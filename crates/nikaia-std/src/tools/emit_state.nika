@@ -53,6 +53,8 @@ pub struct EmitState {
     pub facts: CheckFacts,
     /// This unit's own contracts, inferred from the source.
     pub own_contracts: Ledger,
+    /// `own_contracts`' functions by a method's name.
+    pub own_methods: MethodIndex,
     /// A described crate's contracts (ADR-290).
     pub described: Ledger,
     /// The structs and enums that hold a view, and so take a lifetime.

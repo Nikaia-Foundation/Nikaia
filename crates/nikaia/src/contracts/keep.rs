@@ -296,9 +296,11 @@ pub(crate) fn buffer_plans(
             .kept
             .into_iter()
             .collect();
+    let own_methods = nikaia_std::tools::ty::method_index(ledger);
     let ask = BufferAsk {
         names: &parsed.interner,
         own: ledger,
+        own_methods: &own_methods,
         library,
         items: &parsed.program.items,
         context: &context,
@@ -427,18 +429,6 @@ fn from_nikaia(plan: nikaia_std::tools::buffers::BufferPlan) -> Plan {
             .map(|(at, keep)| (place(at), keep_from(keep)))
             .collect(),
     }
-}
-
-/// The ledger key of a method that takes a keep: `self.load(…)` inside its
-/// `impl`, or a name only one keeping function in the ledger has. One answer
-/// for the plan and for the emitter, so the call and its keep cannot part.
-pub fn keeping_method_key(
-    ledger: &Ledger,
-    target: Option<&str>,
-    on_self: bool,
-    method: &str,
-) -> Option<String> {
-    nikaia_std::tools::keep::keeping_method_key(ledger, target, on_self, method)
 }
 
 /// The name a call's callee is written as.

@@ -772,14 +772,14 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
     // (ADR-278 D2, D16, D3): asked of every candidate for the name.
     let mut candidates = 0
     let mut all_read = true
-    for key in ledger_candidates(world.own, name) {
+    for key in ledger_candidates(world.own, world.own_methods, name) {
         candidates += 1
         let contract = world.own.functions[key] ?? continue
         if contract.mutates {
             all_read = false
         }
     }
-    for key in ledger_candidates(world.library, name) {
+    for key in ledger_candidates(world.library, world.library_methods, name) {
         candidates += 1
         let contract = world.library.functions[key] ?? continue
         if contract.mutates {

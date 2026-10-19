@@ -35,6 +35,9 @@ pub struct KeepsBody {
     /// A method call of this body went to an entry no ledger has, so the
     /// candidates for a method name are not the whole list.
     pub unresolved: bool,
+    /// The two ledgers' functions by a method's name.
+    pub own_methods: ref MethodIndex,
+    pub library_methods: ref MethodIndex,
 }
 
 // The walk's state: what it found, and the names a `let` bound to what may be
@@ -659,8 +662,8 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
     if names.len() == 0 {
         return
     }
-    let ours = receiver_taken_in(own, method)
-    let theirs = receiver_taken_in(library, method)
+    let ours = receiver_taken_in(own, context.own_methods, method)
+    let theirs = receiver_taken_in(library, context.library_methods, method)
     if context.unresolved || ours.hit || theirs.hit || (!ours.any && !theirs.any) {
         for name in names {
             walk.uses.kept.insert(name.clone())
@@ -696,9 +699,9 @@ fn takes_its_receiver(contract: ref FnContract) -> bool {
 // A library's candidates answer from their ledger, and no candidate at all
 // keeps (D2).
 fn keep_method_arguments(args: ref Vec[Expr], method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
-    let ours = candidate_keys(own, method)
+    let ours = candidate_keys(own, context.own_methods, method)
     for k in 0..<args.len() {
-        let theirs = keeps_at_in(library, method, k + 1)
+        let theirs = keeps_at_in(library, context.library_methods, method, k + 1)
         for name in keeps_handed(args[k], interner, context, own, library, walk) {
             for key in ours {
                 walk.uses.passed.push(Passed { parameter: name.clone(), callee: key.clone(), at: k + 1 })
@@ -711,11 +714,11 @@ fn keep_method_arguments(args: ref Vec[Expr], method: ref String, interner: ref 
 }
 
 // The keys of a ledger's candidates for a bare method name.
-fn candidate_keys(ledger: ref Ledger, method: ref String) -> Vec[String] {
-    let suffix = f"::{method}"
+fn candidate_keys(ledger: ref Ledger, methods: ref MethodIndex, method: ref String) -> Vec[String] {
     let mut keys: Vec[String] = []
-    for (key, contract) in ledger.functions {
-        if key.ends_with(ref suffix) && takes_self(contract) {
+    for key in method_keys(methods, method) {
+        let contract = ledger.functions[key] ?? continue
+        if takes_self(contract) {
             keys.push(key.clone())
         }
     }
@@ -729,11 +732,11 @@ struct CandidatesSay {
     hit: bool,
 }
 
-fn receiver_taken_in(ledger: ref Ledger, method: ref String) -> CandidatesSay {
-    let suffix = f"::{method}"
+fn receiver_taken_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref String) -> CandidatesSay {
     let mut asked = CandidatesSay { any: false, hit: false }
-    for (key, contract) in ledger.functions {
-        if key.ends_with(ref suffix) && takes_self(contract) {
+    for key in method_keys(methods, method) {
+        let contract = ledger.functions[key] ?? continue
+        if takes_self(contract) {
             asked.any = true
             asked.hit = asked.hit || takes_its_receiver(contract)
         }
@@ -744,11 +747,11 @@ fn receiver_taken_in(ledger: ref Ledger, method: ref String) -> CandidatesSay {
 // **A candidate with no parameter at `at` is not one this call reaches**: it
 // takes fewer arguments than the call gives, so `m.get(key)` is not
 // `Locked::get(self)`, and that entry's silence about `key` is not a keep.
-fn keeps_at_in(ledger: ref Ledger, method: ref String, at: i64) -> CandidatesSay {
-    let suffix = f"::{method}"
+fn keeps_at_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref String, at: i64) -> CandidatesSay {
     let mut asked = CandidatesSay { any: false, hit: false }
-    for (key, contract) in ledger.functions {
-        if key.ends_with(ref suffix) && takes_self(contract) && has_position(contract, at) {
+    for key in method_keys(methods, method) {
+        let contract = ledger.functions[key] ?? continue
+        if takes_self(contract) && has_position(contract, at) {
             asked.any = true
             asked.hit = asked.hit || keeps_at(contract, at)
         }

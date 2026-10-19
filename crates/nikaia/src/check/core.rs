@@ -147,7 +147,7 @@ impl<'a> Checker<'a> {
     /// the time, with the world and a host that can bring it back.
     pub(super) fn nikaia<R>(
         &mut self,
-        f: impl FnOnce(&mut CheckState, &CheckWorld<'a, 'a, 'a, 'a, 'a>, &Core<'_, 'a>) -> R,
+        f: impl FnOnce(&mut CheckState, &CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a>, &Core<'_, 'a>) -> R,
     ) -> R {
         let mut state = self
             .s

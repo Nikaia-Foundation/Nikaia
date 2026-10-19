@@ -323,10 +323,14 @@ fn walked<'a>(
         .iter()
         .position(|other| std::ptr::eq(*other, parsed))
         .map_or(-1, |at| at as i64);
+    let own_methods = nikaia_std::tools::ty::method_index(own);
+    let library_methods = nikaia_std::tools::ty::method_index(library);
     let world = CheckWorld {
         words: &parsed.interner,
         own,
         library,
+        own_methods: &own_methods,
+        library_methods: &library_methods,
         here: parsed_view_of(parsed),
         parts_beside: nikaia_std::tools::check_copies::check_parts_beside(&views, here_at),
         beside: views,
@@ -940,7 +944,7 @@ struct Checker<'a> {
     s: core::Baton,
     /// What it looks at and does not own: the names, and the two ledgers. A
     /// reference, so the moved code can be handed it while the checker is lent.
-    world: &'a CheckWorld<'a, 'a, 'a, 'a, 'a>,
+    world: &'a CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a>,
     /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
     spares: Vec<Box<CheckState>>,
     parsed: &'a Parsed,

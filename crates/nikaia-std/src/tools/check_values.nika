@@ -188,7 +188,7 @@ impl CheckState {
     /// Not where the program declares a method of that name itself.
     pub fn a_copy_under_another_name(ref mut self, world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], span: ref Span) sync {
         let written = world.words.resolve(method).clone()
-        if args.len() != 0 || written != "to_owned" || ledger_candidates(world.own, written).len() != 0 {
+        if args.len() != 0 || written != "to_owned" || ledger_candidates(world.own, world.own_methods, written).len() != 0 {
             return
         }
         let shown: String = match receiver {
@@ -213,13 +213,10 @@ impl CheckState {
 /// signature takes no `self` is a function a call names by its path, and
 /// `x.lines()` never reaches `io::lines()`. An entry with no signature is still
 /// a candidate - what it takes is unknown.
-pub fn ledger_candidates(ledger: ref Ledger, method: ref String) -> Vec[String] sync {
-    let suffix = f"::{method}"
+pub fn ledger_candidates(ledger: ref Ledger, methods: ref MethodIndex, method: ref String) -> Vec[String] sync {
     let mut out: Vec[String] = []
-    for (entry_name, entry_value) in ledger.functions {
-        if !entry_name.ends_with(ref suffix) {
-            continue
-        }
+    for entry_name in method_keys(methods, method) {
+        let entry_value = ledger.functions[entry_name] ?? continue
         if takes_self(entry_value) {
             out.push(entry_name.clone())
         }

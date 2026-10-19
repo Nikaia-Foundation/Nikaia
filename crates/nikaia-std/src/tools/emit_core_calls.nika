@@ -779,7 +779,7 @@ impl EmitState {
         self.emit_core_args(world, walk, out, host, name, args, takes, depth, flow, scope)
         walk.hold_args = null
         // **And a method that takes a keep is given one** (D2).
-        let keeping = keeping_method_key(self.own_contracts, emit_call_owner(scope.function), emit_call_on_self(world, receiver), name)
+        let keeping = keeping_method_key(self.own_contracts, self.own_methods, emit_call_owner(scope.function), emit_call_on_self(world, receiver), name)
         if keeping != null {
             let key = keeping ?? ""
             let found = self.keep_handed(walk, scope.function, flow.statement, key)

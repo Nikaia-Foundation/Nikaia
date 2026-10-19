@@ -181,7 +181,7 @@ pub fn takes_a_keep(contract: ref FnContract) -> bool {
 /// The ledger key of a method that takes a keep: `self.load(…)` inside its
 /// `impl`, or a name only one keeping function in the ledger has. One answer
 /// for the plan and for the emitter, so the call and its keep cannot part.
-pub fn keeping_method_key(ledger: ref Ledger, target: ref String?, on_self: bool, method: ref String) -> String? {
+pub fn keeping_method_key(ledger: ref Ledger, methods: ref MethodIndex, target: ref String?, on_self: bool, method: ref String) -> String? {
     if on_self && target != null {
         let owner = target ?? ""
         let key = f"{owner}::{method}"
@@ -191,10 +191,10 @@ pub fn keeping_method_key(ledger: ref Ledger, target: ref String?, on_self: bool
         }
         return null
     }
-    let suffix = f"::{method}"
     let mut found: String? = null
-    for (key, contract) in ledger.functions {
-        if key.ends_with(ref suffix) && takes_a_keep(contract) {
+    for key in method_keys(methods, method) {
+        let contract = ledger.functions[key] ?? continue
+        if takes_a_keep(contract) {
             if found != null {
                 return null
             }

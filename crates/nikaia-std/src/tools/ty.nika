@@ -1956,3 +1956,38 @@ fn renamed_each(parts: ref Array[Ty], renames: ref collections::BTreeMap[String,
 fn renamed_result(result: ref Ty?, renames: ref collections::BTreeMap[String, String]) -> Ty? {
     return result?.renamed_by(renames)
 }
+
+/// **A ledger's functions by a method's name** (#727): the key's last `::`
+/// segment to every key that ends in it, in the ledger's key order. Built from
+/// a ledger no one changes while it is asked, so it never goes stale.
+pub struct MethodIndex {
+    pub keys: collections::BTreeMap[String, Vec[String]],
+}
+
+/// The index of `ledger`'s functions by their last `::` segment.
+pub fn method_index(ledger: ref Ledger) -> MethodIndex {
+    let mut keys: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for (key, _) in ledger.functions {
+        let last = (key.rsplit("::").next() ?? "").clone()
+        let mut held = keys.remove(last) ?? []
+        held.push(key.clone())
+        keys.insert(last, held)
+    }
+    return MethodIndex { keys: keys }
+}
+
+/// Every key of the indexed ledger that ends in `::{method}`, in key order:
+/// what a scan with `key.ends_with(f"::{method}")` finds. A key ending so has
+/// the same last `::` segment as the suffix, so the bucket holds them all.
+pub fn method_keys(index: ref MethodIndex, method: ref String) -> Vec[String] {
+    let suffix = f"::{method}"
+    let last = (suffix.rsplit("::").next() ?? "").clone()
+    let bucket = index.keys[last] ?? return []
+    let mut out: Vec[String] = []
+    for key in bucket {
+        if key.ends_with(ref suffix) {
+            out.push(key.clone())
+        }
+    }
+    return out
+}

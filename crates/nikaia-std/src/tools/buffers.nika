@@ -82,6 +82,8 @@ pub struct BufferPlan {
 pub struct BufferAsk {
     pub names: ref winnow_grammar::InternerContext,
     pub own: ref Ledger,
+    /// `own`'s functions by a method's name.
+    pub own_methods: ref MethodIndex,
     pub library: ref Ledger,
     pub items: ref Vec[Spanned[Item]],
     pub context: ref KeepContext,
@@ -1081,7 +1083,7 @@ fn method_origins(call: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> 
         Expr::Variable(name, _) => ask.names.resolve(name) == "self",
         else => false,
     }
-    let keeping = keeping_method_key(ask.own, walk.target, on_self, method)
+    let keeping = keeping_method_key(ask.own, ask.own_methods, walk.target, on_self, method)
     if keeping != null {
         add_all(call_source(keeping ?? "", walk), out)
     }
@@ -1089,7 +1091,7 @@ fn method_origins(call: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> 
     // function's is (`answered_by`): where every method of this package by
     // that name hands back such a result, `into.add(length)` points nowhere,
     // and a number it answers kept nothing of `length` alive.
-    if hands_back_its_own(method) || (method == "clone" && copies_text(receiver, ask, walk)) || (keeping == null && owned_by_every_method(ask.own, method)) {
+    if hands_back_its_own(method) || (method == "clone" && copies_text(receiver, ask, walk)) || (keeping == null && owned_by_every_method(ask.own, ask.own_methods, method)) {
         for arg in args {
             origins_of(arg, ask, holes_of, unaliased, walk)
         }
@@ -1105,11 +1107,11 @@ fn method_origins(call: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> 
 
 /// Whether every method of `ledger` named `method` hands back a result that
 /// holds no view - and there is one.
-fn owned_by_every_method(ledger: ref Ledger, method: ref String) -> bool {
-    let suffix = f"::{method}"
+fn owned_by_every_method(ledger: ref Ledger, methods: ref MethodIndex, method: ref String) -> bool {
     let mut any = false
-    for (key, contract) in ledger.functions {
-        if key.ends_with(ref suffix) {
+    for key in method_keys(methods, method) {
+        let contract = ledger.functions[key] ?? continue
+        {
             let signature = contract.signature ?? return false
             any = true
             let result = signature.result ?? continue

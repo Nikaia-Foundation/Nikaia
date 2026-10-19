@@ -2085,6 +2085,7 @@ impl<'p> Emitter<'p> {
             shared,
             built_at_build_time: built_at_build_time(parsed).into_iter().collect(),
             pausing_reach: reach,
+            own_methods: nikaia_std::tools::ty::method_index(&own_contracts),
             own_contracts,
             dsl_drivers: crate::dsl::drivers(parsed).into_iter().collect(),
             foreign_params: foreign_params(parsed),
@@ -5648,6 +5649,7 @@ impl<'p> Emitter<'p> {
         if !below::emit_filled_at_once(
             &self.world,
             &self.s.own_contracts,
+            &self.s.own_methods,
             &declared.node,
             &next.node,
         ) {

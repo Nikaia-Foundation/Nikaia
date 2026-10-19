@@ -198,15 +198,15 @@ fn emit_mentions(world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool
 
 /// Whether `declared` is `let mut xs = []` and `next` is `xs.resize(n, v)` with
 /// `std`'s `resize`: one allocation of a known length, `vec![v; n]`.
-pub fn emit_filled_at_once(world: ref EmitWorld, own: ref Ledger, declared: ref Stmt, next: ref Stmt) -> bool {
+pub fn emit_filled_at_once(world: ref EmitWorld, own: ref Ledger, own_methods: ref MethodIndex, declared: ref Stmt, next: ref Stmt) -> bool {
     let name = emit_declared_empty(world, declared) ?? return false
     return match next {
-        Stmt::Expr(inner) => emit_resizes(world, own, name, inner),
+        Stmt::Expr(inner) => emit_resizes(world, own, own_methods, name, inner),
         else => false,
     }
 }
 
-fn emit_resizes(world: ref EmitWorld, own: ref Ledger, name: ref String, call: ref Expr) -> bool {
+fn emit_resizes(world: ref EmitWorld, own: ref Ledger, own_methods: ref MethodIndex, name: ref String, call: ref Expr) -> bool {
     match call {
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let mut on_it = false
@@ -219,7 +219,7 @@ fn emit_resizes(world: ref EmitWorld, own: ref Ledger, name: ref String, call: r
             if !on_it || emit_text(world, method) != "resize" || args.len() != 2 || config.len() != 0 {
                 return false
             }
-            if ledger_candidates(own, "resize").len() != 0 {
+            if ledger_candidates(own, own_methods, "resize").len() != 0 {
                 return false
             }
             for arg in args {

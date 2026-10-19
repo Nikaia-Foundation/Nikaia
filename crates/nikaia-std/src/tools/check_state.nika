@@ -441,6 +441,9 @@ pub struct CheckWorld {
     pub own: ref Ledger,
     /// `std`'s, as `std` ships them.
     pub library: ref Ledger,
+    /// `own`'s and `library`'s functions by a method's name.
+    pub own_methods: ref MethodIndex,
+    pub library_methods: ref MethodIndex,
     /// This file: its items and its aliases.
     pub here: ParsedView,
     /// **The program's other files**, for the questions that need a body or a

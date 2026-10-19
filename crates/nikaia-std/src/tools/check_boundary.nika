@@ -124,10 +124,10 @@ impl CheckState {
     /// nothing describes is claimed nothing about (Part III C.4).
     pub fn only_reads_its_receiver(ref self, world: ref CheckWorld, method: ref String) -> bool sync {
         let mut candidates: Vec[FnContract] = []
-        for key in ledger_candidates(world.own, method) {
+        for key in ledger_candidates(world.own, world.own_methods, method) {
             candidates.push(world.own.functions[key]?.clone() ?? FnContract::empty())
         }
-        for key in ledger_candidates(world.library, method) {
+        for key in ledger_candidates(world.library, world.library_methods, method) {
             candidates.push(world.library.functions[key]?.clone() ?? FnContract::empty())
         }
         if candidates.len() == 0 {

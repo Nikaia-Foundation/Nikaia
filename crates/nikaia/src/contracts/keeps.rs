@@ -136,12 +136,17 @@ pub fn infer(
     // read once for the grammar arm below.
     let package = super::tether::declared_in(units);
 
+    // **The two ledgers by a method's name** (#727): neither changes until
+    // the walk below is done, so the index cannot go stale.
+    let own_methods = nikaia_std::tools::ty::method_index(ledger);
+    let library_methods = nikaia_std::tools::ty::method_index(library);
+    let indexed = (&own_methods, &library_methods);
     for parsed in units.iter().copied() {
         for item in &parsed.program.items {
             match &item.node {
                 Item::Fn { .. } => {
                     if let Some((name, uses)) =
-                        uses_of(parsed, &item.node, None, ledger, library, resolved)
+                        uses_of(parsed, &item.node, None, ledger, library, indexed, resolved)
                     {
                         graph.insert(name, uses);
                     }
@@ -157,6 +162,7 @@ pub fn infer(
                             Some(&target),
                             ledger,
                             library,
+                            indexed,
                             resolved,
                         ) {
                             graph.insert(name, uses);
@@ -237,6 +243,10 @@ fn uses_of(
     target: Option<&str>,
     ledger: &Ledger,
     library: &Ledger,
+    (own_methods, library_methods): (
+        &nikaia_std::tools::ty::MethodIndex,
+        &nikaia_std::tools::ty::MethodIndex,
+    ),
     resolved: &BTreeMap<String, crate::check::MethodCalls>,
 ) -> Option<(String, Uses)> {
     let Item::Fn {
@@ -351,6 +361,8 @@ fn uses_of(
         returns_a_view,
         hands_back_its_last: ret_type.is_some() && !returns_a_view,
         unresolved,
+        own_methods,
+        library_methods,
     };
     let mut uses = nikaia_std::tools::keeps::uses_in(
         body,
