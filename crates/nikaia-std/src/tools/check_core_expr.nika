@@ -329,6 +329,12 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
     if found != null {
         let ty: Ty = found ?? Ty::Unknown
         state.a_read(expr, name, span)
+        // **A binding that shadows a `comptime` is read under its own name**
+        // (#703): the constant stands in the outermost frame, and a `comptime`
+        // a body declares is a constant too.
+        if state.facts.comptime_names.contains(name) && state.frame_holding(name) > 0 && state.binding(name)?.built == null {
+            state.facts.shadowing_reads.insert(node_key(expr))
+        }
         check_core_expr_an_open_char_read(state, expr, name, span)
         state.a_sequence_is_taken(name, ty, span)
         // **An arm that is a name still read later is a view of it**, lent

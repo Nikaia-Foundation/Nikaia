@@ -53,6 +53,18 @@ pub fn escaped_name(name: ref String) -> String {
     return name.clone()
 }
 
+/// **A binding's name as the language below writes it** (#703): one that
+/// shadows a `comptime` of the package is written under a name of its own,
+/// because the language below reads a binding named like a constant as the
+/// constant. The constant keeps its name, which other files and packages
+/// read; every read of the binding the checker resolved is renamed with it.
+pub fn emit_local_name(comptimes: ref collections::BTreeSet[String], name: ref String) -> String {
+    if comptimes.contains(name) {
+        return f"{name}__nikaia_local"
+    }
+    return escaped_name(name)
+}
+
 /// The Rust a declared handle type is: a transparent wrapper of the address,
 /// dropped by the function that releases it (ADR-302 D7).
 pub fn opaque_type_text(name: ref String, release: ref String) -> String {

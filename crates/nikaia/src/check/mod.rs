@@ -2607,7 +2607,9 @@ impl<'a> Checker<'a> {
                     .as_ref()
                     .map(|ty| Ty::from_ast(other, ty))
                     .unwrap_or(Ty::Unknown);
-                self.bind_with(other.text(*name).to_string(), declared, None);
+                let name = other.text(*name).to_string();
+                self.s.facts.comptime_names.insert(name.clone());
+                self.bind_with(name, declared, None);
             }
         }
         for item in &self.parsed.program.items {
@@ -2618,7 +2620,9 @@ impl<'a> Checker<'a> {
                 .as_ref()
                 .map(|ty| self.declared(ty, &item.span))
                 .unwrap_or(Ty::Unknown);
-            self.bind_with(self.parsed.text(*name).to_string(), declared, None);
+            let name = self.parsed.text(*name).to_string();
+            self.s.facts.comptime_names.insert(name.clone());
+            self.bind_with(name, declared, None);
         }
         for item in &self.parsed.program.items {
             let Item::Comptime {

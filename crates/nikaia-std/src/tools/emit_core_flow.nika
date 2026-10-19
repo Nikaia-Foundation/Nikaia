@@ -157,7 +157,7 @@ impl EmitState {
     pub fn emit_core_closure[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mut names: Vec[String] = []
         for p in params {
-            names.push(escaped_name(emit_text(world, p)))
+            names.push(emit_local_name(self.facts.comptime_names, emit_text(world, p)))
         }
         // **A lambda where a function value is kept** is one shared closure, and
         // it takes what it captures with it.

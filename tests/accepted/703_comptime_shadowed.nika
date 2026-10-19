@@ -1,0 +1,21 @@
+// A binding may shadow a `comptime`: the binding is renamed below, the constant
+// keeps its name (#703).
+comptime LIMIT: i64 = 42
+comptime NAME = "const"
+fn show(LIMIT: i64) { println(f"{LIMIT}") }
+fn unused(LIMIT: i64) { }
+fn named(NAME: String) -> i64 { return NAME.len() }
+fn main() {
+    show(1)
+    unused(2)
+    println(f"{LIMIT}")
+    let LIMIT = 3
+    println(f"{LIMIT}")
+    for NAME in ["a", "bb"] {
+        println(NAME)
+    }
+    println(NAME)
+    println(f"{named("four")}")
+    let v = [1, 2].map fn (LIMIT) { LIMIT + 1 }
+    println(f"{v.len()}")
+}

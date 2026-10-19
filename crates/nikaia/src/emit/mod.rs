@@ -2217,6 +2217,26 @@ impl<'p> Emitter<'p> {
         escaped(self.text(sym))
     }
 
+    /// **A binding's name** (#703): one named like a `comptime` of the
+    /// package is written under a name of its own (`emit_local_name`).
+    fn local(&self, name: &str) -> String {
+        nikaia_std::tools::emit_misc::emit_local_name(&self.s.facts.comptime_names, name)
+    }
+
+    /// **A read of a name**: under the binding's own name where it reads a
+    /// binding that shadows a `comptime` (#703), the source's otherwise.
+    fn read_name(&self, sym: Symbol, expr: &Expr) -> String {
+        match self
+            .s
+            .facts
+            .shadowing_reads
+            .contains(&crate::check::value_node(expr))
+        {
+            true => self.local(self.text(sym)),
+            false => self.name(sym).into_owned(),
+        }
+    }
+
     /// The name of a function whose body walks a type's fields, where this item
     /// is one ([ADR-304](../../docs/specification/adr/adr-304.md) D6).
     ///
@@ -4039,14 +4059,14 @@ impl<'p> Emitter<'p> {
                     true => ("IntoEitherMaybe", "into_either_maybe"),
                     false => ("IntoEither", "into_either"),
                 };
-                let name = escaped(name);
+                let name = self.local(name);
                 either_first.push(format!("let {name} = {name}.{into}();"));
                 return format!(
                     "{name}: impl nikaia_std::either_text::{by}<Either = \
                      nikaia_std::either_text::EitherText<'e>>"
                 );
             }
-            format!("{}: {reference}{written}", escaped(name))
+            format!("{}: {reference}{written}", self.local(name))
         }));
         // Kap 5.1: the language below has neither named arguments nor defaults,
         // so an option becomes an ordinary parameter here - in declaration
@@ -4063,7 +4083,7 @@ impl<'p> Emitter<'p> {
             ty.is_view |= lent_option(at);
             format!(
                 "{}: {}",
-                escaped(name),
+                self.local(name),
                 self.ty_counted(&ty, position, self.count_at(&key, name))
             )
         }));
@@ -4275,7 +4295,7 @@ impl<'p> Emitter<'p> {
         ) {
             Some((own, fields)) => {
                 for (param, lifetime) in &own {
-                    let head = format!("{}: ", escaped(param));
+                    let head = format!("{}: ", self.local(param));
                     if let Some(p) = params.iter_mut().find(|p| p.starts_with(&head)) {
                         *p = renamed_lifetime(p, "'r", lifetime);
                     }
@@ -5887,10 +5907,8 @@ impl<'p> Emitter<'p> {
                 // which is the same answer `contracts::sharing` gives, and the
                 // two have to agree.
                 if names.len() > 1 || !shape.is_empty() {
-                    let bound: Vec<String> = names
-                        .iter()
-                        .map(|n| escaped(self.text(*n)).into_owned())
-                        .collect();
+                    let bound: Vec<String> =
+                        names.iter().map(|n| self.local(self.text(*n))).collect();
                     let pattern = tuple_pattern(&bound, shape);
                     out.push(&format!("let {mutable}{pattern} = "));
                     let (before, after) = Self::around_value(
@@ -5914,7 +5932,7 @@ impl<'p> Emitter<'p> {
                             .copied_tuple_parts
                             .contains(&((span.at() as i64), self.text(*name).to_string()))
                         {
-                            let name = escaped(self.text(*name));
+                            let name = self.local(self.text(*name));
                             out.push(&format!(" let {name} = nikaia_std::num::value({name});"));
                         }
                     }
@@ -5971,7 +5989,7 @@ impl<'p> Emitter<'p> {
                     let wrapper = self.tether_wrapper(&held);
                     out.push(&format!(
                         "let {mutable}{} = {{ let __packed = ",
-                        escaped(bound)
+                        self.local(bound)
                     ));
                     self.expr(out, value, depth, flow)?;
                     out.push(&format!(
@@ -5993,7 +6011,7 @@ impl<'p> Emitter<'p> {
                     };
                     out.push(&format!(
                         "let {mutable}{} = {}.{put}(",
-                        escaped(bound),
+                        self.local(bound),
                         Self::keep_expr(keep, false)
                     ));
                     self.expr(out, value, depth, flow)?;
@@ -6011,7 +6029,10 @@ impl<'p> Emitter<'p> {
                 // - the same value, possibly absent (ADR-281 D2's own line).
                 let (before, after) =
                     Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
-                out.push(&format!("let {mutable}{}{annotation} = ", escaped(bound)));
+                out.push(&format!(
+                    "let {mutable}{}{annotation} = ",
+                    self.local(bound)
+                ));
                 out.push(&before);
                 // **A `let` over a place is a view of it**
                 // ([ADR-094](../../docs/specification/adr/adr-094.md) D4).
@@ -6477,10 +6498,8 @@ impl<'p> Emitter<'p> {
                     }
                     return Ok(());
                 }
-                let each: Vec<String> = bindings
-                    .iter()
-                    .map(|b| self.name(*b).into_owned())
-                    .collect();
+                let each: Vec<String> =
+                    bindings.iter().map(|b| self.local(self.text(*b))).collect();
                 let names = each.join(", ");
                 let bound = tuple_pattern(&each, shape);
                 // **A step that pauses is a loop that gives its thread up**
@@ -6615,7 +6634,7 @@ impl<'p> Emitter<'p> {
                             .contains(&((span.at() as i64), self.text(**b).to_string()))
                     })
                     .map(|b| {
-                        let name = self.name(*b);
+                        let name = self.local(self.text(*b));
                         format!("let {name} = nikaia_std::num::value({name});")
                     })
                     .chain(
@@ -6628,7 +6647,7 @@ impl<'p> Emitter<'p> {
                                     .contains(&((span.at() as i64), self.text(**b).to_string()))
                             })
                             .map(|b| {
-                                let name = self.name(*b);
+                                let name = self.local(self.text(*b));
                                 format!("let {name} = *{name};")
                             }),
                     )
@@ -7201,7 +7220,7 @@ impl<'p> Emitter<'p> {
             // **A `mut` lambda parameter is an address** (ADR-281 D12), so
             // every mention of it is dereferenced.
             Expr::Variable(name, _) if flow.changed.contains(name) => {
-                out.push(&format!("(*{})", self.name(*name)))
+                out.push(&format!("(*{})", self.read_name(*name, expr)))
             }
             // **A constructor handed over as a value**
             // ([ADR-140](../../docs/specification/adr/adr-140.md) D2). `Summary`
@@ -7286,10 +7305,10 @@ impl<'p> Emitter<'p> {
             Expr::Variable(name, _)
                 if !flow.in_a_place && self.copied_in_place(flow, self.text(*name)) =>
             {
-                out.push(&format!("*{}", self.name(*name)));
+                out.push(&format!("*{}", self.read_name(*name, expr)));
             }
             Expr::Variable(name, _) => {
-                out.push(&self.name(*name));
+                out.push(&self.read_name(*name, expr));
                 // **A binding packed for a task is read through its handle**
                 // (ADR-283 D11), for as long as the read borrows it - and so is
                 // an element taken out of a keeper that holds structs of views

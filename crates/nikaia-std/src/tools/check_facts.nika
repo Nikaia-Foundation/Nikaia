@@ -136,6 +136,13 @@ pub struct CheckFacts {
     pub taking_arms: collections::BTreeMap[i64, String],
     pub views_handed_on: collections::BTreeSet[i64],
     pub comptime_uses: collections::BTreeMap[i64, String],
+    /// **The names of the package's `comptime`s** (#703): a binding by one
+    /// of them shadows the constant, which the language below refuses, so
+    /// the emitter writes the binding under a name of its own.
+    pub comptime_names: collections::BTreeSet[String],
+    /// The reads of a name that a binding shadowing a `comptime` holds, by
+    /// node: each is written under the binding's own name.
+    pub shadowing_reads: collections::BTreeSet[i64],
     pub lent_scrutinees: collections::BTreeSet[i64],
     /// **A `match` on a name an enclosing arm bound**, by the subject: that
     /// arm's body. Where the arm lent the name, it is a reference below, and
@@ -321,6 +328,8 @@ impl CheckFacts {
             taking_arms: collections::BTreeMap(),
             views_handed_on: collections::BTreeSet(),
             comptime_uses: collections::BTreeMap(),
+            comptime_names: collections::BTreeSet(),
+            shadowing_reads: collections::BTreeSet(),
             lent_scrutinees: collections::BTreeSet(),
             arm_subjects: collections::BTreeMap(),
             guards_inside_boxes: collections::BTreeMap(),

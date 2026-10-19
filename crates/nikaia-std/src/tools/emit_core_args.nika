@@ -460,7 +460,7 @@ impl EmitState {
             Expr::Closure { params, mutable, body, .. } => {
                 let mut names: Vec[String] = []
                 for p in params {
-                    names.push(escaped_name(emit_text(world, p)))
+                    names.push(emit_local_name(self.facts.comptime_names, emit_text(world, p)))
                 }
                 let joined = names.join(", ")
                 // **No `move` on the run shape** (Part I 5.4 A): the call is over
@@ -700,7 +700,7 @@ impl EmitState {
                 match args[0] {
                     Expr::Closure { params, body, .. } => {
                         if params.len() == 1 {
-                            let named = escaped_name(emit_text(world, params[0]))
+                            let named = emit_local_name(self.facts.comptime_names, emit_text(world, params[0]))
                             out.push(f"|{named}| {{ let __scope_body: Result<_, {channel}> = (|| {{ let {named} = {named}; Ok(")
                             self.emit_call_scope_body(world, walk, out, host, body, depth, flow, scope, channel, owner, false)
                             out.push(f") }})(); {named}.settled(__scope_body) }}")
@@ -834,7 +834,7 @@ impl EmitState {
                     made = "PausedPoolScope"
                     run = "scope_paused_on_pool"
                 }
-                let named = escaped_name(emit_text(world, params[0]))
+                let named = emit_local_name(self.facts.comptime_names, emit_text(world, params[0]))
                 let mut channel = emit_call_tasks_channel(flow, scope)
                 let mut owner: String = ""
                 if channel == scope.channel {
