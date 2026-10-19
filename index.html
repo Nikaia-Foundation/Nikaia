@@ -56,7 +56,7 @@ description: >-
         much memory they can use, how errors are handled, and whether parts of your program keep
         their promises. It catches problems at compile time wherever it can, showing you where
         things can go wrong and why.
-        <a href="#limits">How it works — and where the limits are ↓</a></p>
+        <a href="#safe">How it works — and where the limits are ↓</a></p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
@@ -82,6 +82,70 @@ description: >-
         <a href="{{ "/manifesto.html" | relative_url }}">The manifesto →</a></p>
       </div>
     </div>
+  </div>
+</section>
+
+<section class="home-section" id="safe">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Very safe</p>
+    <h2 class="home-heading">Catch mistakes before they become failures.</h2>
+    <p class="safe-lead home-intro">
+      Many bugs follow patterns. Nikaia checks for those patterns before they reach your users,
+      and says where it cannot. Here are five of them, as they look in a program.
+    </p>
+    <div class="safe-tiles">
+      <a class="safe-tile safe-tile-a" href="{{ "/very-safe.html" | relative_url }}#conflicts">
+        <span class="safe-chip safe-chip-build">Refused when built</span>
+        <h3>Conflicting actions</h3>
+        <p>Two tasks change the same value at once. One update overwrites the other.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">task::scope fn(s) {
+    s.spawn fn { balance = balance + 50 }
+    s.spawn fn { balance = balance - 30 }
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b></code></pre></div>
+        <span class="safe-more">Details and limits →</span>
+      </a>
+      <a class="safe-tile safe-tile-a" href="{{ "/very-safe.html" | relative_url }}#stuck">
+        <span class="safe-chip safe-chip-part">Partly checked</span>
+        <h3>Tasks that get stuck</h3>
+        <p>Tasks wait for each other forever, or one holds up everyone.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">a.update fn(mut acc) {
+    acc.balance -= 30
+    time::sleep(5.millis())
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `time::sleep` can pause, but you're holding a lock here.</b></code></pre></div>
+        <span class="safe-more">Details and limits →</span>
+      </a>
+      <a class="safe-tile safe-tile-a" href="{{ "/very-safe.html" | relative_url }}#memory">
+        <span class="safe-chip safe-chip-run">Run-time protection</span>
+        <h3>Too much memory</h3>
+        <p>One task should not be able to use up memory without limit.</p>
+        <p class="safe-note">Every task is meant to get a budget of its own and stop when it is spent, taking nothing else down. This is a protection while the program runs, not something the compiler proves.</p>
+
+        <span class="safe-more">Details and limits →</span>
+      </a>
+      <a class="safe-tile safe-tile-b" href="{{ "/very-safe.html" | relative_url }}#errors">
+        <span class="safe-chip safe-chip-build">Refused when built</span>
+        <h3>Errors that go unhandled</h3>
+        <p>Something fails and nothing deals with it.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
+    return fs::read_to_string("config.txt", fs::Root::Anywhere)
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
+        <span class="safe-more">Details and limits →</span>
+      </a>
+      <a class="safe-tile safe-tile-b" href="{{ "/very-safe.html" | relative_url }}#promises">
+        <span class="safe-chip safe-chip-build">Refused when built</span>
+        <h3>Broken promises</h3>
+        <p>A part of the program is called outside what it was told to expect.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
+    assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
+    return n
+}
+
+percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
+        <span class="safe-more">Details and limits →</span>
+      </a>
+    </div>
+    <p class="safe-below">The first of them, contracts, is shown in full below.
+    <a href="{{ "/very-safe.html" | relative_url }}">All five, with what each check covers and where it stops →</a></p>
   </div>
 </section>
 
@@ -239,194 +303,6 @@ fn main() {
   …/loop/src/main.nika:14  assert(base &gt;= 10)  precondition of `price`: proved at every call the compiler sees; any other reaches the entry that checks it
 <span class="d-gutter">$</span> <b>target/nikaia/bin/loop</b>
 10 7</code></pre>
-    </div>
-  </div>
-</section>
-
-<section class="home-section" id="limits">
-  <div class="home-inner">
-    <p class="home-eyebrow">What Nikaia checks</p>
-    <h2 class="home-heading">Many bugs follow patterns. Nikaia checks for those patterns before they reach your users.</h2>
-    <p class="limits-lead">
-      Some problems can be ruled out while your program is being built. Others depend on what
-      happens at runtime or on information the compiler cannot see. Here are five kinds of
-      mistakes Nikaia helps you catch, and what its checks can guarantee.
-    </p>
-    <div class="limits-grid">
-      <div class="limit-class">
-        <h3><span class="limit-n">1</span> Conflicting actions</h3>
-        <dl class="limit-steps">
-          <dt>The problem</dt>
-          <dd><strong>When tasks interfere with each other, results can go wrong.</strong></dd>
-          <dt>An example</dt>
-          <dd>Two tasks update the same account balance. One update can overwrite the other, and money appears to disappear.</dd>
-          <dt>What Nikaia checks</dt>
-          <dd>Nikaia restricts how tasks access and change shared data. A task that changes a value the other tasks also use is rejected when the program is built, with the way out named: give each task a value of its own, or keep the value in shared state that is changed through a lock.</dd>
-          <dt>The limit</dt>
-          <dd>Code outside Nikaia can create its own threads. When Nikaia cannot establish the necessary guarantees, you provide a safe boundary, such as passing a copy instead of shared data. The rules reject unsafe constructions; they are not a proof that every conceivable race is found.</dd>
-        </dl>
-        <details class="limit-details home-code markdown-body">
-          <summary>Show the program and what Nikaia says</summary>
-<pre><code class="language-nika">use std::task
-
-fn main() throws {
-    let mut balance = 100
-    task::scope fn(s) {
-        s.spawn fn { balance = balance + 50 }
-        s.spawn fn { balance = balance - 30 }
-    }
-    println(f"{balance}")
-}
-</code></pre>
-<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
-<span class="d-error">error[NK2107]</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b>
-<span class="d-gutter">  --&gt;</span> main.nika:6:22
-<span class="d-gutter">   |</span>
-<span class="d-gutter"> 6 |</span>         s.spawn fn { balance = balance + 50 }
-<span class="d-gutter">   |</span>                      <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^</span>
-<span class="d-gutter">   |</span>
-<span class="d-gutter">   =</span> <span class="d-note">note:</span> A scope's tasks run at the same time, each on a core of its own, so they would write `balance` at once.
-<span class="d-gutter">   =</span> <span class="d-help">help:</span> Give each task a value of its own and combine them after the scope, or keep `balance` in a `SharedMut` and change it through `update`.</code></pre>
-        </details>
-      </div>
-      <div class="limit-class">
-        <h3><span class="limit-n">2</span> Tasks that get stuck</h3>
-        <dl class="limit-steps">
-          <dt>The problem</dt>
-          <dd><strong>Sometimes tasks wait for each other forever.</strong></dd>
-          <dt>An example</dt>
-          <dd>Two account transfers each hold a lock the other needs. Neither can continue.</dd>
-          <dt>What Nikaia checks</dt>
-          <dd>A task that pauses while it holds a lock is rejected, since everyone who needs that value would wait too. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</dd>
-          <dt>The limit</dt>
-          <dd>Nikaia does not yet reject a lock taken inside another lock when you write it by hand, so using <code>update_all</code> for several locks is up to you. And not every possible deadlock can be ruled out in every situation; where the analysis cannot decide, it does not claim the problem is solved.</dd>
-        </dl>
-        <details class="limit-details home-code markdown-body">
-          <summary>Show the program and what Nikaia says</summary>
-<pre><code class="language-nika">use std::time
-
-struct Account {
-    balance: i64,
-}
-
-fn main() throws {
-    let a = SharedMut(Account { balance: 100 })
-    a.update fn(mut acc) {
-        acc.balance -= 30
-        time::sleep(5.millis())
-    }
-}
-</code></pre>
-<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
-<span class="d-error">error[NK2202]</span><b>: `time::sleep` can pause, but you're holding a lock here.</b>
-<span class="d-gutter">   --&gt;</span> main.nika:11:9
-<span class="d-gutter">    |</span>
-<span class="d-gutter"> 11 |</span>         time::sleep(5.millis())
-<span class="d-gutter">    |</span>         <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^</span>
-<span class="d-gutter">    |</span>
-<span class="d-gutter">    =</span> <span class="d-note">note:</span> While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too.
-<span class="d-gutter">    =</span> <span class="d-help">help:</span> Call `time::sleep` before taking the lock and pass its value in, or after it with what the block returned.</code></pre>
-<p>Moving money between two accounts takes both locks at once, always in the same order:</p>
-<pre><code class="language-nika">update_all(a, b) fn(mut from, mut to) {
-    from.balance -= 30
-    to.balance += 30
-}
-</code></pre>
-        </details>
-      </div>
-      <div class="limit-class">
-        <h3><span class="limit-n">3</span> Tasks that use too much memory</h3>
-        <dl class="limit-steps">
-          <dt>The problem</dt>
-          <dd><strong>One task should not be able to consume unlimited memory.</strong></dd>
-          <dt>An example</dt>
-          <dd>A task processes a large file and exhausts the memory available to it.</dd>
-          <dt>What Nikaia checks</dt>
-          <dd>A calculation that runs while the program is built has a limit on its steps and its memory, and stops with a message when it passes them. The language is specified so that each task at run time gets a memory budget of its own, and a task that exceeds it stops without taking the rest of the program down.</dd>
-          <dt>The limit</dt>
-          <dd>This is a protection, not a proof. Nikaia does not prove at build time that a task stays within its budget, and the run-time budget is not yet part of what the toolchain enforces.</dd>
-        </dl>
-
-      </div>
-      <div class="limit-class">
-        <h3><span class="limit-n">4</span> Errors that go unhandled</h3>
-        <dl class="limit-steps">
-          <dt>The problem</dt>
-          <dd><strong>When something fails, the program needs a way to deal with it.</strong></dd>
-          <dt>An example</dt>
-          <dd>A program reads its configuration file. The file is missing, but the calling code assumes the read succeeded.</dd>
-          <dt>What Nikaia checks</dt>
-          <dd>Functions declare when they can fail, and what they can fail with is worked out from their bodies. A function that calls something that can fail, and neither declares it nor handles it, is rejected when the program is built.</dd>
-          <dt>The limit</dt>
-          <dd>For functions from outside Nikaia that nothing describes, Nikaia cannot know every way they fail. A description of the library closes that gap. The check shows where failures are not accounted for; it does not make the handling itself correct.</dd>
-        </dl>
-        <details class="limit-details home-code markdown-body">
-          <summary>Show the program and what Nikaia says</summary>
-<pre><code class="language-nika">use std::fs
-
-fn load() -&gt; String {
-    return fs::read_to_string("config.txt", fs::Root::Anywhere)
-}
-
-fn main() {
-    println(load())
-}
-</code></pre>
-<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
-<span class="d-error">error[NK2605]</span><b>: This function can fail, because `fs::read_to_string` can fail.</b>
-<span class="d-gutter">  --&gt;</span> main.nika:4:5
-<span class="d-gutter">   |</span>
-<span class="d-gutter"> 4 |</span>     return fs::read_to_string("config.txt", fs::Root::Anywhere)
-<span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
-<span class="d-gutter">   |</span>
-<span class="d-gutter">   =</span> <span class="d-note">note:</span> `fs::read_to_string` can fail with `io::IoError`.
-<span class="d-gutter">   =</span> <span class="d-note">note:</span> A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.
-<span class="d-gutter">   =</span> <span class="d-help">help:</span> Add `throws` to `load`, or handle it at the call: `… catch { … }`.</code></pre>
-        </details>
-      </div>
-      <div class="limit-class">
-        <h3><span class="limit-n">5</span> Broken promises</h3>
-        <dl class="limit-steps">
-          <dt>The problem</dt>
-          <dd><strong>Every part of a program should be able to rely on what the other parts promise.</strong></dd>
-          <dt>An example</dt>
-          <dd>A function expects a percentage between 0 and 100 but is called with 140.</dd>
-          <dt>What Nikaia checks</dt>
-          <dd>You write the expectation as an <code>assert</code> and it becomes a contract. A call that breaks it is rejected when the program is built, a promise about a result is available to the callers, and a contract carries across package boundaries.</dd>
-          <dt>The limit</dt>
-          <dd>A compiler cannot know whether data from files, arguments or the network is valid. Check it where it enters the program; once checked, the rest of the code can rely on it.</dd>
-        </dl>
-        <details class="limit-details home-code markdown-body">
-          <summary>Show the program and what Nikaia says</summary>
-<pre><code class="language-nika">fn percent(n: int) -&gt; int {
-    assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
-    return n
-}
-
-fn main() {
-    println(f"{percent(140)}")
-}
-</code></pre>
-<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
-<span class="d-error">error[NK1207]</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b>
-<span class="d-gutter">  --&gt;</span> main.nika:7:5
-<span class="d-gutter">   |</span>
-<span class="d-gutter"> 7 |</span>     println(f"{percent(140)}")
-<span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
-<span class="d-gutter">   |</span>
-<span class="d-gutter">   =</span> <span class="d-note">note:</span> Here `n` is 140.
-<span class="d-gutter">   =</span> <span class="d-help">help:</span> Pass `percent` arguments for which `n &gt;= 0 &amp;&amp; n &lt;= 100` holds, or check them with a guard before the call.</code></pre>
-<p>For data from outside, check it where it arrives. After the guard, the claim is proved:</p>
-<pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
-let n: int = out.stdout.len()
-if n != 41 {
-    println("not a commit id")
-    return
-}
-assert(n == 41)     // proved: the guard above handled the other case
-</code></pre>
-        </details>
-      </div>
     </div>
   </div>
 </section>
