@@ -1141,6 +1141,11 @@ fn call_origins(func: ref Expr, args: ref Vec[Expr], ask: ref BufferAsk, holes_o
         if ask.own.functions.contains_key(named) {
             let contract = ask.own.functions[named] ?? return by_args
             owned = answered_by(contract, named, args, ask, out, walk)
+            // **A view of static text points into no argument** (ADR-282
+            // D29): what such a call hands back is the program's own text.
+            if a_static_view_result(contract) {
+                return out
+            }
             made_arguments(contract, named, args, ask, unaliased, out, walk)
         } else if ask.library.functions.contains_key(named) {
             let contract = ask.library.functions[named] ?? return by_args
@@ -1220,12 +1225,32 @@ fn buffers_view_call(arg: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String
             let callee = written_callee(ask.names, func, unaliased)
             let named = callee?.clone() ?? ""
             match ask.own.functions.contains_key(named) {
-                true => buffers_hands_back_a_view(ask.own.functions[named]),
+                true => buffers_hands_back_a_view(ask.own.functions[named]) && !a_static_view_result(ask.own.functions[named] ?? return false),
                 false => buffers_hands_back_a_view(ask.library.functions[named]),
             }
         }
         else => false,
     }
+}
+
+/// Whether a function of this program hands back a view that holds no
+/// buffer: its result is a view and its signature lends none to it - the view
+/// of static text only literals flow into (ADR-282 D29; `function_views`).
+fn a_static_view_result(contract: ref FnContract) -> bool {
+    if takes_a_keep(contract) {
+        return false
+    }
+    let signature = contract.signature ?? return false
+    let result = signature.result ?? return false
+    if !result.is_a_view() {
+        return false
+    }
+    for held in contract.views {
+        if held.position == RESULT_POSITION {
+            return false
+        }
+    }
+    return true
 }
 
 fn buffers_hands_back_a_view(found: ref FnContract?) -> bool {

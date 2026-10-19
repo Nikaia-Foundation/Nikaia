@@ -2470,10 +2470,12 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     }
     // **A parameter the body only reads is the `&str` any `String` it only
     // reads is** (ADR-282 D5): only one kept holds the view (D29). One handed
-    // on only to parameters that are themselves only read is read too.
+    // on only to parameters that are themselves only read is read too. A
+    // `String?` read is lent whole, `&Option<String>`, which a static view
+    // cannot be: it stays the static view only literals flow into.
     let mut only_read: collections::BTreeSet[String] = collections::BTreeSet()
     for (word, tier) in out {
-        if lasting_tier(tier) && a_parameter_itself(word, flows) {
+        if lasting_tier(tier) && a_parameter_itself(word, flows) && !a_nullable_parameter(word, flows, declared) {
             only_read.insert(word.clone())
         }
     }
@@ -2510,6 +2512,18 @@ fn a_parameter_itself(word: ref String, flows: ref Flows) -> bool {
         else => false,
     }
     return a_parameter && position.path.len() == 0
+}
+
+/// Whether a parameter is declared `String?`.
+fn a_nullable_parameter(word: ref String, flows: ref Flows, declared: ref TextDeclared) -> bool {
+    let position = flows.known[word] ?? return false
+    return match position.owner {
+        TextOwner::Param(key, at) => {
+            let function = declared.fns[key] ?? return false
+            at < function.params.len() && function.params[at].is_nullable
+        },
+        else => false,
+    }
 }
 
 fn a_published_parameter(word: ref String, flows: ref Flows, declared: ref TextDeclared) -> bool {

@@ -140,15 +140,13 @@ fn main() {
 ",
     );
     assert!(
-        rust.contains("let mut maybe_string: Option<String> = None;"),
+        rust.contains("let mut maybe_string: Option<&'static str> = None;"),
         "{rust}"
     );
-    // The second line is the one that needs the constructor written: a
-    // `String` standing where a `String?` is wanted.
-    assert!(
-        rust.contains("maybe_string = Some(String::from(\"World\"));"),
-        "{rust}"
-    );
+    // The second line is the one that needs the wrap written: a `String`
+    // standing where a `String?` is wanted. Only literals flow into it, so it
+    // holds static text (ADR-282 D29).
+    assert!(rust.contains("maybe_string = Some(\"World\");"), "{rust}");
 }
 
 /// **A nullable result, and the `Some(…)` at a `return`.**
@@ -337,7 +335,7 @@ struct Address { city: String }
 struct User { name: String, home: Address? }
 
 fn main() {
-    let home = Address { city: \"Bletchley\" }
+    let home = Address { city: \"Bletchley\".clone() }
     let u = User { name: \"Ada\", home: home }
     let city = u.home?.city ?? \"nowhere\"
     println(f\"{city}\")
@@ -494,10 +492,7 @@ fn main() {
 }
 ",
     );
-    assert!(
-        rust.contains("shown(Some(String::from(\"here\")))"),
-        "{rust}"
-    );
+    assert!(rust.contains("shown(Some(\"here\"))"), "{rust}");
     // `null` is a `T?` already, so nothing goes round it.
     assert!(rust.contains("shown(None)"), "{rust}");
     assert!(!rust.contains("Some(None)"), "{rust}");
@@ -525,11 +520,9 @@ fn main() {
     );
     assert!(rust.contains("shown(b.label)"), "{rust}");
     assert!(!rust.contains("Some(b.label)"), "{rust}");
-    // The field itself does need the wrap, which is the other position.
-    assert!(
-        rust.contains("label: Some(String::from(\"on it\"))"),
-        "{rust}"
-    );
+    // The field itself does need the wrap, which is the other position; only
+    // a literal flows into it, so it holds static text (ADR-282 D29).
+    assert!(rust.contains("label: Some(\"on it\")"), "{rust}");
 }
 
 /// **A `match` and not the field's `map`**, and the reason is what a method can
@@ -671,7 +664,7 @@ fn free() -> String? {{ return \"lit\" }}
 ",
     ));
     assert!(
-        rust.contains("Some(String::from(\"lit\"))"),
+        rust.contains("Some(\"lit\")"),
         "a known type keeps the constructor:\n{rust}"
     );
     assert!(
@@ -680,11 +673,7 @@ fn free() -> String? {{ return \"lit\" }}
     );
     // Two of the three are `Some(…)`, so the conversion is the exception rather
     // than the rule - the `impl` and the free function alike.
-    assert_eq!(
-        rust.matches("Some(String::from(\"lit\"))").count(),
-        2,
-        "{rust}"
-    );
+    assert_eq!(rust.matches("Some(\"lit\")").count(), 2, "{rust}");
 }
 
 // --- one statement, two wraps ------------------------------------------------
@@ -854,7 +843,7 @@ fn a_reached_field_over_a_temporary_still_takes_it() {
 struct User { name: String }
 
 fn find(id: i64) -> User? {
-    if id > 0 { return User { name: \"Ada\" } }
+    if id > 0 { return User { name: \"Ada\".clone() } }
     return null
 }
 
@@ -1015,7 +1004,7 @@ fn a_variant_matched_on_a_nullable_is_refused() {
 #[test]
 fn a_name_given_to_a_coalesce_is_handed_over() {
     let taken = findings(
-        "fn find(n: i64) -> String? {\n    if n > 0 {\n        return \"some\"\n    }\n    return null\n}\n\n\
+        "fn find(n: i64) -> String? {\n    if n > 0 {\n        return \"some\".clone()\n    }\n    return null\n}\n\n\
          fn main() {\n    let viewed = find(1)\n    let first = viewed ?? \"none\"\n    println(first)\n    \
          if viewed != null {\n        println(\"again\")\n    }\n}\n",
     );
@@ -1178,7 +1167,7 @@ impl Tag {
 
 fn find(n: i64) -> String? {
     if n > 0 {
-        return "found"
+        return "found".clone()
     }
     return null
 }
@@ -1410,8 +1399,8 @@ fn the_text_form_of_text_beside_a_view_is_the_text_itself() {
 struct User { name: String }
 
 fn main() {
-    let user: User? = User { name: \"Ada\" }
-    let nobody: String = \"nobody\"
+    let user: User? = User { name: \"Ada\".clone() }
+    let nobody: String = \"nobody\".clone()
     let name = user?.name ?? nobody.to_string()
     println(f\"{name}\")
 }

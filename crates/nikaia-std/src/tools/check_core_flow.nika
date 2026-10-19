@@ -527,12 +527,16 @@ fn check_core_flow_copied_parts(mut state: CheckState, world: ref CheckWorld, ar
     let mut parts = state.pattern_parts(world, arm.pattern, typed)
     state.typed_inside_boxes(world, arm.pattern, parts)
     // `text => …` over a `ref T?` held by value: the name is the payload,
-    // which is already the view (`Some(text)` binds the `&T`).
+    // which is already the view (`Some(text)` binds the `&T`), and nothing is
+    // copied out of it - a view copies, but `*text` would be the text itself.
     let the_payload = !through_the_reference && check_core_flow_binds_the_payload(arm.pattern, typed)
+    if the_payload {
+        return
+    }
     for (name, ty) in parts {
         // A view of a slice, `..rest`, is already the reference.
         let a_slice = check_core_flow_a_slice(ty)
-        if (state.copied(world, ty) || (ty.is_a_view() && !the_payload)) && !a_slice {
+        if (state.copied(world, ty) || ty.is_a_view()) && !a_slice {
             state.facts.copied_bindings.insert((at, name.clone()))
         }
     }
@@ -540,9 +544,11 @@ fn check_core_flow_copied_parts(mut state: CheckState, world: ref CheckWorld, ar
 
 /// Whether `pattern` names the whole payload of a nullable `typed`.
 fn check_core_flow_binds_the_payload(pattern: ref MatchPattern, typed: ref Ty) -> bool {
+    // Beside a `null` arm the arms are typed as what is inside, which is the
+    // view itself: `text =>` binds it as it is.
     let nullable = match typed {
         Ty::Nullable(_) => true,
-        else => false,
+        else => typed.is_a_view(),
     }
     if !nullable {
         return false
