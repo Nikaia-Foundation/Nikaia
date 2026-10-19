@@ -2704,11 +2704,29 @@ fn bounding_fits(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rhs: &Expr, t
         let high = walk.arena.int(hi);
         let above = walk.arena.ge(t, low);
         let below = walk.arena.le(t, high);
-        let goal = walk.arena.and(vec![above, below]);
+        let side = bounding_one_way(op, lhs, rhs);
+        let mut goal = walk.arena.and(vec![above, below]);
+        if side > 0 { goal = below; } else if side < 0 { goal = above; }
         return bounding_proves(&walk, facts, goal, ask);
     }
     let range = match bounding_range_of(walk, op, lhs, rhs, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return false };
     bounds.holds(&range)
+}
+
+fn bounding_one_way(op: &BinaryOp, lhs: &Expr, rhs: &Expr) -> i64 {
+    match op {
+        BinaryOp::Add => { if bounding_a_count(rhs) || bounding_a_count(lhs) { return 1; } },
+        BinaryOp::Sub => { if bounding_a_count(rhs) { return -1; } },
+        _ => { },
+    }
+    0
+}
+
+fn bounding_a_count(expr: &Expr) -> bool {
+    match expr {
+        Expr::LitInt { negative, .. } => { let negative = *negative; !negative },
+        _ => false,
+    }
 }
 
 fn bounding_bounded(walk: &mut BoundsWalk, facts: &mut BoundsFacts, name: &str, range: &Range) {
@@ -13877,7 +13895,7 @@ fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, 
         let local = match state.binding(&pushed_name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let id = local.id;
         let at = span.start as i64;
-        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false });
+        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] });
         state.open_number_given(world, at, nikaia_std::index::get(&args, 0), span);
         state.flow.open_elements.insert(id, at);
     } else if open >= 0 && one_pushed {
@@ -16817,6 +16835,10 @@ fn check_core_ops_whole(side: &Expr, ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_ops_whole_or_open(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { check_core_ops_whole(side, ty) || !state.open_numbers_in(world, side).is_empty() }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_ops_whole_name(side: &Expr, ty: &Ty) -> String {
     if check_core_ops_lit_int(side) { return "".to_owned(); }
     let plain = ty.unseen();
@@ -16915,7 +16937,7 @@ fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         return Ty::Unknown;
     }
     let (found, named) = check_core_ops_same(&state, op, lhs, left, rhs, right, at);
-    if named != "" { state.facts.arithmetic.insert(at.start as i64, named); }
+    if named != "" { state.facts.arithmetic.insert(at.start as i64, named); } else if check_core_ops_unchecked(op) && check_core_ops_whole_or_open(&state, world, lhs, left) && check_core_ops_whole_or_open(&state, world, rhs, right) { state.open_number_site(world, &vec![lhs, rhs], at.start as i64); }
     found
 }
 
@@ -18349,7 +18371,7 @@ fn check_core_stmt_a_path(ty: &Ty) -> bool {
     }
 }
 
-fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_owned(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false } }
+fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_owned(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -18836,6 +18858,12 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
                 _ => value_of_a_copy(&found.unseen()) == into.unseen(),
             };
             if is_whole_number(&name) && same { state.facts.arithmetic.insert(span.start as i64, name); }
+        } else {
+            let counted = match value {
+                Expr::LitInt { .. } => true,
+                _ => !state.open_numbers_in(world, value).is_empty(),
+            };
+            if counted { state.open_number_site(world, &vec![target], span.start as i64); }
         }
     }
     if check_core_stmt_a_slot_operator(op) && check_core_stmt_an_index(target) {
@@ -21230,6 +21258,7 @@ pub struct CheckOpenNumber {
     pub casts: Vec<(i64, String)>,
     pub shifts: Vec<(CheckConstant, Span)>,
     pub typed: bool,
+    pub sites: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25144,6 +25173,10 @@ impl CheckState {
                     let mut written: String = ty.to_owned();
                     if member.1.element { written = format!("Vec<{}>", ty); }
                     self.facts.number_lets.insert(member.1.at.start as i64, written);
+                    for site in member.1.sites.iter() {
+                        let site = nikaia_std::num::value(site);
+                        self.facts.arithmetic.insert(site, ty.to_owned());
+                    }
                     for put in member.1.written.iter() {
                         let mut suffixed = put.2;
                         for literal in put.1.iter() { if !integer_fits(&literal.1, "i32") { suffixed = true; } }
@@ -25499,6 +25532,21 @@ impl CheckState {
             let other = self.open_root(*nikaia_std::index::get(&numbers, (at) as usize));
             if other != head { self.join_number(other, head); }
         }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn open_number_site(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, values: &[&Expr], site: i64) {
+        let mut numbers: Vec<i64> = vec![];
+        for value in values.iter() {
+            let value = *value;
+            numbers.extend(self.open_numbers_in(world, value));
+        }
+        if numbers.is_empty() { return; }
+        let head = self.open_root(*nikaia_std::index::get(&numbers, 0));
+        let found = match *nikaia_std::index::get(&self.flow.open_numbers, &head) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut entry = found.clone();
+        entry.sites.push(site);
+        self.flow.open_numbers.insert(head, entry);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

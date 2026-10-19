@@ -451,6 +451,24 @@ impl CheckState {
         }
     }
 
+    /// **An operation over an open number is a site of the overflow proof**
+    /// (ADR-306 D6) once the number's type is written: kept with the number
+    /// until then. `values` are the operation's sides.
+    pub fn open_number_site(ref mut self, world: ref CheckWorld, values: ref Vec[ref Expr], site: i64) sync {
+        let mut numbers: Vec[i64] = []
+        for value in values {
+            numbers.extend(self.open_numbers_in(world, value))
+        }
+        if numbers.len() == 0 {
+            return
+        }
+        let head = self.open_root(numbers[0])
+        let found = self.flow.open_numbers[head] ?? return
+        let mut entry = found.clone()
+        entry.sites.push(site)
+        self.flow.open_numbers.insert(head, entry)
+    }
+
     fn join_number(ref mut self, number: i64, head: i64) sync {
         let found = self.flow.open_numbers[number] ?? return
         let mut entry = found.clone()

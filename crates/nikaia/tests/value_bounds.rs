@@ -507,3 +507,66 @@ fn main() {
     assert_eq!(unchecked_arithmetic(&rust), 2, "{rust}");
     prints("zero-sized", source, "1001 1001\n");
 }
+
+/// #699: `i + k` and `i += 1` inside `while i < b.len()`: the condition holds
+/// in the body (ADR-306 D4), and a constant that is not negative moves `i`
+/// up only, so the bound below is not asked (D6).
+#[test]
+fn a_step_under_a_while_over_a_length_is_proved() {
+    let typed = "\
+fn a(b: Vec[u8]) -> i64 {
+    let mut i: i64 = 0
+    let mut s: i64 = 0
+    while i < b.len() { s = i + 8; i += 1 }
+    return s
+}
+
+fn main() {
+    println(f\"{a([1, 2, 3])}\")
+}
+";
+    let rust = lowered(typed, Level::Aggressive);
+    assert_eq!(unchecked_arithmetic(&rust), 2, "{rust}");
+    prints("while-step", typed, "10\n");
+    // An untyped `let mut i = 0` is a site as a typed one is.
+    let untyped = typed.replace("let mut i: i64 = 0", "let mut i = 0");
+    let rust = lowered(&untyped, Level::Aggressive);
+    assert_eq!(unchecked_arithmetic(&rust), 2, "{rust}");
+    assert!(rust.contains("<i64>::wrapping_add("), "{rust}");
+    prints("while-step-untyped", &untyped, "10\n");
+}
+
+/// #699: a parameter under `if i < b.len()` is proved from the upper bound
+/// alone; the same `i + 8` with nothing above it keeps its check.
+#[test]
+fn an_upper_bound_alone_proves_a_constant_step() {
+    let guarded = "\
+fn a(b: Vec[u8], i: i64) -> i64 {
+    if i < b.len() { return i + 8 }
+    return 0
+}
+
+fn main() {
+    println(f\"{a([1, 2, 3], -5)}\")
+}
+";
+    assert_eq!(
+        unchecked_arithmetic(&lowered(guarded, Level::Aggressive)),
+        1
+    );
+    prints("upper-bound-step", guarded, "3\n");
+    let unguarded = "\
+fn a(i: i64) -> i64 {
+    return i + 8
+}
+
+fn main() {
+    println(f\"{a(9223372036854775807)}\")
+}
+";
+    assert_eq!(
+        unchecked_arithmetic(&lowered(unguarded, Level::Aggressive)),
+        0
+    );
+    stops("unguarded-step", unguarded, "overflow");
+}

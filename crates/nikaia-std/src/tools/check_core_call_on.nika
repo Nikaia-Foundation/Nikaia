@@ -340,7 +340,7 @@ fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, entry
         let local = state.binding(pushed_name) ?? return
         let id = local.id
         let at = span.start as i64
-        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.clone(), element: true, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false })
+        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.clone(), element: true, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] })
         state.open_number_given(world, at, args[0], span)
         state.flow.open_elements.insert(id, at)
     } else if open >= 0 && one_pushed {

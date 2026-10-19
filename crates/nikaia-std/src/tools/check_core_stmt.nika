@@ -162,7 +162,7 @@ fn check_core_stmt_a_path(ty: ref Ty) -> bool sync {
 
 /// A fresh open number at a `let` or a `for`.
 fn check_core_stmt_open_number(name: ref String, element: bool, span: ref Span) -> CheckOpenNumber {
-    return CheckOpenNumber { name: name.clone(), element: element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false }
+    return CheckOpenNumber { name: name.clone(), element: element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] }
 }
 
 /// **A `let` whose declared type is a number and whose value is a `for`
@@ -822,6 +822,16 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
             }
             if is_whole_number(name) && same {
                 state.facts.arithmetic.insert(span.start as i64, name)
+            }
+        } else {
+            // **`i += 1` on an untyped `let mut i = 0`** waits for the
+            // number's type, as `i + 1` does (ADR-285 D23).
+            let counted = match value {
+                Expr::LitInt { .. } => true,
+                else => state.open_numbers_in(world, value).len() > 0,
+            }
+            if counted {
+                state.open_number_site(world, [target], span.start as i64)
             }
         }
     }

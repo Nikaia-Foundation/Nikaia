@@ -193,6 +193,11 @@ impl CheckState {
                         written = f"Vec<{ty}>"
                     }
                     self.facts.number_lets.insert(member.1.at.start as i64, written)
+                    // **An operation over it is a site of the overflow proof**
+                    // as one over a typed name is (ADR-306 D6).
+                    for site in member.1.sites {
+                        self.facts.arithmetic.insert(site, ty.clone())
+                    }
                     for put in member.1.written {
                         let mut suffixed = put.2
                         for literal in put.1 {

@@ -59,6 +59,10 @@ pub struct CheckOpenNumber {
     /// cast or a method call (#629 D-1, D-2), which the language below cannot
     /// read off an unsuffixed literal.
     pub typed: bool,
+    /// The operations over it that stay inside their type or stop the
+    /// program, by the byte they stand at: sites of the overflow proof
+    /// (ADR-306 D6) once the number's type is written.
+    pub sites: Vec[i64],
 }
 
 /// **A `'…'` bound by a `let` that its uses type** (ADR-320 D8, as a number

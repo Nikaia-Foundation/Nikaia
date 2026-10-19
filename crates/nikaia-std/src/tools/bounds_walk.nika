@@ -573,11 +573,47 @@ fn bounding_fits(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref
         let high = walk.arena.int(hi)
         let above = walk.arena.ge(t, low)
         let below = walk.arena.le(t, high)
-        let goal = walk.arena.and([above, below])
+        // **A constant that is not negative moves a value of the type one way
+        // only** (ADR-306 D6): `i + k` cannot leave below, nor `i - k` above,
+        // so the bound on that side is not asked.
+        let side = bounding_one_way(op, lhs, rhs)
+        let mut goal = walk.arena.and([above, below])
+        if side > 0 {
+            goal = below
+        } else if side < 0 {
+            goal = above
+        }
         return bounding_proves(walk, facts, goal, ask)
     }
     let range = bounding_range_of(walk, op, lhs, rhs, facts, context, program, words, ask) ?? return false
     return bounds.holds(range)
+}
+
+/// Which way an operation with a constant that is not negative moves the
+/// other side: `1` up (`x + k`, `k + x`), `-1` down (`x - k`), `0` either.
+fn bounding_one_way(op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr) -> i64 {
+    match op {
+        BinaryOp::Add => {
+            if bounding_a_count(rhs) || bounding_a_count(lhs) {
+                return 1
+            }
+        },
+        BinaryOp::Sub => {
+            if bounding_a_count(rhs) {
+                return -1
+            }
+        },
+        else => {},
+    }
+    return 0
+}
+
+/// A literal whole number that is not negative.
+fn bounding_a_count(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { negative, .. } => !negative,
+        else => false,
+    }
 }
 
 /// `name` lies within `range`, where it is a whole number.

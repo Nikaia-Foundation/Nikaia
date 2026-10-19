@@ -192,6 +192,12 @@ fn check_core_ops_whole(side: ref Expr, ty: ref Ty) -> bool sync {
     }
 }
 
+/// A side of a whole-number type, a literal, or a number whose type its uses
+/// decide (ADR-285 D23).
+fn check_core_ops_whole_or_open(state: ref CheckState, world: ref CheckWorld, side: ref Expr, ty: ref Ty) -> bool sync {
+    return check_core_ops_whole(side, ty) || state.open_numbers_in(world, side).len() > 0
+}
+
 /// The whole-number type a side names, or the empty text for a literal.
 fn check_core_ops_whole_name(side: ref Expr, ty: ref Ty) -> String sync {
     if check_core_ops_lit_int(side) {
@@ -322,6 +328,10 @@ fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckW
     let (found, named) = check_core_ops_same(state, op, lhs, left, rhs, right, at)
     if named != "" {
         state.facts.arithmetic.insert(at.start as i64, named)
+    } else if check_core_ops_unchecked(op) && check_core_ops_whole_or_open(state, world, lhs, left) && check_core_ops_whole_or_open(state, world, rhs, right) {
+        // **An untyped `let mut i = 0` is a site as a typed one is**: the
+        // operation waits for the number's type (ADR-285 D23).
+        state.open_number_site(world, [lhs, rhs], at.start as i64)
     }
     return found
 }
