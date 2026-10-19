@@ -1843,3 +1843,31 @@ fn a_struct_viewing_a_parameter_only_read_still_lends_it() {
         "`String` lowers as `ref String` does"
     );
 }
+
+/// **A program method's result views its arguments as a function's does**
+/// (#702): `keep` pushes `m.make(v)` into `b`, which outlives `v`, so `make`
+/// keeps `s` and `Tag.label` holds text of its own. `rustc` refused it before
+/// (`v` does not live long enough).
+#[test]
+fn a_method_result_viewing_a_kept_parameter_pushed_into_a_container_owns_its_text() {
+    let method = KEPT_INTO_A_CONTAINER
+        .replace(
+            "fn tag(s: String) -> Tag {\n    return Tag { label: s }\n}\n",
+            "struct Maker {\n    n: i64,\n}\n\nimpl Maker {\n    fn make(ref self, s: String) -> Tag {\n        return Tag { label: s }\n    }\n}\n",
+        )
+        .replace(
+            "fn keep(v: String, mut b: Box) {\n    let a = tag(v)\n    b.items.push(a)\n}",
+            "fn keep(m: Maker, v: String, mut b: Box) {\n    b.items.push(m.make(v))\n}",
+        )
+        .replace(
+            "    keep(f\"x{1}\", b)\n    println(b.items.len())",
+            "    let m = Maker { n: 2 }\n    keep(m, f\"x{1}\", b)\n    println(f\"{b.items.len()} {b.items[0].label} {m.n}\")",
+        );
+    assert!(
+        method.contains("m.make(v)") && method.contains("keep(m, "),
+        "{method}"
+    );
+    runs("method-kept-into-a-container", &method, "1 x1 2");
+    let rust = lowered(&method, Build::default());
+    assert!(rust.contains("label: String,"), "{rust}");
+}

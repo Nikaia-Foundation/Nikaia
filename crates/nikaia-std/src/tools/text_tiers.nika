@@ -1952,34 +1952,60 @@ fn ties_of(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Vec[TextTie
         }
         Expr::Call { func, args, .. } => {
             let callee = tier_callee(func, ask) ?? return out
-            let function = walk.declared.fns[callee]?.clone() ?? return out
-            let mut at = 0
-            while at < args.len() && at < function.params.len() {
-                for tie in ties_of(args[at], ask, walk) {
-                    out.push(tie)
+            call_ties(callee, args, ask, walk, out)
+        }
+        // **A program method's result views its arguments as a function's
+        // does** (#702): the method is the receiver type's where that is
+        // known, as `method_kinds` resolves it.
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = ask.names.resolve(method)
+            let of = tier_struct_of(receiver, ask, walk)
+            let mut keys: Vec[String] = walk.declared.methods[name]?.clone() ?? []
+            if of != null {
+                let own = f"{of ?? ""}::{name}"
+                if keys.contains(own) {
+                    keys = [own]
+                } else if std_declares(name, of, ask) {
+                    keys = []
                 }
-                if a_text_parameter(ask.names, function.params[at]) {
-                    let root = tie_root(args[at], ask)
-                    if root != null {
-                        let name: String = root ?? ""
-                        let local = tier_local(name, walk)
-                        if local != null {
-                            let found: TierLocal = local ?? plain_local(no_kinds())
-                            let kinds = found.kinds.clone()
-                            let depth = tie_depth(name, walk)
-                            if depth >= 0 && !lasting_tier(tier_of_kinds(kinds)) {
-                                let word = seen(TextOwner::Param(callee.clone(), at), no_path(), walk)
-                                out.push(TextTie { word: word, depth: depth, through_text: hands_back_text(function, ask) })
-                            }
-                        }
-                    }
-                }
-                at += 1
+            }
+            for key in keys {
+                call_ties(key, args, ask, walk, out)
             }
         }
         else => {}
     }
     return out
+}
+
+/// The ties a call of this program's function or method `callee` hands
+/// back: those its arguments carry, and each text parameter given a local's
+/// text that does not last.
+fn call_ties(callee: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk, mut out: Vec[TextTie]) {
+    let function = walk.declared.fns[callee]?.clone() ?? return
+    let mut at = 0
+    while at < args.len() && at < function.params.len() {
+        for tie in ties_of(args[at], ask, walk) {
+            out.push(tie)
+        }
+        if a_text_parameter(ask.names, function.params[at]) {
+            let root = tie_root(args[at], ask)
+            if root != null {
+                let name: String = root ?? ""
+                let local = tier_local(name, walk)
+                if local != null {
+                    let found: TierLocal = local ?? plain_local(no_kinds())
+                    let kinds = found.kinds.clone()
+                    let depth = tie_depth(name, walk)
+                    if depth >= 0 && !lasting_tier(tier_of_kinds(kinds)) {
+                        let word = seen(TextOwner::Param(callee.clone(), at), no_path(), walk)
+                        out.push(TextTie { word: word, depth: depth, through_text: hands_back_text(function, ask) })
+                    }
+                }
+            }
+        }
+        at += 1
+    }
 }
 
 fn field_ties(field: ref FieldInit, shorthand: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Vec[TextTie] {

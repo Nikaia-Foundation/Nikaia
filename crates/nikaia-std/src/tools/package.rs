@@ -58207,35 +58207,53 @@ fn ties_of(value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Vec<
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return out };
-            let function = match match *nikaia_std::index::get(&walk.declared.fns, &callee) {
+            call_ties(&callee, args, ask, walk, &mut out);
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            let of = tier_struct_of(receiver, ask, &walk);
+            let mut keys: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.declared.methods, name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            } { Some(__nikaia_value) => __nikaia_value, None => return out };
-            let mut at: i64 = 0;
-            while at < args.len() as i64 && at < function.params.len() as i64 {
-                for tie in ties_of(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk) { out.push(tie); }
-                if a_text_parameter(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
-                    let root = tie_root(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask);
-                    if root.is_some() {
-                        let name: String = nikaia_std::index::or(root, || "".into());
-                        let local = tier_local(&name, &walk);
-                        if local.is_some() {
-                            let found: TierLocal = nikaia_std::index::or(local, || plain_local(no_kinds()).into());
-                            let kinds = found.kinds.clone();
-                            let depth = tie_depth(&name, &walk);
-                            if depth >= 0 && !lasting_tier(tier_of_kinds(&kinds)) {
-                                let word = seen(&TextOwner::Param(callee.to_owned(), at), &no_path(), walk);
-                                out.push(TextTie { word, depth, through_text: hands_back_text(&function, ask) });
-                            }
-                        }
-                    }
-                }
-                at += 1;
+            }, || vec![].into());
+            if of.is_some() {
+                let own = format!("{}::{}", nikaia_std::index::or(of.as_deref(), || ""), name);
+                if nikaia_std::list::contains(&keys, &own) { keys = vec![own]; } else if std_declares(name, Option::as_deref(&of), ask) { keys = vec![]; }
             }
+            for key in keys.iter() { call_ties(key, args, ask, walk, &mut out); }
         },
         _ => { },
     }
     out
+}
+
+fn call_ties(callee: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<TextTie>) {
+    let function = match match *nikaia_std::index::get(&walk.declared.fns, callee) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut at: i64 = 0;
+    while at < args.len() as i64 && at < function.params.len() as i64 {
+        for tie in ties_of(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk) { out.push(tie); }
+        if a_text_parameter(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
+            let root = tie_root(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask);
+            if root.is_some() {
+                let name: String = nikaia_std::index::or(root, || "".into());
+                let local = tier_local(&name, &walk);
+                if local.is_some() {
+                    let found: TierLocal = nikaia_std::index::or(local, || plain_local(no_kinds()).into());
+                    let kinds = found.kinds.clone();
+                    let depth = tie_depth(&name, &walk);
+                    if depth >= 0 && !lasting_tier(tier_of_kinds(&kinds)) {
+                        let word = seen(&TextOwner::Param(callee.to_owned(), at), &no_path(), walk);
+                        out.push(TextTie { word, depth, through_text: hands_back_text(&function, ask) });
+                    }
+                }
+            }
+        }
+        at += 1;
+    }
 }
 
 fn field_ties(field: &FieldInit, shorthand: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Vec<TextTie> {
