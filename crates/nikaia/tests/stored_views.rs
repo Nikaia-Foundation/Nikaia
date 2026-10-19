@@ -560,14 +560,22 @@ impl Holder {
 
 /// #585: a local struct read only through its fields keeps nothing; one that
 /// leaves - returned, handed to a kept list, stored in another struct - still
-/// keeps the view it holds.
+/// keeps the view it holds. One handed back through a `let` lends its
+/// parameter, as `return Holder { name: s }` does
+/// ([ADR-282](../../../docs/specification/adr/adr-282.md) D5, D12, #678).
 #[test]
 fn a_local_struct_keeps_a_view_only_where_it_leaves() {
     let head = "struct Holder {\n    name: String,\n}\n\nstruct Outer {\n    held: Holder,\n}\n\n";
     let local = "fn two(s: ref String) -> i64 {\n    let h = Holder { name: s }\n    return h.name.len()\n}\n";
     assert!(findings(&format!("{head}{local}")).is_empty());
+    let handed_back =
+        "fn keep(s: ref String) -> Holder {\n    let h = Holder { name: s }\n    return h\n}\n";
+    assert!(
+        findings(&format!("{head}{handed_back}")).is_empty(),
+        "{:#?}",
+        findings(&format!("{head}{handed_back}"))
+    );
     for leaves in [
-        "fn keep(s: ref String) -> Holder {\n    let h = Holder { name: s }\n    return h\n}\n",
         "fn keep(s: ref String, mut l: Vec[Holder]) {\n    let h = Holder { name: s }\n    l.push(h)\n}\n",
         "fn keep(s: ref String) -> Outer {\n    let h = Holder { name: s }\n    return Outer { held: h }\n}\n",
     ] {
