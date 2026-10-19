@@ -20531,6 +20531,12 @@ impl CheckState {
                 help = format!("Take it apart first: `let ({}) = {}`, then write {}.", pattern, shown, listed);
             },
             Ty::Named { ref name, .. } => {
+                if name == "SharedMut" || name == "Locked" {
+                    let message = format!("You can't put a `{}` in an `f\"…\"` hole.", held.text());
+                    let note = format!("A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.text());
+                    self.findings.push(check_refusal("NK1201", span, message, vec![note], Some(format!("Take the value out first: `let value = {}.get()`, then write `{{value}}`.", shown))));
+                    return;
+                }
                 if name.contains("::") || name == "Self" { return; }
                 let is_enum = self.enums.contains_key(name);
                 let is_struct = self.structs.contains_key(name);

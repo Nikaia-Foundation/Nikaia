@@ -288,7 +288,7 @@ fn a_struct_that_holds_a_shared_crosses_into_a_task() {
 fn a_lock_goes_into_a_task_of_our_own() {
     let clean = crossings(
         "fn zaehle(counter: SharedMut[i32]) {\n\
-             spawn fn { println(f\"{counter}\") }\n\
+             spawn fn { println(f\"{counter.get()}\") }\n\
          }",
     );
     assert!(
@@ -360,7 +360,7 @@ fn a_lock_does_not_go_into_code_nothing_describes() {
     assert!(
         crossings(
             "fn zaehle(counter: SharedMut[i32]) {\n\
-             spawn fn { println(f\"{counter}\") }\n\
+             spawn fn { println(f\"{counter.get()}\") }\n\
          }",
         )
         .is_empty()
@@ -457,7 +457,7 @@ fn the_verdict_is_the_same_at_both_settings() {
              spawn fn { println(f\"{counts.len()}\") }\n\
          }",
         "fn zaehle(counter: SharedMut[i32]) {\n\
-             spawn fn { println(f\"{counter}\") }\n\
+             spawn fn { println(f\"{counter.get()}\") }\n\
          }",
     ] {
         // The analysis never sees a switch, so there is one verdict to compare.
@@ -503,7 +503,7 @@ fn the_verdict_is_the_same_at_both_settings() {
 fn the_shared_half_of_part_ii_12_2s_counter_no_longer_refuses() {
     let source = "fn zaehle(counter: SharedMut[i32]) {\n\
                       counter.access(fn(a) { a })\n\
-                      spawn fn { println(f\"{counter}\") }\n\
+                      spawn fn { println(f\"{counter.get()}\") }\n\
                   }";
     for setting in ["no", "yes"] {
         assert_eq!(refused_at(source, setting), None, "at `{setting}`");

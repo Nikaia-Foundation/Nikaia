@@ -837,3 +837,24 @@ fn a_character_binding_is_typed_by_its_uses() {
     let help = refused[0].help.as_deref().unwrap_or_default();
     assert!(help.contains("let c: u8 = ';'"), "{help}");
 }
+
+/// **A value behind a lock has no text of its own** (#704): `SharedMut[i32]`
+/// in a hole reached `rustc` as *`Arc<Mutex<i32>>` doesn't implement
+/// `std::fmt::Display`*. `get` takes the value out (Part I 6.3).
+#[test]
+fn a_shared_mut_in_a_hole_is_refused() {
+    let found = no_text_form(
+        "fn count(n: SharedMut[i32]) {\n\
+         \x20   println(f\"{n}\")\n\
+         }\n\
+         fn main() { }\n",
+    );
+    assert_eq!(
+        found.message,
+        "You can't put a `SharedMut[i32]` in an `f\"…\"` hole."
+    );
+    assert!(
+        found.help.as_deref().unwrap_or("").contains("n.get()"),
+        "{found:#?}"
+    );
+}

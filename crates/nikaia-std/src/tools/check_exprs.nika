@@ -141,7 +141,8 @@ impl CheckState {
     }
 
     /// `NK1201` for the rest of what has no text form (#638): a range, a
-    /// tuple, and a struct or `enum` of this package with no `impl Error`. An
+    /// tuple, a `SharedMut[T]` or `Locked[T]`, and a struct or `enum` of this
+    /// package with no `impl Error`. An
     /// error's text is its message, and the lowering writes a `Display` for
     /// it and for a sum of errors; a type from another package is left alone.
     fn a_value_with_no_text_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, span: ref Span) sync {
@@ -178,6 +179,15 @@ impl CheckState {
                 help = f"Take it apart first: `let ({pattern}) = {shown}`, then write {listed}."
             }
             Ty::Named { name, .. } => {
+                // **A value behind a lock is reached through a door** (Part I
+                // 6.3, #704): `SharedMut[T]` and `Locked[T]` have no text of
+                // their own; `get` takes the value out.
+                if name == "SharedMut" || name == "Locked" {
+                    let message = f"You can't put a `{held.text()}` in an `f\"…\"` hole."
+                    let note = f"A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{written}` is `{held.text()}`."
+                    self.findings.push(check_refusal("NK1201", span, message, [note], f"Take the value out first: `let value = {shown}.get()`, then write `{{value}}`."))
+                    return
+                }
                 if name.contains("::") || name == "Self" {
                     return
                 }
