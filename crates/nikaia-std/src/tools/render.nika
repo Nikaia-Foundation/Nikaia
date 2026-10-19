@@ -58,14 +58,13 @@ struct Placed {
 
 /// The finding, laid out.
 pub fn rendered(shown: ref Shown, path: ref String, source: ref String) -> String {
-    let chars: Vec[scalar] = source.chars().collect()
     let lines: Vec[ref String] = source.split("\n").collect()
-    return rendered_in(shown, path, chars, lines)
+    return rendered_in(shown, path, lines)
 }
 
-/// [`rendered`] over a source already split into its scalars and its lines:
+/// [`rendered`] over a source already split into its lines:
 /// a file with many findings splits once, not once per finding (#727).
-pub fn rendered_in(shown: ref Shown, path: ref String, chars: ref Vec[scalar], lines: ref Vec[ref String]) -> String {
+pub fn rendered_in(shown: ref Shown, path: ref String, lines: ref Vec[ref String]) -> String {
     let mut labels: Vec[Marked] = shown.labels.clone()
     // One layout for every message: a finding that names no place of its own
     // is marked where it stands.
@@ -74,9 +73,9 @@ pub fn rendered_in(shown: ref Shown, path: ref String, chars: ref Vec[scalar], l
     }
     let mut placed: Vec[Placed] = []
     for label in labels {
-        let at = line_column(chars, label.span.start)
+        let at = line_column(lines, label.span.start)
         let text = line_of(lines, at.0)
-        let found = if label.word.len() == 0 { (at.1, spanned_width(chars, label.span)) } else { word_in(text, at.1, label.word) }
+        let found = if label.word.len() == 0 { (at.1, spanned_width(lines, label.span)) } else { word_in(text, at.1, label.word) }
         placed.push(Placed { line: at.0, column: found.0, width: found.1, label: label.clone() })
     }
     let placed = in_order(placed)
@@ -89,7 +88,7 @@ pub fn rendered_in(shown: ref Shown, path: ref String, chars: ref Vec[scalar], l
         }
     }
     if line < 0 {
-        let at = line_column(chars, shown.span.start)
+        let at = line_column(lines, shown.span.start)
         line = at.0
         column = at.1
     }
@@ -177,43 +176,47 @@ fn line_of(lines: ref Vec[ref String], line: i64) -> String {
     return lines[line - 1].clone()
 }
 
+// The 0-based line `offset` is on: the last whose first byte is not after it.
+fn line_at(lines: ref Vec[ref String], offset: i64) -> (i64, i64) {
+    let mut line = 0
+    let mut start = 0
+    while line + 1 < lines.len() && start + lines[line].len() < offset {
+        start += lines[line].len() + 1
+        line += 1
+    }
+    return (line, start)
+}
+
 // The 1-based line and the 1-based column, in characters, of a byte offset.
-fn line_column(chars: ref Vec[scalar], offset: u32) -> (i64, i64) {
+fn line_column(lines: ref Vec[ref String], offset: u32) -> (i64, i64) {
     let wanted = offset as i64
-    let mut bytes = 0
-    let mut line = 1
+    let at = line_at(lines, wanted)
+    let mut bytes = at.1
     let mut column = 1
-    for c in chars {
+    for c in lines[at.0].chars() {
         if bytes >= wanted {
             break
         }
         bytes += utf8_width(c)
-        if c == '\n' {
-            line += 1
-            column = 1
-        } else {
-            column += 1
-        }
+        column += 1
     }
-    return (line, column)
+    return (at.0 + 1, column)
 }
 
 // How many characters of its first line a span covers, without the trailing
 // space: what a label with no word of its own underlines. One at least, so a
 // place is always marked.
-fn spanned_width(chars: ref Vec[scalar], span: ref Span) -> i64 {
+fn spanned_width(lines: ref Vec[ref String], span: ref Span) -> i64 {
     let start = span.start as i64
     let end = span.end as i64
-    let mut bytes = 0
+    let at = line_at(lines, start)
+    let mut bytes = at.1
     let mut covered: String = ""
-    for c in chars {
+    for c in lines[at.0].chars() {
         if bytes >= end {
             break
         }
         if bytes >= start {
-            if c == '\n' {
-                break
-            }
             covered.push(c)
         }
         bytes += utf8_width(c)

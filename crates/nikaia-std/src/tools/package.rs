@@ -46062,7 +46062,7 @@ fn lg_tighten_step(bound: &LgLin, steps: &mut Vec<LgStep>) -> LgHeld {
     LgHeld { lin: tight, step: steps.len() as i64 - 1 }
 }
 
-fn lg_sorted_places(keys: &[String], places: &[i64]) -> Vec<i64> {
+fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
     if places.len() < 2 { return places.to_owned(); }
     let middle = places.len() as i64 / 2;
     let mut left: Vec<i64> = vec![];
@@ -46072,13 +46072,15 @@ fn lg_sorted_places(keys: &[String], places: &[i64]) -> Vec<i64> {
         if at < middle { left.push(*nikaia_std::index::get(&places, (at) as usize)); } else { right.push(*nikaia_std::index::get(&places, (at) as usize)); }
         at += 1;
     }
-    let a = lg_sorted_places(keys, &left);
-    let b = lg_sorted_places(keys, &right);
+    let a = lg_sorted_places(held, &left);
+    let b = lg_sorted_places(held, &right);
     let mut out: Vec<i64> = vec![];
     let mut i: i64 = 0;
     let mut j: i64 = 0;
     while ((i) as usize) < a.len() && ((j) as usize) < b.len() {
-        if *nikaia_std::index::get(&keys, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))) < *nikaia_std::index::get(&keys, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))) {
+        let mut order = lg_terms_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.terms, &nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.terms);
+        if order == 0 { if nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.constant { order = -1; } else if nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.constant { order = 1; } }
+        if order < 0 {
             out.push(*nikaia_std::index::get(&b, (j) as usize));
             j += 1;
         } else {
@@ -46097,44 +46099,6 @@ fn lg_sorted_places(keys: &[String], places: &[i64]) -> Vec<i64> {
     out
 }
 
-fn lg_order_key(lin: &LgLin) -> String {
-    let mut key: String = String::from("");
-    for (name, k) in lin.terms.iter() {
-        let k = nikaia_std::num::value(k);
-        key.push_str(name);
-        key.push_str("\0");
-        if k < 0 {
-            key.push_str("0");
-            key.push_str(&lg_padded(k + 9223372036854775807i64 + 1));
-        } else {
-            key.push_str("1");
-            key.push_str(&lg_padded(k));
-        }
-    }
-    key.push_str("\u{1}");
-    let c = lin.constant;
-    if c >= 0 {
-        key.push_str("0");
-        key.push_str(&lg_padded(9223372036854775807i64 - c));
-    } else {
-        key.push_str("1");
-        key.push_str(&lg_padded(-(c + 1)));
-    }
-    key
-}
-
-fn lg_padded(n: i64) -> String {
-    let digits = format!("{}", n);
-    let mut out: String = String::from("");
-    let mut at = digits.len() as i64;
-    while at < 19 {
-        out.push_str("0");
-        at += 1;
-    }
-    out.push_str(&digits);
-    out
-}
-
 fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     let mut steps: Vec<LgStep> = vec![];
     let mut round_names: Vec<String> = vec![];
@@ -46149,16 +46113,12 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     loop {
         for one in held.iter() { if one.lin.terms.is_empty() && one.lin.constant > 0 { return LgClosed::Refuted(lg_traced(&steps, one.step)); } }
         let mut live: Vec<i64> = vec![];
-        let mut keys: Vec<String> = vec![];
         let mut at: i64 = 0;
         while at < held.len() as i64 {
-            if !nikaia_std::index::get(&held, nikaia_std::index::at(at)).lin.terms.is_empty() {
-                live.push(at);
-                keys.push(lg_order_key(&nikaia_std::index::get(&held, nikaia_std::index::at(at)).lin));
-            } else { keys.push(String::from("")); }
+            if !nikaia_std::index::get(&held, nikaia_std::index::at(at)).lin.terms.is_empty() { live.push(at); }
             at += 1;
         }
-        let ordered = lg_sorted_places(&keys, &live);
+        let ordered = lg_sorted_places(&held, &live);
         let mut bounds_now: Vec<LgHeld> = vec![];
         let mut kept: i64 = -1;
         for place in ordered.iter() {
@@ -53681,19 +53641,18 @@ struct Placed {
 }
 
 pub fn rendered(shown: &Shown, path: &str, source: &str) -> String {
-    let chars: Vec<scalar> = nikaia_std::list::chars(source.chars());
     let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
-    rendered_in(shown, path, &chars, &lines)
+    rendered_in(shown, path, &lines)
 }
 
-pub fn rendered_in(shown: &Shown, path: &str, chars: &[scalar], lines: &[&str]) -> String {
+pub fn rendered_in(shown: &Shown, path: &str, lines: &[&str]) -> String {
     let mut labels: Vec<Marked> = shown.labels.to_owned();
     if labels.is_empty() { labels.push(Marked { span: shown.span.clone(), word: String::from(""), text: String::from(""), main: true }); }
     let mut placed: Vec<Placed> = vec![];
     for label in labels.iter() {
-        let at = line_column(chars, label.span.start);
+        let at = line_column(lines, label.span.start);
         let text = line_of(lines, at.0);
-        let found = if label.word.is_empty() { (at.1, spanned_width(chars, &label.span)) } else { word_in(&text, at.1, &label.word) };
+        let found = if label.word.is_empty() { (at.1, spanned_width(lines, &label.span)) } else { word_in(&text, at.1, &label.word) };
         placed.push(Placed { line: at.0, column: found.0, width: found.1, label: label.clone() });
     }
     let placed = in_order(&placed);
@@ -53706,7 +53665,7 @@ pub fn rendered_in(shown: &Shown, path: &str, chars: &[scalar], lines: &[&str]) 
         }
     }
     if line < 0 {
-        let at = line_column(chars, shown.span.start);
+        let at = line_column(lines, shown.span.start);
         line = at.0;
         column = at.1;
     }
@@ -53785,35 +53744,38 @@ fn line_of(lines: &[&str], line: i64) -> String {
     (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).to_owned()
 }
 
-fn line_column(chars: &[scalar], offset: u32) -> (i64, i64) {
-    let wanted = offset as i64;
-    let mut bytes: i64 = 0;
-    let mut line = 1;
-    let mut column = 1;
-    for c in chars.iter() {
-        let c = nikaia_std::num::value(c);
-        if bytes >= wanted { break; }
-        bytes += utf8_width(c);
-        if c == '\n' {
-            line += 1;
-            column = 1;
-        } else { column += 1; }
+fn line_at(lines: &[&str], offset: i64) -> (i64, i64) {
+    let mut line: i64 = 0;
+    let mut start: i64 = 0;
+    while ((line + 1) as usize) < lines.len() && (start + (*nikaia_std::index::get(&lines, (line) as usize)).len() as i64) < offset {
+        start += (*nikaia_std::index::get(&lines, (line) as usize)).len() as i64 + 1;
+        line += 1;
     }
-    (line, column)
+    (line, start)
 }
 
-fn spanned_width(chars: &[scalar], span: &Span) -> i64 {
+fn line_column(lines: &[&str], offset: u32) -> (i64, i64) {
+    let wanted = offset as i64;
+    let at = line_at(lines, wanted);
+    let mut bytes = at.1;
+    let mut column = 1;
+    for c in (*nikaia_std::index::get(&lines, nikaia_std::index::at(at.0))).chars() {
+        if bytes >= wanted { break; }
+        bytes += utf8_width(c);
+        column += 1;
+    }
+    (at.0 + 1, column)
+}
+
+fn spanned_width(lines: &[&str], span: &Span) -> i64 {
     let start = span.start as i64;
     let end = span.end as i64;
-    let mut bytes: i64 = 0;
+    let at = line_at(lines, start);
+    let mut bytes = at.1;
     let mut covered: String = String::from("");
-    for c in chars.iter() {
-        let c = nikaia_std::num::value(c);
+    for c in (*nikaia_std::index::get(&lines, nikaia_std::index::at(at.0))).chars() {
         if bytes >= end { break; }
-        if bytes >= start {
-            if c == '\n' { break; }
-            covered.push(c);
-        }
+        if bytes >= start { covered.push(c); }
         bytes += utf8_width(c);
     }
     let width = covered.trim_end().chars().count() as i64;

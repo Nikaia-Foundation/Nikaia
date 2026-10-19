@@ -634,15 +634,9 @@ pub fn render_finding(finding: &crate::check::Finding, path: &str, source: &str)
     nikaia_std::tools::render::rendered(&shown(finding), path, source)
 }
 
-/// [`render_finding`] over a source already split into its characters and its
-/// lines, for a caller that renders every finding of one file (#727).
-pub fn render_finding_in(
-    finding: &crate::check::Finding,
-    path: &str,
-    chars: &[char],
-    lines: &[&str],
-) -> String {
-    nikaia_std::tools::render::rendered_in(&shown(finding), path, chars, lines)
+/// [`render_finding`] over a source already split into its lines, for a caller that renders every finding of one file (#727).
+pub fn render_finding_in(finding: &crate::check::Finding, path: &str, lines: &[&str]) -> String {
+    nikaia_std::tools::render::rendered_in(&shown(finding), path, lines)
 }
 
 fn shown(finding: &crate::check::Finding) -> nikaia_std::tools::render::Shown {
