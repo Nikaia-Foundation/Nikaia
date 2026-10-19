@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1090] — 2026-10-19
+
+**A program's std no longer compiles the compiler (#723)**
+- nikaia-std's self-hosted compiler (`src/tools`, `nikaia_std::tools`) is compiled only under the new `compiler` feature, which only crates/nikaia enables. std's own run-time Nikaia, the HTTP/1 head grammar, moved to `src/runtime`, a package of its own lowered into `src/runtime/package.rs` (`nikaia_std::runtime`). Building a program's std: about 120 s to 10 s of CPU, rlib 37 MB to 4.8 MB. A change to a `tools/*.nika` no longer rebuilds programs' std.
+
 ## [0.0.1089] — 2026-10-19
 
 **a `catch` also catches a failing call inside the expression it guards (#721)**
