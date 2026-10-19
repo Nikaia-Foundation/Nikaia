@@ -3,4 +3,4 @@
 # question in normal form, and `proved` with its certificate,
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
-a5fed63e6a20dbbde4a686a5c890969e36f4a8b2070da09be87caa538bcc5039 refuted v0=4611686018427387904,v1=4611686018427387905
+747f57667d32b7c1cdc26b362da1cf3b16da2571a615a11485bb381d97e792ab refuted v0=4611686018427387904,v1=4611686018427387905
