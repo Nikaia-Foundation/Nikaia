@@ -96,3 +96,36 @@ fn main() {
         "{found:#?}"
     );
 }
+
+/// **The block supplies the replacement value, of the guarded value's type**
+/// (Part I 7.1, #704): `fs::read` hands back `Bytes`, and a text fallback
+/// reached `rustc` as *mismatched types*. A block that leaves is not asked.
+#[test]
+fn a_replacement_of_another_type_is_refused() {
+    let found = findings(
+        r#"
+use std::fs
+
+fn main() {
+    let t = fs::read("a.txt", fs::Root::Anywhere) catch { "" }
+}
+"#,
+    );
+    assert!(
+        found.iter().any(|f| f.code == "NK1103"
+            && f.message
+                == "This `catch` hands back `String`, but the value it guards is `Bytes`."),
+        "{found:#?}"
+    );
+    let leaves = findings(
+        r#"
+use std::fs
+
+fn main() {
+    let t = fs::read("a.txt", fs::Root::Anywhere) catch { return }
+    println(f"{t.len()}")
+}
+"#,
+    );
+    assert!(!leaves.iter().any(|f| f.code == "NK1103"), "{leaves:#?}");
+}

@@ -907,5 +907,12 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     if state.block_leaves(world, handler) || value.is_unknown() || value.fits(answers) {
         return answers
     }
+    // **The block supplies the replacement value** (Part I 7.1), so it is of
+    // the type the guarded value has (#704): `fs::read(…) catch { "" }` is
+    // refused, not handed to the backend. A block that ends in a statement
+    // hands back nothing and is not asked.
+    if !answers.is_unknown() && value.text() != "()" {
+        state.expect_type(world, value.owned(), answers, span, "let", fn(found, wanted) { f"This `catch` hands back `{found}`, but the value it guards is `{wanted}`." })
+    }
     return Ty::Unknown
 }
