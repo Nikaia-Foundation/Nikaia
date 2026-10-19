@@ -182,6 +182,27 @@ pub fn imports_exactly(view: ref ParsedView, head: ref String) -> bool {
     return false
 }
 
+/// Whether the file's struct `owner` declares `field` a `String` that holds
+/// static text (ADR-282 D29): its type is the view below, and `String` in the
+/// program's words.
+pub fn a_field_of_static_text(view: ref ParsedView, owner: ref String, field: ref String) -> bool {
+    for item in view.items {
+        match item.node {
+            Item::Struct { name, fields, .. } => {
+                if view.text(name) == owner {
+                    for declared in fields {
+                        if view.text(declared.name) == field {
+                            return declared.ty.lasting
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
 /// Whether the file declares an `extern` struct or enum called `name`.
 pub fn an_extern_struct_named(view: ref ParsedView, name: ref String) -> bool {
     for item in view.items {

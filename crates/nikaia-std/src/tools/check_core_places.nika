@@ -184,6 +184,9 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
     for found in fields {
         if found.name == field {
             state.field_is_reachable(ty, found, span)
+            if a_field_of_static_text(world.here, ty, field) {
+                state.facts.static_field_reads.insert(id_of(expr) as i64)
+            }
             // `Pair[i64].first` is an `i64` (ADR-288, ADR-295 D2).
             return substitute(found.ty, state.arguments_of(on))
         }

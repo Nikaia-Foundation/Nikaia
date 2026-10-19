@@ -86,6 +86,31 @@ impl CheckState {
     /// [`CheckState::expect_type`], for a position that has the value in hand, so a
     /// view of text kept where text of its own is wanted can say **why** here
     /// (ADR-282 D25). `keeper` is the position's own words for what keeps it.
+    /// **A field declared `String` is said as `String`** (ADR-282 D29): one
+    /// that holds static text is typed as the view it is below, and the
+    /// refusals pushed since `before` speak the program's words.
+    fn said_as_declared(ref mut self, present: ref Ty, value: ref Expr?, before: i64) sync {
+        let given = value ?? return
+        if !self.facts.static_field_reads.contains(id_of(check_peeled(given)) as i64) {
+            return
+        }
+        let shown = f"`{present.text()}`"
+        let said = f"`{present.owned().text()}`"
+        if shown == said {
+            return
+        }
+        let mut at = before
+        while at < self.findings.len() {
+            let message = self.findings[at].message.replace(shown, said)
+            self.findings[at].message = message
+            if self.findings[at].help != null {
+                let help = (self.findings[at].help ?? "").replace(shown, said)
+                self.findings[at].help = help
+            }
+            at += 1
+        }
+    }
+
     pub fn expect_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
         // **A place that says its type is a use of the numbers put there**
         // (ADR-285 D24): a field, a `let`'s annotation, what a function hands
@@ -135,6 +160,7 @@ impl CheckState {
         }
         let before = self.findings.len()
         self.expect_type(world, present, target, span, what, message)
+        self.said_as_declared(present, value, before)
         if self.findings.len() > before {
             self.a_view_kept_beside(world, present, target, value, keeper)
         }

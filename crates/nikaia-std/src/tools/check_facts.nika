@@ -108,6 +108,10 @@ pub struct CheckFacts {
     /// through `?.`, the receiver is a reference to the text, which may itself
     /// be a view (ADR-282 D29), and only `to_string` copies both.
     pub text_copies: collections::BTreeSet[i64],
+    /// Reads of a field declared `String` that holds static text (ADR-282
+    /// D29), by the read's id: typed as the view it is below, said as the
+    /// `String` the program wrote.
+    pub static_field_reads: collections::BTreeSet[i64],
     pub text_as_is: collections::BTreeSet[i64],
     pub lent_coalesces: collections::BTreeMap[i64, String],
     pub plain_reaches: collections::BTreeSet[i64],
@@ -271,6 +275,7 @@ impl CheckFacts {
             copied_slots: collections::BTreeSet(),
             owned_copies: collections::BTreeSet(),
             text_copies: collections::BTreeSet(),
+            static_field_reads: collections::BTreeSet(),
             text_as_is: collections::BTreeSet(),
             lent_coalesces: collections::BTreeMap(),
             plain_reaches: collections::BTreeSet(),
