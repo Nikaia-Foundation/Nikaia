@@ -102,13 +102,17 @@ pub fn analyse(
 }
 
 /// Whether a callee takes its parameter `index` as its own: the body keeps it
-/// or changes it, so it is not lowered as a view (Part I 6.5).
+/// or changes it, so it is not lowered as a view (Part I 6.5). One lowered as a
+/// view whose result keeps it (`pair(a: String) -> Pair`, lent since #678)
+/// is only read: the result is a view of the caller's text (#708).
 fn owns(contract: &crate::contracts::FnContract, index: usize) -> bool {
     let Some(signature) = contract.signature.as_ref() else {
         return false;
     };
-    signature.params.get(index).is_some_and(|(param, _)| {
-        param != "self" && (contract.keeps.contains(param) || signature.mutable.contains(param))
+    signature.params.get(index).is_some_and(|(param, ty)| {
+        param != "self"
+            && ((contract.keeps.contains(param) && !ty.is_a_view())
+                || signature.mutable.contains(param))
     })
 }
 
