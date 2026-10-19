@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1104] — 2026-10-19
+
+**An impl narrower than its trait's declaration is the type's own method and a bridge**
+- A trait method declared to pause or fail (ADR-288 D25) may be implemented by a `sync` or non-throwing method (D2). That method is now lowered into an inherent `impl` (`pub` when the type is), so a call on the concrete type follows its own contract without `.await` or `?`. The trait's `impl` is a bridge with the declaration's signature that calls it, awaiting it and wrapping it in `Ok` as needed (#703 item 11).
+
 ## [0.0.1103] — 2026-10-19
 
 **A binding may shadow a comptime; a part of a mut parameter is handed on in place**
