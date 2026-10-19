@@ -41437,6 +41437,7 @@ fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, holes_of: &
         },
         Expr::ListLit { items, .. } => { for item in items.iter() { keep_part(Some(item), interner, context, uses); } },
         Expr::Tuple(items, _) => { for item in items.iter() { keep_part(Some(item), interner, context, uses); } },
+        Expr::ListRepeat { value, .. } => { let value = nikaia_std::boxed::open(value); keep_part(Some(value), interner, context, uses); },
         Expr::Coalesce { value, .. } => { let value = nikaia_std::boxed::open(value); keep_named(value, interner, context, uses); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); keep_named(base, interner, context, uses); },
         Expr::Try(value, _) => { let value = nikaia_std::boxed::open(value); keep_named(value, interner, context, uses); },

@@ -409,6 +409,8 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
                 keep_part(item, interner, context, uses)
             }
         }
+        // `[x; n]` holds `x` as many times as it says.
+        Expr::ListRepeat { value, .. } => keep_part(value, interner, context, uses),
         // **Three shapes the lowering consumes**: `a ?? b` is
         // `unwrap_or_else`, `x?.f` takes the value it reaches through, and `x?`
         // unwraps one - each moves the value in the language below.

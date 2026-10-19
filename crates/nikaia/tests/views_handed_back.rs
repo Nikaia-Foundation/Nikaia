@@ -84,16 +84,19 @@ fn tethers_names_the_keep() {
 }
 
 /// **Step 5**: `NK1104`'s help is the way out, and following it is a program
-/// (that it runs is `tests/language/src/views_handed_back.nika`).
+/// (that it runs is `tests/language/src/views_handed_back.nika`). The text is
+/// a local's: a `String` parameter the result points into is lent, and
+/// handing it back is already a program (ADR-282 D5, #654).
 #[test]
 fn following_nk1104s_help_is_a_program() {
     let refused = "\
-fn e(t: String) -> ref String {
-    return t
+fn d() -> ref String {
+    let s: String = \"x\".clone()
+    return s
 }
 
 fn main() {
-    println(e(\"y\"))
+    println(d())
 }
 ";
     let found = findings(refused);
@@ -103,7 +106,7 @@ fn main() {
         found[0].help.as_deref(),
         Some("Write `ref` in front of it to pass a view of it.")
     );
-    let followed = refused.replace("return t", "return ref t");
+    let followed = refused.replace("return s", "return ref s");
     assert!(findings(&followed).is_empty(), "{followed}");
 }
 
