@@ -545,6 +545,16 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // **And a lambda handed a lent item is lent it** (#626).
     let outer_lent = state.flow.lent_params.clone()
     state.flow.lent_params = state.lent_walk_params(world, contract, entry, receiver, args)
+    // **`and_modify` on a map of numbers hands its lambda the number** (#684):
+    // `fn(v) { v += 1 }` and `fn(v) { v = v * 2 }` change the value in the
+    // slot, which is copied in and written back.
+    if key == "Entry::and_modify" && args.len() == 1 && expected.len() == 1 {
+        let copied: Ty? = check_core_call_on_copied_entry(expected[0], args[0])
+        if copied != null {
+            expected[0] = copied ?? Ty::Unknown
+            state.facts.copied_entry_lambdas.insert(id_of(args[0]) as i64)
+        }
+    }
     let callee: FnContract? = contract.clone()
     let found = check_core_arguments_given(state, world, host, args, expected, world.own.functions.contains_key(key), callee, span)
     state.flow.open_params = outer_params
@@ -775,4 +785,27 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
         return Ty::Unknown
     }
     return Ty::Nullable(reached)
+}
+
+/// The function type an `and_modify` lambda of one parameter is handed where
+/// the map holds a number, `bool` or `char` (#684): the value, not a view of
+/// it.
+fn check_core_call_on_copied_entry(want: ref Ty, arg: ref Expr) -> Ty? {
+    let one = match arg {
+        Expr::Closure { params, .. } => params.len() == 1,
+        else => false,
+    }
+    if !one {
+        return null
+    }
+    return match want {
+        Ty::Fn { params, result, is_sync, can_throw } => {
+            if params.len() == 1 && params[0].is_a_view() && copies_plainly(unviewed_type(params[0])) {
+                Ty::Fn { params: [unviewed_type(params[0])], result: result?.clone(), is_sync: is_sync, can_throw: can_throw }
+            } else {
+                null
+            }
+        },
+        else => null,
+    }
 }

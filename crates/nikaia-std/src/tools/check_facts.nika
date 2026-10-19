@@ -137,6 +137,10 @@ pub struct CheckFacts {
     pub collected_into: collections::BTreeSet[i64],
     pub copied_walks: collections::BTreeSet[i64],
     pub filter_patterns: collections::BTreeSet[i64],
+    /// **An `and_modify` lambda handed a number, `bool` or `char` in the
+    /// map** (#684), by the lambda: its parameter is the value, read out of
+    /// the slot and written back when the lambda ends.
+    pub copied_entry_lambdas: collections::BTreeSet[i64],
     pub kept_lambdas: collections::BTreeMap[i64, (bool, bool)],
     pub kept_hulls: collections::BTreeMap[i64, Vec[String]],
     pub kept_owned: collections::BTreeMap[i64, Vec[String]],
@@ -298,6 +302,7 @@ impl CheckFacts {
             collected_into: collections::BTreeSet(),
             copied_walks: collections::BTreeSet(),
             filter_patterns: collections::BTreeSet(),
+            copied_entry_lambdas: collections::BTreeSet(),
             kept_lambdas: collections::BTreeMap(),
             kept_hulls: collections::BTreeMap(),
             kept_owned: collections::BTreeMap(),

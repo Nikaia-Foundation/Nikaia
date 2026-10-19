@@ -6061,6 +6061,16 @@ impl<'p> Emitter<'p> {
                         self.key(out, form, index, depth, flow)?;
                         out.push(&format!(", {STORED}); }}"));
                     }
+                    // A literal position is written as the `usize` it is.
+                    None if let Expr::LitInt {
+                        value,
+                        negative: false,
+                        ..
+                    } = &**index =>
+                    {
+                        let at = crate::ast::int_value(*value, false);
+                        out.push(&format!(", {at}usize, {STORED}); }}"));
+                    }
                     None if self.never_negative(flow, index) => {
                         out.push(", (");
                         self.index_expr(out, index, depth, flow)?;
