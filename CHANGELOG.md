@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1088] — 2026-10-19
+
+**A path of fields is a name of the bounds walk and the prover (ADR-306 D17, #711)**
+- The bounds/overflow walk reads `t.slots`, `p.end` and `self.at` as names, and `path.len()` as a length. Through a borrowed parameter the facts hold for the whole body; otherwise they are dropped at a write to the path or a path it is part of, at a call handed the root to change, at a method that changes its receiver, and in a lambda, task, `overlap` branch or `select` arm that changes it.
+- The prover (ADR-269 D9) reads a path of fields from a borrowed parameter or an immutable binding: `assert(p.start >= 0 && p.end <= b.len())` is a precondition its callers prove; a struct literal's fields are known.
+- A loop counter changed only by adding keeps *at least its start* where every addition is proved not negative; a loop is walked again without the counters that failed.
+- `Array[T, N]` has `len() == N`.
+
 ## [0.0.1087] — 2026-10-19
 
 **a name read later, or a parameter arm, goes into a keeping parameter as a view (#716)**
