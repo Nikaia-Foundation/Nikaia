@@ -631,8 +631,23 @@ pub fn render_sync_violation(
 /// whole (`^` where the error is, `-` where something explains it), the notes
 /// and the help.
 pub fn render_finding(finding: &crate::check::Finding, path: &str, source: &str) -> String {
-    use nikaia_std::tools::render::{Marked, Shown, rendered};
-    let shown = Shown {
+    nikaia_std::tools::render::rendered(&shown(finding), path, source)
+}
+
+/// [`render_finding`] over a source already split into its characters and its
+/// lines, for a caller that renders every finding of one file (#727).
+pub fn render_finding_in(
+    finding: &crate::check::Finding,
+    path: &str,
+    chars: &[char],
+    lines: &[&str],
+) -> String {
+    nikaia_std::tools::render::rendered_in(&shown(finding), path, chars, lines)
+}
+
+fn shown(finding: &crate::check::Finding) -> nikaia_std::tools::render::Shown {
+    use nikaia_std::tools::render::{Marked, Shown};
+    Shown {
         warning: matches!(finding.severity, crate::check::Severity::Warning),
         code: finding.code.to_string(),
         message: finding.message.clone(),
@@ -649,8 +664,7 @@ pub fn render_finding(finding: &crate::check::Finding, path: &str, source: &str)
                 main: label.main,
             })
             .collect(),
-    };
-    rendered(&shown, path, source)
+    }
 }
 
 /// **A line of a message as a sentence** (Part III C.2, rule 5): it starts

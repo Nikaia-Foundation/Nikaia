@@ -53560,13 +53560,17 @@ struct Placed {
 pub fn rendered(shown: &Shown, path: &str, source: &str) -> String {
     let chars: Vec<scalar> = nikaia_std::list::chars(source.chars());
     let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
+    rendered_in(shown, path, &chars, &lines)
+}
+
+pub fn rendered_in(shown: &Shown, path: &str, chars: &[scalar], lines: &[&str]) -> String {
     let mut labels: Vec<Marked> = shown.labels.to_owned();
     if labels.is_empty() { labels.push(Marked { span: shown.span.clone(), word: String::from(""), text: String::from(""), main: true }); }
     let mut placed: Vec<Placed> = vec![];
     for label in labels.iter() {
-        let at = line_column(&chars, label.span.start);
-        let text = line_of(&lines, at.0);
-        let found = if label.word.is_empty() { (at.1, spanned_width(&chars, &label.span)) } else { word_in(&text, at.1, &label.word) };
+        let at = line_column(chars, label.span.start);
+        let text = line_of(lines, at.0);
+        let found = if label.word.is_empty() { (at.1, spanned_width(chars, &label.span)) } else { word_in(&text, at.1, &label.word) };
         placed.push(Placed { line: at.0, column: found.0, width: found.1, label: label.clone() });
     }
     let placed = in_order(&placed);
@@ -53579,7 +53583,7 @@ pub fn rendered(shown: &Shown, path: &str, source: &str) -> String {
         }
     }
     if line < 0 {
-        let at = line_column(&chars, shown.span.start);
+        let at = line_column(chars, shown.span.start);
         line = at.0;
         column = at.1;
     }
@@ -53611,7 +53615,7 @@ pub fn rendered(shown: &Shown, path: &str, source: &str) -> String {
             out.push(' ');
             out.push_str(&right_aligned(&format!("{}", one.line), gutter));
             out.push_str(" | ");
-            out.push_str(&line_of(&lines, one.line).trim_end());
+            out.push_str(&line_of(lines, one.line).trim_end());
             out.push('\n');
             shown_line = one.line;
         }
@@ -67339,7 +67343,7 @@ pub mod prover_walk {
 }
 pub mod render {
     #[allow(unused_imports)]
-    pub use super::{Marked, Shown, rendered, Pause, paused, an_or_a, Relayed, relayed};
+    pub use super::{Marked, Shown, rendered, rendered_in, Pause, paused, an_or_a, Relayed, relayed};
 }
 pub mod rust {
     #[allow(unused_imports)]

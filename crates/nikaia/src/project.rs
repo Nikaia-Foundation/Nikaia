@@ -1780,8 +1780,10 @@ pub fn check(
     // it says them again.
     let path = path.display().to_string();
     let mut warnings = String::new();
+    let chars: Vec<char> = source.chars().collect();
+    let lines: Vec<&str> = source.split('\n').collect();
     for finding in &all {
-        let rendered = diagnostics::render_finding(finding, &path, source);
+        let rendered = diagnostics::render_finding_in(finding, &path, &chars, &lines);
         if finding.severity == check::Severity::Warning {
             warnings.push_str(&rendered);
             if in_the_wrapper {

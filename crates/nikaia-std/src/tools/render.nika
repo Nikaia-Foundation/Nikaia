@@ -60,6 +60,12 @@ struct Placed {
 pub fn rendered(shown: ref Shown, path: ref String, source: ref String) -> String {
     let chars: Vec[scalar] = source.chars().collect()
     let lines: Vec[ref String] = source.split("\n").collect()
+    return rendered_in(shown, path, chars, lines)
+}
+
+/// [`rendered`] over a source already split into its scalars and its lines:
+/// a file with many findings splits once, not once per finding (#727).
+pub fn rendered_in(shown: ref Shown, path: ref String, chars: ref Vec[scalar], lines: ref Vec[ref String]) -> String {
     let mut labels: Vec[Marked] = shown.labels.clone()
     // One layout for every message: a finding that names no place of its own
     // is marked where it stands.
