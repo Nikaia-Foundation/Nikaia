@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1046] — 2026-10-19
+
+**A shift written only in literals is folded exactly (#661)**
+- ADR-285 D40, Part I 2.2 and 2.4: `1 << 40` with nothing asking is the value 1099511627776 and takes the first type that holds it, an `i64`, as `+` and `*` do (D22); `1 << 31` is 2147483648; `1 << 63` is refused. Where a use asks for a type, the shift is that type's and loses the bits it moves out. Specification only; the compiler follows (#661).
+
 ## [0.0.1045] — 2026-10-19
 
 **a grammar run takes in a small rule it calls**

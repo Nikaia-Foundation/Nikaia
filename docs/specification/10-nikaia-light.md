@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1045 (Draft)
+**Version:** 0.0.1046 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -358,8 +358,9 @@ type has no `_neg` and no `_abs`. There is no operator for either.
 **The bits of an integer are reached with operators**
 ([ADR-285](adr/adr-285.md)): `&`, `|`, `^`, `<<` and `>>`, and `!`, which on
 an integer flips every bit. Both sides are one integer type, except a shift's
-count, which may be any. A shift loses the bits it moves out, and a count as
-large as the type is wide aborts; `>>` fills with zeros on an unsigned type and
+count, which may be any. A shift loses the bits it moves out of its type (a
+shift of numbers alone takes the type that holds its exact value, 2.4), and a
+count as large as the type is wide aborts; `>>` fills with zeros on an unsigned type and
 with the sign on a signed one. They bind tighter than a comparison, and one
 written beside a comparison is written in parentheses (`NK1197`), because C
 reads `a & mask == 0` the other way:
@@ -621,11 +622,16 @@ the annotation to write. Where no use asks, what the name is given decides:
 `let mut n = 1` followed by `n = 3000000000` is an `i64`, and a value it is
 given that the decided type does not hold is `NK1116`, naming the use.
 
-**A sum of numbers is a number**, so the same rule decides it:
+**A sum of numbers is a number**, so the same rule decides it. So are a
+product and a shift: the value is computed exactly, and a shift loses bits only
+in a type a use asks for (2.2):
 
 ```nika
 let c = 2000000000 + 2000000000   // an i64: nothing asks, and an i32 does not hold it
 let small = 2 + 3                 // an i32, the same as any number that fits
+let k = 1 << 40                   // an i64: 1099511627776
+let top = 1 << 31                 // an i64: 2147483648
+let bit: i32 = 1 << 31            // -2147483648: the i32 is asked for
 ```
 
 **A name is where the widening stops.** A name already took a type, and
