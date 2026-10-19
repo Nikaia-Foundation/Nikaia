@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1044] — 2026-10-19
+
+**std's map hash spreads integer keys**
+- `FxHasher::finish` rotates left by 26 as rustc-hash 2 does, so integer keys on a power-of-two stride no longer crowd into a few buckets (100 k keys `i*1024`: 699.7 to 71.3 instructions per operation; 1BRC +1.5 a row).
+
 ## [0.0.1043] — 2026-10-19
 
 **A cached build says its warnings again**
