@@ -38793,7 +38793,7 @@ fn reach_edges_of(words: &winnow_grammar::InternerContext, aliases: &collections
 }
 
 fn reach_note(aliases: &collections::BTreeMap<String, String>, pausing: &collections::BTreeSet<String>, by_last: &collections::BTreeMap<String, Vec<String>>, written: &str, out: &mut collections::BTreeSet<String>) {
-    let name = unaliased_in(aliases, &written);
+    let name = unaliased_in(aliases, written);
     if pausing.contains(&name) {
         out.insert(name);
         return;

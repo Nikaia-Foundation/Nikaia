@@ -1502,15 +1502,48 @@ impl<'a> Checker<'a> {
             };
             frame.push(self.local_free("self".to_string(), ty));
         }
-        for arg in args {
+        // **A `String` the body only reads is a view of text here**, as it is
+        // below (ADR-282 D2, D5, #654): bound as one written `ref String`, so
+        // that handing it on lends it as it is rather than writing a `&` the
+        // written view does not get. The same answer the emitter's declaration
+        // reads (`lends_in_own`), and for a lent option `lowered_options`.
+        let own_contract = self
+            .s
+            .current
+            .as_ref()
+            .and_then(|key| self.world.own.functions.get(key))
+            .cloned();
+        let offset = usize::from(receiver.is_some());
+        for (at, arg) in args.iter().enumerate() {
             let name = self.parsed.text(arg.name).to_string();
             self.s.nameable(&name, &arg.span, "a parameter");
+            let plain_text = self.parsed.text(arg.ty.name) == "String"
+                && arg.ty.generics.is_empty()
+                && !arg.ty.is_view
+                && !arg.ty.is_nullable
+                && !arg.ty.is_slice
+                && !arg.mutable;
+            let lent_text = plain_text
+                && own_contract.as_ref().is_some_and(|contract| {
+                    crate::contracts::keeps::lends_in_own(
+                        contract,
+                        at + offset,
+                        &[self.world.library],
+                    )
+                });
+            let ty = if lent_text {
+                let mut viewed = arg.ty.clone();
+                viewed.is_view = true;
+                self.declared(&viewed, &arg.span)
+            } else {
+                self.declared(&arg.ty, &arg.span)
+            };
             frame.push(Local {
                 written_mut: false,
                 id: self.a_new_binding(),
                 literal: None,
                 name,
-                ty: self.declared(&arg.ty, &arg.span).erase(&parameters),
+                ty: ty.erase(&parameters),
                 constant: None,
                 // A parameter is not a `for` binding: what a call lends is the
                 // caller's business, and a cast over one needs no deref.
@@ -1541,14 +1574,22 @@ impl<'a> Checker<'a> {
         for option in config {
             self.a_computed_default(option);
         }
+        let lowered_options = own_contract
+            .as_ref()
+            .map(nikaia_std::tools::lends::lowered_options)
+            .unwrap_or_default();
         for option in config {
-            frame.push(self.local_free(
-                self.parsed.text(option.name).to_string(),
-                // Not `declared`: an option has no span of its own, and a
-                // caret on the wrong line is worse than no message. Its default
-                // is a literal (Part I 5.1), so a hull cannot stand here anyway.
-                Ty::from_ast(self.parsed, &option.ty).erase(&parameters),
-            ));
+            let name = self.parsed.text(option.name).to_string();
+            // Not `declared`: an option has no span of its own, and a
+            // caret on the wrong line is worse than no message. Its default
+            // is a literal (Part I 5.1), so a hull cannot stand here anyway.
+            // A lent one is the view it is below, as a parameter is.
+            let ty = lowered_options
+                .iter()
+                .find(|lowered| lowered.name == name && lowered.ty.is_a_view())
+                .map(|lowered| lowered.ty.clone())
+                .unwrap_or_else(|| Ty::from_ast(self.parsed, &option.ty));
+            frame.push(self.local_free(name, ty.erase(&parameters)));
         }
         // **So is a spread** ([ADR-296](../../docs/specification/adr/adr-296.md)
         // D5): `...args: Self::dsl` is the driver's one value holding what the

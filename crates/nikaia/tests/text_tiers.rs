@@ -791,6 +791,94 @@ fn the_http_example_without_ref_on_its_results_lowers_the_same() {
     );
 }
 
+/// **A `String` parameter the body only reads is handed on as one written
+/// `ref String` is** (ADR-282 D2, D5, #654): `count(dna, k)` and
+/// `counts.get(fragment)` lend it as it is, with no `&` the written view does
+/// not get, and a parameter only literals flow into is a view of text, not
+/// static text.
+#[test]
+fn the_k_nucleotide_example_without_ref_on_its_parameters_lowers_the_same() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/k-nucleotide/src/main.nika");
+    let source = std::fs::read_to_string(&path).expect("examples/k-nucleotide/src/main.nika");
+    assert!(source.contains("dna: ref String, fragment: ref String"));
+    let without = source
+        .replace("dna: ref String", "dna: String")
+        .replace("fragment: ref String", "fragment: String");
+    assert!(findings(&without).is_empty(), "{:#?}", findings(&without));
+    assert_eq!(
+        lowered(&source, Build::default()),
+        lowered(&without, Build::default())
+    );
+}
+
+/// **The same for a lent option and for a parameter handed from one reading
+/// function to another** (#654): `inner(sep, n)`, `opt(n; sep: sep)` and
+/// `shout(s)` lend what they are given as the `ref String` twins do.
+const LENT_HANDED_ON: &str = r##"fn inner(s: ref String, n: i64) -> i64 {
+    return s.len() + n
+}
+
+fn opt(n: i64; sep: ref String = ",") -> i64 {
+    return inner(sep, n)
+}
+
+fn outer(n: i64; sep: ref String = " ") -> i64 {
+    return inner(sep, n) + opt(n; sep: sep)
+}
+
+fn shout(t: ref String) {
+    println(f"{t}!")
+}
+
+fn say(s: ref String) {
+    shout(s)
+    println(f"{s.starts_with("a")} {inner(s, 0)}")
+}
+
+fn main() {
+    let a = f"ab{1}"
+    say("ada")
+    say(a)
+    println(f"{outer(1)} {outer(2; sep: a)}")
+}
+"##;
+
+#[test]
+fn a_lent_parameter_or_option_handed_on_lowers_as_a_written_view() {
+    let without = LENT_HANDED_ON.replace(": ref String", ": String");
+    runs(
+        "lent-handed-on",
+        &without,
+        "ada!\ntrue 3\nab1!\ntrue 3\n4 10",
+    );
+    assert_eq!(
+        lowered(LENT_HANDED_ON, Build::default()),
+        lowered(&without, Build::default())
+    );
+}
+
+/// **`examples/http` without any `ref String` but on its methods' parameters
+/// lowers to the same Rust** (#654): `listen(at)` hands its parameter to
+/// `std::net` as it is. A method's parameter is not lent yet (ADR-288): a
+/// method with a `String` parameter keeps it.
+#[test]
+fn the_http_example_without_ref_but_on_method_parameters_lowers_the_same() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/http/src/main.nika");
+    let source = std::fs::read_to_string(&path).expect("examples/http/src/main.nika");
+    let without = source
+        .replace("(ref self, name: ref String)", "(ref self, name: KEPT)")
+        .replace("ref String", "String")
+        .replace("name: KEPT", "name: ref String");
+    assert!(without.contains("name: ref String"));
+    assert!(findings(&without).is_empty(), "{:#?}", findings(&without));
+    assert_eq!(
+        lowered(&source, Build::default()),
+        lowered(&without, Build::default())
+    );
+}
+
 // ---------------------------------------------------------------------------
 /// **A position only literals flow into is a view of the program's own text**
 /// ([ADR-282](../../../docs/specification/adr/adr-282.md) D29, #659):
