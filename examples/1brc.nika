@@ -32,12 +32,12 @@ grammar Measurements {
     // An uppercase rule is *lexical*: nothing is skipped between its parts, so
     // "Hamburg " with a trailing blank is a station of its own.
     //
-    // `ref String` is a slice of the input, never a copy.
+    // The `String` is a slice of the input, never a copy.
     //
     // The scan stops at the `;` or at `frame_end`, the line end that
     // MEASUREMENT below declares. A plain `until(";")` could run into the next
     // line, and the compiler rejects it here.
-    rule NAME -> ref String = s:until(";" | frame_end) { s }
+    rule NAME -> String = s:until(";" | frame_end) { s }
 
     // Temperatures always carry exactly one decimal, so they are parsed as
     // tenths and all the arithmetic stays in integers until printing.
@@ -75,7 +75,7 @@ grammar Measurements {
 }
 
 struct Reading {
-    name: ref String,
+    name: String,
     temp: i32,
 }
 

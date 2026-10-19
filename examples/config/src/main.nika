@@ -38,27 +38,27 @@ grammar Config {
     rule setting -> Setting =
         key:NAME "=" value:VALUE { Setting { key, value } }
 
-    rule NAME -> ref String = s:raw_ident { s }
+    rule NAME -> String = s:raw_ident { s }
 
     // Lexical (uppercase), so blanks inside a value are kept. The value ends at
     // the end of the line or at a `#`, and the action trims the blanks left
     // before a comment. A `#` can therefore not appear inside a value.
-    rule VALUE -> ref String = s:until("#" | line_ending) { s.trim() }
+    rule VALUE -> String = s:until("#" | line_ending) { s.trim() }
 
     entry rule file -> Vec[Section] =
         sections:section* { sections }
 }
 
 pub struct Setting {
-    key: ref String,
-    value: ref String,
+    key: String,
+    value: String,
 }
 
 // `Section` holds `Setting`s, which hold slices of the input, so a `Section`
 // may not outlive the input either. The compiler infers that; nothing here
 // declares it.
 pub struct Section {
-    name: ref String,
+    name: String,
     settings: Vec[Setting],
 }
 

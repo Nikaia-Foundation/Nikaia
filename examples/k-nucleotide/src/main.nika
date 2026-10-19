@@ -43,17 +43,17 @@ grammar Fasta {
     rule section -> Section =
         ">" header:LINE body:body_line* { Section { header, lines: body } }
 
-    rule body_line -> ref String = not(">") l:LINE { l }
+    rule body_line -> String = not(">") l:LINE { l }
 
     // `until` stops before the terminator, so the line ending is consumed
     // explicitly. Input whose last line has no line ending is refused as not
     // FASTA rather than losing that line.
-    rule LINE -> ref String = s:until(line_ending) line_ending { s }
+    rule LINE -> String = s:until(line_ending) line_ending { s }
 }
 
 pub struct Section {
-    header: ref String,
-    lines: Vec[ref String],
+    header: String,
+    lines: Vec[String],
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ impl Tally {
 // The keys are views into `dna`: `ref dna[i..<i + k]` is a slice, not a copy,
 // so a sequence of a million characters builds a table of positions and
 // lengths rather than a million small strings.
-fn count(dna: ref String, k: i64) -> collections::HashMap[ref String, Tally] {
+fn count(dna: String, k: i64) -> collections::HashMap[ref String, Tally] {
     let mut counts: collections::HashMap[ref String, Tally] = collections::HashMap()
 
     if dna.len() < k {
@@ -111,7 +111,7 @@ fn count(dna: ref String, k: i64) -> collections::HashMap[ref String, Tally] {
 // Two stable sorts give the order the benchmark asks for: by fragment, then by
 // count descending. The second sort keeps the first's order among equal counts,
 // so ties come out alphabetically.
-fn report_frequencies(dna: ref String, k: i64) {
+fn report_frequencies(dna: String, k: i64) {
     let counts = count(dna, k)
 
     let mut rows = Vec()
@@ -133,7 +133,7 @@ fn report_frequencies(dna: ref String, k: i64) {
 
 // One named fragment, and how often it occurs. `k` is the fragment's own
 // length, so the table is built for exactly the width being asked about.
-fn report_fragment(dna: ref String, fragment: ref String) {
+fn report_fragment(dna: String, fragment: String) {
     let counts = count(dna, fragment.len())
     // `get` hands back a `Tally?`, because the key may not be there: `?.`
     // reaches into it if it is, and `??` gives the value to use if it is not.

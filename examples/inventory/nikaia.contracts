@@ -34,7 +34,7 @@ signature = "(data: ref String) -> Vec[Entry]"
 
 [fn."render"]
 pub = true
-signature = "(entries: Vec[Entry], total: i64; title: ref String = \"Stock\") -> String"
+signature = "(entries: Vec[Entry], total: i64; title: String = \"Stock\") -> String"
 
 [fn."total"]
 pub = true

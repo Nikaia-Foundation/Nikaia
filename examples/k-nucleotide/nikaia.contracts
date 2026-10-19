@@ -32,7 +32,7 @@ signature = "(first: i64) -> Tally"
 [fn."count"]
 sync = "inferred"
 views = ["dna: borrowed", "<result>: borrowed"]
-signature = "(dna: ref String, k: i64) -> collections::HashMap[ref(dna) String, Tally]"
+signature = "(dna: String, k: i64) -> collections::HashMap[ref(dna) String, Tally]"
 
 [fn."main"]
 throws = ["?"]
@@ -43,13 +43,13 @@ signature = "()"
 sync = "inferred"
 locks = true
 views = ["dna: borrowed", "fragment: borrowed"]
-signature = "(dna: ref String, fragment: ref String)"
+signature = "(dna: String, fragment: String)"
 
 [fn."report_frequencies"]
 sync = "inferred"
 locks = true
 views = ["dna: borrowed"]
-signature = "(dna: ref String, k: i64)"
+signature = "(dna: String, k: i64)"
 
 [type."Section"]
 pub = true

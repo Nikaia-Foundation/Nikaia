@@ -2,7 +2,7 @@
 
 grammar Stock {
 
-    rule FIELD -> ref String = s:until(";" | frame_end) { s }
+    rule FIELD -> String = s:until(";" | frame_end) { s }
 
     rule COUNT -> i64 = n:dec[i64](digit+) { n }
 
@@ -15,14 +15,14 @@ grammar Stock {
 }
 
 pub struct Entry {
-    pub category: ref String,
-    pub item: ref String,
+    pub category: String,
+    pub item: String,
     pub count: int,
 }
 
 // A grammar is only visible in the file that declares it, so `main.nika`
 // cannot call `Stock::file` and calls this instead.
-pub fn read(data: ref String) -> Vec[Entry] throws {
+pub fn read(data: String) -> Vec[Entry] throws {
     return Stock::file(data)
 }
 

@@ -21,7 +21,7 @@ grammar Stock {
 
     // Up to the next `;` or the end of the line. A line missing its last field
     // then stops at the newline instead of eating the line after it.
-    rule FIELD -> ref String = s:until(";" | frame_end) { s }
+    rule FIELD -> String = s:until(";" | frame_end) { s }
 
     rule COUNT -> i64 = n:dec[i64](digit+) { n }
 
@@ -35,11 +35,11 @@ grammar Stock {
     entry rule file -> Vec[Entry] = entries:ENTRY* { entries }
 }
 
-// `ref String`: the category and the item are slices of the input file, not
+// `String`: the category and the item are slices of the input file, not
 // copies.
 pub struct Entry {
-    category: ref String,
-    item: ref String,
+    category: String,
+    item: String,
     count: i64,
 }
 

@@ -51,7 +51,7 @@ pub extern fn each_word(text: ref String, each: fn(ref String, Case) -> bool syn
     return seen
 }
 
-fn case_of(word: ref String) -> Case sync {
+fn case_of(word: String) -> Case sync {
     if word == word.to_lowercase() {
         return Case::Lower
     }

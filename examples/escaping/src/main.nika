@@ -13,9 +13,9 @@
 use std::html
 
 pub struct Row {
-    name: ref String,
-    note: ref String,
-    shade: ref String,
+    name: String,
+    note: String,
+    shade: String,
 }
 
 // Every `{…}` hole in a template is escaped, always; there is no way to turn
@@ -37,7 +37,7 @@ fn table(rows: Vec[Row]) -> String {
 // The one way to put markup into a hole is the type `html::Raw`: its value is
 // not escaped again. So the name is escaped first, with `html::escape`, and the
 // `<em>` around it survives.
-fn emphasised(name: ref String) -> String {
+fn emphasised(name: String) -> String {
     let mut built = String()
     built.push_str("<em>")
     built.push_str(ref html::escape(name))

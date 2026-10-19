@@ -25,7 +25,7 @@ grammar Log {
     // Up to the next blank or the end of the line. Without `frame_end`, a line
     // missing a field would run on into the next line; the compiler rejects
     // a scan like that inside a frame.
-    rule FIELD -> ref String = s:until(" " | frame_end) { s }
+    rule FIELD -> String = s:until(" " | frame_end) { s }
 
     // Exactly three digits: a status of "20" is a parse error here.
     rule STATUS -> i32 = n:dec[i32](digit{3}) { n }
@@ -51,7 +51,7 @@ grammar Log {
 
 // `path` is a slice of the mapped file, not a copy.
 pub struct Hit {
-    path: ref String,
+    path: String,
     status: i32,
     bytes: i64,
 }

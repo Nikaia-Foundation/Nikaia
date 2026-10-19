@@ -17,4 +17,4 @@ signature = "()"
 [fn."summary"]
 sync = "inferred"
 touches = []
-signature = "(lines: i64, blank: i64; separator: ref String = \" \") -> String"
+signature = "(lines: i64, blank: i64; separator: String = \" \") -> String"

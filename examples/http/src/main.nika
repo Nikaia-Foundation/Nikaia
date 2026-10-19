@@ -49,36 +49,36 @@ impl Request {
     }
 
     // The method as the client wrote it, for a log.
-    pub fn method_text(ref self) -> ref String {
+    pub fn method_text(ref self) -> String {
         return self.head.method()
     }
 
     // The path without the query string. It is not decoded: a `%20` stays
     // `%20`.
-    pub fn path(ref self) -> ref String {
+    pub fn path(ref self) -> String {
         return self.head.path()
     }
 
     // The whole request target as the client wrote it, for a log.
-    pub fn target(ref self) -> ref String {
+    pub fn target(ref self) -> String {
         return self.head.target()
     }
 
     // What the client sent after the head, empty if it sent nothing. Treat it
     // as untrusted: it came off a socket.
-    pub fn body(ref self) -> ref String {
+    pub fn body(ref self) -> String {
         return self.body
     }
 
     // One query parameter, or nothing if the query does not have it. The `?`
     // in the return type is what allows "nothing". Not decoded either.
-    pub fn query(ref self, name: ref String) -> ref String? {
+    pub fn query(ref self, name: ref String) -> String? {
         return self.head.query(name)
     }
 
     // One header, or nothing if the client did not send it. The name is
     // matched case-insensitively, as HTTP requires.
-    pub fn header(ref self, name: ref String) -> ref String? {
+    pub fn header(ref self, name: ref String) -> String? {
         return self.head.header(name)
     }
 }
@@ -111,7 +111,7 @@ pub struct File {
 }
 
 impl File {
-    pub fn(path: ref String, root: fs::Root) -> File {
+    pub fn(path: String, root: fs::Root) -> File {
         let mut status = 200
         let mut size = 0
         let known = fs::metadata(path, root) catch {
@@ -254,7 +254,7 @@ pub fn status_line(status: i32) -> String {
 // Nothing here waits in a special way. `accept` and `read` are plain calls
 // with no `async` or `await`.
 pub fn listen(
-    at: ref String,
+    at: String,
     handler: fn(Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
@@ -345,7 +345,7 @@ fn answer(
 
 // Answers a request the server refuses. The text `http1` throws already starts
 // with the status code, so it is passed on as the body.
-fn refuse(mut connection: net::Connection, status: i32, why: ref String) {
+fn refuse(mut connection: net::Connection, status: i32, why: String) {
     let answered = Response { status: status, content_type: "text/plain", body: Body::Text(why.clone()) }
     send(connection, answered) catch { return }
 }

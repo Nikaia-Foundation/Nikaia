@@ -11,17 +11,15 @@ version = 4
 
 [fn."emphasised"]
 views = ["name: borrowed"]
-signature = "(name: ref String) -> String"
+signature = "(name: String) -> String"
 
 [fn."main"]
 locks = true
 signature = "()"
 
 [fn."table"]
-views = ["rows: borrowed"]
 signature = "(rows: Vec[Row]) -> String"
 
 [type."Row"]
 pub = true
 fields = ["name: ref String", "note: ref String", "shade: ref String"]
-tethered = ["name", "note", "shade"]

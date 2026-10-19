@@ -8,5 +8,5 @@ inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies"
 
 [sources]
 "main.nika" = "3ff95a5cdae3798d2ae242495e3e0c51202f1823afad6647d375916105259aa3"
-"page.nika" = "7fc3eba6b8d77e1bb209d29320df73f41ee79b012df3d0e0c451e7f144dbdaf9"
-"stock.nika" = "47f7256fc2e6b33736829f9b742ff9369bc2be584d15968c48aedbcf6871350d"
+"page.nika" = "1d908e427bf585bc6f356dcb1fab2f0f1f3f03e8145164bed22b70c6bf314a70"
+"stock.nika" = "1bf5ee31210c29ba6b33d7e4cc07ccc2053d654f947ca0da133d92f5312246d2"

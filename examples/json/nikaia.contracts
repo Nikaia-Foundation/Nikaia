@@ -40,7 +40,7 @@ signature = "(value: Json, indent: i64)"
 sync = "inferred"
 touches = []
 views = ["raw: borrowed"]
-signature = "(raw: ref String) -> String"
+signature = "(raw: String) -> String"
 
 [type."Json"]
 variants = ["Null", "Bool(bool)", "Number(f64)", "Text(ref String)", "Array(Vec[Json])", "Object(Vec[Member])"]

@@ -36,7 +36,7 @@ enum Json {
 }
 
 pub struct Member {
-    key: ref String,
+    key: String,
     value: Json,
 }
 
@@ -93,7 +93,7 @@ grammar Json_ {
     // An escape is a backslash and whatever follows it; anything else is a
     // character that is neither a quote nor a backslash. `text(…)` hands back
     // the input the repetition covered, as a view: one slice, no copy.
-    rule TEXT -> ref String = "\"" s:text((ESC | PLAIN)*) "\"" { s }
+    rule TEXT -> String = "\"" s:text((ESC | PLAIN)*) "\"" { s }
 
     rule ESC = "\\" any { }
     rule PLAIN = not("\"") not("\\") any { }
@@ -155,7 +155,7 @@ fn show(value: Json, indent: i64) {
 // What a JSON escape means. This is the only place a string is decoded.
 //
 // `\u` is not handled: `\u0041` comes out as `u0041`, not `A`.
-fn unescape(raw: ref String) -> String {
+fn unescape(raw: String) -> String {
     let mut out = String()
     let mut escaped = false
 

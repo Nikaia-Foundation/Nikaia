@@ -782,12 +782,28 @@ fn the_http_example_without_ref_on_its_results_lowers_the_same() {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/http/src/main.nika");
     let source = std::fs::read_to_string(&path).expect("examples/http/src/main.nika");
-    assert!(source.contains("-> ref String"), "the example writes `ref`");
-    let without = source.replace("-> ref String", "-> String");
-    assert!(findings(&without).is_empty(), "{:#?}", findings(&without));
+    assert!(
+        !source.contains("-> ref String"),
+        "the example writes no `ref`"
+    );
+    let mut with = source.clone();
+    for accessor in ["method_text", "path", "target", "body"] {
+        let written = format!("fn {accessor}(ref self) -> String");
+        assert!(with.contains(&written), "{written}");
+        with = with.replace(&written, &format!("fn {accessor}(ref self) -> ref String"));
+    }
+    for accessor in ["query", "header"] {
+        let written = format!("fn {accessor}(ref self, name: ref String) -> String?");
+        assert!(with.contains(&written), "{written}");
+        with = with.replace(
+            &written,
+            &format!("fn {accessor}(ref self, name: ref String) -> ref String?"),
+        );
+    }
+    assert!(findings(&source).is_empty(), "{:#?}", findings(&source));
     assert_eq!(
-        lowered(&source, Build::default()),
-        lowered(&without, Build::default())
+        lowered(&with, Build::default()),
+        lowered(&source, Build::default())
     );
 }
 
@@ -801,14 +817,14 @@ fn the_k_nucleotide_example_without_ref_on_its_parameters_lowers_the_same() {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/k-nucleotide/src/main.nika");
     let source = std::fs::read_to_string(&path).expect("examples/k-nucleotide/src/main.nika");
-    assert!(source.contains("dna: ref String, fragment: ref String"));
-    let without = source
-        .replace("dna: ref String", "dna: String")
-        .replace("fragment: ref String", "fragment: String");
-    assert!(findings(&without).is_empty(), "{:#?}", findings(&without));
+    assert!(source.contains("dna: String, fragment: String"));
+    let with = source
+        .replace("dna: String", "dna: ref String")
+        .replace("fragment: String", "fragment: ref String");
+    assert!(findings(&source).is_empty(), "{:#?}", findings(&source));
     assert_eq!(
-        lowered(&source, Build::default()),
-        lowered(&without, Build::default())
+        lowered(&with, Build::default()),
+        lowered(&source, Build::default())
     );
 }
 
