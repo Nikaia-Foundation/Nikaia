@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1102] — 2026-10-19
+
+**Lowering runs each analysis once (#727)**
+- Lowering runs each analysis once: the emitter takes the facts of the check that ran (lower-std), counters never negative are found once per function, what a program needs is read off its items, the program is read once, the trust join reuses the ledger pass, and diagnostics split a file once. Output unchanged; a cold single-file lower costs 52 % fewer instructions.
+
 ## [0.0.1101] — 2026-10-19
 
 **spec: u8 has every wrapping, saturating, checked and truncating name (ADR-285 D41, #729)**
