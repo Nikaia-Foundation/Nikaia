@@ -415,6 +415,8 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
 /// `NK1135` there is the harness's limitation and not a refusal of the program.
 /// The files `nikaia lower` sweeps are the ones checkable this way, which is
 /// the top level of `examples/` and `std`'s own sources.
+/// A file whose project declares packages is checked with them, as the build
+/// checks it (`common::corpus_findings`, #679).
 #[test]
 fn no_loose_program_in_the_repository_is_refused() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -426,7 +428,6 @@ fn no_loose_program_in_the_repository_is_refused() {
         let Ok(parsed) = parse_to_ast(&source) else {
             continue;
         };
-        let own = Ledger::infer(&parsed);
         let name = path.display().to_string();
         // `fortunes.nika` is the one program that is meant not to build: it
         // reaches for an `http` package the project does not declare, which is
@@ -443,8 +444,7 @@ fn no_loose_program_in_the_repository_is_refused() {
             .find(|manifest| manifest.is_file())
             .and_then(|manifest| std::fs::read_to_string(manifest).ok())
             .is_some_and(|manifest| manifest.contains("artifact = \"c-library\""));
-        for finding in nikaia::check::check(&parsed, &own, &library)
-            .findings
+        for finding in common::corpus_findings(&path, &parsed, &library)
             .iter()
             .filter(|finding| !(a_library && finding.code == "NK1238"))
             // A warning refuses nothing (`NK1261` and the rest).

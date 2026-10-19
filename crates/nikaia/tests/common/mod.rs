@@ -170,6 +170,31 @@ pub fn standalone_programs(dir: &Path) -> Vec<PathBuf> {
     found
 }
 
+/// **What a corpus sweep finds in one of [`standalone_programs`], checked as
+/// `nikaia build` checks it** (#679): a file whose project declares Nikaia
+/// packages is checked against the program's ledger, with those packages'
+/// contracts in it and their names as modules, as the build does
+/// (`project::lower_reading`). Alone it would meet `http::listen` as an unknown
+/// callee, which keeps what it is handed (ADR-094 D2 fails closed), and refuse
+/// a lambda's `serve(at)` the build accepts. Every other file is checked alone.
+#[allow(dead_code)]
+pub fn corpus_findings(
+    path: &Path,
+    parsed: &nikaia::parser::Parsed,
+    library: &nikaia::contracts::Ledger,
+) -> Vec<nikaia::check::Finding> {
+    use nikaia::contracts::LedgerOps;
+    if let Ok((program, packages)) = nikaia::project::read_file(path)
+        && !packages.is_empty()
+    {
+        let own = program.contracts_as_promised();
+        let modules = program.package_names();
+        return nikaia::check::check_program(parsed, &own, library, &modules).findings;
+    }
+    let own = nikaia::contracts::Ledger::infer(parsed);
+    nikaia::check::check(parsed, &own, library).findings
+}
+
 /// A scratch directory of this test's own. The tests run in parallel threads
 /// of one process, and two of them sharing a file name means one compiles the
 /// other's code.

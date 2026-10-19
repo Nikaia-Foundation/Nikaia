@@ -85,7 +85,6 @@ fn no_program_in_the_repository_has_a_type_error() {
             let source = std::fs::read_to_string(&path).expect("read the program");
             let parsed = parse_to_ast(&source)
                 .unwrap_or_else(|e| panic!("{} does not parse: {e}", path.display()));
-            let own = Ledger::infer(&parsed);
             let name = path.display().to_string();
             // **`fortunes.nika` is written at specification level**
             // (`examples.rs`'s `SPECIFICATION_LEVEL`): its `env::var` names a
@@ -104,8 +103,7 @@ fn no_program_in_the_repository_has_a_type_error() {
                 .find(|manifest| manifest.is_file())
                 .and_then(|manifest| std::fs::read_to_string(manifest).ok())
                 .is_some_and(|manifest| manifest.contains("artifact = \"c-library\""));
-            for finding in check::check(&parsed, &own, &library)
-                .findings
+            for finding in common::corpus_findings(&path, &parsed, &library)
                 .into_iter()
                 .filter(|finding| !(a_library && finding.code == "NK1238"))
                 // A warning is not a type error (`NK1261` and the rest).
@@ -121,6 +119,33 @@ fn no_program_in_the_repository_has_a_type_error() {
 
     assert!(checked >= 8, "only {checked} programs were checked");
     assert!(reported.is_empty(), "the corpus is not clean:\n{reported}");
+}
+
+/// **A file of a project with packages is checked with them** (#679), as
+/// `nikaia build` checks it. `hello-http`'s `serve(at: String)` hands `at` to
+/// `http::listen`, which lends it; alone the call is an unknown callee, which
+/// keeps what it is handed (ADR-094 D2 fails closed), and the lambda that
+/// calls `serve(at, ...)` again on every restart was refused with `NK2105`.
+#[test]
+fn a_package_file_is_checked_with_the_packages_it_uses() {
+    let path = repo_root().join("examples/hello-http/src/main.nika");
+    let source = std::fs::read_to_string(&path).expect("read the program");
+    let parsed = parse_to_ast(&source).expect("it parses");
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    let codes = |findings: Vec<Finding>| -> Vec<String> {
+        findings
+            .into_iter()
+            .filter(|f| f.severity != Severity::Warning)
+            .map(|f| f.code)
+            .collect()
+    };
+    let with = codes(common::corpus_findings(&path, &parsed, &library));
+    assert!(with.is_empty(), "with `http`: {with:?}");
+    let alone = codes(check::check(&parsed, &Ledger::infer(&parsed), &library).findings);
+    assert!(
+        alone.iter().any(|code| code == "NK2105"),
+        "alone, `http::listen` keeps `at`: {alone:?}"
+    );
 }
 
 // --- what it catches ---------------------------------------------------------

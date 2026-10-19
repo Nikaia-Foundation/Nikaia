@@ -61,7 +61,7 @@ fn refresh(refreshed: SharedMut[i64], asked: SharedMut[i64], crashed: SharedMut[
     }
 }
 
-fn serve(at: ref String, refreshed: SharedMut[i64], asked: SharedMut[i64], crashed: SharedMut[i64]) throws {
+fn serve(at: String, refreshed: SharedMut[i64], asked: SharedMut[i64], crashed: SharedMut[i64]) throws {
     // One function answers every request and decides by method and path.
     // Nothing is served that this function does not name.
     http::listen(at) fn(request) {
