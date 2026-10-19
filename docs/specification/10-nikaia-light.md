@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1072 (Draft)
+**Version:** 0.0.1073 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -770,6 +770,11 @@ a scalar stops the program.
 **A `Bytes` is read as a run of bytes:** `b[i] -> u8`, `b[a..<b]`, `b.len()`,
 `b.find(byte; from: i64) -> i64?`, and `b.text()`, which checks UTF-8 and is
 `NotText` where it fails. An index outside stops the program, as a list's does.
+**A word is read at a position, in the order its name says:** `b.u32_le(i)`
+and `b.u64_le(i)` read 4 or 8 bytes from `i`, least significant first, as a
+`u32` or a `u64`; `b.u32_be(i)` and `b.u64_be(i)` read them most significant
+first. Each reads what `b[i..<i + n]` reads and stops the program where that
+cut would.
 
 **A `'…'` is a `u8` or a `scalar`, by its use.** One ASCII character is either;
 `'\xNN'` above `\x7F` is only a `u8`; one scalar that is not ASCII is only a

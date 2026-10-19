@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1073] — 2026-10-19
+
+**A `Bytes` reads a word in the order its name says (ADR-320 D12)**
+- Decided, not yet built: `b.u32_le(i)`, `b.u64_le(i)`, `b.u32_be(i)` and `b.u64_be(i)` read 4 or 8 bytes from `i` as an unsigned number, checked as `b[i..<i + n]` is and proved as it is (ADR-320 D12, Part I 2.6). ADR-296 D12 says it rejects a scanning construct of the language, not a program reading words.
+
 ## [0.0.1072] — 2026-10-19
 
 **`Bytes::find` searches with memchr; range indexes inline (#701)**
