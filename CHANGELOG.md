@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1068] — 2026-10-19
+
+**A struct viewing a kept `String` parameter, stored where it outlives it, owns its text (#702)**
+- A parameter is no longer lent where a caller hands the call's result back, or stores it into a parameter, `self` or an outer scope's local that outlives the caller's text; the position then takes what its callers hand it (ADR-282 D12, D13). Before, rustc refused such programs (`v` does not live long enough).
+
 ## [0.0.1067] — 2026-10-19
 
 **A struct of views read through a local does not keep the argument it views (#697)**
