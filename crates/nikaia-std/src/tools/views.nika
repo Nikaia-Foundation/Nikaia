@@ -1381,6 +1381,10 @@ struct ResultSrcFlow {
     shadow: collections::BTreeSet[String],
     // The type a `let` wrote for a local, where it wrote one.
     annotated: collections::BTreeMap[String, Type],
+    // The `mut` parameters whose place a view may be kept in (ADR-283 D27),
+    // and what is kept there. Empty outside `places_stored`.
+    places: collections::BTreeSet[String],
+    stores: collections::BTreeMap[String, collections::BTreeSet[String]],
 }
 
 fn rsrc_none() -> collections::BTreeSet[String] {
@@ -1489,7 +1493,7 @@ fn rsrc_all_loose(entries: ref collections::BTreeSet[String]) -> collections::BT
 
 fn rsrc_flow(at: ref Span) -> ResultSrcFlow {
     let env: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
-    return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap() }
+    return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap(), places: rsrc_none(), stores: collections::BTreeMap() }
 }
 
 fn rsrc_shadow(asked: ref Asked, here: ref Here, name: ref String, mut flow: ResultSrcFlow) {
@@ -1916,7 +1920,10 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, value, flow)
                 match target {
                     Expr::Variable(name, _) => rsrc_bind(flow, asked.names.resolve(name), reach),
-                    else => rsrc_bind_root(asked, here, target, reach, flow),
+                    else => {
+                        rsrc_bind_root(asked, here, target, reach, flow)
+                        rsrc_store(asked, target, reach, flow)
+                    }
                 }
             }
             Stmt::Return(value) => {
@@ -2016,6 +2023,9 @@ fn rsrc_method(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
     }
     let root = rsrc_root_local(asked, here, flow, receiver)
     let ty = rsrc_type(unit, asked, here, flow, receiver)
+    if stored.len() > 0 && flow.places.len() > 0 && rsrc_changes_described(asked, ty, name) {
+        rsrc_store(asked, receiver, stored, flow)
+    }
     if stored.len() > 0 && root != null {
         let mut changes = true
         if ty != null {
@@ -2035,6 +2045,32 @@ fn rsrc_method(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
     let subject = asked.names.resolve(known_type.name)
     let key = f"{subject}::{name}"
     return rsrc_callee(asked, known, key, positional, everything)
+}
+
+// **A view kept in a parameter's place** (ADR-283 D27): `v.push(w)`,
+// `v[i] = w` and `p.f = w`, with `mut v` and `mut p` parameters, keep what
+// `w` reaches in the caller's value.
+fn rsrc_store(asked: ref Asked, place: ref Expr, reach: ref collections::BTreeSet[String], mut flow: ResultSrcFlow) {
+    if reach.len() == 0 || flow.places.len() == 0 {
+        return
+    }
+    let root = rsrc_root_name(asked, place) ?? return
+    if !flow.places.contains(root) || flow.shadow.contains(root) {
+        return
+    }
+    let mut now = flow.stores[root]?.clone() ?? rsrc_none()
+    rsrc_join(now, reach)
+    flow.stores.insert(root.clone(), now)
+}
+
+// Whether a ledger describes the method as one that changes its receiver:
+// only such a method keeps its arguments in the receiver's place.
+fn rsrc_changes_described(asked: ref Asked, ty: ref Type?, name: ref String) -> bool {
+    let kind = ty ?? return false
+    let subject = asked.names.resolve(kind.name)
+    let described = asked.own.functions[f"{subject}::{name}"]?.clone() ?? asked.library.functions[f"{subject}::{name}"]?.clone()
+    let contract = described ?? return false
+    return contract.mutates
 }
 
 fn rsrc_call(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {
@@ -2548,6 +2584,119 @@ pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffe
         out.push(ResultSource { key: key.clone(), borrows: borrows, returns: rsrc_returns_text(found.params, found.reach) })
     }
     return out
+}
+
+/// What each function keeps in a `mut` parameter's place (ADR-283 D27), by
+/// ledger key: `v:s` where a view of the text parameter `s`, lent, reaches
+/// what the body pushes, inserts or assigns into `v`.
+pub struct PlacesStored {
+    pub key: String,
+    pub stores: Vec[String],
+}
+
+/// The answer of D27 for every function of the unit that has a `mut`
+/// parameter and a text parameter lent to it.
+pub fn places_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[PlacesStored] {
+    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) }
+    let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
+    let mut ignored: Vec[Finding] = []
+    rsrc_solve(unit, asked, items, own_buffer, known, ignored)
+    let mut out: Vec[PlacesStored] = []
+    let nothing: Type? = null
+    for item in items {
+        match item.node {
+            Item::Fn { .. } => places_of(unit, asked, nothing, item.span, item.node, own_buffer, known, out),
+            Item::Impl { target, methods, .. } => {
+                let subject: Type? = target.clone()
+                for method in methods {
+                    places_of(unit, asked, subject, method.span, method.node, own_buffer, known, out)
+                }
+            }
+            else => {}
+        }
+    }
+    return out
+}
+
+// One function: its `mut` parameters are the places, its lent text
+// parameters the sources, and the walk is the result's (`rsrc_block`).
+fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span, item: ref Item, own_buffer: fn(ref Expr) -> bool sync, known: ref collections::BTreeMap[String, ResultSrcKnown], mut out: Vec[PlacesStored]) {
+    match item {
+        Item::Fn { name, receiver, args, config, body, .. } => {
+            let owner = text_of(asked, subject)
+            let function = function_name(asked.names, name)
+            let key = rsrc_key(owner, function)
+            let own_contract = asked.own.functions[key]?.clone()
+            let mut places = rsrc_none()
+            let mut sources: Vec[String] = []
+            let mut position = 0
+            if receiver != null {
+                position = 1
+            }
+            for arg in args {
+                let named = asked.names.resolve(arg.name).clone()
+                if arg.mutable && arg.ty.code == null && !rsrc_scalar(asked, arg.ty) {
+                    places.insert(named.clone())
+                } else if !arg.mutable && rsrc_plain_text(asked, arg.ty) && (arg.ty.is_view || rsrc_lent(asked, own_contract, position)) {
+                    sources.push(named.clone())
+                }
+                position += 1
+            }
+            if places.len() == 0 || sources.len() == 0 {
+                return
+            }
+            let mut declared: Vec[(winnow_grammar::Symbol, Type)] = []
+            for arg in args {
+                declared.push((arg.name, arg.ty.clone()))
+            }
+            for option in config {
+                declared.push((option.name, option.ty.clone()))
+            }
+            let here = Here { subject: subject?.clone(), subject_fields: fields_of_type(unit, asked, subject), declared: declared, ours: null, carriers: collections::BTreeSet(), found: [] }
+            let mut flow = rsrc_flow(at)
+            flow.places = places
+            for source in sources {
+                let mut own = rsrc_none()
+                own.insert(source.clone())
+                flow.env.insert(source.clone(), own)
+            }
+            let mut size = -1
+            let mut rounds = 0
+            while rounds < 64 {
+                flow.ways = []
+                flow.depth = 0
+                let tail = rsrc_block(unit, asked, here, known, own_buffer, body, flow)
+                let mut now = rsrc_size(flow)
+                for (_, kept) in flow.stores {
+                    now += kept.len()
+                }
+                if now == size {
+                    break
+                }
+                size = now
+                rounds += 1
+            }
+            let mut stores: Vec[String] = []
+            for (place, kept) in flow.stores {
+                let reached = rsrc_plain(kept)
+                for source in sources {
+                    if reached.contains(source) {
+                        stores.push(f"{place}:{source}")
+                    }
+                }
+            }
+            if stores.len() > 0 {
+                out.push(PlacesStored { key: key, stores: stores })
+            }
+        }
+        else => {}
+    }
+}
+
+// Whether this unit's own entry lends the parameter at `at` (ADR-282 D5).
+fn rsrc_lent(asked: ref Asked, contract: ref FnContract?, at: i64) -> bool {
+    let own = contract ?? return false
+    return lends_in_own(own, at, [asked.library])
 }
 
 // D5's spelling of the views' own sources, by path, in the signature's order of

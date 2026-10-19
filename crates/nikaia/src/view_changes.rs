@@ -56,6 +56,8 @@ struct View {
     used: Option<Span>,
     /// The call that made it, as written (`longest(x, y)`), where one did.
     call: Option<String>,
+    /// The way out the refusal names, where it is not a copy of the view.
+    help: Option<String>,
 }
 
 struct Walk<'a> {
@@ -220,6 +222,7 @@ impl Walk<'_> {
                     way_out: HashMap::new(),
                     used: None,
                     call: None,
+                    help: None,
                 })
             }
             Expr::Call { func, args, .. } => {
@@ -259,10 +262,60 @@ impl Walk<'_> {
                             .collect::<Vec<_>>()
                             .join(", ")
                     )),
+                    help: None,
                 })
             }
             _ => None,
         }
+    }
+
+    /// The views a call keeps in the places its arguments hold (ADR-283 D27):
+    /// the ledger's `stores` says `v:s`, so the argument at `v` holds views of
+    /// the one at `s` from here on.
+    fn kept_in_places(&self, at: &Span, func: &Expr, args: &[Expr]) -> Vec<View> {
+        let parsed = self.parsed;
+        let Expr::Variable(callee, _) = func else {
+            return Vec::new();
+        };
+        let callee = parsed.text(*callee).to_string();
+        let Some(contract) = self.contract(&callee) else {
+            return Vec::new();
+        };
+        let Some(signature) = contract.signature.as_ref() else {
+            return Vec::new();
+        };
+        let index = |n: &str| signature.params.iter().position(|(p, _)| p == n);
+        let mut out = Vec::new();
+        for entry in &contract.stores {
+            let Some((place, source)) = entry.split_once(':') else {
+                continue;
+            };
+            let (Some(held_at), Some(source_at)) = (index(place), index(source)) else {
+                continue;
+            };
+            let Some(holder) = args.get(held_at).and_then(|a| root_of(parsed, a)) else {
+                continue;
+            };
+            let Some(root) = args.get(source_at).and_then(|a| root_of(parsed, a)) else {
+                continue;
+            };
+            out.push(View {
+                name: holder.clone(),
+                roots: BTreeSet::from([root.clone()]),
+                made: *at,
+                from: format!("`{callee}` keeps a view of `{root}` in `{holder}` here"),
+                way_out: HashMap::from([(
+                    root.clone(),
+                    format!("`{callee}` keeps views of what it was given as `{source}` in `{place}`."),
+                )]),
+                used: None,
+                call: None,
+                help: Some(format!(
+                    "Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`."
+                )),
+            });
+        }
+        out
     }
 
     /// The way out of `callee` that hands back `param`: `return b`, where the
@@ -348,6 +401,12 @@ impl Walk<'_> {
                             }
                         }
                     }
+                }
+                // **A view kept in an argument's place** (ADR-283 D27):
+                // `words(t, v)` gives `v` views of `t`.
+                Stmt::Expr(Expr::Call { func, args, .. }) => {
+                    let kept = self.kept_in_places(&at, func, args);
+                    views.extend(kept);
                 }
                 Stmt::Let {
                     names,
@@ -669,9 +728,11 @@ impl Walk<'_> {
             code: "NK2305".to_string(),
             message: format!("`{root}` is changed here, but `{name}` may point into its data and is used later."),
             notes,
-            help: Some(format!(
-                "Use `{name}` before this change, or take a copy of it with `{name}.clone()` before the change."
-            )),
+            help: Some(view.help.clone().unwrap_or_else(|| {
+                format!(
+                    "Use `{name}` before this change, or take a copy of it with `{name}.clone()` before the change."
+                )
+            })),
             labels,
         });
     }

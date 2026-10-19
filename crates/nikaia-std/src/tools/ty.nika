@@ -1089,6 +1089,11 @@ pub struct FnContract {
     /// `left: ref(a), right: ref(b)`. Empty where every view the result holds
     /// may point into all of `borrows`.
     pub returns: String,
+    /// **Views of a parameter kept in a place another parameter holds**
+    /// (ADR-283 D27): `v:s` where a view of `s` is pushed, inserted or
+    /// assigned into `mut v`'s place, `self:s` into the receiver's. Worked
+    /// out from the body for this unit's own functions; not spelled.
+    pub stores: Vec[String],
     pub keeps: Vec[String],
     pub mutates: bool,
     pub touches_a_lock: Lock,
@@ -1136,6 +1141,7 @@ impl FnContract {
             signature: null,
             borrows: [],
             returns: "".clone(),
+            stores: [],
             keeps: [],
             mutates: false,
             touches_a_lock: Lock::No,

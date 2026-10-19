@@ -3591,6 +3591,40 @@ impl<'p> Emitter<'p> {
         // twice (`contracts::keeps::lends`), because the two disagreeing is a
         // `&&T` or a moved value in the language below.
         let lent = self.s.own_contracts.functions.get(&key);
+        // **A view of a parameter kept in another parameter's place**
+        // ([ADR-283](../../docs/specification/adr/adr-283.md) D27): the ledger's
+        // `stores` says `v:s`, and the two share one lifetime,
+        // `s: &'a str, v: &mut Vec<&'a str>`. Not where the subject already
+        // names the buffer (D1, `carries_input`).
+        let stores: Vec<(String, String)> = match lifetimes {
+            Lifetimes::Elided => lent
+                .map(|c| {
+                    c.stores
+                        .iter()
+                        .filter_map(|e| e.split_once(':'))
+                        .map(|(p, s)| (p.to_string(), s.to_string()))
+                        .filter(|(_, s)| !carries_input.is_some_and(|set| set.contains(s)))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        // **Only a place whose type is written with the lifetime**: a list the
+        // text tiers made text of its own takes a copy at the push, and ties
+        // nothing.
+        let stores: Vec<(String, String)> = stores
+            .into_iter()
+            .filter(|(place, _)| {
+                args.iter()
+                    .find(|a| self.text(a.name) == place.as_str())
+                    .is_some_and(|a| {
+                        self.ty_counted(&a.ty, Lifetimes::Named, self.count_at(&key, place))
+                            .contains("'a")
+                    })
+            })
+            .collect();
+        let store_source = |name: &str| stores.iter().any(|(_, s)| s == name);
+        let store_place = |name: &str| stores.iter().any(|(p, _)| p == name);
         // **A parameter lowered as a view** ([ADR-283](../../docs/specification/adr/adr-283.md)
         // D24): one the body changes (`&mut`), or one it only reads, which is
         // a `&` below whatever its written type says (Part I 6.5).
@@ -3749,6 +3783,12 @@ impl<'p> Emitter<'p> {
                 || lowered_views > 0
                 || args.iter().any(|a| self.carries_a_view(&a.ty)));
         let how = |name: Symbol| {
+            if store_place(self.text(name))
+                || (store_source(self.text(name))
+                    && args.iter().any(|a| a.name == name && a.ty.is_view))
+            {
+                return Lifetimes::Named;
+            }
             if let Some(kept) = kept.filter(|_| self.tethered_position(&key, self.text(name))) {
                 return kept;
             }
@@ -3841,13 +3881,17 @@ impl<'p> Emitter<'p> {
                 )
             }) && !written_as_a_view
             {
-                match (
-                    is_source && shared && !source_nested,
-                    is_source && source_kept,
-                ) {
-                    (true, _) => "&'r ",
-                    (_, true) => "&'k ",
-                    _ => "&",
+                if !is_source && store_source(name) {
+                    "&'a "
+                } else {
+                    match (
+                        is_source && shared && !source_nested,
+                        is_source && source_kept,
+                    ) {
+                        (true, _) => "&'r ",
+                        (_, true) => "&'k ",
+                        _ => "&",
+                    }
                 }
             } else {
                 ""
@@ -3930,8 +3974,8 @@ impl<'p> Emitter<'p> {
                 && !a.ty.is_nullable
                 && !a.ty.is_slice;
             let written = match (reference, plain_text, plain_list) {
-                ("&" | "&'r " | "&'k ", _, _) if plain_bytes => "[u8]".to_string(),
-                ("&" | "&'r " | "&'k ", true, _) => "str".to_string(),
+                ("&" | "&'r " | "&'k " | "&'a ", _, _) if plain_bytes => "[u8]".to_string(),
+                ("&" | "&'r " | "&'k " | "&'a ", true, _) => "str".to_string(),
                 ("&" | "&'r " | "&'k ", _, true) if written.starts_with("Vec<") => {
                     format!("[{}]", &written[4..written.len() - 1])
                 }
@@ -4032,7 +4076,9 @@ impl<'p> Emitter<'p> {
         // **The buffer a struct parameter carries is named on the function**
         // where no `impl` names it already.
         let declared: Vec<String> = match lifetimes == Lifetimes::Elided
-            && (carries_input.is_some_and(|set| !set.is_empty()) || inner_views.is_some())
+            && (carries_input.is_some_and(|set| !set.is_empty())
+                || inner_views.is_some()
+                || !stores.is_empty())
         {
             true => std::iter::once("'a".to_string()).chain(declared).collect(),
             false => declared,

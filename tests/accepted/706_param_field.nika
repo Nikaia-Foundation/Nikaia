@@ -1,0 +1,18 @@
+// #706: a view of a parameter assigned to a field of a `mut` struct
+// parameter, with an argument made in the call.
+
+struct Summary {
+    label: ref String,
+    n: i64,
+}
+
+fn relabel(mut s: Summary, name: ref String) {
+    s.label = name
+    s.n += 1
+}
+
+fn main() {
+    let mut s = Summary { label: "x", n: 1 }
+    relabel(s, f"a {1}")
+    println(f"{s.label} {s.n}")
+}

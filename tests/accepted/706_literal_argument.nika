@@ -1,0 +1,20 @@
+// #706: a literal handed to a parameter whose views are kept in another
+// parameter's list, and a named argument read afterwards.
+
+fn words(s: String, mut v: Vec[String]) {
+    for w in s.split(" ") {
+        v.push(w)
+    }
+}
+
+fn main() {
+    let mut v: Vec[String] = []
+    words("x y z", v)
+    let line = f"p q {2}"
+    words(line, v)
+    println(v.len())
+    println(line)
+    for w in v {
+        println(w)
+    }
+}

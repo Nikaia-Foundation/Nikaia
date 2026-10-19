@@ -1,0 +1,23 @@
+// #706: a `ref mut self` method pushing parts of a parameter into a field
+// list; the buffer is the struct's (ADR-283 D1), the argument the caller's.
+
+struct Bag {
+    items: Vec[ref String],
+}
+
+impl Bag {
+    fn add(ref mut self, s: ref String) {
+        for w in s.split(",") {
+            self.items.push(w)
+        }
+    }
+}
+
+fn main() {
+    let mut b = Bag { items: [] }
+    let line = f"a,b,{1}"
+    b.add(line)
+    b.add("c,d")
+    println(b.items.len())
+    println(b.items[4])
+}

@@ -2462,7 +2462,10 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
             facts.ints.insert(name.to_owned());
             if ty.starts_with('u') { bounding_at_least_zero(walk, &mut facts, &name); }
         }
-        if ty == "Vec" || ty == "List" || ty == "Array" { bounding_at_least_zero(walk, &mut facts, &length_of(&name)); }
+        if ty == "Vec" || ty == "List" || ty == "Array" {
+            let __keep_11244 = nikaia_std::tether::Keep::new();
+            bounding_at_least_zero(walk, &mut facts, (&__keep_11244).put(length_of(&name)));
+        }
     }
     for (name, range) in context.given.iter() {
         let range = *range;
@@ -2473,7 +2476,10 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
     }
     for (name, range) in context.text_lengths.iter() {
         let range = *range;
-        if !walk.shape.bound.contains(name) { bounding_bounded(walk, &mut facts, &length_of(name), &range); }
+        if !walk.shape.bound.contains(name) {
+            let __keep_11799 = nikaia_std::tether::Keep::new();
+            bounding_bounded(walk, &mut facts, (&__keep_11799).put(length_of(name)), &range);
+        }
     }
     bounding_block(walk, body, &mut facts, context, program, words, ask);
 }
@@ -3343,6 +3349,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
+            let __keep_56696 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 _ => { },
@@ -3536,7 +3543,10 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
     let mut outer = BoundsChanged { values: changed.values.to_owned(), lengths: changed.lengths.to_owned() };
     for list in filled.iter() { outer.lengths.remove(list); }
     bounding_after_change(walk, facts, &outer);
-    for list in filled.iter() { bounding_shift(walk, facts, &length_of(list), count); }
+    for list in filled.iter() {
+        let __keep_66418 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_66418).put(length_of(list)), count);
+    }
 }
 
 fn bounding_below(walk: &mut BoundsWalk, n: i64, h: i64, closed: bool) -> i64 {
@@ -5080,6 +5090,7 @@ fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAs
 
 fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
     if takes_a_keep(contract) { return; }
+    stored_arguments(contract, named, args, ask, unaliased, walk);
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     if !result.is_a_view() && !a_struct_of_views(result, ask) { return; }
@@ -5092,6 +5103,27 @@ fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &Buffe
             walk.sources.insert(id.clone(), Sourced { source, path: walk.path.to_owned() });
         }
         out.insert(id);
+    }
+}
+
+fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+    let copying: Vec<&Ledger> = vec![ask.own, ask.library];
+    for entry in contract.stores.iter() {
+        let parts = entry.split(':').collect::<Vec<_>>();
+        if parts.len() != 2 { continue; }
+        let place = parameter_index(contract, *nikaia_std::index::get(&parts, 0));
+        let k = parameter_index(contract, *nikaia_std::index::get(&parts, 1));
+        if place < 0 || k < 0 || place >= args.len() as i64 || k >= args.len() as i64 { continue; }
+        if !made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(k))) || !lends_in(contract, k, &copying) || buffers_view_call(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, unaliased) { continue; }
+        let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(place))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let id = (walk.statement, format!("{}#{}", named, k));
+        if !walk.sources.contains_key(&id) {
+            let source = Source::Argument { at: walk.statement, callee: named.to_owned(), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
+            walk.sources.insert(id.clone(), Sourced { source, path: walk.path.to_owned() });
+        }
+        let mut origins: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
+        origins.insert(id);
+        flow_into(&root, &origins, walk);
     }
 }
 
@@ -36125,7 +36157,8 @@ impl EmitState {
             if !inside_a_box {
                 if !nikaia_std::index::or(answer, || true) { out.push("!"); }
                 out.push("matches!(");
-                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value))?;
+                let __keep_32438 = nikaia_std::tether::Keep::new();
+                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, (&__keep_32438).put(self.emit_match_lent_subject(world, value)))?;
                 out.push(", ");
                 let mut i: i64 = 0;
                 for arm in arms.iter() {
@@ -36141,7 +36174,8 @@ impl EmitState {
         }
         out.push("match ");
         if self.facts.lent_scrutinees.contains(&node_key(value)) { out.push("&"); }
-        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value))?;
+        let __keep_33343 = nikaia_std::tether::Keep::new();
+        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, (&__keep_33343).put(self.emit_match_lent_subject(world, value)))?;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let close = "    ".repeat(nikaia_std::count::of(depth));
         out.push(" {\n");
@@ -55136,6 +55170,7 @@ fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], 
             a_lambda_handed_on((described).as_ref(), at, &arg, asked, holes_of, ty_of, walk);
             continue;
         }
+        let __keep_63023 = nikaia_std::tether::Keep::new();
         a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk);
     }
     for setting in config.iter() {
@@ -55261,11 +55296,13 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
     }
     let optional = generic_of(text, "Option");
     if optional.is_some() {
+        let __keep_2262 = nikaia_std::tether::Keep::new();
         let inner = translate(nikaia_std::index::or(optional.as_deref(), || ""), crate_word, parameters, types, mentioned);
         return Translated { ty: Ty::Nullable(Box::new(inner.ty)), kept: inner.kept };
     }
     let listed = generic_of(text, "Vec");
     if listed.is_some() {
+        let __keep_2496 = nikaia_std::tether::Keep::new();
         let inner = translate(nikaia_std::index::or(listed.as_deref(), || ""), crate_word, parameters, types, mentioned);
         return Translated { ty: Ty::Named { name: String::from("Vec"), args: vec![inner.ty], view: false }, kept: true };
     }
@@ -62241,6 +62278,7 @@ pub struct FnContract {
     pub signature: Option<Signature>,
     pub borrows: Vec<String>,
     pub returns: String,
+    pub stores: Vec<String>,
     pub keeps: Vec<String>,
     pub mutates: bool,
     pub touches_a_lock: Lock,
@@ -62257,7 +62295,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: "".to_owned(), keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], inferred: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: "".to_owned(), stores: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], inferred: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64238,6 +64276,8 @@ struct ResultSrcFlow {
     inner: collections::BTreeSet<String>,
     shadow: collections::BTreeSet<String>,
     annotated: collections::BTreeMap<String, Type>,
+    places: collections::BTreeSet<String>,
+    stores: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
 fn rsrc_none() -> collections::BTreeSet<String> {
@@ -64304,7 +64344,7 @@ fn rsrc_all_loose(entries: &collections::BTreeSet<String>) -> collections::BTree
 
 fn rsrc_flow(at: &Span) -> ResultSrcFlow {
     let env: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
-    ResultSrcFlow { env, ways: vec![], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap::new() }
+    ResultSrcFlow { env, ways: vec![], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap::new(), places: rsrc_none(), stores: collections::BTreeMap::new() }
 }
 
 fn rsrc_shadow(asked: &Asked<'_, '_, '_>, here: &Here, name: &str, flow: &mut ResultSrcFlow) { if variable_type(asked, here, name).is_some() { flow.shadow.insert(name.to_owned()); } }
@@ -64655,7 +64695,10 @@ fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &colle
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, value, flow);
                 match target {
                     Expr::Variable(name, _) => { let name = *name; rsrc_bind(flow, asked.names.resolve(name), &reach); },
-                    _ => { rsrc_bind_root(asked, here, target, &reach, flow); },
+                    _ => {
+                        rsrc_bind_root(asked, here, target, &reach, flow);
+                        rsrc_store(asked, target, &reach, flow);
+                    },
                 }
             },
             Stmt::Return(value) => {
@@ -64737,6 +64780,7 @@ fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &coll
     for i in 1..positional.len() as i64 { rsrc_join(&mut stored, nikaia_std::index::get(&positional, (i) as usize)); }
     let root = rsrc_root_local(asked, here, &flow, receiver);
     let ty = rsrc_type(unit, asked, here, &flow, receiver);
+    if !stored.is_empty() && !flow.places.is_empty() && rsrc_changes_described(asked, (ty).as_ref(), name) { rsrc_store(asked, receiver, &stored, flow); }
     if !stored.is_empty() && root.is_some() {
         let mut changes = true;
         if ty.is_some() {
@@ -64763,6 +64807,32 @@ fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &coll
     let subject = asked.names.resolve(known_type.name);
     let key = format!("{}::{}", subject, name);
     rsrc_callee(asked, known, &key, &positional, &everything)
+}
+
+fn rsrc_store(asked: &Asked<'_, '_, '_>, place: &Expr, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
+    if reach.is_empty() || flow.places.is_empty() { return; }
+    let root = match rsrc_root_name(asked, place) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if !flow.places.contains(&root) || flow.shadow.contains(&root) { return; }
+    let mut now = nikaia_std::index::or(match *nikaia_std::index::get(&flow.stores, &root) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || rsrc_none().into());
+    rsrc_join(&mut now, reach);
+    flow.stores.insert(root.to_owned(), now);
+}
+
+fn rsrc_changes_described(asked: &Asked<'_, '_, '_>, ty: Option<&Type>, name: &str) -> bool {
+    let kind = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let subject = asked.names.resolve(kind.name);
+    let described = nikaia_std::index::or_maybe(match *nikaia_std::index::get(&asked.own.functions, &(format!("{}::{}", subject, name))) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || match *nikaia_std::index::get(&asked.library.functions, &(format!("{}::{}", subject, name))) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    });
+    let contract = match described { Some(__nikaia_value) => __nikaia_value, None => return false };
+    contract.mutates
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -65166,6 +65236,96 @@ pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_bu
         out.push(ResultSource { key: key.to_owned(), borrows, returns: rsrc_returns_text(&found.params, &found.reach) });
     }
     out
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlacesStored {
+    pub key: String,
+    pub stores: Vec<String>,
+}
+
+pub fn places_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<PlacesStored> {
+    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) };
+    let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
+    let mut ignored: Vec<Finding> = vec![];
+    rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
+    let mut out: Vec<PlacesStored> = vec![];
+    let nothing: Option<Type> = None;
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { .. } => { places_of(&unit, asked, (nothing).as_ref(), &item.span, &item.node, own_buffer, &known, &mut out); },
+            Item::Impl { target, methods, .. } => {
+                let subject: Option<Type> = Some(target.clone());
+                for method in methods.iter() { places_of(&unit, asked, (subject).as_ref(), &method.span, &method.node, own_buffer, &known, &mut out); }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<PlacesStored>) {
+    match item {
+        Item::Fn { name, receiver, args, config, body, .. } => {
+            let name = *name;
+            let owner = text_of(asked, subject);
+            let function = function_name(asked.names, name);
+            let key = rsrc_key((owner).as_deref(), &function);
+            let own_contract = match *nikaia_std::index::get(&asked.own.functions, &key) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let mut places = rsrc_none();
+            let mut sources: Vec<String> = vec![];
+            let mut position: i64 = 0;
+            if receiver.is_some() { position = 1; }
+            for arg in args.iter() {
+                let named = asked.names.resolve(arg.name).to_owned();
+                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) { places.insert(named.to_owned()); } else if !arg.mutable && rsrc_plain_text(asked, &arg.ty) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(named.to_owned()); }
+                position += 1;
+            }
+            if places.is_empty() || sources.is_empty() { return; }
+            let mut declared: Vec<(winnow_grammar::Symbol, Type)> = vec![];
+            for arg in args.iter() { declared.push((arg.name, arg.ty.clone())); }
+            for option in config.iter() { declared.push((option.name, option.ty.clone())); }
+            let here = Here { subject: match subject {
+                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                None => None,
+            }, subject_fields: fields_of_type(unit, asked, subject), declared, ours: None, carriers: collections::BTreeSet::new(), found: vec![] };
+            let mut flow = rsrc_flow(at);
+            flow.places = places;
+            for source in sources.iter() {
+                let mut own = rsrc_none();
+                own.insert(source.to_owned());
+                flow.env.insert(source.to_owned(), own);
+            }
+            let mut size: i64 = -1;
+            let mut rounds = 0;
+            while rounds < 64 {
+                flow.ways = vec![];
+                flow.depth = 0;
+                let tail = rsrc_block(unit, asked, &here, known, own_buffer, body, &mut flow);
+                let mut now = rsrc_size(&flow);
+                for (_, kept) in flow.stores.iter() { now += kept.len() as i64; }
+                if now == size { break; }
+                size = now;
+                rounds += 1;
+            }
+            let mut stores: Vec<String> = vec![];
+            for (place, kept) in flow.stores.iter() {
+                let reached = rsrc_plain(kept);
+                for source in sources.iter() { if reached.contains(source) { stores.push(format!("{}:{}", place, source)); } }
+            }
+            if !stores.is_empty() { out.push(PlacesStored { key, stores }); }
+        },
+        _ => { },
+    }
+}
+
+fn rsrc_lent(asked: &Asked<'_, '_, '_>, contract: Option<&FnContract>, at: i64) -> bool {
+    let own = match contract { Some(__nikaia_value) => __nikaia_value, None => return false };
+    lends_in_own(own, at, &vec![asked.library])
 }
 
 fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet<String>) -> String {
@@ -66174,7 +66334,7 @@ pub mod types {
 }
 pub mod views {
     #[allow(unused_imports)]
-    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources};
+    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources, PlacesStored, places_stored};
 }
 pub mod written {
     #[allow(unused_imports)]

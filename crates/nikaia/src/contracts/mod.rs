@@ -992,12 +992,21 @@ pub const PARSE_ERROR: &str = "ParseError";
 /// ever says more).
 fn write_result_sources(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
     for _ in 0..2 {
+        for contract in ledger.functions.values_mut() {
+            contract.stores.clear();
+        }
         for parsed in units.iter().copied() {
             let sources = crate::views::result_sources(parsed, ledger, library);
             for source in sources {
                 if let Some(contract) = ledger.functions.get_mut(&source.key) {
                     contract.borrows = source.borrows;
                     contract.returns = source.returns;
+                }
+            }
+            // **And what it keeps in a `mut` parameter's place** (D27).
+            for stored in crate::views::places_stored(parsed, ledger, library) {
+                if let Some(contract) = ledger.functions.get_mut(&stored.key) {
+                    contract.stores = stored.stores;
                 }
             }
         }

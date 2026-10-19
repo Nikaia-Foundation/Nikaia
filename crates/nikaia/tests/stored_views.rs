@@ -587,3 +587,68 @@ fn a_local_struct_keeps_a_view_only_where_it_leaves() {
         );
     }
 }
+
+/// #706: a view of a parameter kept in another parameter's list
+/// ([ADR-283](../../../docs/specification/adr/adr-283.md) D27): the two share
+/// one lifetime, and an argument made in the call is put into the caller's
+/// keep. What it computes is `tests/accepted/706_*.nika`.
+#[test]
+fn a_view_kept_in_a_parameters_place_shares_its_lifetime() {
+    let source = r#"
+fn words(s: String, mut v: Vec[String]) {
+    for w in s.split(" ") {
+        v.push(w)
+    }
+}
+
+fn main() {
+    let mut v: Vec[String] = []
+    words(f"a b {1}", v)
+    println(v.len())
+}
+"#;
+    let rust = lowered(source);
+    assert!(
+        rust.contains("fn words<'a>(s: &'a str, v: &mut Vec<&'a str>)"),
+        "the parameter and the list share one lifetime:\n{rust}"
+    );
+    assert!(
+        rust.contains(".put(format!("),
+        "the argument made in the call lives in the caller's keep:\n{rust}"
+    );
+}
+
+/// #706: changing the argument in place while the list that holds views of
+/// it is still read is `NK2305` (ADR-353 D4), at the change.
+#[test]
+fn changing_an_argument_kept_in_a_parameters_place_is_refused() {
+    let source = r#"
+fn words(s: String, mut v: Vec[String]) {
+    for w in s.split(" ") {
+        v.push(w)
+    }
+}
+
+fn main() {
+    let mut v: Vec[String] = []
+    let mut t = f"a b {1}"
+    words(t, v)
+    t.push_str(" c")
+    println(v.len())
+}
+"#;
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    let found: Vec<Finding> = check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code == "NK2305")
+        .collect();
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].message.contains("`t` is changed here, but `v`"),
+        "{}",
+        found[0].message
+    );
+}

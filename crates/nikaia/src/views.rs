@@ -58,6 +58,20 @@ pub fn result_sources(
     )
 }
 
+/// What each function keeps in a `mut` parameter's place (ADR-283 D27,
+/// `tools/views.nika`), by ledger key: `v:s`.
+pub fn places_stored(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+) -> Vec<nikaia_std::tools::views::PlacesStored> {
+    nikaia_std::tools::views::places_stored(
+        &asked(parsed, own, library),
+        &parsed.program.items,
+        &|value: &Expr| own_buffer(parsed, value, own, library),
+    )
+}
+
 /// The parameters the emitter writes as views of the subject's buffer, by the
 /// byte the method they belong to starts at.
 pub fn carried(parsed: &Parsed, own: &Ledger, library: &Ledger) -> HashMap<usize, HashSet<Ident>> {

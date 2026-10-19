@@ -1200,6 +1200,7 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
     if takes_a_keep(contract) {
         return
     }
+    stored_arguments(contract, named, args, ask, unaliased, walk)
     let signature = contract.signature ?? return
     let result = signature.result ?? return
     if !result.is_a_view() && !a_struct_of_views(result, ask) {
@@ -1216,6 +1217,36 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
             walk.sources.insert(id.clone(), Sourced { source: source, path: walk.path.clone() })
         }
         out.insert(id)
+    }
+}
+
+// **An argument made in the call whose view the callee keeps in another
+// argument's place** (ADR-283 D27): `words(f"a b {1}", v)` - a source that
+// flows into `v`, so it lives in the keep of the frame that keeps `v`.
+fn stored_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Expr], ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) {
+    let copying: Vec[ref Ledger] = [ask.own, ask.library]
+    for entry in contract.stores {
+        let parts = entry.split(":").collect()
+        if parts.len() != 2 {
+            continue
+        }
+        let place = parameter_index(contract, parts[0])
+        let k = parameter_index(contract, parts[1])
+        if place < 0 || k < 0 || place >= args.len() || k >= args.len() {
+            continue
+        }
+        if !made_in_the_call(args[k]) || !lends_in(contract, k, copying) || buffers_view_call(args[k], ask, unaliased) {
+            continue
+        }
+        let root = root_of(ask.names, args[place]) ?? continue
+        let id = (walk.statement, f"{named}#{k}")
+        if !walk.sources.contains_key(id) {
+            let source = Source::Argument { at: walk.statement, callee: named.clone(), index: k, span: Span { start: walk.statement as u32, end: walk.statement as u32 } }
+            walk.sources.insert(id.clone(), Sourced { source: source, path: walk.path.clone() })
+        }
+        let mut origins: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
+        origins.insert(id)
+        flow_into(root, origins, walk)
     }
 }
 
