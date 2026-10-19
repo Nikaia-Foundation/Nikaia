@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1042] — 2026-10-19
+
+**Static views of text: a published list and build-time values own their text; winnow-grammar 3c50bc4 (#659, #453)**
+- `pub fn f() -> Vec[String] { return g() }` stays `Vec<String>`; option defaults, `comptime` values and field defaults read what they read as text of their own.
+- A `String?` parameter only literals reach stays `Option<&'static str>`, a call returning static text keeps no argument alive, and `text =>` over a nullable view binds the payload as it is.
+- Messages say `String` for a field declared `String`, whatever it lowers to.
+- Grammars cut without a boundary check next to an ASCII byte, search with one static searcher per site and match fixed-shape runs in one step (winnow-grammar 3c50bc4): 1BRC from 273.4 to 239.4 instructions a row.
+
 ## [0.0.1041] — 2026-10-18
 
 **Static views of text: a parameter only read is &str again (ADR-282 D5, D29, #659)**
