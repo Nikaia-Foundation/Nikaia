@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1081] — 2026-10-19
+
+**a view of a parameter kept in another parameter's place points into the caller's argument (ADR-283 D27, #706)**
+- A function that pushes, inserts or assigns parts of a text parameter into a `mut` parameter's list or field compiles: the two share one lifetime in the lowering, an argument made in the call lives in the caller's keep, and changing a named argument in place while the place is read is NK2305. Free functions only so far.
+
 ## [0.0.1080] — 2026-10-19
 
 **A `Bytes` reads a word: `u32_le`, `u64_le`, `u32_be`, `u64_be` (#709)**
