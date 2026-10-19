@@ -57200,6 +57200,7 @@ fn changed_in_place(target: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWal
         Expr::Index { base, .. } => {
             let base = nikaia_std::boxed::open(base);
             let element = match element_word(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+            walk.flows.unwrappable.insert(element.to_owned());
             flow_word(&element, &owned_kinds(), walk);
             return;
         },
@@ -57211,12 +57212,14 @@ fn changed_in_place(target: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWal
         if plain_string(ask.names, &found.ty) {
             let word = seen(&found.owner, &no_path(), walk);
             walk.flows.changed.insert(word.to_owned());
+            walk.flows.unwrappable.insert(word.to_owned());
             flow_word(&word, &owned_kinds(), walk);
         }
         return;
     }
     let read_from = match text_source_word(Some(target), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     walk.flows.changed.insert(read_from.to_owned());
+    walk.flows.unwrappable.insert(read_from.to_owned());
     flow_word(&read_from, &owned_kinds(), walk);
 }
 

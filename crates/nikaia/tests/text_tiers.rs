@@ -1400,3 +1400,42 @@ fn the_json_example_lowers_as_its_ref_twin() {
     assert!(rust.contains("Text(&'a str)"), "{rust}");
     assert_eq!(rust, lowered(&written, Build::default()));
 }
+
+/// **A `String` parameter changed in place through a name bound to it owns
+/// its text** (ADR-282 D29, #681): never mixed, so a view handed to it is
+/// refused at the call (`NK1102`), published or not, where before it was
+/// taken as `EitherText` and `rustc` refused the `push_str`. With
+/// `.clone()` it runs; a caller taking `String` still hands it over
+/// (`NK2105`).
+#[test]
+fn a_parameter_changed_through_a_name_bound_to_it_refuses_a_view() {
+    let probe = r##"pub fn greet(who: String) -> String {
+    let mut s = who
+    s.push_str("!")
+    return s
+}
+pub fn hello(w: ref String) -> String { return greet(w) }
+fn main() {
+    let w = f"w{1}"
+    println(hello(w))
+    println(w)
+}
+"##;
+    for source in [probe.to_string(), probe.replace("pub fn", "fn")] {
+        let found = findings(&source);
+        assert!(
+            found.iter().any(|f| f.code == "NK1102"
+                && f.message.contains(
+                    "`greet` expects `who` to be `String`, but you're passing `ref String`"
+                )),
+            "{found:#?}"
+        );
+    }
+    runs(
+        "changed-through-a-name",
+        &probe.replace("greet(w)", "greet(w.clone())"),
+        "w1!\nw1",
+    );
+    let found = findings(&probe.replace("hello(w: ref String)", "hello(w: String)"));
+    assert!(found.iter().any(|f| f.code == "NK2105"), "{found:#?}");
+}

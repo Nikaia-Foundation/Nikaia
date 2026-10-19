@@ -466,7 +466,8 @@ struct Flows {
     /// representation below and get one tier (ADR-282 D16).
     links: collections::BTreeSet[(String, String)],
     /// Positions a value goes into from inside an `f"…"` hole this pass has
-    /// no place to hand it over in: never mixed.
+    /// no place to hand it over in, and positions changed in place: never
+    /// mixed.
     unwrappable: collections::BTreeSet[String],
     /// Parameters handed as they are to a parse, whose result may view them:
     /// views, whatever flows in, as if written `ref String`.
@@ -1075,12 +1076,14 @@ fn still_tail(block: ref Block, ask: ref TierAsk, mut walk: TierWalk, mut out: V
 
 /// **Text changed in place is text of its own** (ADR-282 D29): the
 /// position the changed value is declared as, or was read out of, has text
-/// of its own flowing in.
+/// of its own flowing in, and is never mixed: what is changed is owned, so
+/// a view handed there is refused (`NK1102`), not taken as `EitherText`.
 fn changed_in_place(target: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
     // `names[i] += "!"`: the element position of the list.
     match target {
         Expr::Index { base, .. } => {
             let element = element_word(base, ask, walk) ?? return
+            walk.flows.unwrappable.insert(element.clone())
             flow_word(element, owned_kinds(), walk)
             return
         }
@@ -1092,12 +1095,14 @@ fn changed_in_place(target: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
         if plain_string(ask.names, found.ty) {
             let word = seen(found.owner, no_path(), walk)
             walk.flows.changed.insert(word.clone())
+            walk.flows.unwrappable.insert(word.clone())
             flow_word(word, owned_kinds(), walk)
         }
         return
     }
     let read_from = text_source_word(target, ask, walk) ?? return
     walk.flows.changed.insert(read_from.clone())
+    walk.flows.unwrappable.insert(read_from.clone())
     flow_word(read_from, owned_kinds(), walk)
 }
 
