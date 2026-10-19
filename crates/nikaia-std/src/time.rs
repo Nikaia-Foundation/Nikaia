@@ -115,15 +115,10 @@ pub trait DurationIn {
     fn in_millis(self) -> i64;
     /// How many whole millionths of a second.
     fn in_micros(self) -> i64;
-    /// **`d.as_nanos()`** ([ADR-368](../../../docs/specification/adr/adr-368.md)
-    /// D2): how many nanoseconds, an `i64` that stays at `i64::MAX` past it.
-    ///
-    /// The language below's own `as_nanos` is a `u128` and takes `&self`;
-    /// this one takes `self`, so a method call on a `Duration` finds it first
-    /// (by value before by reference). `d.as_secs_f64()` needs nothing here:
-    /// the language below's answers an `f64` already.
-    #[allow(clippy::wrong_self_convention)] // by value, to come before the `&self` one
-    fn as_nanos(self) -> i64;
+    /// How many whole billionths of a second
+    /// ([ADR-368](../../../docs/specification/adr/adr-368.md) D2), the reading
+    /// a measurement wants.
+    fn in_nanos(self) -> i64;
 }
 
 impl DurationIn for Duration {
@@ -142,8 +137,8 @@ impl DurationIn for Duration {
     fn in_micros(self) -> i64 {
         counted(self.as_micros())
     }
-    fn as_nanos(self) -> i64 {
-        counted(Duration::as_nanos(&self))
+    fn in_nanos(self) -> i64 {
+        counted(self.as_nanos())
     }
 }
 
@@ -259,14 +254,12 @@ mod tests {
         assert_eq!(i64::MAX.seconds().in_seconds(), i64::MAX);
     }
 
-    /// **ADR-368 D2**: the trait's `as_nanos` is the one a call finds, an
-    /// `i64`, saturated; `as_secs_f64` is the language below's.
+    /// **ADR-368 D2**: a span read in nanoseconds, saturated as the other
+    /// `in_*` readers are.
     #[test]
-    fn a_span_reads_as_nanoseconds_and_as_seconds() {
-        let nanos: i64 = 1500.micros().as_nanos();
-        assert_eq!(nanos, 1_500_000);
-        assert_eq!(i64::MAX.hours().as_nanos(), i64::MAX);
-        assert_eq!(1500.millis().as_secs_f64(), 1.5);
+    fn a_span_reads_as_nanoseconds() {
+        assert_eq!(1500.micros().in_nanos(), 1_500_000);
+        assert_eq!(i64::MAX.hours().in_nanos(), i64::MAX);
     }
 
     /// **ADR-368 D1**: a later reading minus an earlier is what passed, and

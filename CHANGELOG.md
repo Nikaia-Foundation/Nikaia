@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1058] — 2026-10-19
+
+**a program reads the clock, and what a program it ran cost (ADR-368)**
+- ADR-368 built: `time::now()` reads a monotonic clock as a `time::Instant` (`elapsed()`, `b.since(a)`, zero where `b` is earlier); `d.in_nanos()` joins ADR-150's readers; `process::run`'s `Output` reports `elapsed`, `user_time`, `system_time` and `max_rss_kib` (`i64?`) for that one child, through `wait4` in the new `crates/unsafe/child-usage`.
+
 ## [0.0.1057] — 2026-10-19
 
 **A `String` parameter changed through a name bound to it owns its text (#681)**

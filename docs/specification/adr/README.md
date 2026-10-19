@@ -95,7 +95,7 @@ implementation.
 | [365](adr-365.md) | Standard input and every file read while the program runs are untrusted unless marked `trusted: true`; only the project's own assets (`asset("…")`) are trusted without a marker | Accepted | no |
 | [366](adr-366.md) | A grammar reads `Bytes` as readily as text; what becomes text is checked as UTF-8 where it becomes text, a bad byte is a parse error at its offset | Accepted | no |
 | [367](adr-367.md) | A fold over a grammar's input takes no more steps than the input has room for; a counter that grows by a fixed amount a step is proved from that, a sum is checked once before the fold; only where the input's length is known, never over a stream | Accepted | no |
-| [368](adr-368.md) | A program can measure time and what another program used: `time::now()` and `Instant`, a `Duration`'s readers, and `process::run`'s `elapsed`, `user_time`, `system_time`, `max_rss_kib` for that one child | Accepted | no |
+| [368](adr-368.md) | A program can measure time and what another program used: `time::now()` and `Instant`, `Duration::in_nanos`, and `process::run`'s `elapsed`, `user_time`, `system_time`, `max_rss_kib` for that one child | Accepted | no |
 | [243](adr-243.md) | `std::process::run` starts a program and waits for it on a thread of its own, and a non-zero exit is an answer, not a failure. | Accepted | yes |
 | [258](adr-258.md) | A design question is weighed by four weights: the special case pays, the compiler works for the developer, the common case costs nothing, and the language is consistent with itself. | Accepted | yes |
 | [001](adr-001.md) | The toolchain is stable Rust named in one file, the parser is generated from a grammar over bytes, and the build is staged with Stage 0 a transpiler. | Accepted | yes |

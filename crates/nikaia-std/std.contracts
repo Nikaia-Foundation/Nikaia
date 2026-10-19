@@ -4314,23 +4314,13 @@ sync = true
 touches = []
 signature = "(self) -> i64"
 
-# **A span read as a number** ([ADR-368](../../docs/specification/adr/adr-368.md)
-# D2), under the language below's names: the measuring half, where `in_*` is the
-# counting one. `touches = []` and `sync = true` for the arithmetic entries'
-# reason.
-# How many nanoseconds the span holds; past `i64::MAX` it stays there.
-[fn."time::Duration::as_nanos"]
+# How many whole billionths of a second the span holds; past `i64::MAX` it
+# stays there ([ADR-368](../../docs/specification/adr/adr-368.md) D2).
+[fn."time::Duration::in_nanos"]
 pub = true
 sync = true
 touches = []
 signature = "(self) -> i64"
-
-# The span in seconds, with the fraction.
-[fn."time::Duration::as_secs_f64"]
-pub = true
-sync = true
-touches = []
-signature = "(self) -> f64"
 
 # **A reading of the monotonic clock** ([ADR-368](../../docs/specification/adr/adr-368.md)
 # D1), the language below's `Instant` re-exported as `Duration` is. It crosses,

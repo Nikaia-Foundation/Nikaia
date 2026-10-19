@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1057 (Draft)
+**Version:** 0.0.1058 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -967,8 +967,8 @@ fn main() {
 }
 ```
 
-`in_hours`, `in_minutes`, `in_seconds`, `in_millis` and `in_micros` answer an
-`i64`; a span longer than an `i64` counts reads as `i64::MAX`, as a count too
+`in_hours`, `in_minutes`, `in_seconds`, `in_millis`, `in_micros` and
+`in_nanos` answer an `i64`; a span longer than an `i64` counts reads as `i64::MAX`, as a count too
 large to make a span saturates. `time::sleep` pauses, and gives the thread up
 while it does.
 
@@ -1470,8 +1470,8 @@ Some modules are available, or behave restrictively, depending on the target and
   `time::Instant`; `i.elapsed()` is the `Duration` since it, `b.since(a)` the
   one from `a` to `b`, zero where `b` is earlier. An `Instant` never goes back,
   says nothing about the calendar, and means something only within the run
-  that read it. A `Duration` reads as `d.as_nanos()`, an `i64` saturated at
-  its largest value, and `d.as_secs_f64()` ([ADR-368](adr/adr-368.md)).
+  that read it. A `Duration` also reads as `d.in_nanos()`, an `i64` saturated
+  at its largest value as the other `in_*` readers are ([ADR-368](adr/adr-368.md)).
 * **`std::thread` / `spawn`**:
     * **At `user_parallelism = yes`:** full concurrency. The primary mechanism is `spawn`.
         * **Strict implicit move:** ownership of the ordinary data used inside a `spawn` block is transferred to the new task. A handle on a shared value is the one exception and is duplicated instead, so the name outside keeps working (Part I 6.2).

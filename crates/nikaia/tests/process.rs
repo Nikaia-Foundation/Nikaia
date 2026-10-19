@@ -157,12 +157,12 @@ fn what_the_run_cost_comes_back() {
                   \n\
                   fn main() throws {\n\
                   \x20   let out = process::run(\"sh\", [\"-c\", \"sleep 0.02\"])\n\
-                  \x20   let took = out.elapsed.as_nanos()\n\
+                  \x20   let took = out.elapsed.in_nanos()\n\
                   \x20   let rss = out.max_rss_kib ?? 0\n\
-                  \x20   let busy = out.user_time.as_secs_f64() + out.system_time.as_secs_f64()\n\
-                  \x20   println(f\"waited={took >= 20000000} rss={rss > 0} busy={busy >= 0.0}\")\n\
+                  \x20   let busy = out.user_time.in_nanos() + out.system_time.in_nanos()\n\
+                  \x20   println(f\"waited={took >= 20000000} rss={rss > 0} busy={busy >= 0}\")\n\
                   \x20   let fine = process::run(\"true\", [])\n\
-                  \x20   println(f\"elapsed={fine.elapsed.as_nanos() > 0} rss={(fine.max_rss_kib ?? 0) > 0}\")\n\
+                  \x20   println(f\"elapsed={fine.elapsed.in_nanos() > 0} rss={(fine.max_rss_kib ?? 0) > 0}\")\n\
                   }\n";
     runs(
         "costs",
