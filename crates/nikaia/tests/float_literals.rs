@@ -91,3 +91,66 @@ fn main() {
         "{found:#?}"
     );
 }
+
+/// **An integer literal is no float** (Part I 2.4, #703): a number takes its
+/// type among the integer types, so `2` where an `f64` is declared, handed or
+/// met is refused in the position's own words, as the language below would
+/// refuse the generated file.
+#[test]
+fn an_integer_literal_is_no_float() {
+    let cases: [(&str, &str); 11] = [
+        (
+            "NK1103",
+            "fn main() {\n    let x: f64 = 2\n    println(f\"{x}\")\n}\n",
+        ),
+        (
+            "NK1102",
+            "fn half(x: f64) -> f64 { return x / 2.0 }\nfn main() { println(f\"{half(3)}\") }\n",
+        ),
+        (
+            "NK1103",
+            "fn pick(c: bool) -> f64 {\n    let y: f64 = if c { 2 } else { 3.5 }\n    return y\n}\nfn main() { println(f\"{pick(true)}\") }\n",
+        ),
+        (
+            "NK1104",
+            "fn t() -> f64 { 3 }\nfn main() { println(f\"{t()}\") }\n",
+        ),
+        (
+            "NK1104",
+            "fn t() -> f64 { return -3 }\nfn main() { println(f\"{t()}\") }\n",
+        ),
+        (
+            "NK1106",
+            "struct P { a: f64 }\nfn main() {\n    let p = P { a: 3 }\n    println(f\"{p.a}\")\n}\n",
+        ),
+        (
+            "NK1105",
+            "fn main() {\n    let mut x: f64 = 1.5\n    x = 3\n    println(f\"{x}\")\n}\n",
+        ),
+        (
+            "NK1199",
+            "fn main() {\n    let x: f64 = 1.5\n    println(f\"{x * 2} {x > 0}\")\n}\n",
+        ),
+        (
+            "NK1199",
+            "fn main() {\n    let mut x: f64 = 1.5\n    x += 1\n    println(f\"{x}\")\n}\n",
+        ),
+        (
+            "NK1154",
+            "fn main() {\n    let v = [1.5, 2]\n    println(f\"{v.len()}\")\n}\n",
+        ),
+        (
+            "NK1102",
+            "fn half(x: f64) -> f64 { return x / 2.0 }\nfn main() {\n    let n = 2\n    println(f\"{half(n)}\")\n}\n",
+        ),
+    ];
+    for (code, source) in cases {
+        let found = findings(source);
+        assert!(
+            found.iter().any(|f| f.code == code),
+            "{code} for\n{source}\n{found:#?}"
+        );
+    }
+    let fine = "fn half(x: f64) -> f64 { return x / 2.0 }\nfn main() {\n    let x: f64 = 2.0\n    let n = 3\n    println(f\"{half(x * 2.0 + 1.5)} {n * 2} {-x}\")\n}\n";
+    assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
+}

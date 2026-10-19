@@ -130,15 +130,43 @@ pub fn unsigned_from_signed(found: ref Ty, want: ref Ty) -> String? sync {
     return null
 }
 
-/// **A number literal where the declared type is not a number** (#471): the
+/// **A number literal where the declared type is not a number** (#471), and an
+/// integer literal where it is a float (#703): the
 /// type it takes when nothing asks, so the position's ordinary mismatch says
 /// so.
 pub fn number_where_no_number_is(want: ref Ty, value: ref Expr) -> Ty? sync {
+    // **A list of floats given integer literals** (#703): `Vec[f64]` and
+    // `[1, 2]` is the list of `i64` it would be.
+    match want {
+        Ty::Named { name, args, .. } => {
+            if name == "Vec" && args.len() == 1 && a_float_type(args[0]) {
+                match value {
+                    Expr::ListLit { items, .. } => {
+                        for item in items {
+                            if an_integer_literal(item) {
+                                return Ty::Named { name: "Vec", args: [Ty::Named { name: "i64", args: [], view: false }], view: false }
+                            }
+                        }
+                    },
+                    else => {},
+                }
+            }
+        },
+        else => {},
+    }
     let name = match want {
         Ty::Named { name, .. } => name.clone(),
         else => return null,
     }
-    if is_whole(name) || name == "f32" || name == "f64" {
+    if is_whole(name) {
+        return null
+    }
+    // **An integer literal is no float** (Part I 2.4): a number takes its
+    // type among the integer types, and a float literal its own.
+    if name == "f32" || name == "f64" {
+        if an_integer_literal(value) {
+            return Ty::Named { name: "i64", args: [], view: false }
+        }
         return null
     }
     let literal: ref Expr = match value {

@@ -441,6 +441,27 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
             state.a_list_whose_elements_disagree(kind, first.text(), "a value", found, span)
         }
     }
+    // **An integer beside a float** (Part I 2.4, #703): `[1.5, 2]`. A number
+    // takes its type among the integer types.
+    if !said {
+        let mut float: Ty? = null
+        let mut an_integer = false
+        let mut n = 0
+        for item in items {
+            if float == null && a_float_type(value_of_a_copy(founds[n].unseen())) {
+                float = founds[n].clone()
+            }
+            if founds[n].is_unknown() && an_integer_literal(item) {
+                an_integer = true
+            }
+            n += 1
+        }
+        if float != null && an_integer {
+            said = true
+            let first: Ty = float ?? Ty::Unknown
+            state.a_list_whose_elements_disagree("a float", first.text(), "an integer", Ty::Unknown, span)
+        }
+    }
     // **And the narrower elements are widened into it** (D32).
     let common = check_core_args_plain_name(agreed)
     if common != "" && check_core_args_an_integer(common) {

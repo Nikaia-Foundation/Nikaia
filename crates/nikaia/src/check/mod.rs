@@ -1710,6 +1710,11 @@ impl<'a> Checker<'a> {
                 Some(Stmt::Expr(value)) if !lending => self
                     .text_literal(expected, value, true)
                     .or_else(|| self.tuple_literal(&tail, expected, value))
+                    // **A number where no number goes, an integer where a
+                    // float does**, as a `return` says it (#471, #703).
+                    .or_else(|| {
+                        nikaia_std::tools::check_widen::number_where_no_number_is(expected, value)
+                    })
                     .unwrap_or(tail),
                 _ => tail,
             };

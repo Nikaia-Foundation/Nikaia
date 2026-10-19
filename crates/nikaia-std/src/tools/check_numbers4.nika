@@ -486,11 +486,12 @@ impl CheckState {
     /// **An open number put where no number fits** (#554): `let n = 12` and then
     /// `let s: String = n`. The number has no type until a use decides it
     /// (ADR-285 D23), so it read as `?` here and passed, and `rustc` refused the
-    /// generated file. A use that asks for a type no number can be is refused at
+    /// generated file. A use that asks for a type no integer can be, a float
+    /// among them (#703), is refused at
     /// that use, with the position's own code and sentence, the value named *a
     /// number*.
     pub fn an_open_number_where_none_fits(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) -> bool sync {
-        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_number_is(want) {
+        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(want) {
             return false
         }
         let code = number_position_code(what) ?? return false
@@ -500,7 +501,11 @@ impl CheckState {
         let wanted = want.text()
         let said = message(hole, wanted)
         let text = said.replace(f"`{hole}`", "a number")
-        self.findings.push(check_refusal(code, span, text, ["A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.".clone()], f"Make it a `{wanted}`, or give the number to a place that holds one."))
+        let mut note: String = "A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number."
+        if a_float_type(want) {
+            note = "A number nothing typed takes one of the integer types its uses ask for, and a float is none of them (Part I 2.4)."
+        }
+        self.findings.push(check_refusal(code, span, text, [note], f"Make it a `{wanted}`, or give the number to a place that holds one."))
         return true
     }
 

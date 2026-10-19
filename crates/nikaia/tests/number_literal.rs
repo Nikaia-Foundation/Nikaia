@@ -388,10 +388,15 @@ fn a_number_literal_where_text_is_declared_is_refused() {
         ),
         ["NK1106"]
     );
-    // A number declared, or a number that may be absent, still takes it.
+    // An integer declared, or one that may be absent, still takes it; a float
+    // is written with a decimal point (Part I 2.4, #703).
     assert!(
-        codes("fn main() {\n    let n: i32 = 4\n    let x: f64 = 2\n    let y: i64? = 3\n    println(f\"{n} {x} {y ?? 0}\")\n}\n")
+        codes("fn main() {\n    let n: i32 = 4\n    let x: f64 = 2.0\n    let y: i64? = 3\n    println(f\"{n} {x} {y ?? 0}\")\n}\n")
             .is_empty()
+    );
+    assert_eq!(
+        codes("fn main() {\n    let x: f64 = 2\n    println(f\"{x}\")\n}\n"),
+        ["NK1103"]
     );
 }
 

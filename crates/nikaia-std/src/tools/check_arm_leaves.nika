@@ -458,7 +458,7 @@ impl CheckState {
             // **An open-number arm is asked as a number written there** (#600):
             // `if c { "a".clone() } else { 1 }` under `String` is refused as
             // `let s: String = 3` is.
-            if ty.is_unknown() && arm_is_a_written_integer(arm) && self.no_number_is(want) {
+            if ty.is_unknown() && arm_is_a_written_integer(arm) && self.no_integer_is(want) {
                 ty = Ty::Named { name: "i64".clone(), args: [], view: false }
             }
             if what == "field" {

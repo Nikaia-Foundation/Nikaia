@@ -198,7 +198,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             continue
         }
         // A number literal as an arm is an `i64` written there (#600).
-        let no_number = at < wanted.len() && state.no_number_is(wanted[at].1)
+        let no_number = at < wanted.len() && state.no_integer_is(wanted[at].1)
         let mut k = 0
         while k < arms.len() {
             let arm = arms[k].clone()
@@ -304,6 +304,11 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 found_here = array ?? found_here.clone()
             } else {
                 found_here = state.text_literal(world, literal_wants, value, kept) ?? found_here.clone()
+            }
+            // **An integer literal handed where no integer goes** (#471,
+            // #703) is the `i64` it would be, and the mismatch says so.
+            if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(want) {
+                found_here = Ty::Named { name: "i64".clone(), args: [], view: false }
             }
         }
         // **A view handed to a `String` the callee only reads is lent as it

@@ -54,6 +54,13 @@ impl CheckState {
         }
     }
 
+    /// **A type no integer is** (Part I 2.2, 2.4): one no number is, and a
+    /// float, whose literal is written with a decimal point. A number takes
+    /// its type among the integer types.
+    pub fn no_integer_is(ref self, ty: ref Ty) -> bool sync {
+        return self.no_number_is(ty) || a_float_type(ty)
+    }
+
     /// **Owned text is lent to a pattern** (D28, #579). `starts_with`,
     /// `ends_with` and `contains` take a view of text or a character, which is
     /// why the ledger writes their parameter `?`. Text of its own handed to one

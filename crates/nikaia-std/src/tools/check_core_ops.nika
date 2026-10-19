@@ -381,6 +381,10 @@ pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref Che
         state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at)
         state.two_integer_types_compared(lhs, left, rhs, right, at)
     }
+    // **An integer beside a float** (#703).
+    if !check_core_ops_logical(op) && !check_core_ops_shift(op) {
+        state.an_integer_beside_a_float(world, lhs, left, rhs, right, at)
+    }
     // **Two number types in one operation** (ADR-285 D1, D32).
     let mut common: String? = null
     if !op.is_comparison() && !check_core_ops_logical(op) {

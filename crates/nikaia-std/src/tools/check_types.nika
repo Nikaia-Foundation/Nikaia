@@ -12,6 +12,23 @@ pub fn a_number_name(name: ref String) -> bool {
     return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64"
 }
 
+/// A floating-point type, `f32` or `f64`, viewed or not.
+pub fn a_float_type(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, .. } => args.len() == 0 && (name == "f32" || name == "f64"),
+        else => false,
+    }
+}
+
+/// **An integer written as a literal**, negated or not: `2`, `-2`.
+pub fn an_integer_literal(expr: ref Expr) -> bool {
+    return match check_peeled(expr) {
+        Expr::LitInt { .. } => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && an_integer_literal(expr),
+        else => false,
+    }
+}
+
 /// A name's last segment: `fs::Root` is `Root`.
 pub fn type_last_segment(name: ref String) -> String {
     return (name.rsplit("::").next() ?? name).clone()

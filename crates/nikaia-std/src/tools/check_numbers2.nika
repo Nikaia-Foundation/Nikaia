@@ -91,6 +91,29 @@ impl CheckState {
         return null
     }
 
+    /// **An integer beside a float** (Part I 2.4, #703): `x * 2` and `x > 0`
+    /// over an `f64` `x`. A number takes its type among the integer types,
+    /// so a literal or a number nothing typed meets a float as an integer
+    /// does: `NK1199`. `true` where it was refused.
+    pub fn an_integer_beside_a_float(ref mut self, world: ref CheckWorld, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) -> bool sync {
+        let l = value_of_a_copy(left.unseen())
+        let r = value_of_a_copy(right.unseen())
+        let mut float: String = ""
+        if a_float_type(l) && r.is_unknown() && self.number_shaped(world, rhs) {
+            float = bare_name(l)
+        } else if a_float_type(r) && l.is_unknown() && self.number_shaped(world, lhs) {
+            float = bare_name(r)
+        }
+        if float.is_empty() {
+            return false
+        }
+        let message = f"You're mixing {number_article(float)} `{float}` and an integer in one operation."
+        let note: String = "An integer and a floating-point number never mix on their own: the conversion can change the value. A number takes its type among the integer types."
+        let help = f"Write the number with a decimal point (`2.0`), or convert it with `as {float}`."
+        self.findings.push(check_refusal("NK1199", at, message, [note], help))
+        return true
+    }
+
     /// **A comparison of two integer types** (ADR-285 D32): each side that is
     /// narrower than the type both go to is wrapped to widen; where none holds
     /// both, they go to `i64` and the comparison says whether the left is the

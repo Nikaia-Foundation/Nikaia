@@ -2169,7 +2169,8 @@ fn an_open_number_arm_into_a_return_or_an_argument_is_refused() {
 fn number_arms_under_a_number_still_pass() {
     for source in [
         "fn f(c: bool) -> i64 {\n    let y: i64 = if c { 1 } else { 2 }\n    return y\n}\n",
-        "fn f(c: bool) -> f64 {\n    let y: f64 = if c { 1.5 } else { 2 }\n    return y\n}\n",
+        // A float arm is written with a decimal point (Part I 2.4, #703).
+        "fn f(c: bool) -> f64 {\n    let y: f64 = if c { 1.5 } else { 2.0 }\n    return y\n}\n",
     ] {
         assert!(findings(source).is_empty(), "{:#?}", findings(source));
     }

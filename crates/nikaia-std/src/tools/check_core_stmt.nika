@@ -821,7 +821,10 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     // **`x += a` over two integer types is `x = x + a`** (ADR-285 D32).
     if op != null && !check_core_stmt_a_shift(op) {
         let o: ref BinaryOp = op ?? return check_core_stmt_unit()
-        state.a_compound_over_two_integer_types(world, o.clone(), target, into, value, found, span)
+        // **`x += 1` over an `f64` `x`** is an integer beside a float (#703).
+        if !state.an_integer_beside_a_float(world, target, into, value, found, span) {
+            state.a_compound_over_two_integer_types(world, o.clone(), target, into, value, found, span)
+        }
     }
     // **`x += d` is `x = x + d`, and may be proved as one** (#387), and so
     // is `x.f += d`, a fold's counter (ADR-367 D3).
@@ -877,7 +880,13 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         let at = check_span_at(world, value, span)
         let pushed = state.findings.len() as i64
         let waiting = state.slots_waiting(span)
-        state.expect_type(world, found, into, span, "assign", fn(was, wanted) { f"You're assigning `{was}` to something that holds `{wanted}`." })
+        // **A number assigned where no integer goes** (#703) is the `i64` it
+        // would be, and the mismatch says so.
+        let mut assigned: Ty = found.clone()
+        if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(into) {
+            assigned = Ty::Named { name: "i64".clone(), args: [], view: false }
+        }
+        state.expect_type(world, assigned, into, span, "assign", fn(was, wanted) { f"You're assigning `{was}` to something that holds `{wanted}`." })
         state.findings_moved(span, at, pushed, waiting)
     }
     return check_core_stmt_unit()

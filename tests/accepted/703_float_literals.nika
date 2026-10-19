@@ -1,0 +1,7 @@
+// A float is written with a decimal point (Part I 2.4, #703).
+fn half(x: f64) -> f64 { return x / 2.0 }
+fn main() {
+    let x: f64 = 2.0
+    let v: Vec[f64] = [1.0, 2.5]
+    println(f"{half(x * 2.0 + 1.0)} {v.len()} {x > 0.0}")
+}
