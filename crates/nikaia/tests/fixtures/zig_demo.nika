@@ -1,0 +1,72 @@
+// The program `tests/zig_backend.rs` lowers to Zig: what the prototype
+// covers, in one file. Its Rust build prints the same lines.
+
+struct Point {
+    x: i64,
+    y: i64,
+}
+
+impl Point {
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 }
+    }
+
+    fn manhattan(ref self) -> i64 {
+        let dx = if self.x < 0 { 0 - self.x } else { self.x }
+        let dy = if self.y < 0 { 0 - self.y } else { self.y }
+        return dx + dy
+    }
+
+    fn step(ref mut self, dx: i64, dy: i64) {
+        self.x += dx
+        self.y += dy
+    }
+}
+
+fn fib(n: i64) -> i64 {
+    if n < 2 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn collatz(start: i64) -> i64 {
+    let mut n = start
+    let mut steps = 0
+    while n != 1 {
+        if n % 2 == 0 {
+            n = n / 2
+        } else {
+            n = 3 * n + 1
+        }
+        steps += 1
+    }
+    return steps
+}
+
+fn sum(xs: Vec[i64]) -> i64 {
+    let mut total = 0
+    for x in xs {
+        total += x
+    }
+    return total
+}
+
+fn greet(name: String) -> String {
+    return f"Hallo, {name}!"
+}
+
+fn main() {
+    let mut p = Point::origin()
+    p.step(3, 0 - 4)
+    println(f"p = ({p.x}, {p.y}), |p| = {p.manhattan()}")
+    println(f"fib(25) = {fib(25)}")
+    println(f"collatz(27) = {collatz(27)}")
+    let xs = [1, 2, 3, 4, 5]
+    println(f"sum = {sum(xs)}, len = {xs.len()}, xs[2] = {xs[2]}")
+    let half = 7.0 / 2.0
+    println(f"half = {half}, -7 / 2 = {(0 - 7) / 2}, -7 % 2 = {(0 - 7) % 2}")
+    println(greet("Zig"))
+    let same = greet("Nikaia") == "Hallo, Nikaia!"
+    println(f"same = {same}, braces: {{ok}}")
+}

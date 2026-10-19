@@ -1,0 +1,7 @@
+p = (3, -4), |p| = 7
+fib(25) = 75025
+collatz(27) = 111
+sum = 15, len = 5, xs[2] = 3
+half = 3.5, -7 / 2 = -3, -7 % 2 = -1
+Hallo, Zig!
+same = true, braces: {ok}

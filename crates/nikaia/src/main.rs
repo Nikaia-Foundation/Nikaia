@@ -214,6 +214,21 @@ pub enum Command {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    /// Lower one `.nika` file to Zig (an experiment): checks it as `nikaia
+    /// check` does, then writes `<file>.zig`, which `zig run` compiles.
+    ///
+    /// A small part of the language is lowered - functions, structs and
+    /// their methods, numbers, `bool`, `String`, loops, f-strings and
+    /// `println`; anything else is refused by name.
+    Zig {
+        /// The `.nika` file.
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+        /// Where the Zig is written. Defaults to the file with `.zig` for its
+        /// extension.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
     /// Check one `.nika` file: report the checker's findings and write
     /// nothing. Exits non-zero when the file is refused.
     ///
@@ -662,6 +677,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             project,
         } => return describe(crate_name, project.clone()),
         Command::Lower { .. }
+        | Command::Zig { .. }
         | Command::Cache { .. }
         | Command::Check { .. }
         | Command::Interpret { .. }
@@ -814,6 +830,7 @@ fn report_moved_keys(manifest: &Manifest) {
 /// **What a verb that takes one file does with it** (ADR-260 D3).
 enum Verb<'a> {
     Lower { output: Option<&'a std::path::Path> },
+    Zig { output: Option<&'a std::path::Path> },
     Check,
     Interpret,
     Explain,
@@ -853,6 +870,28 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
             Ok(())
         }
         Verb::Lower { output } => lower_to_rust(input, output, args, &settings),
+        Verb::Zig { output } => {
+            // The checker decides what the program means; the Zig only says it.
+            let (_, packages) = project::read_file(input)?;
+            project::lower_reading(
+                input,
+                &settings,
+                true,
+                &packages,
+                args.allow_read_from_list.as_deref(),
+            )?;
+            let parsed = parser::parse_to_ast(&source)?;
+            let zig = nikaia::zig::lower(&parsed)?;
+            let path = output.map_or_else(|| input.with_extension("zig"), |p| p.to_path_buf());
+            std::fs::write(&path, zig).with_context(|| format!("writing {}", path.display()))?;
+            println!(
+                "Lowered {} to {} (Zig {})",
+                input.display(),
+                path.display(),
+                nikaia::zig::ZIG_VERSION
+            );
+            Ok(())
+        }
         Verb::Check => {
             let (_, packages) = project::read_file(input)?;
             project::lower_reading(
@@ -935,6 +974,13 @@ fn run() -> Result<()> {
             &args,
             file,
             Verb::Lower {
+                output: output.as_deref(),
+            },
+        ),
+        Command::Zig { file, output } => single_file(
+            &args,
+            file,
+            Verb::Zig {
                 output: output.as_deref(),
             },
         ),
