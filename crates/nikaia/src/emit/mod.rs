@@ -6185,9 +6185,9 @@ impl<'p> Emitter<'p> {
             }
             // **`x += d` proved to stay inside its type** (#387) is written as
             // the operation it is, without its check, as `x = x + d` would be
-            // (ADR-306 D10).
+            // (ADR-306 D10); so is `x.f += d`, a fold's counter (ADR-367 D3).
             Stmt::Assign {
-                target: target @ Expr::Variable(_, _),
+                target: target @ (Expr::Variable(_, _) | Expr::Field { .. }),
                 op: Some(op @ (BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul)),
                 value,
             } if self.s.proven_arithmetic.contains_key(&(span.at() as i64)) => {

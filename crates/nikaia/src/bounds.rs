@@ -333,5 +333,9 @@ pub fn proven(
             }
         }
     }
+    // **A fold's counters, proved from the input's length**
+    // ([ADR-367](../../docs/specification/adr/adr-367.md) D3).
+    out.arithmetic
+        .extend(crate::fold_bound::proven_counters(parsed, arithmetic));
     out
 }

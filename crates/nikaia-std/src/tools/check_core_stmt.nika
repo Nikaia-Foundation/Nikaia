@@ -810,8 +810,9 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         let o: ref BinaryOp = op ?? return check_core_stmt_unit()
         state.a_compound_over_two_integer_types(world, o.clone(), target, into, value, found, span)
     }
-    // **`x += d` is `x = x + d`, and may be proved as one** (#387).
-    if check_core_stmt_add_sub_mul(op) && check_core_stmt_a_name(target) {
+    // **`x += d` is `x = x + d`, and may be proved as one** (#387), and so
+    // is `x.f += d`, a fold's counter (ADR-367 D3).
+    if check_core_stmt_add_sub_mul(op) && check_core_stmt_a_name_or_field(target) {
         let plain = check_core_stmt_plain_name(into.unseen())
         if plain != null {
             let name: String = (plain ?? "").clone()

@@ -18717,7 +18717,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         state.a_compound_over_two_integer_types(world, o.clone(), target, &into, value, &found, span);
     }
-    if check_core_stmt_add_sub_mul(op) && check_core_stmt_a_name(target) {
+    if check_core_stmt_add_sub_mul(op) && check_core_stmt_a_name_or_field(target) {
         let plain = check_core_stmt_plain_name(&into.unseen());
         if plain.is_some() {
             let name: String = nikaia_std::index::or(plain.as_deref(), || "").to_owned();

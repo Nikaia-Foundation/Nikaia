@@ -85,6 +85,19 @@ pub fn report(
                         if let Some(action) = &alt.action {
                             walk.block(action);
                         }
+                        // And a fold's lambdas (ADR-367 D3).
+                        let mut specs = Vec::new();
+                        crate::fold_bound::folds(&alt.pattern.node, &mut specs);
+                        for spec in specs {
+                            for lambda in [Some(&spec.init), Some(&spec.step), spec.merge.as_ref()]
+                                .into_iter()
+                                .flatten()
+                            {
+                                if let crate::ast::Expr::Closure { body, .. } = lambda {
+                                    walk.block(body);
+                                }
+                            }
+                        }
                     }
                 }
             }
