@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1095] — 2026-10-19
+
+**a caught method call adds nothing to the caller's error channel (#725)**
+- A method call inside a `catch` that keeps its error adds to the enclosing function's inferred error set only the fatal errors the handler does not name, as a caught function call already did. A function declared `throws` that throws nothing it can name passes its unnamed error (`?`) on to its callers, which widen to the boxed channel (ADR-280 D9) instead of keeping one named type and failing in rustc.
+
 ## [0.0.1094] — 2026-10-19
 
 **check: an open number is handed on once; a + a + … + a checks in linear time**
