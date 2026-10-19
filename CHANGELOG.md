@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1056] — 2026-10-19
+
+**A variant's `String` payload is decided by what flows into it (#680)**
+- A positional variant's `String` payload is decided like a field (ADR-282 D2, D12): only views flowing in make it a view and the enum takes the lifetime; text of its own keeps it `String`; both make it `EitherText`; only literals make it `&'static str`. A `pub enum` may become a view but never mixed. NK1261 also warns on a payload written `ref String`. `examples/json` writes `Text(String)` and lowers as before. Fixed on the way: a guard reading a view bound inside a box compiles.
+
 ## [0.0.1055] — 2026-10-19
 
 **a program can measure time and what another program used (ADR-368)**
