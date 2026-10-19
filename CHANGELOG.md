@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1057] — 2026-10-19
+
+**A `String` parameter changed through a name bound to it owns its text (#681)**
+- A `String` parameter changed in place through a name bound to it (`let mut s = who; s.push_str("!")`), as a place, or as a list element owns its text and is never mixed (ADR-282 D29). A view handed to it is refused at the call with NK1102, published or not; before, `nikaia check` took it as `EitherText` and rustc refused the `push_str`.
+
 ## [0.0.1056] — 2026-10-19
 
 **A variant's `String` payload is decided by what flows into it (#680)**
