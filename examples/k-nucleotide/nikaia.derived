@@ -7,4 +7,4 @@ toolchain = "nikaia 0.1.0"
 inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies"
 
 [sources]
-"main.nika" = "a09c4c299b2986a2a878f443117b9789104e6a5d52421c73cc2a1d0ee2e636be"
+"main.nika" = "1ef904ea0b9143a2f3fac4b054510bfcd81447a6fabff7eaaf375d228795b7f4"

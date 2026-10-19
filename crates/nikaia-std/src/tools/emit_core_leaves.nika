@@ -98,12 +98,26 @@ impl EmitState {
         host.expr(walk, out, node, depth, flow, scope)
     }
 
-    /// A key, handed over as it is or lent with a `&`.
+    /// A key, handed over as it is, lent with a `&`, or read as the `str` it
+    /// holds (#659).
     pub fn emit_core_key[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, form: FactKeyForm, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let kind = match form {
             FactKeyForm::Either => 1,
             FactKeyForm::Lent => 2,
+            FactKeyForm::Viewed => 3,
             else => 0,
+        }
+        if kind == 3 {
+            out.push("nikaia_std::index::as_text(&")
+            if !emit_leaf_bare_key(index) {
+                out.push("(")
+            }
+            host.expr(walk, out, index, depth, flow, scope)
+            if !emit_leaf_bare_key(index) {
+                out.push(")")
+            }
+            out.push(")")
+            return
         }
         if kind == 1 {
             out.push("nikaia_std::index::key(")

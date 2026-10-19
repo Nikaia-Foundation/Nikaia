@@ -595,7 +595,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // **The source's own name and not the ledger's.**
     let no_options: Vec[(String, Ty)] = []
     let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, no_options, span)
-    state.a_lookup_key_lent(world, key, args, found)
+    state.a_lookup_key_lent(world, key, on, args, found)
     // **`entry`'s key is the map's** (#676): a literal or a view of text, on a
     // map keyed by owned text, is built into text of its own, as `insert`'s is.
     if key == "collections::HashMap::entry" && args.len() == 1 && found.len() == 1 {

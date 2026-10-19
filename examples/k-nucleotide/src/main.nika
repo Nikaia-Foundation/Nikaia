@@ -83,8 +83,8 @@ impl Tally {
 // The keys are views into `dna`: `ref dna[i..<i + k]` is a slice, not a copy,
 // so a sequence of a million characters builds a table of positions and
 // lengths rather than a million small strings.
-fn count(dna: String, k: i64) -> collections::HashMap[ref String, Tally] {
-    let mut counts: collections::HashMap[ref String, Tally] = collections::HashMap()
+fn count(dna: String, k: i64) -> collections::HashMap[String, Tally] {
+    let mut counts: collections::HashMap[String, Tally] = collections::HashMap()
 
     if dna.len() < k {
         return counts

@@ -78,7 +78,7 @@ impl Counts {
 }
 
 pub struct Report {
-    paths: collections::HashMap[ref String, Counts],
+    paths: collections::HashMap[String, Counts],
     requests: i64,
     failures: i64,
 }

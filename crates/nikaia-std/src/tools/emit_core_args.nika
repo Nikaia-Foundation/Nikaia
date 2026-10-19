@@ -256,6 +256,16 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **Text of its own looked up among views of text** (#659): as its
+        // `str`.
+        if i == 0 {
+            let keyed = self.map_key(arg, false)
+            if keyed != null {
+                let form = keyed ?? return
+                self.emit_core_key(world, walk, out, host, form, arg, depth, flow, scope)
+                return
+            }
+        }
         // ADR-312 D1: a handle on a shared value is **duplicated, never moved**,
         // where it is handed on by value, and only where the argument names one.
         let duplicate = i < takes_a_handle.len() && takes_a_handle[i] && emit_arg_names_a_place(arg)

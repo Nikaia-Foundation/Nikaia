@@ -538,6 +538,13 @@ where
     }
 }
 
+/// **Text looked up among views of text** (#659): a key of its own, a view, or
+/// a reference to either, as the `str` every key of text borrows as.
+#[inline(always)]
+pub fn as_text<T: AsRef<str> + ?Sized>(key: &T) -> &str {
+    key.as_ref()
+}
+
 /// The emitted spelling: `nikaia_std::index::get(&m, nikaia_std::index::at(k))`.
 #[track_caller]
 pub fn get<T, K>(target: &T, key: K) -> T::Out<'_>

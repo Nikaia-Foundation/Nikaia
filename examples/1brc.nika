@@ -121,7 +121,7 @@ impl Stats {
 // The stations seen so far and their statistics. The keys are slices of the
 // input too.
 struct Summary {
-    stations: collections::HashMap[ref String, Stats],
+    stations: collections::HashMap[String, Stats],
 }
 
 impl Summary {

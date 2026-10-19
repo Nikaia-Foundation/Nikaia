@@ -483,8 +483,8 @@ struct Flows {
     /// Positions a view of static text read out of them was kept where no
     /// position says what it is: they keep text of their own (ADR-282 D29).
     demoted: collections::BTreeSet[String],
-    /// A map's keys and values: looked up by text of any kind, so never a
-    /// view of static text (ADR-282 D29).
+    /// A map's keys and values: a parameter lent into one is not lent on
+    /// (#678). Static text may be one: a lookup reads the key as `str` (#659).
     in_maps: collections::BTreeSet[String],
     /// A `String` parameter handed back as it is - into the result, or into
     /// a field of a struct literal handed back - and where it goes: lent,
@@ -664,7 +664,13 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
     }
     // A list that comes whole from a position is linked to it below, and the
     // link is all that flows.
-    let linked = a_container(ask.names, ty) && comes_whole(value, ask, walk)
+    let mut linked = a_container(ask.names, ty) && comes_whole(value, ask, walk)
+    // **Text read out of a position and put back into it** adds nothing to
+    // what flows there (#659): a key of a map walked whole, entered again.
+    if plain && tier_a_name(value) {
+        let back = text_source_word(value, ask, walk) ?? ""
+        linked = back != "" && back == position_word(owner, path)
+    }
     if !linked {
         flow_type(owner, ty, path.clone(), kinds, ask, walk)
     }
@@ -826,6 +832,33 @@ fn element_word(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String?
         return null
     }
     return seen(found.owner, [0], walk)
+}
+
+/// Whether a value is a name, and nothing else.
+fn tier_a_name(value: ref Expr?) -> bool {
+    let given = value ?? return false
+    return match given {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+/// The map a loop walks whole: `m`, `m.iter()`, `m.drain()`, `m.into_iter()`.
+fn map_walked(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Declaring? {
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = ask.names.resolve(method)
+            if args.len() == 0 && (name == "iter" || name == "drain" || name == "into_iter" || name == "iter_mut") {
+                return map_walked(receiver, ask, walk)
+            }
+        }
+        else => {}
+    }
+    let found = source_of(iter, ask, walk) ?? return null
+    if !a_map(ask.names, found.ty) || found.ty.generics.len() != 2 {
+        return null
+    }
+    return found
 }
 
 /// A view of static text and text of its own in one value: below they are
@@ -1417,13 +1450,29 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
         Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk)
             let from = element_word(iter, ask, walk)
+            // **A walk of a map binds its key and its value apart** (#659),
+            // each of the kinds its position holds; the key is read out of its
+            // position, so going back into it adds nothing.
+            let mut map: Declaring? = null
+            if bindings.len() == 2 {
+                map = map_walked(iter, ask, walk)
+            }
             open_tier_scope(walk)
+            let mut at = 0
             for binding in bindings {
                 let mut local = plain_local(kinds.clone())
                 if bindings.len() == 1 {
                     local.from = from?.clone()
                 }
+                if map != null {
+                    let found = map?.clone() ?? continue
+                    local = plain_local(element_kinds(found, at == 0, ask, walk))
+                    if at == 0 && plain_string(ask.names, found.ty.generics[0]) {
+                        local.from = seen(found.owner, [0], walk)
+                    }
+                }
                 bind_tier_local(ask.names.resolve(binding).clone(), local, walk)
+                at += 1
             }
             tier_block(body, ask, walk)
             close_tier_scope(walk)
@@ -1779,9 +1828,33 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> Strin
         Expr::Variable(name, _) => struct_of_local(ask.names.resolve(name), walk),
         Expr::Unary { expr, .. } => tier_struct_of(expr, ask, walk),
         Expr::Try(inner, _) => tier_struct_of(inner, ask, walk),
-        Expr::Field { base, name, .. } => field_struct(base, ask.names.resolve(name), ask, walk),
+        Expr::Field { base, name, .. } => field_struct_or_bytes(base, ask.names.resolve(name), ask, walk),
+        Expr::Index { base, index, .. } => cut_bytes(base, index, ask, walk),
         else => null,
     }
+}
+
+/// A field's type as `field_struct` names it, and a text's `bytes` where it
+/// names none: `s.bytes[a..<b].text()` is `Bytes::text`, a view (#659).
+fn field_struct_or_bytes(base: ref Expr, field: ref String, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+    let found = field_struct(base, field, ask, walk)
+    if found != null || field != "bytes" {
+        return found
+    }
+    return "Bytes"
+}
+
+/// A cut of a `Bytes` is one too.
+fn cut_bytes(base: ref Expr, index: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+    let a_range = match index {
+        Expr::Range { .. } => true,
+        else => false,
+    }
+    let of = tier_struct_of(base, ask, walk) ?? return null
+    if a_range && of == "Bytes" {
+        return of
+    }
+    return null
 }
 
 /// The type a field holds, by its written name, where that is one name: a
@@ -2653,8 +2726,8 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     // published field and a published result stay what they are published
     // as.
     let mut fixed: collections::BTreeSet[String] = collections::BTreeSet()
-    // Positions that are never static text: inside a map.
-    let mut never: collections::BTreeSet[String] = flows.in_maps.clone()
+    // Positions that are never static text.
+    let mut never: collections::BTreeSet[String] = collections::BTreeSet()
     // Every position the walk saw, also one only linked to another (a list
     // handed back whole from a call): a published one stays text of its own.
     for (word, _) in flows.known {

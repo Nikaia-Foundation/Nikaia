@@ -32,6 +32,9 @@ pub enum FactKeyForm {
     Lent,
     AsIs,
     Either,
+    /// Text of its own looked up in a map keyed by views of text: read as the
+    /// `str` it holds, which every key of text borrows as (#659).
+    Viewed,
 }
 
 /// What a reach is a view of.

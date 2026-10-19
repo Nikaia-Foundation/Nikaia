@@ -240,7 +240,7 @@ impl CheckState {
     /// by reference in the language below, and the `&` is recorded here for
     /// exactly these entries, where the key is a known value that is not already
     /// a view.
-    pub fn a_lookup_key_lent(ref mut self, world: ref CheckWorld, key: ref String, args: ref Vec[Expr], found: ref Vec[Ty]) sync {
+    pub fn a_lookup_key_lent(ref mut self, world: ref CheckWorld, key: ref String, on: ref Ty, args: ref Vec[Expr], found: ref Vec[Ty]) sync {
         if !is_a_lookup(key) || !world.library.functions.contains_key(key) {
             return
         }
@@ -252,6 +252,13 @@ impl CheckState {
         let a_string = match given {
             Expr::LitStr { .. } => true,
             else => false,
+        }
+        // **Text looked up in a map or a set of views of text** - its own, a
+        // view, a name lent either - as the `str` it holds, which such a key
+        // borrows as (#659); a literal is one already.
+        if !a_string && names_text(ty) && check_reads_keyed_by_views(on) {
+            self.facts.map_keys.insert((id_of(given) as i64, false), FactKeyForm::Viewed)
+            return
         }
         if ty.is_a_view() || a_string {
             return
@@ -382,5 +389,17 @@ impl CheckState {
         } else {
             self.facts.narrowing_casts.insert(at, FactNarrowing::Integer)
         }
+    }
+}
+
+/// Whether `on` is a map or a set whose keys are views of text (#659).
+fn check_reads_keyed_by_views(on: ref Ty) -> bool sync {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name)
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set"
+            keyed && args.len() > 0 && args[0].is_a_view() && names_text(args[0])
+        },
+        else => false,
     }
 }

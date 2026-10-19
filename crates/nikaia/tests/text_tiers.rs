@@ -1439,3 +1439,137 @@ fn main() {
     let found = findings(&probe.replace("hello(w: ref String)", "hello(w: String)"));
     assert!(found.iter().any(|f| f.code == "NK2105"), "{found:#?}");
 }
+
+/// **A map's `String` key is decided by what flows into it** (#659): the
+/// examples that wrote `HashMap[ref String, ...]` lower byte for byte as they
+/// did. In `1brc` and `access-log` a key walked out of the map whole and
+/// entered again adds nothing to it, so the keys stay views of the input;
+/// in `k-nucleotide` the fragments are cuts of the text's bytes, views too.
+#[test]
+fn the_map_examples_without_ref_on_their_keys_lower_as_their_ref_twins() {
+    for example in [
+        "1brc.nika",
+        "access-log/src/main.nika",
+        "k-nucleotide/src/main.nika",
+    ] {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples")
+            .join(example);
+        let source = std::fs::read_to_string(&path).expect(example);
+        assert!(source.contains("HashMap[String, "), "{example}");
+        assert!(!source.contains("HashMap[ref String, "), "{example}");
+        let written = source.replace("HashMap[String, ", "HashMap[ref String, ");
+        assert!(
+            findings(&source).is_empty(),
+            "{example}: {:#?}",
+            findings(&source)
+        );
+        let rust = lowered(&source, Build::default());
+        assert!(!rust.contains("EitherText"), "{example}: {rust}");
+        assert_eq!(rust, lowered(&written, Build::default()), "{example}");
+    }
+}
+
+/// **A map only literals go into is keyed by static text** (#659, ADR-282
+/// D29), and text of its own is looked up in it as the `str` it holds: in
+/// the brackets, with `get` and with `contains_key`.
+#[test]
+fn a_literal_keyed_map_is_static_text_looked_up_by_any_text() {
+    let probe = r##"use std::collections
+
+fn main() {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.insert("a", 1)
+    m.insert("b", 2)
+    let k = f"a{""}"
+    println(f"{m.len()} {m["a"] ?? 0} {m[k] ?? 0} {m.get(k) ?? 0} {m.contains_key(k)}")
+}
+"##;
+    let rust = lowered(probe, Build::default());
+    assert!(rust.contains("TrustedMap<&'static str, i64>"), "{rust}");
+    assert!(
+        rust.contains("m.get(nikaia_std::index::as_text(&k))"),
+        "{rust}"
+    );
+    runs("literal-keyed-map", probe, "2 1 1 1 true");
+}
+
+/// **Views of text as keys and as values, looked up by text of its own**
+/// (#659): a local map and a struct's field, the field's map walked whole
+/// and put back, and a key cut out of the text's bytes.
+#[test]
+fn a_map_of_views_is_looked_up_by_text_of_its_own() {
+    let local = r##"use std::collections
+
+fn main() {
+    let s = f"x y x{1}"
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for w in s.split(" ") {
+        m.insert(w, w)
+    }
+    let k = f"y"
+    println(f"{m.len()} {m[k] ?? "-"} {m.get(k) ?? "-"} {m.contains_key(k)} {m["x1"] ?? "-"}")
+}
+"##;
+    let rust = lowered(local, Build::default());
+    assert!(rust.contains("TrustedMap<&str, &str>"), "{rust}");
+    runs("map-of-views", local, "3 y y true x1");
+    let field = r##"use std::collections
+
+struct Reading {
+    name: String,
+    t: i64,
+}
+
+struct Seen {
+    m: collections::HashMap[String, i64],
+}
+
+impl Seen {
+    fn record(ref mut self, r: Reading) {
+        self.m.insert(r.name, r.t)
+    }
+
+    fn merge(ref mut self, other: Seen) {
+        for (name, n) in other.m.drain() {
+            self.m.insert(name, n)
+        }
+    }
+}
+
+fn cut(dna: String) -> collections::HashMap[String, i64] {
+    let mut counts: collections::HashMap[String, i64] = collections::HashMap()
+    for i in 0..<dna.len() {
+        let one = dna.bytes[i..<i + 1].text() catch {
+            continue
+        }
+        counts.insert(one, i)
+    }
+    return counts
+}
+
+fn main() {
+    let s = f"a b a{1}"
+    let mut x = Seen { m: collections::HashMap() }
+    let mut y = Seen { m: collections::HashMap() }
+    for w in s.split(" ") {
+        y.record(Reading { name: w, t: 1 })
+    }
+    x.merge(y)
+    let k = f"b"
+    let c = cut(s)
+    println(f"{x.m.len()} {x.m[k] ?? 0} {c.len()} {c[k] ?? 0}")
+}
+"##;
+    let rust = lowered(field, Build::default());
+    assert!(
+        rust.contains("m: collections::TrustedMap<&'a str, i64>"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("fn cut(dna: &str) -> collections::TrustedMap<&str, i64>"),
+        "{rust}"
+    );
+    assert!(!rust.contains("EitherText"), "{rust}");
+    runs("map-field-of-views", field, "3 1 4 2");
+}

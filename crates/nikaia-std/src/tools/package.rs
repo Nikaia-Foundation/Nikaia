@@ -10206,7 +10206,11 @@ impl CheckState {
             self.facts.map_keys.insert((node_key(index), writing), form);
             return;
         }
-        if keys.is_a_view() { return; }
+        if keys.is_a_view() {
+            let a_literal = matches!(index, Expr::LitStr { .. });
+            if !writing && !a_literal && names_text(keys) && names_text(found) { self.facts.map_keys.insert((node_key(index), false), FactKeyForm::Viewed); }
+            return;
+        }
         let mut form = FactKeyForm::Lent;
         if writing {
             if self.text_literal(world, keys, index, true).is_none() {
@@ -14055,7 +14059,7 @@ fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &Ch
     if key.starts_with("fs::Path::") && !state.facts.path_methods.contains_key(&node) { state.facts.path_methods.insert(node, false); }
     let no_options: Vec<(String, Ty)> = vec![];
     let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &no_options, span);
-    state.a_lookup_key_lent(world, key, args, &found);
+    state.a_lookup_key_lent(world, key, on, args, &found);
     if key == "collections::HashMap::entry" && args.len() == 1 && found.len() == 1 {
         let keys: Ty = nikaia_std::index::or(match bound.get("K") {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -20382,6 +20386,7 @@ pub enum FactKeyForm {
     Lent,
     AsIs,
     Either,
+    Viewed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26754,12 +26759,16 @@ impl CheckState {
     fn a_number_beside(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { check_copied(ty) && self.a_side_is_a_value(world, side, ty) || check_number_by_form(side) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lookup_key_lent(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, args: &[Expr], found: &[Ty]) {
+    pub fn a_lookup_key_lent(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, on: &Ty, args: &[Expr], found: &[Ty]) {
         if !is_a_lookup(key) || !world.library.functions.contains_key(key) { return; }
         if args.len() != 1 || found.len() != 1 { return; }
         let given = nikaia_std::index::get(&args, 0);
         let ty = nikaia_std::index::get(&found, 0);
         let a_string = matches!(given, Expr::LitStr { .. });
+        if !a_string && names_text(&ty) && check_reads_keyed_by_views(on) {
+            self.facts.map_keys.insert((id_of(&given) as i64, false), FactKeyForm::Viewed);
+            return;
+        }
         if ty.is_a_view() || a_string { return; }
         if moves(&ty) && (self.a_lent_name(world, &given) || self.a_lent_let(world, &given)) { return; }
         let mut a_number = matches!(given, Expr::LitInt { .. } | Expr::LitFloat(_, _));
@@ -26841,6 +26850,19 @@ impl CheckState {
         let checked = check_numeric(&from_name) && check_numeric(&into_name) && !always_fits;
         let at = operand;
         if !checked { let added = self.flow.widening_casts.insert(at); } else if from_name == "f64" { self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat); } else { self.facts.narrowing_casts.insert(at, FactNarrowing::Integer); }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_reads_keyed_by_views(on: &Ty) -> bool {
+    match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name);
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set";
+            keyed && !args.is_empty() && (*nikaia_std::index::get(&args, 0)).is_a_view() && names_text(nikaia_std::index::get(&args, 0))
+        },
+        _ => false,
     }
 }
 
@@ -32749,6 +32771,14 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
+        if i == 0 {
+            let keyed = self.map_key(arg, false);
+            if keyed.is_some() {
+                let form = match keyed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                self.emit_core_key(world, walk, out, host, form, arg, depth, flow, scope)?;
+                return Ok(());
+            }
+        }
         let duplicate = i < takes_a_handle.len() as i64 && *nikaia_std::index::get(&takes_a_handle, nikaia_std::index::at(i)) && emit_arg_names_a_place(arg);
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node, arg);
         let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
@@ -35090,8 +35120,17 @@ impl EmitState {
         let kind = match form {
             FactKeyForm::Either => 1,
             FactKeyForm::Lent => 2,
+            FactKeyForm::Viewed => 3,
             _ => 0,
         };
+        if kind == 3 {
+            out.push("nikaia_std::index::as_text(&");
+            if !emit_leaf_bare_key(index) { out.push("("); }
+            host.expr(walk, out, index, depth, flow, scope)?;
+            if !emit_leaf_bare_key(index) { out.push(")"); }
+            out.push(")");
+            return Ok(());
+        }
         if kind == 1 {
             out.push("nikaia_std::index::key(");
             host.expr(walk, out, index, depth, flow, scope)?;
@@ -56977,7 +57016,11 @@ fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds, ask: &Tier
             walk.flows.param_into.insert((from_word, to));
         }
     }
-    let linked = a_container(ask.names, &ty) && comes_whole(value, ask, &walk);
+    let mut linked = a_container(ask.names, &ty) && comes_whole(value, ask, &walk);
+    if plain && tier_a_name(value) {
+        let back = nikaia_std::index::or(text_source_word(value, ask, walk), || "".into());
+        linked = back != "" && back == position_word(&owner, &path);
+    }
     if !linked { flow_type(&owner, &ty, &mut path.to_owned(), kinds, ask, walk); }
     if plain && kinds.still && value.is_some() {
         let given_value = match value { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -57088,6 +57131,25 @@ fn element_word(iter: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> 
     if !a_container(ask.names, &ty) || a_map(ask.names, &ty) || ty.generics.is_empty() { return None; }
     if !plain_string(ask.names, nikaia_std::index::get(&ty.generics, 0)) { return None; }
     Some(seen(&found.owner, &vec![0], walk))
+}
+
+fn tier_a_name(value: Option<&Expr>) -> bool {
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(given, Expr::Variable(_, _))
+}
+
+fn map_walked(iter: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Option<Declaring> {
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            if args.is_empty() && (name == "iter" || name == "drain" || name == "into_iter" || name == "iter_mut") { return map_walked(receiver, ask, walk); }
+        },
+        _ => { },
+    }
+    let found = match source_of(iter, ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !a_map(ask.names, &found.ty) || found.ty.generics.len() != 2 { return None; }
+    Some(found)
 }
 
 fn beside_its_own(kinds: &Kinds) -> bool { kinds.still && kinds.owned }
@@ -57540,7 +57602,10 @@ fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_>, walk: &mut Ti
         Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk);
             let from = element_word(iter, ask, walk);
+            let mut map: Option<Declaring> = None;
+            if bindings.len() == 2 { map = map_walked(iter, ask, walk); }
             open_tier_scope(walk);
+            let mut at = 0;
             for binding in bindings.iter() {
                 let binding = *binding;
                 let mut local = plain_local(kinds.clone());
@@ -57550,7 +57615,16 @@ fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_>, walk: &mut Ti
                         None => None,
                     };
                 }
+                if map.is_some() {
+                    let found = match match map.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    } { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    local = plain_local(element_kinds(&found, at == 0, ask, &walk));
+                    if at == 0 && plain_string(ask.names, nikaia_std::index::get(&found.ty.generics, 0)) { local.from = Some(seen(&found.owner, &vec![0], walk)); }
+                }
                 bind_tier_local(ask.names.resolve(binding).to_owned(), local, walk);
+                at += 1;
             }
             tier_block(body, ask, walk);
             close_tier_scope(walk);
@@ -57848,9 +57922,23 @@ fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Op
         Expr::Variable(name, _) => { let name = *name; struct_of_local(ask.names.resolve(name), walk) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tier_struct_of(expr, ask, walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_struct_of(inner, ask, walk) },
-        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_struct(base, ask.names.resolve(name), ask, walk) },
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_struct_or_bytes(base, ask.names.resolve(name), ask, walk) },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); cut_bytes(base, index, ask, walk) },
         _ => None,
     }
+}
+
+fn field_struct_or_bytes(base: &Expr, field: &str, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<String> {
+    let found = field_struct(base, field, ask, walk);
+    if found.is_some() || field != "bytes" { return found; }
+    Some(String::from("Bytes"))
+}
+
+fn cut_bytes(base: &Expr, index: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<String> {
+    let a_range = matches!(index, Expr::Range { .. });
+    let of = match tier_struct_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if a_range && of == "Bytes" { return Some(of); }
+    None
 }
 
 fn field_struct(base: &Expr, field: &str, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<String> {
@@ -58536,7 +58624,7 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut collection
     }
     let mut lent = lent_parameters(flows, declared, &unlent, &mut positions);
     let mut fixed: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut never: collections::BTreeSet<String> = flows.in_maps.to_owned();
+    let mut never: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (word, _) in flows.known.iter() { if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) { fixed.insert(word.to_owned()); } }
     let mut changed = true;
     while changed {
@@ -62203,14 +62291,14 @@ fn bounds_in(names: &winnow_grammar::InternerContext, generics: &[GenericParam],
 }
 
 fn declared_once_in(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], out: &mut Vec<Finding>) {
-    let mut seen: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let mut seen: collections::BTreeMap<String, &'static str> = collections::BTreeMap::new();
     for item in items.iter() {
         let kind = kind_declared(&item.node);
         if kind.is_empty() { continue; }
         let name = name_declared(names, &item.node);
         if name.is_empty() { continue; }
         let earlier: Option<String> = match *nikaia_std::index::get(&seen, &name) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         };
         if earlier.is_none() {
@@ -62223,14 +62311,14 @@ fn declared_once_in(names: &winnow_grammar::InternerContext, items: &[Spanned<It
     }
 }
 
-fn kind_declared(item: &Item) -> String {
+fn kind_declared(item: &Item) -> &'static str {
     match item {
-        Item::Fn { name, .. } => { let name = *name; if name.is_some() { String::from("fn") } else { String::from("") } },
-        Item::Struct { .. } => String::from("struct"),
-        Item::Enum { .. } => String::from("enum"),
-        Item::Trait { .. } => String::from("trait"),
-        Item::Grammar(_) => String::from("grammar"),
-        _ => String::from(""),
+        Item::Fn { name, .. } => { let name = *name; if name.is_some() { "fn" } else { "" } },
+        Item::Struct { .. } => "struct",
+        Item::Enum { .. } => "enum",
+        Item::Trait { .. } => "trait",
+        Item::Grammar(_) => "grammar",
+        _ => "",
     }
 }
 

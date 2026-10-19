@@ -257,6 +257,16 @@ impl CheckState {
             return
         }
         if keys.is_a_view() {
+            // **Text read out of a map keyed by views of text** - its own, a
+            // view, a name lent either - is looked up as the `str` it holds,
+            // which such a key borrows as (#659); a literal is one already.
+            let a_literal = match index {
+                Expr::LitStr { .. } => true,
+                else => false,
+            }
+            if !writing && !a_literal && names_text(keys) && names_text(found) {
+                self.facts.map_keys.insert((node_key(index), false), FactKeyForm::Viewed)
+            }
             return
         }
         let mut form = FactKeyForm::Lent
