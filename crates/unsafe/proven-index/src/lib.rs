@@ -29,6 +29,22 @@ pub unsafe fn read<T>(items: &[T], at: usize) -> &T {
     unsafe { items.get_unchecked(at) }
 }
 
+/// The run from `start` up to `end`, `end` not included.
+///
+/// # Safety
+///
+/// `start <= end <= items.len()`. A debug build checks it.
+#[inline(always)]
+pub unsafe fn cut<T>(items: &[T], start: usize, end: usize) -> &[T] {
+    debug_assert!(
+        start <= end && end <= items.len(),
+        "a proved cut is outside: {start}..{end} of {}",
+        items.len()
+    );
+    // SAFETY: the caller guarantees `start <= end <= items.len()`.
+    unsafe { items.get_unchecked(start..end) }
+}
+
 /// The element at `at`, to change in place.
 ///
 /// # Safety
@@ -71,6 +87,23 @@ mod tests {
             // SAFETY: `at` runs over the length.
             assert_eq!(unsafe { *read(&items, at) }, items[at]);
         }
+    }
+
+    #[test]
+    fn cuts_the_run_inside() {
+        let items = vec![10, 20, 30, 40];
+        // SAFETY: 1 <= 3 <= 4, and 4 <= 4 <= 4.
+        assert_eq!(unsafe { cut(&items, 1, 3) }, &items[1..3]);
+        assert!(unsafe { cut(&items, 4, 4) }.is_empty());
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "a proved cut is outside")]
+    fn a_debug_build_catches_a_wrong_cut() {
+        let items = [1, 2];
+        // SAFETY: deliberately broken; the debug assertion stops it first.
+        let _ = unsafe { cut(&items, 1, 3) };
     }
 
     #[test]

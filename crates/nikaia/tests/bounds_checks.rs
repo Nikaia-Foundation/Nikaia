@@ -366,3 +366,55 @@ fn main() {
     }
     stops_at_the_index("pattern", source);
 }
+
+const BYTES_READ: &str = "\
+fn ld(t: String, i: i64) -> u64 {
+    let b = t.bytes
+    if i >= 0 && i + 2 <= b.len() { return (b[i] as u64) | ((b[i + 1] as u64) << 8) }
+    return 0
+}
+
+fn eight(t: String, i: i64) -> i64 {
+    let b = t.bytes
+    if i >= 0 && i + 8 <= b.len() { return b[i..<i + 8].len() }
+    return 0
+}
+
+fn main() {
+    println(f\"{ld(\"abc\", 1)} {ld(\"abc\", 2)} {eight(\"abcdefghij\", 2)} {eight(\"abc\", 0)}\")
+}
+";
+
+/// #698: a `Bytes` read and a `Bytes` cut are proved as a list's read is
+/// (ADR-320 D7, ADR-306 D4), and written through `proven`.
+#[test]
+fn a_bytes_read_and_cut_under_a_guard_are_proved() {
+    assert_eq!(unchecked(&lowered(BYTES_READ, BoundsChecks::Kept)), 0);
+    let rust = lowered(BYTES_READ, BoundsChecks::Removed);
+    assert_eq!(unchecked(&rust), 2, "{rust}");
+    assert_eq!(
+        rust.matches("nikaia_std::proven::cut(").count(),
+        1,
+        "{rust}"
+    );
+    prints("bytes-read", BYTES_READ, "25442 0 8 0\n");
+}
+
+/// #698: a `Bytes` read nothing guards keeps its check, and stops the program
+/// at the index.
+#[test]
+fn an_unguarded_bytes_read_keeps_its_check() {
+    let source = "\
+fn at(t: String, i: i64) -> u8 {
+    let b = t.bytes
+    return b[i]
+}
+
+fn main() {
+    println(f\"{at(\"abc\", 3)}\")
+}
+";
+    let rust = lowered(source, BoundsChecks::Removed);
+    assert_eq!(unchecked(&rust), 0, "{rust}");
+    stops_at_the_index("bytes-unguarded", source);
+}

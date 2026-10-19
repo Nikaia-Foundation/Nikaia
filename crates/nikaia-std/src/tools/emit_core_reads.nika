@@ -417,6 +417,35 @@ impl EmitState {
             }
             return
         }
+        // **A cut proved inside is cut without its check** (ADR-306 D5), as a
+        // read is: `proven::cut` takes the ends the proof was about.
+        if slicing && self.proven_indices.contains(node_key(base)) && self.map_key(index, false) == null && !nested && !self.reads_through_handle(world, walk, scope.function, base) {
+            match index {
+                Expr::Range { start, end, inclusive, .. } => {
+                    out.push("unsafe { nikaia_std::proven::cut(&")
+                    self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+                    out.push(", (")
+                    if only_literals(start) {
+                        host.expr(walk, out, start, depth, flow.inferred(), scope)
+                    } else {
+                        host.expr(walk, out, start, depth, flow, scope)
+                    }
+                    out.push(") as usize, (")
+                    if only_literals(end) {
+                        host.expr(walk, out, end, depth, flow.inferred(), scope)
+                    } else {
+                        host.expr(walk, out, end, depth, flow, scope)
+                    }
+                    if inclusive {
+                        out.push(") as usize + 1) }")
+                    } else {
+                        out.push(") as usize) }")
+                    }
+                    return
+                },
+                else => {},
+            }
+        }
         // **A read of a read is handed the reference it already is** (0.0.238):
         // `d[i][j]` over a list of lists was `get(&(*get(&d, i)), j)`, a borrow of
         // a deref. The inner read answers a `&T` before its `*`, which is what the

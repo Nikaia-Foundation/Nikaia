@@ -1033,14 +1033,20 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
             check_core_places_text_cut(state, world, base, index, span)
             return check_core_places_str_view()
         }
-        // **A cut of a `Bytes` is a `Bytes`** (ADR-320 D7).
+        // **A cut of a `Bytes` is a `Bytes`** (ADR-320 D7), and a candidate
+        // for a proof that it lies inside, as a list's read is (ADR-306 D4).
         if b == "Bytes" && args.len() == 0 {
+            if written_range {
+                state.facts.list_indices.insert(id_of(base) as i64)
+            }
             return check_core_places_named("Bytes")
         }
         return Ty::Unknown
     }
-    // **A `Bytes` is read as a run of bytes** (ADR-320 D7).
+    // **A `Bytes` is read as a run of bytes** (ADR-320 D7), and its read is a
+    // candidate for a proof, as a list's is (ADR-306 D4).
     if b == "Bytes" && args.len() == 0 {
+        state.facts.list_indices.insert(id_of(base) as i64)
         return check_core_places_named("u8")
     }
     // **A sequence keeps its `T` and its abort** (ADR-293 D3).

@@ -3193,6 +3193,21 @@ fn bounding_inside(walk: &mut BoundsWalk, list: &str, index: &Expr, facts: &Boun
     if walk.collecting || walk.pinned.contains(list) { return false; }
     let length = length_of(list);
     let len = walk.arena.var(&length);
+    match index {
+        Expr::Range { start, end, inclusive, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+            let from = match bounding_lin(walk, start, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let to = match bounding_lin(walk, end, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let zero = walk.arena.int(0);
+            let low = walk.arena.ge(from, zero);
+            let ordered = walk.arena.le(from, to);
+            let mut high = walk.arena.le(to, len);
+            if inclusive { high = walk.arena.lt(to, len); }
+            let goal = walk.arena.and(vec![low, ordered, high]);
+            return bounding_proves(&walk, facts, goal, ask);
+        },
+        _ => { },
+    }
     let at = bounding_lin(walk, index, facts, context, program, words);
     if at.is_none() {
         let range = match bounding_range(walk, index, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -16208,7 +16223,7 @@ fn check_core_method_counted(on: &Ty) -> bool {
     match on {
         Ty::Named { name, .. } => {
             let b = check_core_method_base(name);
-            b == "Vec" || b == "List" || b == "Array" || b == "String" || b == "str" || b == "HashMap" || b == "Map" || b == "BTreeMap" || b == "HashSet" || b == "Set" || b == "BTreeSet"
+            b == "Vec" || b == "List" || b == "Array" || b == "String" || b == "str" || b == "Bytes" || b == "HashMap" || b == "Map" || b == "BTreeMap" || b == "HashSet" || b == "Set" || b == "BTreeSet"
         },
         Ty::Pointed { slice, .. } => { let slice = *slice; slice },
         _ => false,
@@ -18151,10 +18166,16 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
             check_core_places_text_cut(state, world, base, index, span);
             return check_core_places_str_view();
         }
-        if b == "Bytes" && args.is_empty() { return check_core_places_named("Bytes"); }
+        if b == "Bytes" && args.is_empty() {
+            if written_range { state.facts.list_indices.insert(id_of(base) as i64); }
+            return check_core_places_named("Bytes");
+        }
         return Ty::Unknown;
     }
-    if b == "Bytes" && args.is_empty() { return check_core_places_named("u8"); }
+    if b == "Bytes" && args.is_empty() {
+        state.facts.list_indices.insert(id_of(base) as i64);
+        return check_core_places_named("u8");
+    }
     if check_core_places_a_list(&b) && !args.is_empty() {
         state.facts.list_indices.insert(id_of(base) as i64);
         return (*nikaia_std::index::get(&args, 0)).clone();
@@ -36814,6 +36835,22 @@ impl EmitState {
             out.push(") as usize) }");
             if self.reads_through_handle(world, &walk, &scope.function, base) { out.push(".get()"); }
             return Ok(());
+        }
+        if slicing && self.proven_indices.contains(&node_key(base)) && self.map_key(index, false).is_none() && !nested && !self.reads_through_handle(world, &walk, &scope.function, base) {
+            match index {
+                Expr::Range { start, end, inclusive, .. } => {
+                    let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+                    out.push("unsafe { nikaia_std::proven::cut(&");
+                    self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
+                    out.push(", (");
+                    if only_literals(start) { host.expr(walk, out, start, depth, flow.inferred(), scope)?; } else { host.expr(walk, out, start, depth, flow, scope)?; }
+                    out.push(") as usize, (");
+                    if only_literals(end) { host.expr(walk, out, end, depth, flow.inferred(), scope)?; } else { host.expr(walk, out, end, depth, flow, scope)?; }
+                    if inclusive { out.push(") as usize + 1) }"); } else { out.push(") as usize) }"); }
+                    return Ok(());
+                },
+                _ => { },
+            }
         }
         if nested {
             out.push("nikaia_std::index::get(");

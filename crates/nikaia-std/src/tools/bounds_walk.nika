@@ -1175,6 +1175,24 @@ fn bounding_inside(mut walk: BoundsWalk, list: ref String, index: ref Expr, fact
     }
     let length = length_of(list)
     let len = walk.arena.var(length)
+    // **A cut lies inside where its ends do** (ADR-306 D4): `0 <= a <= b <=
+    // len` for `a..<b`, and `b < len` for `a..=b`.
+    match index {
+        Expr::Range { start, end, inclusive, .. } => {
+            let from = bounding_lin(walk, start, facts, context, program, words) ?? return false
+            let to = bounding_lin(walk, end, facts, context, program, words) ?? return false
+            let zero = walk.arena.int(0)
+            let low = walk.arena.ge(from, zero)
+            let ordered = walk.arena.le(from, to)
+            let mut high = walk.arena.le(to, len)
+            if inclusive {
+                high = walk.arena.lt(to, len)
+            }
+            let goal = walk.arena.and([low, ordered, high])
+            return bounding_proves(walk, facts, goal, ask)
+        },
+        else => {},
+    }
     let at = bounding_lin(walk, index, facts, context, program, words)
     if at == null {
         // A position read out of a list whose values are bounded (ADR-306

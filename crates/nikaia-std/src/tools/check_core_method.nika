@@ -140,12 +140,12 @@ fn check_core_method_literal(mut state: CheckState, receiver: ref Expr, on: Ty) 
     return on
 }
 
-/// **A length `std` counts**: of a list, a run, text or a map.
+/// **A length `std` counts**: of a list, a run, text, a `Bytes` or a map.
 fn check_core_method_counted(on: ref Ty) -> bool {
     return match on {
         Ty::Named { name, .. } => {
             let b = check_core_method_base(name)
-            b == "Vec" || b == "List" || b == "Array" || b == "String" || b == "str" || b == "HashMap" || b == "Map" || b == "BTreeMap" || b == "HashSet" || b == "Set" || b == "BTreeSet"
+            b == "Vec" || b == "List" || b == "Array" || b == "String" || b == "str" || b == "Bytes" || b == "HashMap" || b == "Map" || b == "BTreeMap" || b == "HashSet" || b == "Set" || b == "BTreeSet"
         },
         Ty::Pointed { slice, .. } => slice,
         else => false,
