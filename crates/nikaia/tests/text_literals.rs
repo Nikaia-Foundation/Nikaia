@@ -303,3 +303,38 @@ fn a_literal_handed_to_a_string_option_is_one() {
     assert!(findings(source).is_empty(), "{:?}", findings(source));
     assert_eq!(ran("option", source), "Hello, Nika!\nHallo, Nika!\n");
 }
+
+/// **A published result stays text of its own, also a list handed back whole
+/// from a call** (ADR-282 D22, D29): `all` hands back `names()`, linked to it
+/// and not flowed into, and was lowered to `Vec<&'static str>` - a published
+/// position holding views. Both lists are text of their own, and the literals
+/// are built; the single `String` beside it was always right.
+#[test]
+fn a_published_list_handed_back_from_a_call_is_text_of_its_own() {
+    let source = "fn names() -> Vec[String] {\n\
+         \x20   return [\"a\", \"b\"]\n\
+         }\n\
+         \n\
+         pub fn all() -> Vec[String] {\n\
+         \x20   return names()\n\
+         }\n\
+         \n\
+         fn first() -> String {\n\
+         \x20   return \"x\"\n\
+         }\n\
+         \n\
+         pub fn one() -> String {\n\
+         \x20   return first()\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   println(f\"{all().len()} {all()[1]} {one()}\")\n\
+         }\n";
+    let found = findings(source);
+    assert!(found.is_empty(), "{found:#?}");
+    let rust = lowered(source);
+    assert!(rust.contains("pub fn all() -> Vec<String>"), "{rust}");
+    assert!(rust.contains("fn names() -> Vec<String>"), "{rust}");
+    assert!(rust.contains("pub fn one() -> String"), "{rust}");
+    assert_eq!(ran("published-list", source), "2 b x\n");
+}

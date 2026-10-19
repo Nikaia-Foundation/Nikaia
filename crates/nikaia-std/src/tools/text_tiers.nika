@@ -2177,9 +2177,33 @@ fn walk_program(program: ref Program, ask: ref TierAsk, mut walk: TierWalk) {
             // A test's and a bench's values flow as a function's do.
             Item::Test { body, .. } => walk_body(body, ask, walk),
             Item::Bench { body, .. } => walk_body(body, ask, walk),
+            // **A value computed while the program is built** - a `comptime`,
+            // a field's default - crosses as the text of its own its type
+            // says (ADR-282 D29): what it reads keeps text of its own.
+            Item::Comptime { value, .. } => {
+                fresh_tier_frame(walk)
+                kept_unseen(value, ask, walk)
+            },
+            Item::Struct { fields, .. } => {
+                fresh_tier_frame(walk)
+                for field in fields {
+                    let given = field.default ?? continue
+                    kept_unseen(given.value, ask, walk)
+                }
+            },
             else => {}
         }
     }
+}
+
+/// A walk outside any function: no locals, no result.
+fn fresh_tier_frame(mut walk: TierWalk) {
+    walk.locals = collections::BTreeMap()
+    walk.frames = []
+    walk.result = null
+    walk.in_hole = false
+    walk.hole_text = -1
+    walk.lent_self = false
 }
 
 fn walk_body(body: ref Block, ask: ref TierAsk, mut walk: TierWalk) {
@@ -2325,8 +2349,8 @@ fn grammar_reference_kinds(gname: ref String, rules: ref collections::BTreeSet[S
 }
 
 fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: TierWalk) {
-    let (name, receiver, args, body) = match item {
-        Item::Fn { name, receiver, args, body, .. } => (name, receiver, args, body),
+    let (name, receiver, args, config, body) = match item {
+        Item::Fn { name, receiver, args, config, body, .. } => (name, receiver, args, config, body),
         else => return,
     }
     let key = tier_key(target, own_name(name, ask.names))
@@ -2344,6 +2368,12 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1 }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
+    }
+    // **An option's default is computed while the program is built** and
+    // crosses as the text of its own its type says (ADR-282 D29): what it
+    // reads keeps text of its own.
+    for option in config {
+        kept_unseen(option.default, ask, walk)
     }
     walk.lent_self = false
     if receiver != null && target != null {
@@ -2382,7 +2412,9 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     let mut fixed: collections::BTreeSet[String] = collections::BTreeSet()
     // Positions that are never static text: inside a map.
     let mut never: collections::BTreeSet[String] = flows.in_maps.clone()
-    for (word, _) in positions {
+    // Every position the walk saw, also one only linked to another (a list
+    // handed back whole from a call): a published one stays text of its own.
+    for (word, _) in flows.known {
         if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) {
             fixed.insert(word.clone())
         }
