@@ -146,6 +146,14 @@ pub struct Pool {
     /// How many workers actually started — counted rather than asked for, so
     /// `--runtime` reports what this process got.
     threads: std::sync::atomic::AtomicUsize,
+    /// The earliest time a task on this pool asked to be polled again
+    /// (`rt::timer::wake_at`, a `sleep`). The timer cell is per thread and a
+    /// task may be polled on any worker, so each poll hands its time over here.
+    timer: Mutex<Option<std::time::Instant>>,
+    /// How often an idle turn woke anybody: the test that an idle pool stays
+    /// quiet (#693) counts it.
+    #[cfg(test)]
+    rang: std::sync::atomic::AtomicUsize,
 }
 
 impl Pool {
@@ -166,6 +174,9 @@ impl Pool {
             piloting: AtomicBool::new(false),
             closing: AtomicBool::new(false),
             threads: std::sync::atomic::AtomicUsize::new(0),
+            timer: Mutex::new(None),
+            #[cfg(test)]
+            rang: std::sync::atomic::AtomicUsize::new(0),
         });
         for n in 0..threads {
             let mine = pool.clone();
@@ -267,6 +278,8 @@ impl Pool {
         let waker = waker_for(cell.clone());
         let mut context = Context::from_waker(&waker);
         if future.as_mut().poll(&mut context).is_ready() {
+            // A time asked for by a future that has now finished is no wake.
+            let _ = crate::rt::timer::taken();
             self.live
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
@@ -279,6 +292,12 @@ impl Pool {
             return;
         }
         *cell.future.lock().unwrap_or_else(|e| e.into_inner()) = Some(future);
+        if let Some(when) = crate::rt::timer::taken() {
+            let mut timer = self.timer.lock().unwrap_or_else(|e| e.into_inner());
+            if timer.is_none_or(|already| when < already) {
+                *timer = Some(when);
+            }
+        }
         // Back to idle, unless a wake arrived while it was running — in which
         // case this worker is the one that has to put it back, because the
         // waker saw `RUNNING` and declined to.
@@ -293,20 +312,28 @@ impl Pool {
     }
 
     /// Nothing was ready. Wait for something, in the one way that is allowed.
+    ///
+    /// **Only something that happened wakes anybody** (#693). A park that timed
+    /// out, or that found nothing outstanding, rearms nothing and rings
+    /// nothing: an idle pool that woke itself on every turn kept every thread
+    /// of it, and `main`, busy for nothing. What does wake it is a completion
+    /// (the park answers `true`), a task's time arriving, or the pool closing.
     fn idle(self: &Arc<Pool>) {
+        // **A time that has come is a wake like any other**, and any worker
+        // may notice it: nothing posts it, so it is looked at on every turn.
+        if self.timer_due() {
+            self.rearm();
+            return;
+        }
+        let slice = self.slice();
         let piloting = self
             .piloting
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_ok();
         if !piloting {
-            let ready = self.ready.lock().unwrap_or_else(|e| e.into_inner());
-            if !ready.is_empty() || self.closing.load(Ordering::Acquire) {
-                return;
-            }
-            let _ = self
-                .bell
-                .wait_timeout(ready, SLICE)
-                .unwrap_or_else(|e| e.into_inner());
+            // A wait that times out returns to the loop and tries the pilot's
+            // seat again, which is how a non-pilot takes over within a slice.
+            self.wait(slice);
             return;
         }
 
@@ -320,19 +347,81 @@ impl Pool {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .is_empty();
-        if empty && !self.closing.load(Ordering::Acquire) {
-            crate::rt::io::park_for(generation, Some(SLICE));
-            // **Everybody gets another turn.** Which task was waiting for this
-            // completion is not something the pool knows: an I/O future stores
-            // no waker, because the executor is the only thing that parks. So
-            // the answer to "who should be polled now" is everyone.
-            self.rearm();
-            // …and whoever is on the main thread, which at `yes` waits on the
-            // runtime's bell rather than in the I/O.
-            crate::rt::ring_the_bell();
+        let closing = self.closing.load(Ordering::Acquire);
+        let mut moved = false;
+        let mut left = None;
+        if empty && !closing {
+            let parked = std::time::Instant::now();
+            moved = crate::rt::io::park_for(generation, Some(slice));
+            if moved {
+                // **Everybody gets another turn.** Which task was waiting for
+                // this completion is not something the pool knows: an I/O
+                // future stores no waker, because the executor is the only
+                // thing that parks. So the answer to "who should be polled
+                // now" is everyone.
+                self.rearm();
+                // **No bell of its own.** Whoever is on the main thread, which
+                // at `yes` waits on the runtime's bell, has heard already: an
+                // answer this park reaped moved the count under the ring's lock
+                // (`Runtime::with_ring`), and a count that moved is somebody
+                // else's ring. Ringing again here rang the ring's `eventfd`,
+                // whose completion the next park reaped as one more move, so a
+                // pilot with any I/O outstanding woke itself for ever (#693).
+            } else {
+                // `false` before the slice is up means nothing was outstanding,
+                // so the park did not wait at all: the rest of the slice is
+                // waited out below, off the pilot's seat.
+                left = slice.checked_sub(parked.elapsed());
+            }
         }
         self.piloting.store(false, Ordering::Release);
-        self.bell.notify_all();
+        if moved || closing {
+            #[cfg(test)]
+            self.rang.fetch_add(1, Ordering::AcqRel);
+            self.bell.notify_all();
+        } else if let Some(left) = left {
+            // **Off the seat, so the next worker to go idle takes it** — the one
+            // whose task has just started the I/O this pilot found missing, which
+            // then parks in it at once rather than a slice later.
+            self.wait(left);
+        }
+    }
+
+    /// Wait on the pool's own bell for at most `limit`, unless there is
+    /// already something to do.
+    fn wait(&self, limit: std::time::Duration) {
+        let ready = self.ready.lock().unwrap_or_else(|e| e.into_inner());
+        if !ready.is_empty() || self.closing.load(Ordering::Acquire) {
+            return;
+        }
+        let _ = self
+            .bell
+            .wait_timeout(ready, limit)
+            .unwrap_or_else(|e| e.into_inner());
+    }
+
+    /// How long an idle turn may wait: a slice, or less if a task's time comes
+    /// sooner.
+    fn slice(&self) -> std::time::Duration {
+        match *self.timer.lock().unwrap_or_else(|e| e.into_inner()) {
+            Some(when) => when
+                .saturating_duration_since(std::time::Instant::now())
+                .min(SLICE),
+            None => SLICE,
+        }
+    }
+
+    /// Whether a task's time has come, clearing it if so: the task that is
+    /// still sleeping after its poll leaves its time again.
+    fn timer_due(&self) -> bool {
+        let mut timer = self.timer.lock().unwrap_or_else(|e| e.into_inner());
+        match *timer {
+            Some(when) if when <= std::time::Instant::now() => {
+                *timer = None;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Put every idle task back on the queue.
@@ -474,5 +563,46 @@ mod tests {
         assert_eq!(pool.live(), 0, "the task finished rather than sitting idle");
         assert!(rounds.load(Ordering::Acquire) >= 3, "it was polled again");
         pool.close();
+    }
+
+    /// **An idle pool stays quiet** (#693): with no task and no I/O, a turn
+    /// that waited out its slice wakes nobody. Before, every turn rearmed and
+    /// rang, so this counted one ring per turn per worker.
+    ///
+    /// The other tests of this binary run alongside and move the runtime's
+    /// count, which is a real wake for this pool too: those are subtracted.
+    #[test]
+    fn an_idle_pool_does_not_wake_itself() {
+        let pool = Pool::start(2);
+        let before = crate::rt::io::generation();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let rang = pool.rang.load(Ordering::Acquire) as u64;
+        let others = (crate::rt::io::generation() - before).saturating_sub(rang);
+        pool.close();
+        assert!(
+            rang <= others + 3,
+            "an idle pool rang {rang} times in 300 ms, for {others} wakes from elsewhere"
+        );
+    }
+
+    /// **A task that sleeps on the pool still wakes**, although nothing rings
+    /// for it: its time is handed to the pool and the idle turn looks at it.
+    #[test]
+    fn a_sleeping_task_wakes_on_its_time() {
+        let pool = Pool::start(2);
+        let begun = std::time::Instant::now();
+        let woke = Arc::new(Mutex::new(None));
+        let mine = woke.clone();
+        pool.start_task(async move {
+            crate::time::sleep(std::time::Duration::from_millis(30)).await;
+            *mine.lock().expect("the time") = Some(begun.elapsed());
+        });
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while pool.live() > 0 && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        pool.close();
+        let woke = woke.lock().expect("the time").expect("the task finished");
+        assert!(woke >= std::time::Duration::from_millis(30), "{woke:?}");
     }
 }

@@ -125,6 +125,14 @@ pub struct Runtime {
     /// by `the_compilers_pair_answers_the_same_either_way` hanging.
     #[cfg(target_os = "linux")]
     bell: Option<uring::Bell>,
+    /// How many threads wait for the ring's lock to submit or poll
+    /// (`with_ring`): a park lets them have it first (#693).
+    #[cfg(target_os = "linux")]
+    wanting: std::sync::atomic::AtomicUsize,
+    /// How many parks wait on the bell because somebody else has the ring
+    /// (`park_in_ring`): whoever lets the ring go tells them.
+    #[cfg(target_os = "linux")]
+    parkers: std::sync::atomic::AtomicUsize,
     /// The executor for user tasks, at `user_parallelism = yes` and not
     /// otherwise.
     ///
@@ -422,6 +430,10 @@ impl Runtime {
             ring,
             #[cfg(target_os = "linux")]
             bell,
+            #[cfg(target_os = "linux")]
+            wanting: std::sync::atomic::AtomicUsize::new(0),
+            #[cfg(target_os = "linux")]
+            parkers: std::sync::atomic::AtomicUsize::new(0),
             user_pool,
         }
     }
@@ -485,7 +497,96 @@ impl Runtime {
         // is the one thing `uring`'s soundness rule forbids. Recovering is
         // sound because the *next* operation reconciles the ring before it
         // submits anything.
-        let mut held = ring.lock().unwrap_or_else(|e| e.into_inner());
+        let held = match ring.try_lock() {
+            Ok(held) => held,
+            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+            // **Somebody holds the ring, and may be parked in it**: at `yes`
+            // the pool's pilot waits in `io_uring_enter` with this lock held
+            // for up to a slice. A task on another worker that wants to submit
+            // would wait that slice out, so it rings the bell first and the
+            // park returns (#693). A holder that was not parked finds the
+            // bell's completion on its next park, which then costs one turn.
+            Err(std::sync::TryLockError::WouldBlock) => {
+                use std::sync::atomic::Ordering;
+                self.wanting.fetch_add(1, Ordering::SeqCst);
+                if let Some(bell) = &self.bell {
+                    bell.ring();
+                }
+                let held = ring.lock().unwrap_or_else(|e| e.into_inner());
+                self.wanting.fetch_sub(1, Ordering::SeqCst);
+                held
+            }
+        };
+        Some(self.with_held(held, f))
+    }
+
+    /// **Park in the ring, or on the bell while another thread has it** (#693).
+    ///
+    /// Two threads can want to park at once - at `yes` the pool's pilot, and
+    /// `main` while no task is on the pool - and only one can be inside
+    /// `io_uring_enter`. The other waits on the bell rather than for the lock:
+    /// whatever wakes the one inside moves the count too (an answer it reaps is
+    /// counted in [`Runtime::with_held`], a worker's ring counts itself), so
+    /// the one outside hears every wake it would have heard in the ring. A park
+    /// also stands back for a thread that wants the ring to submit: the lock is
+    /// not fair, and a parker looping straight back into the ring took it again
+    /// before the waiting thread was scheduled.
+    ///
+    /// **`FINISHED` is held while the ring is tried**, and `with_held` takes it
+    /// to tell the parkers after it has let the ring go, so a ring let go
+    /// between the try and the wait still wakes this wait.
+    #[cfg(target_os = "linux")]
+    fn park_in_ring(&self, since: u64, limit: Option<std::time::Duration>) -> bool {
+        use std::sync::atomic::Ordering;
+        let ring = self
+            .ring
+            .as_ref()
+            .expect("`Files::Completion` means there is a ring");
+        let until = limit.map(|limit| std::time::Instant::now() + limit);
+        let mut count = FINISHED.lock().unwrap_or_else(|e| e.into_inner());
+        self.parkers.fetch_add(1, Ordering::SeqCst);
+        let held = loop {
+            if *count > since {
+                self.parkers.fetch_sub(1, Ordering::SeqCst);
+                return true;
+            }
+            if self.wanting.load(Ordering::SeqCst) == 0 {
+                match ring.try_lock() {
+                    Ok(held) => break held,
+                    Err(std::sync::TryLockError::Poisoned(e)) => break e.into_inner(),
+                    Err(std::sync::TryLockError::WouldBlock) => {}
+                }
+            }
+            count = match until {
+                None => BELL.wait(count).unwrap_or_else(|e| e.into_inner()),
+                Some(until) => {
+                    let left = until.saturating_duration_since(std::time::Instant::now());
+                    if left.is_zero() {
+                        self.parkers.fetch_sub(1, Ordering::SeqCst);
+                        return false;
+                    }
+                    BELL.wait_timeout(count, left)
+                        .unwrap_or_else(|e| e.into_inner())
+                        .0
+                }
+            };
+        };
+        self.parkers.fetch_sub(1, Ordering::SeqCst);
+        drop(count);
+        let left = until.map(|until| until.saturating_duration_since(std::time::Instant::now()));
+        self.with_held(held, |ring| {
+            ring.park(since, self.pending() > 0, left, io::generation)
+        })
+    }
+
+    /// Run `f` on the ring already held, count what it reaped, and let the
+    /// ring go.
+    #[cfg(target_os = "linux")]
+    fn with_held<T>(
+        &self,
+        mut held: std::sync::MutexGuard<'_, uring::Ring>,
+        f: impl FnOnce(&mut uring::Ring) -> T,
+    ) -> T {
         let before = held.answered();
         let out = f(&mut held);
         // **An answer this call reaped may be another thread's**, and that
@@ -510,7 +611,13 @@ impl Runtime {
             *count += 1;
             BELL.notify_all();
         }
-        Some(out)
+        drop(held);
+        // A park waiting for the ring can have it now.
+        if self.parkers.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+            let _count = FINISHED.lock().unwrap_or_else(|e| e.into_inner());
+            BELL.notify_all();
+        }
+        out
     }
 }
 
@@ -1013,8 +1120,8 @@ pub mod io {
     /// would never reach it.
     ///
     /// What everything that could wake `main` has in common is that it rings
-    /// this bell: an I/O worker after an operation, the pilot after a
-    /// completion, a `Slot` being filled, a task finishing. So this is the one
+    /// this bell: an I/O worker after an operation, a completion reaped from
+    /// the ring (`Runtime::with_ring` counts it), a `Slot` being filled, a task finishing. So this is the one
     /// wait, and `false` means the bound ran out with nothing having moved.
     pub fn wait_for_bell(since: u64, limit: Option<std::time::Duration>) -> bool {
         let mut count = super::FINISHED.lock().unwrap_or_else(|e| e.into_inner());
@@ -1080,11 +1187,7 @@ pub mod io {
             // and the park returns. What the ring cannot know is that there is
             // one coming, because D2 keeps the bell out of its job count - so
             // the worker count is read here and handed down.
-            Files::Completion => runtime
-                .with_ring(|ring| {
-                    ring.park(since, runtime.pending() > 0, limit, super::io::generation)
-                })
-                .expect("`Files::Completion` means there is a ring"),
+            Files::Completion => runtime.park_in_ring(since, limit),
             #[cfg(not(target_os = "linux"))]
             Files::Completion => unreachable!("no completion queue off Linux"),
             Files::Blocking => {
