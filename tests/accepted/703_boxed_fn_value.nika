@@ -1,0 +1,24 @@
+// A function that throws its own error, run by a `fn() throws` parameter:
+// its error goes into the box that type fails in (ADR-280 D9, #703).
+enum Bad { Oops }
+impl Error for Bad {
+    fn message(ref self) -> String { "oops" }
+}
+fn fail() throws {
+    throw Bad::Oops
+}
+fn guard(run: fn() throws) {
+    run() catch { println("caught") }
+}
+fn fail_at(n: i64) throws {
+    if n > 0 {
+        throw Bad::Oops
+    }
+}
+fn guard_at(run: fn(i64) throws) {
+    run(1) catch { println("caught at") }
+}
+fn main() {
+    guard(fail)
+    guard_at(fail_at)
+}

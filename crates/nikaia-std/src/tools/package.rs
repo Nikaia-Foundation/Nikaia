@@ -9893,7 +9893,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             all_arms.push(arms);
             continue;
         }
-        let no_number = at < wanted.len() as i64 && state.no_number_is(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
+        let no_number = at < wanted.len() as i64 && state.no_integer_is(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
         let mut k: i64 = 0;
         while ((k) as usize) < arms.len() {
             let arm = (*nikaia_std::index::get(&arms, (k) as usize)).clone();
@@ -9958,6 +9958,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             let array = state.array_literal(world, &found_here, &want, value, span);
             if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || found_here.clone().into()); }
+            if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(&want) { found_here = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
         }
         let string = Ty::Named { name: "String".to_owned(), args: vec![], view: false };
         if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own { continue; }
@@ -10638,7 +10639,7 @@ impl CheckState {
         for asked in arms.iter() {
             let arm = match asked.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut ty = nikaia_std::index::or(self.text_literal(world, want, arm, true), || asked.ty.clone().into());
-            if ty.is_unknown() && arm_is_a_written_integer(arm) && self.no_number_is(want) { ty = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
+            if ty.is_unknown() && arm_is_a_written_integer(arm) && self.no_integer_is(want) { ty = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
             if what == "field" { self.flow.field_either = mixed; }
             if what == "let" && check_core_stmt_element_view(self, world, arm, &ty, want) == 1 {
                 self.facts.lent_reads.insert(node_key(arm));
@@ -12886,14 +12887,16 @@ fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     let mut lends = false;
     let mut wants_fn = false;
     let mut wants_pausing_fn = false;
+    let mut wants_throwing_fn = false;
     if at < expected.len() as i64 {
         lends = (*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_a_view();
         match nikaia_std::index::get(&expected, nikaia_std::index::at(at)) {
-            Ty::Fn { is_sync, .. } => {
-                let is_sync = *is_sync;
+            Ty::Fn { is_sync, can_throw, .. } => {
+                let can_throw = *can_throw; let is_sync = *is_sync;
                 wants_fn = true;
                 let plain: bool = is_sync;
                 wants_pausing_fn = !plain;
+                wants_throwing_fn = can_throw;
             },
             _ => { },
         }
@@ -12903,14 +12906,17 @@ fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     let named = check_core_args_named(&state, world, arg);
     let runs = check_core_args_runs(callee, at);
     let mut found_fn = false;
+    let mut found_throws = false;
     let mut arity: i64 = 0;
     match found {
-        Ty::Fn { ref params, .. } => {
+        Ty::Fn { ref params, can_throw, .. } => {
             found_fn = true;
+            found_throws = can_throw;
             arity = params.len() as i64;
         },
         _ => { },
     }
+    if declared_here && named && runs && wants_throwing_fn && found_throws { state.facts.boxed_fn_values.insert(id_of(arg) as i64, arity); }
     if declared_here && named && runs && wants_pausing_fn && found_fn { state.facts.sync_functions_run_async.insert(id_of(arg) as i64, arity); }
     if declared_here && wants_fn && found_fn && runs && !check_core_args_a_run_parameter(&state, world, arg) && !named { state.facts.kept_args.insert(id_of(arg) as i64); }
     if wants_fn && found_fn && !runs && named { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), arg, span); }
@@ -13150,6 +13156,21 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
             let first = agreed.clone();
             let kind: String = nikaia_std::index::or(element_kind(item, &first), || "a value".into()).to_owned();
             state.a_list_whose_elements_disagree(&kind, &first.text(), "a value", &found, span);
+        }
+    }
+    if !said {
+        let mut float: Option<Ty> = None;
+        let mut an_integer = false;
+        let mut n: i64 = 0;
+        for item in items.iter() {
+            if float.is_none() && a_float_type(&value_of_a_copy(&(*nikaia_std::index::get(&founds, (n) as usize)).unseen())) { float = Some((*nikaia_std::index::get(&founds, (n) as usize)).clone()); }
+            if (*nikaia_std::index::get(&founds, (n) as usize)).is_unknown() && an_integer_literal(item) { an_integer = true; }
+            n += 1;
+        }
+        if float.is_some() && an_integer {
+            said = true;
+            let first: Ty = nikaia_std::index::or(float, || Ty::Unknown);
+            state.a_list_whose_elements_disagree("a float", &first.text(), "an integer", &Ty::Unknown, span);
         }
     }
     let common = check_core_args_plain_name(&agreed);
@@ -16836,6 +16857,20 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
                         Expr::Closure { params, .. } => {
                             let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: Box::new(None), is_sync: true, can_throw: false });
                             check_core_ops_a_pair_split(state, world, (handed).as_ref(), params, span);
+                            check_core_ops_none_named(state, (handed).as_ref(), params, span);
+                        },
+                        _ => { },
+                    }
+                }
+            }
+        },
+        Ty::Named { name: ref list, args: ref items, .. } => {
+            if (list == "Vec" || list == "Array" || list == "List") && !items.is_empty() && check_core_method_one_item(&name) {
+                for arg in args.iter() {
+                    match arg {
+                        Expr::Closure { params, .. } => {
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(nikaia_std::index::get(&items, 0))], result: Box::new(None), is_sync: true, can_throw: false });
+                            check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
                         _ => { },
                     }
@@ -17279,6 +17314,7 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
         state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at);
         state.two_integer_types_compared(lhs, &left, rhs, &right, at);
     }
+    if !check_core_ops_logical(op) && !check_core_ops_shift(op) { state.an_integer_beside_a_float(world, lhs, &left, rhs, &right, at); }
     let mut common: Option<String> = None;
     if !op.is_comparison() && !check_core_ops_logical(op) { common = state.two_number_types(op, lhs, &left, rhs, &right, at); }
     if !check_core_ops_logical(op) {
@@ -17508,6 +17544,21 @@ fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckWorld<'_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_core_ops_none_named(state: &mut CheckState, declared: Option<&Ty>, params: &[winnow_grammar::Symbol], span: &Span) {
+    if !params.is_empty() { return; }
+    let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return };
+    let handed: i64 = match ty {
+        Ty::Fn { params, .. } => params.len() as i64,
+        _ => 0,
+    };
+    if handed == 0 { return; }
+    let notes: Vec<String> = vec!["A lambda takes the arguments it names, so `fn { … }` takes none (Part I 5.3).".to_owned()];
+    let help: String = if handed == 1 { String::from("Name the argument, `fn(item) { … }`, or `fn(_) { … }` where the body does not use it.") } else { String::from("Name the arguments, `fn(a, b) { … }`, or `_` for one the body does not use.") };
+    state.findings.push(check_refusal("NK1101", span, format!("This lambda takes no arguments, but it is handed {}.", counted(handed, "argument")), notes, Some(help)));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_ops_given(declared: Option<&Ty>, count: i64) -> Vec<Ty> {
     let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     match ty {
@@ -17534,6 +17585,7 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.flow.lambda_expected = None;
     let given: Vec<Ty> = check_core_ops_given((declared).as_ref(), params.len() as i64);
     check_core_ops_a_pair_split(state, world, (declared).as_ref(), params, span);
+    check_core_ops_none_named(state, (declared).as_ref(), params, span);
     let mut frame: Vec<CheckLocal> = vec![];
     let mut names: Vec<String> = vec![];
     let mut at: i64 = 0;
@@ -19183,7 +19235,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     if op.is_some() { check_core_a_compound_write_to_a_map_slot(state, world, host, target, span); }
     if op.is_some() && !check_core_stmt_a_shift(op) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-        state.a_compound_over_two_integer_types(world, o.clone(), target, &into, value, &found, span);
+        if !state.an_integer_beside_a_float(world, target, &into, value, &found, span) { state.a_compound_over_two_integer_types(world, o.clone(), target, &into, value, &found, span); }
     }
     if check_core_stmt_add_sub_mul(op) && check_core_stmt_a_name_or_field(target) {
         let plain = check_core_stmt_plain_name(&into.unseen());
@@ -19220,7 +19272,9 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         let at = check_span_at(world, value, span);
         let pushed = state.findings.len() as i64;
         let waiting = state.slots_waiting(span);
-        state.expect_type(world, &found, &into, span, "assign", &|was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
+        let mut assigned: Ty = found.clone();
+        if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(&into) { assigned = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
+        state.expect_type(world, &assigned, &into, span, "assign", &|was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
         state.findings_moved(span, &at, pushed, &waiting);
     }
     check_core_stmt_unit()
@@ -20892,6 +20946,7 @@ pub struct CheckFacts {
     pub run_lambdas: collections::BTreeSet<i64>,
     pub run_code_fails: collections::BTreeSet<i64>,
     pub sync_functions_run_async: collections::BTreeMap<i64, i64>,
+    pub boxed_fn_values: collections::BTreeMap<i64, i64>,
     pub pausing_lambdas: collections::BTreeMap<i64, FactPausing>,
     pub paused_scopes: collections::BTreeSet<i64>,
     pub scope_tasks: collections::BTreeSet<i64>,
@@ -20960,7 +21015,7 @@ pub struct CheckFacts {
 }
 
 impl CheckFacts {
-    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_copies: collections::BTreeSet::new(), static_field_reads: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), copied_entry_lambdas: collections::BTreeSet::new(), owned_entry_keys: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), bytes_entries: collections::BTreeSet::new(), bytes_grammars: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), text_scalars: collections::BTreeSet::new(), text_graphemes: collections::BTreeSet::new(), kept_text_bytes: collections::BTreeSet::new(), byte_copies: collections::BTreeSet::new(), map_drains: collections::BTreeSet::new(), kept_drains: collections::BTreeSet::new(), kept_byte_fields: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
+    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_copies: collections::BTreeSet::new(), static_field_reads: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), copied_entry_lambdas: collections::BTreeSet::new(), owned_entry_keys: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), boxed_fn_values: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), bytes_entries: collections::BTreeSet::new(), bytes_grammars: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), text_scalars: collections::BTreeSet::new(), text_graphemes: collections::BTreeSet::new(), kept_text_bytes: collections::BTreeSet::new(), byte_copies: collections::BTreeSet::new(), map_drains: collections::BTreeSet::new(), kept_drains: collections::BTreeSet::new(), kept_byte_fields: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
 }
 
 fn check_claim_held(held: Option<&ClaimHeld>) -> String {
@@ -25140,6 +25195,20 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn an_integer_beside_a_float(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> bool {
+        let l = value_of_a_copy(&left.unseen());
+        let r = value_of_a_copy(&right.unseen());
+        let mut float: String = String::from("");
+        if a_float_type(&l) && r.is_unknown() && self.number_shaped(world, rhs) { float = bare_name(&l); } else if a_float_type(&r) && l.is_unknown() && self.number_shaped(world, lhs) { float = bare_name(&r); }
+        if float.is_empty() { return false; }
+        let message = format!("You're mixing {} `{}` and an integer in one operation.", number_article(&float), float);
+        let note: String = String::from("An integer and a floating-point number never mix on their own: the conversion can change the value. A number takes its type among the integer types.");
+        let help = format!("Write the number with a decimal point (`2.0`), or convert it with `as {}`.", float);
+        self.findings.push(check_refusal("NK1199", at, message, vec![note], Some(help)));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn two_integer_types_compared(&mut self, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
         if is_a_literal(lhs) || is_a_literal(rhs) { return; }
         let l = match an_integer_named(left) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -25906,13 +25975,15 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn an_open_number_where_none_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) -> bool {
-        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_number_is(want) { return false; }
+        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(want) { return false; }
         let code = match number_position_code(what) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let hole: String = String::from("\u{0}");
         let wanted = want.text();
         let said = message(&hole, &wanted);
         let text = said.replace(&format!("`{}`", hole), "a number");
-        self.findings.push(check_refusal(&code, span, text, vec!["A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.".to_owned()], Some(format!("Make it a `{}`, or give the number to a place that holds one.", wanted))));
+        let mut note: String = String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.");
+        if a_float_type(want) { note = String::from("A number nothing typed takes one of the integer types its uses ask for, and a float is none of them (Part I 2.4)."); }
+        self.findings.push(check_refusal(&code, span, text, vec![note], Some(format!("Make it a `{}`, or give the number to a place that holds one.", wanted))));
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -29638,6 +29709,21 @@ impl CheckState {
 
 pub fn a_number_name(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" }
 
+pub fn a_float_type(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => args.is_empty() && (name == "f32" || name == "f64"),
+        _ => false,
+    }
+}
+
+pub fn an_integer_literal(expr: &Expr) -> bool {
+    match check_peeled(expr) {
+        Expr::LitInt { .. } => true,
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && an_integer_literal(expr) },
+        _ => false,
+    }
+}
+
 pub fn type_last_segment(name: &str) -> String { nikaia_std::index::or(name.rsplit("::").next(), || name.into()).to_owned() }
 
 pub fn view_of_type(inner: &Ty) -> Ty {
@@ -29956,6 +30042,9 @@ impl CheckState {
             _ => false,
         }
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn no_integer_is(&self, ty: &Ty) -> bool { self.no_number_is(ty) || a_float_type(ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
@@ -30622,11 +30711,26 @@ pub fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<String> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
+    match want {
+        Ty::Named { name, args, .. } => {
+            if name == "Vec" && args.len() == 1 && a_float_type(nikaia_std::index::get(&args, 0)) {
+                match value {
+                    Expr::ListLit { items, .. } => { for item in items.iter() { if an_integer_literal(item) { return Some(Ty::Named { name: String::from("Vec"), args: vec![Ty::Named { name: String::from("i64"), args: vec![], view: false }], view: false }); } } },
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
     let name = match want {
         Ty::Named { name, .. } => name.to_owned(),
         _ => return None,
     };
-    if is_whole(&name) || name == "f32" || name == "f64" { return None; }
+    if is_whole(&name) { return None; }
+    if name == "f32" || name == "f64" {
+        if an_integer_literal(value) { return Some(Ty::Named { name: String::from("i64"), args: vec![], view: false }); }
+        return None;
+    }
     let literal: &Expr = match value {
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Neg { expr } else { value } },
         _ => value,
@@ -33157,6 +33261,13 @@ impl EmitState {
         if call_pauses(&self.own_contracts, &key) || call_library_pauses(world.library, &key).is_some() { return -1; }
         nikaia_std::index::or(self.facts.sync_functions_run_async.get(&place), || -1)
     }
+    fn emit_arg_into_the_box(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> i64 {
+        let arity = match self.facts.boxed_fn_values.get(&node_key(arg)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return -1 };
+        let key = match emit_arg_function_key(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+        if call_pauses(&self.own_contracts, &key) { return -1; }
+        if self.error_channel(world, &key, true, "", "", false) == "Box<dyn std::error::Error>" { return -1; }
+        arity
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
@@ -33334,6 +33445,17 @@ impl EmitState {
             return Ok(());
         }
         let arity = self.emit_arg_run_async(world, inside.statement, i, arg);
+        let boxed = self.emit_arg_into_the_box(world, arg);
+        if boxed >= 0 {
+            let mut names: Vec<String> = vec![];
+            for n in 0..boxed { names.push(format!("__nikaia_a{}", n)); }
+            let joined = names.join(", ");
+            if arity >= 0 { out.push("async "); }
+            out.push(&format!("|{}| ", joined));
+            host.expr(walk, out, arg, depth, inside, scope)?;
+            out.push(&format!("({}).map_err(Into::into)", joined));
+            return Ok(());
+        }
         if arity < 0 {
             host.expr(walk, out, arg, depth, inside, scope)?;
             return Ok(());
@@ -66637,7 +66759,7 @@ pub mod check_core_method {
 }
 pub mod check_core_ops {
     #[allow(unused_imports)]
-    pub use super::{check_core_ops_binary, check_core_ops_coalesce, check_core_ops_closure, check_core_ops_spawn};
+    pub use super::{check_core_ops_binary, check_core_ops_coalesce, check_core_ops_none_named, check_core_ops_closure, check_core_ops_spawn};
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]
@@ -66795,7 +66917,7 @@ pub mod check_texts {
 }
 pub mod check_types {
     #[allow(unused_imports)]
-    pub use super::{a_number_name, type_last_segment, view_of_type, viewed_from_type, unviewed_type, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of, check_peeled};
+    pub use super::{a_number_name, a_float_type, an_integer_literal, type_last_segment, view_of_type, viewed_from_type, unviewed_type, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of, check_peeled};
 }
 pub mod check_values {
     #[allow(unused_imports)]

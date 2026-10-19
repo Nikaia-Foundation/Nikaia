@@ -111,13 +111,15 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let mut lends = false
     let mut wants_fn = false
     let mut wants_pausing_fn = false
+    let mut wants_throwing_fn = false
     if at < expected.len() as i64 {
         lends = expected[at].is_a_view()
         match expected[at] {
-            Ty::Fn { is_sync, .. } => {
+            Ty::Fn { is_sync, can_throw, .. } => {
                 wants_fn = true
                 let plain: bool = is_sync
                 wants_pausing_fn = !plain
+                wants_throwing_fn = can_throw
             }
             else => {}
         }
@@ -129,13 +131,21 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let named = check_core_args_named(state, world, arg)
     let runs = check_core_args_runs(callee, at)
     let mut found_fn = false
+    let mut found_throws = false
     let mut arity = 0
     match found {
-        Ty::Fn { params, .. } => {
+        Ty::Fn { params, can_throw, .. } => {
             found_fn = true
+            found_throws = can_throw
             arity = params.len() as i64
         }
         else => {}
+    }
+    // **A declared function that throws, run by a `fn(..) throws`
+    // parameter** (ADR-280 D9, #703): that type's channel is the box, and the
+    // function's own may be narrower.
+    if declared_here && named && runs && wants_throwing_fn && found_throws {
+        state.facts.boxed_fn_values.insert(id_of(arg) as i64, arity)
     }
     // **A declared function, run by a parameter that may pause** (#516).
     if declared_here && named && runs && wants_pausing_fn && found_fn {

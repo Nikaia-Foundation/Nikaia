@@ -198,6 +198,22 @@ impl EmitState {
         return self.facts.sync_functions_run_async.get(place) ?? -1
     }
 
+    /// The count of parameters of a declared function named where a
+    /// `fn(..) throws` parameter runs it, where its channel is not the box
+    /// that type fails in (ADR-280 D9, #703); `-1` otherwise. One that pauses
+    /// is handed over as it is.
+    fn emit_arg_into_the_box(ref self, world: ref EmitWorld, arg: ref Expr) -> i64 {
+        let arity = self.facts.boxed_fn_values.get(node_key(arg)) ?? return -1
+        let key = emit_arg_function_key(world, arg) ?? return -1
+        if call_pauses(self.own_contracts, key) {
+            return -1
+        }
+        if self.error_channel(world, key, true, "", "", false) == "Box<dyn std::error::Error>" {
+            return -1
+        }
+        return arity
+    }
+
     /// Each argument of a call, with what the checker found out about its
     /// position. `callee` is the callee as the source wrote it: Part I 2.3's
     /// wrap is keyed by it, because a statement may hold several calls and one
@@ -494,6 +510,25 @@ impl EmitState {
             return
         }
         let arity = self.emit_arg_run_async(world, inside.statement, i, arg)
+        // **A function whose channel is narrower than the box, run by a
+        // `fn(..) throws` parameter** (ADR-280 D9, #703): a closure that calls
+        // it and puts its error in the box, `async` where the parameter may
+        // pause.
+        let boxed = self.emit_arg_into_the_box(world, arg)
+        if boxed >= 0 {
+            let mut names: Vec[String] = []
+            for n in 0..<boxed {
+                names.push(f"__nikaia_a{n}")
+            }
+            let joined = names.join(", ")
+            if arity >= 0 {
+                out.push("async ")
+            }
+            out.push(f"|{joined}| ")
+            host.expr(walk, out, arg, depth, inside, scope)
+            out.push(f"({joined}).map_err(Into::into)")
+            return
+        }
         if arity < 0 {
             host.expr(walk, out, arg, depth, inside, scope)
             return
