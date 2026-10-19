@@ -1,0 +1,29 @@
+// #678: `let t = expr; return t` hands back what `return expr` does.
+
+struct Pair {
+    left: String,
+    right: String,
+}
+
+fn pair(a: String, b: String) -> Pair {
+    let t = Pair { left: a, right: b }
+    return t
+}
+
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        let t = a
+        return t
+    }
+    let t = b
+    return t
+}
+
+fn main() {
+    let x = f"abc{1}"
+    let y = f"de{2}"
+    let r = longest(x, y)
+    println(r)
+    let p = pair(y, x)
+    println(f"{p.left} {p.right} {x} {y}")
+}

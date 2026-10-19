@@ -1,0 +1,38 @@
+// #659: a map of views in a struct's field, filled by a method and merged
+// by draining another into it.
+
+use std::collections
+
+struct Reading {
+    name: String,
+    t: i64,
+}
+
+struct Seen {
+    m: collections::HashMap[String, i64],
+}
+
+impl Seen {
+    fn record(ref mut self, r: Reading) {
+        self.m.insert(r.name, r.t)
+    }
+
+    fn merge(ref mut self, other: Seen) {
+        for (name, n) in other.m.drain() {
+            self.m.insert(name, (self.m[name] ?? 0) + n)
+        }
+    }
+}
+
+fn main() {
+    let s = f"a b a{1}"
+    let mut x = Seen { m: collections::HashMap() }
+    let mut y = Seen { m: collections::HashMap() }
+    x.record(Reading { name: "a", t: 5 })
+    for w in s.split(" ") {
+        y.record(Reading { name: w, t: 1 })
+    }
+    x.merge(y)
+    let k = f"a"
+    println(f"{x.m.len()} {x.m[k] ?? 0} {x.m["b"] ?? 0} {x.m["a1"] ?? 0}")
+}

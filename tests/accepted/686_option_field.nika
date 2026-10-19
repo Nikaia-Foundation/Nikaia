@@ -1,0 +1,20 @@
+// #686: owned text in a typed option, stored into a field inside a loop.
+
+struct L {
+    from: String?,
+}
+
+fn word(n: i64) -> String {
+    return f"w{n}"
+}
+
+fn main() {
+    let mut l = L { from: null }
+    for i in 0..<3 {
+        if i >= 1 {
+            let key: String? = word(i)
+            l.from = key
+        }
+    }
+    println(l.from ?? "-")
+}

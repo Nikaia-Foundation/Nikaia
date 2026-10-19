@@ -1,0 +1,34 @@
+// #702: `fn mk(v: String) -> Tag { return tag(v) }`.
+
+struct Tag {
+    label: String,
+}
+
+struct Box {
+    items: Vec[Tag],
+}
+
+fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}
+
+fn show(b: Box) -> String {
+    let mut out = f"{b.items.len()}"
+    for t in b.items {
+        out = f"{out} {t.label}"
+    }
+    return out
+}
+
+fn mk(v: String) -> Tag {
+    return tag(v)
+}
+
+fn main() {
+    let mut b = Box { items: [] }
+    let x = f"x{1}"
+    println(x)
+    b.items.push(mk(x))
+    b.items.push(mk("lit"))
+    println(f"{show(b)}")
+}

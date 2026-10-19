@@ -1,0 +1,21 @@
+// #659: keys cut out of a text's bytes.
+
+use std::collections
+
+fn cut(dna: String) -> collections::HashMap[String, i64] {
+    let mut counts: collections::HashMap[String, i64] = collections::HashMap()
+    for i in 0..<dna.len() - 1 {
+        let two = dna.bytes[i..<i + 2].text() catch {
+            continue
+        }
+        counts.insert(two, (counts[two] ?? 0) + 1)
+    }
+    return counts
+}
+
+fn main() {
+    let s = f"GATAGA{""}"
+    let c = cut(s)
+    let k = f"GA"
+    println(f"{c.len()} {c[k] ?? 0} {c["AT"] ?? 0} {c["TA"] ?? 0} {c["AG"] ?? 0} {c["CC"] ?? 0}")
+}

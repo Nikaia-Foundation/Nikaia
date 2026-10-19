@@ -1,0 +1,21 @@
+// #697: a struct of views from `tag(v)`, only read locally; the caller uses
+// `x` again afterwards.
+
+struct Tag {
+    label: String,
+}
+
+fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}
+
+fn shout(v: String) {
+    let a = tag(v)
+    println(a.label)
+}
+
+fn main() {
+    let x = f"x{1}"
+    shout(x)
+    println(x)
+}

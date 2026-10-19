@@ -1,0 +1,19 @@
+// #694: `a[k] ?? b[k] ?? return x` over maps handed as parameters, with a
+// value type that is a copy; the key in the first map, in the second, in neither.
+
+use std::collections
+
+
+fn either(a: collections::BTreeMap[String, i64], b: collections::BTreeMap[String, i64], name: String) -> i64 {
+    let found = a[name] ?? b[name] ?? return -1
+    return found
+}
+
+fn main() {
+    let mut a: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    a.insert("j", 4)
+    let mut b: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    b.insert("k", 3)
+    let k = f"k"
+    println(f"{either(a, b, "j")} {either(a, b, k)} {either(a, b, "z")} {a.len()} {b.len()}")
+}

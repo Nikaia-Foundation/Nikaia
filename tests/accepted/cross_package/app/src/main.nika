@@ -1,0 +1,16 @@
+// #702 across packages: `tags::tag` called with new text, kept past the call
+// and pushed into a list from a loop.
+
+use tags
+
+fn main() {
+    let t = tags::tag(f"app")
+    let mut all: Vec[tags::Tag] = []
+    for i in 0..<2 {
+        all.push(tags::tag(f"app{i}"))
+    }
+    let x = f"x{1}"
+    println(x)
+    let u = tags::tag(x)
+    println(f"{t.label} {all.len()} {all[0].label} {all[1].label} {u.label}")
+}

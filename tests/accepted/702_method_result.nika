@@ -1,0 +1,31 @@
+// #702: a program method's result, viewing a parameter, pushed into a `mut`
+// parameter's list.
+
+struct Tag {
+    label: String,
+}
+
+struct Box {
+    items: Vec[Tag],
+}
+
+struct Maker {
+    n: i64,
+}
+
+impl Maker {
+    fn make(ref self, s: String) -> Tag {
+        return Tag { label: s }
+    }
+}
+
+fn keep(m: Maker, v: String, mut b: Box) {
+    b.items.push(m.make(v))
+}
+
+fn main() {
+    let mut b = Box { items: [] }
+    let m = Maker { n: 1 }
+    keep(m, f"x{1}", b)
+    println(f"{b.items.len()} {b.items[0].label} {m.n}")
+}

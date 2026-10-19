@@ -1,0 +1,21 @@
+// #686: the same with a plain `String` field.
+
+struct L {
+    from: String,
+}
+
+fn word(n: i64) -> String {
+    return f"w{n}"
+}
+
+fn main() {
+    let mut l = L { from: "start" }
+    println(l.from)
+    for i in 0..<3 {
+        if i >= 1 {
+            let key = word(i)
+            l.from = key
+        }
+    }
+    println(l.from)
+}

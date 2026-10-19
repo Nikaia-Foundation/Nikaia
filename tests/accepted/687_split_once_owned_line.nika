@@ -1,0 +1,15 @@
+// #687: parts cut from text owned by one turn of the loop, kept past it.
+
+use std::collections
+
+fn main() {
+    let mut v: Vec[String] = []
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for i in 0..2 {
+        let line = f"k{i}=v{i}"
+        let (a, b) = line.split_once("=") ?? continue
+        v.push(a)
+        m.insert(a, b)
+    }
+    println(f"{v.len()} {v[0]} {v[2]} {m.len()} {m["k1"] ?? "-"}")
+}

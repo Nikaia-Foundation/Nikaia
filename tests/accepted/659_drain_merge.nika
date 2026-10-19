@@ -1,0 +1,18 @@
+// #659: `for (k, v) in m.drain()` merged into another map of views.
+
+use std::collections
+
+fn main() {
+    let s = f"p q r{1} p"
+    let mut a: collections::HashMap[String, i64] = collections::HashMap()
+    let mut b: collections::HashMap[String, i64] = collections::HashMap()
+    for w in s.split(" ") {
+        b.insert(w, w.len())
+    }
+    a.insert("p", 10)
+    for (k, v) in b.drain() {
+        a.insert(k, (a[k] ?? 0) + v)
+    }
+    let q = f"q"
+    println(f"{a.len()} {a["p"] ?? 0} {a[q] ?? 0} {a["r1"] ?? 0}")
+}

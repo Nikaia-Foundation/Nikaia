@@ -1,0 +1,29 @@
+// #678: a parameter handed to a function that only reads it, then handed back.
+
+fn show(s: String) {
+    println(f"[{s}]")
+}
+
+fn width(s: String) -> i64 {
+    return s.len()
+}
+
+fn echo(a: String) -> String {
+    show(a)
+    return a
+}
+
+fn measured(a: String) -> String {
+    let n = width(a)
+    if n > 3 {
+        return a
+    }
+    return a
+}
+
+fn main() {
+    let x = f"v{12}"
+    let e = echo(x)
+    let m = measured(e)
+    println(f"{e} {m} {x}")
+}

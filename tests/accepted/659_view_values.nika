@@ -1,0 +1,13 @@
+// #659: views as keys and as values.
+
+use std::collections
+
+fn main() {
+    let s = f"x y x{1}"
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for w in s.split(" ") {
+        m.insert(w, w)
+    }
+    let k = f"y"
+    println(f"{m.len()} {m[k] ?? "-"} {m.get(k) ?? "-"} {m.contains_key(k)} {m["x1"] ?? "-"}")
+}

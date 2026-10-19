@@ -1,0 +1,27 @@
+// #702: `tag(v)`'s result handed as an argument to a function that stores it.
+
+struct Tag {
+    label: String,
+}
+
+struct Box {
+    items: Vec[Tag],
+}
+
+fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}
+
+fn put(t: Tag, mut b: Box) {
+    b.items.push(t)
+}
+
+fn keep(v: String, mut b: Box) {
+    put(tag(v), b)
+}
+
+fn main() {
+    let mut b = Box { items: [] }
+    keep(f"x{1}", b)
+    println(f"{b.items.len()} {b.items[0].label}")
+}

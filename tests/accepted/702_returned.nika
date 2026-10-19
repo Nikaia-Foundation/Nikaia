@@ -1,0 +1,33 @@
+// #702: `tag(v)` of a local `v` returned, then pushed by the caller.
+
+struct Tag {
+    label: String,
+}
+
+struct Box {
+    items: Vec[Tag],
+}
+
+fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}
+
+fn show(b: Box) -> String {
+    let mut out = f"{b.items.len()}"
+    for t in b.items {
+        out = f"{out} {t.label}"
+    }
+    return out
+}
+
+fn make(n: i64) -> Tag {
+    let v = f"x{n}"
+    return tag(v)
+}
+
+fn main() {
+    let mut b = Box { items: [] }
+    b.items.push(make(1))
+    b.items.push(make(2))
+    println(show(b))
+}

@@ -1,0 +1,16 @@
+// #687: `split_once` parts past `?? break` are pushed into a list and
+// inserted into a map.
+
+use std::collections
+
+fn main() {
+    let s = f"x=1 y=2 z x=3"
+    let mut v: Vec[String] = []
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for w in s.split(" ") {
+        let (a, b) = w.split_once("=") ?? break
+        v.push(a)
+        m.insert(a, b)
+    }
+    println(f"{v.len()} {v[0]} {v[v.len() - 1]} {m.len()} {m["x"] ?? "-"} {m["y"] ?? "-"}")
+}

@@ -1,0 +1,10 @@
+// #702 across packages: a published function whose result views its
+// `String` parameter.
+
+pub struct Tag {
+    pub label: String,
+}
+
+pub fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}

@@ -1,0 +1,12 @@
+// #659: a map only literals go into, looked up with any text.
+
+use std::collections
+
+fn main() {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.insert("a", 1)
+    m.insert("b", 2)
+    let k = f"a{""}"
+    let j = f"b"
+    println(f"{m.len()} {m["a"] ?? 0} {m[k] ?? 0} {m.get(j) ?? 0} {m.contains_key(k)} {m["c"] ?? 0}")
+}

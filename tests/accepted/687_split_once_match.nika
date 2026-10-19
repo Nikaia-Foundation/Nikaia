@@ -1,0 +1,19 @@
+// #687: `split_once` matched as a tuple; the parts go into a list and a map.
+
+use std::collections
+
+fn main() {
+    let s = f"x=1 y=2 z x=3"
+    let mut v: Vec[String] = []
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for w in s.split(" ") {
+        match w.split_once("=") {
+            (a, b) => {
+                v.push(a)
+                m.insert(a, b)
+            },
+            null => v.push("none"),
+        }
+    }
+    println(f"{v.len()} {v[2]} {v[3]} {m.len()} {m["x"] ?? "-"} {m["y"] ?? "-"}")
+}

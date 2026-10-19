@@ -1,0 +1,32 @@
+// #702: `b.items.push(tag(v))`.
+
+struct Tag {
+    label: String,
+}
+
+struct Box {
+    items: Vec[Tag],
+}
+
+fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}
+
+fn show(b: Box) -> String {
+    let mut out = f"{b.items.len()}"
+    for t in b.items {
+        out = f"{out} {t.label}"
+    }
+    return out
+}
+
+fn keep(v: String, mut b: Box) {
+    b.items.push(tag(v))
+}
+
+fn main() {
+    let mut b = Box { items: [] }
+    keep(f"x{1}", b)
+    keep(f"y{2}", b)
+    println(show(b))
+}

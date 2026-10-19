@@ -1,0 +1,19 @@
+// #687: `split_once` parts past `?? return`, kept in locals of the function.
+
+use std::collections
+
+fn count(s: String) -> String {
+    let mut v: Vec[String] = []
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for w in s.split(" ") {
+        let (a, b) = w.split_once("=") ?? return f"{v.len()} {m.len()} {m["x"] ?? "-"}"
+        v.push(a)
+        m.insert(a, b)
+    }
+    return f"all {v.len()} {m.len()}"
+}
+
+fn main() {
+    println(count(f"x=1 y=2 z x=3"))
+    println(count(f"x=1 y=2"))
+}

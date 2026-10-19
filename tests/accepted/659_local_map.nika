@@ -1,0 +1,14 @@
+// #659: a local map keyed by views of a text, looked up with text of its own
+// and with a literal.
+
+use std::collections
+
+fn main() {
+    let s = f"x y x{1} y"
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    for w in s.split(" ") {
+        m.insert(w, (m[w] ?? 0) + 1)
+    }
+    let k = f"y"
+    println(f"{m.len()} {m[k] ?? 0} {m.get(k) ?? 0} {m.contains_key(k)} {m["x1"] ?? 0} {m["q"] ?? 0}")
+}

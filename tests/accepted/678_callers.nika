@@ -1,0 +1,33 @@
+// #678: callers of lent `String` parameters hand a view, an owned value and
+// a literal.
+
+struct Pair {
+    left: String,
+    right: String,
+}
+
+fn pair(a: String, b: String) -> Pair {
+    return Pair { left: a, right: b }
+}
+
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    let owned = f"own{1}"
+    let line = f"a,bbbbbb,cc"
+    for part in line.split(",") {
+        let r = longest(part, owned)
+        println(r)
+        let p = pair(part, "lit")
+        println(f"{p.left} {p.right}")
+    }
+    let l = longest("literal-long", owned)
+    println(l)
+    let p = pair(owned, "x")
+    println(f"{p.left} {p.right} {owned}")
+}

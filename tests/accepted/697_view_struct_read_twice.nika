@@ -1,0 +1,22 @@
+// #697: two structs of views of the same parameter, read and compared; the
+// caller uses `x` again afterwards.
+
+struct Tag {
+    label: String,
+}
+
+fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}
+
+fn same(v: String, w: String) -> bool {
+    let a = tag(v)
+    let b = tag(w)
+    return a.label == b.label
+}
+
+fn main() {
+    let x = f"x{1}"
+    let y = f"y{2}"
+    println(f"{same(x, x)} {same(x, y)} {x} {y}")
+}

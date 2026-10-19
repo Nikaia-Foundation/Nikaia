@@ -1,0 +1,30 @@
+// #678: Part I 6.5's `longest`, `pair` and `Pair`, with `String` parameters
+// the compiler lends. The old text of `y` lives on while `r` is used.
+
+struct Pair {
+    left: String,
+    right: String,
+}
+
+fn pair(a: String, b: String) -> Pair {
+    return Pair { left: a, right: b }
+}
+
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    let x = f"abc{1}"
+    let mut y = "short".clone()
+    let r = longest(x, y)
+    y = "replaced".clone()
+    println(r)
+    let p = pair(x, y)
+    println(f"{p.left} {p.right}")
+    let q = longest(y, x)
+    println(f"{q} {x} {y}")
+}
