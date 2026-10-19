@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1070] — 2026-10-19
+
+**a chain of map reads past a jump copies numbers out; a method's result ties the text handed to it (#694, #702)**
+- A chain `a[k] ?? b[k] ?? return x` over maps of numbers copies the number out at each link (#694). A program method's result that views a `String` argument, stored where it outlives the caller's text, owns that text, as a function's result already did (#702, ADR-282 D12).
+
 ## [0.0.1069] — 2026-10-19
 
 **A `Bytes` read and `i + k` under a bound are proved (#698, #699)**
