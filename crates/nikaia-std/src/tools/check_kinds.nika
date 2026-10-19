@@ -106,6 +106,16 @@ fn kind_names_a_variant(pattern: ref MatchPattern) -> bool {
     }
 }
 
+/// Whether an arm's pattern is a value of the `T` a `T?` holds: a variant, or
+/// a literal (#704). `null` is a literal too, and the caller has already left
+/// where a `null` arm stands.
+fn kind_names_a_value_of_the_inner(pattern: ref MatchPattern) -> bool {
+    return match pattern {
+        MatchPattern::Literal(_) => true,
+        else => kind_names_a_variant(pattern),
+    }
+}
+
 /// Whether the block assigns `name` as a whole and never reads it.
 fn kind_an_update_only_replaces(world: ref CheckWorld, name: ref String, body: ref Block) -> bool {
     let mut assigned = false
@@ -252,7 +262,8 @@ impl CheckState {
         self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.text()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm.".clone()))
     }
 
-    /// **`NK1205`: a variant matched on a `T?`** (issue #180): a pattern of `W`
+    /// **`NK1205`: a variant or a literal matched on a `T?`** (issue #180,
+    /// #704): a pattern of `W`
     /// says nothing about the nothing. The way out is to say what `null` stands
     /// for first, with `??`.
     pub fn a_variant_matched_on_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
@@ -266,9 +277,12 @@ impl CheckState {
             return
         }
         for arm in arms {
-            if kind_names_a_variant(arm.pattern) {
+            if kind_names_a_value_of_the_inner(arm.pattern) {
                 let written = written_expression(world.words, value)
-                let variant = written_pattern(world.words, arm.pattern)
+                let variant = match arm.pattern {
+                    MatchPattern::Literal(literal) => written_expression(world.words, literal),
+                    else => written_pattern(world.words, arm.pattern),
+                }
                 let note = f"`{written}` is a `{on.text()}`: a `{inner.text()}` or nothing, and a pattern of the `{inner.text()}` says nothing about the nothing."
                 self.findings.push(check_refusal("NK1205", span, f"`{written}` may be `null`, so `{variant}` can't be matched on it directly.", [note], f"Say what `null` stands for first: `let value = {written} ?? …`, and `match value`."))
                 return

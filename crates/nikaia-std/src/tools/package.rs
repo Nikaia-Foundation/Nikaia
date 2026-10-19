@@ -23408,6 +23408,13 @@ fn kind_names_a_variant(pattern: &MatchPattern) -> bool {
     }
 }
 
+fn kind_names_a_value_of_the_inner(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Literal(_) => true,
+        _ => kind_names_a_variant(pattern),
+    }
+}
+
 fn kind_an_update_only_replaces(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block) -> bool {
     let mut assigned = false;
     let mut read = false;
@@ -23531,9 +23538,12 @@ impl CheckState {
         };
         if shapes_has_a_null_arm(arms) { return; }
         for arm in arms.iter() {
-            if kind_names_a_variant(&arm.pattern) {
+            if kind_names_a_value_of_the_inner(&arm.pattern) {
                 let written = written_expression(world.words, value);
-                let variant = written_pattern(world.words, &arm.pattern);
+                let variant = match &arm.pattern {
+                    MatchPattern::Literal(literal) => written_expression(world.words, literal),
+                    _ => written_pattern(world.words, &arm.pattern),
+                };
                 let note = format!("`{}` is a `{}`: a `{}` or nothing, and a pattern of the `{}` says nothing about the nothing.", written, on.text(), inner.text(), inner.text());
                 self.findings.push(check_refusal("NK1205", span, format!("`{}` may be `null`, so `{}` can't be matched on it directly.", written, variant), vec![note], Some(format!("Say what `null` stands for first: `let value = {} ?? …`, and `match value`.", written))));
                 return;

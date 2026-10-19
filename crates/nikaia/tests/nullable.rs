@@ -1012,6 +1012,33 @@ fn a_variant_matched_on_a_nullable_is_refused() {
     );
 }
 
+/// **A literal matched on a `T?` is `NK1205` too** (#704): `1` against
+/// `v.first()` reached `rustc` as *expected `Option<&i64>`, found integer*.
+/// With a `null` arm the other arms match the `T` (ADR-352 D1).
+#[test]
+fn a_literal_matched_on_a_nullable_is_refused() {
+    let source = |arms: &str| {
+        format!(
+            "fn main() {{\n\
+             \x20   let v = [1, 2]\n\
+             \x20   let r = match v.first() {{ {arms} }}\n\
+             \x20   println(f\"{{r}}\")\n\
+             }}\n"
+        )
+    };
+    let found = findings(&source("1 => 1, else => 0"));
+    let it = found
+        .iter()
+        .find(|f| f.code == "NK1205")
+        .unwrap_or_else(|| panic!("no NK1205: {found:#?}"));
+    assert!(it.message.contains("so `1` can't be matched"), "{it:#?}");
+    let with_null = findings(&source("null => 0, 1 => 1, else => 0"));
+    assert!(
+        !with_null.iter().any(|f| f.code == "NK1205"),
+        "{with_null:#?}"
+    );
+}
+
 /// **A name on the left of `??` is handed over** when what it holds does not
 /// copy: `viewed ?? "none"` takes the option, and a use of `viewed` after the
 /// line reached `rustc` as *borrow of moved value* (found moving `Ty::parse`
