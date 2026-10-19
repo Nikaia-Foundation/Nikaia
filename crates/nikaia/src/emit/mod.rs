@@ -1171,6 +1171,9 @@ struct Emitter<'p> {
     /// Inside `bytes(...)` of a grammar's copy over bytes: `any` there is the
     /// backend's raw `byte`, since what is captured is not checked.
     grammar_raw: std::cell::Cell<bool>,
+    /// **The counters `bounds::proven` already found never negative**, by the
+    /// address of the body in `parsed` (`Proven::nonnegative_locals`).
+    nonnegative_bodies: HashMap<usize, HashSet<Symbol>>,
     /// **The program's `main`'s parameters as its definition wrote them**,
     /// `name: type`, for the entry that reads the words into them
     /// ([ADR-360](../../docs/specification/adr/adr-360.md) D1).
@@ -1925,7 +1928,7 @@ impl<'p> Emitter<'p> {
         // **Proved at every build, written without the check only where the
         // build says so** (ADR-306 D14): what is proved does not depend on
         // `remove-bounds-checks` or `remove-overflow-checks`.
-        let proven = crate::bounds::proven(
+        let mut proven = crate::bounds::proven(
             parsed,
             &crate::bounds::Sites {
                 lengths: &propagation.std_lengths,
@@ -2147,6 +2150,7 @@ impl<'p> Emitter<'p> {
             floor: std::cell::Cell::new(false),
             grammar_bytes: std::cell::Cell::new(false),
             grammar_raw: std::cell::Cell::new(false),
+            nonnegative_bodies: std::mem::take(&mut proven.nonnegative_locals),
             main_params: std::cell::RefCell::new(Vec::new()),
         };
         made.s.sums = made.s.error_sums(&made.world);
@@ -4532,11 +4536,16 @@ impl<'p> Emitter<'p> {
             channel,
         } = declared;
         self.walking(|w| w.keep_function = key.to_string());
-        let locals: std::collections::BTreeSet<String> =
-            nikaia_std::tools::emit_locals::nonnegative_locals(body)
+        let locals: std::collections::BTreeSet<String> = match self
+            .nonnegative_bodies
+            .get(&(std::ptr::from_ref(body) as usize))
+        {
+            Some(known) => known.iter().map(|s| self.text(*s).to_string()).collect(),
+            None => nikaia_std::tools::emit_locals::nonnegative_locals(body)
                 .into_iter()
                 .map(|s| self.text(s).to_string())
-                .collect();
+                .collect(),
+        };
         self.walking(|w| w.nonnegative.insert(key.to_string(), locals));
         let flow = Flow {
             changed: &[],

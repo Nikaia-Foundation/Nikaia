@@ -108,6 +108,11 @@ pub struct Proven {
     /// Of the negations asked, those proved to stay inside their type
     /// (ADR-314 D5), by node.
     pub negations: HashSet<i64>,
+    /// **Each walked body's counters that are never negative**
+    /// (`emit::nonnegative_names`), by the body's address in the `Parsed`
+    /// both walks borrow: the emitter reads them back rather than walking the
+    /// body a second time.
+    pub nonnegative_locals: std::collections::HashMap<usize, HashSet<winnow_grammar::Symbol>>,
 }
 
 /// **What each callee the ledgers describe ensures**
@@ -272,14 +277,18 @@ pub fn proven(
         // **The aggressive walk** (`tools/bounds_walk.nika`), with the
         // solver asked about the arena it grows.
         let function = name.map(|n| parsed.text(n).to_string()).unwrap_or_default();
+        let counters = crate::emit::nonnegative_names(body);
+        let names = counters
+            .iter()
+            .map(|s| parsed.text(*s).to_string())
+            .collect();
+        out.nonnegative_locals
+            .insert(std::ptr::from_ref(body) as usize, counters);
         let walked = crate::proofs::in_function(&function, item.span.start as usize, || {
             walk::bounds_aggressive(
                 args,
                 body,
-                crate::emit::nonnegative_names(body)
-                    .into_iter()
-                    .map(|s| parsed.text(s).to_string())
-                    .collect(),
+                names,
                 &context,
                 &parsed.program,
                 &parsed.interner,
