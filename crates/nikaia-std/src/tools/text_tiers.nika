@@ -515,10 +515,14 @@ struct Flows {
     /// The arms that are a name of text of its own still read later, taken
     /// as a view of it (#712).
     viewed_arms: collections::BTreeSet[i64],
+    /// The arms that are a `String` parameter of the function walked, in a
+    /// choice handed to a parameter that keeps its text, by their nodes, and
+    /// the parameter's word (#716).
+    param_arm_into: collections::BTreeMap[i64, String],
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap() }
 }
 
 struct TierWalk {
@@ -560,6 +564,18 @@ struct TierWalk {
     /// The arms that are a name still read after their choice, or in a later
     /// turn of a loop (#712), by their nodes.
     late: collections::BTreeSet[i64],
+    /// The names handed as they are to a call and still read after it, or in
+    /// a later turn of a loop (#716), by their nodes.
+    late_args: collections::BTreeSet[i64],
+    /// The arms that are a parameter of the function they stand in, in a
+    /// choice that does not leave it (#716), by their nodes.
+    late_params: collections::BTreeSet[i64],
+    /// The `String` parameters that keep their text: handed as they are into
+    /// a place that is not a parameter, or to one that keeps it (#716).
+    keeping: collections::BTreeSet[String],
+    /// The arms that are a parameter named nowhere else, handed to one that
+    /// keeps its text: each is a view of the parameter (#716).
+    param_arms: collections::BTreeSet[i64],
 }
 
 /// A view a call's result may hold of the caller's text (#702): the word of
@@ -2229,6 +2245,20 @@ fn flow_args(key: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: r
             // **A parameter handed on as it is to a `String` parameter**
             // goes in as nothing yet: lent, it goes in as a view (#678).
             let mut kinds = given[at].clone()
+            // **To a parameter that keeps its text** (#716): a name still
+            // read after the call, or in a later turn of a loop, goes in as
+            // a view of it, and an arm that is a parameter named nowhere else
+            // is one too - the position takes both kinds (`EitherText`).
+            if a_keeping_target(function, at, ask) && walk.keeping.contains(position_word(owner, no_path())) {
+                let only_owned = kinds.owned && !kinds.view && !kinds.either && !kinds.still
+                if only_owned && walk.late_args.contains(node_key(args[at])) && lendable_parameter(args[at], ask, walk) == null {
+                    walk.flows.viewed_arms.insert(node_key(args[at]))
+                    kinds = view_kinds()
+                }
+                if tier_a_choice(args[at]) {
+                    param_arm_leaves(args[at], ask, walk)
+                }
+            }
             if a_text_parameter(ask.names, function.params[at]) {
                 let source = lendable_parameter(args[at], ask, walk)
                 if source != null {
@@ -2269,6 +2299,16 @@ struct TierLateArm {
     name: String,
     serial: i64,
     loops: i64,
+    /// A name handed as it is to a call, not an arm (#716).
+    argument: bool,
+}
+
+/// What the run-order walk found, by node: arms and arguments still read
+/// later, and arms that are a parameter of the function (#716).
+struct TierLateFound {
+    arms: collections::BTreeSet[i64],
+    args: collections::BTreeSet[i64],
+    params: collections::BTreeSet[i64],
 }
 
 /// One binding of a name: its serial, and the loops around it.
@@ -2295,12 +2335,25 @@ struct TierLate {
     /// Arms whose binding may still be read after their choice.
     pending: Vec[TierLateArm],
     found: collections::BTreeSet[i64],
+    /// Names handed to a call still read later (#716).
+    args: collections::BTreeSet[i64],
+    /// Arms that are a parameter of the function, in a choice that does not
+    /// leave it (#716).
+    params: collections::BTreeSet[i64],
+    /// The serials of the walked function's parameters: above `params_from`,
+    /// up to `params_upto`.
+    params_from: i64,
+    params_upto: i64,
+    /// What waits for a later read from inside the branch being walked: a
+    /// read in another branch of the same choice is not after it.
+    branch_args: Vec[TierLateArm],
+    branches: i64,
 }
 
 /// The arms that are a name still read after their choice, or in a later turn
 /// of a loop around the choice but not around the name, by their nodes.
-fn late_arms(program: ref Program, ask: ref TierAsk) -> collections::BTreeSet[i64] {
-    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet() }
+fn late_arms(program: ref Program, ask: ref TierAsk) -> TierLateFound {
+    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0 }
     for item in program.items {
         match item.node {
             Item::Fn { .. } => late_function(item.node, ask, late),
@@ -2314,7 +2367,7 @@ fn late_arms(program: ref Program, ask: ref TierAsk) -> collections::BTreeSet[i6
             else => {}
         }
     }
-    return late.found
+    return TierLateFound { arms: late.found.clone(), args: late.args.clone(), params: late.params.clone() }
 }
 
 fn late_function(item: ref Item, ask: ref TierAsk, mut late: TierLate) {
@@ -2337,10 +2390,14 @@ fn late_body(body: ref Block, names: Vec[String], ask: ref TierAsk, mut late: Ti
     late.leaving = 0
     late.leaves = []
     late.pending = []
+    late.branch_args = []
+    late.branches = 0
     late_open(late)
+    late.params_from = late.serial
     for name in names {
         late_bind(name.clone(), late)
     }
+    late.params_upto = late.serial
     late_block(body, false, ask, late)
     late_close(late)
 }
@@ -2396,13 +2453,25 @@ fn late_read(name: ref String, mut late: TierLate) {
         return
     }
     let mut read: Vec[i64] = []
-    for arm in late.pending {
+    let mut handed: Vec[i64] = []
+    let mut waiting = late.pending.clone()
+    for arm in late.branch_args {
+        waiting.push(arm.clone())
+    }
+    for arm in waiting {
         if arm.serial == serial && arm.name == name {
-            read.push(arm.at)
+            if arm.argument {
+                handed.push(arm.at)
+            } else {
+                read.push(arm.at)
+            }
         }
     }
     for at in read {
         late.found.insert(at)
+    }
+    for at in handed {
+        late.args.insert(at)
     }
 }
 
@@ -2416,6 +2485,46 @@ fn late_written(name: ref String, mut late: TierLate) {
         }
     }
     late.pending = kept
+    let mut branch: Vec[TierLateArm] = []
+    for arm in late.branch_args {
+        if arm.serial != serial || arm.name != name {
+            branch.push(arm.clone())
+        }
+    }
+    late.branch_args = branch
+}
+
+/// What waits for a later read: inside a branch, until the choice ends.
+fn late_defer(arm: TierLateArm, mut late: TierLate) {
+    if late.branches > 0 {
+        late.branch_args.push(arm)
+    } else {
+        late.pending.push(arm)
+    }
+}
+
+/// The branches of a choice begin: what waits from inside each is gathered
+/// apart from the others.
+fn late_branches_opened(mut late: TierLate) -> Vec[TierLateArm] {
+    let outer = late.branch_args.clone()
+    late.branch_args = []
+    late.branches += 1
+    return outer
+}
+
+fn late_branch_ended(mut gathered: Vec[TierLateArm], mut late: TierLate) {
+    for arm in late.branch_args {
+        gathered.push(arm.clone())
+    }
+    late.branch_args = []
+}
+
+fn late_branches_closed(outer: Vec[TierLateArm], gathered: ref Vec[TierLateArm], mut late: TierLate) {
+    late.branches -= 1
+    late.branch_args = outer
+    for arm in gathered {
+        late_defer(arm.clone(), late)
+    }
 }
 
 fn late_block(block: ref Block, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
@@ -2529,7 +2638,7 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             late_read(word, late)
             let serial = late_serial(word, late)
             if leaf && serial >= 0 {
-                late.leaves.push(TierLateArm { at: node_key(expr), name: word.clone(), serial: serial, loops: late_loops(word, late) })
+                late.leaves.push(TierLateArm { at: node_key(expr), name: word.clone(), serial: serial, loops: late_loops(word, late), argument: false })
             }
         }
         Expr::If { cond, then_branch, else_branch, .. } => {
@@ -2540,13 +2649,20 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             }
             let otherwise = else_branch ?? return
             let held = late_choice_opened(leaf, late)
+            let outer = late_branches_opened(late)
+            let mut gathered: Vec[TierLateArm] = []
             late_block(then_branch, true, ask, late)
+            late_branch_ended(gathered, late)
             late_block(otherwise, true, ask, late)
+            late_branch_ended(gathered, late)
+            late_branches_closed(outer, gathered, late)
             late_choice_closed(leaf, held, late)
         }
         Expr::Match { value, arms, .. } => {
             late_expr(value, false, ask, late)
             let held = late_choice_opened(leaf, late)
+            let outer = late_branches_opened(late)
+            let mut gathered: Vec[TierLateArm] = []
             for arm in arms {
                 late_open(late)
                 late_pattern(arm.pattern, ask, late)
@@ -2555,7 +2671,9 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
                 }
                 late_expr(arm.body, true, ask, late)
                 late_close(late)
+                late_branch_ended(gathered, late)
             }
+            late_branches_closed(outer, gathered, late)
             late_choice_closed(leaf, held, late)
         }
         Expr::Block(block, _) => late_block(block, leaf, ask, late),
@@ -2572,6 +2690,11 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
         Expr::Call { func, args, .. } => {
             late_expr(func, false, ask, late)
             late_all(args, ask, late)
+            // After every argument: one read beside it in the same call is
+            // not after it, and may take the text it hands over.
+            for arg in args {
+                late_argument(arg, ask, late)
+            }
         }
         Expr::MethodCall { receiver, args, .. } => {
             late_expr(receiver, false, ask, late)
@@ -2652,6 +2775,29 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
     }
 }
 
+/// **A name handed as it is to a call** (#716): read again in a later turn of
+/// a loop around the call but not around the name, or after the call, it is
+/// a view where the parameter keeps its text.
+fn late_argument(arg: ref Expr, ask: ref TierAsk, mut late: TierLate) {
+    if late.leaving > 0 {
+        return
+    }
+    let word = match arg {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => return,
+    }
+    let serial = late_serial(word, late)
+    if serial < 0 {
+        return
+    }
+    let loops = late_loops(word, late)
+    if late.loops > loops {
+        late.args.insert(node_key(arg))
+        return
+    }
+    late_defer(TierLateArm { at: node_key(arg), name: word.clone(), serial: serial, loops: loops, argument: true }, late)
+}
+
 /// A choice begins: the outermost one collects its arms afresh.
 fn late_choice_opened(leaf: bool, mut late: TierLate) -> Vec[TierLateArm] {
     if leaf {
@@ -2675,10 +2821,13 @@ fn late_choice_closed(leaf: bool, held: Vec[TierLateArm], mut late: TierLate) {
         return
     }
     for arm in arms {
+        if arm.serial > late.params_from && arm.serial <= late.params_upto {
+            late.params.insert(arm.at)
+        }
         if late.loops > arm.loops {
             late.found.insert(arm.at)
         } else {
-            late.pending.push(arm.clone())
+            late_defer(arm.clone(), late)
         }
     }
 }
@@ -2727,7 +2876,8 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             let kinds = kinds_of_local(ask.names.resolve(name), walk)
             // **An arm that is a name still read later is a view of it**
             // (ADR-282 D7, D13, #712): moving it would end what is read next.
-            if walk.late.contains(node_key(expr)) && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
+            let late = walk.late.contains(node_key(expr)) || walk.param_arms.contains(node_key(expr))
+            if late && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
                 walk.flows.viewed_arms.insert(node_key(expr))
                 return view_kinds()
             }
@@ -3824,6 +3974,118 @@ fn a_parameter_itself(word: ref String, flows: ref Flows) -> bool {
     return a_parameter && position.path.len() == 0
 }
 
+/// **The `String` parameters that keep their text** (#716): handed as they
+/// are into a place that is not a parameter - the result, a field, a list -
+/// or to a parameter that keeps it.
+fn tier_keeping(flows: ref Flows) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for (from, to) in flows.param_into {
+        if !a_parameter_itself(to, flows) {
+            out.insert(from.clone())
+        }
+    }
+    let mut growing = true
+    while growing {
+        growing = false
+        for (from, to) in flows.param_into {
+            if out.contains(to) && !out.contains(from) {
+                out.insert(from.clone())
+                growing = true
+            }
+        }
+    }
+    return out
+}
+
+fn same_words(a: ref collections::BTreeSet[String], b: ref collections::BTreeSet[String]) -> bool {
+    if a.len() != b.len() {
+        return false
+    }
+    for word in a {
+        if !b.contains(word) {
+            return false
+        }
+    }
+    return true
+}
+
+/// **An arm that is a parameter named nowhere else is a view of it** where
+/// its choice goes to a parameter that keeps its text (#716): the function
+/// only hands it on, so its callers lend it, and the parameter it goes to
+/// takes the view beside the other arms' text of its own (`EitherText`).
+fn viewed_param_arms(flows: ref Flows, before: ref collections::BTreeSet[i64]) -> collections::BTreeSet[i64] {
+    let mut out = before.clone()
+    let mut counts: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for (_, word) in flows.param_arm_into {
+        let held = counts[word] ?? 0
+        counts.insert(word.clone(), held + 1)
+    }
+    for (at, word) in flows.param_arm_into {
+        let named = flows.uses[word] ?? 0
+        let arms = counts[word] ?? 0
+        if named == arms {
+            out.insert(at.clone())
+        }
+    }
+    return out
+}
+
+/// **A `String` parameter of a function of this file that keeps its text**
+/// (#716): not published - a published one is decided for the package
+/// (ADR-282 D22) - nor a trait's, `mut`, `String?` or written `ref`.
+fn a_keeping_target(function: ref FnDecl, at: i64, ask: ref TierAsk) -> bool {
+    if function.published || function.of_a_trait || at >= function.params.len() {
+        return false
+    }
+    if at < function.changes.len() && function.changes[at] {
+        return false
+    }
+    let ty = function.params[at].clone()
+    if !plain_string(ask.names, ty) || ty.is_nullable || ty.is_view {
+        return false
+    }
+    return true
+}
+
+/// The arms of a choice handed to a parameter that keeps its text that are a
+/// parameter of the function walked, in a choice that does not leave it.
+fn param_arm_leaves(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    match value {
+        Expr::Block(block, _) => param_arm_tail(block, ask, walk),
+        Expr::If { then_branch, else_branch, .. } => {
+            param_arm_tail(then_branch, ask, walk)
+            let otherwise = else_branch ?? return
+            param_arm_tail(otherwise, ask, walk)
+        }
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                param_arm_leaves(arm.body, ask, walk)
+            }
+        }
+        Expr::Variable(_, _) => {
+            if !walk.late_params.contains(node_key(value)) {
+                return
+            }
+            let word = lendable_parameter(value, ask, walk) ?? return
+            if walk.unlent.contains(word) {
+                return
+            }
+            walk.flows.param_arm_into.insert(node_key(value), word)
+        }
+        else => {}
+    }
+}
+
+fn param_arm_tail(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) {
+    if block.stmts.len() == 0 {
+        return
+    }
+    match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Expr(last) => param_arm_leaves(last, ask, walk),
+        else => {}
+    }
+}
+
 /// Whether a parameter is declared `String?`.
 fn a_nullable_parameter(word: ref String, flows: ref Flows, declared: ref TextDeclared) -> bool {
     let position = flows.known[word] ?? return false
@@ -3893,7 +4155,11 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: late_arms(program, ask) }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), param_arms: collections::BTreeSet() }
+    let found = late_arms(program, ask)
+    walk.late = found.arms
+    walk.late_args = found.args
+    walk.late_params = found.params
     for _ in 0..<16 {
         walk.flows = no_flows()
         walk_program(program, ask, walk)
@@ -3901,11 +4167,16 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
         let unlent_before = walk.unlent.len()
         let next = decide_tiers(walk.flows, walk.declared, walk.demoted, walk.unlent)
         let linked = same_adopted(walk.flows.adopted, walk.adopted)
-        if same_tiers(next, walk.tiers) && linked && walk.demoted.len() == demoted_before && walk.unlent.len() == unlent_before {
+        let keeping = tier_keeping(walk.flows)
+        let arms = viewed_param_arms(walk.flows, walk.param_arms)
+        let settled = same_words(keeping, walk.keeping) && arms.len() == walk.param_arms.len()
+        if same_tiers(next, walk.tiers) && linked && settled && walk.demoted.len() == demoted_before && walk.unlent.len() == unlent_before {
             break
         }
         walk.tiers = next
         walk.adopted = walk.flows.adopted.clone()
+        walk.keeping = keeping
+        walk.param_arms = arms
     }
     let mut tiers: Vec[(TextPosition, Tier)] = []
     for (word, tier) in walk.tiers {

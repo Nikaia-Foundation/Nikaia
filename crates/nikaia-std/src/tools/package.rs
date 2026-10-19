@@ -57195,9 +57195,10 @@ struct Flows {
     arg_uses: collections::BTreeMap<String, i64>,
     changed: collections::BTreeSet<String>,
     viewed_arms: collections::BTreeSet<i64>,
+    param_arm_into: collections::BTreeMap<i64, String>,
 }
 
-fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new() } }
+fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 struct TierWalk {
@@ -57218,6 +57219,10 @@ struct TierWalk {
     tail_back: bool,
     ties: collections::BTreeMap<String, Vec<TextTie>>,
     late: collections::BTreeSet<i64>,
+    late_args: collections::BTreeSet<i64>,
+    late_params: collections::BTreeSet<i64>,
+    keeping: collections::BTreeSet<String>,
+    param_arms: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58506,6 +58511,14 @@ fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_
                 walk.unlent.insert(word);
             }
             let mut kinds = (*nikaia_std::index::get(&given, nikaia_std::index::at(at))).clone();
+            if a_keeping_target(&function, at, ask) && walk.keeping.contains(&position_word(&owner, &no_path())) {
+                let only_owned = kinds.owned && !kinds.view && !kinds.either && !kinds.still;
+                if only_owned && walk.late_args.contains(&node_key(nikaia_std::index::get(&args, nikaia_std::index::at(at)))) && lendable_parameter(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk).is_none() {
+                    walk.flows.viewed_arms.insert(node_key(nikaia_std::index::get(&args, nikaia_std::index::at(at))));
+                    kinds = view_kinds();
+                }
+                if tier_a_choice(nikaia_std::index::get(&args, nikaia_std::index::at(at))) { param_arm_leaves(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk); }
+            }
             if a_text_parameter(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
                 let source = lendable_parameter(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk);
                 if source.is_some() {
@@ -58537,6 +58550,14 @@ struct TierLateArm {
     name: String,
     serial: i64,
     loops: i64,
+    argument: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TierLateFound {
+    arms: collections::BTreeSet<i64>,
+    args: collections::BTreeSet<i64>,
+    params: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58555,10 +58576,16 @@ struct TierLate {
     leaves: Vec<TierLateArm>,
     pending: Vec<TierLateArm>,
     found: collections::BTreeSet<i64>,
+    args: collections::BTreeSet<i64>,
+    params: collections::BTreeSet<i64>,
+    params_from: i64,
+    params_upto: i64,
+    branch_args: Vec<TierLateArm>,
+    branches: i64,
 }
 
-fn late_arms(program: &Program, ask: &TierAsk<'_, '_, '_>) -> collections::BTreeSet<i64> {
-    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new() };
+fn late_arms(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TierLateFound {
+    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0 };
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => { late_function(&item.node, ask, &mut late); },
@@ -58568,7 +58595,7 @@ fn late_arms(program: &Program, ask: &TierAsk<'_, '_, '_>) -> collections::BTree
             _ => { },
         }
     }
-    late.found
+    TierLateFound { arms: late.found.to_owned(), args: late.args.to_owned(), params: late.params.to_owned() }
 }
 
 fn late_function(item: &Item, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
@@ -58589,8 +58616,12 @@ fn late_body(body: &Block, names: &[String], ask: &TierAsk<'_, '_, '_>, late: &m
     late.leaving = 0;
     late.leaves = vec![];
     late.pending = vec![];
+    late.branch_args = vec![];
+    late.branches = 0;
     late_open(late);
+    late.params_from = late.serial;
     for name in names.iter() { late_bind(name.to_owned(), late); }
+    late.params_upto = late.serial;
     late_block(body, false, ask, late);
     late_close(late);
 }
@@ -58632,10 +58663,17 @@ fn late_read(name: &str, late: &mut TierLate) {
     let serial = late_serial(name, &late);
     if serial < 0 { return; }
     let mut read: Vec<i64> = vec![];
-    for arm in late.pending.iter() { if arm.serial == serial && arm.name == name { read.push(arm.at); } }
+    let mut handed: Vec<i64> = vec![];
+    let mut waiting = late.pending.to_owned();
+    for arm in late.branch_args.iter() { waiting.push(arm.clone()); }
+    for arm in waiting.iter() { if arm.serial == serial && arm.name == name { if arm.argument { handed.push(arm.at); } else { read.push(arm.at); } } }
     for at in read.iter() {
         let at = nikaia_std::num::value(at);
         late.found.insert(at);
+    }
+    for at in handed.iter() {
+        let at = nikaia_std::num::value(at);
+        late.args.insert(at);
     }
 }
 
@@ -58644,6 +58682,29 @@ fn late_written(name: &str, late: &mut TierLate) {
     let mut kept: Vec<TierLateArm> = vec![];
     for arm in late.pending.iter() { if arm.serial != serial || arm.name != name { kept.push(arm.clone()); } }
     late.pending = kept;
+    let mut branch: Vec<TierLateArm> = vec![];
+    for arm in late.branch_args.iter() { if arm.serial != serial || arm.name != name { branch.push(arm.clone()); } }
+    late.branch_args = branch;
+}
+
+fn late_defer(arm: TierLateArm, late: &mut TierLate) { if late.branches > 0 { late.branch_args.push(arm); } else { late.pending.push(arm); } }
+
+fn late_branches_opened(late: &mut TierLate) -> Vec<TierLateArm> {
+    let outer = late.branch_args.to_owned();
+    late.branch_args = vec![];
+    late.branches += 1;
+    outer
+}
+
+fn late_branch_ended(gathered: &mut Vec<TierLateArm>, late: &mut TierLate) {
+    for arm in late.branch_args.iter() { gathered.push(arm.clone()); }
+    late.branch_args = vec![];
+}
+
+fn late_branches_closed(outer: Vec<TierLateArm>, gathered: &[TierLateArm], late: &mut TierLate) {
+    late.branches -= 1;
+    late.branch_args = outer;
+    for arm in gathered.iter() { late_defer(arm.clone(), late); }
 }
 
 fn late_block(block: &Block, leaf: bool, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
@@ -58729,7 +58790,7 @@ fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_>, late: &mut Tier
             let word = ask.names.resolve(name).to_owned();
             late_read(&word, late);
             let serial = late_serial(&word, &late);
-            if leaf && serial >= 0 { late.leaves.push(TierLateArm { at: node_key(expr), name: word.to_owned(), serial, loops: late_loops(&word, &late) }); }
+            if leaf && serial >= 0 { late.leaves.push(TierLateArm { at: node_key(expr), name: word.to_owned(), serial, loops: late_loops(&word, &late), argument: false }); }
         },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
@@ -58740,21 +58801,30 @@ fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_>, late: &mut Tier
             }
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
             let held = late_choice_opened(leaf, late);
+            let outer = late_branches_opened(late);
+            let mut gathered: Vec<TierLateArm> = vec![];
             late_block(then_branch, true, ask, late);
+            late_branch_ended(&mut gathered, late);
             late_block(otherwise, true, ask, late);
+            late_branch_ended(&mut gathered, late);
+            late_branches_closed(outer, &gathered, late);
             late_choice_closed(leaf, held, late);
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
             late_expr(value, false, ask, late);
             let held = late_choice_opened(leaf, late);
+            let outer = late_branches_opened(late);
+            let mut gathered: Vec<TierLateArm> = vec![];
             for arm in arms.iter() {
                 late_open(late);
                 late_pattern(&arm.pattern, ask, late);
                 if arm.guard.is_some() { late_maybe((arm.guard).as_ref(), ask, late); }
                 late_expr(&arm.body, true, ask, late);
                 late_close(late);
+                late_branch_ended(&mut gathered, late);
             }
+            late_branches_closed(outer, &gathered, late);
             late_choice_closed(leaf, held, late);
         },
         Expr::Block(block, _) => { late_block(block, leaf, ask, late); },
@@ -58772,6 +58842,7 @@ fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_>, late: &mut Tier
             let func = nikaia_std::boxed::open(func);
             late_expr(func, false, ask, late);
             late_all(args, ask, late);
+            for arg in args.iter() { late_argument(arg, ask, late); }
         },
         Expr::MethodCall { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -58859,6 +58930,22 @@ fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_>, late: &mut Tier
     }
 }
 
+fn late_argument(arg: &Expr, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
+    if late.leaving > 0 { return; }
+    let word = match arg {
+        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
+        _ => return,
+    };
+    let serial = late_serial(&word, &late);
+    if serial < 0 { return; }
+    let loops = late_loops(&word, &late);
+    if late.loops > loops {
+        late.args.insert(node_key(arg));
+        return;
+    }
+    late_defer(TierLateArm { at: node_key(arg), name: word.to_owned(), serial, loops, argument: true }, late);
+}
+
 fn late_choice_opened(leaf: bool, late: &mut TierLate) -> Vec<TierLateArm> {
     if leaf { return vec![]; }
     let held = late.leaves.to_owned();
@@ -58871,7 +58958,10 @@ fn late_choice_closed(leaf: bool, held: Vec<TierLateArm>, late: &mut TierLate) {
     let arms = late.leaves.to_owned();
     late.leaves = held;
     if late.leaving > 0 { return; }
-    for arm in arms.iter() { if late.loops > arm.loops { late.found.insert(arm.at); } else { late.pending.push(arm.clone()); } }
+    for arm in arms.iter() {
+        if arm.serial > late.params_from && arm.serial <= late.params_upto { late.params.insert(arm.at); }
+        if late.loops > arm.loops { late.found.insert(arm.at); } else { late_defer(arm.clone(), late); }
+    }
 }
 
 fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
@@ -58913,7 +59003,8 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
         Expr::Variable(name, _) => {
             let name = *name;
             let kinds = kinds_of_local(ask.names.resolve(name), &walk);
-            if walk.late.contains(&node_key(expr)) && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
+            let late = walk.late.contains(&node_key(expr)) || walk.param_arms.contains(&node_key(expr));
+            if late && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
                 walk.flows.viewed_arms.insert(node_key(expr));
                 return view_kinds();
             }
@@ -59778,6 +59869,79 @@ fn a_parameter_itself(word: &str, flows: &Flows) -> bool {
     a_parameter && position.path.is_empty()
 }
 
+fn tier_keeping(flows: &Flows) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (from, to) in flows.param_into.iter() { if !a_parameter_itself(to, flows) { out.insert(from.to_owned()); } }
+    let mut growing = true;
+    while growing {
+        growing = false;
+        for (from, to) in flows.param_into.iter() {
+            if out.contains(to) && !out.contains(from) {
+                out.insert(from.to_owned());
+                growing = true;
+            }
+        }
+    }
+    out
+}
+
+fn same_words(a: &collections::BTreeSet<String>, b: &collections::BTreeSet<String>) -> bool {
+    if (a.len() as i64) != b.len() as i64 { return false; }
+    for word in a.iter() { if !b.contains(word) { return false; } }
+    true
+}
+
+fn viewed_param_arms(flows: &Flows, before: &collections::BTreeSet<i64>) -> collections::BTreeSet<i64> {
+    let mut out = before.to_owned();
+    let mut counts: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for (_, word) in flows.param_arm_into.iter() {
+        let held = nikaia_std::index::or(*nikaia_std::index::get(&counts, word), || 0);
+        counts.insert(word.to_owned(), held + 1);
+    }
+    for (at, word) in flows.param_arm_into.iter() {
+        let at = nikaia_std::num::value(at);
+        let named = nikaia_std::index::or(*nikaia_std::index::get(&flows.uses, word), || 0);
+        let arms = nikaia_std::index::or(*nikaia_std::index::get(&counts, word), || 0);
+        if named == arms { out.insert(at.clone()); }
+    }
+    out
+}
+
+fn a_keeping_target(function: &FnDecl, at: i64, ask: &TierAsk<'_, '_, '_>) -> bool {
+    if function.published || function.of_a_trait || at >= function.params.len() as i64 { return false; }
+    if at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { return false; }
+    let ty = (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at))).clone();
+    if !plain_string(ask.names, &ty) || ty.is_nullable || ty.is_view { return false; }
+    true
+}
+
+fn param_arm_leaves(value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    match value {
+        Expr::Block(block, _) => { param_arm_tail(block, ask, walk); },
+        Expr::If { then_branch, else_branch, .. } => {
+            param_arm_tail(then_branch, ask, walk);
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+            param_arm_tail(otherwise, ask, walk);
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { param_arm_leaves(&arm.body, ask, walk); } },
+        Expr::Variable(_, _) => {
+            if !walk.late_params.contains(&node_key(value)) { return; }
+            let word = match lendable_parameter(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if walk.unlent.contains(&word) { return; }
+            walk.flows.param_arm_into.insert(node_key(value), word);
+        },
+        _ => { },
+    }
+}
+
+fn param_arm_tail(block: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    if block.stmts.is_empty() { return; }
+    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        Stmt::Expr(last) => { param_arm_leaves(last, ask, walk); },
+        _ => { },
+    }
+}
+
 fn a_nullable_parameter(word: &str, flows: &Flows, declared: &TextDeclared) -> bool {
     let position = match *nikaia_std::index::get(&flows.known, word) { Some(__nikaia_value) => __nikaia_value, None => return false };
     match &position.owner {
@@ -59835,7 +59999,11 @@ fn tier_word(tier: Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: late_arms(program, ask) };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new() };
+    let found = late_arms(program, ask);
+    walk.late = found.arms;
+    walk.late_args = found.args;
+    walk.late_params = found.params;
     for _ in 0..16 {
         walk.flows = no_flows();
         walk_program(program, ask, &mut walk);
@@ -59843,9 +60011,14 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
         let unlent_before = walk.unlent.len() as i64;
         let next = decide_tiers(&walk.flows, &walk.declared, &mut walk.demoted, &mut walk.unlent);
         let linked = same_adopted(&walk.flows.adopted, &walk.adopted);
-        if same_tiers(&next, &walk.tiers) && linked && (walk.demoted.len() as i64) == demoted_before && (walk.unlent.len() as i64) == unlent_before { break; }
+        let keeping = tier_keeping(&walk.flows);
+        let arms = viewed_param_arms(&walk.flows, &walk.param_arms);
+        let settled = same_words(&keeping, &walk.keeping) && (arms.len() as i64) == walk.param_arms.len() as i64;
+        if same_tiers(&next, &walk.tiers) && linked && settled && (walk.demoted.len() as i64) == demoted_before && (walk.unlent.len() as i64) == unlent_before { break; }
         walk.tiers = next;
         walk.adopted = walk.flows.adopted.to_owned();
+        walk.keeping = keeping;
+        walk.param_arms = arms;
     }
     let mut tiers: Vec<(TextPosition, Tier)> = vec![];
     for (word, tier) in walk.tiers.iter() {

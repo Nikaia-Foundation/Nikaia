@@ -1,0 +1,15 @@
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    let t = f"tea{1}"
+    let r = longest(f"n{2}", "ab")
+    println(r)
+    let q = longest(t, "abcdefg")
+    println(q)
+    println(t)
+}

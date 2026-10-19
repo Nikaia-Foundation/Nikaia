@@ -1,0 +1,18 @@
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+
+fn show(s: String, n: i64) {
+    let r = longest(if n == 0 { s } else { f"n{n}" }, "ab")
+    println(r)
+}
+
+fn main() {
+    let s = f"base{1}"
+    show(s, 0)
+    show(s, 7)
+    println(s)
+}

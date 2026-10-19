@@ -1277,8 +1277,13 @@ fn main() throws {
         assert!(rust.contains(kept), "{kept}\n{rust}");
     }
     let reused = "fn mixed(a: String, b: bool) -> String {\n    if b { return a }\n    return f\"own{1}\"\n}\nfn main() {\n    let x = f\"x{1}\"\n    println(mixed(x, true))\n    println(x)\n}\n";
+    // Read again after the call, `x` goes in as a view (#716): the only text
+    // `a` is handed, so `a` is one, and `x` is lent, not handed over.
     let found = findings(reused);
-    assert!(found.iter().any(|f| f.code == "NK2105"), "{found:#?}");
+    assert!(found.is_empty(), "{found:#?}");
+    let rust = lowered(reused, Build::default());
+    assert!(rust.contains("fn mixed(a: &str, b: bool)"), "{rust}");
+    assert!(rust.contains("mixed(&x, true)"), "{rust}");
 }
 
 /// **An argument made in the call lives as long as the struct of views handed
@@ -1905,4 +1910,64 @@ fn an_arm_naming_text_read_later_is_a_view_of_it() {
             && !rust.contains("either"),
         "{rust}"
     );
+}
+
+/// **A name handed to a parameter that keeps its text, and still read later,
+/// goes in as a view** (ADR-282 D7, D13, #716): `t`, read again in the loop's
+/// next turn, is lent to `longest`'s `a`, which takes both kinds beside the
+/// text of its own the first call hands it. Where nothing reads `t` again, it
+/// is handed over as before and `a` stays a `String`. That the first runs is
+/// `tests/accepted/716_name_kept_in_loop.nika`.
+#[test]
+fn a_name_read_later_handed_to_a_keeping_parameter_is_a_view() {
+    let longest = r##"fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+"##;
+    let later = format!(
+        "{longest}{}",
+        r##"
+fn main() {
+    let t = f"t{1}"
+    for n in 0..<3 {
+        let r = longest(if n == 0 { "lit" } else { f"n{n}" }, "ab")
+        println(r)
+        let q = longest(t, "abcdefg")
+        println(q)
+    }
+}
+"##
+    );
+    let rust = lowered(&later, Build::default());
+    assert!(
+        rust.contains("fn longest<'r>(a: nikaia_std::either_text::EitherText<'r>"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("longest(nikaia_std::either_text::either(&t), \"abcdefg\")"),
+        "{rust}"
+    );
+    let moved = format!(
+        "{longest}{}",
+        r##"
+fn main() {
+    let t = f"t{1}"
+    for n in 0..<3 {
+        let r = longest(if n == 0 { "lit" } else { f"n{n}" }, "ab")
+        println(r)
+    }
+    let q = longest(t, "abcdefg")
+    println(q)
+}
+"##
+    );
+    let rust = lowered(&moved, Build::default());
+    assert!(
+        rust.contains("fn longest(a: String, b: &'static str)"),
+        "{rust}"
+    );
+    assert!(rust.contains("let q = longest(t, \"abcdefg\");"), "{rust}");
 }
