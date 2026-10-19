@@ -912,6 +912,42 @@ fn flow_payload(callee: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], 
     }
 }
 
+/// **A payload of static text bound in a match arm** is a view of static
+/// text read out of the payload (ADR-282 D29): where the arm hands it on
+/// beside text of its own, the payload keeps text of its own too.
+fn bind_static_payloads(pattern: ref MatchPattern, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    let mut bound = false
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            let written = unaliased_in(ask.aliases, joined_segments(path, ask.names))
+            let declared = walk.declared.variants[written]?.clone() ?? return false
+            let (of, variant) = variant_named(written)
+            let mut at = 0
+            for part in parts {
+                if at >= declared.len() {
+                    return bound
+                }
+                let owner = TextOwner::Variant(of.clone(), variant.clone(), at)
+                let lasting = plain_string(ask.names, declared[at]) && lasting_tier(tier_at(position_word(owner, no_path()), walk))
+                match part {
+                    MatchPattern::Path(named) => {
+                        if lasting && named.len() == 1 && !names_a_type(ask.names.resolve(named[0])) {
+                            let mut local = plain_local(still_kinds())
+                            local.from = seen(owner, no_path(), walk)
+                            bind_tier_local(ask.names.resolve(named[0]).clone(), local, walk)
+                            bound = true
+                        }
+                    }
+                    else => {}
+                }
+                at += 1
+            }
+        }
+        else => {}
+    }
+    return bound
+}
+
 /// `E::V` as the enum's name and the variant's.
 fn variant_named(callee: ref String) -> (String, String) {
     let variant = last_segment(callee)
@@ -1992,15 +2028,28 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                 }
             }
             let mut out = no_kinds()
+            // The positions a payload an arm binds was read out of, found
+            // while the arm's names are bound.
+            let mut payloads: Vec[String] = []
             for arm in arms {
+                open_tier_scope(walk)
+                let bound = bind_static_payloads(arm.pattern, ask, walk)
                 if arm.guard != null {
                     let guard = arm.guard ?? continue
                     tier_expr(guard, ask, walk)
                 }
                 out = kinds_joined(out, tier_expr(arm.body, ask, walk))
+                if bound {
+                    still_sources(arm.body, ask, walk, payloads)
+                }
+                close_tier_scope(walk)
             }
             if beside_its_own(out) {
                 kept_unseen(expr, ask, walk)
+                for read_from in payloads {
+                    flow_word(read_from, owned_kinds(), walk)
+                    walk.flows.demoted.insert(read_from.clone())
+                }
             }
             if literals_beside_null(expr) {
                 return owned_kinds()

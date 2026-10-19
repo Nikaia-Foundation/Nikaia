@@ -57190,6 +57190,40 @@ fn flow_payload(callee: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, 
     }
 }
 
+fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> bool {
+    let mut bound = false;
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            let written = unaliased_in(ask.aliases, &joined_segments(path, ask.names));
+            let declared = match match *nikaia_std::index::get(&walk.declared.variants, &written) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let (of, variant) = variant_named(&written);
+            let mut at: i64 = 0;
+            for part in parts.iter() {
+                if at >= declared.len() as i64 { return bound; }
+                let owner = TextOwner::Variant(of.to_owned(), variant.to_owned(), at);
+                let lasting = plain_string(ask.names, nikaia_std::index::get(&declared, nikaia_std::index::at(at))) && lasting_tier(tier_at(&position_word(&owner, &no_path()), &walk));
+                match part {
+                    MatchPattern::Path(named) => {
+                        if lasting && named.len() == 1 && !names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) {
+                            let mut local = plain_local(still_kinds());
+                            local.from = Some(seen(&owner, &no_path(), walk));
+                            bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
+                            bound = true;
+                        }
+                    },
+                    _ => { },
+                }
+                at += 1;
+            }
+        },
+        _ => { },
+    }
+    bound
+}
+
 fn variant_named(callee: &str) -> (String, String) {
     let variant = last_segment(callee);
     let of = nikaia_std::index::or(callee.strip_suffix(&format!("::{}", variant)), || "").to_owned();
@@ -58068,14 +58102,25 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
                 if container_source((whole).as_ref(), ask) { kept_unseen(value, ask, walk); }
             }
             let mut out = no_kinds();
+            let mut payloads: Vec<String> = vec![];
             for arm in arms.iter() {
+                open_tier_scope(walk);
+                let bound = bind_static_payloads(&arm.pattern, ask, walk);
                 if arm.guard.is_some() {
                     let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                     tier_expr(guard, ask, walk);
                 }
                 out = kinds_joined(&out, &tier_expr(&arm.body, ask, walk));
+                if bound { still_sources(&arm.body, ask, walk, &mut payloads); }
+                close_tier_scope(walk);
             }
-            if beside_its_own(&out) { kept_unseen(expr, ask, walk); }
+            if beside_its_own(&out) {
+                kept_unseen(expr, ask, walk);
+                for read_from in payloads.iter() {
+                    flow_word(read_from, &owned_kinds(), walk);
+                    walk.flows.demoted.insert(read_from.to_owned());
+                }
+            }
             if literals_beside_null(expr) { return owned_kinds(); }
             out
         },

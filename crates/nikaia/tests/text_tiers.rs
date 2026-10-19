@@ -1385,6 +1385,38 @@ fn a_variant_payload_takes_the_tier_of_what_flows_in() {
     runs("variant-mixed", &mixed, "w0\nhi 1");
 }
 
+/// **A payload of static text bound in a match arm** (ADR-282 D29, #680):
+/// handed into a result beside text of its own, the payload keeps text of its
+/// own, as a field read there does; beside literals only, the result is the
+/// static text it holds. NK1104 before, on `n` beside `"?".clone()`.
+#[test]
+fn a_static_payload_bound_in_a_match_arm_follows_where_it_goes() {
+    let source = r##"enum T {
+    Unknown,
+    Named(String),
+}
+
+fn show(t: T) -> String {
+    return match t {
+        T::Unknown => "?".clone(),
+        T::Named(n) => n,
+    }
+}
+
+fn main() {
+    println(f"{show(T::Named("x"))} {show(T::Unknown)}")
+}
+"##;
+    runs("static-payload-beside-own", source, "x ?");
+    let rust = lowered(source, Build::default());
+    assert!(rust.contains("Named(String)"), "{rust}");
+
+    let lasting = source.replace("\"?\".clone()", "\"?\"");
+    runs("static-payload-beside-literals", &lasting, "x ?");
+    let rust = lowered(&lasting, Build::default());
+    assert!(rust.contains("Named(&'static str)"), "{rust}");
+}
+
 /// **`examples/json` without `ref`** (#680): `Text(String)` lowers byte for
 /// byte as `Text(ref String)` did, every parsed string a view of the input.
 #[test]
