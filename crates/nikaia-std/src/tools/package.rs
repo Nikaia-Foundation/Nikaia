@@ -32935,6 +32935,7 @@ impl EmitState {
             if !crossings { return lock_name(Count::Plain); }
             return lock_name(count);
         }
+        if name == "TaskHandle" && !self.structs.contains(name) && !self.structs_beside.contains(name) && !emit_below_an_enum_named(world, name) { return String::from("nikaia_std::task::TaskHandle"); }
         let mapped = self.mapped_path(trusting, name);
         unaliased_in(world.aliases, &mapped)
     }
@@ -32990,6 +32991,19 @@ pub fn emit_bounded(world: &EmitWorld<'_, '_, '_, '_>, param: &GenericParam) -> 
     if bounds.is_empty() { return name; }
     let joined = bounds.join(" + ");
     format!("{}: {}", name, joined)
+}
+
+fn emit_below_an_enum_named(world: &EmitWorld<'_, '_, '_, '_>, wanted: &str) -> bool {
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Enum { name, .. } => {
+                let name = *name;
+                if world.words.resolve(name) == wanted { return true; }
+            },
+            _ => { },
+        }
+    }
+    false
 }
 
 

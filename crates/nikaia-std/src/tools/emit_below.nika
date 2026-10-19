@@ -444,6 +444,13 @@ impl EmitState {
             }
             return lock_name(count)
         }
+        // **A task's handle is `std`'s** (#703): every program writes
+        // `TaskHandle[T]` without a `use`, as what `spawn` gives (Part I 8.2),
+        // and below it lives in `nikaia_std::task`. A type of the program by
+        // that name keeps its own.
+        if name == "TaskHandle" && !self.structs.contains(name) && !self.structs_beside.contains(name) && !emit_below_an_enum_named(world, name) {
+            return "nikaia_std::task::TaskHandle"
+        }
         let mapped = self.mapped_path(trusting, name)
         return unaliased_in(world.aliases, mapped)
     }
@@ -526,4 +533,19 @@ pub fn emit_bounded(world: ref EmitWorld, param: ref GenericParam) -> String {
     }
     let joined = bounds.join(" + ")
     return f"{name}: {joined}"
+}
+
+/// Whether this file declares an enum by the name.
+fn emit_below_an_enum_named(world: ref EmitWorld, wanted: ref String) -> bool {
+    for item in world.items {
+        match item.node {
+            Item::Enum { name, .. } => {
+                if world.words.resolve(name) == wanted {
+                    return true
+                }
+            },
+            else => {}
+        }
+    }
+    return false
 }

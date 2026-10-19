@@ -1,0 +1,13 @@
+// `TaskHandle[T]` written as a result and as a parameter (#703).
+fn started(n: i64) -> TaskHandle[i64] {
+    return spawn fn { n * 2 }
+}
+
+fn finished(h: TaskHandle[i64]) -> i64 throws {
+    return h.join()
+}
+
+fn main() throws {
+    let h = started(21)
+    println(f"{finished(h)}")
+}
