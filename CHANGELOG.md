@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1099] — 2026-10-19
+
+**Lowering looks methods up by name (#727)**
+- Method candidates are read from an index by the method's name, built where a pass starts, not from a scan of every function of the ledger for each call; output unchanged. A cold lower of a 5 000-line file: 16.41 -> 15.40 G instructions.
+
 ## [0.0.1098] — 2026-10-19
 
 **An integer literal is no float; a lambda takes what it names**
