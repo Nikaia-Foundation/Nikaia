@@ -45737,28 +45737,30 @@ pub fn lg_tightened(a: &LgLin) -> LgLin {
 }
 
 pub fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTreeMap<String, i64>) -> i64 {
-    let mut left: Vec<(String, i64)> = vec![];
+    let mut left_names: Vec<&str> = vec![];
+    let mut left_ks: Vec<i64> = vec![];
     for (name, k) in a.iter() {
         let k = nikaia_std::num::value(k);
-        left.push((name.to_owned(), k));
+        left_names.push(name);
+        left_ks.push(k);
     }
-    let mut right: Vec<(String, i64)> = vec![];
+    let mut right_names: Vec<&str> = vec![];
+    let mut right_ks: Vec<i64> = vec![];
     for (name, k) in b.iter() {
         let k = nikaia_std::num::value(k);
-        right.push((name.to_owned(), k));
+        right_names.push(name);
+        right_ks.push(k);
     }
     let mut at: i64 = 0;
-    while ((at) as usize) < left.len() && ((at) as usize) < right.len() {
-        let (lname, lk) = (*nikaia_std::index::get(&left, (at) as usize)).clone();
-        let (rname, rk) = (*nikaia_std::index::get(&right, (at) as usize)).clone();
-        if lname < rname { return -1; }
-        if rname < lname { return 1; }
-        if lk < rk { return -1; }
-        if rk < lk { return 1; }
+    while ((at) as usize) < left_ks.len() && ((at) as usize) < right_ks.len() {
+        if *nikaia_std::index::get(&left_names, (at) as usize) < *nikaia_std::index::get(&right_names, (at) as usize) { return -1; }
+        if *nikaia_std::index::get(&right_names, (at) as usize) < *nikaia_std::index::get(&left_names, (at) as usize) { return 1; }
+        if *nikaia_std::index::get(&left_ks, (at) as usize) < *nikaia_std::index::get(&right_ks, (at) as usize) { return -1; }
+        if *nikaia_std::index::get(&right_ks, (at) as usize) < *nikaia_std::index::get(&left_ks, (at) as usize) { return 1; }
         at += 1;
     }
-    if (left.len() as i64) < right.len() as i64 { return -1; }
-    if (left.len() as i64) > right.len() as i64 { return 1; }
+    if (left_ks.len() as i64) < right_ks.len() as i64 { return -1; }
+    if (left_ks.len() as i64) > right_ks.len() as i64 { return 1; }
     0
 }
 
@@ -46044,37 +46046,53 @@ fn lg_tighten_step(bound: &LgLin, steps: &mut Vec<LgStep>) -> LgHeld {
 }
 
 fn lg_sorted(held: &[LgHeld]) -> Vec<LgHeld> {
-    if held.len() < 2 { return held.to_owned(); }
-    let middle = held.len() as i64 / 2;
-    let mut left: Vec<LgHeld> = vec![];
-    let mut right: Vec<LgHeld> = vec![];
+    let mut places: Vec<i64> = vec![];
     let mut at: i64 = 0;
-    while ((at) as usize) < held.len() {
-        if at < middle { left.push((*nikaia_std::index::get(&held, (at) as usize)).clone()); } else { right.push((*nikaia_std::index::get(&held, (at) as usize)).clone()); }
+    while at < held.len() as i64 {
+        places.push(at);
         at += 1;
     }
-    let a = lg_sorted(&left);
-    let b = lg_sorted(&right);
+    let order = lg_sorted_places(held, &places);
     let mut out: Vec<LgHeld> = vec![];
+    for place in order.iter() {
+        let place = nikaia_std::num::value(place);
+        out.push((*nikaia_std::index::get(&held, nikaia_std::index::at(place))).clone());
+    }
+    out
+}
+
+fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
+    if places.len() < 2 { return places.to_owned(); }
+    let middle = places.len() as i64 / 2;
+    let mut left: Vec<i64> = vec![];
+    let mut right: Vec<i64> = vec![];
+    let mut at: i64 = 0;
+    while ((at) as usize) < places.len() {
+        if at < middle { left.push(*nikaia_std::index::get(&places, (at) as usize)); } else { right.push(*nikaia_std::index::get(&places, (at) as usize)); }
+        at += 1;
+    }
+    let a = lg_sorted_places(held, &left);
+    let b = lg_sorted_places(held, &right);
+    let mut out: Vec<i64> = vec![];
     let mut i: i64 = 0;
     let mut j: i64 = 0;
     while ((i) as usize) < a.len() && ((j) as usize) < b.len() {
-        let mut order = lg_terms_cmp(&nikaia_std::index::get(&b, (j) as usize).lin.terms, &nikaia_std::index::get(&a, (i) as usize).lin.terms);
-        if order == 0 { if nikaia_std::index::get(&a, (i) as usize).lin.constant < nikaia_std::index::get(&b, (j) as usize).lin.constant { order = -1; } else if nikaia_std::index::get(&b, (j) as usize).lin.constant < nikaia_std::index::get(&a, (i) as usize).lin.constant { order = 1; } }
+        let mut order = lg_terms_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.terms, &nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.terms);
+        if order == 0 { if nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.constant { order = -1; } else if nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.constant { order = 1; } }
         if order < 0 {
-            out.push((*nikaia_std::index::get(&b, (j) as usize)).clone());
+            out.push(*nikaia_std::index::get(&b, (j) as usize));
             j += 1;
         } else {
-            out.push((*nikaia_std::index::get(&a, (i) as usize)).clone());
+            out.push(*nikaia_std::index::get(&a, (i) as usize));
             i += 1;
         }
     }
     while ((i) as usize) < a.len() {
-        out.push((*nikaia_std::index::get(&a, (i) as usize)).clone());
+        out.push(*nikaia_std::index::get(&a, (i) as usize));
         i += 1;
     }
     while ((j) as usize) < b.len() {
-        out.push((*nikaia_std::index::get(&b, (j) as usize)).clone());
+        out.push(*nikaia_std::index::get(&b, (j) as usize));
         j += 1;
     }
     out

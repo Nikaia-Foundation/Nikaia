@@ -220,36 +220,38 @@ pub fn lg_tightened(a: ref LgLin) -> LgLin {
 /// How two maps of terms are ordered, as `BTreeMap` orders them: pair by pair,
 /// then by length.
 pub fn lg_terms_cmp(a: ref collections::BTreeMap[String, i64], b: ref collections::BTreeMap[String, i64]) -> i64 {
-    let mut left: Vec[(String, i64)] = []
+    let mut left_names: Vec[ref String] = []
+    let mut left_ks: Vec[i64] = []
     for (name, k) in a {
-        left.push((name.clone(), k))
+        left_names.push(name)
+        left_ks.push(k)
     }
-    let mut right: Vec[(String, i64)] = []
+    let mut right_names: Vec[ref String] = []
+    let mut right_ks: Vec[i64] = []
     for (name, k) in b {
-        right.push((name.clone(), k))
+        right_names.push(name)
+        right_ks.push(k)
     }
     let mut at = 0
-    while at < left.len() && at < right.len() {
-        let (lname, lk) = left[at].clone()
-        let (rname, rk) = right[at].clone()
-        if lname < rname {
+    while at < left_ks.len() && at < right_ks.len() {
+        if left_names[at] < right_names[at] {
             return -1
         }
-        if rname < lname {
+        if right_names[at] < left_names[at] {
             return 1
         }
-        if lk < rk {
+        if left_ks[at] < right_ks[at] {
             return -1
         }
-        if rk < lk {
+        if right_ks[at] < left_ks[at] {
             return 1
         }
         at += 1
     }
-    if left.len() < right.len() {
+    if left_ks.len() < right_ks.len() {
         return -1
     }
-    if left.len() > right.len() {
+    if left_ks.len() > right_ks.len() {
         return 1
     }
     return 0
@@ -648,50 +650,67 @@ fn lg_tighten_step(bound: ref LgLin, mut steps: Vec[LgStep]) -> LgHeld {
 /// Of the bounds on one form only the strongest counts: `form + c <= 0` with the
 /// largest `c`. Sorted by form, then by constant, largest first - stably.
 fn lg_sorted(held: ref Vec[LgHeld]) -> Vec[LgHeld] {
-    if held.len() < 2 {
-        return held.clone()
-    }
-    let middle = held.len() / 2
-    let mut left: Vec[LgHeld] = []
-    let mut right: Vec[LgHeld] = []
+    let mut places: Vec[i64] = []
     let mut at = 0
     while at < held.len() {
+        places.push(at)
+        at += 1
+    }
+    let order = lg_sorted_places(held, places)
+    let mut out: Vec[LgHeld] = []
+    for place in order {
+        out.push(held[place].clone())
+    }
+    return out
+}
+
+/// The places of `held` named by `places`, in `lg_sorted`'s order: a merge
+/// sort that moves numbers, not bounds.
+fn lg_sorted_places(held: ref Vec[LgHeld], places: ref Vec[i64]) -> Vec[i64] {
+    if places.len() < 2 {
+        return places.clone()
+    }
+    let middle = places.len() / 2
+    let mut left: Vec[i64] = []
+    let mut right: Vec[i64] = []
+    let mut at = 0
+    while at < places.len() {
         if at < middle {
-            left.push(held[at].clone())
+            left.push(places[at])
         } else {
-            right.push(held[at].clone())
+            right.push(places[at])
         }
         at += 1
     }
-    let a = lg_sorted(left)
-    let b = lg_sorted(right)
-    let mut out: Vec[LgHeld] = []
+    let a = lg_sorted_places(held, left)
+    let b = lg_sorted_places(held, right)
+    let mut out: Vec[i64] = []
     let mut i = 0
     let mut j = 0
     while i < a.len() && j < b.len() {
         // `b` goes first only where it is strictly before `a`.
-        let mut order = lg_terms_cmp(b[j].lin.terms, a[i].lin.terms)
+        let mut order = lg_terms_cmp(held[b[j]].lin.terms, held[a[i]].lin.terms)
         if order == 0 {
-            if a[i].lin.constant < b[j].lin.constant {
+            if held[a[i]].lin.constant < held[b[j]].lin.constant {
                 order = -1
-            } else if b[j].lin.constant < a[i].lin.constant {
+            } else if held[b[j]].lin.constant < held[a[i]].lin.constant {
                 order = 1
             }
         }
         if order < 0 {
-            out.push(b[j].clone())
+            out.push(b[j])
             j += 1
         } else {
-            out.push(a[i].clone())
+            out.push(a[i])
             i += 1
         }
     }
     while i < a.len() {
-        out.push(a[i].clone())
+        out.push(a[i])
         i += 1
     }
     while j < b.len() {
-        out.push(b[j].clone())
+        out.push(b[j])
         j += 1
     }
     return out
