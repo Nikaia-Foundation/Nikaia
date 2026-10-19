@@ -161,6 +161,17 @@ fn add_variable(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut 
     names.insert(name)
 }
 
+fn add_root(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut names: collections::BTreeSet[String]) {
+    let name = assigned_root(expr, words) ?? return
+    names.insert(name)
+}
+
+fn add_roots(exprs: ref Vec[Expr], words: ref winnow_grammar::InternerContext, mut names: collections::BTreeSet[String]) {
+    for e in exprs {
+        add_root(e, words, names)
+    }
+}
+
 fn names_the(exprs: ref Vec[Expr], list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     for e in exprs {
         if (variable_text(e, words) ?? "") == list {
@@ -323,18 +334,20 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             Expr::Call { args, .. } => add_variables(args, words, tally.names),
             else => {},
         },
+        // **A deferred body that may change a value pins the name it is
+        // under** (ADR-306 D17): `t.slots.push(x)` in a lambda pins `t`.
         Ask::Pinned => {
             if deferred {
                 match expr {
                     Expr::MethodCall { receiver, args, .. } => {
-                        add_variable(receiver, words, tally.names)
-                        add_variables(args, words, tally.names)
+                        add_root(receiver, words, tally.names)
+                        add_roots(args, words, tally.names)
                     },
                     Expr::SafeMethod { receiver, args, .. } => {
-                        add_variable(receiver, words, tally.names)
-                        add_variables(args, words, tally.names)
+                        add_root(receiver, words, tally.names)
+                        add_roots(args, words, tally.names)
                     },
-                    Expr::Call { args, .. } => add_variables(args, words, tally.names),
+                    Expr::Call { args, .. } => add_roots(args, words, tally.names),
                     else => {},
                 }
             }

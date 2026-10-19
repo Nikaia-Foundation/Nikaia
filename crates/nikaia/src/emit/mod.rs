@@ -1914,6 +1914,8 @@ impl<'p> Emitter<'p> {
                 char_codes: &propagation.char_codes,
                 arithmetic: &propagation.arithmetic,
                 negations: &propagation.negations,
+                whole_fields: &propagation.whole_fields,
+                array_lengths: &propagation.array_lengths,
             },
             &[&own_contracts, std_ledger()],
             &std::collections::BTreeSet::new(),

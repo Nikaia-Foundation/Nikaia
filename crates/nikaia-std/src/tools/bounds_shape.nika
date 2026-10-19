@@ -44,6 +44,9 @@ pub struct BodyShape {
 pub struct Around {
     pub functions: collections::BTreeMap[String, Vec[bool]],
     pub changing_methods: collections::BTreeSet[String],
+    /// The methods of this program that take their receiver `mut`: they
+    /// may change any field of it (ADR-306 D17).
+    pub changing_receivers: collections::BTreeSet[String],
 }
 
 enum Look {

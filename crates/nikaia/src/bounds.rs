@@ -144,6 +144,10 @@ pub struct Sites<'a> {
     pub arithmetic: &'a BTreeMap<i64, String>,
     /// [`crate::check::CheckFacts::negations`] (ADR-314 D5).
     pub negations: &'a BTreeMap<i64, String>,
+    /// [`crate::check::CheckFacts::whole_fields`] (ADR-306 D17).
+    pub whole_fields: &'a BTreeSet<i64>,
+    /// [`crate::check::CheckFacts::array_lengths`] (#711).
+    pub array_lengths: &'a BTreeMap<i64, i64>,
 }
 
 impl<'a> Sites<'a> {
@@ -155,6 +159,8 @@ impl<'a> Sites<'a> {
             char_codes: &facts.char_codes,
             arithmetic: &facts.arithmetic,
             negations: &facts.negations,
+            whole_fields: &facts.whole_fields,
+            array_lengths: &facts.array_lengths,
         }
     }
 }
@@ -174,23 +180,33 @@ pub fn proven(
         char_codes,
         arithmetic,
         negations,
+        whole_fields,
+        array_lengths,
     } = *sites;
     let mut out = Proven::default();
     let mut functions: BTreeMap<String, Vec<bool>> = BTreeMap::new();
     // A method of this program that takes a parameter `mut` changes what it
     // is handed, whichever type it is called on.
     let mut changing_methods: BTreeSet<String> = BTreeSet::new();
+    // One that takes its receiver `mut` may change any field of it
+    // (ADR-306 D17).
+    let mut changing_receivers: BTreeSet<String> = BTreeSet::new();
     for item in &parsed.program.items {
         if let Item::Impl { methods, .. } = &item.node {
             for method in methods {
                 if let Item::Fn {
                     name: Some(name),
                     args,
+                    receiver,
                     ..
                 } = &method.node
-                    && args.iter().any(|a| a.mutable)
                 {
-                    changing_methods.insert(parsed.text(*name).to_string());
+                    if args.iter().any(|a| a.mutable) {
+                        changing_methods.insert(parsed.text(*name).to_string());
+                    }
+                    if receiver.as_ref().is_some_and(|r| r.is_mut) {
+                        changing_receivers.insert(parsed.text(*name).to_string());
+                    }
                 }
             }
         }
@@ -212,6 +228,7 @@ pub fn proven(
     let around = Around {
         functions,
         changing_methods,
+        changing_receivers,
     };
     let context = BoundsContext {
         lengths: lengths.iter().copied().collect(),
@@ -232,6 +249,8 @@ pub fn proven(
         text_lengths: BTreeMap::new(),
         text_classes: BTreeMap::new(),
         around,
+        whole_fields: whole_fields.iter().copied().collect(),
+        array_lengths: array_lengths.iter().map(|(k, v)| (*k, *v)).collect(),
     };
     let mut bodies: Vec<&Spanned<Item>> = Vec::new();
     for item in &parsed.program.items {

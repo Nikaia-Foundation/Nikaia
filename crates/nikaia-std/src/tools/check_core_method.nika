@@ -652,6 +652,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // **A length `std` counts** (ADR-306 D4).
     if args.len() == 0 && name == "len" && check_core_method_counted(on) {
         state.facts.std_lengths.insert(id_of(receiver) as i64)
+        check_core_places_array_length(state, id_of(receiver) as i64, on)
         if state.elements_take_space(on) {
             state.facts.sized_lengths.insert(id_of(receiver) as i64)
         }
