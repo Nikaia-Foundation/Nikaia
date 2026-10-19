@@ -92,7 +92,8 @@ impl CheckState {
     /// item 2, #97). The guard runs before the arm takes the part apart, so the
     /// lowering binds those names a second time inside the guard, and this
     /// records which of them the guard reads and which of those are copied out
-    /// for it (a number, a `bool`, a `char`).
+    /// for it (a number, a `bool`, a `char`, and a view, which is a copy too:
+    /// the guard compares the `&str`, not the `&&str` the box lends, #680).
     pub fn a_guard_reading_inside_a_box[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, pattern: ref MatchPattern, body: ref Expr, guard: ref Expr) sync {
         let mut inside: Vec[String] = []
         self.names_inside_boxes(world, pattern, inside)
@@ -110,8 +111,8 @@ impl CheckState {
         self.typed_inside_boxes(world, pattern, typed)
         let mut copied: collections::BTreeSet[String] = collections::BTreeSet()
         for name in read {
-            let held: Ty? = typed[name]?.clone()
-            if held != null && a_copy_by_value(held ?? Ty::Unknown) {
+            let ty = typed[name]?.clone() ?? continue
+            if (a_copy_by_value(ty) || ty.is_a_view()) && !check_core_flow_a_slice(ty) {
                 copied.insert(name.clone())
             }
         }

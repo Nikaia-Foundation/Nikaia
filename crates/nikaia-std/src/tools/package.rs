@@ -29893,11 +29893,11 @@ impl CheckState {
         self.typed_inside_boxes(world, pattern, &mut typed);
         let mut copied: collections::BTreeSet<String> = collections::BTreeSet::new();
         for name in read.iter() {
-            let held: Option<Ty> = match *nikaia_std::index::get(&typed, name) {
+            let ty = match match *nikaia_std::index::get(&typed, name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            };
-            if held.is_some() && a_copy_by_value(nikaia_std::index::or(held.as_ref(), || &Ty::Unknown)) { copied.insert(name.to_owned()); }
+            } { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if (a_copy_by_value(&ty) || ty.is_a_view()) && !check_core_flow_a_slice(&ty) { copied.insert(name.to_owned()); }
         }
         self.facts.guards_inside_boxes.insert(id_of(body) as i64, copied);
     }
@@ -56498,6 +56498,7 @@ pub enum TextOwner {
     Returned(String),
     Param(String, i64),
     Let(i64),
+    Variant(String, String, i64),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56512,6 +56513,7 @@ fn owner_word(owner: &TextOwner) -> String {
         TextOwner::Returned(key) => format!("result {}", key),
         TextOwner::Param(key, at) => { let at = *at; format!("param {} {}", key, at) },
         TextOwner::Let(at) => { let at = *at; format!("let {}", at) },
+        TextOwner::Variant(of, variant, at) => { let at = *at; format!("variant {} {} {}", of, variant, at) },
     }
 }
 
@@ -56609,13 +56611,15 @@ struct FnDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct TextDeclared {
     fields: collections::BTreeMap<(String, String), FieldDecl>,
+    variants: collections::BTreeMap<String, Vec<Type>>,
+    public_enums: collections::BTreeSet<String>,
     fns: collections::BTreeMap<String, FnDecl>,
     methods: collections::BTreeMap<String, Vec<String>>,
     rules: collections::BTreeSet<String>,
 }
 
 fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), fns: collections::BTreeMap::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new() };
+    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -56624,6 +56628,19 @@ fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> Te
                 for field in fields.iter() {
                     let key = (owner.to_owned(), names.resolve(field.name).to_owned());
                     declared.fields.insert(key, FieldDecl { ty: field.ty.clone(), published: is_public && field.is_public });
+                }
+            },
+            Item::Enum { name, variants, is_public, is_extern } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                let owner = names.resolve(name).to_owned();
+                if is_public { declared.public_enums.insert(owner.to_owned()); }
+                if !is_extern {
+                    for variant in variants.iter() {
+                        match &variant.fields {
+                            VariantFields::Tuple(parts) => { declared.variants.insert(format!("{}::{}", owner, names.resolve(variant.name)), parts.to_owned()); },
+                            _ => { },
+                        }
+                    }
                 }
             },
             Item::Fn { .. } => { declare_function(&item.node, None, names, &mut declared, false); },
@@ -56694,6 +56711,7 @@ fn position_published(owner: &TextOwner, declared: &TextDeclared) -> bool {
         TextOwner::Returned(key) => fn_published(key, declared),
         TextOwner::Param(key, _) => fn_published(key, declared),
         TextOwner::Let(_) => false,
+        TextOwner::Variant(of, _, _) => declared.public_enums.contains(of),
     }
 }
 
@@ -57016,6 +57034,39 @@ fn kept_args(args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_>, walk: &m
     let mut at: i64 = 0;
     for arg in args.iter() {
         if ((at) as usize) < given.len() && nikaia_std::index::get(&given, (at) as usize).still { kept_unseen(arg, ask, walk); }
+        at += 1;
+    }
+}
+
+fn flow_payload(callee: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let parts = match match *nikaia_std::index::get(&walk.declared.variants, callee) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let (of, variant) = variant_named(callee);
+    let mut at: i64 = 0;
+    while at < args.len() as i64 && at < given.len() as i64 && at < parts.len() as i64 {
+        let owner = TextOwner::Variant(of.to_owned(), variant.to_owned(), at);
+        flow_value(&going_into(&owner, nikaia_std::index::get(&parts, nikaia_std::index::at(at)), vec![], true), Some(nikaia_std::index::get(&args, nikaia_std::index::at(at))), nikaia_std::index::get(&given, nikaia_std::index::at(at)), ask, walk);
+        at += 1;
+    }
+}
+
+fn variant_named(callee: &str) -> (String, String) {
+    let variant = last_segment(callee);
+    let of = nikaia_std::index::or(callee.strip_suffix(&format!("::{}", variant)), || "").to_owned();
+    (of, variant)
+}
+
+fn variant_handed_on(written: &str, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let parts = match match *nikaia_std::index::get(&walk.declared.variants, written) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let (of, variant) = variant_named(written);
+    let mut at = 0;
+    for part in parts.iter() {
+        flow_type(&TextOwner::Variant(of.to_owned(), variant.to_owned(), at), part, &mut vec![], &owned_kinds(), ask, walk);
         at += 1;
     }
 }
@@ -57951,6 +58002,11 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
             tier_expr(end, ask, walk);
             owned_kinds()
         },
+        Expr::Path(_, _) => {
+            let written = match tier_callee(expr, ask) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
+            variant_handed_on(&written, ask, walk);
+            owned_kinds()
+        },
         _ => owned_kinds(),
     }
 }
@@ -58031,6 +58087,10 @@ fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut 
         flow_args(&callee, args, &given, ask, walk);
         if walk.declared.rules.contains(&callee) && !args.is_empty() { parsed_parameter(nikaia_std::index::get(&args, 0), ask, walk); }
         return result_kinds(&callee, ask, &walk);
+    }
+    if walk.declared.variants.contains_key(&callee) {
+        flow_payload(&callee, args, &given, ask, walk);
+        return owned_kinds();
     }
     if args.is_empty() && is_a_container_name(&callee) { return no_kinds(); }
     if names_a_type(&last_segment(&callee)) || !ask.library.functions.contains_key(&callee) { kept_args(args, &given, ask, walk); } else { std_container_args(args, ask, walk); }
@@ -62154,14 +62214,19 @@ fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &coll
                 if !is_extern { types_text_by_ref(names, &field.ty, "field", views, &format!("field {} {}", of, names.resolve(field.name)), span, out); }
             }
         },
-        Item::Enum { variants, .. } => {
+        Item::Enum { name, variants, is_extern, .. } => {
+            let is_extern = *is_extern; let name = *name;
+            let of = names.resolve(name).to_owned();
             for variant in variants.iter() {
                 match &variant.fields {
                     VariantFields::Unit => { },
                     VariantFields::Tuple(parts) => {
+                        let mut at = 0;
                         for ty in parts.iter() {
                             written_at(names, ty, known, false, span, out);
                             widths_written(names, ty, false, span, out);
+                            if !is_extern { types_text_by_ref(names, ty, "payload", views, &format!("variant {} {} {}", of, names.resolve(variant.name), at), span, out); }
+                            at += 1;
                         }
                     },
                     VariantFields::Named(fields) => {

@@ -245,4 +245,14 @@ fn a_guard_reads_a_name_bound_inside_a_box() {
                   }\n";
     let found = findings(source);
     assert!(!found.iter().any(|f| f.code == "NK1193"), "{found:#?}");
+    // Only literals go into `Name`: static text, and the guard compares the
+    // view itself, not the reference the box lends to it (#680); the same
+    // where the program wrote `ref String`.
+    for written in ["Name(String)", "Name(ref String)"] {
+        let rust = lowered(&source.replace("Name(String)", written), Build::default());
+        assert!(
+            rust.contains("{ let s = *s; s == \"x\""),
+            "{written}: {rust}"
+        );
+    }
 }

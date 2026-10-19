@@ -272,14 +272,21 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 }
             }
         }
-        Item::Enum { variants, .. } => {
+        Item::Enum { name, variants, is_extern, .. } => {
+            let of = names.resolve(name).clone()
             for variant in variants {
                 match variant.fields {
                     VariantFields::Unit => {}
                     VariantFields::Tuple(parts) => {
+                        let mut at = 0
                         for ty in parts {
                             written_at(names, ty, known, false, span, out)
                             widths_written(names, ty, false, span, out)
+                            // A payload is a position as a field is (#680).
+                            if !is_extern {
+                                types_text_by_ref(names, ty, "payload", views, f"variant {of} {names.resolve(variant.name)} {at}", span, out)
+                            }
+                            at += 1
                         }
                     }
                     VariantFields::Named(fields) => {
@@ -366,8 +373,9 @@ fn types_word_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref T
 // **`ref String` inside Nikaia says what `String` says** (ADR-282 D2): text
 // is a view wherever a view suffices, and the ledger records what a published
 // signature lends and keeps, so `ref` on text written on a parameter, a field,
-// a result or a `let` outside the C boundary is the warning `NK1261`. The
-// program means what it means with `String`, and is still held to the view.
+// a result, a variant's payload or a `let` outside the C boundary is the
+// warning `NK1261`. The program means what it means with `String`, and is
+// still held to the view.
 fn types_text_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, position: String, views: ref collections::BTreeSet[String], key: String, span: ref Span, mut out: Vec[Finding]) {
     // A position `text_tiers` made a view was written `String`.
     if views.contains(key) {

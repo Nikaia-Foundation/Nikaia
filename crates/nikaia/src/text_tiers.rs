@@ -66,6 +66,9 @@ enum Owner {
     Param(String, usize),
     /// An annotated `let`, by the byte its statement starts at.
     Let(usize),
+    /// What an enum's variant carries: the enum, the variant, the payload's
+    /// place (#680).
+    Variant(String, String, usize),
 }
 
 /// A declared `String`: who declares it, and where inside the declared type -
@@ -87,6 +90,7 @@ fn position_from(position: nikaia_std::tools::text_tiers::TextPosition) -> Posit
         TextOwner::Returned(key) => Owner::Result(key),
         TextOwner::Param(key, at) => Owner::Param(key, at as usize),
         TextOwner::Let(at) => Owner::Let(at as usize),
+        TextOwner::Variant(of, variant, at) => Owner::Variant(of, variant, at as usize),
     };
     Position {
         owner,
@@ -421,6 +425,26 @@ fn rewrite(
                     mark_let_item(&mut item.node, *at, &position.path, *tier);
                 }
             }
+            Owner::Variant(of, variant, at) => {
+                for item in &mut program.items {
+                    let Item::Enum { name, variants, .. } = &mut item.node else {
+                        continue;
+                    };
+                    if parsed.interner.resolve(*name) != of.as_str() {
+                        continue;
+                    }
+                    for v in variants.iter_mut() {
+                        if parsed.interner.resolve(v.name) != variant.as_str() {
+                            continue;
+                        }
+                        if let crate::ast::VariantFields::Tuple(parts) = &mut v.fields
+                            && let Some(ty) = parts.get_mut(*at)
+                        {
+                            mark(ty, &position.path, *tier);
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -679,6 +703,7 @@ fn views(tiers: &Tiers) -> BTreeSet<String> {
             Owner::Result(key) => format!("result {key}"),
             Owner::Param(key, at) => format!("param {key} {at}"),
             Owner::Let(at) => format!("let {at}"),
+            Owner::Variant(of, variant, at) => format!("variant {of} {variant} {at}"),
         })
         .collect()
 }
@@ -704,6 +729,9 @@ fn said(tiers: &Tiers) -> Vec<String> {
                 Owner::Result(key) => format!("what `{key}` hands back"),
                 Owner::Param(key, at) => format!("parameter {} of `{key}`", at + 1),
                 Owner::Let(_) => "a `let`".to_string(),
+                Owner::Variant(of, variant, at) => {
+                    format!("what `{of}::{variant}` carries at {}", at + 1)
+                }
             };
             let inside = match position.path.as_slice() {
                 [] => String::new(),

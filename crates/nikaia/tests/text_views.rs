@@ -357,3 +357,34 @@ fn ref_string_at_the_c_boundary_is_no_warning() {
                   fn main() {\n    println(f\"{count([\"a\"], \"b\")}\")\n}\n";
     assert_eq!(redundant_refs(source), Vec::<String>::new());
 }
+
+/// **A variant's payload is a position too** (#680): written `ref String` it
+/// is the warning `NK1261`; written `String` and made a view by the tiers, it
+/// is none.
+#[test]
+fn ref_string_in_a_variant_payload_is_a_warning() {
+    let written = "enum Tok {\n    Word(ref String),\n    Num(i64),\n}\n\n\
+                   fn first(line: String) -> Tok {\n\
+                   \x20   if line.len() == 0 {\n        return Tok::Num(0)\n    }\n\
+                   \x20   return Tok::Word(line.trim())\n}\n\n\
+                   fn main() {\n\
+                   \x20   match first(f\" hi {1} \") {\n\
+                   \x20       Tok::Word(w) => println(w),\n\
+                   \x20       Tok::Num(n) => println(f\"{n}\"),\n\
+                   \x20   }\n}\n";
+    let found = redundant_refs(written);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].contains("a payload written `ref String`"),
+        "{found:#?}"
+    );
+    // As long as the written one, so that every byte offset agrees.
+    let plain = written.replace("Word(ref String)", "Word(    String)");
+    let views = nikaia::parser::parse_to_ast(&plain)
+        .expect("the source parses")
+        .text_views;
+    assert!(views.contains("variant Tok Word 0"), "{views:?}");
+    assert_eq!(redundant_refs(&plain), Vec::<String>::new());
+    same_rust("variant_payload", written, &plain);
+    assert_eq!(ran("variant_payload", &plain), "hi 1\n");
+}

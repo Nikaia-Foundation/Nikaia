@@ -1300,3 +1300,103 @@ fn main() {
     let rust = lowered(source, Build::default());
     assert!(rust.contains(".put(format!(\"own{}\", 1))"), "{rust}");
 }
+
+// ---------------------------------------------------------------------------
+// What an enum's variant carries (#680)
+// ---------------------------------------------------------------------------
+
+/// A variant whose `String` payload is filled with `{given}` where `n` is not
+/// zero, and with a number otherwise.
+fn token_program(header: &str, payload: &str, given: &str) -> String {
+    format!(
+        "{header}enum Tok {{\n    Word({payload}),\n    Num(i64),\n}}\n\n\
+         fn first(line: String, n: i64) -> Tok {{\n\
+         \x20   if n == 0 {{\n        return Tok::Num(0)\n    }}\n\
+         \x20   return Tok::Word({given})\n}}\n\n\
+         fn main() {{\n\
+         \x20   let text = f\"  hi {{1}} \"\n\
+         \x20   for n in 0..<2 {{\n\
+         \x20       match first(text, n) {{\n\
+         \x20           Tok::Word(w) => println(w),\n\
+         \x20           Tok::Num(k) => println(f\"{{k}}\"),\n\
+         \x20       }}\n\
+         \x20   }}\n}}\n"
+    )
+}
+
+/// **A variant's payload only views flow into is a view** (ADR-282 D2, D12,
+/// #680): `Word(String)` lowers byte for byte as `Word(ref String)`, the enum
+/// taking the lifetime a struct of views takes; in a `pub enum` as well
+/// (D25: what is published may be a view).
+#[test]
+fn a_variant_payload_only_views_flow_into_is_a_view() {
+    for header in ["", "pub "] {
+        let plain = token_program(header, "String", "line.trim()");
+        let written = token_program(header, "ref String", "line.trim()");
+        let rust = lowered(&plain, Build::default());
+        assert!(rust.contains("Word(&'a str)"), "{rust}");
+        assert_eq!(rust, lowered(&written, Build::default()), "{header}");
+        runs("variant-view", &plain, "0\nhi 1");
+    }
+    // A list of views as well.
+    let list = "enum Tok {\n    Words(Vec[String]),\n    Num(i64),\n}\n\n\
+                fn split(line: String) -> Tok {\n\
+                \x20   if line.len() == 0 {\n        return Tok::Num(0)\n    }\n\
+                \x20   let mut out: Vec[String] = []\n\
+                \x20   for w in line.split(\" \") {\n        out.push(w)\n    }\n\
+                \x20   return Tok::Words(out)\n}\n\n\
+                fn main() {\n\
+                \x20   let text = f\"a b {1}\"\n\
+                \x20   match split(text) {\n\
+                \x20       Tok::Words(ws) => println(f\"{ws.len()}\"),\n\
+                \x20       Tok::Num(n) => println(f\"{n}\"),\n\
+                \x20   }\n}\n";
+    let rust = lowered(list, Build::default());
+    assert_eq!(
+        rust,
+        lowered(&list.replace("String", "ref String"), Build::default())
+    );
+    runs("variant-list", list, "3");
+}
+
+/// **Text of its own stays `String`, literals only are static text, both are
+/// `EitherText`** (ADR-282 D29, D14, #680), each run.
+#[test]
+fn a_variant_payload_takes_the_tier_of_what_flows_in() {
+    let owned = token_program("", "String", "f\"w{n}\"");
+    let rust = lowered(&owned, Build::default());
+    assert!(rust.contains("Word(String)"), "{rust}");
+    runs("variant-owned", &owned, "0\nw1");
+
+    let lasting = token_program("", "String", "\"word\"");
+    let rust = lowered(&lasting, Build::default());
+    assert!(rust.contains("Word(&'static str)"), "{rust}");
+    runs("variant-lasting", &lasting, "0\nword");
+
+    let mixed = token_program("", "String", "line.trim()").replace(
+        "        return Tok::Num(0)",
+        "        return Tok::Word(f\"w{n}\")",
+    );
+    let rust = lowered(&mixed, Build::default());
+    assert!(
+        rust.contains("Word(nikaia_std::either_text::EitherText<'a>)"),
+        "{rust}"
+    );
+    runs("variant-mixed", &mixed, "w0\nhi 1");
+}
+
+/// **`examples/json` without `ref`** (#680): `Text(String)` lowers byte for
+/// byte as `Text(ref String)` did, every parsed string a view of the input.
+#[test]
+fn the_json_example_lowers_as_its_ref_twin() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/json/src/main.nika"
+    );
+    let source = std::fs::read_to_string(path).expect("examples/json");
+    assert!(source.contains("    Text(String),"), "{source}");
+    let written = source.replace("    Text(String),", "    Text(ref String),");
+    let rust = lowered(&source, Build::default());
+    assert!(rust.contains("Text(&'a str)"), "{rust}");
+    assert_eq!(rust, lowered(&written, Build::default()));
+}

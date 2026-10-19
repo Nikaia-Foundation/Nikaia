@@ -128,6 +128,9 @@ pub enum TextOwner {
     Param(String, i64),
     /// An annotated `let`, by the byte its statement starts at.
     Let(i64),
+    /// What an enum's variant carries, by the enum, the variant and the
+    /// payload's place: `Text(String)` is `Variant("Json", "Text", 0)`.
+    Variant(String, String, i64),
 }
 
 /// A declared `String`: who declares it, and where inside the declared type -
@@ -146,6 +149,7 @@ fn owner_word(owner: ref TextOwner) -> String {
         TextOwner::Returned(key) => f"result {key}",
         TextOwner::Param(key, at) => f"param {key} {at}",
         TextOwner::Let(at) => f"let {at}",
+        TextOwner::Variant(of, variant, at) => f"variant {of} {variant} {at}",
     }
 }
 
@@ -270,6 +274,10 @@ struct FnDecl {
 struct TextDeclared {
     /// Every field of every struct, and whether it is published.
     fields: collections::BTreeMap[(String, String), FieldDecl],
+    /// What every positional variant of every enum carries, by `E::V`.
+    variants: collections::BTreeMap[String, Vec[Type]],
+    /// The enums that are published.
+    public_enums: collections::BTreeSet[String],
     /// Every function and method, by key.
     fns: collections::BTreeMap[String, FnDecl],
     /// Method names declared in this program, to the keys that declare them.
@@ -279,7 +287,7 @@ struct TextDeclared {
 }
 
 fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap(), fns: collections::BTreeMap(), methods: collections::BTreeMap(), rules: collections::BTreeSet() }
+    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), methods: collections::BTreeMap(), rules: collections::BTreeSet() }
     for item in program.items {
         match item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -287,6 +295,25 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext)
                 for field in fields {
                     let key = (owner.clone(), names.resolve(field.name).clone())
                     declared.fields.insert(key, FieldDecl { ty: field.ty.clone(), published: is_public && field.is_public })
+                }
+            }
+            // **A variant's payload is a position as a field is** (ADR-282
+            // D2, D12, #680). Not one of a `pub extern enum`, which crosses
+            // to C by value.
+            Item::Enum { name, variants, is_public, is_extern } => {
+                let owner = names.resolve(name).clone()
+                if is_public {
+                    declared.public_enums.insert(owner.clone())
+                }
+                if !is_extern {
+                    for variant in variants {
+                        match variant.fields {
+                            VariantFields::Tuple(parts) => {
+                                declared.variants.insert(f"{owner}::{names.resolve(variant.name)}", parts.clone())
+                            }
+                            else => {}
+                        }
+                    }
                 }
             }
             Item::Fn { .. } => declare_function(item.node, null, names, declared, false),
@@ -356,6 +383,7 @@ fn position_published(owner: ref TextOwner, declared: ref TextDeclared) -> bool 
         TextOwner::Returned(key) => fn_published(key, declared),
         TextOwner::Param(key, _) => fn_published(key, declared),
         TextOwner::Let(_) => false,
+        TextOwner::Variant(of, _, _) => declared.public_enums.contains(of),
     }
 }
 
@@ -833,6 +861,39 @@ fn kept_args(args: ref Vec[Expr], given: ref Vec[Kinds], ask: ref TierAsk, mut w
         if at < given.len() && given[at].still {
             kept_unseen(arg, ask, walk)
         }
+        at += 1
+    }
+}
+
+fn flow_payload(callee: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: ref TierAsk, mut walk: TierWalk) {
+    let parts = walk.declared.variants[callee]?.clone() ?? return
+    let (of, variant) = variant_named(callee)
+    let mut at = 0
+    while at < args.len() && at < given.len() && at < parts.len() {
+        let owner = TextOwner::Variant(of.clone(), variant.clone(), at)
+        // A value handed into a mixed payload is wrapped where it stands:
+        // a variant takes no conversion of its own.
+        flow_value(going_into(owner, parts[at], [], true), args[at], given[at], ask, walk)
+        at += 1
+    }
+}
+
+/// `E::V` as the enum's name and the variant's.
+fn variant_named(callee: ref String) -> (String, String) {
+    let variant = last_segment(callee)
+    let of = (callee.strip_suffix(f"::{variant}") ?? "").clone()
+    return (of, variant)
+}
+
+/// **A variant named where it is not called** - handed on as a function -
+/// is built where this walk does not see it: its payload holds text of its
+/// own (#680).
+fn variant_handed_on(written: ref String, ask: ref TierAsk, mut walk: TierWalk) {
+    let parts = walk.declared.variants[written]?.clone() ?? return
+    let (of, variant) = variant_named(written)
+    let mut at = 0
+    for part in parts {
+        flow_type(TextOwner::Variant(of.clone(), variant.clone(), at), part, [], owned_kinds(), ask, walk)
         at += 1
     }
 }
@@ -1957,6 +2018,11 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             tier_expr(end, ask, walk)
             owned_kinds()
         }
+        Expr::Path(_, _) => {
+            let written = tier_callee(expr, ask) ?? return owned_kinds()
+            variant_handed_on(written, ask, walk)
+            owned_kinds()
+        }
         else => owned_kinds(),
     }
 }
@@ -2053,6 +2119,12 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
             parsed_parameter(args[0], ask, walk)
         }
         return result_kinds(callee, ask, walk)
+    }
+    // **A variant built where its payload is declared** flows into the
+    // payload as an argument into a parameter (#680).
+    if walk.declared.variants.contains_key(callee) {
+        flow_payload(callee, args, given, ask, walk)
+        return owned_kinds()
     }
     // `Vec()`, `HashMap()`: empty, so no text of any kind.
     if args.len() == 0 && is_a_container_name(callee) {
