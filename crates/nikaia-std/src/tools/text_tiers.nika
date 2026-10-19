@@ -1917,12 +1917,28 @@ fn flow_args(key: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: r
     while at < args.len() && at < given.len() {
         if at < function.params.len() {
             let owner = TextOwner::Param(key.clone(), at)
+            // **A choice of a view and text of its own handed to a `String`
+            // parameter** is wrapped arm by arm into a mixed one: such a
+            // parameter is not lent (#678), which would need each arm kept.
+            if tier_a_choice(args[at]) && mixed(tier_of_kinds(given[at])) && plain_string(ask.names, function.params[at]) {
+                let word = seen(owner, no_path(), walk)
+                walk.unlent.insert(word)
+            }
             flow_value(going_into(owner, function.params[at], [], false), args[at], given[at], ask, walk)
             if at < function.changes.len() && function.changes[at] {
                 changed_in_place(args[at], ask, walk)
             }
         }
         at += 1
+    }
+}
+
+/// An `if` or a `match` handed on whole.
+fn tier_a_choice(value: ref Expr) -> bool {
+    return match value {
+        Expr::If { .. } => true,
+        Expr::Match { .. } => true,
+        else => false,
     }
 }
 

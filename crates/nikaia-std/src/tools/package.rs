@@ -57998,12 +57998,18 @@ fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_
     while at < args.len() as i64 && at < given.len() as i64 {
         if at < function.params.len() as i64 {
             let owner = TextOwner::Param(key.to_owned(), at);
+            if tier_a_choice(nikaia_std::index::get(&args, nikaia_std::index::at(at))) && mixed(tier_of_kinds(nikaia_std::index::get(&given, nikaia_std::index::at(at)))) && plain_string(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
+                let word = seen(&owner, &no_path(), walk);
+                walk.unlent.insert(word);
+            }
             flow_value(&going_into(&owner, nikaia_std::index::get(&function.params, nikaia_std::index::at(at)), vec![], false), Some(nikaia_std::index::get(&args, nikaia_std::index::at(at))), nikaia_std::index::get(&given, nikaia_std::index::at(at)), ask, walk);
             if at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { changed_in_place(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk); }
         }
         at += 1;
     }
 }
+
+fn tier_a_choice(value: &Expr) -> bool { matches!(value, Expr::If { .. } | Expr::Match { .. }) }
 
 fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let read = walk.read_here;
