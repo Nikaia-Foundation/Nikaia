@@ -418,3 +418,91 @@ fn main() {
     assert_eq!(unchecked(&rust), 0, "{rust}");
     stops_at_the_index("bytes-unguarded", source);
 }
+
+const BYTES_WORD: &str = "\
+fn word(t: String, i: i64) -> u64 {
+    let b = t.bytes
+    if i >= 0 && i + 8 <= b.len() { return b.u64_le(i) }
+    return 0
+}
+
+fn half(t: String, i: i64) -> u32 {
+    let b = t.bytes
+    if i >= 0 && i + 4 <= b.len() { return b.u32_be(i) }
+    return 0
+}
+
+fn main() {
+    println(f\"{word(\"abcdefghij\", 2)} {word(\"abcdefghij\", 3)} {half(\"abcd\", 0)} {half(\"abcd\", 1)}\")
+}
+";
+
+/// #709: a word read of a `Bytes` under the guard its cut needs is proved
+/// (ADR-320 D12, ADR-306 D4) and read through `proven::array`, without a
+/// check; one ending exactly at the end is inside.
+#[test]
+fn a_bytes_word_under_a_guard_is_proved() {
+    let kept = lowered(BYTES_WORD, BoundsChecks::Kept);
+    assert_eq!(
+        kept.matches("nikaia_std::proven::array").count(),
+        0,
+        "{kept}"
+    );
+    let rust = lowered(BYTES_WORD, BoundsChecks::Removed);
+    assert_eq!(
+        rust.matches("u64::from_le_bytes(*unsafe { nikaia_std::proven::array::<u8, 8>(")
+            .count(),
+        1,
+        "{rust}"
+    );
+    assert_eq!(
+        rust.matches("u32::from_be_bytes(*unsafe { nikaia_std::proven::array::<u8, 4>(")
+            .count(),
+        1,
+        "{rust}"
+    );
+    assert!(
+        !rust.contains(".u64_le(") && !rust.contains(".u32_be("),
+        "{rust}"
+    );
+    prints(
+        "bytes-word",
+        BYTES_WORD,
+        &format!(
+            "{} {} {} 0\n",
+            u64::from_le_bytes(*b"cdefghij"),
+            0,
+            u32::from_be_bytes(*b"abcd")
+        ),
+    );
+}
+
+/// #709: a word read nothing guards keeps its check: ending exactly at the
+/// end it reads, one byte past it stops the program with the cut's message.
+#[test]
+fn an_unguarded_bytes_word_keeps_its_check() {
+    let inside = "\
+fn at(t: String, i: i64) -> u64 {
+    let b = t.bytes
+    return b.u64_le(i)
+}
+
+fn main() {
+    println(f\"{at(\"abcdefghij\", 2)}\")
+}
+";
+    let rust = lowered(inside, BoundsChecks::Removed);
+    assert!(!rust.contains("proven::array"), "{rust}");
+    prints(
+        "bytes-word-end",
+        inside,
+        &format!("{}\n", u64::from_le_bytes(*b"cdefghij")),
+    );
+    let past = inside.replace("\"abcdefghij\", 2", "\"abcdefghij\", 3");
+    stops_at_the_index("bytes-word-past", &past);
+    let (_, _, err) = run("bytes-word-past-message", &past, BoundsChecks::Removed);
+    assert!(
+        err.contains("range end index 11 out of range for slice of length 10"),
+        "{err}"
+    );
+}

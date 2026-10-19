@@ -846,7 +846,17 @@ fn counted_blocks(expr: &Expr, over: &[CountedLoop], words: &winnow_grammar::Int
     }
 }
 
-pub fn keeps_length(method: &str) -> bool { matches!(method, "len" | "is_empty" | "contains" | "iter" | "first" | "last" | "get" | "clone" | "to_vec" | "index_of" | "starts_with" | "ends_with" | "join" | "sum" | "min" | "max" | "sort" | "sort_by" | "sort_by_key" | "reverse" | "swap" | "fill" | "map" | "filter" | "any" | "all" | "count" | "find" | "position" | "enumerate" | "zip" | "windows" | "chunks" | "rev" | "fold" | "binary_search" | "to_string" | "chars" | "bytes") }
+pub fn keeps_length(method: &str) -> bool { matches!(method, "len" | "is_empty" | "contains" | "iter" | "first" | "last" | "get" | "clone" | "to_vec" | "index_of" | "starts_with" | "ends_with" | "join" | "sum" | "min" | "max" | "sort" | "sort_by" | "sort_by_key" | "reverse" | "swap" | "fill" | "map" | "filter" | "any" | "all" | "count" | "find" | "position" | "enumerate" | "zip" | "windows" | "chunks" | "rev" | "fold" | "binary_search" | "to_string" | "chars" | "bytes" | "u32_le" | "u32_be" | "u64_le" | "u64_be") }
+
+pub fn bytes_word_width(method: &str) -> i64 {
+    match method {
+        "u32_le" => 4,
+        "u32_be" => 4,
+        "u64_le" => 8,
+        "u64_be" => 8,
+        _ => 0,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Seek {
@@ -3245,6 +3255,21 @@ fn bounding_inside(walk: &mut BoundsWalk, list: &str, index: &Expr, facts: &Boun
 }
 
 #[allow(clippy::too_many_arguments)]
+fn bounding_word_inside(walk: &mut BoundsWalk, list: &str, at: &Expr, width: i64, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
+    if walk.collecting || walk.pinned.contains(list) { return false; }
+    let length = length_of(list);
+    let len = walk.arena.var(&length);
+    let from = match bounding_lin(walk, at, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let zero = walk.arena.int(0);
+    let n = walk.arena.int(width);
+    let to = walk.arena.add(from, n);
+    let low = walk.arena.ge(from, zero);
+    let high = walk.arena.le(to, len);
+    let goal = walk.arena.and(vec![low, high]);
+    bounding_proves(&walk, facts, goal, ask)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn bounding_index(walk: &mut BoundsWalk, base: &Expr, index: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     match base {
         Expr::Variable(list, _) => {
@@ -3792,7 +3817,12 @@ fn bounding_method_call(walk: &mut BoundsWalk, receiver: &Expr, method: &str, ar
         if key.is_some() { bounding_write(walk, nikaia_std::index::or(key.as_deref(), || ""), nikaia_std::index::get(&args, nikaia_std::index::at(nikaia_std::index::or(written, || 0))), &facts, context, program, words, ask); }
     }
     match receiver {
-        Expr::Variable(name, _) => { let name = *name; bounding_method(walk, facts, words.resolve(name), method, args, context, program, words, ask); },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let width = bytes_word_width(method);
+            if width > 0 && args.len() == 1 && bounding_word_inside(walk, words.resolve(name), nikaia_std::index::get(&args, 0), width, &facts, context, program, words, ask) { walk.proven.indices.insert(node_key(receiver)); }
+            bounding_method(walk, facts, words.resolve(name), method, args, context, program, words, ask);
+        },
         _ => { },
     }
     let changes_its_arguments = context.around.changing_methods.contains(method);
@@ -16457,6 +16487,7 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
         }
     }
     if args.is_empty() && name == "clone" && check_core_method_bytes(&on) { state.facts.byte_copies.insert(id_of(receiver) as i64); }
+    if args.len() == 1 && bytes_word_width(&name) > 0 && check_core_method_bytes(&on) { state.facts.list_indices.insert(id_of(receiver) as i64); }
     if text && args.is_empty() && name == "to_string" && ledger_candidates(world.own, "to_string").is_empty() {
         state.facts.text_as_is.insert(id_of(receiver) as i64);
         state.flow.receiver_name = outer_named;
@@ -34410,6 +34441,17 @@ impl EmitState {
             let from = emit_call_option_named(world, config, "from");
             if !from.is_empty() { host.expr(walk, out, nikaia_std::index::get(&from, 0), depth, flow, scope)?; } else { out.push("0"); }
             out.push(")");
+            return Ok(());
+        }
+        let width = bytes_word_width(&name);
+        if width > 0 && args.len() == 1 && self.proven_indices.contains(&node_key(receiver)) {
+            let kind = if width == 4 { "u32" } else { "u64" };
+            let order = if name.ends_with("_be") { "be" } else { "le" };
+            out.push(&format!("{}::from_{}_bytes(*unsafe {{ nikaia_std::proven::array::<u8, {}>(&", kind, order, width));
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
+            out.push(", (");
+            if only_literals(nikaia_std::index::get(&args, 0)) { host.expr(walk, out, nikaia_std::index::get(&args, 0), depth, flow.inferred(), scope)?; } else { host.expr(walk, out, nikaia_std::index::get(&args, 0), depth, flow, scope)?; }
+            out.push(") as usize) })");
             return Ok(());
         }
         if self.emit_core_a_field_call(world, walk, out, host, receiver, false, method, args, depth, flow, scope)? { return Ok(()); }
@@ -65350,7 +65392,7 @@ pub mod boundaries {
 }
 pub mod bounds_basic {
     #[allow(unused_imports)]
-    pub use super::{basic_indices, keeps_length, length_stays, rebinds};
+    pub use super::{basic_indices, keeps_length, bytes_word_width, length_stays, rebinds};
 }
 pub mod bounds_body {
     #[allow(unused_imports)]

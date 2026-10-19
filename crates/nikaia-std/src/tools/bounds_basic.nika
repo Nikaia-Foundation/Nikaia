@@ -328,8 +328,18 @@ pub fn keeps_length(method: ref String) -> bool {
         "find" => true, "position" => true, "enumerate" => true, "zip" => true,
         "windows" => true, "chunks" => true, "rev" => true, "fold" => true,
         "binary_search" => true, "to_string" => true, "chars" => true,
-        "bytes" => true,
+        "bytes" => true, "u32_le" => true, "u32_be" => true, "u64_le" => true,
+        "u64_be" => true,
         else => false,
+    }
+}
+
+/// **How many bytes a word read of a `Bytes` takes** (ADR-320 D12): 4 or 8
+/// for `u32_le` ... `u64_be`, 0 for any other method.
+pub fn bytes_word_width(method: ref String) -> i64 {
+    return match method {
+        "u32_le" => 4, "u32_be" => 4, "u64_le" => 8, "u64_be" => 8,
+        else => 0,
     }
 }
 

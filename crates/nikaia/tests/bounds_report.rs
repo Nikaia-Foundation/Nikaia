@@ -78,3 +78,29 @@ fn a_build_that_removes_nothing_proves_the_same_and_says_so() {
         removed.lines().skip(1).collect::<Vec<_>>()
     );
 }
+
+/// #709: a word read of a `Bytes` is a site of its own, proved under the
+/// guard its cut needs (ADR-320 D12).
+#[test]
+fn a_bytes_word_is_a_site() {
+    let source = "\
+fn word(t: String, i: i64) -> u64 {
+    let b = t.bytes
+    if i >= 0 && i + 8 <= b.len() { return b.u64_le(i) }
+    return b.u32_le(i) as u64
+}
+
+fn main() {
+    println(f\"{word(\"abcdefghij\", 2)}\")
+}
+";
+    let out = report(source, BoundsChecks::Removed, OverflowChecks::Removed);
+    let line = |text: &str| {
+        out.lines()
+            .find(|l| l.contains(text))
+            .unwrap_or_else(|| panic!("no line for `{text}`:\n{out}"))
+            .to_string()
+    };
+    assert!(line("b.u64_le(i)").ends_with("proved"), "{out}");
+    assert!(line("b.u32_le(i)").contains("checked"), "{out}");
+}

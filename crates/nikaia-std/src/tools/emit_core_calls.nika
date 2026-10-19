@@ -960,6 +960,24 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **A word read proved inside is read without its check** (ADR-320
+        // D12, ADR-306 D5): `proven::array` hands over the bytes the proof was
+        // about, and the position is written once.
+        let width = bytes_word_width(name)
+        if width > 0 && args.len() == 1 && self.proven_indices.contains(node_key(receiver)) {
+            let kind = if width == 4 { "u32" } else { "u64" }
+            let order = if name.ends_with("_be") { "be" } else { "le" }
+            out.push(f"{kind}::from_{order}_bytes(*unsafe {{ nikaia_std::proven::array::<u8, {width}>(&")
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
+            out.push(", (")
+            if only_literals(args[0]) {
+                host.expr(walk, out, args[0], depth, flow.inferred(), scope)
+            } else {
+                host.expr(walk, out, args[0], depth, flow, scope)
+            }
+            out.push(") as usize) })")
+            return
+        }
         // **`field.of(value)` is the field read a program would have written by
         // hand** (ADR-304 D2, D5's *at run time: nothing*): `value.name`, with no
         // descriptor and no dispatch left. **A field that holds a function is

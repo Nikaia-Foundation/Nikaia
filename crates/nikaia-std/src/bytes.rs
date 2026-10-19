@@ -70,6 +70,38 @@ impl Bytes {
         ByteReads::find(&*self.buffer, byte, from)
     }
 
+    /// The 4 bytes from `at` as an unsigned number, least significant byte
+    /// first (ADR-320 D12): [`ByteReads::u32_le`].
+    #[inline]
+    #[track_caller]
+    pub fn u32_le(&self, at: i64) -> u32 {
+        ByteReads::u32_le(&*self.buffer, at)
+    }
+
+    /// The 4 bytes from `at` as an unsigned number, most significant byte
+    /// first (ADR-320 D12): [`ByteReads::u32_be`].
+    #[inline]
+    #[track_caller]
+    pub fn u32_be(&self, at: i64) -> u32 {
+        ByteReads::u32_be(&*self.buffer, at)
+    }
+
+    /// The 8 bytes from `at` as an unsigned number, least significant byte
+    /// first (ADR-320 D12): [`ByteReads::u64_le`].
+    #[inline]
+    #[track_caller]
+    pub fn u64_le(&self, at: i64) -> u64 {
+        ByteReads::u64_le(&*self.buffer, at)
+    }
+
+    /// The 8 bytes from `at` as an unsigned number, most significant byte
+    /// first (ADR-320 D12): [`ByteReads::u64_be`].
+    #[inline]
+    #[track_caller]
+    pub fn u64_be(&self, at: i64) -> u64 {
+        ByteReads::u64_be(&*self.buffer, at)
+    }
+
     /// A copy of the bytes, owned by the caller.
     ///
     /// The one place this type allocates on the way out, and it says so: Part I
@@ -87,6 +119,14 @@ pub trait ByteReads {
     fn text(&self) -> Result<&str, crate::io::IoError>;
     /// The first `byte` at or after `from`, or `None`: [`Bytes::find`].
     fn find(&self, byte: u8, from: i64) -> Option<i64>;
+    /// The 4 bytes from `at`, least significant first: [`Bytes::u32_le`].
+    fn u32_le(&self, at: i64) -> u32;
+    /// The 4 bytes from `at`, most significant first: [`Bytes::u32_be`].
+    fn u32_be(&self, at: i64) -> u32;
+    /// The 8 bytes from `at`, least significant first: [`Bytes::u64_le`].
+    fn u64_le(&self, at: i64) -> u64;
+    /// The 8 bytes from `at`, most significant first: [`Bytes::u64_be`].
+    fn u64_be(&self, at: i64) -> u64;
 }
 
 impl ByteReads for [u8] {
@@ -105,6 +145,43 @@ impl ByteReads for [u8] {
         let rest = self.get(start..)?;
         let at = memchr::memchr(byte, rest)?;
         i64::try_from(start + at).ok()
+    }
+
+    #[inline]
+    #[track_caller]
+    fn u32_le(&self, at: i64) -> u32 {
+        u32::from_le_bytes(word(self, at))
+    }
+
+    #[inline]
+    #[track_caller]
+    fn u32_be(&self, at: i64) -> u32 {
+        u32::from_be_bytes(word(self, at))
+    }
+
+    #[inline]
+    #[track_caller]
+    fn u64_le(&self, at: i64) -> u64 {
+        u64::from_le_bytes(word(self, at))
+    }
+
+    #[inline]
+    #[track_caller]
+    fn u64_be(&self, at: i64) -> u64 {
+        u64::from_be_bytes(word(self, at))
+    }
+}
+
+/// **The `N` bytes from `at`, read as the cut `b[at..<at + N]` is**
+/// (ADR-320 D12): a position outside stops the program with the cut's own
+/// message, at the caller's line.
+#[inline(always)]
+#[track_caller]
+fn word<const N: usize>(bytes: &[u8], at: i64) -> [u8; N] {
+    let cut = crate::index::get(bytes, crate::index::at(at..at.wrapping_add(N as i64)));
+    match <[u8; N]>::try_from(cut) {
+        Ok(word) => word,
+        Err(_) => unreachable!("a cut of {N} bytes has {N} bytes"),
     }
 }
 
@@ -241,6 +318,33 @@ mod tests {
         }
         assert_eq!(Bytes::new().find(b';', 0), None);
         assert_eq!(Bytes::from(vec![b';'; 64]).find(b';', 63), Some(63));
+    }
+
+    /// **A word is read in the order its name says** (ADR-320 D12), on a
+    /// `Bytes` and on a text's own bytes alike, up to the last whole word.
+    #[test]
+    fn words_in_both_orders() {
+        let b = Bytes::from((1u8..=9).collect::<Vec<u8>>());
+        assert_eq!(b.u32_le(0), 0x0403_0201);
+        assert_eq!(b.u32_be(0), 0x0102_0304);
+        assert_eq!(b.u64_le(1), 0x0908_0706_0504_0302);
+        assert_eq!(b.u64_be(1), 0x0203_0405_0607_0809);
+        assert_eq!(b.u32_le(5), 0x0908_0706);
+        let text: &[u8] = b"abcd";
+        assert_eq!(super::ByteReads::u32_be(text, 0), 0x6162_6364);
+    }
+
+    /// **And outside, it stops as the cut does**: with the cut's message.
+    #[test]
+    #[should_panic(expected = "range end index 9 out of range for slice of length 8")]
+    fn a_word_past_the_end_stops() {
+        let _ = Bytes::from(vec![0u8; 8]).u64_le(1);
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds: the index is -1")]
+    fn a_word_before_the_start_stops() {
+        let _ = Bytes::from(vec![0u8; 8]).u32_le(-1);
     }
 
     /// **And a copy is asked for**, never taken.

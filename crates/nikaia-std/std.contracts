@@ -5003,6 +5003,38 @@ sync = true
 touches = []
 signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
 
+# The 4 bytes from `at` as an unsigned number, least significant byte first
+# (ADR-320 D12): checked as the cut `b[at..<at + 4]` is, and proved as it is.
+[fn."Bytes::u32_le"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self, at: i64) -> u32"
+
+# The 4 bytes from `at` as an unsigned number, most significant byte first
+# (ADR-320 D12): checked as the cut `b[at..<at + 4]` is, and proved as it is.
+[fn."Bytes::u32_be"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self, at: i64) -> u32"
+
+# The 8 bytes from `at` as an unsigned number, least significant byte first
+# (ADR-320 D12): checked as the cut `b[at..<at + 8]` is, and proved as it is.
+[fn."Bytes::u64_le"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self, at: i64) -> u64"
+
+# The 8 bytes from `at` as an unsigned number, most significant byte first
+# (ADR-320 D12): checked as the cut `b[at..<at + 8]` is, and proved as it is.
+[fn."Bytes::u64_be"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self, at: i64) -> u64"
+
 # A copy of the bytes, owned by whoever asked for it (ADR-320 D11): of a
 # `Bytes`, and of a text's own bytes, `s.bytes`, which is how they are kept
 # beyond the text.

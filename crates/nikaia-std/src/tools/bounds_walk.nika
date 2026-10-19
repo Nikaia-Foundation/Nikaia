@@ -1251,6 +1251,24 @@ fn bounding_inside(mut walk: BoundsWalk, list: ref String, index: ref Expr, fact
     return bounding_proves(walk, facts, goal, ask)
 }
 
+/// Whether the `width` elements from `at` lie inside `list`, as the cut
+/// `list[at..<at + width]` does: `0 <= at` and `at + width <= list.len()`.
+fn bounding_word_inside(mut walk: BoundsWalk, list: ref String, at: ref Expr, width: i64, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    if walk.collecting || walk.pinned.contains(list) {
+        return false
+    }
+    let length = length_of(list)
+    let len = walk.arena.var(length)
+    let from = bounding_lin(walk, at, facts, context, program, words) ?? return false
+    let zero = walk.arena.int(0)
+    let n = walk.arena.int(width)
+    let to = walk.arena.add(from, n)
+    let low = walk.arena.ge(from, zero)
+    let high = walk.arena.le(to, len)
+    let goal = walk.arena.and([low, high])
+    return bounding_proves(walk, facts, goal, ask)
+}
+
 /// `base[index]`, read or written: proved where `base` is a list by name.
 fn bounding_index(mut walk: BoundsWalk, base: ref Expr, index: ref Expr, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
     match base {
@@ -1926,7 +1944,15 @@ fn bounding_method_call(mut walk: BoundsWalk, receiver: ref Expr, method: ref St
         }
     }
     match receiver {
-        Expr::Variable(name, _) => bounding_method(walk, facts, words.resolve(name), method, args, context, program, words, ask),
+        Expr::Variable(name, _) => {
+            // **A word read lies inside where its cut does** (ADR-320 D12):
+            // `0 <= at` and `at + n <= len`.
+            let width = bytes_word_width(method)
+            if width > 0 && args.len() == 1 && bounding_word_inside(walk, words.resolve(name), args[0], width, facts, context, program, words, ask) {
+                walk.proven.indices.insert(node_key(receiver))
+            }
+            bounding_method(walk, facts, words.resolve(name), method, args, context, program, words, ask)
+        },
         else => {},
     }
     let changes_its_arguments = context.around.changing_methods.contains(method)

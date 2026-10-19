@@ -255,3 +255,42 @@ fn a_char_literal_compared_with_a_walked_byte_is_a_u8() {
          }\n";
     assert_eq!(run("bytes-walked-literal", source, &[]), "5\n");
 }
+
+/// **A word is read in the order its name says** (ADR-320 D12, #709): the
+/// four reads on a buffer `fs::read` handed out and on a text's own bytes, a
+/// read that ends exactly at the end; widened with `as`, and a signed number
+/// out of the same bits by name (Part I 2.2).
+#[test]
+fn a_word_is_read_in_the_order_its_name_says() {
+    let source = "use std::fs\n\
+         \n\
+         fn words(path: ref String) throws {\n\
+         \x20   let b = fs::read(ref path, fs::Root::Anywhere)\n\
+         \x20   println(f\"{b.u32_le(0)} {b.u32_be(0)} {b.u64_le(1)} {b.u64_be(1)}\")\n\
+         \x20   println(f\"{b.u64_le(8).truncating_i64()} {b.u32_be(12) as i64} {b.u64_le(8)} {b.u32_le(0) as i64 - 1}\")\n\
+         \x20   let s = \"abcdefgh\"\n\
+         \x20   println(f\"{s.bytes.u32_le(4)} {s.bytes.u64_be(0)}\")\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   words(\"w\") catch {\n\
+         \x20       println(\"failed\")\n\
+         \x20   }\n\
+         }\n";
+    let mut file: Vec<u8> = (1u8..=8).collect();
+    file.extend([0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+    let head = u32::from_le_bytes([1, 2, 3, 4]);
+    let head_be = u32::from_be_bytes([1, 2, 3, 4]);
+    let one = u64::from_le_bytes([2, 3, 4, 5, 6, 7, 8, 0xFE]);
+    let one_be = u64::from_be_bytes([2, 3, 4, 5, 6, 7, 8, 0xFE]);
+    let tail = u64::from_le_bytes(file[8..16].try_into().unwrap());
+    let text_le = u32::from_le_bytes(*b"efgh");
+    let text_be = u64::from_be_bytes(*b"abcdefgh");
+    assert_eq!(
+        run("text-bytes-words", source, &[("w", &file)]),
+        format!(
+            "{head} {head_be} {one} {one_be}\n-2 4294967295 {tail} {}\n{text_le} {text_be}\n",
+            head - 1
+        )
+    );
+}

@@ -45,6 +45,24 @@ pub unsafe fn cut<T>(items: &[T], start: usize, end: usize) -> &[T] {
     unsafe { items.get_unchecked(start..end) }
 }
 
+/// The `N` elements from `at`, as an array: a word read of bytes (ADR-320
+/// D12) is `u64::from_le_bytes(*array::<u8, 8>(bytes, at))`.
+///
+/// # Safety
+///
+/// `at <= items.len()` and `N <= items.len() - at`. A debug build checks it.
+#[inline(always)]
+pub unsafe fn array<T, const N: usize>(items: &[T], at: usize) -> &[T; N] {
+    debug_assert!(
+        at <= items.len() && N <= items.len() - at,
+        "a proved word is outside: {N} from {at} of {}",
+        items.len()
+    );
+    // SAFETY: the caller guarantees the `N` elements from `at` are inside,
+    // and `[T; N]` has the layout of `N` consecutive `T`.
+    unsafe { &*items.as_ptr().add(at).cast::<[T; N]>() }
+}
+
 /// The element at `at`, to change in place.
 ///
 /// # Safety
@@ -104,6 +122,24 @@ mod tests {
         let items = [1, 2];
         // SAFETY: deliberately broken; the debug assertion stops it first.
         let _ = unsafe { cut(&items, 1, 3) };
+    }
+
+    #[test]
+    fn reads_the_array_inside() {
+        let items = [1u8, 2, 3, 4, 5];
+        // SAFETY: 1 + 4 <= 5.
+        assert_eq!(unsafe { array::<u8, 4>(&items, 1) }, &[2, 3, 4, 5]);
+        // SAFETY: 5 + 0 <= 5.
+        assert!(unsafe { array::<u8, 0>(&items, 5) }.is_empty());
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "a proved word is outside")]
+    fn a_debug_build_catches_a_wrong_array() {
+        let items = [1u8, 2, 3];
+        // SAFETY: deliberately broken; the debug assertion stops it first.
+        let _ = unsafe { array::<u8, 4>(&items, 0) };
     }
 
     #[test]

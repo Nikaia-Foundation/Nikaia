@@ -214,6 +214,23 @@ impl Walk<'_> {
                     blocked: (!proved).then(|| blocked_index(base, index)),
                 });
             }
+            // **A word read of a `Bytes`** (ADR-320 D12), a candidate as the
+            // cut it reads is: keyed by its receiver.
+            Expr::MethodCall { receiver, args, .. }
+                if args.len() == 1 && self.lists.contains(&value_node(receiver)) =>
+            {
+                if !self.seen.insert(value_node(receiver) as usize) {
+                    return;
+                }
+                let proved = self.proven.indices.contains(&value_node(receiver));
+                found.push(Site {
+                    line,
+                    text: crate::check::written(self.parsed, expr),
+                    index: true,
+                    proved,
+                    blocked: (!proved).then(|| blocked_index(receiver, &args[0])),
+                });
+            }
             Expr::Binary {
                 op: op @ (BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul),
                 lhs,
