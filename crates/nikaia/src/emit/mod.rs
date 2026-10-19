@@ -2493,7 +2493,13 @@ impl<'p> Emitter<'p> {
                 "Option<&str>" => ("Option<String>".to_string(), "{}.as_deref()"),
                 _ => match ty.strip_prefix("&[").and_then(|t| t.strip_suffix(']')) {
                     Some(element) => (format!("Vec<{element}>"), "&{}"),
-                    None => (ty.trim_start_matches("&mut ").to_string(), "{}"),
+                    // Any other view the body only reads, `&Option<String>`
+                    // for an unused `String?` among them (#703), is lent
+                    // from the local that owns the word.
+                    None => match ty.strip_prefix('&').filter(|t| !t.starts_with("mut ")) {
+                        Some(held) => (held.to_string(), "&{}"),
+                        None => (ty.trim_start_matches("&mut ").to_string(), "{}"),
+                    },
                 },
             };
             types.push(owned);

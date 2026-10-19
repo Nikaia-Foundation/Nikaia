@@ -1,0 +1,4 @@
+// Unused words of `main`, each kind, are lent from the locals that own them (#703).
+fn main(rest: Vec[String]) {
+    println("ran")
+}

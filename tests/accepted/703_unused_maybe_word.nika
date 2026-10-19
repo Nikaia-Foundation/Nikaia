@@ -1,0 +1,4 @@
+// An unused `String?` word of `main` is lent from the local that owns it (#703).
+fn main(b: String?) {
+    println("ran")
+}
