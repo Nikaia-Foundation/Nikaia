@@ -707,77 +707,308 @@ impl Layout {
     }
 }
 
-/// How many compiled-`std` trees are kept beside the newest one.
+/// **The user cache is bounded by its size, and by nothing else** (#724).
 ///
-/// Small on purpose. Each is a whole Cargo target directory - measured, around
-/// 240 MB - and the key holds the compiler's own identity, so **every rebuild of
-/// this compiler starts a new one**. A developer therefore leaves one behind per
-/// working day, and nothing ever took one away: measured, 1.7 GB in a user cache
-/// and 13 GB in the one the project tests share, with a build then failing on
-/// "no space left on device".
-///
-/// Eight, and not one: switching target or codegen table back and forth is a
-/// normal thing to do, and parallel worktrees build with different compilers at
-/// once; evicting on every switch would turn a cache into a tax. Every kind of
-/// entry in the user cache (`rlib/`, `build-time-bundle/`,
-/// `build-time-parsers/`) is held to the same number.
-pub const KEEP_TREES: usize = 8;
+/// Eight GiB unless `NIKAIA_CACHE_LIMIT` says otherwise. Every kind of entry
+/// is held to the one bound together: a compiled-`std` tree (around 240 MB, and
+/// every rebuild of this compiler starts one), a build-time or run bundle, a
+/// grammar parser, a file run on its own. Unbounded, the cache reached 15 GB and
+/// nearly filled a disk.
+pub const DEFAULT_LIMIT: u64 = 8 << 30;
 
-/// An entry nobody used for this long goes, whatever its rank (#615): one night
-/// of agent work on many compiler versions left 23 GB behind.
-const UNUSED: std::time::Duration = std::time::Duration::from_secs(60 * 60 * 24);
+/// The variable that sets the bound: bytes, or a number followed by `K`, `M`,
+/// `G` or `T` (powers of 1024). `0` is no bound.
+pub const LIMIT_VAR: &str = "NIKAIA_CACHE_LIMIT";
 
-/// Don't touch a tree that has been written to within this. A concurrent build
-/// is the thing being protected from, and a build that has not touched its own
-/// tree in an hour is not one that is running.
-const IN_USE: std::time::Duration = std::time::Duration::from_secs(60 * 60);
-
-/// Keep the newest [`KEEP_TREES`] entries of a cache directory, remove the
-/// rest, and remove any entry not used for a day.
-///
-/// **A cache with no eviction is a disk leak**, and this one leaks by design
-/// rather than by accident: two builds which differ in a way Cargo would answer
-/// by rebuilding - a toolchain, a target, a codegen table - coexist instead of
-/// evicting one another ([ADR-021](../../../docs/specification/adr/adr-021.md)
-/// D7). Coexisting is right; coexisting *forever* is what makes the disk run out.
-///
-/// Newest by the marker file [`touch`] writes, not by the directory's own
-/// timestamp: Cargo writes into subdirectories, so a tree that is used every day
-/// can have a top-level mtime from the day it was created.
-///
-/// **Failure here is never a failed build.** A cache that cannot be swept is a
-/// fuller disk, which is the situation this is trying to improve and not a reason
-/// to refuse to compile - the same rule D12 gives for a cache that cannot be
-/// opened.
-pub fn sweep(root: &Path, keep: usize) {
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return;
-    };
-    let now = std::time::SystemTime::now();
-    let mut trees: Vec<(std::time::SystemTime, PathBuf)> = entries
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.is_dir())
-        .map(|path| (used_at(&path), path))
-        .collect();
-
-    // Newest first, so the tail is what goes.
-    trees.sort_by_key(|(used, _)| std::cmp::Reverse(*used));
-    for (rank, (used, path)) in trees.into_iter().enumerate() {
-        let idle = now.duration_since(used).unwrap_or_default();
-        if idle < IN_USE || (rank < keep && idle < UNUSED) {
-            continue;
-        }
-        let _ = std::fs::remove_dir_all(&path);
+/// The bound this process works to, and a warning when the variable says
+/// something that is not a size. A bad value is the default, never a failed
+/// build (ADR-021 D12).
+pub fn limit() -> (u64, Option<String>) {
+    match std::env::var(LIMIT_VAR) {
+        Err(_) => (DEFAULT_LIMIT, None),
+        Ok(text) if text.trim().is_empty() => (DEFAULT_LIMIT, None),
+        Ok(text) => match parse_size(&text) {
+            Some(bytes) => (bytes, None),
+            None => (
+                DEFAULT_LIMIT,
+                Some(format!(
+                    "warning: {LIMIT_VAR}={text:?} is not a size (bytes, or a number \
+                     followed by K, M, G or T); the cache is held to the default {}",
+                    show_size(DEFAULT_LIMIT)
+                )),
+            ),
+        },
     }
 }
 
-/// **Mark an entry used and sweep its siblings**: what every writer of a user
-/// cache entry calls, so the entry it is about to use is the newest and stays.
+/// `8G`, `500M`, `1024`: a size in bytes, the suffixes powers of 1024.
+pub fn parse_size(text: &str) -> Option<u64> {
+    let text = text.trim();
+    let text = text
+        .strip_suffix(['B', 'b'])
+        .filter(|rest| !rest.is_empty())
+        .unwrap_or(text);
+    let (digits, shift) = match text.chars().last()?.to_ascii_uppercase() {
+        'K' => (&text[..text.len() - 1], 10),
+        'M' => (&text[..text.len() - 1], 20),
+        'G' => (&text[..text.len() - 1], 30),
+        'T' => (&text[..text.len() - 1], 40),
+        _ => (text, 0),
+    };
+    let number: u64 = digits.trim().parse().ok()?;
+    number.checked_mul(1u64 << shift)
+}
+
+/// A size as a person reads it: `1.5 GiB`, `312 MiB`, `40 KiB`, `12 B`.
+pub fn show_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["KiB", "MiB", "GiB", "TiB"];
+    if bytes < 1024 {
+        return format!("{bytes} B");
+    }
+    let mut value = bytes as f64 / 1024.0;
+    let mut unit = 0;
+    while value >= 1024.0 && unit + 1 < UNITS.len() {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if value < 10.0 {
+        format!("{value:.1} {}", UNITS[unit])
+    } else {
+        format!("{value:.0} {}", UNITS[unit])
+    }
+}
+
+/// The lock files of the entries this process uses, held open until it ends:
+/// a shared lock on each tells every other process's [`prune`] that the entry
+/// is in use.
+static HELD: std::sync::Mutex<Vec<std::fs::File>> = std::sync::Mutex::new(Vec::new());
+
+/// Whether this process started an entry, and so whether [`settle`] has work.
+static ADDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// **Mark an entry used**: what every user of a user-cache entry calls before it
+/// reads or writes the entry.
+///
+/// The stamp's time is the entry's last use - written by this compiler, not the
+/// file system's access time, which most mounts do not keep. The entry's lock is
+/// taken shared and held until the process ends, so no [`prune`] removes it under
+/// this build. An entry that did not exist yet makes the next [`settle`] prune.
 pub fn use_entry(entry: &Path) {
+    if !entry.join(USED).exists() {
+        ADDED.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
     touch(entry);
-    if let Some(root) = entry.parent() {
-        sweep(root, KEEP_TREES);
+    hold(entry);
+}
+
+/// Take the entry's lock shared, and keep it.
+fn hold(entry: &Path) {
+    let Ok(file) = open_lock(entry) else {
+        return;
+    };
+    if lock::shared(&file)
+        && let Ok(mut held) = HELD.lock()
+    {
+        held.push(file);
+    }
+}
+
+fn open_lock(entry: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(entry.join(LOCK))
+}
+
+/// **Prune once a build has added an entry**: what a build calls when Cargo is
+/// done, and the compiler once more before it exits. Nothing happens when this
+/// process started no entry, so a build that only reused the cache does not
+/// walk it.
+pub fn settle() {
+    if !ADDED.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let (limit, warning) = limit();
+    if let Some(warning) = warning {
+        eprintln!("{warning}");
+    }
+    prune(&Layout::user_cache_dir(), limit);
+}
+
+/// What one [`prune`] pass did.
+#[derive(Debug, Default)]
+pub struct Pruned {
+    /// Each entry removed and its size, the least recently used first.
+    pub removed: Vec<(PathBuf, u64)>,
+    /// What the entries left come to.
+    pub size: u64,
+}
+
+/// **Remove the entries used longest ago until the cache is within `limit`.**
+///
+/// Only the last use counts: an entry goes because others were used after it,
+/// however young it is, and a month-old entry that is still used stays. `0` is
+/// no limit.
+///
+/// An entry is a directory two levels below the root (`rlib/<key>`,
+/// `run-bundle/<key>`, ...) that carries the stamp [`use_entry`] writes; what has
+/// no stamp is not this pass's to remove. Never removed: an entry a running build
+/// holds - this compiler's shared lock ([`use_entry`]), which includes the one
+/// this process just used, or Cargo's lock on a target directory inside it.
+///
+/// **Failure here is never a failed build.** A removed entry is a later cache
+/// miss; an entry that cannot be removed is a fuller disk (ADR-021 D12).
+pub fn prune(root: &Path, limit: u64) -> Pruned {
+    let mut entries = entries(root);
+    let mut pruned = Pruned {
+        removed: Vec::new(),
+        size: entries.iter().map(|entry| entry.size).sum(),
+    };
+    if limit == 0 || pruned.size <= limit {
+        return pruned;
+    }
+    // Used longest ago first.
+    entries.sort_by_key(|entry| entry.used);
+    for entry in entries {
+        if pruned.size <= limit {
+            break;
+        }
+        let Ok(file) = open_lock(&entry.path) else {
+            continue;
+        };
+        // Held exclusively while it is removed, so a build that starts using it
+        // now waits and then finds it gone: a miss.
+        if lock::recently_used(entry.used) || !lock::exclusive(&file) || cargo_holds(&entry.path) {
+            continue;
+        }
+        if std::fs::remove_dir_all(&entry.path).is_ok() {
+            pruned.size = pruned.size.saturating_sub(entry.size);
+            pruned.removed.push((entry.path, entry.size));
+        }
+    }
+    pruned
+}
+
+struct Entry {
+    path: PathBuf,
+    used: std::time::SystemTime,
+    size: u64,
+}
+
+/// Every entry of the cache: the stamped directories two levels down.
+fn entries(root: &Path) -> Vec<Entry> {
+    let dirs = |dir: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
+            .map(|entry| entry.path())
+            .collect()
+    };
+    dirs(root)
+        .iter()
+        .flat_map(|kind| dirs(kind))
+        .filter(|path| path.join(USED).is_file())
+        .map(|path| Entry {
+            used: used_at(&path),
+            size: size_of(&path),
+            path,
+        })
+        .collect()
+}
+
+/// What the files under a directory come to. Links are not followed, and a
+/// file Cargo hard-linked into a second place (`deps/x` and `x`) is counted once.
+fn size_of(dir: &Path) -> u64 {
+    let mut seen = BTreeSet::new();
+    let mut total = 0;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            if meta.is_dir() {
+                stack.push(entry.path());
+            } else if first_link(&meta, &mut seen) {
+                total += meta.len();
+            }
+        }
+    }
+    total
+}
+
+/// Whether this is the first name of its file met in this walk.
+#[cfg(unix)]
+fn first_link(meta: &std::fs::Metadata, seen: &mut BTreeSet<(u64, u64)>) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    meta.nlink() < 2 || seen.insert((meta.dev(), meta.ino()))
+}
+
+#[cfg(not(unix))]
+fn first_link(_: &std::fs::Metadata, _: &mut BTreeSet<(u64, u64)>) -> bool {
+    true
+}
+
+/// Whether Cargo is building in a target directory inside the entry: it holds
+/// `.cargo-lock` of the profile directory (`debug/`, `<triple>/release/`, ...)
+/// locked while it runs.
+fn cargo_holds(entry: &Path) -> bool {
+    let mut stack = vec![(entry.to_path_buf(), 0)];
+    while let Some((dir, depth)) = stack.pop() {
+        for item in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let path = item.path();
+            if item.file_name() == ".cargo-lock" {
+                let busy = std::fs::File::open(&path).is_ok_and(|file| !lock::exclusive(&file));
+                if busy {
+                    return true;
+                }
+            } else if depth < 4 && item.file_type().is_ok_and(|t| t.is_dir()) {
+                stack.push((path, depth + 1));
+            }
+        }
+    }
+    false
+}
+
+/// Advisory locks, taken without waiting: `flock`, the call Cargo locks its
+/// target directory with. A lock is released when its file is closed.
+#[cfg(unix)]
+mod lock {
+    use rustix::fs::{FlockOperation, flock};
+
+    pub fn shared(file: &std::fs::File) -> bool {
+        flock(file, FlockOperation::NonBlockingLockShared).is_ok()
+    }
+
+    pub fn exclusive(file: &std::fs::File) -> bool {
+        flock(file, FlockOperation::NonBlockingLockExclusive).is_ok()
+    }
+
+    /// With locks, a lock says whether an entry is in use.
+    pub fn recently_used(_: std::time::SystemTime) -> bool {
+        false
+    }
+}
+
+/// Without `flock`, an entry used within the hour counts as held: a build
+/// that has not touched its entry for that long is not one that is running.
+#[cfg(not(unix))]
+mod lock {
+    pub fn shared(_: &std::fs::File) -> bool {
+        true
+    }
+
+    pub fn exclusive(_: &std::fs::File) -> bool {
+        true
+    }
+
+    pub fn recently_used(used: std::time::SystemTime) -> bool {
+        used.elapsed()
+            .is_ok_and(|idle| idle < std::time::Duration::from_secs(60 * 60))
     }
 }
 
@@ -813,7 +1044,7 @@ pub fn touch(dir: &Path) {
 /// So a build says which directory its tag belongs to, and removes what every
 /// tag whose directory is gone left in the tree. A project that no longer
 /// exists is not building, so nothing is taken from a build in flight. Failure
-/// is a fuller disk, never a failed build ([`sweep`]'s rule).
+/// is a fuller disk, never a failed build ([`prune`]'s rule).
 pub fn sweep_programs(tree: &Path, tag: &str, project: &Path) {
     let records = tree.join(PROJECTS);
     let _ = std::fs::create_dir_all(&records);
@@ -899,9 +1130,12 @@ fn used_at(dir: &Path) -> std::time::SystemTime {
         .unwrap_or(std::time::UNIX_EPOCH)
 }
 
-/// The marker `touch` writes. A file rather than the directory's own mtime,
+/// The stamp `touch` writes. A file rather than the directory's own mtime,
 /// because Cargo writes into subdirectories and leaves the top alone.
 const USED: &str = ".nikaia-used";
+
+/// The file an entry's users lock shared and [`prune`] locks exclusively.
+const LOCK: &str = ".nikaia-lock";
 
 #[cfg(test)]
 mod tests {
@@ -1393,52 +1627,111 @@ mod tests {
 }
 
 #[cfg(test)]
-mod sweep_tests {
+mod prune_tests {
     use super::*;
 
-    fn tree(root: &Path, name: &str, used_ago: std::time::Duration) -> PathBuf {
-        let dir = root.join(name);
+    /// An entry of `size` bytes under `root/kind/`, last used `used_ago` ago.
+    fn entry(root: &Path, name: &str, size: usize, used_ago: std::time::Duration) -> PathBuf {
+        let dir = root.join("rlib").join(name);
         std::fs::create_dir_all(dir.join("debug")).expect("a cargo-shaped tree");
-        std::fs::write(dir.join("debug/artifact"), b"x").expect("something in it");
+        std::fs::write(dir.join("debug/artifact"), vec![b'x'; size]).expect("something in it");
         touch(&dir);
         set_used_at(&dir, std::time::SystemTime::now() - used_ago);
         dir
     }
 
-    /// The marker's mtime, set directly - a test cannot wait an hour.
+    /// The stamp's mtime, set directly - a test cannot wait a day.
     fn set_used_at(dir: &Path, when: std::time::SystemTime) {
         let file = std::fs::OpenOptions::new()
             .write(true)
             .open(dir.join(USED))
-            .expect("the marker is there");
+            .expect("the stamp is there");
         file.set_modified(when).expect("set the time");
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("nikaia-sweep-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("nikaia-prune-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a scratch root");
         dir
     }
 
     const DAY: std::time::Duration = std::time::Duration::from_secs(60 * 60 * 24);
-    const HOUR: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
-    /// **#615: an entry unused for a day goes after a write, a fresh one stays**,
-    /// even when both are well within the count kept.
+    /// **Over the limit, the entry used longest ago goes first**, and only as
+    /// many as the limit needs: t1 < t2 < t3, room for two.
     #[test]
-    fn a_write_evicts_what_was_not_used_for_a_day() {
-        let root = scratch("stale");
-        let old_version = tree(&root, "v1", 2 * DAY);
-        let fresh = tree(&root, "v2", 2 * HOUR);
-        let written = root.join("v3");
+    fn the_entry_used_longest_ago_goes_first() {
+        let root = scratch("order");
+        let t1 = entry(&root, "t1", 100, 3 * DAY);
+        let t2 = entry(&root, "t2", 100, 2 * DAY);
+        let t3 = entry(&root, "t3", 100, DAY);
 
-        use_entry(&written);
+        let pruned = prune(&root, 250);
 
-        assert!(written.is_dir(), "the entry being written stays");
-        assert!(fresh.is_dir(), "a fresh one stays");
-        assert!(!old_version.is_dir(), "the stale version went");
+        assert!(!t1.is_dir(), "the one used longest ago went");
+        assert!(t2.is_dir() && t3.is_dir(), "the limit needed only one gone");
+        assert_eq!(pruned.removed, vec![(t1, 100)]);
+        assert_eq!(pruned.size, 200);
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// **An entry in use is never removed**, however long ago its last use was
+    /// stamped: the next one in the order goes instead.
+    #[test]
+    fn an_entry_in_use_is_skipped() {
+        let root = scratch("held");
+        let t1 = entry(&root, "t1", 100, 3 * DAY);
+        let t2 = entry(&root, "t2", 100, 2 * DAY);
+        let t3 = entry(&root, "t3", 100, DAY);
+        // A build holds t1: the lock `use_entry` takes, without its stamp.
+        hold(&t1);
+        set_used_at(&t1, std::time::SystemTime::now() - 3 * DAY);
+
+        prune(&root, 250);
+
+        assert!(t1.is_dir(), "a build holds it");
+        assert!(!t2.is_dir(), "the next oldest went instead");
+        assert!(t3.is_dir());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// **Age alone removes nothing**: a month-old entry within the limit stays,
+    /// and `0` is no limit at all.
+    #[test]
+    fn within_the_limit_nothing_goes() {
+        let root = scratch("within");
+        let old = entry(&root, "old", 100, 30 * DAY);
+        let new = entry(&root, "new", 100, DAY);
+        assert!(prune(&root, 200).removed.is_empty());
+        assert!(prune(&root, 0).removed.is_empty());
+        assert!(old.is_dir() && new.is_dir());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// What carries no stamp is not an entry, and is never removed.
+    #[test]
+    fn what_has_no_stamp_is_left_alone() {
+        let root = scratch("unstamped");
+        let loose = root.join("tools").join("x");
+        std::fs::create_dir_all(&loose).expect("a directory");
+        std::fs::write(loose.join("f"), vec![b'x'; 500]).expect("a file");
+        assert!(prune(&root, 1).removed.is_empty());
+        assert!(loose.is_dir());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sizes_are_read_with_their_suffixes() {
+        assert_eq!(parse_size("8G"), Some(8 << 30));
+        assert_eq!(parse_size("500m"), Some(500 << 20));
+        assert_eq!(parse_size("2GB"), Some(2 << 30));
+        assert_eq!(parse_size("1024"), Some(1024));
+        assert_eq!(parse_size("0"), Some(0));
+        assert_eq!(parse_size("lots"), None);
+        assert_eq!(parse_size(""), None);
+        assert_eq!(show_size(8 << 30), "8.0 GiB");
+        assert_eq!(show_size(12), "12 B");
     }
 
     /// **`nikaia cache clean` empties the cache**, and an absent one is not an
@@ -1446,59 +1739,20 @@ mod sweep_tests {
     #[test]
     fn clean_empties_the_cache() {
         let root = scratch("clean");
-        tree(&root, "rlib", HOUR);
-        tree(&root.join("build-time-bundle"), "k", HOUR);
+        entry(&root, "k", 1, DAY);
         clean_dir(&root).expect("cleaned");
         assert!(!root.exists());
         clean_dir(&root).expect("nothing to clean is fine");
     }
 
-    /// **The newest `keep` stay and the rest go.**
-    ///
-    /// The leak this is about: the key holds the compiler's own identity, so a
-    /// rebuild of the compiler starts a new tree of some 240 MB and nothing ever
-    /// removed one. Measured before this, 1.7 GB in one user cache and 13 GB in
-    /// the one the project tests share.
-    #[test]
-    fn the_oldest_trees_are_removed_and_the_newest_are_kept() {
-        let root = scratch("oldest");
-        let newest = tree(&root, "aaa", 2 * HOUR);
-        let middle = tree(&root, "bbb", 3 * HOUR);
-        let old = tree(&root, "ccc", 4 * HOUR);
-        let older = tree(&root, "ddd", 5 * HOUR);
-
-        sweep(&root, 2);
-
-        assert!(newest.is_dir(), "the newest stays");
-        assert!(middle.is_dir(), "and the one below it");
-        assert!(!old.is_dir(), "the third is gone");
-        assert!(!older.is_dir(), "and so is the fourth");
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    /// **A tree in use is never removed, however far down the order it is.**
-    ///
-    /// A second build running right now is the thing to be careful of: its tree
-    /// was touched when it started, so an age floor is what keeps a sweep from
-    /// deleting a directory Cargo is writing into.
-    #[test]
-    fn a_tree_touched_recently_is_left_alone() {
-        let root = scratch("recent");
-        let a = tree(&root, "aaa", DAY);
-        let b = tree(&root, "bbb", 2 * DAY);
-        let running = tree(&root, "ccc", std::time::Duration::from_secs(5));
-
-        sweep(&root, 1);
-
-        assert!(running.is_dir(), "a build is using it");
-        assert!(!a.is_dir() && !b.is_dir(), "the idle ones went");
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    /// A cache that cannot be swept is a fuller disk, not a failed build - the
+    /// A cache that cannot be pruned is a fuller disk, not a failed build - the
     /// rule ADR-021 D12 already gives for a cache that cannot be opened.
     #[test]
-    fn sweeping_what_is_not_there_is_not_an_error() {
-        sweep(Path::new("/nowhere/at/all/nikaia"), 3);
+    fn pruning_what_is_not_there_is_not_an_error() {
+        assert!(
+            prune(Path::new("/nowhere/at/all/nikaia"), 1)
+                .removed
+                .is_empty()
+        );
     }
 }

@@ -355,6 +355,10 @@ pub enum Command {
 pub enum CacheAction {
     /// Empty the user cache. Everything in it is rebuilt on demand.
     Clean,
+    /// Remove the entries used longest ago until the cache is within its limit
+    /// (`NIKAIA_CACHE_LIMIT`, 8 GiB by default), and say what went. A build
+    /// that adds an entry does the same by itself.
+    Prune,
 }
 
 /// `rustc --error-format=json … | nikaia explain x.nika`
@@ -878,8 +882,36 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
 /// the frames are the most useful thing there is, so those are untouched.
 pub fn main() -> std::process::ExitCode {
     let code = main_run();
+    // What this run added to the user cache is held to its limit (#724).
+    orchestrator::cache::settle();
     prover_counts();
     code
+}
+
+/// **`nikaia cache prune`**: the pass a build runs after it adds an entry,
+/// by hand, with what it removed said. The pass itself is the build's
+/// (`orchestrator::cache::prune`), so this only reports it.
+fn cache_prune() {
+    use orchestrator::cache::{Layout, limit, prune, show_size};
+    let (limit, warning) = limit();
+    if let Some(warning) = warning {
+        eprintln!("{warning}");
+    }
+    let dir = Layout::user_cache_dir();
+    let pruned = prune(&dir, limit);
+    for (entry, size) in &pruned.removed {
+        println!("removed {} ({})", entry.display(), show_size(*size));
+    }
+    let bound = match limit {
+        0 => "no limit".to_string(),
+        limit => format!("limit {}", show_size(limit)),
+    };
+    println!(
+        "{}: {} in entries, {bound}, {} removed",
+        dir.display(),
+        show_size(pruned.size),
+        pruned.removed.len()
+    );
 }
 
 /// `NIKAIA_PROVER_COUNTS`: what the prover's extra work came to (ADR-359
@@ -949,8 +981,15 @@ fn run() -> Result<()> {
             println!("emptied {}", dir.display());
             Ok(())
         }
+        Command::Cache {
+            action: CacheAction::Prune,
+        } => {
+            cache_prune();
+            Ok(())
+        }
         command => {
             let code = project_command(&args, command)?;
+            orchestrator::cache::settle();
             prover_counts();
             std::process::exit(code);
         }

@@ -1022,6 +1022,9 @@ pub fn project_for_file(
     let root = Layout::user_cache_dir()
         .join("run")
         .join(format!("{name}-{}", &key[..16]));
+    // An entry of the user cache like any other: pruned when it was used
+    // longest ago (#724).
+    orchestrator::cache::use_entry(&root);
     write_if_changed(
         &root.join("nikaia.toml"),
         &format!(
@@ -3116,6 +3119,10 @@ impl Project {
             build_args.push("--quiet".to_string());
         }
         let (mut code, messages) = cargo.messages("build", &build_args)?;
+        // Cargo is done with what this build added to the user cache, so its
+        // size is known: hold the cache to its limit before a `run` starts the
+        // program (#724).
+        orchestrator::cache::settle();
         self.report(&messages, allowlist)?;
         // **The library and its header, together where a C build looks**
         // (ADR-284 D4, D12): `target/nikaia/c-library/`.

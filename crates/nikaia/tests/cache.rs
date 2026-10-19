@@ -563,3 +563,42 @@ fn a_hit_says_the_warnings_of_the_check_again() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **`nikaia cache prune` holds the user cache to `NIKAIA_CACHE_LIMIT`** and
+/// says what it removed: the entry used longest ago goes, the rest stay
+/// (#724). The order itself is `orchestrator::cache`'s unit tests'.
+#[test]
+fn cache_prune_removes_the_entry_used_longest_ago_and_says_so() {
+    let dir = common::scratch_dir("cache-prune");
+    let home = dir.join("cache");
+    let now = std::time::SystemTime::now();
+    let day = std::time::Duration::from_secs(60 * 60 * 24);
+    for (name, ago) in [("old", 3), ("middle", 2), ("new", 1)] {
+        let entry = home.join("rlib").join(name);
+        std::fs::create_dir_all(&entry).expect("an entry");
+        std::fs::write(entry.join("artifact"), vec![b'x'; 1024]).expect("its content");
+        let stamp = std::fs::File::create(entry.join(".nikaia-used")).expect("its stamp");
+        stamp.set_modified(now - ago * day).expect("its last use");
+    }
+
+    let run = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .args(["cache", "prune"])
+        .env("NIKAIA_CACHE_DIR", &home)
+        .env("NIKAIA_CACHE_LIMIT", "2K")
+        .output()
+        .expect("the nikaia binary runs");
+
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(!home.join("rlib/old").exists(), "the oldest went: {stdout}");
+    assert!(home.join("rlib/middle").is_dir() && home.join("rlib/new").is_dir());
+    assert!(
+        stdout.contains("removed") && stdout.contains("old") && stdout.contains("1 removed"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

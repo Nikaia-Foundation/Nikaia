@@ -186,12 +186,12 @@ impl Sysroot {
     /// that differ in a way Cargo would answer by rebuilding - a different
     /// codegen table, a different toolchain - coexist instead of evicting one
     /// another (D7, §4's "dimensions coexist; they do not share").
-    /// **Which tree, and the sweep that keeps the rest from piling up.** A new
+    /// **Which tree, and the pruning that keeps the rest from piling up.** A new
     /// toolchain, target or codegen table starts a new tree, and nothing ever
     /// took an old one away - measured, 1.7 GB in a user cache and 13 GB in the
     /// one the project tests share, with a build then failing for want of disk.
     /// Coexisting is right (D7); coexisting forever is the leak. See
-    /// [`cache::sweep`].
+    /// [`cache::prune`].
     pub fn rlib_cache(&self, target: &str, codegen: &Codegen, features: &str) -> PathBuf {
         let key = Key::sysroot(
             env!("NIKAIA_RUSTC_VERSION"),
@@ -201,8 +201,8 @@ impl Sysroot {
         );
         let root = Layout::user_cache_dir().join("rlib");
         let tree = root.join(key.as_str());
-        // Marked in use *before* the sweep, so this build's own tree is the
-        // newest one and can never be the one that goes.
+        // Marked in use, and held, *before* anything prunes, so this build's
+        // own tree can never be the one that goes.
         cache::use_entry(&tree);
         tree
     }
@@ -808,7 +808,7 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
 /// The key is the compiler's own bytes - its lowering, `std`'s ledger and the
 /// tools' described one are all compiled into it - and the name and text of
 /// every file read, in order. Each entry is a directory of the cache's
-/// `lower-std/`, so `cache::use_entry`'s sweep keeps that from piling up.
+/// `lower-std/`, so `cache::prune` keeps that from piling up.
 /// Failure here is never a failed lowering: no key or an unreadable entry
 /// lowers again, and an entry that cannot be written is not written.
 struct LoweredBefore {

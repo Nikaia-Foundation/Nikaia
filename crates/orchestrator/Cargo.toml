@@ -14,3 +14,9 @@ serde_json = "1.0"
 sha2 = "0.10"
 toml = "0.9"
 which = "6.0"
+
+# `flock`, safely: what `cache::prune` reads a running build's hold on an entry
+# with, the same lock Cargo takes on its target directory (#724). Already in
+# the tree.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] }
