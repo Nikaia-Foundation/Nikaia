@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1065] — 2026-10-19
+
+**`split_once` parts past `?? continue` are views (#687)**
+- The text-tiers walk counts `continue` and `break` after `??` as no value, as it did `return`, so the names `let (a, b) = w.split_once(..) ?? continue` binds are views of `w`, and a list or map they go into becomes one of views. A bare tuple pattern `(a, b)` in a `match` on `split_once` binds its parts the same way.
+
 ## [0.0.1064] — 2026-10-19
 
 **An idle task pool at `yes` sleeps (#693)**
