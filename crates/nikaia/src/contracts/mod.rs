@@ -697,7 +697,10 @@ impl LedgerOps for Ledger {
         // `signature` — which the item loop wrote — and a callee's own
         // `keeps`, which is itself;
         // nothing above produces anything it needs, and nothing above reads
-        // what it writes.
+        // what it writes. **What each result points into is written first**
+        // (#697): a call whose result points into an argument keeps it only
+        // where the result leaves, and the walk asks the callee's `ref(..)`.
+        write_result_sources(&mut ledger, units, library);
         keeps::infer(&mut ledger, units, library, &resolved);
         // ADR-037 D7: which count each `Shared` class gets. After `keeps`,
         // because a lambda handed to a parameter the callee keeps is a kept one
@@ -731,17 +734,7 @@ impl LedgerOps for Ledger {
         // twice, so that a callee of another unit is read as written once its
         // unit has been (the first pass reads the declaration's list, which
         // only ever says more).
-        for _ in 0..2 {
-            for parsed in units.iter().copied() {
-                let sources = crate::views::result_sources(parsed, &ledger, library);
-                for source in sources {
-                    if let Some(contract) = ledger.functions.get_mut(&source.key) {
-                        contract.borrows = source.borrows;
-                        contract.returns = source.returns;
-                    }
-                }
-            }
-        }
+        write_result_sources(&mut ledger, units, library);
         evaluate_defaults(&mut ledger, units, &defaults, library);
         attribute_values(&mut ledger, units, library);
         (ledger, checked, noted)
@@ -992,6 +985,24 @@ pub const UNNAMED_ERROR: &str = "?";
 /// A `std` type with no module in front, which is `Overtaken`'s shape: a
 /// program never writes a path to it, because it arrives in a `catch`.
 pub const PARSE_ERROR: &str = "ParseError";
+
+/// What each function's result points into, written into its entry (ADR-283
+/// D25, #580): twice, so that a callee of another unit is read as written once
+/// its unit has been (the first pass reads the declaration's list, which only
+/// ever says more).
+fn write_result_sources(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
+    for _ in 0..2 {
+        for parsed in units.iter().copied() {
+            let sources = crate::views::result_sources(parsed, ledger, library);
+            for source in sources {
+                if let Some(contract) = ledger.functions.get_mut(&source.key) {
+                    contract.borrows = source.borrows;
+                    contract.returns = source.returns;
+                }
+            }
+        }
+    }
+}
 
 /// The one parameter every grammar entry takes: the text to parse
 /// ([ADR-296](../../../docs/specification/adr/adr-296.md) D24).

@@ -14,8 +14,11 @@
 //! nothing in the column itself says which of the two it is; only a test that a
 //! read stays a read does.
 
+mod common;
+
 use nikaia::contracts::{Ledger, LedgerOps};
 use nikaia::parser::parse_to_ast;
+use std::process::Command;
 
 /// What the ledger says one function keeps, after the inference.
 fn keeps(source: &str, name: &str) -> Vec<String> {
@@ -585,4 +588,118 @@ fn a_parameter_handed_to_a_trait_method_by_value_is_kept() {
          fn pass[H: Host](host: ref H, f: Flow, g: Flow) -> i64 sync { return host.go(f, g) }";
     assert_eq!(keeps(source, "Host::go"), ["f"]);
     assert_eq!(keeps(source, "pass"), ["f"]);
+}
+
+/// What `nikaia lower` says about a program, and what it prints once lowered,
+/// compiled and run: `Err` with the refusal where it is refused.
+fn lowered_and_run(purpose: &str, source: &str) -> Result<String, String> {
+    let dir = common::scratch_dir(&format!("keeps-{purpose}"));
+    std::fs::write(dir.join("program.nika"), source).expect("write the source");
+    let lowered = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["lower", "program.nika", "--output", "program.rs"])
+        .output()
+        .expect("the nikaia binary runs");
+    if !lowered.status.success() {
+        std::fs::remove_dir_all(&dir).ok();
+        return Err(String::from_utf8_lossy(&lowered.stderr).to_string());
+    }
+    let binary = dir.join("program");
+    let compiled = common::compile(
+        &dir.join("program.rs"),
+        &["--crate-type", "bin", "-o", &binary.to_string_lossy()],
+    );
+    assert!(
+        compiled.status.success(),
+        "{purpose} did not compile in rustc:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let out = Command::new(&binary).output().expect("run it");
+    assert!(out.status.success(), "{purpose} failed");
+    std::fs::remove_dir_all(&dir).ok();
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// Issue #697's probe: `shout` hands `v` to `tag`, whose result points into it,
+/// and only reads the result through a local.
+const A_VIEW_ONLY_READ: &str = "struct Tag {\n    label: ref String,\n}\n\n\
+fn tag(s: ref String) -> Tag {\n    return Tag { label: s }\n}\n\n\
+fn shout(v: String) {\n    let a = tag(v)\n    println(a.label)\n}\n\n\
+fn main() {\n    let x = f\"x{1}\"\n    shout(x)\n    println(x)\n}\n";
+
+/// **A call whose result points into an argument keeps it only where the
+/// result leaves** (#697, ADR-094 D2): a `Tag` bound to a local that is only
+/// read dies with the call, so `shout` lends `v` and `main` uses `x` again.
+#[test]
+fn a_result_that_views_a_parameter_and_is_only_read_does_not_keep_it() {
+    assert!(keeps(A_VIEW_ONLY_READ, "shout").is_empty());
+    assert_eq!(
+        lowered_and_run("view-only-read", A_VIEW_ONLY_READ).expect("it lowers"),
+        "x1\nx1\n"
+    );
+}
+
+/// The same with `tag` taking `String`, which it lends (#678): the struct's
+/// field is plain `String` too, and the tiers make the `Tag` a view.
+#[test]
+fn a_result_of_a_lent_string_parameter_only_read_does_not_keep_it() {
+    let source = A_VIEW_ONLY_READ
+        .replace("label: ref String", "label: String")
+        .replace("tag(s: ref String)", "tag(s: String)");
+    assert!(keeps(&source, "shout").is_empty());
+    assert_eq!(
+        lowered_and_run("lent-view-only-read", &source).expect("it lowers"),
+        "x1\nx1\n"
+    );
+}
+
+/// **A result that leaves takes the argument with it**: returned, put into a
+/// struct or a list, renamed and returned, or pushed into a container the
+/// function changes. Read through a field and copied, it stays behind.
+#[test]
+fn a_result_that_views_a_parameter_keeps_it_where_it_leaves() {
+    let source = "struct Tag { label: ref String }\n\
+                  struct Box { items: Vec[Tag] }\n\
+                  fn tag(s: ref String) -> Tag { return Tag { label: s } }\n\
+                  fn returned(v: String) -> Tag { let a = tag(v)\n return a }\n\
+                  fn returned_at_once(v: String) -> Tag { return tag(v) }\n\
+                  fn renamed(v: String) -> Tag { let a = tag(v)\n let b = a\n return b }\n\
+                  fn wrapped(v: String) -> Box { let a = tag(v)\n return Box { items: [a] } }\n\
+                  fn pushed(v: String, mut b: Box) { let a = tag(v)\n b.items.push(a) }\n\
+                  fn pushed_at_once(v: String, mut b: Box) { b.items.push(tag(v)) }\n\
+                  fn copied(v: String) -> String { let a = tag(v)\n return a.label.clone() }";
+    for name in [
+        "returned",
+        "returned_at_once",
+        "renamed",
+        "wrapped",
+        "pushed",
+        "pushed_at_once",
+    ] {
+        assert_eq!(keeps(source, name), ["v"], "{name}");
+    }
+    assert!(keeps(source, "copied").is_empty());
+}
+
+/// **Handed back, the view goes with the result**: written `ref String`,
+/// `shout` lends `v` and its `Tag` points into the caller's text. Written
+/// `String`, `shout` keeps `v` - the result leaves - and the view of text the
+/// call owns is refused with `NK2302` before `rustc` sees it.
+#[test]
+fn a_result_that_views_a_parameter_handed_back() {
+    let source = A_VIEW_ONLY_READ
+        .replace("fn shout(v: String) {", "fn shout(v: ref String) -> Tag {")
+        .replace("    println(a.label)\n}", "    return a\n}")
+        .replace(
+            "    shout(x)\n",
+            "    let t = shout(x)\n    println(t.label)\n",
+        );
+    assert_eq!(
+        lowered_and_run("view-handed-back", &source).expect("it lowers"),
+        "x1\nx1\n"
+    );
+    let owned = source.replace("fn shout(v: ref String)", "fn shout(v: String)");
+    assert_eq!(keeps(&owned, "shout"), ["v"]);
+    let refused = lowered_and_run("view-handed-back-owned", &owned).expect_err("it is refused");
+    assert!(refused.contains("error[NK2302]"), "{refused}");
 }
