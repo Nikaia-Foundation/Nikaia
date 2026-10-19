@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1048] — 2026-10-19
+
+**A shift written only in literals is folded exactly (#661)**
+- `1 << 40` is 1099511627776, an `i64`, and `1 << 31` is 2147483648: a shift written only in literals takes the first type that holds its value, as `+` and `*` do (ADR-285 D22, D40). `1 << 63` is NK1116 from Nikaia, no longer rustc's arithmetic_overflow. An open `let` given such a shift is typed by its value. Where a use asks for a type the shift is that type's: `let m: i32 = 1 << 31` stays -2147483648, `let m: i32 = 1 << 40` is NK1116, and an `i32` field given `1 << 31` no longer lowers as `1i64 << 31i64`.
+
 ## [0.0.1047] — 2026-10-19
 
 **A `String` parameter or option the body only reads is handed on as a view (#654)**
