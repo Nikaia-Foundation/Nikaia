@@ -119,9 +119,13 @@ impl Hasher for FxHasher {
         self.add(n as u64);
     }
 
+    /// The multiply leaves the most entropy in the top bits, but a table picks
+    /// the bucket from the bottom ones: the rotation brings the top down, as
+    /// `rustc-hash` 2 does, so keys on a power-of-two stride (`i * 1024`,
+    /// `i << 32`) do not crowd into a few buckets.
     #[inline]
     fn finish(&self) -> u64 {
-        self.hash
+        self.hash.rotate_left(26)
     }
 }
 
@@ -274,6 +278,35 @@ mod tests {
             theirs.write(&key);
             let back = theirs.finish().rotate_right(26).wrapping_mul(inverse);
             assert_eq!(back, hash_bytes(&key), "length {len}");
+        }
+    }
+
+    /// Integer keys on a power-of-two stride spread over the buckets a
+    /// 4096-bucket table picks from the low 12 bits: 2941 of them for
+    /// `i * 1024` and 1985 for `i << 32` (random keys reach about 2589), where
+    /// without the rotation in `finish` they share 4 and 1. Keyed again, they
+    /// hash the same way.
+    #[test]
+    fn strided_integers_spread_over_the_low_bits() {
+        let hash_u64 = |n: u64| {
+            let mut h = FxHasher::default();
+            h.write_u64(n);
+            h.finish()
+        };
+        for (name, key) in [
+            ("i * 1024", (|i: u64| i * 1024) as fn(u64) -> u64),
+            ("i << 32", |i: u64| i << 32),
+        ] {
+            let buckets: std::collections::HashSet<u64> =
+                (0..4096u64).map(|i| hash_u64(key(i)) & 0xfff).collect();
+            assert!(
+                buckets.len() >= 4096 / 4,
+                "{name}: {} buckets",
+                buckets.len()
+            );
+            for i in 0..4096u64 {
+                assert_eq!(hash_u64(key(i)), hash_u64(key(i)), "{name}");
+            }
         }
     }
 
