@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1064] — 2026-10-19
+
+**An idle task pool at `yes` sleeps (#693)**
+- `Pool::idle` rearms and wakes only after a park that saw something move, the pilot no longer rings the bell itself, a `sleep` on a pool task is woken by its time, and a second parker waits on the bell while another thread holds the I/O ring (`park_in_ring`). On 1BRC at `yes`, voluntary context switches drop from about 10 000 to about 70, and sys time from about 0.2 s to 0.
+
 ## [0.0.1063] — 2026-10-19
 
 **owned text assigned whole is moved; a map read past a jump is a view (#686, #694)**
