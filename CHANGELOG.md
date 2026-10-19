@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1050] — 2026-10-19
+
+**A list repeat keeps what it repeats (#654)**
+- `[x; n]` counts as keeping `x` (ADR-282 D6), as `[x]` does, so a `String` parameter repeated into a list is no longer lent, and `[name; 3]` is NK1280 again rather than NK1104.
+
 ## [0.0.1049] — 2026-10-19
 
 **a fold's counters proved from the input's length (ADR-367)**
