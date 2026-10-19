@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1071] — 2026-10-19
+
+**`drain` takes its container away (#707)**
+- Reading a list or map after `for x in c.drain()` is NK2105, as the ledger's `self: Vec[T]` says; before, the checker accepted it and rustc refused "borrow of moved value". A container that stays the caller's (a `mut` parameter, a field under `ref mut self`) is emptied: a list with `drain(..)`, a map with `drain()`.
+
 ## [0.0.1070] — 2026-10-19
 
 **a chain of map reads past a jump copies numbers out; a method's result ties the text handed to it (#694, #702)**
