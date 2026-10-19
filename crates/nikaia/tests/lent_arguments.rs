@@ -86,22 +86,23 @@ fn a_written_ampersand_at_a_lending_call_is_refused() {
 
 /// **A parameter the body keeps is not lent**, so the `&` a caller writes there
 /// is the program's own and stays. `keeps` is a restriction and doubt adds it
-/// (D2), and this is the position where that polarity is spent.
+/// (D2), and this is the position where that polarity is spent. A list, since
+/// a `String` handed back into a field is lent and the field views it (#678).
 #[test]
 fn a_kept_parameter_keeps_its_owned_argument() {
     let rust = lowered(
-        "struct Row { name: String }\n\
-         fn wrap(name: String) -> Row { return Row { name: name } }\n\
-         fn main() { let n = \"a\".clone() let r = wrap(n) println(f\"{r.name}\") }\n",
+        "struct Row { counts: Vec[i64] }\n\
+         fn wrap(counts: Vec[i64]) -> Row { return Row { counts: counts } }\n\
+         fn main() { let n: Vec[i64] = [1, 2] let r = wrap(n) println(f\"{r.counts.len()}\") }\n",
     );
-    assert!(rust.contains("fn wrap(name: String)"), "{rust}");
+    assert!(rust.contains("fn wrap(counts: Vec<i64>)"), "{rust}");
     assert!(!rust.contains("wrap(&n)"), "{rust}");
 
     // And nothing is refused there, because nothing would have been written.
     assert!(!refused(
-        "struct Row { name: String }\n\
-         fn wrap(name: String) -> Row { return Row { name: name } }\n\
-         fn main() { let n = \"a\" let r = wrap(n) println(f\"{r.name}\") }\n"
+        "struct Row { counts: Vec[i64] }\n\
+         fn wrap(counts: Vec[i64]) -> Row { return Row { counts: counts } }\n\
+         fn main() { let n: Vec[i64] = [1, 2] let r = wrap(n) println(f\"{r.counts.len()}\") }\n"
     ));
 }
 
