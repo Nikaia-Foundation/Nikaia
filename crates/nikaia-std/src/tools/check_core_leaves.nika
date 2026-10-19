@@ -271,6 +271,9 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
         let local = state.lambda_parameter(world, p, mutable, ty, span)
         if local.ty.is_unknown() {
             state.flow.unknown_bound.insert(local.id)
+            if local.open_number == null {
+                state.flow.unknown_lambda_params.insert(local.id)
+            }
         }
         frame.push(local)
         at += 1

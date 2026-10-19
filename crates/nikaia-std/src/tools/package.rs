@@ -10303,6 +10303,24 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_member_of_an_unknown_lambda_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
+        let base: &Expr = match expr {
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); receiver },
+            _ => return,
+        };
+        let name: String = match base {
+            Expr::Variable(n, _) => { let n = *n; world.words.resolve(n).to_owned() },
+            _ => return,
+        };
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !self.flow.unknown_lambda_params.contains(&local.id) || self.number_shaped(world, base) || self.an_error_stands_at(span) { return; }
+        let removed = self.flow.unknown_lambda_params.remove(&local.id);
+        self.flow.unknown_said += 1;
+        self.findings.push(check_refusal("NK1245", span, format!("The compiler can't tell what type `{}` is.", name), vec![format!("`{}` is a lambda's parameter, and what it is handed has no known type, so a member of it can't be checked.", name), "What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.".to_owned()], Some("Write the type down where the value is made, such as `let m: collections::HashMap[String, T] = collections::HashMap()`.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     fn is_an_unknown_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(n, _) => { let n = *n; self.is_a_name_bound_unknown(world.words.resolve(n)) },
@@ -14971,6 +14989,7 @@ pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     let ty = check_core_expr_flat_get(state, world, expr, opened);
     if state.flow.read_a_map && check_core_expr_a_map_read(world, expr) { state.flow.map_read_sites.insert(id_of(expr) as i64); }
     if check_core_expr_makes_a_value(expr) { check_crossings_a_value_with_a_cleanup_made(state, world, &ty); }
+    state.a_member_of_an_unknown_lambda_parameter(world, expr, span);
     if ty.is_unknown() && !said_inside { state.a_value_of_no_known_type(world, expr, span); }
     ty
 }
@@ -16298,7 +16317,10 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
         let mut ty: Ty = Ty::Unknown;
         if ((at) as usize) < given.len() { ty = (*nikaia_std::index::get(&given, (at) as usize)).clone(); }
         let local = state.lambda_parameter(world, p, mutable, ty, span);
-        if local.ty.is_unknown() { state.flow.unknown_bound.insert(local.id); }
+        if local.ty.is_unknown() {
+            state.flow.unknown_bound.insert(local.id);
+            if local.open_number.is_none() { state.flow.unknown_lambda_params.insert(local.id); }
+        }
         frame.push(local);
         at += 1;
     }
@@ -21762,6 +21784,7 @@ pub struct CheckFlow {
     pub lambda_expected: Option<Ty>,
     pub open_calls: collections::BTreeMap<i64, Vec<i64>>,
     pub unknown_bound: collections::BTreeSet<i64>,
+    pub unknown_lambda_params: collections::BTreeSet<i64>,
     pub unknown_said: i64,
     pub list_constants: collections::BTreeMap<i64, Vec<CheckConstant>>,
     pub overflowed: collections::BTreeSet<i64>,
@@ -21776,7 +21799,7 @@ pub struct CheckFlow {
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_lambda_params: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
 }
 
 

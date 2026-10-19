@@ -93,6 +93,7 @@ pub fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     if check_core_expr_makes_a_value(expr) {
         check_crossings_a_value_with_a_cleanup_made(state, world, ty)
     }
+    state.a_member_of_an_unknown_lambda_parameter(world, expr, span)
     if ty.is_unknown() && !said_inside {
         state.a_value_of_no_known_type(world, expr, span)
     }

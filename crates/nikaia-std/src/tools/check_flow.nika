@@ -225,6 +225,9 @@ pub struct CheckFlow {
     pub open_calls: collections::BTreeMap[i64, Vec[i64]],
     /// The `let`s whose value had no known type (#497), by binding.
     pub unknown_bound: collections::BTreeSet[i64],
+    /// **The lambda parameters handed a value of no known type** (#703), by
+    /// binding: a member of one is asked where the lambda stands (`NK1245`).
+    pub unknown_lambda_params: collections::BTreeSet[i64],
     /// How many `NK1245`s this walk has said (or stood back for).
     pub unknown_said: i64,
     /// What such a list holds, where nothing can change it (D26).
@@ -307,6 +310,7 @@ impl CheckFlow {
             lambda_expected: null,
             open_calls: collections::BTreeMap(),
             unknown_bound: collections::BTreeSet(),
+            unknown_lambda_params: collections::BTreeSet(),
             unknown_said: 0,
             list_constants: collections::BTreeMap(),
             overflowed: collections::BTreeSet(),

@@ -371,6 +371,29 @@ impl CheckState {
         }
     }
 
+    /// **A lambda handed a value of no known type is asked where it
+    /// stands** (`NK1245`, #703): a member of its parameter is where the
+    /// language below has to know the type, and nothing here does. Once per
+    /// parameter, and not for a number its uses type.
+    pub fn a_member_of_an_unknown_lambda_parameter(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
+        let base: ref Expr = match expr {
+            Expr::Field { base, .. } => base,
+            Expr::MethodCall { receiver, .. } => receiver,
+            else => return,
+        }
+        let name: String = match base {
+            Expr::Variable(n, _) => world.words.resolve(n).clone(),
+            else => return,
+        }
+        let local = self.binding(name) ?? return
+        if !self.flow.unknown_lambda_params.contains(local.id) || self.number_shaped(world, base) || self.an_error_stands_at(span) {
+            return
+        }
+        let removed = self.flow.unknown_lambda_params.remove(local.id)
+        self.flow.unknown_said += 1
+        self.findings.push(check_refusal("NK1245", span, f"The compiler can't tell what type `{name}` is.", [f"`{name}` is a lambda's parameter, and what it is handed has no known type, so a member of it can't be checked.", "What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.".clone()], "Write the type down where the value is made, such as `let m: collections::HashMap[String, T] = collections::HashMap()`.".clone()))
+    }
+
     fn is_an_unknown_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(n, _) => self.is_a_name_bound_unknown(world.words.resolve(n)),

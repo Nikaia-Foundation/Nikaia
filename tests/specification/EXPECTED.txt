@@ -129,7 +129,7 @@
 20-nikaia-advance.md #24 fragment (as written) [about-a-refusal sketch]  let account_a = SharedMut(Account(…))
 20-nikaia-advance.md #25 refused (items, then a body) [NK1117,NK1181]  use std::time
 20-nikaia-advance.md #26 lowered (items, then a body)  use std::channel
-20-nikaia-advance.md #27 lowered (a body)  let pixels = [/* 1 million pixels */]
+20-nikaia-advance.md #27 refused (a body) [NK1245]  let pixels = [/* 1 million pixels */]
 20-nikaia-advance.md #28 refused (a body) [NK1117,NK1181]  let summary = rows.par_iter().fold(Summary, fn(acc, r) …
 20-nikaia-advance.md #29 fragment (as written)  let table = b.par_pieces(b'\n').fold(Table, fn(t, piece…
 20-nikaia-advance.md #30 refused (a body) [NK1117,NK1201,NK2605]  let data = [1, 2, 3]

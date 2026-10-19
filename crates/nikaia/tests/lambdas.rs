@@ -378,3 +378,42 @@ fn a_lambda_takes_its_arguments_from_the_list_and_not_from_its_body() {
     assert!(none.contains("||"), "{none}");
     assert!(!none.contains("|a|"), "{none}");
 }
+
+/// **A lambda handed a value of no known type is asked where it stands**
+/// (`NK1245`, Part III, #703): `HashMap()` that nothing typed hands
+/// `and_modify` a value the compiler cannot tell, and the language below
+/// cannot either (E0282). Typed where the map is made, the same lambda is a
+/// program.
+#[test]
+fn a_lambda_handed_a_value_of_no_known_type_is_refused() {
+    let body = "use std::collections\n\
+                struct Tally { n: i64 }\n\
+                impl Tally {\n\
+                \x20   fn bump(ref mut self) sync { self.n += 1 }\n\
+                }\n\
+                fn main() {\n\
+                \x20   let mut counts{ty} = collections::HashMap()\n\
+                \x20   counts.entry(\"a\").and_modify fn (t) { t.bump() }.or_insert_with fn { Tally { n: 1 } }\n\
+                \x20   println(f\"{counts.len()}\")\n\
+                }\n";
+    let library = nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std");
+    let check = |ty: &str| {
+        let source = body.replace("{ty}", ty);
+        let parsed = parse_to_ast(&source).expect("it parses");
+        let own = nikaia::contracts::Ledger::infer(&parsed);
+        nikaia::check::check(&parsed, &own, &library).findings
+    };
+    let open = check("");
+    assert!(
+        open.iter()
+            .any(|f| f.code == "NK1245" && f.message.contains("`t`")),
+        "{open:#?}"
+    );
+    let typed = check(": collections::HashMap[String, Tally]");
+    assert!(
+        !typed
+            .iter()
+            .any(|f| f.severity == nikaia::check::Severity::Error),
+        "{typed:#?}"
+    );
+}

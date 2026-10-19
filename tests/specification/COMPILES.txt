@@ -54,7 +54,6 @@
 20-nikaia-advance.md #22 compiles
 20-nikaia-advance.md #23 compiles
 20-nikaia-advance.md #26 compiles
-20-nikaia-advance.md #27 refused
 30-nikaia-tooling.md #1 compiles
 30-nikaia-tooling.md #3 compiles
 30-nikaia-tooling.md #7 compiles
