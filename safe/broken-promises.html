@@ -63,7 +63,7 @@ assert(n == 41)     // proved: the guard above handled the other case
 <section class="home-section home-code-section" id="contracts">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <p class="home-eyebrow">Contracts</p>
+      <p class="home-eyebrow">Very safe · Contracts</p>
       <h2>An <code>assert</code> is a contract.</h2>
       <p>
         There is no separate specification language. You write
@@ -155,10 +155,10 @@ fn main() {
   </div>
 </section>
 
-<section class="home-section home-section home-code-section" id="loops">
+<section class="home-section home-section-alt home-code-section" id="loops">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <p class="home-eyebrow">Loops</p>
+      <p class="home-eyebrow">Very safe · Loops</p>
       <h2>A loop needs no invariant.</h2>
       <p>
         The <code>assert</code> after the loop in <code>steps</code> reads <code>total</code>,
@@ -218,3 +218,166 @@ fn main() {
   </div>
 </section>
 
+<section class="home-section home-code-section" id="outside">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <p class="home-eyebrow">Very safe · Data from outside</p>
+      <h2>A guard, not an <code>assert</code>.</h2>
+      <p>
+        What another program prints is not up to your program. If it is not what you expected,
+        that is not a bug in your code. It is a case your code has to handle.
+      </p>
+      <p>
+        So an <code>assert</code> about such data is refused, and the error says what to write
+        instead. After an <code>if</code> that handles the bad case, the same
+        <code>assert</code> is proved.
+      </p>
+    </div>
+    <div class="home-code markdown-body home-code-stack">
+<pre><code class="language-nika">use std::process
+
+fn main() throws {
+    let out = process::run("git", ["rev-parse", "HEAD"])
+    let n: int = out.stdout.len()
+    assert(n == 41)
+    println(f"commit {out.stdout.trim()}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build</b>
+<span class="d-error">error[NK1202]</span><b>: `n == 41` is a claim about data from outside the program.</b>
+<span class="d-gutter">  --&gt;</span> …/outa/src/main.nika:6:5
+<span class="d-gutter">   |</span>
+<span class="d-gutter"> 6 |</span>     assert(n == 41)
+<span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^</span>
+<span class="d-gutter">   |</span>
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> `n` comes from outside the program, so nothing the compiler can see says what it holds.
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> That it is wrong is a case the program has to handle, not a defect an `assert` catches.
+<span class="d-gutter">   =</span> <span class="d-help">help:</span> Check it where it arrives, with a guard the program handles: `throw BadInput(n) if !(n == 41)`, or `return … if !(n == 41)`. After that line, this `assert` is proved.
+1 type error</code></pre>
+<pre><code class="language-nika">use std::process
+
+fn main() throws {
+    let out = process::run("git", ["rev-parse", "HEAD"])
+    let n: int = out.stdout.len()
+    if n != 41 {
+        println("not a commit id")
+        return
+    }
+    assert(n == 41)
+    println(f"commit {out.stdout.trim()}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+<b>asserts in …/outb/src/main.nika: 1 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 1 (proved 1, preconditions proved at every call 0)</b>
+  …/outb/src/main.nika:10  assert(n == 41)  proved
+<span class="d-gutter">$</span> <b>target/nikaia/bin/outb</b>
+commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt home-code-section" id="report">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <p class="home-eyebrow">Very safe · The report</p>
+      <h2>Ask what was proved.</h2>
+      <p>
+        <code>nikaia build --asserts</code> lists every <code>assert</code> and what became of
+        it. <em>Proved</em> means no check is left in the program. A <em>precondition</em> is
+        each caller's to show; here every call shows it.
+      </p>
+      <p>
+        <em>Checked at run time</em> means the prover could not read the claim. It reads sums,
+        differences and comparisons, not the product of two names like <code>w * h</code>. Such
+        a claim does not stop the build. The program checks it when it runs, and the report
+        says why.
+      </p>
+    </div>
+    <div class="home-code markdown-body home-code-stack">
+<pre><code class="language-nika">fn average(total: int, count: int) -&gt; int {
+    assert(count &gt; 0)
+    return total / count
+}
+
+fn area(w: int, h: int) -&gt; int {
+    assert(w &gt;= 0 &amp;&amp; h &gt;= 0)
+    let a = w * h
+    assert(a &gt;= 0)
+    return a
+}
+
+fn main() {
+    let scores = [3, 5, 9]
+    let n = scores.len()
+    assert(n == 3)
+    println(f"{average(17, n)} {area(4, 5)}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+<b>asserts in …/rep/src/main.nika: 4 - not proved 1 (refused 0, checked at run time 1, checked by a test 0); checked where the words arrive 0; proved 3 (proved 1, preconditions proved at every call 2)</b>
+  …/rep/src/main.nika:9  assert(a &gt;= 0)  checked at run time: `a` is not a whole number the prover reads
+  …/rep/src/main.nika:16  assert(n == 3)  proved
+  …/rep/src/main.nika:2  assert(count &gt; 0)  precondition of `average`: proved at every call the compiler sees; any other reaches the entry that checks it
+  …/rep/src/main.nika:7  assert(w &gt;= 0 &amp;&amp; h &gt;= 0)  precondition of `area`: proved at every call the compiler sees; any other reaches the entry that checks it</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="main-parameters">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <p class="home-eyebrow">Very safe · The command line</p>
+      <h2><code>main</code>'s parameters are its command line.</h2>
+      <p>
+        <code>a</code> is a word the program needs. <code>times</code> comes after the
+        <code>;</code>, so it is named: on the command line it is the option
+        <code>--times</code>, and 4 where it is left out.
+      </p>
+      <p>
+        The words a program is started with come from outside, so an <code>assert</code> about
+        them cannot be proved. It is checked once the words are read, before the body runs.
+        A wrong word ends the program with exit status 2 and a line that says what is wrong.
+        <code>--help</code> lists the precondition next to the parameter.
+      </p>
+      <p><a href="{{ "/docs/specification/adr/adr-360.html" | relative_url }}">How main reads its words →</a></p>
+    </div>
+    <div class="home-code markdown-body home-code-stack">
+<pre><code class="language-nika">/// Divides 100 by a, a few times.
+fn main(a: int; times: int = 4) {
+    assert(a &gt; 0)
+    for i in 0..&lt;times {
+        println(f"{i}: {100 / a}")
+    }
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+<b>asserts in …/mainp/src/main.nika: 1 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 1; proved 0 (proved 0, preconditions proved at every call 0)</b>
+  …/mainp/src/main.nika:3  assert(a &gt; 0)  precondition of `main`, checked where the words arrive
+<span class="d-gutter">$</span> <b>./mainp 5 --times 2</b>
+0: 20
+1: 20
+<span class="d-gutter">$</span> <b>./mainp 0</b>
+<span class="d-error">error</span><b>: `a` is 0, which breaks `main`'s precondition `a &gt; 0`.</b>
+usage: mainp [--times &lt;int&gt;] &lt;a&gt;
+For more, try `mainp --help`.
+<span class="d-gutter">$</span> <b>echo $?</b>
+2
+<span class="d-gutter">$</span> <b>./mainp five</b>
+<span class="d-error">error</span><b>: `a` is an `int`, and `five` is not one.</b>
+usage: mainp [--times &lt;int&gt;] &lt;a&gt;
+For more, try `mainp --help`.
+<span class="d-gutter">$</span> <b>./mainp --help</b>
+mainp
+Divides 100 by a, a few times.
+
+usage: mainp [--times &lt;int&gt;] &lt;a&gt;
+
+arguments:
+  &lt;a&gt;                  int; requires `a &gt; 0`
+
+options:
+  --times &lt;int&gt;        int, default 4
+  -h, --help           prints this help</code></pre>
+    </div>
+  </div>
+</section>
