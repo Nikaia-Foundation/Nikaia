@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1075] — 2026-10-19
+
+**a view of a parameter kept in another parameter's place points into the caller's argument (ADR-283 D27, #706)**
+- Decided, not built: `fn words(s: String, mut v: Vec[String])` pushing parts of `s` into `v` gives the two parameters one lifetime, and the caller's argument lives as long as the place's owner (Part I 6.6).
+
 ## [0.0.1074] — 2026-10-19
 
 **`fs::map` hands back bytes; `m.text()` checks them once (ADR-016 D5)**
