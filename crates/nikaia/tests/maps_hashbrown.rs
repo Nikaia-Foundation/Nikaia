@@ -34,7 +34,7 @@ const PROGRAM: &str = "use std::collections\n\
      \x20   for w in words {\n\
      \x20       m.entry(w.clone()).and_modify(fn(mut c) { c += 1 }).or_insert_with(fn() { bonus })\n\
      \x20   }\n\
-     \x20   m.entry(\"d\".clone()).or_insert(3)\n\
+     \x20   m.entry(\"d\").or_insert(3)\n\
      \x20   m.insert(\"z\", 5)\n\
      \x20   let old = m.insert(\"z\", 6)\n\
      \x20   println(f\"{old ?? 0} {m.len()} {m.contains_key(\"a\")} {m.get(\"a\") ?? 0} {m[\"b\"] ?? 0} {m.get(\"q\") ?? -1}\")\n\

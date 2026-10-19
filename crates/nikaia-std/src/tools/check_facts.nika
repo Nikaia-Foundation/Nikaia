@@ -141,6 +141,10 @@ pub struct CheckFacts {
     /// map** (#684), by the lambda: its parameter is the value, read out of
     /// the slot and written back when the lambda ends.
     pub copied_entry_lambdas: collections::BTreeSet[i64],
+    /// **The key of `entry` on a map keyed by owned text, given a literal or
+    /// a view** (#676), by the key: built into text of its own, as `insert`'s
+    /// is.
+    pub owned_entry_keys: collections::BTreeSet[i64],
     pub kept_lambdas: collections::BTreeMap[i64, (bool, bool)],
     pub kept_hulls: collections::BTreeMap[i64, Vec[String]],
     pub kept_owned: collections::BTreeMap[i64, Vec[String]],
@@ -303,6 +307,7 @@ impl CheckFacts {
             copied_walks: collections::BTreeSet(),
             filter_patterns: collections::BTreeSet(),
             copied_entry_lambdas: collections::BTreeSet(),
+            owned_entry_keys: collections::BTreeSet(),
             kept_lambdas: collections::BTreeMap(),
             kept_hulls: collections::BTreeMap(),
             kept_owned: collections::BTreeMap(),

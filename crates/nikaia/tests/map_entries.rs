@@ -1,5 +1,7 @@
 //! **`entry` on a map** lowers to what rustc takes: `and_modify` on a map of
-//! numbers changes the number in the slot (#684).
+//! numbers changes the number in the slot (#684), and a literal or a view of
+//! text handed to `entry` on a map keyed by `String` is built into the key
+//! (#676), as `insert`'s is.
 
 mod common;
 
@@ -43,4 +45,52 @@ fn main() {
 }
 "#;
     assert_eq!(run("entry-number", source), "14 0.5 false\n");
+}
+
+/// The issue's own probe: a literal key for `entry` as for `insert` (#676).
+#[test]
+fn a_literal_key_for_entry_is_built_into_text() {
+    let source = r#"use std::collections
+
+fn main() {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.insert("a", 1)
+    m.entry("d").and_modify(fn(v) { v += 1 }).or_insert(1)
+    m.entry("d").and_modify(fn(v) { v += 1 }).or_insert(1)
+    println(f"{m.len()} {m["d"] ?? 0}")
+}
+"#;
+    assert_eq!(run("entry-literal", source), "2 2\n");
+}
+
+/// A `ref String` parameter and the `.text()` of a `Bytes` view are views,
+/// and `entry` builds the key from them (#676).
+#[test]
+fn a_view_key_for_entry_is_built_into_text() {
+    let source = r#"use std::collections
+
+struct C { n: i64 }
+
+fn count(k: ref String) -> i64 {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.entry(k).and_modify(fn(v) { v += 1 }).or_insert(1)
+    m.entry(k).and_modify(fn(v) { v += 1 }).or_insert(1)
+    return m[k] ?? 0
+}
+
+fn main() throws {
+    let key = "a".clone()
+    let line = "ab;1.0"
+    let mut c: collections::HashMap[String, C] = collections::HashMap()
+    let name = line.bytes[0..<2].text()
+    c.entry(name).and_modify(fn(x) { x.n += 1 }).or_insert(C { n: 1 })
+    c.entry(name).and_modify(fn(x) { x.n += 1 }).or_insert(C { n: 1 })
+    let mut n = 0
+    for (_, x) in c {
+        n = n + x.n
+    }
+    println(f"{count(key)} {count("b")} {c.len()} {n}")
+}
+"#;
+    assert_eq!(run("entry-view", source), "2 2 1 2\n");
 }

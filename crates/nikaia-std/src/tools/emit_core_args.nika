@@ -234,6 +234,13 @@ impl EmitState {
             out.push(scalar.clone())
             return
         }
+        // **`entry`'s key built into the map's text** (#676).
+        if self.facts.owned_entry_keys.contains(node_key(arg)) {
+            out.push("String::from(")
+            host.expr(walk, out, arg, depth, flow, scope)
+            out.push(")")
+            return
+        }
         // **A part of a variant that is boxed is built in its box** (ADR-246 D3),
         // around everything else this argument is written with.
         let boxed_here = i < boxed_mask.len() && boxed_mask[i]

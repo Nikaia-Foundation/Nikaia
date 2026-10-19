@@ -596,6 +596,14 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let no_options: Vec[(String, Ty)] = []
     let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, no_options, span)
     state.a_lookup_key_lent(world, key, args, found)
+    // **`entry`'s key is the map's** (#676): a literal or a view of text, on a
+    // map keyed by owned text, is built into text of its own, as `insert`'s is.
+    if key == "collections::HashMap::entry" && args.len() == 1 && found.len() == 1 {
+        let keys: Ty = bound.get("K")?.clone() ?? Ty::Unknown
+        if check_core_call_on_owned_text(keys) && check_core_call_on_text_to_build(world, args[0], found[0]) {
+            state.facts.owned_entry_keys.insert(id_of(args[0]) as i64)
+        }
+    }
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, found, expected, span)
     check_core_call_on_given(state, world, host, key, args, found, expected, span)
     state.a_pattern_of_owned_text(key, args, found, span)
@@ -807,5 +815,36 @@ fn check_core_call_on_copied_entry(want: ref Ty, arg: ref Expr) -> Ty? {
             }
         },
         else => null,
+    }
+}
+
+/// Whether a type is owned text: `String`, not a view of it.
+fn check_core_call_on_owned_text(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && args.len() == 0 && type_last_segment(name) == "String",
+        else => false,
+    }
+}
+
+/// Whether an `entry` key is text the map's owned key is built from: a
+/// literal, or text that may be a view below whatever its type says (a `let`
+/// of `.text()` is one). Text just made (`clone`, `to_string`) and the tier
+/// pass's own conversion are handed over as they are.
+fn check_core_call_on_text_to_build(world: ref CheckWorld, arg: ref Expr, found: ref Ty) -> bool {
+    let made = match arg {
+        Expr::LitStr { .. } => return true,
+        Expr::MethodCall { method, .. } => {
+            let called = world.words.resolve(method)
+            called == "clone" || called == "to_string" || called == "to_owned" || called == "into_either"
+        },
+        else => false,
+    }
+    return !made && check_core_call_on_names_text(found)
+}
+
+fn check_core_call_on_names_text(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, .. } => args.len() == 0 && (type_last_segment(name) == "String" || type_last_segment(name) == "str"),
+        else => false,
     }
 }
