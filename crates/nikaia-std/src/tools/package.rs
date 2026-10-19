@@ -4365,7 +4365,7 @@ fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_
                 local.buffer = true;
                 for origin in origins.iter() { local.origins.insert(origin.clone()); }
                 set_local(&root, local, walk);
-            } else { flow_into(&root, &origins, walk); }
+            } else if op.is_some() || !is_the_buffer(value, ask, &walk) { flow_into(&root, &origins, walk); }
         },
         Stmt::For { bindings, iter, body, .. } => {
             let origins = origins_of(iter, ask, holes_of, unaliased, walk);

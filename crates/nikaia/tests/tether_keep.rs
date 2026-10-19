@@ -790,3 +790,47 @@ fn main() {
     let rust = lowered(source, Build::default());
     assert!(rust.contains("current = __keep_frame.put("), "{rust}");
 }
+
+/// **Owned text handed to a field whole is moved there** (#686), as it is in a
+/// struct literal: `l.from = key` inside a loop keeps no view of `key`, so
+/// `key` is not put into the frame's keep, and its `String?` is `Some(..)`.
+#[test]
+fn owned_text_assigned_to_a_field_is_moved_not_kept() {
+    let source = "struct L {
+    from: String?,
+}
+
+fn word(n: i64) -> String {
+    return f\"w{n}\"
+}
+
+fn main() {
+    let mut l = L { from: null }
+    for i in 0..<2 {
+        if i == 1 {
+            let key: String? = word(i)
+            l.from = key
+        }
+    }
+    println(l.from ?? \"-\")
+}
+";
+    assert!(
+        !lowered(source, Build::default()).contains("__keep_frame"),
+        "{}",
+        lowered(source, Build::default())
+    );
+    runs("text-moved-into-a-field", source, "w1");
+    // Only read inside the loop, it stays an owned option, no copy made.
+    let read = source.replace("l.from = key", "println(key ?? \"\")");
+    let rust = lowered(&read, Build::default());
+    assert!(
+        rust.contains("let key: Option<String> = Some(word(i));"),
+        "{rust}"
+    );
+    assert!(
+        !rust.contains("__keep_frame") && !rust.contains(".clone()"),
+        "{rust}"
+    );
+    runs("text-only-read", &read, "w1\n-");
+}

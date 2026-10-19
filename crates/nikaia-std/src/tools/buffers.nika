@@ -317,7 +317,9 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                     local.origins.insert(origin.clone())
                 }
                 set_local(root, local, walk)
-            } else {
+            } else if op != null || !is_the_buffer(value, ask, walk) {
+                // **And so is one handed to a field or an element whole** (#686):
+                // `l.from = key` moves the text there, as `L { from: key }` does.
                 flow_into(root, origins, walk)
             }
         }
