@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1066] — 2026-10-19
+
+**A struct handed back through a `let`, and a parameter handed to a reader, lend their `String` parameter (#678)**
+- `fn tag(s: String) -> Tag { let t = Tag { label: s }; return t }` and `fn f(a: String) -> String { g(a); return a }`, where `g` only reads its argument, lower byte for byte like their `ref String` twins (ADR-282 D2, D5, D12; Part I 6.5). The `ref String` twin of the first shape is no longer refused with NK2302.
+
 ## [0.0.1065] — 2026-10-19
 
 **`split_once` parts past `?? continue` are views (#687)**
