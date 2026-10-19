@@ -1163,16 +1163,26 @@ pub fn lower_reading(
     let cached = cache
         .as_ref()
         .and_then(|cache| cache.lookup(&unit, &key_source, &choices, &layout.root))
-        .filter(|artifacts| artifacts.has_all(&[RUST, CONTRACTS, DERIVED]));
+        .filter(|artifacts| artifacts.has_all(&[RUST, CONTRACTS, DERIVED, WARNINGS]));
     let reused = cached.is_some();
     let mut proofs = None;
 
     let (rust, ledger, derived) = match &cached {
-        Some(artifacts) => (
-            artifacts.get(RUST).expect("checked above").to_string(),
-            artifacts.get(CONTRACTS).expect("checked above").to_string(),
-            artifacts.get(DERIVED).expect("checked above").to_string(),
-        ),
+        Some(artifacts) => {
+            // **A warning is the program's, not the build's** (as Cargo
+            // replays a fresh crate's): what the check said when this
+            // lowering was made is said again, under the same rule of once.
+            let in_the_wrapper =
+                std::env::var_os(WRAPPER_MARKER).is_some() || WARNED.with(|warned| warned.get());
+            if !in_the_wrapper {
+                eprint!("{}", artifacts.get(WARNINGS).expect("checked above"));
+            }
+            (
+                artifacts.get(RUST).expect("checked above").to_string(),
+                artifacts.get(CONTRACTS).expect("checked above").to_string(),
+                artifacts.get(DERIVED).expect("checked above").to_string(),
+            )
+        }
         None => {
             // Every unit is checked against the *program's* contracts, not its
             // own: `utils::double` is a name `main.nika` may write, and the
@@ -1224,6 +1234,7 @@ pub fn lower_reading(
                 true => crate::proofs::Book::read(&layout.root),
                 false => crate::proofs::Book::default(),
             };
+            let mut warnings = String::new();
             let (checked, book) = crate::proofs::with_book(book, || -> Result<()> {
                 for unit in &program.units {
                     let contracts = match &unit.package {
@@ -1233,7 +1244,7 @@ pub fn lower_reading(
                             .unwrap_or(&program.contracts),
                         None => &promised,
                     };
-                    crate::proofs::for_unit(
+                    warnings += &crate::proofs::for_unit(
                         &unit.path,
                         &unit.source,
                         unit.package.is_some(),
@@ -1305,7 +1316,9 @@ pub fn lower_reading(
             // known, and a warning rather than a refusal — the line is a
             // permission that is no longer used, not a program that is wrong.
             for entry in reads.unused() {
-                eprintln!("warning: the allowlist names `{entry}` and nothing read it");
+                let line = format!("warning: the allowlist names `{entry}` and nothing read it\n");
+                eprint!("{line}");
+                warnings.push_str(&line);
             }
 
             if let Some(cache) = &mut cache {
@@ -1315,7 +1328,8 @@ pub fn lower_reading(
                 let artifacts = Artifacts::new()
                     .with(RUST, &lowered.rust)
                     .with(CONTRACTS, &ledger)
-                    .with(DERIVED, &derived);
+                    .with(DERIVED, &derived)
+                    .with(WARNINGS, &warnings);
                 let stored = cache
                     .record(&unit, &key_source, reads.taken(), &choices, &artifacts)
                     .and_then(|()| cache.save());
@@ -1392,6 +1406,9 @@ pub const CONTRACTS: &str = "contracts";
 /// What the contract was derived from, `nikaia.derived`
 /// ([ADR-251](../../docs/specification/adr/adr-251.md) D1).
 pub const DERIVED: &str = "derived";
+/// The warnings the check said while it made the lowering, said again when it
+/// is reused.
+pub const WARNINGS: &str = "warnings";
 
 /// Everything the compiler decides for itself, before it emits a line of Rust.
 ///
@@ -1697,7 +1714,7 @@ pub fn check(
     user_parallelism: &str,
     refuted_claims: &str,
     building_a_library: bool,
-) -> Result<()> {
+) -> Result<String> {
     let Around {
         foreign,
         newly,
@@ -1731,7 +1748,7 @@ pub fn check(
     let_refuted_claims_through(&mut all, refuted_claims);
     let violations = sync::check(parsed, own, &library);
     if all.is_empty() && violations.is_empty() {
-        return Ok(());
+        return Ok(String::new());
     }
 
     // A warning is printed and does not stop anything: a string that looks
@@ -1744,19 +1761,28 @@ pub fn check(
     // wrapper on any it saw.
     let in_the_wrapper =
         std::env::var_os(WRAPPER_MARKER).is_some() || WARNED.with(|warned| warned.get());
+    //
+    // **The warnings are handed back as they were said**, suppressed or not:
+    // the build cache keeps them with the lowering, and a build that reuses
+    // it says them again.
     let path = path.display().to_string();
+    let mut warnings = String::new();
     for finding in &all {
-        if in_the_wrapper && finding.severity == check::Severity::Warning {
-            continue;
+        let rendered = diagnostics::render_finding(finding, &path, source);
+        if finding.severity == check::Severity::Warning {
+            warnings.push_str(&rendered);
+            if in_the_wrapper {
+                continue;
+            }
         }
-        eprint!("{}", diagnostics::render_finding(finding, &path, source));
+        eprint!("{rendered}");
     }
     let findings: Vec<&check::Finding> = all
         .iter()
         .filter(|f| f.severity == check::Severity::Error)
         .collect();
     if findings.is_empty() && violations.is_empty() {
-        return Ok(());
+        return Ok(warnings);
     }
     for violation in &violations {
         eprint!(

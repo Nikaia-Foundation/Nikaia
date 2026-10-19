@@ -514,3 +514,52 @@ fn a_file_named_another_way_is_not_served_the_other_name() {
     assert!(hit, "the same name again is a hit");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A warning is the program's, and a hit says it again**: the check that
+/// found it does not run on a hit, so the cache keeps what it said and the
+/// build that reuses the lowering replays it - as Cargo replays a fresh
+/// crate's warnings. `NK1213` is a decomposed `char` literal, composed.
+#[test]
+fn a_hit_says_the_warnings_of_the_check_again() {
+    let dir = common::scratch_dir("cache-warnings-replayed");
+    let home = dir.join("cache");
+    let input = dir.join("warned.nika");
+    std::fs::write(
+        &input,
+        "fn main() {\n    let c = 'e\\u{301}'\n    println(f\"{c}\")\n}\n",
+    )
+    .expect("write the program");
+
+    let said = |verb: &str, cache: Option<&std::path::Path>| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_nikaia"));
+        command.args([verb, input.to_str().unwrap()]);
+        if let Some(cache) = cache {
+            command.env("NIKAIA_CACHE_DIR", cache);
+        }
+        let out = command.output().expect("the nikaia binary runs");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(out.status.success(), "{verb}: {err}");
+        (String::from_utf8_lossy(&out.stdout).into_owned(), err)
+    };
+
+    let (first, warned) = said("lower", Some(&home));
+    assert!(
+        !first.contains("from cache"),
+        "the first lowering has to lower"
+    );
+    assert!(warned.contains("NK1213"), "{warned}");
+    let (second, again) = said("lower", Some(&home));
+    assert!(second.contains("from cache"), "the second is a hit");
+    assert_eq!(again, warned, "a hit says what the check said");
+
+    // **And `run`**, the path the arm64 runner took: its cache persists from
+    // one CI run to the next, so the second run here is what every run after
+    // the first one saw there. The user's cache, so the bundle is shared.
+    for time in ["first", "second"] {
+        let (out, err) = said("run", None);
+        assert_eq!(out, "é\n", "{time}: {err}");
+        assert!(err.contains("NK1213"), "{time} run: {err}");
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
