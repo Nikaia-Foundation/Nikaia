@@ -17,16 +17,16 @@ use std::cli
 use std::text
 use std::fs
 
-fn read(path: ref String) -> i64 throws {
+fn read(path: String) -> i64 throws {
     let text = fs::read_to_string(ref path, fs::Root::Anywhere)
     return text.len()
 }
 
-fn checked(path: ref String) -> i64 throws {
+fn checked(path: String) -> i64 throws {
     return read(path)
 }
 
-fn measured(path: ref String) -> i64 throws {
+fn measured(path: String) -> i64 throws {
     return checked(path)
 }
 

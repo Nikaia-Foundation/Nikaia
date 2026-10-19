@@ -22,7 +22,7 @@ struct Stats {
 fn main() throws {
     let path = cli::args().nth(1) ?? "measurements.txt"
     let data = fs::read_to_string(path, fs::Root::Anywhere)
-    let mut stations: collections::HashMap[ref String, Stats] = collections::HashMap()
+    let mut stations: collections::HashMap[String, Stats] = collections::HashMap()
 
     for line in data.lines() {
         let at = line.find(";") ?? panic("a separator")
