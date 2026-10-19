@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1060 (Draft)
+**Version:** 0.0.1061 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -1452,7 +1452,9 @@ Some modules are available, or behave restrictively, depending on the target and
   and `system_time`, the processor time it used; and `max_rss_kib`, the most
   memory it held resident in KiB, an `i64?` that is `null` where the platform
   does not report it. Each figure is that one program's
-  ([ADR-368](adr/adr-368.md)). A non-zero exit is an answer and not a
+  ([ADR-368](adr/adr-368.md)), as the operating system reports it; on Linux
+  `max_rss_kib` is never below the most memory the caller had held resident
+  before it started the program. A non-zero exit is an answer and not a
   failure; what throws `io::IoError` is a program that cannot be started, or
   output that is not UTF-8. The wait gives the thread up, so other tasks run
   while the program does.

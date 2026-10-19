@@ -28,6 +28,7 @@ pub struct Waited {
     pub system_time: Duration,
     /// The most memory it held resident, in KiB, as the operating system
     /// reports it for that child; `None` where the platform is not Unix.
+    /// Linux counts the replaced image's high-water mark, the caller's, in it.
     pub max_rss_kib: Option<i64>,
 }
 

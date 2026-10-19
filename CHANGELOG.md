@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1061] — 2026-10-19
+
+**process::run's max_rss_kib on Linux counts the caller's high-water mark (ADR-368 D3)**
+- `process::run`'s `max_rss_kib` is the kernel's figure as it stands: on Linux it is never below the most memory the caller had held resident before it started the program, since the kernel counts the image `exec` replaced. ADR-368 D3 and Part III say so; the figure itself is unchanged.
+
 ## [0.0.1060] — 2026-10-19
 
 **A map's text keys and values are views where only views go in (#659)**

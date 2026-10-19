@@ -54,6 +54,8 @@ pub struct Output {
     pub system_time: Duration,
     /// The most memory it held resident, in KiB, as the operating system
     /// reports it for that one program; `None` where the platform is not Unix.
+    /// On Linux never below the caller's own high-water mark before the start
+    /// (ADR-368 D3).
     pub max_rss_kib: Option<i64>,
 }
 
