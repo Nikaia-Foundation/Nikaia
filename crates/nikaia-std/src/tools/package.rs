@@ -17918,7 +17918,7 @@ pub fn check_core_places_text_position(state: &CheckState, world: &CheckWorld<'_
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
             let found = match check_core_places_text_position(state, world, value) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            if check_core_places_leaves(fallback) { return Some(found); }
+            if check_core_places_leaves(fallback) || state.exits(world, fallback) { return Some(found); }
             let other = match check_core_places_text_position(state, world, fallback) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return check_core_places_either_position(&found, &other);
         },

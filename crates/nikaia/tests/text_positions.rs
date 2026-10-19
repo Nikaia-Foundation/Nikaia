@@ -175,3 +175,43 @@ fn an_rfind_position_of_another_text_is_refused() {
     assert!(err.contains("NK1214"), "{err}");
     assert!(err.contains("another text"), "{err}");
 }
+
+/// **A fallback that never comes back keeps `find`'s position** (#683): the
+/// value of `find(..) ?? panic(..)`, `?? throw` or `?? return` is always the
+/// left side's, so each cuts the text; a made-up number as the fallback does
+/// not (`0`, the start of every text, would).
+#[test]
+fn a_fallback_that_never_returns_keeps_the_position() {
+    let out = run(
+        "positions-never-returns",
+        "enum Bad { Missing }\n\
+         impl Error for Bad { fn message(ref self) -> String { return \"bad\" } }\n\
+         \n\
+         fn by_panic(line: ref String) -> String {\n\
+         \x20   let at = line.find(\";\") ?? panic(\"no separator\")\n\
+         \x20   return line[..<at]\n\
+         }\n\
+         \n\
+         fn by_throw(line: ref String) -> String throws {\n\
+         \x20   let at = line.find(\";\") ?? throw Bad::Missing\n\
+         \x20   return line[at + 1..]\n\
+         }\n\
+         \n\
+         fn by_return(line: ref String) {\n\
+         \x20   let at = line.find(\";\") ?? return\n\
+         \x20   println(line[..<at])\n\
+         }\n\
+         \n\
+         fn main() throws {\n\
+         \x20   println(by_panic(\"ab;1.0\"))\n\
+         \x20   println(by_throw(\"ab;1.0\"))\n\
+         \x20   by_return(\"cd;2.0\")\n\
+         }\n",
+    );
+    assert_eq!(out, "ab\n1.0\ncd\n");
+    let err = refused(
+        "positions-fallback-number",
+        "fn main() {\n    let line = \"ab;1.0\"\n    let at = line.find(\";\") ?? 1\n    println(line[..<at])\n}\n",
+    );
+    assert!(err.contains("NK1214"), "{err}");
+}

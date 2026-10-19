@@ -848,7 +848,9 @@ pub fn check_core_places_text_position(state: ref CheckState, world: ref CheckWo
         },
         Expr::Coalesce { value, fallback, .. } => {
             let found = check_core_places_text_position(state, world, value) ?? return null
-            if check_core_places_leaves(fallback) {
+            // A fallback that never comes back (`return`, `throw`, `panic(..)`,
+            // a jump): the value is always the left side's.
+            if check_core_places_leaves(fallback) || state.exits(world, fallback) {
                 return found
             }
             let other = check_core_places_text_position(state, world, fallback) ?? return null
