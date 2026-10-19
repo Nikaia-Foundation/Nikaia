@@ -57171,6 +57171,7 @@ struct TierWalk {
     handed_back: i64,
     unlent: collections::BTreeSet<String>,
     read_here: bool,
+    tail_back: bool,
     ties: collections::BTreeMap<String, Vec<TextTie>>,
 }
 
@@ -57902,6 +57903,8 @@ fn field_place(base: &Expr, field: &str, ask: &TierAsk<'_, '_, '_>, walk: &TierW
 }
 
 fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
+    let back = walk.tail_back;
+    walk.tail_back = false;
     open_tier_scope(walk);
     let mut tail = no_kinds();
     let mut k: i64 = 0;
@@ -57909,11 +57912,13 @@ fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> 
         let before = walk.handed_back;
         let bound = handed_by_name(&stmt.node, block, k, ask);
         if bound >= 0 { walk.handed_back = bound; }
+        if k + 1 == block.stmts.len() as i64 && (walk.frames.len() == 2 || back) && walk.result.is_some() { walk.tail_back = a_value_statement(&stmt.node); }
         let kinds = tier_statement(&stmt.node, stmt.span.start as i64, ask, walk);
+        walk.tail_back = false;
         if bound >= 0 { walk.handed_back = before; }
         if k + 1 == block.stmts.len() as i64 {
             tail = kinds;
-            if walk.frames.len() == 2 && walk.result.is_some() {
+            if (walk.frames.len() == 2 || back) && walk.result.is_some() {
                 match &stmt.node {
                     Stmt::Expr(last) => { tie_leaves(last, -1, None, true, ask, walk); },
                     _ => { },
@@ -57925,6 +57930,8 @@ fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> 
     close_tier_scope(walk);
     tail
 }
+
+fn a_value_statement(stmt: &Stmt) -> bool { matches!(stmt, Stmt::Expr(_)) }
 
 fn handed_by_name(stmt: &Stmt, block: &Block, at: i64, ask: &TierAsk<'_, '_, '_>) -> i64 {
     match stmt {
@@ -58482,6 +58489,8 @@ fn tier_a_choice(value: &Expr) -> bool { matches!(value, Expr::If { .. } | Expr:
 fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let read = walk.read_here;
     walk.read_here = false;
+    let back = walk.tail_back;
+    walk.tail_back = false;
     if !read {
         match expr {
             Expr::Variable(name, _) => { let name = *name; count_use(ask.names.resolve(name), walk); },
@@ -58559,9 +58568,11 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
             tier_expr(cond, ask, walk);
+            walk.tail_back = back;
             let mut out = tier_block(then_branch, ask, walk);
             if else_branch.is_some() {
                 let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out };
+                walk.tail_back = back;
                 out = kinds_joined(&out, &tier_block(otherwise, ask, walk));
             }
             if beside_its_own(&out) { kept_unseen(expr, ask, walk); }
@@ -58585,7 +58596,9 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
                     let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                     tier_expr(guard, ask, walk);
                 }
+                walk.tail_back = back;
                 out = kinds_joined(&out, &tier_expr(&arm.body, ask, walk));
+                if back { tie_leaves(&arm.body, -1, None, true, ask, walk); }
                 if bound { still_sources(&arm.body, ask, walk, &mut payloads); }
                 close_tier_scope(walk);
             }
@@ -58599,7 +58612,10 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
             if literals_beside_null(expr) { return owned_kinds(); }
             out
         },
-        Expr::Block(block, _) => tier_block(block, ask, walk),
+        Expr::Block(block, _) => {
+            walk.tail_back = back;
+            tier_block(block, ask, walk)
+        },
         Expr::Unsafe(block, _) => tier_block(block, ask, walk),
         Expr::Overlap(block, _) => tier_block(block, ask, walk),
         Expr::Closure { body, .. } => {
@@ -59423,7 +59439,7 @@ fn tier_word(tier: Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, ties: collections::BTreeMap::new() };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new() };
     for _ in 0..16 {
         walk.flows = no_flows();
         walk_program(program, ask, &mut walk);

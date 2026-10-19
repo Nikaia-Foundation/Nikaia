@@ -544,6 +544,9 @@ struct TierWalk {
     unlent: collections::BTreeSet[String],
     /// The next value walked is only read where it stands.
     read_here: bool,
+    /// The next block or arm walked is handed back as the function's last
+    /// value, through the arms of an `if` or a `match` (#708).
+    tail_back: bool,
     /// The views of a caller's text each name of the function walked may
     /// hold through a call's result (#702).
     ties: collections::BTreeMap[String, Vec[TextTie]],
@@ -1505,6 +1508,8 @@ fn field_place(base: ref Expr, field: ref String, ask: ref TierAsk, walk: ref Ti
 }
 
 fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
+    let back = walk.tail_back
+    walk.tail_back = false
     open_tier_scope(walk)
     let mut tail = no_kinds()
     let mut k = 0
@@ -1517,14 +1522,20 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         if bound >= 0 {
             walk.handed_back = bound
         }
+        if k + 1 == block.stmts.len() && (walk.frames.len() == 2 || back) && walk.result != null {
+            walk.tail_back = a_value_statement(stmt.node)
+        }
         let kinds = tier_statement(stmt.node, stmt.span.start as i64, ask, walk)
+        walk.tail_back = false
         if bound >= 0 {
             walk.handed_back = before
         }
         if k + 1 == block.stmts.len() {
             tail = kinds
-            // A function's last value is handed back as a `return` is.
-            if walk.frames.len() == 2 && walk.result != null {
+            // A function's last value is handed back as a `return` is, and
+            // so is each arm's last value of an `if` or a `match` it ends
+            // with (#708).
+            if (walk.frames.len() == 2 || back) && walk.result != null {
                 match stmt.node {
                     Stmt::Expr(last) => tie_leaves(last, -1, null, true, ask, walk),
                     else => {}
@@ -1535,6 +1546,13 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     }
     close_tier_scope(walk)
     return tail
+}
+
+fn a_value_statement(stmt: ref Stmt) -> bool {
+    return match stmt {
+        Stmt::Expr(_) => true,
+        else => false,
+    }
 }
 
 /// The id of a struct literal a `let` binds to a name the block hands back,
@@ -2237,6 +2255,8 @@ fn tier_a_choice(value: ref Expr) -> bool {
 fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let read = walk.read_here
     walk.read_here = false
+    let back = walk.tail_back
+    walk.tail_back = false
     if !read {
         match expr {
             Expr::Variable(name, _) => count_use(ask.names.resolve(name), walk),
@@ -2310,9 +2330,11 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         }
         Expr::If { cond, then_branch, else_branch, .. } => {
             tier_expr(cond, ask, walk)
+            walk.tail_back = back
             let mut out = tier_block(then_branch, ask, walk)
             if else_branch != null {
                 let otherwise = else_branch ?? return out
+                walk.tail_back = back
                 out = kinds_joined(out, tier_block(otherwise, ask, walk))
             }
             if beside_its_own(out) {
@@ -2345,7 +2367,13 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                     let guard = arm.guard ?? continue
                     tier_expr(guard, ask, walk)
                 }
+                walk.tail_back = back
                 out = kinds_joined(out, tier_expr(arm.body, ask, walk))
+                // An arm's value the function ends with is handed back as a
+                // `return` is (#708), while the names the arm binds are bound.
+                if back {
+                    tie_leaves(arm.body, -1, null, true, ask, walk)
+                }
                 if bound {
                     still_sources(arm.body, ask, walk, payloads)
                 }
@@ -2363,7 +2391,10 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             }
             out
         }
-        Expr::Block(block, _) => tier_block(block, ask, walk),
+        Expr::Block(block, _) => {
+            walk.tail_back = back
+            tier_block(block, ask, walk)
+        }
         Expr::Unsafe(block, _) => tier_block(block, ask, walk),
         Expr::Overlap(block, _) => tier_block(block, ask, walk),
         // A lambda's `return` is the lambda's, not the function's.
@@ -3420,7 +3451,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, ties: collections::BTreeMap() }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap() }
     for _ in 0..<16 {
         walk.flows = no_flows()
         walk_program(program, ask, walk)

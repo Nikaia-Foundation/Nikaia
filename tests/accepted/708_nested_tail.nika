@@ -1,0 +1,38 @@
+// #708: a function whose last value is an `if` or a `match` hands back each
+// arm's value as a `return` does: `tag(v)` takes `v` by value here.
+
+struct Tag {
+    label: String,
+}
+
+struct Box {
+    items: Vec[Tag],
+}
+
+fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}
+
+fn mk(v: String, c: i64) -> Tag {
+    if c > 0 {
+        if c > 1 {
+            tag(v)
+        } else {
+            tag(v)
+        }
+    } else {
+        match c {
+            0 => tag(v),
+            else => tag(v),
+        }
+    }
+}
+
+fn main() {
+    let mut b = Box { items: [] }
+    for i in 0..<3 {
+        let v = f"x{i}"
+        b.items.push(mk(v, i))
+    }
+    println(f"{b.items.len()} {b.items[0].label} {b.items[1].label} {b.items[2].label}")
+}
