@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1087] — 2026-10-19
+
+**a name read later, or a parameter arm, goes into a keeping parameter as a view (#716)**
+- A name handed straight to a keeping `String` parameter is lent instead of moved when it is still read after the call, or in a later turn of a loop around the call; the parameter then takes both kinds (`EitherText`). An `if`/`match` arm that is a parameter, in a choice handed to a keeping parameter, is a view likewise. A name nothing reads afterwards still moves; a `pub fn`'s parameter is unchanged.
+
 ## [0.0.1086] — 2026-10-19
 
 **fs::map maps bytes; m.text() checks the mapping once (ADR-016 D5, #710)**
