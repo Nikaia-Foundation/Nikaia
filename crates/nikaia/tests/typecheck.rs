@@ -158,12 +158,13 @@ fn a_call_into_std_is_checked_against_the_shipped_ledger() {
 #[test]
 fn an_argument_of_the_wrong_type_is_reported() {
     // A **view** and not a literal: a literal handed to a `String` is one
-    // (ADR-282 D4). And a **published** parameter text of its own also goes
-    // into, which stays text of its own (ADR-282 D14), so the view still needs
-    // its copy written.
-    let (code, message) = one("pub fn greet(who: String) -> String { return who }\n\
-         pub fn hello(w: ref String) -> String { return greet(w) }\n\
-         pub fn world() -> String { return greet(f\"world\") }");
+    // (ADR-282 D4). And a parameter the body keeps in a list: one only handed
+    // back would be lent (#678).
+    let (code, message) = one(
+        "pub fn greet(who: String) -> Vec[String] { return [who] }\n\
+         pub fn hello(w: ref String) -> Vec[String] { return greet(w) }\n\
+         pub fn world() -> Vec[String] { return greet(f\"world\") }",
+    );
     assert_eq!(code, "NK1102");
     assert_eq!(
         message,
@@ -1936,7 +1937,7 @@ fn every_refused_arm_shape_is_pointed_at() {
         (
             "NK1102",
             format!(
-                "fn g(x: String) -> String {{\n    return x\n}}\n\
+                "fn g(x: String) -> String {{\n    let mut y = x\n    y.push_str(\"!\")\n    return y\n}}\n\
                  fn f(v: ref Val) -> String {{\n    return g({arms})\n}}\n"
             ),
         ),
@@ -2047,7 +2048,7 @@ fn a_match_arm_that_is_a_view_is_refused_in_an_annotated_let() {
 #[test]
 fn a_match_arm_that_is_a_view_is_refused_as_an_argument() {
     let found = findings(&format!(
-        "{A_CHOICE_OF_ARMS}fn g(x: String) -> String {{\n    return x\n}}\n\
+        "{A_CHOICE_OF_ARMS}fn g(x: String) -> String {{\n    let mut y = x\n    y.push_str(\"!\")\n    return y\n}}\n\
          fn f(v: ref Val) -> String {{\n    return g(match v {{\n        Val::Int(n) => f\"{{n}}\",\n        \
          Val::Text(t) => t,\n    }})\n}}\n"
     ));
