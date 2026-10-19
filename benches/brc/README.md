@@ -34,9 +34,13 @@ benches/brc/brc.sh 200000     # quicker
   with `nikaia build` at `opt-level = 3`, every `optimization` on
   (`remove-bounds-checks`, `remove-overflow-checks`, `skip-free-at-exit`), no
   debug assertions; it keeps the overflow checks the language promises. **Neither side
-  uses link-time optimisation.** Each Rust program is a binary of its own: in one
-  binary with the others, LLVM did not inline `tuned`'s hash-table entry and the
-  count rose by 40 a row.
+  uses link-time optimisation.** **Both sides use one codegen unit**: the Rust
+  programs through `[profile.release.package.brc-bench]` in the workspace's
+  `Cargo.toml`, Nikaia's through `CARGO_PROFILE_DEV_CODEGEN_UNITS=1` (a project
+  cannot say it yet, #692). With release's 16, which unit rustc put `tuned`'s
+  hash-table `entry` in decided whether the hot loop inlined it: a change to the
+  output code alone moved it out and the count rose by 40 a row. Each Rust
+  program is a binary of its own, for the same reason.
 * **Nikaia without overflow checks** is the same project built with
   `RUSTFLAGS="-C overflow-checks=off"`, to say what the checks cost.
 * **Length in tokens**, by [`scripts/tokens.nika`](../../scripts/tokens.nika), the

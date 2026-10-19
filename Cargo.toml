@@ -55,3 +55,10 @@ debug = 0
 [profile.release]
 opt-level = 3
 debug = false
+
+# **One codegen unit for the 1BRC programs** (`benches/brc/README.md`): with
+# release's 16, where rustc put the map's `entry` decided whether `tuned`'s hot
+# loop inlined it, and an unrelated change to its output code moved it (+40
+# instructions a row). `brc.sh` builds the Nikaia side with one as well.
+[profile.release.package.brc-bench]
+codegen-units = 1

@@ -29,7 +29,8 @@ nikaia="$bin/nikaia"
 
 # A Nikaia program is built the way a user builds it: a project with a
 # `nikaia.toml`. `opt-level = 3` as Cargo's release profile has it, no LTO on
-# either side, every optimization the compiler offers on.
+# either side, every optimization the compiler offers on. One codegen unit, as
+# the Rust programs have (README); a project cannot say it yet (#692).
 proj="$work/project"
 mkdir -p "$proj/src"
 nikaia_toml() {
@@ -54,7 +55,7 @@ build_nikaia() {
     local name=$1 parallel=$2 source=${3:-$root/examples/1brc.nika}
     cp "$source" "$proj/src/main.nika"
     nikaia_toml "$parallel"
-    ( cd "$proj" && "$nikaia" build >/dev/null 2>&1 ) || { echo "nikaia build failed ($name)"; exit 1; }
+    ( cd "$proj" && CARGO_PROFILE_DEV_CODEGEN_UNITS=1 "$nikaia" build >/dev/null 2>&1 ) || { echo "nikaia build failed ($name)"; exit 1; }
     local built
     cp "$proj/target/nikaia/bin/brc" "$work/nikaia.$name"
 }
