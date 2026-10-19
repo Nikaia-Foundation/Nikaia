@@ -544,6 +544,20 @@ struct TierWalk {
     unlent: collections::BTreeSet[String],
     /// The next value walked is only read where it stands.
     read_here: bool,
+    /// The views of a caller's text each name of the function walked may
+    /// hold through a call's result (#702).
+    ties: collections::BTreeMap[String, Vec[TextTie]],
+}
+
+/// A view a call's result may hold of the caller's text (#702): the word of
+/// the callee's parameter it went in through, and the depth of the scope that
+/// binds the text's owner - 0 for a parameter of the function walked.
+struct TextTie {
+    word: String,
+    depth: i64,
+    /// The callee hands back text: a parameter of the caller handed back
+    /// through it is lent on, as the callee's result is (#678).
+    through_text: bool,
 }
 
 fn open_tier_scope(mut walk: TierWalk) {
@@ -1509,6 +1523,13 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         }
         if k + 1 == block.stmts.len() {
             tail = kinds
+            // A function's last value is handed back as a `return` is.
+            if walk.frames.len() == 2 && walk.result != null {
+                match stmt.node {
+                    Stmt::Expr(last) => tie_leaves(last, -1, null, true, ask, walk),
+                    else => {}
+                }
+            }
         }
         k += 1
     }
@@ -1534,8 +1555,12 @@ fn handed_by_name(stmt: ref Stmt, block: ref Block, at: i64, ask: ref TierAsk) -
 /// Walk a statement; what it is worth as a block's last value.
 fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     match stmt {
-        Stmt::Let { names, value, ty, .. } => tier_let(names, value, ty, at, ask, walk),
+        Stmt::Let { names, value, ty, .. } => {
+            tier_let(names, value, ty, at, ask, walk)
+            tie_bound(names, value, ask, walk)
+        }
         Stmt::Assign { target, op, value } => {
+            tie_stored(target, value, ask, walk)
             tier_assign(target, value, ask, walk)
             if op != null {
                 changed_in_place(target, ask, walk)
@@ -1577,6 +1602,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
         }
         Stmt::Return(value) => {
             let given = value ?? return no_kinds()
+            tie_leaves(given, -1, null, true, ask, walk)
             let before = walk.handed_back
             walk.handed_back = handed_struct(given)
             let kinds = tier_expr(given, ask, walk)
@@ -1857,6 +1883,165 @@ fn lendable_parameter(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> 
 /// function only borrows - `self.head.path` under `ref self`, `h.path` for
 /// `h: ref Head` - every step a field of a struct the walk can name, and none
 /// a view itself, so what it points into is that parameter.
+// **A parameter is not lent where a caller's text would die before the
+// result viewing it** (ADR-282 D12, #702): where a call's result - or a name
+// bound to it, or a list, tuple or struct literal holding it - leaves the
+// function, or goes into a place bound in an outer scope than the text it
+// views, that text flows into the callee's position for longer than its
+// owner lives. The parameter then keeps its text, and the position takes
+// what its callers hand it.
+
+/// The depth of the scope that binds `name`, and -1 for none.
+fn tie_depth(name: ref String, walk: ref TierWalk) -> i64 {
+    let mut at = walk.frames.len() - 1
+    while at >= 0 {
+        if walk.frames[at].contains(name) {
+            return at
+        }
+        at -= 1
+    }
+    return -1
+}
+
+/// The name a place or a value read out of one is rooted in.
+fn tie_root(value: ref Expr, ask: ref TierAsk) -> String? {
+    return match value {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::Field { base, .. } => tie_root(base, ask),
+        Expr::SafeField { base, .. } => tie_root(base, ask),
+        Expr::Index { base, .. } => tie_root(base, ask),
+        Expr::MethodCall { receiver, .. } => tie_root(receiver, ask),
+        else => null,
+    }
+}
+
+/// The views of the caller's text `value` may hold through calls of this
+/// program's functions.
+fn ties_of(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Vec[TextTie] {
+    let mut out: Vec[TextTie] = []
+    match value {
+        Expr::Variable(name, _) => {
+            let found = walk.ties[ask.names.resolve(name)]?.clone() ?? []
+            for tie in found {
+                out.push(tie.clone())
+            }
+        }
+        Expr::Field { base, .. } => return ties_of(base, ask, walk),
+        Expr::Try(inner, _) => return ties_of(inner, ask, walk),
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                for tie in ties_of(item, ask, walk) {
+                    out.push(tie)
+                }
+            }
+        }
+        Expr::Tuple(items, _) => {
+            for item in items {
+                for tie in ties_of(item, ask, walk) {
+                    out.push(tie)
+                }
+            }
+        }
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                let shorthand = Expr::Variable(field.name, fresh_id())
+                for tie in field_ties(field, shorthand, ask, walk) {
+                    out.push(tie)
+                }
+            }
+        }
+        Expr::Call { func, args, .. } => {
+            let callee = tier_callee(func, ask) ?? return out
+            let function = walk.declared.fns[callee]?.clone() ?? return out
+            let mut at = 0
+            while at < args.len() && at < function.params.len() {
+                for tie in ties_of(args[at], ask, walk) {
+                    out.push(tie)
+                }
+                if a_text_parameter(ask.names, function.params[at]) {
+                    let root = tie_root(args[at], ask)
+                    if root != null {
+                        let name: String = root ?? ""
+                        let local = tier_local(name, walk)
+                        if local != null {
+                            let found: TierLocal = local ?? plain_local(no_kinds())
+                            let kinds = found.kinds.clone()
+                            let depth = tie_depth(name, walk)
+                            if depth >= 0 && !lasting_tier(tier_of_kinds(kinds)) {
+                                let word = seen(TextOwner::Param(callee.clone(), at), no_path(), walk)
+                                out.push(TextTie { word: word, depth: depth, through_text: hands_back_text(function, ask) })
+                            }
+                        }
+                    }
+                }
+                at += 1
+            }
+        }
+        else => {}
+    }
+    return out
+}
+
+fn field_ties(field: ref FieldInit, shorthand: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Vec[TextTie] {
+    if field.value != null {
+        let value = field.value ?? return []
+        return ties_of(value, ask, walk)
+    }
+    return ties_of(shorthand, ask, walk)
+}
+
+fn hands_back_text(function: ref FnDecl, ask: ref TierAsk) -> bool {
+    let result = function.result ?? return false
+    return a_text_parameter(ask.names, result)
+}
+
+/// `value` goes where text bound at `depth` and outside lives on - -1 for
+/// out of the function - and, where `into` names a local, that name holds
+/// what `value` views from now on.
+fn tie_leaves(value: ref Expr, depth: i64, into: String?, back: bool, ask: ref TierAsk, mut walk: TierWalk) {
+    let ties = ties_of(value, ask, walk)
+    if ties.len() == 0 {
+        return
+    }
+    for tie in ties {
+        if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) {
+            walk.unlent.insert(tie.word.clone())
+        }
+    }
+    let name = into ?? return
+    let mut all: Vec[TextTie] = walk.ties[name]?.clone() ?? []
+    for tie in ties {
+        all.push(tie.clone())
+    }
+    walk.ties.insert(name, all)
+}
+
+/// `value` stored into the place `target`, or handed to a method of it.
+fn tie_stored(target: ref Expr, value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    let root = tie_root(target, ask) ?? return
+    let mut depth = tie_depth(root, walk)
+    // A parameter's or `self`'s place outlives the function.
+    if depth <= 0 {
+        depth = -1
+    }
+    tie_leaves(value, depth, root, false, ask, walk)
+}
+
+/// A `let` binds its names to what its value views.
+fn tie_bound(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    let ties = ties_of(value, ask, walk)
+    if ties.len() == 0 {
+        return
+    }
+    for name in names {
+        let mut all: Vec[TextTie] = []
+        for tie in ties {
+            all.push(tie.clone())
+        }
+        walk.ties.insert(ask.names.resolve(name).clone(), all)
+    }
+}
+
 fn lent_field(value: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
     let place = place_of(value, ask, walk) ?? return false
     if !plain_string(ask.names, place.ty) || place.ty.is_nullable {
@@ -2406,6 +2591,9 @@ fn parsed_parameter(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
 }
 
 fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
+    for arg in args {
+        tie_stored(receiver, arg, ask, walk)
+    }
     walk.read_here = true
     let received = tier_expr(receiver, ask, walk)
     if changes_its_text(method) {
@@ -2653,6 +2841,7 @@ fn walk_program(program: ref Program, ask: ref TierAsk, mut walk: TierWalk) {
 /// A walk outside any function: no locals, no result.
 fn fresh_tier_frame(mut walk: TierWalk) {
     walk.locals = collections::BTreeMap()
+    walk.ties = collections::BTreeMap()
     walk.frames = []
     walk.result = null
     walk.in_hole = false
@@ -2662,6 +2851,7 @@ fn fresh_tier_frame(mut walk: TierWalk) {
 
 fn walk_body(body: ref Block, ask: ref TierAsk, mut walk: TierWalk) {
     walk.locals = collections::BTreeMap()
+    walk.ties = collections::BTreeMap()
     walk.frames = []
     walk.result = null
     walk.in_hole = false
@@ -2684,6 +2874,7 @@ fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
         let key = f"{gname}::{ask.names.resolve(rule.name)}"
         for alt in rule.alts {
             walk.locals = collections::BTreeMap()
+            walk.ties = collections::BTreeMap()
             walk.frames = []
             walk.result = key.clone()
             walk.in_hole = false
@@ -2809,6 +3000,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     }
     let key = tier_key(target, own_name(name, ask.names))
     walk.locals = collections::BTreeMap()
+    walk.ties = collections::BTreeMap()
     walk.frames = []
     walk.result = key.clone()
     walk.in_hole = false
@@ -3202,7 +3394,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, ties: collections::BTreeMap() }
     for _ in 0..<16 {
         walk.flows = no_flows()
         walk_program(program, ask, walk)

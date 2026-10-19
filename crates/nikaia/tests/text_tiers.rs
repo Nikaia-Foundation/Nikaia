@@ -1764,3 +1764,82 @@ fn main() {
 "#;
     runs("split-once-owned-line", short_lived, "3 k2 3");
 }
+
+/// **A parameter is not lent where a caller's text would die before the
+/// result viewing it** ([ADR-282](../../../docs/specification/adr/adr-282.md)
+/// D12, #702): `keep` hands `tag(v)`'s result into `b`, which outlives `v`,
+/// so `tag` keeps `s` and `Tag.label` holds text of its own. `rustc` refused
+/// it before (`v` does not live long enough).
+const KEPT_INTO_A_CONTAINER: &str = r##"struct Tag {
+    label: String,
+}
+
+struct Box {
+    items: Vec[Tag],
+}
+
+fn tag(s: String) -> Tag {
+    return Tag { label: s }
+}
+
+fn keep(v: String, mut b: Box) {
+    let a = tag(v)
+    b.items.push(a)
+}
+
+fn main() {
+    let mut b = Box { items: [] }
+    keep(f"x{1}", b)
+    println(b.items.len())
+}
+"##;
+
+#[test]
+fn a_struct_viewing_a_kept_parameter_pushed_into_a_container_owns_its_text() {
+    runs("kept-into-a-container", KEPT_INTO_A_CONTAINER, "1");
+    let rust = lowered(KEPT_INTO_A_CONTAINER, Build::default());
+    assert!(rust.contains("label: String,"), "{rust}");
+    assert!(rust.contains("fn tag(s: String) -> Tag {"), "{rust}");
+    // Pushed straight in, from a local, from a local handed back, and from a
+    // local of one turn of a loop into a list outside it.
+    let straight = KEPT_INTO_A_CONTAINER.replace(
+        "    let a = tag(v)\n    b.items.push(a)",
+        "    b.items.push(tag(v))",
+    );
+    runs("kept-into-a-container-straight", &straight, "1");
+    let local = KEPT_INTO_A_CONTAINER
+        .replace(
+            "fn keep(v: String, mut b: Box) {\n    let a",
+            "fn keep(mut b: Box) {\n    let v = f\"x{1}\"\n    let a",
+        )
+        .replace("keep(f\"x{1}\", b)", "keep(b)");
+    runs("kept-into-a-container-local", &local, "1");
+    let handed_back = KEPT_INTO_A_CONTAINER
+        .replace(
+            "fn keep(v: String, mut b: Box) {\n    let a = tag(v)\n    b.items.push(a)\n}",
+            "fn make() -> Tag {\n    let v = f\"x{1}\"\n    return tag(v)\n}",
+        )
+        .replace("    keep(f\"x{1}\", b)\n", "    b.items.push(make())\n");
+    runs("kept-into-a-container-handed-back", &handed_back, "1");
+    let looped = KEPT_INTO_A_CONTAINER.replace(
+        "    keep(f\"x{1}\", b)\n",
+        "    for i in 0..<3 {\n        let v = f\"x{i}\"\n        b.items.push(tag(v))\n    }\n",
+    );
+    runs("kept-into-a-container-looped", &looped, "3");
+}
+
+/// The same `tag` where `keep` only reads what it made: `tag` still lends `s`,
+/// and lowers byte for byte as its `ref String` twin.
+#[test]
+fn a_struct_viewing_a_parameter_only_read_still_lends_it() {
+    let read = KEPT_INTO_A_CONTAINER.replace("    b.items.push(a)", "    println(a.label)");
+    runs("kept-only-read", &read, "x1\n0");
+    let written = read
+        .replace("    label: String,", "    label: ref String,")
+        .replace("tag(s: String)", "tag(s: ref String)");
+    assert_eq!(
+        lowered(&read, Build::default()),
+        lowered(&written, Build::default()),
+        "`String` lowers as `ref String` does"
+    );
+}
