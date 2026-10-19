@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1097] — 2026-10-19
+
+**spec: a Bytes carries what owns its memory; a ref Bytes only read takes any run of bytes (ADR-373, #718)**
+- A `Bytes` holds its own allocation, a `Vec[u8]` handed over with `Bytes(v)` (no copy), or a mapping; a `fs::Mapped` may be given wherever a `Bytes` is taken, read or kept. A `ref Bytes` parameter that is only read takes any run of bytes (Part I 2.6, Part III 17.2; ADR-373, ADR-283 D20 changed).
+
 ## [0.0.1096] — 2026-10-19
 
 **view changes: methods are looked up by name, not by a scan of every function**

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1096 (Draft)
+**Version:** 0.0.1097 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -766,6 +766,8 @@ A number the program makes up does not: `s[0..<10]` is refused (`NK1214`) and
 says the view - `s.bytes[0..<10].text()` for bytes, `s.graphemes.take(10)` for
 what a reader sees. So is a position from one text used on another. A cut inside
 a scalar stops the program.
+
+**A `Bytes` is one run of bytes, whatever holds its memory:** what it allocated, a `Vec[u8]` handed over with `Bytes(v)`, which copies nothing, or a mapped file (`fs::Mapped` is a `Bytes`, Part III 17.2). It reads the same in each case and is handed on by a count. A `ref Bytes` that a function only reads takes any of them, and a text's `s.bytes`.
 
 **A `Bytes` is read as a run of bytes:** `b[i] -> u8`, `b[a..<b]`, `b.len()`,
 `b.find(byte; from: i64) -> i64?`, and `b.text()`, which checks UTF-8 and is

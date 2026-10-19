@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1096 (Draft)
+**Version:** 0.0.1097 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -1301,7 +1301,7 @@ a `spawn`, never by the compiler.
 
 `read` returns **`Bytes`**, not a `Vec[u8]`: one shared buffer, and slices that outlive its scope are tethered to it (Part I 6.6). A parser can therefore hand back thousands of names that all point into a single allocation.
 
-`Bytes` is a language type, written bare, and is one reference-counted buffer. A tethered slice keeps its buffer alive in whatever keeps the slice; nothing is written for it.
+`Bytes` is a language type, written bare, and is one reference-counted buffer over memory it allocated, a `Vec[u8]` handed over (`Bytes(v)`, no copy), or a mapping. A tethered slice keeps its buffer alive in whatever keeps the slice; nothing is written for it.
 
 **Reading a large file: `map`, and the grammar**
 
@@ -1342,7 +1342,7 @@ impl File {
 pub fn map(path: Path, root: Root) -> Mapped throws     // read-only memory map
 ```
 
-`Mapped` derefs to `Bytes`, so a mapped file is a tethered buffer like any other. The pages are the buffer, nothing is copied, and `fs::map` checks nothing. **`m.text()` is the mapping as text:** the first call checks UTF-8 over the whole of it and throws `io::IoError::NotText` with the earliest bad byte; later calls hand back the same view without checking again. A cut, `m[a..<b].text()`, checks only that cut. A grammar run over a mapping checks the text it reads, and a byte that is not UTF-8 is an error at its position ([ADR-016](adr/adr-016.md) D5).
+`Mapped` derefs to `Bytes`, so a mapped file is a tethered buffer like any other: it may be given wherever a `Bytes` is taken, read or kept, at a count, and the file stays mapped while any holder lives. The pages are the buffer, nothing is copied, and `fs::map` checks nothing. **`m.text()` is the mapping as text:** the first call checks UTF-8 over the whole of it and throws `io::IoError::NotText` with the earliest bad byte; later calls hand back the same view without checking again. A cut, `m[a..<b].text()`, checks only that cut. A grammar run over a mapping checks the text it reads, and a byte that is not UTF-8 is an error at its position ([ADR-016](adr/adr-016.md) D5).
 
 **Retention.** A slice that escapes the mapping's scope tethers to it, and a tether keeps the whole map alive. The compiler warns where a small extract outlives a large buffer and suggests `.clone()` ([ADR-283](adr/adr-283.md) D6). The mapping is released once the last tether is gone, which may be later than the end of the block that created it. Slices that never leave that scope cost nothing and hold nothing. At process exit a read-only mapping with nothing observable attached to it is left to the operating system rather than unmapped page by page.
 
