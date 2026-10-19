@@ -53,6 +53,13 @@ const NIKA: &str = "nika";
 /// ([`Sysroot::tool_modules`]).
 const TOOLS: &str = "tools";
 
+/// **Where `std`'s own unpublished Nikaia lives** (#723), under `std`'s `src`:
+/// what a *program* runs - the HTTP/1 head's grammar - as opposed to what only
+/// the compiler runs, in [`TOOLS`]. A package of its own, lowered the same
+/// way into its own `package.rs`, because `std` compiles the tools only for
+/// the compiler (the `compiler` feature) and this into every program.
+const RUNTIME: &str = "runtime";
+
 /// **The toolchain's Nikaia is one package** (ADR-294): every `.nika` in
 /// `src/tools` shares one namespace, as the files of a package do (Part I 9.1,
 /// ADR-286 D1), and is lowered into this one file beside them. A name declared
@@ -135,9 +142,16 @@ impl Sysroot {
     /// `lib.rs` means something**: that `std` offers it, and that
     /// `std.contracts` has to say so. This one is not offered and must not be
     /// in that file.
-    /// The directory of the toolchain's Nikaia package.
+    /// The directory of the toolchain's Nikaia package, which `std` compiles
+    /// only under its `compiler` feature (#723).
     pub fn tools_dir(&self) -> PathBuf {
         self.std_dir().join("src").join(TOOLS)
+    }
+
+    /// The directory of `std`'s run-time Nikaia package (#723): unpublished
+    /// like the tools, but compiled into every program.
+    pub fn runtime_dir(&self) -> PathBuf {
+        self.std_dir().join("src").join(RUNTIME)
     }
 
     pub fn tool_modules(&self) -> Result<Vec<PathBuf>> {
@@ -755,12 +769,16 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
         };
         lowered.push((lowered_path(&nika), rust));
     }
-    let tools = sysroot.tools_dir();
-    if tools.is_dir() {
+    // **Two packages, each lowered alone** (#723): the compiler's and the
+    // one every program runs; neither sees the other's names.
+    for package in [sysroot.tools_dir(), sysroot.runtime_dir()] {
+        if !package.is_dir() {
+            continue;
+        }
         // **Keyed on every file of the package**: each file is checked and
         // lowered against all the others (`beside`, the package's ledger, its
         // trust), so a change in any of them may change any section.
-        let paths = tools_sources(&tools)?;
+        let paths = tools_sources(&package)?;
         let key = cache.key("tools", &paths);
         let rust = match cache.get(key.as_deref()) {
             Some(rust) => rust,
@@ -770,7 +788,7 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
                 rust
             }
         };
-        lowered.push((tools_lowered_path(&tools), rust));
+        lowered.push((tools_lowered_path(&package), rust));
     }
     for (rs, rust) in lowered {
         let current = std::fs::read_to_string(&rs).ok();

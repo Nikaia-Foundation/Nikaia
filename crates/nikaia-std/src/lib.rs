@@ -103,6 +103,43 @@ pub mod text {
     include!("text_normal.rs");
 }
 
+/// **`std`'s own Nikaia, which every program runs** (#723): one package in
+/// `src/runtime`, lowered by `nikaia lower-std` into its `package.rs` the way
+/// the tools are, and kept apart from them because a program compiles this
+/// half and never the compiler's. Unpublished: `std.contracts` does not list
+/// it, and `std`'s Rust (`http1.rs`) is its only caller.
+#[doc(hidden)]
+pub mod runtime {
+    include!("runtime/package.rs");
+
+    /// The text tiers' conversions, which a lowered `String` local reassigned
+    /// from a view calls (`rest = rest.strip_prefix(..).into_either()`): a
+    /// program gets them from its own prelude, a tool has none (#563).
+    #[allow(unused_imports)]
+    use crate::either_text::{IntoEither, IntoEitherMaybe};
+
+    /// `scalar`, which the lowered files write for one character (ADR-320).
+    #[allow(unused_imports)]
+    use crate::prelude::scalar;
+
+    // --- http1.nika ---
+
+    /// **The one call a Rust caller makes into the grammar**, for
+    /// `rust::file`'s reason: the generated `Http1::parse_head()` hands
+    /// back a parser rather than a result, and a Rust caller has no
+    /// emitter to write the four lines that turn one into the other.
+    pub fn written(text: &str) -> Result<Written<'_, '_>, crate::grammar::ParseError> {
+        use winnow::Parser;
+        let mut stream = winnow_grammar::ParseInput::<()> {
+            state: winnow_grammar::ParseContext::<()>::default(),
+            input: winnow::stream::LocatingSlice::new(text),
+        };
+        Http1::parse_head()
+            .parse_next(&mut stream)
+            .map_err(|error| crate::grammar::ParseError::of(error.render(text)))
+    }
+}
+
 /// **Nikaia that the toolchain - or `std` itself, below its surface - uses and
 /// `std` does not publish.** `http1` is the second kind: the text half of
 /// `crate::http1`, which a program reaches through that module and never here.
@@ -212,6 +249,9 @@ pub mod text {
     clippy::useless_format,
     unreachable_patterns
 )]
+/// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):
+/// only `crates/nikaia` turns it on, so a program's `std` does not compile it.
+#[cfg(feature = "compiler")]
 pub mod tools {
     // **One package, one file** ([ADR-294](../../../docs/specification/adr/adr-294.md)):
     // every `.nika` in `src/tools` shares one namespace, as the files of a
@@ -232,23 +272,6 @@ pub mod tools {
     /// `scalar`, which the lowered files write for one character (ADR-320).
     #[allow(unused_imports)]
     use crate::prelude::scalar;
-
-    // --- http1.nika ---
-
-    /// **The one call a Rust caller makes into the grammar**, for
-    /// `rust::file`'s reason: the generated `Http1::parse_head()` hands
-    /// back a parser rather than a result, and a Rust caller has no
-    /// emitter to write the four lines that turn one into the other.
-    pub fn written(text: &str) -> Result<Written<'_, '_>, crate::grammar::ParseError> {
-        use winnow::Parser;
-        let mut stream = winnow_grammar::ParseInput::<()> {
-            state: winnow_grammar::ParseContext::<()>::default(),
-            input: winnow::stream::LocatingSlice::new(text),
-        };
-        Http1::parse_head()
-            .parse_next(&mut stream)
-            .map_err(|error| crate::grammar::ParseError::of(error.render(text)))
-    }
 
     // --- ast.nika ---
 

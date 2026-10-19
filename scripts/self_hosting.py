@@ -24,8 +24,8 @@ RUST = ROOT / "crates" / "nikaia" / "src"
 TOOLS = ROOT / "crates" / "nikaia-std" / "src" / "tools"
 
 # The toolchain's Nikaia, and the Rust module each one took the place of or
-# serves. `http1.nika` is in the same directory and is not here: it is `std`'s
-# HTTP server, which a program runs, and not a piece of the compiler.
+# serves. `http1.nika` is not here: it is `std`'s HTTP server, which a program
+# runs, and not a piece of the compiler, so it lives in `src/runtime` (#723).
 COMPILER_NIKA = {
     "spelling.nika": "check: *did you mean* (0.0.238)",
     "dsl.nika": "dsl: a body's parameters, the shadow types, the drivers and the check of a call (0.0.248, 0.0.335)",

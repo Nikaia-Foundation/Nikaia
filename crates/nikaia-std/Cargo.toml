@@ -19,6 +19,12 @@ reentrancy-check = []
 # declares is a warning about a generated file, which Part III C.1 makes a
 # defect.
 trace = ["winnow-grammar/trace"]
+# **The compiler's Nikaia** (`src/tools`, ADR-294) is compiled only where this is
+# on, and only `crates/nikaia` turns it on (#723): a program's `std` is built
+# without it, so it neither compiles the 3.5 MB of `tools/package.rs` nor is
+# rebuilt when a `tools/*.nika` changes. What `std` itself runs is in
+# `src/runtime` and always compiled.
+compiler = []
 
 [dependencies]
 # **A map is `hashbrown`'s table, directly** (#420, #434): `std`'s `HashMap`
@@ -92,6 +98,11 @@ file-ring = { path = "../unsafe/file-ring" }
 # `toml`, `sha2` and `nikaia` itself among them. The Nikaia half is lowered at
 # release time now and the `.rs` is committed beside the `.nika`, so building
 # `std` needs nothing but `rustc`.
+
+# Reads `tools::rust`, which only the compiler's build has.
+[[test]]
+name = "rust_signatures"
+required-features = ["compiler"]
 
 [dev-dependencies]
 # `hash.rs` copies its byte hash; a test holds the copy to it.

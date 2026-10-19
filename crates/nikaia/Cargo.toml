@@ -31,7 +31,9 @@ orchestrator = { workspace = true }
 # Measured before the edge was drawn: four packages the compiler did not
 # already resolve (`nikaia-std`, `memmap2`, `polling`, `io-uring`; `rayon` and
 # `libc` were already in the tree), and it was a dev-dependency here already.
-nikaia-std = { workspace = true }
+# **`compiler` turns `nikaia_std::tools` on**, and only this crate does (#723):
+# a program's `std` is built without the compiler's Nikaia.
+nikaia-std = { workspace = true, features = ["compiler"] }
 winnow = { workspace = true }
 winnow-grammar = { workspace = true }
 # `nikaia.toml`'s build switches (ADR-037 D5).

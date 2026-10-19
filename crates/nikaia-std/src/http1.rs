@@ -6,7 +6,7 @@
 //! **the parser was Rust here and is a Nikaia grammar now** (0.0.248,
 //! [ADR-303](../../../docs/specification/adr/adr-303.md) D6), by
 //! [ADR-290](../../../docs/specification/adr/adr-290.md)'s route:
-//! `src/tools/http1.nika`. What stays here is the bytes - the buffer a socket
+//! `src/runtime/http1.nika`. What stays here is the bytes - the buffer a socket
 //! fills, where a head ends, whether it is text - and the `Head` a program is
 //! handed.
 //!
@@ -280,18 +280,18 @@ impl Head {
 /// The request line and the headers, where the head is already known to be text
 /// and `size` bytes long.
 ///
-/// **Read in Nikaia** (0.0.248): `src/tools/http1.nika` is the grammar and the
+/// **Read in Nikaia** (0.0.248): `src/runtime/http1.nika` is the grammar and the
 /// rules - which methods, which version, what a `Content-Length` has to be -
 /// and this is the handover. The grammar reads every head that ended, so a
 /// failure of it is a head this module has no words for, and it is refused as
 /// one rather than guessed at.
 fn parse(text: &str, size: i64) -> Result<Head, IoError> {
-    let Ok(written) = crate::tools::http1::written(text) else {
+    let Ok(written) = crate::runtime::http1::written(text) else {
         return Err(IoError::Other(
             "400 a request head this does not read".into(),
         ));
     };
-    let read = crate::tools::http1::read_head(&written);
+    let read = crate::runtime::http1::read_head(&written);
     if !read.refused.is_empty() {
         return Err(IoError::Other(read.refused.into()));
     }

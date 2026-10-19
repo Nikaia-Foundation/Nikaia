@@ -45,18 +45,22 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
             .is_empty(),
         "`src/tools` holds the reading half of `nikaia describe` (ADR-290 D13)"
     );
-    let expected = sysroot::lower_tools(&tools).expect("the toolchain's Nikaia lowers");
-    let at = sysroot::tools_lowered_path(&tools);
-    let committed = std::fs::read_to_string(&at)
-        .unwrap_or_else(|e| panic!("{} is not committed: {e}", at.display()));
-    assert_eq!(
-        committed,
-        expected,
-        "{} has drifted from what this compiler lowers {} to. \
-         Run `cargo run -p nikaia -- lower-std` and commit the result.",
-        at.display(),
-        tools.display(),
-    );
+    // **And `std`'s run-time package** (#723), lowered the same way into a
+    // file of its own: the half every program compiles.
+    for package in [tools, sysroot.runtime_dir()] {
+        let expected = sysroot::lower_tools(&package).expect("the toolchain's Nikaia lowers");
+        let at = sysroot::tools_lowered_path(&package);
+        let committed = std::fs::read_to_string(&at)
+            .unwrap_or_else(|e| panic!("{} is not committed: {e}", at.display()));
+        assert_eq!(
+            committed,
+            expected,
+            "{} has drifted from what this compiler lowers {} to. \
+             Run `cargo run -p nikaia -- lower-std` and commit the result.",
+            at.display(),
+            package.display(),
+        );
+    }
 
     for nika in modules {
         let expected = sysroot::lower_std_module(&nika).expect("std's Nikaia half lowers");
@@ -99,15 +103,18 @@ fn stds_nikaia_half_lowers_the_same_at_both_switches() {
     let sequential = Build::parse("x86_64-linux", "no", "yes").expect("a switch that exists");
     let concurrent = Build::parse("x86_64-linux", "yes", "yes").expect("a switch that exists");
 
-    let tools = sysroot.tools_dir();
-    let at = sysroot::tools_lowered_path(&tools);
-    assert_eq!(
-        std::fs::read_to_string(&at)
-            .unwrap_or_else(|e| panic!("{} is not committed: {e}", at.display())),
-        sysroot::lower_tools_at(&tools, concurrent).expect("the tools lower at `yes`"),
-        "{} is not the toolchain's package lowered at `user_parallelism = yes` (ADR-363 D1).",
-        at.display(),
-    );
+    // `std`'s run-time package (#723) is lowered as the tools are, at `yes`,
+    // which is correct at one thread too.
+    for package in [sysroot.tools_dir(), sysroot.runtime_dir()] {
+        let at = sysroot::tools_lowered_path(&package);
+        assert_eq!(
+            std::fs::read_to_string(&at)
+                .unwrap_or_else(|e| panic!("{} is not committed: {e}", at.display())),
+            sysroot::lower_tools_at(&package, concurrent).expect("the package lowers at `yes`"),
+            "{} is not the package lowered at `user_parallelism = yes` (ADR-363 D1).",
+            at.display(),
+        );
+    }
     for nika in sysroot.std_modules().expect("std's Nikaia modules") {
         let source = std::fs::read_to_string(&nika).expect("the source reads");
         let parsed = nikaia::parser::parse_to_ast(&source).expect("std's Nikaia half parses");
