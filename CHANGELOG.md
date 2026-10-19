@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1093] — 2026-10-19
+
+**The user cache is bounded by size, least recently used first (#724)**
+- `~/.cache/nikaia` is held to `NIKAIA_CACHE_LIMIT` (default 8 GiB, `0` = no limit). After a build adds an entry, the entries used longest ago are removed until the cache fits, however young they are; an entry a running build holds is never removed. Last use is a stamp nikaia writes, and in-use is a shared `flock` or Cargo's lock. This replaces the eight-per-kind and 24-hour rules. New `nikaia cache prune` runs the pass and prints what it removed (Part III, ADR-021 D12.5).
+
 ## [0.0.1092] — 2026-10-19
 
 **a parameter handed to a position the callee keeps is kept, even where the callee's result could point into it (#720)**
