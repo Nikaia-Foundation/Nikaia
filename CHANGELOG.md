@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1063] — 2026-10-19
+
+**owned text assigned whole is moved; a map read past a jump is a view (#686, #694)**
+- Owned text handed over whole by an assignment (`l.from = key`) is moved, as it already was in a struct literal, a `let` and `push`; it is no longer put into the keep frame, which rustc refused. A `??` fallback that reads a map and jumps when the key is missing (`a[k] ?? b[k] ?? return x`, also `continue`, `break`) counts as a view of the map's value, as `b[k]` alone does; NK1185 still refuses a fallback that is a value of its own.
+
 ## [0.0.1062] — 2026-10-19
 
 **four defects that kept develop red, from text tiers and and_modify (#678, #680, #684)**
