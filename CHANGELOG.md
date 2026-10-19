@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1052] — 2026-10-19
+
+**`ref String` outside the C boundary is a warning (NK1261, #654)**
+- `ref` on text written on a parameter, an option, a field, a result or a `let` says what `String` says (ADR-282 D2). Outside `extern "C"` and `pub extern fn` it is now the warning NK1261, and the program means the same without it. Text the compiler made a view where the source wrote plain `String` gets no warning (the tier pass records those positions, `Parsed::text_views`).
+
 ## [0.0.1051] — 2026-10-19
 
 **a fold's counters proved from the input's length**
