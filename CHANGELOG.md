@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1100] — 2026-10-19
+
+**A word is never a view inside a type either; TaskHandle and two-view function types lower**
+- `ref` on a number, `bool`, `scalar` or bare enum is `NK1257` inside a type too (`Vec[ref i64]`, `(String, ref u8)`, `fn(ref i64) -> i64`). A written `TaskHandle[T]` lowers to std's handle. `fn(ref String, ref String) -> ref String` gets one lifetime for the call (#703 items 5, 6, 8).
+
 ## [0.0.1099] — 2026-10-19
 
 **Lowering looks methods up by name (#727)**
