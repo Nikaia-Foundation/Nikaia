@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1084] — 2026-10-19
+
+**an arm that is a name still read later is a view of it (#712, #708)**
+- An `if` or `match` arm that is a name of text of its own, still read after the choice or in a later turn of a loop, is a view of it: beside an arm that makes text of its own the choice is `EitherText`, and the name is lent, not moved (ADR-282 D7, D13). Before, `nikaia check` accepted such programs and rustc refused them with "borrow of moved value".
+
 ## [0.0.1083] — 2026-10-19
 
 **Vector lanes, `crc32c` and prefetch are portable `std`; an architecture's instruction is a safe function (ADR-371)**
