@@ -1605,3 +1605,68 @@ fn main() {
     assert!(!rust.contains("EitherText"), "{rust}");
     runs("map-field-of-views", field, "3 1 4 2");
 }
+
+/// **The names a tuple `let` binds from `split_once`** are views of the text
+/// cut, past `?? continue`, `?? break` and `?? return` as without a `??`, and
+/// so are the names a bare tuple pattern binds in a `match` on it (#687).
+#[test]
+fn split_once_parts_are_views_of_what_was_cut() {
+    let pushed = |jump: &str| {
+        format!(
+            r#"fn main() {{
+    let s = f"x=1 y=2"
+    let mut v: Vec[String] = []
+    for w in s.split(" ") {{
+        let (a, _b) = w.split_once("=") ?? {jump}
+        v.push(a)
+    }}
+    println(f"{{v.len()}}")
+}}
+"#
+        )
+    };
+    runs("split-once-continue", &pushed("continue"), "2");
+    runs("split-once-return", &pushed("return"), "2");
+    runs("split-once-break", &pushed("break"), "2");
+    let inserted = r#"use std::collections
+fn main() {
+    let s = f"x=1 y=2 x=3"
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for w in s.split(" ") {
+        let (a, b) = w.split_once("=") ?? continue
+        m.insert(a, b)
+    }
+    println(f"{m.len()}")
+}
+"#;
+    runs("split-once-insert", inserted, "2");
+    let matched = r#"fn main() {
+    let s = f"x=1 y=2 z"
+    let mut v: Vec[String] = []
+    for w in s.split(" ") {
+        match w.split_once("=") {
+            (a, _b) => v.push(a),
+            null => {},
+        }
+    }
+    println(f"{v.len()}")
+}
+"#;
+    runs("split-once-match", matched, "2");
+    // Cut from text owned by one turn of the loop: the list cannot hold a
+    // view of it, so it holds text of its own.
+    let short_lived = r#"use std::collections
+fn main() {
+    let mut v: Vec[String] = []
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for i in 0..2 {
+        let line = f"k{i}=v{i}"
+        let (a, b) = line.split_once("=") ?? continue
+        v.push(a)
+        m.insert(a, b)
+    }
+    println(f"{v.len()} {v[2]} {m.len()}")
+}
+"#;
+    runs("split-once-owned-line", short_lived, "3 k2 3");
+}

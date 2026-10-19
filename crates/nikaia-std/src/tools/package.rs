@@ -57207,6 +57207,22 @@ fn flow_payload(callee: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, 
     }
 }
 
+fn bind_tuple_parts(pattern: &MatchPattern, scrutinee: &Kinds, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    if scrutinee.either || scrutinee.owned && (scrutinee.view || scrutinee.still) { return; }
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            if !path.is_empty() { return; }
+            for part in parts.iter() {
+                match part {
+                    MatchPattern::Path(named) => { if named.len() == 1 && !names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) { bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), plain_local(scrutinee.clone()), walk); } },
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
+}
+
 fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> bool {
     let mut bound = false;
     match pattern {
@@ -58129,6 +58145,7 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
             for arm in arms.iter() {
                 open_tier_scope(walk);
                 let bound = bind_static_payloads(&arm.pattern, ask, walk);
+                bind_tuple_parts(&arm.pattern, &scrutinee, ask, walk);
                 if arm.guard.is_some() {
                     let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                     tier_expr(guard, ask, walk);
@@ -58242,6 +58259,8 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
             variant_handed_on(&written, ask, walk);
             owned_kinds()
         },
+        Expr::Break(_) => no_kinds(),
+        Expr::Continue(_) => no_kinds(),
         _ => owned_kinds(),
     }
 }

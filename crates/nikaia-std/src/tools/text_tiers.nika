@@ -912,6 +912,33 @@ fn flow_payload(callee: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], 
     }
 }
 
+/// **The parts a bare tuple pattern binds** (`(a, b)` on
+/// `w.split_once("=")`) are each the scrutinee's kind where that is one kind,
+/// as a tuple `let` binds them.
+fn bind_tuple_parts(pattern: ref MatchPattern, scrutinee: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) {
+    if scrutinee.either || (scrutinee.owned && (scrutinee.view || scrutinee.still)) {
+        return
+    }
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            if !path.is_empty() {
+                return
+            }
+            for part in parts {
+                match part {
+                    MatchPattern::Path(named) => {
+                        if named.len() == 1 && !names_a_type(ask.names.resolve(named[0])) {
+                            bind_tier_local(ask.names.resolve(named[0]).clone(), plain_local(scrutinee.clone()), walk)
+                        }
+                    }
+                    else => {}
+                }
+            }
+        }
+        else => {}
+    }
+}
+
 /// **A payload of static text bound in a match arm** is a view of static
 /// text read out of the payload (ADR-282 D29): where the arm hands it on
 /// beside text of its own, the payload keeps text of its own too.
@@ -2050,6 +2077,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             for arm in arms {
                 open_tier_scope(walk)
                 let bound = bind_static_payloads(arm.pattern, ask, walk)
+                bind_tuple_parts(arm.pattern, scrutinee, ask, walk)
                 if arm.guard != null {
                     let guard = arm.guard ?? continue
                     tier_expr(guard, ask, walk)
@@ -2166,6 +2194,10 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             variant_handed_on(written, ask, walk)
             owned_kinds()
         }
+        // A jump is no value: `x ?? continue` is what `x` is, as it is past
+        // `?? return`.
+        Expr::Break(_) => no_kinds(),
+        Expr::Continue(_) => no_kinds(),
         else => owned_kinds(),
     }
 }
