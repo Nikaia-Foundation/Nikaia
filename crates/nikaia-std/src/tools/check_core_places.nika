@@ -260,7 +260,39 @@ pub fn check_core_field[H: CheckHost](mut state: CheckState, world: ref CheckWor
         Ty::Named { name, .. } => name.clone(),
         else => return Ty::Unknown,
     }
-    return check_core_places_a_named_field(state, world, expr, seen, ty, field, span)
+    let got = check_core_places_a_named_field(state, world, expr, seen, ty, field, span)
+    // **A field of a whole-number type is a number of the bounds walk**
+    // (ADR-306 D17), read through its path.
+    match got {
+        Ty::Named { name, args, .. } => {
+            if args.is_empty() && is_whole_number(name) {
+                state.facts.whole_fields.insert(id_of(expr) as i64)
+            }
+        },
+        else => {}
+    }
+    check_core_places_array_length(state, id_of(expr) as i64, got)
+    return got
+}
+
+/// **The length an `Array[T, N]` says** (#711): the `N` of the array read at
+/// `node`, for the bounds walk.
+pub fn check_core_places_array_length(mut state: CheckState, node: i64, on: ref Ty) sync {
+    match on {
+        Ty::Named { name, args, .. } => {
+            if (name == "Array" || name.ends_with("::Array")) && args.len() == 2 {
+                match args[1] {
+                    Ty::Count(n) => {
+                        if n >= 0 {
+                            state.facts.array_lengths.insert(node, n)
+                        }
+                    },
+                    else => {}
+                }
+            }
+        },
+        else => {}
+    }
 }
 
 /// **The code a function field is given, remembered with the field**
@@ -981,6 +1013,7 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
         }
     }
     let written_range = check_core_places_a_range(index)
+    check_core_places_array_length(state, id_of(base) as i64, on)
     // **A view of a run is indexed as the run is** (ADR-179 D1, ADR-293 D23).
     match on {
         Ty::Pointed { item, slice, mutable } => {

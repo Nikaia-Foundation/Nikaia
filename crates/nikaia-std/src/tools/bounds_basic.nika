@@ -41,7 +41,7 @@ fn counted_block(block: ref Block, mut over: Vec[CountedLoop], words: ref winnow
 fn without(over: ref Vec[CountedLoop], name: ref String) -> Vec[CountedLoop] {
     let mut kept: Vec[CountedLoop] = []
     for o in over {
-        if o.binding != name && o.list != name {
+        if o.binding != name && path_root(o.list) != name {
             kept.push(CountedLoop { binding: o.binding.clone(), list: o.list.clone() })
         }
     }
@@ -118,10 +118,7 @@ fn loop_over_length(binding: winnow_grammar::Symbol, iter: ref Expr, body: ref B
     let list = match end {
         Expr::MethodCall { receiver, method, args, .. } => {
             return null if !args.is_empty() || words.resolve(method) != "len"
-            match receiver {
-                Expr::Variable(list, _) => words.resolve(list).clone(),
-                else => return null,
-            }
+            path_of(receiver, words) ?? return null
         },
         else => return null,
     }
@@ -162,16 +159,16 @@ fn indexes_its_loop(over: ref Vec[CountedLoop], list: ref String, at: ref String
 fn counted_expr(expr: ref Expr, over: ref Vec[CountedLoop], words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[i64]) {
     match expr {
         Expr::Index { base, index, .. } => {
-            match base {
-                Expr::Variable(list, _) => match index {
+            let list = path_of(base, words)
+            if list != null {
+                match index {
                     Expr::Variable(at, _) => {
-                        if indexes_its_loop(over, words.resolve(list), words.resolve(at)) {
+                        if indexes_its_loop(over, list ?? "", words.resolve(at)) {
                             out.insert(node_key(base))
                         }
                     },
                     else => {},
-                },
-                else => {},
+                }
             }
         },
         else => {},
@@ -370,20 +367,63 @@ pub fn rebinds(body: ref Block, name: ref String, words: ref winnow_grammar::Int
     return seek_block(body, Seek::Rebound(name.clone()), words)
 }
 
+/// **A path of fields from a name** (ADR-306 D17): `t`, `t.slots`,
+/// `self.at`, as the walk names it; nothing for any other expression.
+pub fn path_of(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Field { base, name, .. } => {
+            let inner = path_of(base, words) ?? return null
+            f"{inner}.{words.resolve(name)}"
+        },
+        else => null,
+    }
+}
+
+/// The name a path starts at: `t` of `t.slots`, of `t.slots.len()`.
+pub fn path_root(path: ref String) -> String {
+    let parts: Vec[ref String] = path.split(".").collect()
+    return parts[0].clone()
+}
+
+/// Whether `path` is `within` or a part of it: `t.slots` is within `t` and
+/// within `t.slots`, not within `t.used`.
+pub fn path_within(path: ref String, within: ref String) -> bool {
+    return path == within || path.starts_with(f"{within}.")
+}
+
+/// Whether `expr` is a path that `list` is, or is a part of: a change there
+/// may change `list`.
+fn holds_path(expr: ref Expr, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    let path = path_of(expr, words) ?? return false
+    return path_within(list, path)
+}
+
+fn any_holds_path(exprs: ref Vec[Expr], list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    for e in exprs {
+        if holds_path(e, list, words) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **A method that may change `list`'s length**: one `keeps_length` does not
+/// know on the list itself, and any method on a value the list is a field
+/// of, which may change any of its fields.
+fn changes_through(receiver: ref Expr, method: ref String, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    let path = path_of(receiver, words) ?? return false
+    if path == list {
+        return !keeps_length(method)
+    }
+    return path_within(list, path)
+}
+
 fn is_variable(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return match expr {
         Expr::Variable(n, _) => words.resolve(n) == name,
         else => false,
     }
-}
-
-fn any_is_variable(exprs: ref Vec[Expr], name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
-    for e in exprs {
-        if is_variable(e, name, words) {
-            return true
-        }
-    }
-    return false
 }
 
 fn any_symbol(symbols: ref Vec[winnow_grammar::Symbol], name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
@@ -399,9 +439,9 @@ fn any_symbol(symbols: ref Vec[winnow_grammar::Symbol], name: ref String, words:
 fn statement_says(stmt: ref Stmt, seek: ref Seek, words: ref winnow_grammar::InternerContext) -> bool {
     return match seek {
         Seek::LengthChanged(list) => match stmt {
-            Stmt::Assign { target, .. } => is_variable(target, list, words),
-            Stmt::Let { names, .. } => any_symbol(names, list, words),
-            Stmt::For { bindings, .. } => any_symbol(bindings, list, words),
+            Stmt::Assign { target, .. } => holds_path(target, list, words),
+            Stmt::Let { names, .. } => any_symbol(names, path_root(list), words),
+            Stmt::For { bindings, .. } => any_symbol(bindings, path_root(list), words),
             else => false,
         },
         Seek::Rebound(wanted) => match stmt {
@@ -422,11 +462,11 @@ fn statement_says(stmt: ref Stmt, seek: ref Seek, words: ref winnow_grammar::Int
 fn expression_says(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::InternerContext) -> bool {
     return match seek {
         Seek::LengthChanged(list) => match expr {
-            Expr::MethodCall { receiver, method, args, .. } => (is_variable(receiver, list, words) && !keeps_length(words.resolve(method))) || any_is_variable(args, list, words),
-            Expr::SafeMethod { receiver, method, args, .. } => (is_variable(receiver, list, words) && !keeps_length(words.resolve(method))) || any_is_variable(args, list, words),
-            Expr::Call { args, .. } => any_is_variable(args, list, words),
-            Expr::Closure { body, .. } => seek_block(body, Seek::Mentioned(list.clone()), words),
-            Expr::Spawn { body, .. } => seek_expr(body, Seek::Mentioned(list.clone()), words),
+            Expr::MethodCall { receiver, method, args, .. } => changes_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
+            Expr::SafeMethod { receiver, method, args, .. } => changes_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
+            Expr::Call { args, .. } => any_holds_path(args, list, words),
+            Expr::Closure { body, .. } => seek_block(body, Seek::Mentioned(path_root(list)), words),
+            Expr::Spawn { body, .. } => seek_expr(body, Seek::Mentioned(path_root(list)), words),
             else => false,
         },
         Seek::Rebound(name) => match expr {

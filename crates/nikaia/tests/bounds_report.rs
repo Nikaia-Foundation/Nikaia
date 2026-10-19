@@ -50,7 +50,9 @@ fn every_site_is_listed_with_what_became_of_it() {
         "{out}"
     );
     assert!(line("total + xs[i]").contains("checked"), "{out}");
-    assert!(line("xs[0] * g.width").contains("#384"), "{out}");
+    // A field of a name is a name of the walk (ADR-306 D17): what is left
+    // is the product.
+    assert!(line("xs[0] * g.width").contains("#386"), "{out}");
     assert!(line("p * q").contains("#386"), "{out}");
     assert!(
         out.lines()

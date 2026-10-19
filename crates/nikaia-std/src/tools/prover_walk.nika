@@ -106,6 +106,11 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                     let at_entry = walk.arena.var(length)
                     scope.entry.insert(length, at_entry)
                 }
+                // **A path of fields from a borrowed parameter is a name of
+                // its own** (ADR-306 D17, ADR-269 D9): `p.end` of `p: Piece`.
+                if !arg.mutable && arg.ty.generics.is_empty() {
+                    prover_parameter_fields(walk, scope, params, arg_name, ty, program, words)
+                }
             }
             // **An option is a parameter** (Part I 5.1): a claim about it is
             // a precondition as one about a subject parameter is (#651).
@@ -308,6 +313,99 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
     }
 }
 
+/// The fields of the struct `ty` declares, as names of the parameter `name`:
+/// each whole number `name.f` and each length `name.f.len()`, read at the
+/// entry as a parameter is; `name` is a parameter a claim may read through.
+fn prover_parameter_fields(mut walk: ProverWalk, mut scope: ProverScope, mut params: collections::BTreeSet[String], name: ref String, ty: ref String, program: ref Program, words: ref winnow_grammar::InternerContext) {
+    for item in program.items {
+        match item.node {
+            Item::Struct { name: declared, generics, fields, .. } => {
+                if words.resolve(declared) == ty && generics.is_empty() {
+                    for field in fields {
+                        let path = f"{name}.{words.resolve(field.name)}"
+                        let field_ty = words.resolve(field.ty.name)
+                        if field.ty.generics.is_empty() && is_whole_number(field_ty) {
+                            scope.ints.insert(path.clone())
+                            scope.loose.insert(path.clone())
+                            params.insert(path.clone())
+                            params.insert(name.clone())
+                            let at_entry = walk.arena.var(path)
+                            scope.entry.insert(path.clone(), at_entry)
+                            if field_ty.starts_with("u") {
+                                scope.not_negative(walk.arena, path)
+                            }
+                        }
+                        if has_a_length(field_ty) {
+                            scope.has_length(walk.arena, path, null)
+                            params.insert(path.clone())
+                            params.insert(name.clone())
+                            let length = length_of(path)
+                            let at_entry = walk.arena.var(length)
+                            scope.entry.insert(length, at_entry)
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// **A literal's fields are names of the binding** (ADR-306 D17): `let p =
+/// Piece { end: n }` knows `p.end == n`, and `p.items.len()` is the length
+/// of the list it was given by name.
+fn prover_literal_fields(mut walk: ProverWalk, mut scope: ProverScope, name: ref String, fields: ref Vec[FieldInit], words: ref winnow_grammar::InternerContext) {
+    for field in fields {
+        let field_name = words.resolve(field.name)
+        let path = f"{name}.{field_name}"
+        let term = prover_field_value(walk, scope, field.value, field_name, words)
+        if term != null {
+            scope.ints.insert(path.clone())
+            let named = walk.arena.var(path)
+            let fact = walk.arena.equal(named, term ?? 0)
+            scope.facts.push(fact)
+            let at_entry = scope.at_entry(walk.arena, term ?? 0)
+            if at_entry != null {
+                scope.entry.insert(path.clone(), at_entry ?? 0)
+            }
+        }
+        let list = prover_field_list(field.value, field_name, words)
+        if list != null {
+            let given = length_of(list ?? "")
+            if scope.ints.contains(given) {
+                let length = length_of(path)
+                scope.ints.insert(length.clone())
+                let named = walk.arena.var(length)
+                let known = walk.arena.var(given)
+                let fact = walk.arena.equal(named, known)
+                scope.facts.push(fact)
+            }
+        }
+    }
+}
+
+/// A field's value as a term: what is written, or the name of the same
+/// name where nothing is (`Piece { end }`).
+fn prover_field_value(mut walk: ProverWalk, scope: ref ProverScope, value: ref Expr?, field_name: ref String, words: ref winnow_grammar::InternerContext) -> i64? {
+    if value == null {
+        if !scope.ints.contains(field_name) {
+            return null
+        }
+        return walk.arena.var(field_name)
+    }
+    let written = value ?? return null
+    return lin_term(written, words, fn(n) { scope.ints.contains(n) }, fn(n) { prover_pinned(walk.state.pinned, scope, n) }, walk.arena.nodes)
+}
+
+/// The list a field is given by name, or by the same name.
+fn prover_field_list(value: ref Expr?, field_name: ref String, words: ref winnow_grammar::InternerContext) -> String? {
+    if value == null {
+        return field_name.clone()
+    }
+    let written = value ?? return null
+    return path_of(written, words)
+}
+
 /// A `let`: what its value makes known of the names it binds.
 fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], mutable: bool, ty: ref Type?, value: ref Expr, span: Span, mut scope: ProverScope, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
@@ -365,6 +463,10 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         return
     }
     let name = words.resolve(names[0]).clone()
+    match value {
+        Expr::StructLit { fields, .. } => prover_literal_fields(walk, scope, name, fields, words),
+        else => {},
+    }
     if !leaned.is_empty() {
         scope.leaned.insert(name.clone(), leaned)
     }

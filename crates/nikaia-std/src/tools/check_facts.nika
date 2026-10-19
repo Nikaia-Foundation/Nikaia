@@ -102,6 +102,11 @@ pub struct CheckFacts {
     pub copied_tuple_parts: collections::BTreeSet[(i64, String)],
     pub std_lengths: collections::BTreeSet[i64],
     pub sized_lengths: collections::BTreeSet[i64],
+    /// **The field reads of a whole-number type**, by node (ADR-306 D17):
+    /// the bounds walk reads a path of fields to one as a number.
+    pub whole_fields: collections::BTreeSet[i64],
+    /// **The `N` of each `Array[T, N]` read or counted**, by node (#711).
+    pub array_lengths: collections::BTreeMap[i64, i64],
     pub char_codes: collections::BTreeSet[i64],
     pub arithmetic: collections::BTreeMap[i64, String],
     pub negations: collections::BTreeMap[i64, String],
@@ -286,6 +291,8 @@ impl CheckFacts {
             copied_tuple_parts: collections::BTreeSet(),
             std_lengths: collections::BTreeSet(),
             sized_lengths: collections::BTreeSet(),
+            whole_fields: collections::BTreeSet(),
+            array_lengths: collections::BTreeMap(),
             char_codes: collections::BTreeSet(),
             arithmetic: collections::BTreeMap(),
             negations: collections::BTreeMap(),

@@ -583,6 +583,7 @@ impl ProverState {
             }
             let mut read: collections::BTreeSet[String] = collections::BTreeSet()
             arena.variables(pre.term, read)
+            given_paths(arena, words, read, params, args, scope, self.pinned, given_by)
             let mut goal: i64? = null
             if every_given(read, given_by) {
                 goal = arena.substitute(pre.term, given_by)
@@ -739,6 +740,11 @@ pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], param
         }
         k += 1
     }
+    let mut read_all: collections::BTreeSet[String] = collections::BTreeSet()
+    for post in posts {
+        arena.variables(post.term, read_all)
+    }
+    given_paths(arena, words, read_all, params, args, scope, pinned, args_given)
     let bound_length = length_of(bound)
     for (_, term) in args_given {
         if arena.mentions(term, bound) || arena.mentions(term, bound_length) {
@@ -894,6 +900,61 @@ pub fn prover_pinned(pinned: ref collections::BTreeMap[String, i64], scope: ref 
         return null
     }
     return pinned[name]
+}
+
+/// **A parameter's paths of fields, as a call gives them** (ADR-306 D17):
+/// `p.end` is `q.end` for an argument `q`, the field's value for a literal
+/// `Piece { end: n }`, and `p.items.len()` the length of the list it names.
+fn given_paths(mut arena: TermArena, words: ref winnow_grammar::InternerContext, read: ref collections::BTreeSet[String], params: ref Vec[String], args: ref Vec[Expr], scope: ref ProverScope, pinned: ref collections::BTreeMap[String, i64], mut given_by: collections::BTreeMap[String, i64]) {
+    for v in read {
+        if given_by.contains_key(v) {
+            continue
+        }
+        for k in 0..<params.len() {
+            if k < args.len() && v.starts_with(f"{params[k]}.") {
+                let rest = (v.strip_prefix(f"{params[k]}.") ?? "").clone()
+                let term = given_path(arena, words, args[k], rest, scope, pinned)
+                if term != null {
+                    given_by.insert(v.clone(), term ?? 0)
+                }
+            }
+        }
+    }
+}
+
+/// The term for the path `rest` of fields from the argument `arg`.
+fn given_path(mut arena: TermArena, words: ref winnow_grammar::InternerContext, arg: ref Expr, rest: ref String, scope: ref ProverScope, pinned: ref collections::BTreeMap[String, i64]) -> i64? {
+    let named = path_of(arg, words)
+    if named != null {
+        let target = f"{named ?? ""}.{rest}"
+        if !scope.ints.contains(target) {
+            return null
+        }
+        return arena.var(target)
+    }
+    match arg {
+        Expr::StructLit { fields, .. } => {
+            let field_name = (rest.strip_suffix(".len()") ?? rest).clone()
+            let counted = rest.ends_with(".len()")
+            for field in fields {
+                if words.resolve(field.name) == field_name {
+                    // A field written by its name alone is not read here.
+                    let value = field.value ?? return null
+                    if counted {
+                        let list = path_of(value, words) ?? return null
+                        let length = length_of(list)
+                        if !scope.ints.contains(length) {
+                            return null
+                        }
+                        return arena.var(length)
+                    }
+                    return lin_term(value, words, fn(n) { scope.ints.contains(n) }, fn(n) { prover_pinned(pinned, scope, n) }, arena.nodes)
+                }
+            }
+            return null
+        },
+        else => return null,
+    }
 }
 
 /// Whether `args_given` gives each of `names`.

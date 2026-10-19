@@ -37,7 +37,7 @@ fn site_shape(a: ref Expr, b: ref Expr) -> String {
     site_reads(a, read)
     site_reads(b, read)
     if read.field {
-        return "it reads a field, of which the walk keeps no facts (#384)"
+        return "it reads a field of a value that is not a name or a path of fields from one, of which the walk keeps no facts (#384)"
     }
     if read.nested {
         return list_of_lists()
@@ -51,8 +51,13 @@ fn site_shape(a: ref Expr, b: ref Expr) -> String {
 /// Every expression inside `expr`, itself included, noted in `read`.
 fn site_reads(expr: ref Expr, mut read: SiteReads) {
     match expr {
+        // **A path of fields from a name is a number of the walk** (ADR-306
+        // D17); a field of anything else - an element, a call's result - is
+        // not.
         Expr::Field { base, .. } => {
-            read.field = true
+            if !a_path(base) {
+                read.field = true
+            }
             site_reads(base, read)
         },
         Expr::Call { args, .. } => {
@@ -95,6 +100,15 @@ fn site_reads(expr: ref Expr, mut read: SiteReads) {
         },
         Expr::Unary { expr, .. } => site_reads(expr, read),
         else => {},
+    }
+}
+
+/// Whether `expr` is a name or a path of fields from one.
+fn a_path(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(_, _) => true,
+        Expr::Field { base, .. } => a_path(base),
+        else => false,
     }
 }
 

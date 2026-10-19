@@ -97,6 +97,20 @@ impl ProverScope {
 
     /// `name` is bound again: nothing known about the old binding holds.
     pub fn rebind(ref mut self, arena: ref TermArena, name: ref String) {
+        // **The paths of fields from it go with it** (ADR-306 D17).
+        let under = f"{name}."
+        let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
+        let own = length_of(name)
+        for n in self.ints {
+            if n.starts_with(under) && n != own && n.ends_with(".len()") {
+                parts.insert((n.strip_suffix(".len()") ?? "").clone())
+            } else if n.starts_with(under) && n != own {
+                parts.insert(n.clone())
+            }
+        }
+        for part in parts {
+            self.rebind(arena, part)
+        }
         let length = length_of(name)
         self.ints.remove(name)
         self.ints.remove(length)

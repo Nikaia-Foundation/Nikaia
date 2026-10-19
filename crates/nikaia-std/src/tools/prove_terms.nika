@@ -35,14 +35,22 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
             if !args.is_empty() || words.resolve(method) != "len" {
                 return null
             }
-            let length = match receiver {
-                Expr::Variable(name, _) => f"{words.resolve(name)}.len()",
-                else => return null,
-            }
+            // A path of fields counts as a name does (ADR-306 D17).
+            let list = path_of(receiver, words) ?? return null
+            let length = f"{list}.len()"
             if !var(length) {
                 return null
             }
             built(SolverTerm::Var(length), out)
+        },
+        // **A path of fields from a name** (ADR-306 D17, ADR-269 D9): `p.end`
+        // is a name of its own where the walk made it one.
+        Expr::Field { .. } => {
+            let path = path_of(expr, words) ?? return null
+            if !var(path) {
+                return null
+            }
+            built(SolverTerm::Var(path), out)
         },
         // **A call's result**, where the walk made it a name of its own
         // (`call_result_name`, ADR-314 D3).
