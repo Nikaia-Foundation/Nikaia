@@ -426,21 +426,27 @@ fn lower_to_rust(
     // **The file as its project reads it** (ADR-260 D1): its package and the
     // dependencies the manifest declares, or - outside a project - the file
     // alone, with none (D2).
-    let (program, packages) = project::read_file(input)?;
-    project::explain(
-        &program,
-        settings,
-        project::Explain {
-            overlaps: args.overlaps,
-            sharing: args.sharing,
-            tethers: args.tethers,
-            trust: args.trust,
-            comptime: args.comptime,
-            asserts: args.asserts,
-            bounds: args.bounds,
-        },
-        &project::reads_for_file(input, args.allow_read_from_list.as_deref())?,
-    )?;
+    let want = project::Explain {
+        overlaps: args.overlaps,
+        sharing: args.sharing,
+        tethers: args.tethers,
+        trust: args.trust,
+        comptime: args.comptime,
+        asserts: args.asserts,
+        bounds: args.bounds,
+    };
+    let reads = project::reads_for_file(input, args.allow_read_from_list.as_deref())?;
+    // **Read here only for an explanation**: `lower_reading` reads the
+    // program itself, and a second read parsed every file and inferred its
+    // ledger again (#727).
+    let packages = match want.asked() {
+        true => {
+            let (program, packages) = project::read_file(input)?;
+            project::explain(&program, settings, want, &reads)?;
+            packages
+        }
+        false => project::packages_of_file(input)?,
+    };
 
     // The cache key gains the dependencies with them: their units are part of
     // the program, and the key is made of the program's sources and paths.
@@ -858,7 +864,7 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
         }
         Verb::Lower { output } => lower_to_rust(input, output, args, &settings),
         Verb::Check => {
-            let (_, packages) = project::read_file(input)?;
+            let packages = project::packages_of_file(input)?;
             project::lower_reading(
                 input,
                 &settings,

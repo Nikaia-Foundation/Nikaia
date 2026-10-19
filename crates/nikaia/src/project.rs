@@ -940,15 +940,25 @@ pub fn reads_for_file(input: &Path, allowlist: Option<&Path>) -> Result<assets::
 }
 
 pub fn read_file(input: &Path) -> Result<(modules::Program, Vec<modules::Dependency>)> {
+    let packages = packages_of_file(input)?;
+    match Layout::resolve(input).in_project {
+        false => Ok((modules::Program::read_one(input)?, packages)),
+        true => Ok((modules::Program::read_with(input, &packages)?, packages)),
+    }
+}
+
+/// [`read_file`]'s dependencies without the program: for a caller that hands
+/// them to [`lower_reading`], which reads the program itself, so the files
+/// are not parsed and their ledger inferred twice.
+pub fn packages_of_file(input: &Path) -> Result<Vec<modules::Dependency>> {
     let layout = Layout::resolve(input);
     if !layout.in_project {
-        return Ok((modules::Program::read_one(input)?, Vec::new()));
+        return Ok(Vec::new());
     }
     let manifest = Manifest::read(&layout.root.join("nikaia.toml"))?;
     // Not announced: `Manifest::find` already read this manifest for the
     // settings, and a note said twice is noise.
-    let packages = packages_of(&manifest, &layout.root, false)?;
-    Ok((modules::Program::read_with(input, &packages)?, packages))
+    packages_of(&manifest, &layout.root, false)
 }
 
 /// **The project `nikaia run <file>` builds** ([ADR-260](../../docs/specification/adr/adr-260.md) D4).
