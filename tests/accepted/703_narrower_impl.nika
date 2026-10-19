@@ -1,0 +1,79 @@
+// #703: an impl narrower than its trait's declaration (ADR-288 D2, D25) is
+// the type's own method, and the trait reaches it through a bridge: a call on
+// the concrete type follows the method's own contract, a call through a
+// generic bound the trait's.
+
+use std::time
+
+trait Source {
+    fn load(ref self) -> String throws
+}
+
+trait Count {
+    fn count(ref self) -> i64
+}
+
+trait Check {
+    fn check(ref self, limit: i64) -> bool sync throws
+}
+
+trait Fetch {
+    fn fetch(ref self, key: String) -> String throws
+}
+
+pub struct Fixed {
+    text: String,
+}
+
+impl Source for Fixed {
+    fn load(ref self) -> String sync {
+        return self.text.clone()
+    }
+}
+
+impl Count for Fixed {
+    fn count(ref self) -> i64 sync {
+        return self.text.len()
+    }
+}
+
+impl Check for Fixed {
+    fn check(ref self, limit: i64) -> bool sync {
+        return self.text.len() <= limit
+    }
+}
+
+impl Fetch for Fixed {
+    fn fetch(ref self, key: String) -> String {
+        time::sleep(1.millis())
+        return f"{self.text}:{key}"
+    }
+}
+
+fn through[S: Source](s: ref S) -> String throws {
+    return s.load()
+}
+
+fn counted[C: Count](c: ref C) -> i64 {
+    return c.count()
+}
+
+fn checked[C: Check](c: ref C, limit: i64) -> bool throws {
+    return c.check(limit)
+}
+
+fn fetched[F: Fetch](f: ref F) -> String throws {
+    return f.fetch("k")
+}
+
+fn main() throws {
+    let f = Fixed { text: "fixed" }
+    println(f.load())
+    println(f"{f.count()}")
+    println(f"{f.check(3)}")
+    println(f.fetch("a"))
+    println(through(f))
+    println(f"{counted(f)}")
+    println(f"{checked(f, 9)}")
+    println(fetched(f))
+}

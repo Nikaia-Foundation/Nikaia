@@ -1468,6 +1468,14 @@ use nikaia_std::tools::emit_kinds::EmitTail as Tail;
 struct MethodOf<'a> {
     target: &'a str,
     declared_by: Option<&'a str>,
+    /// **The own half of a bridged method** (ADR-288 D2, D25): `Some` where
+    /// the method is narrower than the trait's declaration (`sync`, or no
+    /// `throws`) and is written into an inherent `impl`, which a call on the
+    /// concrete type reaches; the trait's `impl` is then a bridge to it. It
+    /// keeps the trait's parameter shapes and channel, and is `async` only if
+    /// its own body pauses. The flag is whether the type is `pub`, which makes
+    /// the method `pub`.
+    bridged: Option<bool>,
 }
 
 /// What the declaration a body belongs to says about that body.
@@ -2882,6 +2890,7 @@ impl<'p> Emitter<'p> {
                                 Some(MethodOf {
                                     target: &target_name,
                                     declared_by: None,
+                                    bridged: None,
                                 }),
                             )?;
                             out.record(&method.span, st);
@@ -2930,6 +2939,7 @@ impl<'p> Emitter<'p> {
                             Some(MethodOf {
                                 target: &target_name,
                                 declared_by: None,
+                                bridged: None,
                             }),
                         )?;
                         out.record(&method.span, st);
@@ -2974,6 +2984,47 @@ impl<'p> Emitter<'p> {
                         .borrow_mut()
                         .enter(&target_name, seeds::Seeds::applied(0, hidden));
                 }
+                // **A method narrower than the trait's declaration is the
+                // type's own, and the trait reaches it through a bridge**
+                // (ADR-288 D2, D25): `sync` or without `throws` where the trait
+                // may pause or fail. A call on the concrete type follows the
+                // method's own contract - no `.await`, no `?` - so the method is
+                // written into an inherent `impl`, which Rust prefers on such a
+                // call, and the trait's `impl` answers with the declaration's
+                // signature and calls it, as `Eq`'s bridge above does.
+                let declared_by = trait_name.map(|t| self.text(t));
+                let wider: Vec<Option<&crate::ast::TraitMethod>> = methods
+                    .iter()
+                    .map(|method| self.declared_wider(declared_by, &target_name, &method.node))
+                    .collect();
+                if wider.iter().any(Option::is_some) {
+                    let public = self.parsed.program.items.iter().any(|item| {
+                        matches!(&item.node,
+                            Item::Struct { name, is_public: true, .. }
+                            | Item::Enum { name, is_public: true, .. }
+                                if self.text(*name) == target_name)
+                    });
+                    out.push(&format!("impl{declares} {target_name}{applied} {{\n"));
+                    for (method, _) in methods.iter().zip(&wider).filter(|(_, w)| w.is_some()) {
+                        let carries = self.s.carries_input.get(&(method.span.at() as i64));
+                        let st = out.mark();
+                        out.push("    ");
+                        self.function(
+                            out,
+                            &method.node,
+                            1,
+                            lifetimes,
+                            carries,
+                            Some(MethodOf {
+                                target: &target_name,
+                                declared_by,
+                                bridged: Some(public),
+                            }),
+                        )?;
+                        out.record(&method.span, st);
+                    }
+                    out.push("}\n");
+                }
                 let head = match trait_name {
                     Some(t) => format!(
                         "impl{declares} {} for {target_name}{applied}",
@@ -2982,7 +3033,12 @@ impl<'p> Emitter<'p> {
                     None => format!("impl{declares} {target_name}{applied}"),
                 };
                 out.push(&format!("{head} {{\n"));
-                for method in methods {
+                for (method, wider) in methods.iter().zip(&wider) {
+                    if let Some(declared) = wider {
+                        out.push("    ");
+                        self.bridge(out, declared, &target_name, &method.node)?;
+                        continue;
+                    }
                     let carries = self.s.carries_input.get(&(method.span.at() as i64));
                     {
                         let st = out.mark();
@@ -2995,7 +3051,8 @@ impl<'p> Emitter<'p> {
                             carries,
                             Some(MethodOf {
                                 target: &target_name,
-                                declared_by: trait_name.map(|t| self.text(t)),
+                                declared_by,
+                                bridged: None,
                             }),
                         )?;
                         out.record(&method.span, st);
@@ -3431,6 +3488,102 @@ impl<'p> Emitter<'p> {
         Ok(())
     }
 
+    /// The trait's declaration of `method`, where it is wider than the
+    /// method itself (ADR-288 D2, D25): it may pause and the method's own
+    /// body does not, or it may fail and the method does not. `None` for a
+    /// method of a trait this program does not declare.
+    fn declared_wider(
+        &self,
+        trait_name: Option<&str>,
+        target: &str,
+        method: &Item,
+    ) -> Option<&crate::ast::TraitMethod> {
+        let trait_name = trait_name?;
+        let Item::Fn {
+            name: Some(name),
+            can_throw,
+            ..
+        } = method
+        else {
+            return None;
+        };
+        let name = self.text(*name);
+        let declared = self
+            .parsed
+            .program
+            .items
+            .iter()
+            .find_map(|item| match &item.node {
+                Item::Trait { name, methods, .. } if self.text(*name) == trait_name => {
+                    Some(methods)
+                }
+                _ => None,
+            })?;
+        let declared = declared
+            .iter()
+            .map(|m| &m.node)
+            .find(|m| self.text(m.name) == name)?;
+        let pauses_less = !declared.is_sync && !self.pauses(&format!("{target}::{name}"));
+        let fails_less = declared.can_throw && !*can_throw;
+        (pauses_less || fails_less).then_some(declared)
+    }
+
+    /// The trait's half of a bridged method: the declaration's own signature,
+    /// written as the trait writes it, and a body that calls the type's own
+    /// method - awaited where that one pauses, and its value wrapped in `Ok`
+    /// where only the declaration fails. An inherent method is found before a
+    /// trait's, so `Self::name` is the type's own.
+    fn bridge(
+        &self,
+        out: &mut Out,
+        declared: &crate::ast::TraitMethod,
+        target: &str,
+        method: &Item,
+    ) -> Result<()> {
+        let own_throws = matches!(
+            method,
+            Item::Fn {
+                can_throw: true,
+                ..
+            }
+        );
+        let name = self.text(declared.name);
+        let mut written = Out::empty();
+        self.trait_method(&mut written, declared, declared.is_sync, false)?;
+        let signature = written.buf.trim_end().trim_end_matches(';').to_string();
+        let passed: Vec<String> = declared
+            .receiver
+            .iter()
+            .map(|_| "self".to_string())
+            .chain(declared.args.iter().map(|a| self.name(a.name).to_string()))
+            .chain(
+                declared
+                    .config
+                    .iter()
+                    .map(|o| self.name(o.name).to_string()),
+            )
+            .collect();
+        let awaited = match self.pauses(&format!("{target}::{name}")) {
+            true => ".await",
+            false => "",
+        };
+        let called = format!(
+            "Self::{}({}){awaited}",
+            self.name(declared.name),
+            passed.join(", ")
+        );
+        let body = match declared.can_throw && !own_throws {
+            true => format!("Ok({called})"),
+            false => called,
+        };
+        let body = match declared.is_sync {
+            true => body,
+            false => format!("async move {{ {body} }}"),
+        };
+        out.push(&format!("{signature} {{ {body} }}\n"));
+        Ok(())
+    }
+
     fn bounded(&self, param: &crate::ast::GenericParam) -> String {
         nikaia_std::tools::emit_below::emit_bounded(&self.world, param)
     }
@@ -3472,6 +3625,7 @@ impl<'p> Emitter<'p> {
                     Some(MethodOf {
                         target,
                         declared_by: None,
+                        bridged: None,
                     }),
                 )?;
                 out.record(&method.span, st);
@@ -4345,7 +4499,11 @@ impl<'p> Emitter<'p> {
         // hasher the parameter holds.
         let outer_unpinned =
             self.walking(|w| std::mem::replace(&mut w.unpinned, hidden > 0 || in_seeded_impl));
-        let vis = if *is_public { "pub " } else { "" };
+        let vis = match owner.and_then(|o| o.bridged) {
+            Some(true) => "pub ",
+            _ if *is_public => "pub ",
+            _ => "",
+        };
         let name = own_name;
         // ADR-303 D4: `fn main` is the runtime's, and the program's own entry
         // point is called from inside it. Only at the crate root, and only for
@@ -4385,6 +4543,7 @@ impl<'p> Emitter<'p> {
         // correct and says nothing, which is D2's own sentence; what it cannot
         // do is hand back an `i64` where a future was promised.
         let declared_pausing = owner
+            .filter(|owner| owner.bridged.is_none())
             .and_then(|owner| owner.declared_by)
             .map(|t| format!("{t}::{name}"))
             .is_some_and(|key| {
