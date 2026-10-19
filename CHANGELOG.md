@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1059] — 2026-10-19
+
+**Four lowering defects found by the 1BRC programs (#683, #684, #685, #676)**
+- A `??` that panics keeps `find`'s position: `find(..) ?? panic(..)` cuts its text as `?? return` does (NK1214).
+- `and_modify` on a map of numbers: `fn(v) { v += 1 }` and `fn(v) { v = v * 2 }` change the number in the slot.
+- `entry` builds its `String` key: a literal or a view handed to `entry` on a map keyed by `String` is converted as `insert`'s key is.
+- A loop name used again: a second `for i in 0..<n` no longer breaks the first loop's `xs[i]`.
+
 ## [0.0.1058] — 2026-10-19
 
 **a program reads the clock, and what a program it ran cost (ADR-368)**
