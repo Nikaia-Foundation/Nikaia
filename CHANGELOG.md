@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1062] — 2026-10-19
+
+**four defects that kept develop red, from text tiers and and_modify (#678, #680, #684)**
+- A pausing lambda handed to `and_modify` on a map of numbers lowers again: its body runs as an awaited async block between the copy out and the write back. A variant's static-text payload bound in a match arm keeps text of its own where the arm hands it on beside text of its own (ADR-282 D29). A `String` parameter that a caller hands a choice of a view and text of its own is not lent (ADR-282 D12). An argument made in a call to another package's function returning a struct of views lives as long as the result (ADR-283 D24).
+
 ## [0.0.1061] — 2026-10-19
 
 **process::run's max_rss_kib on Linux counts the caller's high-water mark (ADR-368 D3)**
