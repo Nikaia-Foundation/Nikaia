@@ -240,6 +240,12 @@ impl CheckState {
         if !expected.is_a_view() {
             return false
         }
+        return self.a_place_of_a_lent_parameter(world, value)
+    }
+
+    /// **A place inside a borrowed `self` or a `ref` parameter**: a field or
+    /// an element, whose buffer is the caller's (#96, #738).
+    pub fn a_place_of_a_lent_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         let a_place = match value {
             Expr::Field { .. } => true,
             Expr::Index { .. } => true,

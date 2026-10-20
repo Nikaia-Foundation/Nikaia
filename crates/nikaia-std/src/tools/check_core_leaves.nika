@@ -52,18 +52,38 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
             return
         }
     }
+    // **An element read out of a lent list is a place of it too** (#738):
+    // `return v[0]` out of `v: ref Vec[String]`.
+    let mut element = false
+    let mut path: String = ""
+    let mut root: String = ""
     match value {
-        Expr::Field { .. } => {}
+        Expr::Field { .. } => {
+            path = state.place_path(world, value) ?? return
+            let at = path.find(".") ?? return
+            root = path[0..<at].clone()
+        }
+        Expr::Index { base, .. } => {
+            let list = state.place_path(world, base) ?? return
+            path = f"{list}[…]"
+            root = state.rooted_at(world, base) ?? return
+            element = true
+        }
         else => return,
     }
-    let path = state.place_path(world, value) ?? return
-    let at = path.find(".") ?? return
-    let root: String = path[0..<at].clone()
     if root == "self" || !state.lent_here(root) {
         return
     }
     let ty = check_core_expr(state, world, host, value, span)
     if ty.is_unknown() || copies_plainly(ty) {
+        return
+    }
+    // A map's read is `NK1102`'s, which says what it views.
+    let nullable = match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    if element && nullable {
         return
     }
     // **`s.bytes` handed back is copied** (ADR-320 D11), not given away.
@@ -308,6 +328,13 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
     if value != null {
         let given = value ?? return
         lending = state.hands_back_a_view_of_the_subject(world, given)
+        // **A result both kinds flow into takes a view** (ADR-282 D13, D15,
+        // #738): a `String` read through a borrowed parameter is lent into
+        // it, as the same value at the end of the function is.
+        if !lending && state.flow.expected_either && state.a_place_of_a_lent_parameter(world, given) {
+            let ty = check_core_expr(state, world, host, given, span)
+            lending = ty == a_string_type()
+        }
         if lending {
             state.facts.lent_returns.insert(span.start as i64)
         }

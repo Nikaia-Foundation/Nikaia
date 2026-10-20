@@ -10454,6 +10454,37 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn lent_arms_handed_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, nullable: bool) -> bool {
+        if !is_a_choice(value) { return false; }
+        let either = self.flow.expected_either;
+        let expected = match match self.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let view = expected.is_a_view();
+        if !either && !view { return false; }
+        let text = a_string_type();
+        let mut lent: Vec<i64> = vec![];
+        let mut others_view = true;
+        for leaf in self.value_leaves(world, value) {
+            if ends_in_null(check_peeled(leaf)) { continue; }
+            let ty = nikaia_std::index::or(self.arm_type_of(leaf), || Ty::Unknown);
+            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) { lent.push(node_key(leaf)); } else if !views_into_text(&ty, &text) { others_view = false; }
+        }
+        if lent.is_empty() || !either && !others_view { return false; }
+        for node in lent.iter() {
+            let node = nikaia_std::num::value(node);
+            self.facts.lent_reads.insert(node);
+            self.flow.lent_tail_leaves.insert(node);
+        }
+        if either {
+            self.note_mixed(world, value, nullable);
+            return false;
+        }
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn views_meet_owned_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> {
         if !is_a_choice(value) { return None; }
         let text = a_string_type();
@@ -10703,7 +10734,16 @@ impl CheckState {
         if what == "returns" { mixed = self.flow.expected_either; } else if what == "field" { mixed = self.flow.field_either; }
         let text = a_string_type();
         let mut a_view = false;
-        for arm in arms.iter() { if views_into_text(&arm.ty, &text) { a_view = true; } }
+        for arm in arms.iter() {
+            if views_into_text(&arm.ty, &text) { a_view = true; }
+            if mixed && what == "returns" && arm.ty == text && arm.tail.is_some() {
+                let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if self.flow.lent_tail_leaves.contains(&node_key(tail)) || self.a_place_of_a_lent_parameter(world, tail) {
+                    self.facts.lent_reads.insert(node_key(tail));
+                    a_view = true;
+                }
+            }
+        }
         for asked in arms.iter() {
             let arm = match asked.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut ty = nikaia_std::index::or(self.text_literal(world, want, arm, true), || asked.ty.clone().into());
@@ -11300,6 +11340,11 @@ impl CheckState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
         if !expected.is_a_view() { return false; }
+        self.a_place_of_a_lent_parameter(world, value)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_place_of_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let a_place = matches!(value, Expr::Field { .. } | Expr::Index { .. });
         if !a_place { return false; }
         let root = match self.rooted_at(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -16261,16 +16306,29 @@ pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut 
         let declared = match expected { Some(__nikaia_value) => __nikaia_value, None => return };
         if declared.is_a_view() { return; }
     }
+    let mut element = false;
+    let mut path: String = String::from("");
+    let mut root: String = String::from("");
     match value {
-        Expr::Field { .. } => { },
+        Expr::Field { .. } => {
+            path = match state.place_path(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
+            root = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_owned();
+        },
+        Expr::Index { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            let list = match state.place_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return };
+            path = format!("{}[…]", list);
+            root = match state.rooted_at(world, base) { Some(__nikaia_value) => __nikaia_value, None => return };
+            element = true;
+        },
         _ => { return; },
     }
-    let path = match state.place_path(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let root: String = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_owned();
     if root == "self" || !state.lent_here(&root) { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
+    let nullable = matches!(ty, Ty::Nullable(_));
+    if element && nullable { return; }
     if state.a_text_bytes_view(world, value) { return; }
     let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
     let help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path);
@@ -16496,6 +16554,10 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         lending = state.hands_back_a_view_of_the_subject(world, given);
+        if !lending && state.flow.expected_either && state.a_place_of_a_lent_parameter(world, given) {
+            let ty = check_core_expr(state, world, host, given, span);
+            lending = ty == a_string_type();
+        }
         if lending { state.facts.lent_returns.insert(span.start as i64); }
         match given {
             Expr::Unary { op, expr, .. } => {
@@ -22133,6 +22195,7 @@ pub struct CheckFlow {
     pub lent_params: collections::BTreeSet<String>,
     pub walk_lent: bool,
     pub lambda_expected: Option<Ty>,
+    pub lent_tail_leaves: collections::BTreeSet<i64>,
     pub open_calls: collections::BTreeMap<i64, Vec<i64>>,
     pub unknown_bound: collections::BTreeSet<i64>,
     pub unknown_lambda_params: collections::BTreeSet<i64>,
@@ -22150,7 +22213,7 @@ pub struct CheckFlow {
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), handle_lets: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_lambda_params: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), handle_lets: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, lent_tail_leaves: collections::BTreeSet::new(), open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_lambda_params: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
 }
 
 
@@ -59377,7 +59440,10 @@ fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk)
             tail = kinds;
             if (walk.frames.len() == 2 || back) && walk.result.is_some() {
                 match &stmt.node {
-                    Stmt::Expr(last) => { tie_leaves(last, -1, None, true, ask, walk); },
+                    Stmt::Expr(last) => {
+                        tie_leaves(last, -1, None, true, ask, walk);
+                        if back { tail = handed_kinds(last, &tail, ask, walk); }
+                    },
                     _ => { },
                 }
             }
@@ -59604,8 +59670,7 @@ fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk:
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match function.result { Some(__nikaia_value) => __nikaia_value, None => return };
-    let mut handed = kinds.clone();
-    if same_kinds(&handed, &owned_kinds()) && lent_field(value, ask, walk) { handed = view_kinds(); }
+    let mut handed = handed_kinds(value, kinds, ask, walk);
     if plain_string(ask.names, &result) && !function.of_a_trait {
         let mut sides: Vec<String> = vec![];
         if lendable_sides(value, ask, walk, &mut sides) && !sides.is_empty() {
@@ -59843,12 +59908,41 @@ fn tie_bound(names: &[winnow_grammar::Symbol], value: &Expr, ask: &TierAsk<'_, '
 }
 
 fn lent_field(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
-    let place = match place_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if !plain_string(ask.names, &place.ty) || place.ty.is_nullable { return false; }
     match value {
-        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); lent_root(base, ask, walk) },
+        Expr::Field { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            let place = match place_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            plain_string(ask.names, &place.ty) && !place.ty.is_nullable && lent_root(base, ask, walk)
+        },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); lent_element(base, ask, walk) },
         _ => false,
     }
+}
+
+fn lent_element(base: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    let list = match place_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) { return false; }
+    let element = nikaia_std::index::get(&list.ty.generics, 0);
+    if !plain_string(ask.names, &element) || element.is_nullable { return false; }
+    match base {
+        Expr::Variable(name, _) => { let name = *name; lent_list_parameter(ask.names.resolve(name), &walk) },
+        Expr::Field { base: inner, .. } => { let inner = nikaia_std::boxed::open(inner); !list.ty.is_view && lent_root(inner, ask, walk) },
+        _ => false,
+    }
+}
+
+fn lent_list_parameter(name: &str, walk: &TierWalk) -> bool {
+    let local = match tier_local(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match declared.owner {
+        TextOwner::Param(_, _) => declared.ty.is_view && !declared.ty.is_nullable,
+        _ => false,
+    }
+}
+
+fn handed_kinds(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
+    if same_kinds(kinds, &owned_kinds()) && lent_field(value, ask, walk) { return view_kinds(); }
+    kinds.clone()
 }
 
 fn lent_root(base: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
@@ -60516,8 +60610,12 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) ->
                     tier_expr(guard, ask, walk);
                 }
                 walk.tail_back = back;
-                out = kinds_joined(&out, &tier_expr(&arm.body, ask, walk));
-                if back { tie_leaves(&arm.body, -1, None, true, ask, walk); }
+                let mut arm_kinds = tier_expr(&arm.body, ask, walk);
+                if back {
+                    tie_leaves(&arm.body, -1, None, true, ask, walk);
+                    arm_kinds = handed_kinds(&arm.body, &arm_kinds, ask, walk);
+                }
+                out = kinds_joined(&out, &arm_kinds);
                 if bound { still_sources(&arm.body, ask, walk, &mut payloads); }
                 close_tier_scope(walk);
             }

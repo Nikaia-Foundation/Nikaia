@@ -67,14 +67,16 @@ fn main() {{
 /// Measured as a class before anything was built: a field read off a borrowed
 /// subject leaks by being handed back, by being bound, and by being passed —
 /// and nowhere else. Handed back as the only text a `String` result gets, it
-/// is a view result now (ADR-282 D2, D12, #663), so it is handed back beside
-/// text of its own here, which leaves the result text of its own.
+/// is a view result now (ADR-282 D2, D12, #663), and beside text of its own
+/// it is lent into the mixed result (D13, D15, #738); so it is handed back
+/// beside text of its own from a published method here, whose result is one
+/// kind (D22).
 #[test]
 fn every_by_value_position_is_refused() {
     let positions = [
         (
             "handed back",
-            "    fn m(ref self, c: bool) -> String {\n        if c { return self.name }\n        return f\"x{1}\"\n    }",
+            "    pub fn m(ref self, c: bool) -> String {\n        if c { return self.name }\n        return f\"x{1}\"\n    }",
         ),
         (
             "bound",
@@ -286,7 +288,7 @@ fn the_ledger_says_the_result_borrows_the_subject() {
 fn the_third_way_out_is_named_only_where_the_result_is() {
     let positions = [
         (
-            "    fn m(ref self, c: bool) -> String {\n        if c { return self.name }\n        return f\"x{1}\"\n    }",
+            "    pub fn m(ref self, c: bool) -> String {\n        if c { return self.name }\n        return f\"x{1}\"\n    }",
             true,
         ),
         (

@@ -1,0 +1,29 @@
+// An element read out of a list a `ref` parameter lends is a view of it
+// (#738 item 1, ADR-282 D13): the result is lent, whole or beside text of
+// its own, as a field read through a borrowed parameter is.
+struct Shelf { items: Vec[String] }
+fn own(s: String) -> String { s.clone() }
+fn first(v: ref Vec[String]) -> String { return v[0] }
+fn first_or(v: ref Vec[String]) -> String? { return v[0] }
+fn first_tail(v: ref Vec[String]) -> String { v[0] }
+fn first_tail_or(v: ref Vec[String]) -> String? { v[0] }
+fn shelved(s: ref Shelf) -> String { s.items[1] }
+fn either_arm(v: ref Vec[String], c: bool) -> String { if c { v[0] } else { own(v[1]) } }
+fn either_return(v: ref Vec[String], c: bool) -> String? { if c { return v[0] } return own(v[1]) }
+fn either_tail(v: ref Vec[String], c: bool) -> String? { if c { return own(v[0]) } v[1] }
+pub fn published(v: ref Vec[String]) -> String { return v[0] }
+fn main() {
+    let v = [f"a{1}", f"b{2}"]
+    let s = Shelf { items: [f"c{3}", f"d{4}"] }
+    println(first(v))
+    println(first_or(v) ?? "-")
+    println(first_tail(v))
+    println(first_tail_or(v) ?? "-")
+    println(shelved(s))
+    println(either_arm(v, true))
+    println(either_arm(v, false))
+    println(either_return(v, true) ?? "-")
+    println(either_return(v, false) ?? "-")
+    println(either_tail(v, false) ?? "-")
+    println(published(v))
+}

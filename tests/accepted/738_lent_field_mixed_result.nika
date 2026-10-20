@@ -1,0 +1,27 @@
+// A field read through a borrowed parameter, handed back beside text of its
+// own, is lent into the mixed result, in the tail form as in the `return`
+// form (#738 item 2, ADR-282 D13, D15).
+struct Holder { name: String }
+impl Holder {
+    fn pick(ref self, c: bool) -> String { if c { self.name } else { f"x{1}" } }
+}
+fn own(s: String) -> String { s.clone() }
+fn tail_if(h: ref Holder, c: bool) -> String? { if c { h.name } else { own(h.name) } }
+fn return_if(h: ref Holder, c: bool) -> String? { if c { return h.name } return own(h.name) }
+fn plain_tail(h: ref Holder, c: bool) -> String { if c { return own(h.name) } h.name }
+fn tail_match(h: ref Holder, c: i64) -> String? { match c { 0 => h.name, 1 => null, else => own(h.name) } }
+fn view_or_null(h: ref Holder, c: bool) -> String? { if c { h.name } else { null } }
+fn view_tail(h: ref Holder) -> String? { h.name }
+fn main() {
+    let h = Holder { name: f"n{1}" }
+    println(h.pick(true))
+    println(h.pick(false))
+    println(tail_if(h, true) ?? "-")
+    println(tail_if(h, false) ?? "-")
+    println(return_if(h, true) ?? "-")
+    println(plain_tail(h, false))
+    println(tail_match(h, 0) ?? "-")
+    println(tail_match(h, 1) ?? "-")
+    println(view_or_null(h, true) ?? "-")
+    println(view_tail(h) ?? "-")
+}

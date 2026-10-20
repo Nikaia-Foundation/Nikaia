@@ -746,9 +746,10 @@ fn a_view_of_a_borrowed_parameter_handed_back_is_a_view_result() {
     );
 }
 
-/// **A result both kinds flow into hands over text of its own**: the view of
-/// `self` is refused, naming `.clone()`, and with it the result owns its text.
-/// A published one is refused the same way (ADR-282 D22).
+/// **A result both kinds flow into takes the view of `self` beside text of
+/// its own** (ADR-282 D13, D15, #738): it is lent into the mixed result. A
+/// published one is one kind, so there the view is refused, naming
+/// `.clone()` (D22), and with the copy the result owns its text.
 #[test]
 fn a_result_both_kinds_flow_into_owns_its_text() {
     let mixed = r##"struct Head { path: String }
@@ -764,8 +765,7 @@ fn main() {
     println(h.pick(false))
 }
 "##;
-    let found = findings(mixed);
-    assert!(found.iter().any(|f| f.code == "NK1131"), "{found:#?}");
+    runs("mixed-result-lent", mixed, "/1\nown1");
     let published = mixed.replace("    fn pick", "    pub fn pick");
     let found = findings(&published);
     assert!(found.iter().any(|f| f.code == "NK1131"), "{found:#?}");
@@ -2070,4 +2070,20 @@ fn a_view_kept_in_a_list_the_walk_cannot_link_is_refused() {
     );
     let owned = include_str!("../../../tests/accepted/738_unlinked_list_argument.nika");
     runs("unlinked-list-argument", owned, "3\n2");
+}
+
+/// **An element of a lent list handed back through a published result
+/// beside text of its own is refused** (#738 item 1, ADR-282 D22, D25), as
+/// `return h.name` is: a published result is one kind.
+#[test]
+fn an_element_of_a_lent_list_into_a_mixed_published_result_is_refused() {
+    let source = "pub fn pick(v: ref Vec[String], c: bool) -> String {\n    if c { return v[0] }\n    return f\"x{1}\"\n}\n\
+                  fn main() {\n    let v = [f\"a{1}\"]\n    println(pick(v, true))\n}\n";
+    let found = findings(source);
+    assert!(
+        found
+            .iter()
+            .any(|f| f.code == "NK1131" && f.message.contains("`v[…]`")),
+        "{found:#?}"
+    );
 }

@@ -1676,7 +1676,14 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             // with (#708).
             if (walk.frames.len() == 2 || back) && walk.result != null {
                 match stmt.node {
-                    Stmt::Expr(last) => tie_leaves(last, -1, null, true, ask, walk),
+                    Stmt::Expr(last) => {
+                        tie_leaves(last, -1, null, true, ask, walk)
+                        // An arm's place read through a borrowed parameter
+                        // is a view beside the others (#738).
+                        if back {
+                            tail = handed_kinds(last, tail, ask, walk)
+                        }
+                    },
                     else => {}
                 }
             }
@@ -1947,10 +1954,7 @@ fn flow_result(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: Ti
     // **A field read through a borrowed parameter is a view of it** when it
     // is handed back (ADR-282 D2, D12, #663): `return self.path` from a
     // `ref self` method points into `self`, as `-> ref String` would.
-    let mut handed = kinds.clone()
-    if same_kinds(handed, owned_kinds()) && lent_field(value, ask, walk) {
-        handed = view_kinds()
-    }
+    let mut handed = handed_kinds(value, kinds, ask, walk)
     // **A `String` or `String?` parameter handed back as it is** - or each
     // side of a `??` that is one - goes in as nothing yet: the decision lends
     // it, and makes the result a view of it, where nothing else handed back
@@ -2263,14 +2267,52 @@ fn tie_bound(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ask: ref T
 }
 
 fn lent_field(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
-    let place = place_of(value, ask, walk) ?? return false
-    if !plain_string(ask.names, place.ty) || place.ty.is_nullable {
-        return false
-    }
     return match value {
-        Expr::Field { base, .. } => lent_root(base, ask, walk),
+        Expr::Field { base, .. } => {
+            let place = place_of(value, ask, walk) ?? return false
+            plain_string(ask.names, place.ty) && !place.ty.is_nullable && lent_root(base, ask, walk)
+        },
+        Expr::Index { base, .. } => lent_element(base, ask, walk),
         else => false,
     }
+}
+
+/// **An element of a list a `ref` parameter lends is a view of it** (#738,
+/// ADR-282 D13): `v[0]` out of `v: ref Vec[String]`, or out of a list field
+/// of a lent struct.
+fn lent_element(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    let list = place_of(base, ask, walk) ?? return false
+    if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) {
+        return false
+    }
+    let element = list.ty.generics[0]
+    if !plain_string(ask.names, element) || element.is_nullable {
+        return false
+    }
+    return match base {
+        Expr::Variable(name, _) => lent_list_parameter(ask.names.resolve(name), walk),
+        Expr::Field { base: inner, .. } => !list.ty.is_view && lent_root(inner, ask, walk),
+        else => false,
+    }
+}
+
+/// A name bound to a list parameter declared `ref`.
+fn lent_list_parameter(name: ref String, walk: ref TierWalk) -> bool {
+    let local = tier_local(name, walk) ?? return false
+    let declared = local.declared ?? return false
+    return match declared.owner {
+        TextOwner::Param(_, _) => declared.ty.is_view && !declared.ty.is_nullable,
+        else => false,
+    }
+}
+
+/// **What a value handed back is** (ADR-282 D13): a place read through a
+/// borrowed parameter is a view of it, whatever its position holds.
+fn handed_kinds(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
+    if same_kinds(kinds, owned_kinds()) && lent_field(value, ask, walk) {
+        return view_kinds()
+    }
+    return kinds.clone()
 }
 
 fn lent_root(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
@@ -3110,12 +3152,14 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                     tier_expr(guard, ask, walk)
                 }
                 walk.tail_back = back
-                out = kinds_joined(out, tier_expr(arm.body, ask, walk))
+                let mut arm_kinds = tier_expr(arm.body, ask, walk)
                 // An arm's value the function ends with is handed back as a
                 // `return` is (#708), while the names the arm binds are bound.
                 if back {
                     tie_leaves(arm.body, -1, null, true, ask, walk)
+                    arm_kinds = handed_kinds(arm.body, arm_kinds, ask, walk)
                 }
+                out = kinds_joined(out, arm_kinds)
                 if bound {
                     still_sources(arm.body, ask, walk, payloads)
                 }

@@ -1721,15 +1721,27 @@ impl<'a> Checker<'a> {
         self.s.flow.grown_text = outer_grown;
         // **The tail hands back as a `return` does**, and a field of a lent
         // place is refused there too (`NK1131`, #576). Read against the scope
-        // still standing, as the numbers below are.
+        // still standing, as the numbers below are. **Whether it lends** is
+        // read here too, while its names are bound: a place of a borrowed
+        // parameter going into a result both kinds flow into is lent into it,
+        // whole or as an arm (ADR-282 D13, D15, #738).
+        let mut tail_lent = false;
+        let mut tail_view = false;
         if expected.is_some()
             && !a_body_never_ends(body)
             && let Some(Stmt::Expr(value)) = body.stmts.last().map(|s| &s.node)
             && let Some(at) = tail_span
-            && !self.s.hands_back_a_view_of_the_subject(self.world, value)
         {
-            self.a_field_of_a_borrowed_subject(value, &at, "handed back");
-            self.a_field_of_a_lent_place_handed_back(value, &at);
+            tail_lent = self.s.hands_back_a_view_of_the_subject(self.world, value)
+                || (self.s.flow.expected_either
+                    && matches!(&tail, Ty::Named { name, args, view: false } if name == "String" && args.is_empty())
+                    && self.s.a_place_of_a_lent_parameter(self.world, value));
+            if !tail_lent {
+                self.a_field_of_a_borrowed_subject(value, &at, "handed back");
+                self.a_field_of_a_lent_place_handed_back(value, &at);
+            }
+            let nullable = matches!(expected, Some(Ty::Nullable(_)));
+            tail_view = self.s.lent_arms_handed_back(self.world, value, nullable);
         }
         // **A body's numbers, typed by their uses** once all of them have been
         // seen ([ADR-285](../../docs/specification/adr/adr-285.md) D24) - the
@@ -1807,12 +1819,18 @@ impl<'a> Checker<'a> {
             // same `&`: `fn text(ref self) -> ref String { self.text }` and the
             // `return` form are one program, and one of the two answering
             // differently would be a spelling that decides a refusal.
-            let lending = matches!(body.stmts.last().map(|s| &s.node), Some(Stmt::Expr(value))
-                if self.s.hands_back_a_view_of_the_subject(self.world, value));
-            if lending {
+            let lending = tail_lent;
+            // Into a `T?` the `&` goes inside the `Some` the tail is put into,
+            // where the place itself is written (#738).
+            if let Some(Stmt::Expr(value)) = body.stmts.last().map(|s| &s.node)
+                && lending
+                && matches!(expected, Ty::Nullable(_))
+            {
+                self.s.facts.lent_reads.insert(value_node(value));
+            } else if lending {
                 self.s.facts.lent_returns.insert(span.at() as i64);
             }
-            let tail = match lending {
+            let tail = match lending || tail_view {
                 true => view_of(&tail),
                 false => tail,
             };

@@ -110,6 +110,50 @@ impl CheckState {
         self.facts.mixed_choices.insert(node_key(value))
     }
 
+    /// **The arms of a function's last value that are a `String` read through
+    /// a borrowed parameter** (ADR-282 D13, D15, #738) are lent, as `return
+    /// h.name` is: into a result both kinds flow into, wrapped one by one;
+    /// into a view, where every other arm is a view or `null`, and the whole
+    /// is one then. Asked while the scope stands; true where the whole is a
+    /// view.
+    pub fn lent_arms_handed_back(ref mut self, world: ref CheckWorld, value: ref Expr, nullable: bool) -> bool sync {
+        if !is_a_choice(value) {
+            return false
+        }
+        let either = self.flow.expected_either
+        let expected = self.expected?.clone() ?? return false
+        let view = expected.is_a_view()
+        if !either && !view {
+            return false
+        }
+        let text = a_string_type()
+        let mut lent: Vec[i64] = []
+        let mut others_view = true
+        for leaf in self.value_leaves(world, value) {
+            if ends_in_null(check_peeled(leaf)) {
+                continue
+            }
+            let ty = self.arm_type_of(leaf) ?? Ty::Unknown
+            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) {
+                lent.push(node_key(leaf))
+            } else if !views_into_text(ty, text) {
+                others_view = false
+            }
+        }
+        if lent.len() == 0 || (!either && !others_view) {
+            return false
+        }
+        for node in lent {
+            self.facts.lent_reads.insert(node)
+            self.flow.lent_tail_leaves.insert(node)
+        }
+        if either {
+            self.note_mixed(world, value, nullable)
+            return false
+        }
+        return true
+    }
+
     /// **Views and text of its own meet as text where nothing asks** (#562):
     /// `let y = if c { s } else { int_text(1) }` is text, and the position `y`
     /// goes into decides what it is (ADR-282 D14). The name is bound as the
@@ -473,6 +517,16 @@ impl CheckState {
         for arm in arms {
             if views_into_text(arm.ty, text) {
                 a_view = true
+            }
+            // **A `String` read through a borrowed parameter is lent into a
+            // result both kinds flow into** (ADR-282 D13, D15, #738), as
+            // `return h.name` is.
+            if mixed && what == "returns" && arm.ty == text && arm.tail != null {
+                let tail = arm.tail ?? continue
+                if self.flow.lent_tail_leaves.contains(node_key(tail)) || self.a_place_of_a_lent_parameter(world, tail) {
+                    self.facts.lent_reads.insert(node_key(tail))
+                    a_view = true
+                }
             }
         }
         for asked in arms {
