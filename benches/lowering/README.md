@@ -22,4 +22,4 @@ benches/lowering/lower.sh count    only (b)
 
 | Lowered | Instructions (Ir) |
 | :--- | ---: |
-| `rs2nika/convert/src/main.nika`, cold | 4 838 692 574 |
+| `rs2nika/convert/src/main.nika`, cold | 3 812 955 235 |
