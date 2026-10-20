@@ -166,6 +166,42 @@ fn the_invariant_through_a_loop_is_kept_in_nikaia_proofs() {
     assert_eq!(again, written);
 }
 
+/// **`nikaia lower` reads the enclosing project's `[build] optimization`**,
+/// as `build` does (#774): a file at the project's root and one in `src/`
+/// lower without the checks the manifest's words remove, and the file named
+/// by itself is not read a second time as `./main.nika`.
+#[test]
+fn lower_reads_the_projects_optimization() {
+    let dir = common::scratch_dir("through-loops-lower-project");
+    std::fs::create_dir_all(dir.join("src")).expect("the package");
+    std::fs::write(
+        dir.join("nikaia.toml"),
+        format!(
+            "[package]\nname = \"tl\"\nversion = \"0.1.0\"\n\n[build]\noptimization = \"{ALL_ON}\"\n"
+        ),
+    )
+    .expect("a manifest");
+    std::fs::write(dir.join("src/main.nika"), PROBED).expect("a source");
+    std::fs::write(dir.join("main.nika"), PROBED).expect("a source at the root");
+    for (at, file, rust) in [
+        (dir.clone(), "main.nika", "main.rs"),
+        (dir.join("src"), "main.nika", "main.rs"),
+        (dir.clone(), "src/main.nika", "src/main.rs"),
+    ] {
+        let out = nikaia(&at, &["lower", file]);
+        assert!(
+            out.status.success(),
+            "{file} in {}: {}",
+            at.display(),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let lowered = std::fs::read_to_string(at.join(rust)).expect("the lowered program");
+        let probe = body(&lowered, "probe");
+        assert!(!probe.contains("index::get"), "{file}: {probe}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The word is `on` or `off`, as every optimization's is.
 #[test]
 fn prove_through_loops_is_on_or_off() {

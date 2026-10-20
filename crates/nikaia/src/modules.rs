@@ -168,7 +168,9 @@ fn package_at(
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
         .filter(|path| path.extension().is_some_and(|e| e == "nika"))
-        .filter(|path| path != entry)
+        // The entry by its name: `x.nika` and the `./x.nika` the directory
+        // lists are one file (#774).
+        .filter(|path| path.file_name() != entry.file_name())
         .collect();
     beside.sort();
 
