@@ -60,7 +60,7 @@ version = "0.1.0"
 
 [build]
 user-parallelism = "$1"
-optimization = "remove-bounds-checks:on,remove-overflow-checks:on,skip-free-at-exit:on"
+optimization = "remove-bounds-checks:on,remove-overflow-checks:on,prove-through-loops:on,skip-free-at-exit:on"
 
 [build.x86_64-linux]
 opt-level = 3

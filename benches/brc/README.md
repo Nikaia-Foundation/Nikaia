@@ -35,7 +35,9 @@ benches/brc/brc.sh 200000     # quicker
 * **Release builds on both sides.** The Rust programs are `cargo build
   --release` (`opt-level = 3`, no overflow checks). Nikaia's is a project built
   with `nikaia build` at `opt-level = 3`, every `optimization` on
-  (`remove-bounds-checks`, `remove-overflow-checks`, `skip-free-at-exit`), no
+  (`remove-bounds-checks`, `remove-overflow-checks`, `prove-through-loops`,
+  which asks a check a loop leaves open through the loop's invariant,
+  `skip-free-at-exit`), no
   debug assertions; it keeps the overflow checks the language promises. **Neither side
   uses link-time optimisation.**
 * **Two codegen-unit settings, the same on both sides each time: 1 and 16**
@@ -69,18 +71,18 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1158, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.1159, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
 per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
-| Rust, `naive` | 840.1 | 9.19 | 859.0 | 8.62 | 556 |
+| Rust, `naive` | 840.8 | 9.23 | 859.8 | 8.66 | 556 |
 | **Nikaia**, `naive.nika` | **570.2** | **8.24** | **569.1** | **8.44** | **375** |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
 | **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.2** | **1.12** | **642** |
-| Nikaia, overflow checks off | 275.0 | 1.12 | 231.3 | 1.13 | |
-| **Nikaia**, `fast.nika` | **163.4** | **0.95** | **163.6** | **0.95** | **1353** |
+| Nikaia, overflow checks off | 274.9 | 1.12 | 231.3 | 1.12 | |
+| **Nikaia**, `fast.nika` | **163.4** | **1.05** | **163.6** | **0.95** | **1353** |
 | Nikaia, `fast.nika`, overflow checks off | 147.6 | 0.95 | 147.8 | 0.95 | |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 | |
 | Nikaia, `fast.nika`, `x86-64-v3` | 151.8 | 0.95 | 152.0 | 0.95 | |
@@ -179,16 +181,16 @@ indexes by address (see the note on `1brc.nika` above).
 What each check costs, at 16 units, `x86-64`: the lowered Rust of `fast.nika`
 edited by hand to drop exactly that check (an unchecked read, `wrapping_*`,
 `get_unchecked`), built the same way, its output compared with `naive`'s and
-counted. None of them is proved today; the last column says what a proof
+counted. None of them is proved today, `prove-through-loops` included (in `fast.nika` it proves only `scan`'s `b[cut - 1]`, read once per piece); the last column says what a proof
 needs. The shift by `28 - dot` is proved from the program's guard on `dot`
 (ADR-306 D18) and is no longer among them.
 
 | check | instructions a row it costs | what proving it needs |
 |---|---:|---|
-| the table's index `self.slots[at]`, in the probe and in the update | 16.1 | `slots.len() == SLOTS` as `Table`'s invariant (ADR-369, not built), `at`'s range carried through the probe's turns, `slot_of`'s result below the length |
-| the name's two word reads, `u64_le(pos)` and `u64_le(pos + 8)` | 15.6 | `0 <= pos < stop` at the read, from the `break` that ends the previous turn (the walk forgets it at the loop's head), and `stop + MARGIN <= buf.len()` stated at `run`'s top |
-| the long name's slice `buf[pos..<pos + len]`, hoisted onto every row | 13.7 | the same facts as the word reads, a separator inside `buf`, and `len >= 0` |
-| the separator's arithmetic, `sep - pos` and `+ (dot >> 3)` | not counted alone | `sep + 1` and `sep + 4` are proved from `0 <= sep < buf.len()`, which each position `find_all` yields (ADR-375 D5) and `buf` keeps across `slot_of`, which takes it `ref` (#771): together the three cost 9.1, and the two cost 2.0. `sep - pos` needs `pos >= 0` across the turns |
+| the table's index `self.slots[at]`, in the probe and in the update | 16.1 | `slots.len() == SLOTS` as `Table`'s rule (ADR-369, #714), and `at`'s range where the probe starts: the walk gives `(h >> (64 - BITS)).bits_as_i64()` no upper bound (a `u64` shifted right has none in the walk). With both, `prove-through-loops` carries `0 <= at <= 16383` through the probe's turns, as it does for ADR-361 D10's example; `slot_of`'s result below the length for the update |
+| the name's two word reads, `u64_le(pos)` and `u64_le(pos + 8)` | 15.6 | an upper bound on `pos` carried across the turns, and `stop + MARGIN <= buf.len()`, stated nowhere. `prove-through-loops` takes its candidates from the facts the loop is reached with: `pos == 0` gives `pos >= 0`, which proves none of the reads; `pos < stop` holds at the end of each turn (the `break`) but not where the loop starts unless `stop > 0`, which `run` does not state |
+| the long name's slice `buf[pos..<pos + len]`, hoisted onto every row | 13.7 | it stands in `slot_of`, a call away from the loop: `0 <= pos <= pos + len <= buf.len()` as what `slot_of` is handed, which no loop invariant gives |
+| the separator's arithmetic, `sep - pos` and `+ (dot >> 3)` | not counted alone | `sep + 1` and `sep + 4` are proved from `0 <= sep < buf.len()`, which each position `find_all` yields (ADR-375 D5) and `buf` keeps across `slot_of`, which takes it `ref` (#771): together the three cost 9.1, and the two cost 2.0. `sep - pos` needs `pos >= 0` across the turns; with `prove-through-loops`, as the word reads: `pos`'s upper bound |
 | `sum += v`, `count += 1` | 2.0 | not provable: the table is scanned again and merged into, so no step count bounds them |
 | `8 * len`, `64 - 8 * len` and the shift by it | 0.6 | `len >= 0`, which a malformed file breaks: only a guard the program writes gives it |
 
