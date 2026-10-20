@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1110] — 2026-10-20
+
+**Every program a checker test accepts is checked by rustc**
+- Test hook: `NIKAIA_DUMP_ACCEPTED` makes the checker write each accepted one-file program, and CI's accepted-programs sweep lowers them all and checks them with `rustc`; a refusal not on its allow-list fails the build (#705).
+
 ## [0.0.1109] — 2026-10-20
 
 **Lowering: the solver copies less and the ledger pass skips report-only walks (#727)**
