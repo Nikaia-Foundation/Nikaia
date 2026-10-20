@@ -58617,6 +58617,7 @@ struct TierWalk {
     late_args: collections::BTreeSet<i64>,
     late_params: collections::BTreeSet<i64>,
     keeping: collections::BTreeSet<String>,
+    kept_into: collections::BTreeSet<(String, i64)>,
     param_arms: collections::BTreeSet<i64>,
     reads: TierReads,
 }
@@ -60039,7 +60040,7 @@ fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_
             let mut kinds = (*nikaia_std::index::get(&given, nikaia_std::index::at(at))).clone();
             if a_keeping_target(&function, at, ask) && tier_keeping_read(position_word(&owner, &no_path()), walk) {
                 let only_owned = kinds.owned && !kinds.view && !kinds.either && !kinds.still;
-                if only_owned && walk.late_args.contains(&node_key(nikaia_std::index::get(&args, nikaia_std::index::at(at)))) && lendable_parameter(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk).is_none() {
+                if only_owned && walk.late_args.contains(&node_key(nikaia_std::index::get(&args, nikaia_std::index::at(at)))) && lendable_parameter(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk).is_none() && !outlived_by_a_keeper(key, at, args, ask, &walk) {
                     walk.flows.viewed_arms.insert(node_key(nikaia_std::index::get(&args, nikaia_std::index::at(at))));
                     kinds = view_kinds();
                 }
@@ -61590,6 +61591,51 @@ fn a_parameter_itself(word: &str, flows: &Flows) -> bool {
     a_parameter && position.path.is_empty()
 }
 
+fn outlived_by_a_keeper(key: &str, at: i64, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_>, walk: &TierWalk) -> bool {
+    let word = position_word(&TextOwner::Param(key.to_owned(), at), &no_path());
+    let source = match tie_root(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let held = tie_depth(&source, walk);
+    for (from, other) in walk.kept_into.iter() {
+        let other = nikaia_std::num::value(other);
+        if *from == word && other < args.len() as i64 {
+            let root = match tie_root(nikaia_std::index::get(&args, nikaia_std::index::at(other)), ask) { Some(__nikaia_value) => __nikaia_value, None => return true };
+            let mut depth = tie_depth(&root, walk);
+            if depth <= 0 { depth = -1; }
+            if depth < held { return true; }
+        }
+    }
+    false
+}
+
+fn tier_kept_into(flows: &Flows) -> collections::BTreeSet<(String, i64)> {
+    let mut out: collections::BTreeSet<(String, i64)> = collections::BTreeSet::new();
+    for (from, to) in flows.param_into.iter() {
+        let position = match match *nikaia_std::index::get(&flows.known, to) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if position.path.is_empty() { continue; }
+        match position.owner {
+            TextOwner::Param(_, other) => { out.insert((from.to_owned(), other)); },
+            _ => { },
+        }
+    }
+    out
+}
+
+fn changed_keepers(a: &collections::BTreeSet<(String, i64)>, b: &collections::BTreeSet<(String, i64)>) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (from, other) in a.iter() {
+        let other = nikaia_std::num::value(other);
+        if !b.contains(&(from.to_owned(), other)) { out.insert(from.to_owned()); }
+    }
+    for (from, other) in b.iter() {
+        let other = nikaia_std::num::value(other);
+        if !a.contains(&(from.to_owned(), other)) { out.insert(from.to_owned()); }
+    }
+    out
+}
+
 fn tier_keeping(flows: &Flows) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (from, to) in flows.param_into.iter() { if !a_parameter_itself(to, flows) { out.insert(from.to_owned()); } }
@@ -61720,7 +61766,7 @@ fn tier_word(tier: Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads() };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads() };
     let found = late_arms(program, ask);
     walk.late = found.arms;
     walk.late_args = found.args;
@@ -61754,11 +61800,14 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_>) -> TextTiers
         let next = decide_tiers(&walk.flows, &walk.declared, &mut walk.demoted, &mut walk.unlent);
         let linked = same_adopted(&walk.flows.adopted, &walk.adopted);
         let keeping = tier_keeping(&walk.flows);
+        let kept_into = tier_kept_into(&walk.flows);
+        let keepers_moved = changed_keepers(&kept_into, &walk.kept_into);
         let arms = viewed_param_arms(&walk.flows, &walk.param_arms);
-        let settled = same_words(&keeping, &walk.keeping) && (arms.len() as i64) == walk.param_arms.len() as i64;
+        let settled = same_words(&keeping, &walk.keeping) && keepers_moved.is_empty() && (arms.len() as i64) == walk.param_arms.len() as i64;
         if same_tiers(&next, &walk.tiers) && linked && settled && (walk.demoted.len() as i64) == demoted_before && (walk.unlent.len() as i64) == unlent_before { break; }
         let tiers_moved = changed_tier_words(&next, &walk.tiers);
-        let keeping_moved = changed_words(&keeping, &walk.keeping);
+        let mut keeping_moved = changed_words(&keeping, &walk.keeping);
+        for word in keepers_moved.iter() { keeping_moved.insert(word.to_owned()); }
         let arms_moved = changed_nodes(&arms, &walk.param_arms);
         let adopted_moved = changed_adopted(&walk.flows.adopted, &walk.adopted);
         let mut v: i64 = 0;
@@ -61769,6 +61818,7 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_>) -> TextTiers
         walk.tiers = next;
         walk.adopted = walk.flows.adopted.to_owned();
         walk.keeping = keeping;
+        walk.kept_into = kept_into;
         walk.param_arms = arms;
     }
     let mut tiers: Vec<(TextPosition, Tier)> = vec![];

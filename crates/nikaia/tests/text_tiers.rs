@@ -2087,3 +2087,21 @@ fn an_element_of_a_lent_list_into_a_mixed_published_result_is_refused() {
         "{found:#?}"
     );
 }
+
+/// **A local lent to a parameter that keeps it in a list the caller's own
+/// parameter holds is handed over instead** (#738 item 5, ADR-282 D7, D25):
+/// the list outlives the local, so a later read of the local is `NK2105`'s,
+/// naming `.clone()`.
+#[test]
+fn a_local_kept_in_a_parameters_list_is_handed_over() {
+    let source = "fn fill(a: String, mut into: Vec[String]) { into.push(a) }\n\
+                  fn outer(mut v: Vec[String]) {\n    let s = f\"y{2}\"\n    fill(s, v)\n    println(s)\n}\n\
+                  fn main() {\n    let mut v: Vec[String] = Vec()\n    fill(\"lit\", v)\n    outer(v)\n    println(v.len())\n}\n";
+    let found = findings(source);
+    assert!(
+        found.iter().any(|f| f.code == "NK2105"
+            && f.message.contains("`fill`")
+            && f.help.iter().any(|h| h.contains("s.clone()"))),
+        "{found:#?}"
+    );
+}

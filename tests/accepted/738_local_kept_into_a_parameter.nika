@@ -1,0 +1,19 @@
+// A local handed to a parameter that keeps it in another argument's list:
+// handed over where it is not read again, and lent where the list goes no
+// further than the local (#738 item 5, ADR-282 D7, D25).
+fn fill(a: String, mut into: Vec[String]) { into.push(a) }
+fn outer(mut v: Vec[String]) {
+    let s = f"y{2}"
+    fill(s, v)
+}
+fn main() {
+    let mut v: Vec[String] = Vec()
+    fill("lit", v)
+    outer(v)
+    let mut w: Vec[String] = Vec()
+    let k = f"k{1}"
+    fill(k, w)
+    println(k)
+    println(v.len())
+    println(w.len())
+}

@@ -585,6 +585,9 @@ struct TierWalk {
     /// The `String` parameters that keep their text: handed as they are into
     /// a place that is not a parameter, or to one that keeps it (#716).
     keeping: collections::BTreeSet[String],
+    /// The `String` parameters kept into a place of another parameter of
+    /// their function, with that one's index (#738).
+    kept_into: collections::BTreeSet[(String, i64)],
     /// The arms that are a parameter named nowhere else, handed to one that
     /// keeps its text: each is a view of the parameter (#716).
     param_arms: collections::BTreeSet[i64],
@@ -2443,7 +2446,7 @@ fn flow_args(key: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: r
             // is one too - the position takes both kinds (`EitherText`).
             if a_keeping_target(function, at, ask) && tier_keeping_read(position_word(owner, no_path()), walk) {
                 let only_owned = kinds.owned && !kinds.view && !kinds.either && !kinds.still
-                if only_owned && walk.late_args.contains(node_key(args[at])) && lendable_parameter(args[at], ask, walk) == null {
+                if only_owned && walk.late_args.contains(node_key(args[at])) && lendable_parameter(args[at], ask, walk) == null && !outlived_by_a_keeper(key, at, args, ask, walk) {
                     walk.flows.viewed_arms.insert(node_key(args[at]))
                     kinds = view_kinds()
                 }
@@ -4398,6 +4401,65 @@ fn a_parameter_itself(word: ref String, flows: ref Flows) -> bool {
     return a_parameter && position.path.len() == 0
 }
 
+/// **A name the callee keeps in another argument's place that outlives it**
+/// (#738, ADR-282 D7, D25): `fill(s, v)`, where `fill` pushes its first
+/// parameter into its second and `v` is the caller's parameter, would leave
+/// `v` holding a view of `s`. So `s` is handed over, and a later read of it
+/// is refused as one after a move is.
+fn outlived_by_a_keeper(key: ref String, at: i64, args: ref Vec[Expr], ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    let word = position_word(TextOwner::Param(key.clone(), at), no_path())
+    let source = tie_root(args[at], ask) ?? return false
+    let held = tie_depth(source, walk)
+    for (from, other) in walk.kept_into {
+        if from == word && other < args.len() {
+            let root = tie_root(args[other], ask) ?? return true
+            let mut depth = tie_depth(root, walk)
+            if depth <= 0 {
+                depth = -1
+            }
+            if depth < held {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+/// **The `String` parameters kept into a place of another parameter of
+/// their function** (#738): a list or a field of it, with its index.
+fn tier_kept_into(flows: ref Flows) -> collections::BTreeSet[(String, i64)] {
+    let mut out: collections::BTreeSet[(String, i64)] = collections::BTreeSet()
+    for (from, to) in flows.param_into {
+        let position = flows.known[to]?.clone() ?? continue
+        if position.path.len() == 0 {
+            continue
+        }
+        match position.owner {
+            TextOwner::Param(_, other) => {
+                out.insert((from.clone(), other))
+            }
+            else => {}
+        }
+    }
+    return out
+}
+
+/// The parameters whose places kept into differ between two rounds.
+fn changed_keepers(a: ref collections::BTreeSet[(String, i64)], b: ref collections::BTreeSet[(String, i64)]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for (from, other) in a {
+        if !b.contains((from.clone(), other)) {
+            out.insert(from.clone())
+        }
+    }
+    for (from, other) in b {
+        if !a.contains((from.clone(), other)) {
+            out.insert(from.clone())
+        }
+    }
+    return out
+}
+
 /// **The `String` parameters that keep their text** (#716): handed as they
 /// are into a place that is not a parameter - the result, a field, a list -
 /// or to a parameter that keeps it.
@@ -4579,7 +4641,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads() }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads() }
     let found = late_arms(program, ask)
     walk.late = found.arms
     walk.late_args = found.args
@@ -4617,13 +4679,18 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
         let next = decide_tiers(walk.flows, walk.declared, walk.demoted, walk.unlent)
         let linked = same_adopted(walk.flows.adopted, walk.adopted)
         let keeping = tier_keeping(walk.flows)
+        let kept_into = tier_kept_into(walk.flows)
+        let keepers_moved = changed_keepers(kept_into, walk.kept_into)
         let arms = viewed_param_arms(walk.flows, walk.param_arms)
-        let settled = same_words(keeping, walk.keeping) && arms.len() == walk.param_arms.len()
+        let settled = same_words(keeping, walk.keeping) && keepers_moved.len() == 0 && arms.len() == walk.param_arms.len()
         if same_tiers(next, walk.tiers) && linked && settled && walk.demoted.len() == demoted_before && walk.unlent.len() == unlent_before {
             break
         }
         let tiers_moved = changed_tier_words(next, walk.tiers)
-        let keeping_moved = changed_words(keeping, walk.keeping)
+        let mut keeping_moved = changed_words(keeping, walk.keeping)
+        for word in keepers_moved {
+            keeping_moved.insert(word.clone())
+        }
         let arms_moved = changed_nodes(arms, walk.param_arms)
         let adopted_moved = changed_adopted(walk.flows.adopted, walk.adopted)
         let mut v = 0
@@ -4634,6 +4701,7 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
         walk.tiers = next
         walk.adopted = walk.flows.adopted.clone()
         walk.keeping = keeping
+        walk.kept_into = kept_into
         walk.param_arms = arms
     }
     let mut tiers: Vec[(TextPosition, Tier)] = []
