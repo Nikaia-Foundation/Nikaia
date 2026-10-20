@@ -77,8 +77,15 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
                     "Write it as `assert(claim)` or `assert(claim; message: \"…\")` after the fields.",
                 ));
             };
+            if !generics.is_empty() {
+                return Err(refused(
+                    rule.span,
+                    format!("`{type_name}` is generic, and a generic struct states no rule yet."),
+                    "Check what the methods need with an `assert` in each of them.",
+                ));
+            }
             let probe = Expr::Variable(*name, NodeId::fresh());
-            if !generics.is_empty() || on(&interner, claim, &probe, &field_names).is_none() {
+            if on(&interner, claim, &probe, &field_names).is_none() {
                 return Err(refused(
                     rule.span,
                     format!(

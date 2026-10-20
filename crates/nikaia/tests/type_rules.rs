@@ -362,3 +362,30 @@ fn another_file_of_the_package_leaves_the_rule_no_fact() {
     assert!(ok, "{err}");
     assert_eq!(out.trim(), "4 7");
 }
+
+/// D3 holds only where every change is checked: a field of the type changed
+/// outside its methods leaves the index checked.
+#[test]
+fn a_field_changed_outside_leaves_the_rule_no_fact() {
+    let source = RING.replace("WIDEN", "2").replace(
+        "    r.bump(5)\n",
+        "    r.bump(5)\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(1023)}\")\n",
+    );
+    let rust = lowered(&source);
+    assert!(!body(&rust, "at").contains("proven::read"), "{rust}");
+    let (ok, _, err) = run("outside", &source);
+    assert!(!ok, "the slot read past the end");
+    assert!(err.contains("out of bounds"), "{err}");
+}
+
+/// A generic struct states no rule yet, so none is a fact: `NK1288`.
+#[test]
+fn a_generic_struct_states_no_rule() {
+    let source = "struct P[T] {\n    a: Vec[T],\n    assert(a.len() > 0)\n}\nfn main() {\n    let p = P { a: [1] }\n    print(f\"{p.a.len()}\")\n}\n";
+    let refused = match parse_to_ast(source) {
+        Ok(_) => panic!("a generic struct's rule is refused"),
+        Err(e) => format!("{e:#}"),
+    };
+    assert!(refused.contains("NK1288"), "{refused}");
+    assert!(refused.contains("`P` is generic"), "{refused}");
+}
