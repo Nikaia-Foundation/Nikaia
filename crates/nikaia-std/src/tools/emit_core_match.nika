@@ -379,6 +379,12 @@ impl EmitState {
                 copied.push(f"let {name} = *{name}; ")
             }
         }
+        // **A part the arm took and changes is opened `mut`** (#734).
+        for one in self.facts.changed_bindings {
+            if one.0 == node_key(body) {
+                copied.push(f"let mut {one.1} = {one.1}; ")
+            }
+        }
         // **And an element a list pattern keeps is cloned out of the slice**
         // (ADR-355 D5, #622): the slice lends it, the arm keeps it.
         let mut cloned: Vec[String] = []

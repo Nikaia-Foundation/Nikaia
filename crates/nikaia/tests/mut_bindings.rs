@@ -351,3 +351,40 @@ fn a_let_changed_without_mut_is_explained_at_both_places() {
          \x20  = help: Add `mut` where it's declared: `let mut count`.\n"
     );
 }
+
+/// **A name handed to a `mut` parameter is changed** (#734, Part I 6.5): the
+/// parameter is passed as `ref mut`, so the caller sees the change, and the
+/// caller's binding says `mut` as for any other change. A `let` without it is
+/// `NK1139`, a field of one too, a parameter without it `NK1138`, and a `for`
+/// binding, whose head takes no `mut` (Part I 3.3), `NK1139`.
+#[test]
+fn a_name_handed_to_a_mut_parameter_says_mut() {
+    let bump = "fn bump(mut n: i64) { n += 1 }\n";
+    assert!(refused_let(&format!(
+        "{bump}fn main() {{\n    let n = 4\n    bump(n)\n}}\n"
+    )));
+    assert!(refused_let(&format!(
+        "struct P {{ x: i64 }}\n{bump}fn main() {{\n    let p = P {{ x: 1 }}\n    bump(p.x)\n}}\n"
+    )));
+    assert!(
+        findings(&format!(
+            "{bump}fn f(n: i64) {{ bump(n) }}\nfn main() {{ f(1) }}\n"
+        ))
+        .iter()
+        .any(|f| f.code == "NK1138")
+    );
+    assert!(refused_let(&format!(
+        "{bump}fn main() {{\n    let v = [1, 2]\n    for x in v {{ bump(x) }}\n}}\n"
+    )));
+    assert!(refused_let(
+        "fn main() {\n    let v = [1, 2]\n    for x in v { x += 1 }\n}\n"
+    ));
+    // With the word it is a program, and a `match` arm's binding is the
+    // arm's own (Part I 3.4): it may be changed, `tests/accepted/734_*`.
+    assert!(!refused_let(&format!(
+        "{bump}fn main() {{\n    let mut n = 4\n    bump(n)\n}}\n"
+    )));
+    assert!(!refused_let(&format!(
+        "{bump}fn main() {{\n    match 5 {{ k => bump(k) }}\n}}\n"
+    )));
+}

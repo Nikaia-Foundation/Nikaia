@@ -126,6 +126,13 @@ impl CheckState {
         let mut message: String = f"You're changing `{name}`, but it wasn't declared as mutable."
         let mut notes: Vec[String] = []
         let mut help: String = f"Add `mut` where it's declared: `let mut {name}`."
+        let mut declared_text: String = "declared here without `mut`"
+        if immutable.kind == CheckKind::Loop {
+            message = f"You're changing `{name}`, which a `for` binds, and a `for` binding can't be changed."
+            notes.push("A `for` binding is the element of this turn, and its head takes no `mut`.")
+            help = f"Change a copy instead: `let mut {name}_own = {name}`."
+            declared_text = "bound here by the `for`"
+        }
         if immutable.kind == CheckKind::Parameter {
             code = "NK1138"
             message = f"You're changing the parameter `{name}`, but it wasn't declared as mutable."
@@ -133,7 +140,7 @@ impl CheckState {
             help = f"Write `mut {name}` in the parameter list. If the caller's value should stay as it was, change a copy instead: `let mut {name}_own = {name}`."
         }
         self.said_mut.insert(declared)
-        let there = CheckLabel { span: immutable.at.clone(), word: name.clone(), text: "declared here without `mut`", main: false }
+        let there = CheckLabel { span: immutable.at.clone(), word: name.clone(), text: declared_text, main: false }
         let here = CheckLabel { span: changed_at.clone(), word: name.clone(), text: how.clone(), main: true }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code: code, message: message, notes: notes, help: help, labels: [there, here] })
     }

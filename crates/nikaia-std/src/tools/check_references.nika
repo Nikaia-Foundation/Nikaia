@@ -140,6 +140,14 @@ impl CheckState {
             if self.a_name_that_changes(world, given_expr) {
                 return true
             }
+            // **The caller's name is changed there** (Part I 6.5, #734): a
+            // `let` without `mut` is `NK1139`, a parameter without it `NK1138`,
+            // as for any other change.
+            let root: String? = self.rooted_at(world, given_expr)
+            if root != null {
+                let changed: String = root ?? ""
+                self.a_changed_binding_says_mut(changed, "handed to a `mut` parameter here", check_span_at(world, given_expr, span))
+            }
             self.facts.mut_args.insert(id_of(given_expr) as i64)
             let bound = match given_expr {
                 Expr::Variable(symbol, _) => self.binding(world.words.resolve(symbol))?.id ?? -1,

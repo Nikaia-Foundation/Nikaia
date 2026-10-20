@@ -1044,6 +1044,9 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         let mut local = CheckLocal::free(name, bound, id)
         local.written_mut = false
         local.lent = lent && !copied && !a_view
+        // **A `for` binding takes no `mut`** (Part I 3.3, #734): its head is
+        // a `let`'s pattern, so a change to it is `NK1139`.
+        local.immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop }
         frame.push(local)
     }
     // **A range's binding is a use of the numbers it counts between**

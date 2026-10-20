@@ -231,6 +231,9 @@ pub struct CheckFacts {
     /// place, or handed to a `mut` parameter. The copy is the arm's own (Part
     /// I 3.4), so it is opened as `let mut`.
     pub changed_copies: collections::BTreeSet[(i64, String)],
+    /// **A part bound by value that the arm changes** (#734, Part I 3.4): the
+    /// arm took it, so it is opened as `let mut` again.
+    pub changed_bindings: collections::BTreeSet[(i64, String)],
     /// **An element a list pattern keeps out of an owned list** (ADR-355
     /// D5, #622): the slice lends it, so the arm opens with its clone, and the
     /// list is gone afterwards as Part I 3.4 says.
@@ -408,6 +411,7 @@ impl CheckFacts {
             boxed_reads: collections::BTreeSet(),
             copied_bindings: collections::BTreeSet(),
             changed_copies: collections::BTreeSet(),
+            changed_bindings: collections::BTreeSet(),
             cloned_bindings: collections::BTreeSet(),
             some_tails: collections::BTreeSet(),
             mixed_leaves: collections::BTreeMap(),

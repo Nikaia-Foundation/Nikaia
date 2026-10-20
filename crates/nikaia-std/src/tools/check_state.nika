@@ -14,15 +14,17 @@
 
 use std::collections
 
-/// Which of the two ways a binding comes to be one that did not say `mut`.
+/// Which of the ways a binding comes to be one that did not say `mut`.
 ///
-/// They are one rule reached from two sides - *what is changed says `mut`* -
-/// and two codes, because the way out is written in a different place:
-/// `NK1138` is a **parameter**'s (ADR-094 D3), `NK1139` is a **`let`**'s
-/// (Part I 2.1).
+/// They are one rule reached from several sides - *what is changed says
+/// `mut`* - and two codes, because the way out is written in a different
+/// place: `NK1138` is a **parameter**'s (ADR-094 D3), `NK1139` is a **`let`**'s
+/// (Part I 2.1) and a **`for`** binding's, whose head takes a `let`'s pattern
+/// and no `mut` (Part I 3.3).
 pub enum CheckKind {
     Parameter,
     Let,
+    Loop,
 }
 
 /// A binding that did not say `mut`: where it was written, and which kind it is.
@@ -85,8 +87,8 @@ pub struct CheckLocal {
 }
 
 impl CheckLocal {
-    /// A binding nothing here refuses a change to: `self`, an option, a `for`
-    /// binding, a pattern's name. `id` is a number no other binding has.
+    /// A binding nothing here refuses a change to: `self`, an option, a
+    /// pattern's name. `id` is a number no other binding has.
     pub fn free(name: String, ty: Ty, id: i64) -> CheckLocal {
         return CheckLocal {
             name: name,

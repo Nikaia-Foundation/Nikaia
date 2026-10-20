@@ -1,0 +1,41 @@
+// #734: a `match` arm's binding is the arm's own (Part I 3.4), so the arm may
+// change it, or hand it to a `mut` parameter; a `let mut` handed to one sees
+// the change (Part I 6.5).
+
+struct P { x: i64 }
+
+fn bump(mut n: i64) { n += 1 }
+
+fn shout(mut s: String) { s.push_str("!") }
+
+fn main() {
+    match 5 {
+        k => {
+            bump(k)
+            println(f"{k}")
+        }
+    }
+    match 5 {
+        k => {
+            k += 1
+            println(f"{k}")
+        }
+    }
+    let p = P { x: 1 }
+    match p {
+        P { x } => {
+            x += 2
+            println(f"{x}")
+        }
+    }
+    let s = "hi".clone()
+    match s {
+        t => {
+            shout(t)
+            println(t)
+        }
+    }
+    let mut m = 4
+    bump(m)
+    println(f"{m}")
+}
