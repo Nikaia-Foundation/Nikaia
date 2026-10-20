@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1158] — 2026-10-20
+
+**unsafe { assume(claim) } (ADR-376, decided); a type's rule another package can break is no fact (ADR-369, built)**
+- ADR-376, Part III 14.2, 15.1: `assume(claim)` inside `unsafe` is a fact from where it stands; checked as an `assert` in a build with `remove-bounds-checks:off` and `remove-overflow-checks:off`, believed (lowered to `core::hint::assert_unchecked`, undefined behaviour if false) in a build with either `on`; outside `unsafe` `NK1294`, in `std` `NK1295`; listed by `nikaia check --asserts`. Decided, not yet built.
+- ADR-369 (built, 5b7643a): a type whose rule reads a `pub` field, or a `pub` type every field of which is `pub` or defaulted, no longer takes its rule as a fact at function entries: a dependency is lowered without its consumers in view, and `remove-bounds-checks:on` read past a slot a consumer had removed. A literal of a type built in another file of its package is checked against the type's rule.
+
 ## [0.0.1157] — 2026-10-20
 
 **A search's positions and a shift's count in the bounds walk (ADR-375 D5, ADR-306 D18, built)**

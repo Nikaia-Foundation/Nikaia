@@ -91,7 +91,7 @@ instructions at both settings, from the same algorithm (below).
 Against AI variant 1, the instructions are level within what the inliner
 decides: Nikaia runs 26 % fewer at 16 units, AI variant 1 1 % fewer at 1 unit.
 The mispredictions are a third of AI variant 1's at both settings. Nikaia's program is a
-quarter fewer tokens, with no `unsafe`, with UTF-8 and every overflow checked
+quarter fewer tokens, with UTF-8 and every overflow checked
 or proved; the same file also runs on every core. The temperature's checks are
 proved (ADR-314), and so are the counter's, `count += 1` and the merge's
 `count += other.count`, from the input's length (ADR-367): the counter is one
@@ -111,8 +111,7 @@ tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 `fast.nika` runs 12 % more instructions than AI variant 2 at both unit
 counts, as many within 0.3 % without its overflow checks, and 16 % more at
 `x86-64-v3`; it has about three times AI variant 2's mispredictions. It is
-24 % fewer tokens, with no `unsafe` and every index and overflow checked or
-proved, and a row without a `.` where the temperature's shape puts one stops
+24 % fewer tokens, with every index and overflow checked or proved, and a row without a `.` where the temperature's shape puts one stops
 the program. Where the difference lies is below.
 
 ## Where Nikaia's instructions go

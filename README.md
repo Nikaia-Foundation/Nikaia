@@ -4,7 +4,7 @@
   <p><strong>Good wins.</strong></p>
   <p>
     Write it like a script. Catch what can be proven at compile time.
-    Fast as lightning, without <code>unsafe</code>.
+    Fast as lightning.
   </p>
 
 
