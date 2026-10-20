@@ -200,21 +200,29 @@ fn user_parallelism_chooses_the_parallelism_and_nothing_else() {
 
     assert!(
         parallel.contains(
-            "nikaia_std::grammar::parse_pieces(&*data, |source| Measurements::parse_file_pieces(source, &ParseContext::<()>::default(), Parallelism::Auto))"
+            "nikaia_std::grammar::parse_pieces(&*data, __nk_fold_Measurements_file(), true, |source, how| Measurements::parse_file_pieces(source, &ParseContext::<()>::default(), how))"
         ),
         "{parallel}"
     );
     assert!(
         sequential.contains(
-            "nikaia_std::grammar::parse_pieces(&*data, |source| Measurements::parse_file_pieces(source, &ParseContext::<()>::default(), Parallelism::Off))"
+            "nikaia_std::grammar::parse_pieces(&*data, __nk_fold_Measurements_file(), false, |source, how| Measurements::parse_file_pieces(source, &ParseContext::<()>::default(), how))"
         ),
         "{sequential}"
     );
 
     // Only the executor differs.
     assert_eq!(
-        parallel.replace("Parallelism::Auto", "Parallelism::Off"),
+        parallel.replace("(), true, |source, how|", "(), false, |source, how|"),
         sequential
+    );
+    // **The options are made beside the grammar** (ADR-372 D6), the defaults
+    // where the `par_fold` names none.
+    assert!(
+        sequential.contains(
+            "pub fn __nk_fold_Measurements_file() -> nikaia_std::par::FoldOptions {\n    nikaia_std::par::FoldOptions::new(nikaia_std::par::Order::Kept, None, None)\n}"
+        ),
+        "{sequential}"
     );
 }
 
@@ -230,8 +238,8 @@ fn a_target_without_threads_pins_the_driver_sequential() {
     };
     let emitted = emit(WITH_DSL, asked_for_parallel);
 
-    assert!(emitted.contains("Parallelism::Off"), "{emitted}");
-    assert!(!emitted.contains("Parallelism::Auto"), "{emitted}");
+    assert!(emitted.contains("(), false, |source, how|"), "{emitted}");
+    assert!(!emitted.contains("(), true, |source, how|"), "{emitted}");
 }
 
 #[test]
@@ -286,7 +294,7 @@ fn a_dsl_with_a_catch_is_handed_the_result_and_not_the_value() {
 fn a_rejected_parse_is_rendered_against_the_input_it_parsed() {
     let emitted = emit(WITH_DSL, Build::default());
     assert!(
-        emitted.contains("nikaia_std::grammar::parse_pieces(&*data, |source| "),
+        emitted.contains("nikaia_std::grammar::parse_pieces(&*data, __nk_fold_Measurements_file(), false, |source, how| "),
         "{emitted}"
     );
     // `std` renders it against the text it was handed (0.0.297): the line and

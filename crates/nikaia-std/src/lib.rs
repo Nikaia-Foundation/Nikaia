@@ -249,6 +249,7 @@ pub mod runtime {
     clippy::too_many_arguments,
     clippy::useless_format,
     clippy::map_entry,
+    clippy::large_enum_variant,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):

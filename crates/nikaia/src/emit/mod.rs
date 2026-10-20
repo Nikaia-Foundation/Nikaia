@@ -4988,6 +4988,51 @@ impl<'p> Emitter<'p> {
             let lowered = nikaia_std::tools::emit_core_leaves::emit_bytes_grammar(&name);
             self.grammar_over(out, def, &lowered, true)?;
         }
+        for rule in def.rules.iter().filter(|rule| rule.is_entry) {
+            if let Some(spec) = a_par_fold(rule) {
+                self.fold_options(out, &name, self.text(rule.name), spec)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// **The options a `par_fold` entry names after its `;`**
+    /// ([ADR-372](../../docs/specification/adr/adr-372.md) D6), made by a
+    /// function beside the grammar that every call of the entry calls: the
+    /// grammar's own module is the backend's, and they are evaluated, and
+    /// checked, where the parse starts.
+    fn fold_options(
+        &self,
+        out: &mut Out,
+        grammar: &str,
+        rule: &str,
+        spec: &FoldSpec,
+    ) -> Result<()> {
+        let named = |wanted: &str| {
+            spec.config
+                .iter()
+                .find(|option| self.text(option.name) == wanted)
+                .map(|option| &option.value)
+        };
+        let function = nikaia_std::tools::emit_core_leaves::emit_fold_options(grammar, rule);
+        out.push(&format!(
+            "\n#[allow(non_snake_case, dead_code)]\npub fn {function}() -> nikaia_std::par::FoldOptions {{\n    nikaia_std::par::FoldOptions::new("
+        ));
+        match named("order") {
+            Some(order) => self.expr(out, order, 0, Flow::PLAIN)?,
+            None => out.push("nikaia_std::par::Order::Kept"),
+        }
+        for option in ["workers", "piece"] {
+            match named(option) {
+                Some(value) => {
+                    out.push(", Some(");
+                    self.expr(out, value, 0, Flow::PLAIN)?;
+                    out.push(")");
+                }
+                None => out.push(", None"),
+            }
+        }
+        out.push(")\n}\n");
         Ok(())
     }
 
@@ -9405,6 +9450,20 @@ fn tuple_pattern(names: &[String], shape: &[i64]) -> String {
         (_, None) | (_, Some(-1)) => format!("({})", names.join(", ")),
         _ => one(names, shape, &mut 0, &mut 0),
     }
+}
+
+/// The `par_fold` a rule's body is, written bare or bound to a name.
+fn a_par_fold(rule: &GrammarRule) -> Option<&FoldSpec> {
+    rule.alts.iter().find_map(|alt| {
+        let pattern = match &alt.pattern.node {
+            Pattern::Bind { pat, .. } => &pat.node,
+            other => other,
+        };
+        match pattern {
+            Pattern::Fold(spec) if spec.parallel => Some(spec),
+            _ => None,
+        }
+    })
 }
 
 #[cfg(test)]

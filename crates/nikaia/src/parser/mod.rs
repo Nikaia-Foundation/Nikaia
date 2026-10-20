@@ -2249,7 +2249,8 @@ grammar! {
             r:NAME ","
             init:expr ","
             step:expr ","
-            merge:expr ")"
+            merge:expr
+            config:config_args? ")"
             -> {
                 Pattern::Fold(FoldSpec {
                     parallel: true,
@@ -2257,6 +2258,7 @@ grammar! {
                     init,
                     step,
                     merge: Some(merge),
+                    config: config.unwrap_or_default(),
                 })
             }
           // Read to the closing parenthesis, so this is the reading that got
@@ -2281,6 +2283,7 @@ grammar! {
                     init,
                     step,
                     merge: None,
+                    config: Vec::new(),
                 })
             }
           // Read to the closing parenthesis, so this is the reading that got

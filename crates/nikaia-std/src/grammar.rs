@@ -134,17 +134,45 @@ where
         .map_err(|error| ParseError::of(error.render(source)))
 }
 
-/// [`parse`] for a `par_fold` rule, which is cut into pieces before it is
-/// parsed: `run` is the generated `parse_<rule>_pieces` applied to `source`.
-pub fn parse_pieces<'a, S, O>(
+/// [`parse`] for a `par_fold` rule: `run` is the generated
+/// `parse_<rule>_pieces` applied to `source` and to how it is cut.
+///
+/// **At `user_parallelism = yes` the pieces are claimed while the work runs**
+/// ([ADR-372](../../../docs/specification/adr/adr-372.md) D4-D6): cut near
+/// `options.piece` bytes, merged in the order `options.order` says, on a pool
+/// of `options.workers`. **At `no`** (`parallel` is `false`) it is one parse
+/// of the whole, and the options, already checked, do nothing (D7).
+pub fn parse_pieces<'a, S, O: Send>(
     source: &'a S,
-    run: impl FnOnce(&'a str) -> Result<O, winnow_grammar::ParseError>,
+    options: crate::par::FoldOptions,
+    parallel: bool,
+    run: impl FnOnce(&'a str, winnow_grammar::rt::Parallelism) -> Result<O, winnow_grammar::ParseError>
+    + Send,
 ) -> Result<O, ParseError>
 where
     S: Source + ?Sized,
 {
     let source = source.text()?;
-    run(source).map_err(|error| ParseError::of(error.render(source)))
+    in_pieces(options, parallel, |how| run(source, how))
+        .map_err(|error| ParseError::of(error.render(source)))
+}
+
+/// `run` with the cut the options and the setting ask for, on the workers
+/// they name.
+fn in_pieces<O: Send>(
+    options: crate::par::FoldOptions,
+    parallel: bool,
+    run: impl FnOnce(winnow_grammar::rt::Parallelism) -> Result<O, winnow_grammar::ParseError> + Send,
+) -> Result<O, winnow_grammar::ParseError> {
+    if !parallel {
+        return run(winnow_grammar::rt::Parallelism::Off);
+    }
+    // One piece per worker, cut before the work starts, merged in input order,
+    // which either order allows; `piece:` tunes and changes no result. The
+    // backend's claimed pieces (`Parallelism::Claimed { piece, order }`) wait
+    // for the winnow-grammar pin that has them (#717 step 5).
+    let how = winnow_grammar::rt::Parallelism::Pieces(options.workers);
+    crate::par::on_workers(options.workers, move || run(how))
 }
 
 /// [`parse`] over a `Bytes` (ADR-366 D1): `rule` is the entry of the grammar's
@@ -163,9 +191,13 @@ pub fn parse_bytes<'a, O>(
 }
 
 /// [`parse_pieces`] over a `Bytes`.
-pub fn parse_bytes_pieces<'a, O>(
+pub fn parse_bytes_pieces<'a, O: Send>(
     source: &'a [u8],
-    run: impl FnOnce(&'a [u8]) -> Result<O, winnow_grammar::ParseError>,
+    options: crate::par::FoldOptions,
+    parallel: bool,
+    run: impl FnOnce(&'a [u8], winnow_grammar::rt::Parallelism) -> Result<O, winnow_grammar::ParseError>
+    + Send,
 ) -> Result<O, ParseError> {
-    run(source).map_err(|error| ParseError::of(error.render(source)))
+    in_pieces(options, parallel, |how| run(source, how))
+        .map_err(|error| ParseError::of(error.render(source)))
 }

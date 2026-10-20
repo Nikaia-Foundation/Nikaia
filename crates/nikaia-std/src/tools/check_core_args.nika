@@ -764,3 +764,31 @@ fn check_core_args_tuple_texts(mut state: CheckState, parts: ref Vec[Expr], foun
     }
     return Ty::Tuple(out)
 }
+
+/// **An option a grammar's `par_fold` names after its `;`** (ADR-372 D6, Part
+/// II 10.7): `order:` takes a `par::Order`, `workers:` and `piece:` an `i64`.
+/// Any other name is `NK1109`; a value of another type `NK1102`.
+pub fn check_core_fold_option(mut state: CheckState, world: ref CheckWorld, name: winnow_grammar::Symbol, value: ref Expr, found: ref Ty, span: ref Span) sync {
+    let written = world.words.resolve(name).clone()
+    let at = check_span_at(world, value, span)
+    let mut wanted: String = "i64"
+    if written == "order" {
+        wanted = "par::Order"
+    } else if written != "workers" && written != "piece" {
+        state.findings.push(check_refusal("NK1109", at, f"`par_fold` has no option called `{written}`.", ["Its options are `order:`, `workers:` and `piece:`, as `Par::fold`'s are.".clone()], "Use one of the options it has.".clone()))
+        return
+    }
+    if found.is_unknown() {
+        return
+    }
+    let expected = Ty::Named { name: wanted.clone(), args: [], view: false }
+    if found.fits(expected) {
+        return
+    }
+    let written_ty = found.text()
+    let mut have = (written_ty.strip_prefix("ref ") ?? "").clone()
+    if have == "" {
+        have = written_ty
+    }
+    state.findings.push(check_refusal("NK1102", at, f"`par_fold`'s option `{written}:` expects `{wanted}`, but it is handed `{have}`.", ["`order:` says how the pieces' results are merged; `workers:` and `piece:` tune how many fold at once and how large a piece is.".clone()], f"Hand `{written}:` a `{wanted}`.".clone()))
+}

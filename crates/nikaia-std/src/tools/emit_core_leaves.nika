@@ -452,10 +452,14 @@ impl EmitState {
             over = "_bytes"
             lowered = emit_bytes_grammar(name)
         }
+        // **A `par_fold` entry is driven in pieces, with the options its rule
+        // names** (ADR-372 D4-D7): claimed at `yes`, one parse at `no`.
         if parallel {
             out.push(f"nikaia_std::grammar::parse{over}_pieces(&*")
             host.expr(walk, out, input, depth, flow, scope)
-            out.push(f", |source| {lowered}::parse_{rule_name}_pieces(source, &ParseContext::<()>::default(), {parallelism})){question}")
+            let options = emit_fold_options(name, rule_name)
+            let claimed = parallelism != "Parallelism::Off"
+            out.push(f", {options}(), {claimed}, |source, how| {lowered}::parse_{rule_name}_pieces(source, &ParseContext::<()>::default(), how)){question}")
             return
         }
         // A sequential entry rule: the parser is driven over the whole input once.
@@ -588,4 +592,11 @@ impl EmitState {
 /// both is two.
 pub fn emit_bytes_grammar(name: ref String) -> String {
     return f"{name}OverBytes"
+}
+
+/// The function beside a grammar that makes the options its `par_fold` entry
+/// `rule` of grammar `book` names (ADR-372 D6): a sibling of the grammar's module, which the
+/// backend writes and nothing can be added to.
+pub fn emit_fold_options(book: ref String, rule: ref String) -> String {
+    return f"__nk_fold_{book}_{rule}"
 }

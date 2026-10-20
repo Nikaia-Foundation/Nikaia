@@ -136,3 +136,117 @@ fn the_1brc_example_compiles_and_prints_what_the_benchmark_asks_for() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **`par_fold`'s options change no answer** (ADR-372 D4-D8, Part II 10.7):
+/// the example with `order: Kept` and `order: Any`, small pieces and a pool of
+/// three, at `user_parallelism` `no` and `yes`, prints what the example as
+/// written prints at `no`; and a file broken in two places reports the first,
+/// the same under every one of them.
+#[test]
+fn the_1brc_example_means_the_same_under_every_order_and_setting() {
+    let source = std::fs::read_to_string(repo_root().join("examples/1brc.nika"))
+        .expect("examples/1brc.nika");
+    let written = "Summary::merge)";
+    assert_eq!(source.matches(written).count(), 1, "the par_fold's merge");
+    let with = |options: &str| -> String {
+        let folded = source.replace(written, &format!("Summary::merge; {options})"));
+        format!("use std::par\n{folded}")
+    };
+    let dir = common::scratch_dir("1brc-orders");
+    let stations = [
+        "Hamburg",
+        "Bulawayo",
+        "Palembang",
+        "St. John's",
+        "Zürich",
+        "東京",
+    ];
+    let mut good = String::new();
+    for i in 0..4000 {
+        let tenths: i32 = (i * 37) % 999 - 499;
+        let sign = if tenths < 0 { "-" } else { "" };
+        let station = stations[i.unsigned_abs() as usize % stations.len()];
+        good += &format!(
+            "{station};{sign}{}.{}\n",
+            tenths.abs() / 10,
+            tenths.abs() % 10
+        );
+    }
+    let mut lines: Vec<String> = good.lines().map(str::to_owned).collect();
+    lines[1234] = "Hamburg;x.1".to_owned();
+    lines[3210] = "Bulawayo;1.y".to_owned();
+    let bad = lines.join("\n") + "\n";
+    let good_path = dir.join("good.txt");
+    let bad_path = dir.join("bad.txt");
+    std::fs::write(&good_path, &good).expect("write the input");
+    std::fs::write(&bad_path, &bad).expect("write the input");
+
+    let mut answers: Vec<(String, String, String)> = Vec::new();
+    let variants = [
+        ("as-written-no", source.clone(), Build::default()),
+        (
+            "kept-yes",
+            with("order: par::Order::Kept, piece: 64"),
+            Build::parallel(),
+        ),
+        (
+            "any-yes",
+            with("order: par::Order::Any, piece: 64, workers: 3"),
+            Build::parallel(),
+        ),
+        (
+            "any-no",
+            with("order: par::Order::Any, piece: 1"),
+            Build::default(),
+        ),
+    ];
+    for (name, text, build) in variants {
+        let parsed = parse_to_ast(&text).expect("the example parses");
+        let lowered = emit_program(&parsed, build).expect("the example lowers");
+        let rust = dir.join(format!("{name}.rs"));
+        std::fs::write(&rust, &lowered.rust).expect("write the emitted Rust");
+        let binary = dir.join(name);
+        let compile = common::compile(
+            &rust,
+            &[
+                "--crate-type",
+                "bin",
+                "-o",
+                binary.to_str().expect("utf-8 path"),
+            ],
+        );
+        assert!(
+            compile.status.success(),
+            "{name}: the emitted Rust did not compile:\n{}\n--- emitted ---\n{}",
+            String::from_utf8_lossy(&compile.stderr),
+            lowered.rust
+        );
+        let ran = |input: &PathBuf| {
+            Command::new(&binary)
+                .arg(input)
+                .output()
+                .expect("run the compiled example")
+        };
+        let ok = ran(&good_path);
+        assert!(
+            ok.status.success(),
+            "{name}: {}",
+            String::from_utf8_lossy(&ok.stderr)
+        );
+        let failed = ran(&bad_path);
+        assert!(!failed.status.success(), "{name}: the broken file was read");
+        answers.push((
+            name.to_owned(),
+            String::from_utf8_lossy(&ok.stdout).into_owned(),
+            String::from_utf8_lossy(&failed.stderr).into_owned(),
+        ));
+    }
+    let (_, out, err) = &answers[0];
+    assert!(out.contains("Hamburg="), "{out}");
+    assert!(err.contains("line 1235"), "{err}");
+    for (name, other_out, other_err) in &answers[1..] {
+        assert_eq!(other_out, out, "{name}");
+        assert_eq!(other_err, err, "{name}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

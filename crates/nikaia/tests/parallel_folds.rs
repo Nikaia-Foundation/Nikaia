@@ -559,3 +559,48 @@ fn a_step_that_hands_back_something_else_is_refused() {
     let found = findings(fine);
     assert!(found.is_empty(), "{found:#?}");
 }
+
+/// **A grammar's `par_fold` takes `Par::fold`'s options after its `;`**
+/// (ADR-372 D6, Part II 10.7): each typed as there, any other name `NK1109`,
+/// a value of another type `NK1102`.
+#[test]
+fn a_grammars_par_fold_takes_the_options_of_a_fold() {
+    let grammar = |options: &str| {
+        format!(
+            "use std::par\n\n\
+             grammar Sum {{\n\
+             \x20   @frame(boundary: \"\\n\")\n\
+             \x20   rule ROW -> i64 = n:dec[i64](digit+) frame_end {{ n }}\n\n\
+             \x20   entry rule total -> i64 = par_fold(ROW, zero, fn(acc, m) {{ acc + m }}, add; {options})\n\
+             }}\n\n\
+             fn zero() -> i64 {{ return 0 }}\n\
+             fn add(a: i64, b: i64) -> i64 {{ return a + b }}\n\n\
+             fn main() throws {{\n\
+             \x20   println(f\"{{Sum::total(\"1\\n2\\n\")}}\")\n\
+             }}\n"
+        )
+    };
+    let fine = findings(&grammar("order: par::Order::Any, workers: 2, piece: 64"));
+    assert!(fine.is_empty(), "{fine:?}");
+    let unknown = findings(&grammar("pieces: 64"));
+    assert!(
+        unknown
+            .iter()
+            .any(|f| f.code == "NK1109" && f.message.contains("`pieces`")),
+        "{unknown:?}"
+    );
+    let typed = findings(&grammar("order: \"any\""));
+    assert!(
+        typed
+            .iter()
+            .any(|f| f.code == "NK1102" && f.message.contains("`order:`")),
+        "{typed:?}"
+    );
+    let counted = findings(&grammar("piece: par::Order::Kept"));
+    assert!(
+        counted
+            .iter()
+            .any(|f| f.code == "NK1102" && f.message.contains("`piece:`")),
+        "{counted:?}"
+    );
+}

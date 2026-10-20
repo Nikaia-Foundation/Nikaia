@@ -1396,6 +1396,9 @@ pub struct FoldSpec {
     pub init: Expr,
     pub step: Expr,
     pub merge: Expr?,
+    /// What a `par_fold` names after its `;`: `order:`, `workers:`, `piece:`
+    /// (ADR-372 D6, Part II 10.7).
+    pub config: Vec[ConfigArg],
 }
 
 /// Kap 4.2: what a method takes as its subject.

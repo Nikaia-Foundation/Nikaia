@@ -469,8 +469,9 @@ impl EmitState {
                     host.expr(walk, out, args[0], depth, flow, scope)
                     // Spelled out: this file has no `par_fold` of its own, so the
                     // two names are not imported here.
-                    let parallelism = host.parallelism()
-                    out.push(f", |source| {package}::{book}::parse_{rule}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::{parallelism})){question}")
+                    let options = emit_fold_options(book, rule)
+                    let claimed = host.parallelism() != "Parallelism::Off"
+                    out.push(f", {package}::{options}(), {claimed}, |source, how| {package}::{book}::parse_{rule}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){question}")
                     return true
                 }
                 out.push("nikaia_std::grammar::parse(&*")

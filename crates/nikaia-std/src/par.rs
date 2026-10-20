@@ -50,6 +50,38 @@ pub fn iter_in_pieces<T: Sync>(
     Par(items.par_iter().with_min_len(piece).with_max_len(piece))
 }
 
+/// **The options a grammar's `par_fold` names after its `;`**
+/// ([ADR-372](../../../docs/specification/adr/adr-372.md) D6, Part II 10.7),
+/// checked where they are made: a `workers:` or `piece:` below 1 is a panic
+/// at both settings of `user_parallelism`, and at `no` that is all they do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FoldOptions {
+    /// D5: whether the pieces' results are merged in input order.
+    pub order: Order,
+    /// At most this many accumulators are folded at once.
+    pub workers: usize,
+    /// The bytes a piece is cut near.
+    pub piece: usize,
+}
+
+impl FoldOptions {
+    /// The options as written: `workers` is `task::cores()` and `piece` the
+    /// runtime's where they are left out.
+    #[track_caller]
+    pub fn new(order: Order, workers: Option<i64>, piece: Option<i64>) -> FoldOptions {
+        let workers = match workers {
+            Some(n) => at_least_one("workers", n),
+            None => usize::try_from(crate::task::cores()).unwrap_or(1),
+        };
+        let piece = piece.map_or(PIECE_BYTES, |n| at_least_one("piece", n));
+        FoldOptions {
+            order,
+            workers,
+            piece,
+        }
+    }
+}
+
 /// A list's own walk at `user_parallelism = no`, where `piece:` is read and
 /// does nothing but be checked (ADR-372 D7).
 #[track_caller]
@@ -82,7 +114,7 @@ fn pool_of(workers: usize) -> Arc<rayon::ThreadPool> {
 /// `body` on a pool of `workers` threads: the one it runs on where that is its
 /// size. More workers than the machine runs at once is capped there, which
 /// changes no answer (ADR-372 D6).
-fn on_workers<R: Send>(workers: usize, body: impl FnOnce() -> R + Send) -> R {
+pub(crate) fn on_workers<R: Send>(workers: usize, body: impl FnOnce() -> R + Send) -> R {
     let here = rayon::current_num_threads();
     let most = here.max(usize::try_from(crate::task::cores()).unwrap_or(1));
     let workers = workers.min(most);

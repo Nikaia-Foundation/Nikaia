@@ -1481,6 +1481,20 @@ impl<'a> Checker<'a> {
                 )
             });
         }
+        // **A `par_fold`'s options** (ADR-372 D6): each typed as `Par::fold`'s.
+        for option in &spec.config {
+            let found = self.expr(&option.value, span);
+            self.nikaia(|state, world, _| {
+                check_core_args::check_core_fold_option(
+                    state,
+                    world,
+                    option.name,
+                    &option.value,
+                    &found,
+                    span,
+                )
+            });
+        }
     }
 
     /// `Summary::merge` or `Summary` in a fold: a function the fold calls, so

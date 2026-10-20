@@ -503,6 +503,7 @@ pub struct FoldSpec {
     pub init: Expr,
     pub step: Expr,
     pub merge: Option<Expr>,
+    pub config: Vec<ConfigArg>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13689,6 +13690,25 @@ fn check_core_args_tuple_texts(state: &mut CheckState, parts: &[Expr], found: &T
         p += 1;
     }
     Ty::Tuple(out)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_fold_option(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, value: &Expr, found: &Ty, span: &Span) {
+    let written = world.words.resolve(name).to_owned();
+    let at = check_span_at(world, value, span);
+    let mut wanted: &'static str = "i64";
+    if written == "order" { wanted = "par::Order"; } else if written != "workers" && written != "piece" {
+        state.findings.push(check_refusal("NK1109", &at, format!("`par_fold` has no option called `{}`.", written), vec!["Its options are `order:`, `workers:` and `piece:`, as `Par::fold`'s are.".to_owned()], Some("Use one of the options it has.".to_owned())));
+        return;
+    }
+    if found.is_unknown() { return; }
+    let expected = Ty::Named { name: wanted.to_owned(), args: vec![], view: false };
+    if found.fits(&expected) { return; }
+    let written_ty = found.text();
+    let mut have = nikaia_std::index::or(written_ty.strip_prefix("ref "), || "").to_owned();
+    if have == "" { have = written_ty; }
+    state.findings.push(check_refusal("NK1102", &at, format!("`par_fold`'s option `{}:` expects `{}`, but it is handed `{}`.", written, wanted, have), vec!["`order:` says how the pieces' results are merged; `workers:` and `piece:` tune how many fold at once and how large a piece is.".to_owned()], Some(format!("Hand `{}:` a `{}`.", written, wanted).to_owned())));
 }
 
 
@@ -36177,8 +36197,9 @@ impl EmitState {
                 if pieces {
                     out.push("nikaia_std::grammar::parse_pieces(&*");
                     host.expr(walk, out, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
-                    let parallelism = host.parallelism();
-                    out.push(&format!(", |source| {}::{}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::{})){}", package, book, rule, parallelism, question));
+                    let options = emit_fold_options(&book, &rule);
+                    let claimed = host.parallelism() != "Parallelism::Off";
+                    out.push(&format!(", {}::{}(), {}, |source, how| {}::{}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", package, options, claimed, package, book, rule, question));
                     return Ok(true);
                 }
                 out.push("nikaia_std::grammar::parse(&*");
@@ -37657,7 +37678,9 @@ impl EmitState {
         if parallel {
             out.push(&format!("nikaia_std::grammar::parse{}_pieces(&*", over));
             host.expr(walk, out, input, depth, flow, scope)?;
-            out.push(&format!(", |source| {}::parse_{}_pieces(source, &ParseContext::<()>::default(), {})){}", lowered, rule_name, parallelism, question));
+            let options = emit_fold_options(&name, &rule_name);
+            let claimed = parallelism != "Parallelism::Off";
+            out.push(&format!(", {}(), {}, |source, how| {}::parse_{}_pieces(source, &ParseContext::<()>::default(), how)){}", options, claimed, lowered, rule_name, question));
             return Ok(());
         }
         out.push(&format!("nikaia_std::grammar::parse{}(&*", over));
@@ -37775,6 +37798,8 @@ impl EmitState {
 }
 
 pub fn emit_bytes_grammar(name: &str) -> String { format!("{}OverBytes", name) }
+
+pub fn emit_fold_options(book: &str, rule: &str) -> String { format!("__nk_fold_{}_{}", book, rule) }
 
 
 // --- emit_core_match.nika ---
@@ -69194,7 +69219,7 @@ pub mod check_copies {
 }
 pub mod check_core_args {
     #[allow(unused_imports)]
-    pub use super::{check_core_arguments_given, check_core_arguments_bound, check_core_fold_form, check_core_locks, check_core_list_literal, check_core_list_repeat, check_core_args_a_field_called, check_core_args_code_said, check_core_a_called_field};
+    pub use super::{check_core_arguments_given, check_core_arguments_bound, check_core_fold_form, check_core_locks, check_core_list_literal, check_core_list_repeat, check_core_args_a_field_called, check_core_args_code_said, check_core_a_called_field, check_core_fold_option};
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
@@ -69470,7 +69495,7 @@ pub mod emit_core_calls {}
 pub mod emit_core_flow {}
 pub mod emit_core_leaves {
     #[allow(unused_imports)]
-    pub use super::{emit_bytes_grammar};
+    pub use super::{emit_bytes_grammar, emit_fold_options};
 }
 pub mod emit_core_match {}
 pub mod emit_core_places {}

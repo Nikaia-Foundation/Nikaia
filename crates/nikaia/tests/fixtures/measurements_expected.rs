@@ -34,6 +34,11 @@ grammar! {
     }
 }
 
+#[allow(non_snake_case, dead_code)]
+pub fn __nk_fold_Measurements_file() -> nikaia_std::par::FoldOptions {
+    nikaia_std::par::FoldOptions::new(nikaia_std::par::Order::Kept, None, None)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reading<'a> {
     name: &'a str,
