@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1140] — 2026-10-20
+
+**A ref Bytes the body keeps takes the Bytes with its owner (built, ADR-373 D1, D4)**
+- A `ref Bytes` parameter of a function that keeps it (clones it, or hands it on to a parameter that keeps it), and that the result does not point into, lowers to `&Bytes`: its `.clone()` is a count, where it copied the bytes; a `Bytes` is borrowed, a mapping handed over at a count, and `s.bytes`, a cut or a `&[u8]` copied. One only read, or returned a view of, stays `&[u8]` (#718).
+
 ## [0.0.1139] — 2026-10-20
 
 **A Bytes carries what owns its memory; Bytes(v) copies nothing; a mapping is a Bytes (built, ADR-373 D1-D3)**
