@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1174] — 2026-10-20
+
+**a proved index is a place without its check**
+- A field of an element, or the element itself, written at a position the bounds walk proved inside, is changed through `proven::slot` without its check, as it is read (ADR-306 D5).
+
 ## [0.0.1173] — 2026-10-20
 
 **x.low_bits(n) is one bzhi where the build has BMI2**
