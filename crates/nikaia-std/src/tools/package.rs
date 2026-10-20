@@ -16230,7 +16230,7 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                     let joined = names.join("::");
                     if world.own.functions.contains_key(&joined) {
                         let contract = match ledger_function(world, &joined) { Some(__nikaia_value) => __nikaia_value, None => return };
-                        let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return };
+                        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
                         check_core_a_kept_function(state, world, host, params, is_sync, can_throw, signature.takes_a_receiver(), value, span);
                     }
                 },
@@ -20183,7 +20183,7 @@ impl CheckState {
         let mut key = name.to_owned();
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { key = format!("{}::new", name); }
         let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut params: Vec<Ty> = vec![];
         for param in signature.params.iter() { params.push(param.1.clone()); }
         Some(Ty::Fn { params, result: Box::new(match signature.result.as_ref() {
@@ -24192,7 +24192,7 @@ pub fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key:
 // this was written - see `contracts::sync`.
 pub fn bounds_in_a_signature(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
     let contract = match ledger_function(world, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut bounds: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for bound in signature.bounds.iter() {
         if bound.1.is_empty() { continue; }
@@ -24206,20 +24206,9 @@ pub fn bounds_in_a_signature(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn ledger_function(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<FnContract> {
-    if world.own.functions.contains_key(key) {
-        return match *nikaia_std::index::get(&world.own.functions, key) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        };
-    }
-    if world.library.functions.contains_key(key) {
-        return match *nikaia_std::index::get(&world.library.functions, key) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        };
-    }
-    None
+pub fn ledger_function<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: &str) -> Option<&'r FnContract> {
+    if world.own.functions.contains_key(key) { return *nikaia_std::index::get(&world.own.functions, key); }
+    *nikaia_std::index::get(&world.library.functions, key)
 }
 
 impl CheckState {
@@ -55641,10 +55630,11 @@ pub struct SharingWalk {
     pub parallel: collections::BTreeSet<String>,
     pub function: String,
     pub scope: collections::BTreeMap<String, Ty>,
+    pub library_keys: collections::BTreeMap<String, String>,
 }
 
 pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, crossings_are_possible: bool) -> Sharing {
-    let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new() };
+    let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new(), library_keys: collections::BTreeMap::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => { sharing_function(&item.node, "", asked, holes_of, ty_of, &mut walk); },
@@ -55997,7 +55987,7 @@ struct SharingCall {
 }
 
 fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
-    let described = parameters_of((called.callee).as_deref(), asked);
+    let described = parameters_of((called.callee).as_deref(), asked, &mut walk.library_keys);
     for at in 0..args.len() as i64 {
         let arg = nikaia_std::index::get(&args, nikaia_std::index::at(at));
         let handle = named_handle(&arg, asked.names, &walk.scope);
@@ -56006,7 +55996,7 @@ fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], 
             a_lambda_handed_on((described).as_ref(), at, &arg, asked, holes_of, ty_of, walk);
             continue;
         }
-        let __keep_63023 = nikaia_std::tether::Keep::new();
+        let __keep_63289 = nikaia_std::tether::Keep::new();
         a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk);
     }
     for setting in config.iter() {
@@ -56079,12 +56069,14 @@ struct Described {
     keeps: Vec<String>,
 }
 
-fn parameters_of(callee: Option<&str>, asked: &Asked<'_, '_, '_>) -> Option<Described> {
+fn parameters_of(callee: Option<&str>, asked: &Asked<'_, '_, '_>, library_keys: &mut collections::BTreeMap<String, String>) -> Option<Described> {
     let named = match callee { Some(__nikaia_value) => __nikaia_value, None => return None };
     let in_own = described_key(named, asked.own);
     if in_own.is_some() { return described_by(nikaia_std::index::or(in_own.as_deref(), || ""), asked.own); }
-    let in_library = match described_key(named, asked.library) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    described_by(&in_library, asked.library)
+    if !library_keys.contains_key(named) { library_keys.insert(named.to_owned(), nikaia_std::index::or(described_key(named, asked.library), || "".into())); }
+    let in_library = match *nikaia_std::index::get(&library_keys, named) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if in_library == "" { return None; }
+    described_by(in_library, asked.library)
 }
 
 fn described_key(callee: &str, ledger: &Ledger) -> Option<String> {
@@ -56727,11 +56719,7 @@ fn before_generics(written: &str) -> String {
     out
 }
 
-fn last_segment(written: &str) -> String {
-    let mut last: String = String::from("");
-    for part in written.split("::") { last = part.to_owned(); }
-    last
-}
+fn last_segment(written: &str) -> String { nikaia_std::index::or(written.rsplit("::").next(), || "").to_owned() }
 
 
 // --- sync.nika ---
@@ -65858,16 +65846,16 @@ fn rsrc_ty_holds_view(asked: &Asked<'_, '_, '_>, ty: &Ty) -> bool {
         Ty::Named { name, args, view } => {
             let view = *view;
             if view || rsrc_any_ty_holds_view(asked, args) { return true; }
-            if asked.own.types.contains_key(name) || asked.library.types.contains_key(name) {
-                let described = match match *nikaia_std::index::get(&asked.own.types, name) {
-                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                    None => None,
-                } { Some(__nikaia_value) => __nikaia_value, None => match match *nikaia_std::index::get(&asked.library.types, name) {
-                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                    None => None,
-                } { Some(__nikaia_value) => __nikaia_value, None => return true } };
-                return !described.tethered.is_empty();
-            }
+            let own = nikaia_std::index::or(match (*nikaia_std::index::get(&asked.own.types, name)).as_ref().map(|__nikaia_it| &__nikaia_it.tethered) {
+                Some(__nikaia_it) => Some(__nikaia_it.len() as i64),
+                None => None,
+            }, || -1);
+            if own >= 0 { return own > 0; }
+            let library = nikaia_std::index::or(match (*nikaia_std::index::get(&asked.library.types, name)).as_ref().map(|__nikaia_it| &__nikaia_it.tethered) {
+                Some(__nikaia_it) => Some(__nikaia_it.len() as i64),
+                None => None,
+            }, || -1);
+            if library >= 0 { return library > 0; }
             return !rsrc_plain_name(name);
         },
         Ty::Tuple(parts) => rsrc_any_ty_holds_view(asked, parts),

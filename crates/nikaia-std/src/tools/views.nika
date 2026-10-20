@@ -1579,9 +1579,14 @@ fn rsrc_ty_holds_view(asked: ref Asked, ty: ref Ty) -> bool {
             if view || rsrc_any_ty_holds_view(asked, args) {
                 return true
             }
-            if asked.own.types.contains_key(name) || asked.library.types.contains_key(name) {
-                let described = asked.own.types[name]?.clone() ?? asked.library.types[name]?.clone() ?? return true
-                return described.tethered.len() > 0
+            // The count alone: a type's contract is not copied to read it (#727).
+            let own = asked.own.types[name]?.tethered?.len() ?? -1
+            if own >= 0 {
+                return own > 0
+            }
+            let library = asked.library.types[name]?.tethered?.len() ?? -1
+            if library >= 0 {
+                return library > 0
             }
             return !rsrc_plain_name(name)
         }

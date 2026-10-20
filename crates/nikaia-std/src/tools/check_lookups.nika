@@ -342,14 +342,11 @@ pub fn bounds_in_a_signature(world: ref CheckWorld, key: ref String) -> collecti
 }
 
 /// A function's contract by its exact key: this unit's, then the library's.
-pub fn ledger_function(world: ref CheckWorld, key: ref String) -> FnContract? sync {
+pub fn ledger_function(world: ref CheckWorld, key: ref String) -> ref FnContract? sync {
     if world.own.functions.contains_key(key) {
-        return world.own.functions[key]?.clone()
+        return world.own.functions[key]
     }
-    if world.library.functions.contains_key(key) {
-        return world.library.functions[key]?.clone()
-    }
-    return null
+    return world.library.functions[key]
 }
 
 impl CheckState {

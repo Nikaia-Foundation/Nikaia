@@ -976,6 +976,9 @@ pub struct SharingWalk {
     pub parallel: collections::BTreeSet[String],
     pub function: String,
     pub scope: collections::BTreeMap[String, Ty],
+    /// The library's key for each callee asked so far, `""` where it has none:
+    /// the library does not change while a unit is walked (#727).
+    pub library_keys: collections::BTreeMap[String, String],
 }
 
 /// Every `Shared` value in a unit, which count each would get, and the
@@ -983,7 +986,7 @@ pub struct SharingWalk {
 /// Where nothing can cross, every count is plain (ADR-312 D10), applied to the
 /// finished answer so the duplication sites are kept as they were found.
 pub fn sharing_of(program: ref Program, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, crossings_are_possible: bool) -> Sharing {
-    let mut walk = SharingWalk { slots: Slots(declared_here(asked.names, program.items)), parallel: collections::BTreeSet(), function: "", scope: collections::BTreeMap() }
+    let mut walk = SharingWalk { slots: Slots(declared_here(asked.names, program.items)), parallel: collections::BTreeSet(), function: "", scope: collections::BTreeMap(), library_keys: collections::BTreeMap() }
     for item in program.items {
         match item.node {
             Item::Fn { .. } => sharing_function(item.node, "", asked, holes_of, ty_of, walk),
@@ -1456,7 +1459,7 @@ struct SharingCall {
 // a lambda that captures a handle or an expression with one in it included,
 // and for the options after the `;`, which no contract covers.
 fn sharing_arguments(called: ref SharingCall, args: ref Vec[Expr], config: ref Vec[ConfigArg], asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, mut walk: SharingWalk) {
-    let described = parameters_of(called.callee, asked)
+    let described = parameters_of(called.callee, asked, walk.library_keys)
     for at in 0..<args.len() {
         let arg = args[at]
         let handle = named_handle(arg, asked.names, walk.scope)
@@ -1562,13 +1565,19 @@ struct Described {
     keeps: Vec[String],
 }
 
-fn parameters_of(callee: ref String?, asked: ref Asked) -> Described? {
+fn parameters_of(callee: ref String?, asked: ref Asked, mut library_keys: collections::BTreeMap[String, String]) -> Described? {
     let named = callee ?? return null
     let in_own = described_key(named, asked.own)
     if in_own != null {
         return described_by(in_own ?? "", asked.own)
     }
-    let in_library = described_key(named, asked.library) ?? return null
+    if !library_keys.contains_key(named) {
+        library_keys.insert(named.clone(), described_key(named, asked.library) ?? "")
+    }
+    let in_library = library_keys[named] ?? return null
+    if in_library == "" {
+        return null
+    }
     return described_by(in_library, asked.library)
 }
 

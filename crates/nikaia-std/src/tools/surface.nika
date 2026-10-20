@@ -398,10 +398,6 @@ fn before_generics(written: ref String) -> String {
 }
 
 fn last_segment(written: ref String) -> String {
-    let mut last: String = ""
-    for part in written.split("::") {
-        last = part.clone()
-    }
-    return last
+    return (written.rsplit("::").next() ?? "").clone()
 }
 
