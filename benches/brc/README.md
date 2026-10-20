@@ -62,8 +62,9 @@ benches/brc/brc.sh 200000     # quicker
 Nikaia 0.0.1064, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
 per row. The AI variant 2 row is measured later, at commit `4a6ee77` with
 rustc 1.97.0 (2d8144b78 2026-07-07), the same machine type and input, at the
-default CPU level (`x86-64`: SSE2, the Fx-style mixer instead of crc32c); the
-other rows are not measured again:
+default CPU level (`x86-64`: SSE2, the Fx-style mixer instead of crc32c). The
+Nikaia `1brc.nika` and AI variant 1 rows were counted again at 0.0.1130 and
+0.0.1139 with the same results to within 0.1 instructions a row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
