@@ -69,21 +69,21 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1156, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.1158, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
 per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
-| Rust, `naive` | 840.3 | 9.21 | 859.4 | 8.65 | 556 |
+| Rust, `naive` | 840.1 | 9.19 | 859.0 | 8.62 | 556 |
 | **Nikaia**, `naive.nika` | **570.2** | **8.24** | **569.1** | **8.44** | **375** |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
 | **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.2** | **1.12** | **642** |
-| Nikaia, overflow checks off | 274.9 | 1.12 | 231.2 | 1.12 | |
-| **Nikaia**, `fast.nika` | **165.4** | **0.95** | **165.6** | **1.04** | **1353** |
+| Nikaia, overflow checks off | 275.0 | 1.12 | 231.3 | 1.13 | |
+| **Nikaia**, `fast.nika` | **163.4** | **0.95** | **163.6** | **0.95** | **1353** |
 | Nikaia, `fast.nika`, overflow checks off | 147.6 | 0.95 | 147.8 | 0.95 | |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 | |
-| Nikaia, `fast.nika`, `x86-64-v3` | 153.8 | 0.95 | 154.0 | 0.95 | |
+| Nikaia, `fast.nika`, `x86-64-v3` | 151.8 | 0.95 | 152.0 | 0.95 | |
 
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
@@ -108,9 +108,9 @@ AI variant 2 runs 36 % fewer instructions than `1brc.nika` at 16 units and
 46 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
-`fast.nika` runs 12 % more instructions than AI variant 2 at both unit
-counts, as many within 0.3 % without its overflow checks, and 16 % more at
-`x86-64-v3`; it has about three times AI variant 2's mispredictions. It is
+`fast.nika` runs 11 % more instructions than AI variant 2 at both unit
+counts, as many within 0.3 % without its overflow checks, and 14 % more at
+`x86-64-v3`; it has two and a half times AI variant 2's mispredictions. It is
 24 % fewer tokens, with every index and overflow checked or proved, and a row without a `.` where the temperature's shape puts one stops
 the program. Where the difference lies is below.
 
@@ -188,7 +188,7 @@ needs. The shift by `28 - dot` is proved from the program's guard on `dot`
 | the table's index `self.slots[at]`, in the probe and in the update | 16.1 | `slots.len() == SLOTS` as `Table`'s invariant (ADR-369, not built), `at`'s range carried through the probe's turns, `slot_of`'s result below the length |
 | the name's two word reads, `u64_le(pos)` and `u64_le(pos + 8)` | 15.6 | `0 <= pos < stop` at the read, from the `break` that ends the previous turn (the walk forgets it at the loop's head), and `stop + MARGIN <= buf.len()` stated at `run`'s top |
 | the long name's slice `buf[pos..<pos + len]`, hoisted onto every row | 13.7 | the same facts as the word reads, a separator inside `buf`, and `len >= 0` |
-| the separator's arithmetic, `sep - pos`, `sep + 1`, `sep + 4 + …` | 9.1 | `0 <= sep < buf.len()` is a fact for each position `find_all` yields (ADR-375 D5), but the walk takes `buf` handed to `slot_of` as changing its length, and `sep - pos` needs `pos >= 0` across the turns |
+| the separator's arithmetic, `sep - pos` and `+ (dot >> 3)` | not counted alone | `sep + 1` and `sep + 4` are proved from `0 <= sep < buf.len()`, which each position `find_all` yields (ADR-375 D5) and `buf` keeps across `slot_of`, which takes it `ref` (#771): together the three cost 9.1, and the two cost 2.0. `sep - pos` needs `pos >= 0` across the turns |
 | `sum += v`, `count += 1` | 2.0 | not provable: the table is scanned again and merged into, so no step count bounds them |
 | `8 * len`, `64 - 8 * len` and the shift by it | 0.6 | `len >= 0`, which a malformed file breaks: only a guard the program writes gives it |
 
