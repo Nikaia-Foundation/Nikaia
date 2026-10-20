@@ -12,7 +12,7 @@ the same aggregation written in Rust:
 | [`ai1.rs`](src/bin/ai1.rs), AI variant 1 | written by an AI assistant at medium effort, in one request, as an optimised solution; what a 1BRC entry looks like before it is parallelised: `mmap` (`unsafe`), raw bytes with **no UTF-8 validation**, one `memchr` searcher over the whole file, the separator found by walking back from the line's end, integer temperatures, a word-at-a-time hash |
 | [`ai2.rs`](src/bin/ai2.rs), AI variant 2 | written by the same AI assistant over several rounds, each measured with callgrind and improved: a SIMD compare finds the `;` (SSE2; AVX2 where the CPU level has it), a word hash of the name (crc32c where the CPU level has it), a branch-free temperature parse, an own open-addressing table, the end of the input run from a padded copy so that nothing reads past the end; `mmap` and `unsafe` throughout, **no UTF-8 validation** |
 | [`examples/1brc.nika`](../../examples/1brc.nika) | a grammar over the whole file, a `par_fold`, names that are slices of a mapped file, `std`'s `HashMap` |
-| [`fast.nika`](fast.nika) | the building blocks of AI variant 2 as far as today's `std` has them: the mapped file read as `Bytes`, `find_all` over a `bytes::ByteSet` of `;` alone (the line's end follows from the temperature's shape), the name's first sixteen bytes read as two words with `u64_le` as its hash and key, the temperature from one word without a branch, an own open-addressing table in a `Vec`, the last rows read from a copy with zeros behind them; no `unsafe`, each station's name checked as UTF-8 once, where it is printed. On more than one core it cuts the file with `par_pieces` and folds the pieces with `Par::fold` |
+| [`fast.nika`](fast.nika) | the building blocks of AI variant 2 as far as today's `std` has them: the mapped file read as `Bytes`, `find_all` over a `bytes::ByteSet` of `;` alone (the line's end follows from the temperature's shape), the name's first sixteen bytes read as two words with `u64_le`, cut to the name with `low_bits` and no branch, as its hash and key, the temperature from one word without a branch, an own open-addressing table in a `Vec`, the last rows read from a copy with zeros behind them; no `unsafe`, each station's name checked as UTF-8 once, where it is printed. On more than one core it cuts the file with `par_pieces` and folds the pieces with `Par::fold` |
 | [`fast-unsafe.nika`](fast-unsafe.nika) | `fast.nika` with the claims a programmer who knows the 1BRC format vouches for, each in `unsafe { assume(…) }` (ADR-376): the table's index in range, a name of at most 100 bytes inside the input, the `;` at least 16 bytes before the end, the temperature's `.` as its second, third or fourth byte, its value at most 99.9, fewer than 10 000 stations, the sums and counts below 10^15 and 10^12. Every one holds for a valid 1BRC file |
 | human-written Rust ([`human/humans.sh`](human/humans.sh)) | [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), fetched at a fixed commit (it has no licence, so nothing of it is in the repository), and automataIA's [`v20_safe`](https://github.com/automataIA/1brc-rs) and `v16_flat_table` (MIT, in [`human/automataia`](human/automataia), `v16` derived and corrected by its patch); all three run on every core |
 
@@ -89,7 +89,7 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1164 with #695 (the `fast.nika` and `fast-unsafe.nika` rows 0.0.1167 with #776, a set written at `find_all` fixed when compiling and two cuts compared in place), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1164 with #695 (the `fast.nika` and `fast-unsafe.nika` rows 0.0.1169 with #776, a set written at `find_all` fixed when compiling, two cuts compared in place, the name's words cut with `low_bits`, and `fast.nika`'s preconditions proved at the call), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
@@ -100,13 +100,13 @@ Nikaia 0.0.1164 with #695 (the `fast.nika` and `fast-unsafe.nika` rows 0.0.1167 
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
 | **Nikaia**, `examples/1brc.nika` | **244.0** | **1.12** | **222.9** | **1.12** | **642** |
 | Nikaia, overflow checks off | 243.0 | 1.12 | 222.9 | 1.13 |  |
-| **Nikaia**, `fast.nika` | **115.7** | **0.93** | **124.4** | **0.93** | **1414** |
-| Nikaia, `fast.nika`, overflow checks off | 108.5 | 0.93 | 109.6 | 0.92 |  |
-| **Nikaia**, `fast-unsafe.nika`, assumes believed | **103.9** | **0.93** | **104.0** | **0.93** | **1569** |
-| Nikaia, `fast-unsafe.nika`, assumes checked | 178.4 | 1.00 | 182.9 | 1.09 |  |
+| **Nikaia**, `fast.nika` | **116.2** | **0.40** | **116.4** | **0.39** | **1416** |
+| Nikaia, `fast.nika`, overflow checks off | 114.2 | 0.40 | 115.4 | 0.39 |  |
+| **Nikaia**, `fast-unsafe.nika`, assumes believed | **115.5** | **0.40** | **115.6** | **0.40** | **1531** |
+| Nikaia, `fast-unsafe.nika`, assumes checked | 196.0 | 0.40 | 198.5 | 0.41 |  |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 |  |
-| Nikaia, `fast.nika`, `x86-64-v3` | 112.6 | 0.93 | 116.5 | 0.93 |  |
-| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 98.1 | 0.93 | 98.2 | 0.93 |  |
+| Nikaia, `fast.nika`, `x86-64-v3` | 110.2 | 0.40 | 109.3 | 0.39 |  |
+| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 104.3 | 0.40 | 104.5 | 0.40 |  |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 4 threads | 133.7 | 0.47 | 131.3 | 0.47 | 12907 |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 1 thread | 133.1 | 0.47 | 130.8 | 0.48 | |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), `x86-64-v3`, 4 threads | 93.3 | 0.69 | 91.5 | 0.30 | |
@@ -144,23 +144,30 @@ AI variant 2 runs 34 % fewer instructions than `1brc.nika` at 16 units and
 40 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
-`fast.nika` runs 11 % more instructions than AI variant 2 at both unit
-counts, as many within 0.3 % without its overflow checks, and 14 % more at
-`x86-64-v3`; it has two and a half times AI variant 2's mispredictions. It is
-24 % fewer tokens, with every index and overflow checked or proved, and a row without a `.` where the temperature's shape puts one stops
-the program. Where the difference lies is below.
+`fast.nika` runs 21 % fewer instructions than AI variant 2 at both unit
+counts, 22 % to 23 % fewer without its overflow checks, and 17 % and 18 %
+fewer at `x86-64-v3`; its mispredictions are within 5 % of AI variant 2's. It
+is 20 % fewer tokens, with every index and overflow checked or proved, and a
+row without a `.` where the temperature's shape puts one stops the program.
+Where the difference lies is below.
 
-`fast-unsafe.nika`, its assumes believed, runs 10 % fewer instructions than
-`fast.nika` at 1 unit and 16 % fewer at 16, and 30 % fewer than AI variant 2
-at both: its assumes drop the checks `fast.nika` still makes (the table
-below), the `.` guard as well, and the ranges they state let LLVM simplify the
-temperature's arithmetic. `fast.nika` itself runs 22 % fewer than AI variant 2
-at 1 unit and 16 % fewer at 16, keeping only the checks the table below lists.
-Against beowolx at one thread `fast-unsafe.nika` runs 22 % fewer at 1 unit and
-20 % fewer at 16, with twice its mispredictions, in an eighth of its tokens;
-at `x86-64-v3` beowolx's SIMD runs 5 % fewer (93.3 on four threads against
-98.1, 1 unit) and 7 % fewer at 16 units (91.5 against 98.2). Checked, the
-same file costs 178.4: every assume tested and no check removed.
+Its name's two words are cut to the name with `low_bits` and no branch: that
+costs 6 to 11 instructions a row more than the two branches it replaced
+(`len <= 8`, `len < 16`), which mispredicted 0.53 times a row on names of
+varying length. At `x86-64-v3` LLVM vectorises the two cuts into one AVX2
+register (`vpsllvq`), 3 instructions a row fewer than the same cuts kept
+scalar.
+
+`fast-unsafe.nika`, its assumes believed, runs 1 % fewer instructions than
+`fast.nika` at both unit counts and 5 % fewer at `x86-64-v3`, and 22 % fewer
+than AI variant 2: its assumes drop the checks `fast.nika` still makes (the
+table below), the `.` guard as well, and the ranges they state let LLVM
+simplify the temperature's arithmetic. Against beowolx at one thread `fast-unsafe.nika`
+runs 13 % fewer at 1 unit and 12 % fewer at 16, with 15 % fewer
+mispredictions, in an eighth of its tokens; at `x86-64-v3` beowolx's SIMD
+runs 11 % fewer (93.3 on four threads against 104.3, 1 unit) and 12 % fewer at
+16 units (91.5 against 104.5). Checked, the same file costs 196.0: every
+assume tested and no check removed.
 
 ## Where Nikaia's instructions go
 

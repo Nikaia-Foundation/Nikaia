@@ -50,7 +50,6 @@ comptime SLOTS: i64 = 16384
 // How far behind the last row start a word read may reach: a name of 100
 // bytes, its temperature and a word beyond.
 comptime MARGIN: i64 = 256
-comptime ONES: u64 = 0xFFFFFFFFFFFFFFFF
 
 fn table() -> Table {
     let mut slots: Vec[Slot] = []
@@ -112,14 +111,8 @@ impl Table {
             }
             // The name's first two words, zeros past its end.
             let len = sep - pos
-            let mut w0 = buf.u64_le(pos)
-            let mut w1 = buf.u64_le(pos + 8)
-            if len <= 8 {
-                w0 = w0 & (ONES >> (64 - 8 * len))
-                w1 = 0
-            } else if len < 16 {
-                w1 = w1 & (ONES >> (128 - 8 * len))
-            }
+            let w0 = buf.u64_le(pos).low_bits(8 * len)
+            let w1 = buf.u64_le(pos + 8).low_bits(8 * len - 64)
 
             // The temperature, `-?d?d.d`, from one word: where the `.` is
             // says how long it is, and the sign becomes a mask.
