@@ -45,11 +45,12 @@ benches/brc/brc.sh 200000     # quicker
 * **Two codegen-unit settings, the same on both sides each time: 1 and 16**
   (release's default). Which unit rustc puts a function in decides whether
   LLVM inlines it into the hot loop: `hashbrown`'s `entry` on both sides, and on
-  Nikaia's also the grammar runtime's `advance`. That moves a row by about 40
-  instructions, and not the same way on both sides: AI variant 1 inlines the entry
-  at 1 unit and not at 16, `1brc.nika` the other way round. One setting alone
-  would pick the winner, so the table shows both. Making Nikaia's side not
-  depend on the partition is #695. `brc.sh` sets the count per run:
+  Nikaia's also the grammar runtime's `advance`. AI variant 1 inlines the
+  entry at 1 unit and not at 16, 42 instructions a row apart. `1brc.nika`
+  inlines the entry at both since #695 (what a fold's step calls is
+  `#[inline(always)]`, `std`'s text hash a call of its own); the runtime's
+  `advance` stays a call at 1 unit. One setting alone would pick the winner,
+  so the table shows both. `brc.sh` sets the count per run:
   `CARGO_PROFILE_RELEASE_CODEGEN_UNITS` for the Rust programs, each setting in
   a target directory of its own, and `CARGO_PROFILE_DEV_CODEGEN_UNITS` for the
   Nikaia project (a project cannot say it yet, #692). Each Rust program is a
@@ -88,17 +89,17 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1162, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1164 with #695 (the `fast*.nika` rows 0.0.1162), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
 | Rust, `naive` | 841.5 | 9.28 | 858.9 | 8.61 | 556 |
-| **Nikaia**, `naive.nika` | **570.2** | **8.25** | **569.1** | **8.44** | **375** |
+| **Nikaia**, `naive.nika` | **573.9** | **8.28** | **564.9** | **8.44** | **375** |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
-| **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.3** | **1.12** | **642** |
-| Nikaia, overflow checks off | 274.9 | 1.12 | 231.2 | 1.12 |  |
+| **Nikaia**, `examples/1brc.nika` | **244.0** | **1.12** | **222.9** | **1.12** | **642** |
+| Nikaia, overflow checks off | 243.0 | 1.12 | 222.9 | 1.13 |  |
 | **Nikaia**, `fast.nika` | **125.5** | **0.94** | **125.7** | **0.94** | **1394** |
 | Nikaia, `fast.nika`, overflow checks off | 123.1 | 0.94 | 123.3 | 0.94 |  |
 | **Nikaia**, `fast-unsafe.nika`, assumes believed | **113.3** | **0.94** | **113.5** | **0.94** | **1569** |
@@ -123,8 +124,8 @@ Nikaia 0.0.1162, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
 
-Against AI variant 1, the instructions are level within what the inliner
-decides: Nikaia runs 26 % fewer at 16 units, AI variant 1 1 % fewer at 1 unit.
+Against AI variant 1, Nikaia runs 10 % fewer instructions at 1 unit and 29 %
+fewer at 16 units, where AI variant 1 leaves its table's entry out of line.
 The mispredictions are a third of AI variant 1's at both settings. Nikaia's program is a
 quarter fewer tokens, with UTF-8 and every overflow checked
 or proved; the same file also runs on every core. The temperature's checks are
@@ -136,11 +137,11 @@ instructions within one, laid out differently.
 
 The mispredictions depend on where the code lies, the instructions do not:
 callgrind's simulated predictor is indexed by address. Every build of
-`1brc.nika` in the table stays at 1.09 to 1.12, a third of AI variant 1's 3.6
+`1brc.nika` in the table stays at 1.09 to 1.13, a third of AI variant 1's 3.6
 to 3.7.
 
-AI variant 2 runs 36 % fewer instructions than `1brc.nika` at 16 units and
-46 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
+AI variant 2 runs 34 % fewer instructions than `1brc.nika` at 16 units and
+40 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
 `fast.nika` runs 11 % more instructions than AI variant 2 at both unit
@@ -162,22 +163,24 @@ same file costs 187.7: every assume tested and no check removed.
 ## Where Nikaia's instructions go
 
 Callgrind's attribution per row for the table's Nikaia row **at 16 units**,
-built again with `debug = 1` (line tables) to have one: its instructions and
-mispredictions are the table's. Each instruction goes to the innermost crate it
+built again with `debug = 1` (line tables) to have one: its instructions are
+the table's; its mispredictions are 1.80 against 1.12, all of the difference in
+`memcmp` (0.71 against 0.18), whose branches the debug build's layout puts on
+other predictor slots. Each instruction goes to the innermost crate it
 was inlined from that is not `core`, `alloc` or `std` (by `addr2line -i`);
 what `core` inlines into the generated rule is its own row.
 
 | | instructions | mispredictions |
 |---|---:|---:|
 | the byte reads, cuts, digit tests and arithmetic `core` inlines into the generated rules | 42.4 | 0.26 |
-| the hash table (`hashbrown`; `std`'s `HashMap` is its table, directly) | 39.3 | 0.05 |
-| the grammar's runtime (`winnow-grammar`, `winnow`) | 32.0 | 0.00 |
-| comparing a name with the one in the table (`memcmp`, the slice comparison) | 27.8 | 0.20 |
+| comparing a name with the one in the table (`memcmp`, and the slice and `&str` comparisons `core` inlines into the probe) | 31.5 | 0.71 |
+| the hash table (`hashbrown`; `std`'s `HashMap` is its table, directly) | 31.2 | 0.05 |
+| hashing a name (`nikaia-std`'s byte hash, a call of its own) | 27.1 | 0.49 |
+| the grammar's runtime (`winnow-grammar`, `winnow`) | 28.0 | 0.18 |
 | finding the `;` and the line's end (`memchr`, with its SIMD intrinsics) | 27.0 | 0.00 |
-| the generated rules and actions, the stats' update among them | 24.6 | 0.01 |
-| hashing a name (`nikaia-std`'s byte hash) | 24.4 | 0.49 |
+| the generated rules and actions, the stats' update among them | 23.6 | 0.01 |
 | the UTF-8 check (`simdutf8`) | 10.3 | 0.09 |
-| the rest: start-up, the output | 3.5 | 0.03 |
+| the rest: start-up, the output | 1.8 | 0.02 |
 
 The AI variants are one function after inlining, so callgrind cannot split
 them the same way.
@@ -294,7 +297,7 @@ all, which a set search cannot know to skip.
 | what | where | issue |
 |---|---|---|
 | the sum's check, proved below a length checked once before the fold (ADR-367 D4; the count's is proved); one branch a row, no instruction in today's layout | the prover, the lowering | [#432](https://github.com/Nikaia-Foundation/Nikaia/issues/432) |
-| the hot loop's inlining not left to the codegen-unit partition: `hashbrown`'s `entry` and the grammar runtime's `advance` inlined at 1 unit as at 16 (about 40 a row) | the lowering or `winnow-grammar` | [#695](https://github.com/Nikaia-Foundation/Nikaia/issues/695) |
+| the grammar runtime's `advance` inlined at 1 unit as at 16: `#[inline(always)]` there takes `1brc.nika` from 244.0 to 235.0 a row at 1 unit (measured with a patched copy), 16 units unchanged | `winnow-grammar` | [#695](https://github.com/Nikaia-Foundation/Nikaia/issues/695) |
 | no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422) | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
 
 ## Why two AI variants
