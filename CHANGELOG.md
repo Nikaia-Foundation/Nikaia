@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1161] — 2026-10-20
+
+**prove-through-loops; a ref argument keeps its length**
+- `prove-through-loops:on` (ADR-361 D10, #767): an `optimization` word and `--optimization` flag, `off` by default. Under `on`, a loop that leaves open an index, overflow, shift, negation or unsigned-slot check reading a name the loop changes is walked again with a candidate invariant, taken from the facts the loop is reached with; each is proved at the loop's entry and at every end of a turn, `continue` and `break` (D4), and kept only where it proves more. The invariant is kept in `nikaia.proofs` (D7). `std`, the tools and the checker never use it, so what is accepted does not depend on it. A `ref` argument keeps its length facts across a call; only a `mut` parameter changes them (#771).
+
 ## [0.0.1160] — 2026-10-20
 
 **unsafe { assume(claim) }**
