@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1136] — 2026-10-20
+
+**--cpu wins over the user's RUSTFLAGS; a ?? fallback name of text and a text literal in a tuple of text lower (ADR-002 D6)**
+- Where `RUSTFLAGS` or `CARGO_ENCODED_RUSTFLAGS` is set, it applies and `--cpu` comes after it and wins; before, Cargo dropped `--cpu` silently (spec; to build).
+- `names.first() ?? n` with `n` a name that views text lowers, and a `str` view with an owned `String` fallback lends it (#752).
+- In a tuple that goes where `(String, …)` is wanted, each text literal is owned text whatever the other parts are, also in a list literal beside a tuple of text, which was NK1154 (#750).
+
 ## [0.0.1135] — 2026-10-20
 
 **A T? beside an unsettled number is refused; a ref String name as a text view's ?? fallback lowers (built)**
