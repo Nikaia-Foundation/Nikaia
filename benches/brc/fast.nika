@@ -67,7 +67,7 @@ impl Table {
                 return at
             }
             if self.slots[at].w0 == w0 && self.slots[at].w1 == w1 && self.slots[at].len == len
-                && (len <= 16 || self.slots[at].name == buf[pos..<pos + len]) {
+                && (len <= 16 || self.slots[at].name[0..<len] == buf[pos..<pos + len]) {
                 assert(at >= 0 && at < SLOTS)
                 return at
             }
