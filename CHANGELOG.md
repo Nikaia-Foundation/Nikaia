@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1113] — 2026-10-20
+
+**Five more programs the checker accepted now compile or are refused**
+- A number an arm over a `mut` parameter copies out and then changes is the arm's own `let mut` copy. A `let` of a call that hands back a `TaskHandle` is NK2109 when nobody takes it. A stored `fn(ref A, ref B) -> ref R sync` gives its struct no view. A pattern of a struct whose every field is a binding, `_` or `..` covers every value without `else` (Part I 3.4, NK1151). A `with` naming every field reads its base as `_` (#730).
+
 ## [0.0.1112] — 2026-10-20
 
 **Lowering: the solver and hot lookups stop copying (#727)**
