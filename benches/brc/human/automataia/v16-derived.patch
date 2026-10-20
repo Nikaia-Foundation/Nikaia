@@ -1,0 +1,199 @@
+Derived and corrected variant of automataIA/1brc-rs, binary v16_flat_table.
+
+Upstream: https://github.com/automataIA/1brc-rs, commit
+ab88b1bc2d14110a20191bc19803c5d5916382b8. The original is unchanged; this patch
+applies to a copy of it.
+
+License: MIT. The original notice is kept unchanged in LICENSE and applies to
+this patch:
+    MIT License, Copyright (c) 2026 carcall. Permission is hereby granted,
+    free of charge, ... (full text in LICENSE). THE SOFTWARE IS PROVIDED
+    "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+The patch fixes only the three ways the original breaks the official 1BRC
+rules, minimally, and adds no speed:
+
+  (A) It reads 8 bytes from every temperature start, also from the last row's
+      at the end of the mmap: an unpadded file (the rules' input) panics
+      "range end index 8 out of range" (lib.rs:127). The authors' generator
+      pads the file with 8 NUL bytes; the rules' files are not padded.
+  (B) Names are kept in [u8; 32] keys: a name longer than 32 bytes panics
+      (hash.rs:164). The rules allow 100 bytes.
+  (C) The table has 4096 slots, no growth and no fullness check: more than
+      4096 stations make `locate` probe forever. The rules allow 10 000.
+
+Hunks, in file order:
+
+  src/bin/v16_flat_table.rs
+    @@ -45 (A): `process_chunk` runs the original row loop (moved unchanged
+        into `process_rows`) up to the first row that starts within 109 bytes
+        of the end of the mapping (109 = 100-byte name + ';' + the 8-byte
+        read from the temperature start); the rows after it
+        are parsed from a copy padded with 8 zero bytes, as beowolx/fast_1brc
+        does. Only the last chunk ever has such rows; the hot loop is the
+        original's, with `stop` instead of `end` as its loop bound.
+    @@ -57 (A): the moved loop returns where it stopped.
+
+  src/hash.rs
+    @@ -120 (C): FLAT_SLOTS 4096 -> 16 384 (load <= 0.61 at 10 000 stations,
+        the primary table size beowolx uses). Each per-thread table grows from
+        ~266 KB to ~1.4 MB of address space (+384 KB for `long`, untouched
+        except at the slots of long names).
+    @@ -129 (B): new field `long: Vec<Vec<u8>>`, the full name of a slot whose
+        name is longer than 32 bytes; empty and unallocated otherwise.
+    @@ -152 (B): `long` initialised with empty vectors.
+    @@ -159 (B): the inline key takes the first min(len, 32) bytes instead of
+        asserting len <= 32.
+    @@ -171 (B): on insert a long name is also stored whole; on a hit (same
+        stored 64-bit hash, same length, same first 32 bytes) a long name must
+        also match in bytes 32.. . Names of <= 32 bytes take one extra
+        predictable compare (`name.len() <= 32`) on a hit.
+    @@ -190 (B): `merge_from` reads the whole name through `name(i)`.
+    @@ -203 (B): `into_btree` reads the whole name through `name(i)`; new
+        helper `name(i)`.
+
+Not changed: `chunk_bounds` (lib.rs) ignores up to 16 bytes after the last
+`\n`, so a final row without `\n` of at most 16 bytes is dropped silently
+(a file ending in "Last;-5.3" without "\n" loses that row); a longer one is counted. The rules say line
+endings are `\n`, so a valid file ends with one; not repaired. v17_prefetch
+shares FlatTable and is not part of this variant.
+
+diff --git a/src/bin/v16_flat_table.rs b/src/bin/v16_flat_table.rs
+index 6e42ffd..192ab03 100644
+--- a/src/bin/v16_flat_table.rs
++++ b/src/bin/v16_flat_table.rs
+@@ -45,10 +45,31 @@ fn find_semi(hay: &[u8]) -> Option<usize> {
+     })
+ }
+ 
++// DERIVED FIX (8-byte read at the end of the file): a row is at most 107
++// bytes (100-byte name, ';', "-99.9", '\n'), so a row that starts at least
++// TAIL_MARGIN bytes before the end of the mapping has 8 readable bytes after
++// its temperature. The rows after that point are parsed from a small
++// zero-padded copy, as beowolx/fast_1brc does; the input file is not padded.
++const TAIL_MARGIN: usize = 109;
++
+ fn process_chunk(data: &[u8], start: usize, end: usize) -> FlatTable {
+     let mut t = FlatTable::new();
++    let fast_end = end.min(data.len().saturating_sub(TAIL_MARGIN));
++    let i = process_rows(&mut t, data, start, fast_end, end);
++    if i < end {
++        let mut tail = data[i..end].to_vec();
++        tail.resize(end - i + 8, 0);
++        process_rows(&mut t, &tail, 0, end - i, end - i);
++    }
++    t
++}
++
++/// The original loop, unchanged except that it stops at the first row that
++/// starts at or after `stop`; `end` still bounds the `;` search.
++#[inline(always)]
++fn process_rows(t: &mut FlatTable, data: &[u8], start: usize, stop: usize, end: usize) -> usize {
+     let mut i = start;
+-    while i < end {
++    while i < stop {
+         let semi = i + find_semi(&data[i..end]).expect("semi");
+         let name = &data[i..semi];
+         let h = fxhash(name);
+@@ -57,7 +78,7 @@ fn process_chunk(data: &[u8], start: usize, end: usize) -> FlatTable {
+         t.stats[idx].update(temp);
+         i = semi + 1 + consumed;
+     }
+-    t
++    i
+ }
+ 
+ fn main() {
+diff --git a/src/hash.rs b/src/hash.rs
+index ffd2a0f..3fdabef 100644
+--- a/src/hash.rs
++++ b/src/hash.rs
+@@ -120,7 +120,10 @@ pub fn fingerprint(name: &[u8]) -> u64 {
+ // Used by `v16_flat_table` and `v17_prefetch`.
+ // ---------------------------------------------------------------------------
+ 
+-pub const FLAT_SLOTS: usize = 1 << 12;
++// DERIVED FIX (10 000 stations): the rules allow 10 000 distinct names; 4096
++// slots without growth made `locate` probe forever once full. 16 384 slots
++// keep the load at or below 0.61 for 10 000 stations.
++pub const FLAT_SLOTS: usize = 1 << 14;
+ pub const FLAT_MASK: usize = FLAT_SLOTS - 1;
+ pub const KEY_MAX: usize = 32;
+ 
+@@ -129,6 +132,9 @@ pub struct FlatTable {
+     pub lens: Vec<u8>,
+     pub hashes: Vec<u64>,
+     pub stats: Vec<Stats>,
++    // DERIVED FIX (names > 32 bytes): the full name of a slot whose name is
++    // longer than KEY_MAX; empty (no allocation) for every other slot.
++    pub long: Vec<Vec<u8>>,
+ }
+ 
+ impl Default for FlatTable {
+@@ -152,6 +158,7 @@ impl FlatTable {
+             lens: vec![0u8; FLAT_SLOTS],
+             hashes: vec![0u64; FLAT_SLOTS],
+             stats: vec![sentinel; FLAT_SLOTS],
++            long: vec![Vec::new(); FLAT_SLOTS],
+         }
+     }
+ 
+@@ -159,9 +166,11 @@ impl FlatTable {
+     /// Inserts if vacant. Linear probing on collision.
+     #[inline]
+     pub fn locate(&mut self, name: &[u8], h: u64) -> usize {
+-        debug_assert!(name.len() <= KEY_MAX);
++        // DERIVED FIX (names > 32 bytes): the inline key holds the first
++        // KEY_MAX bytes; a longer name is also kept whole in `long`.
+         let mut padded = [0u8; KEY_MAX];
+-        padded[..name.len()].copy_from_slice(name);
++        let inline = name.len().min(KEY_MAX);
++        padded[..inline].copy_from_slice(&name[..inline]);
+         let needle = wide::u8x32::new(padded);
+ 
+         let mut idx = (h as usize) & FLAT_MASK;
+@@ -171,11 +180,18 @@ impl FlatTable {
+                 self.lens[idx] = name.len() as u8;
+                 self.keys[idx] = padded;
+                 self.hashes[idx] = h;
++                if name.len() > KEY_MAX {
++                    self.long[idx] = name.to_vec();
++                }
+                 return idx;
+             }
+             if self.hashes[idx] == h && len_at as usize == name.len() {
+                 let stored = wide::u8x32::new(self.keys[idx]);
+-                if wide::CmpEq::cmp_eq(needle, stored).all() {
++                // DERIVED FIX (names > 32 bytes): equal first 32 bytes are a
++                // match only if the rest of a long name is equal too.
++                if wide::CmpEq::cmp_eq(needle, stored).all()
++                    && (name.len() <= KEY_MAX || self.long[idx][KEY_MAX..] == name[KEY_MAX..])
++                {
+                     return idx;
+                 }
+             }
+@@ -190,7 +206,7 @@ impl FlatTable {
+                 continue;
+             }
+             let h = other.hashes[i];
+-            let name = &other.keys[i][..len as usize];
++            let name = other.name(i); // DERIVED FIX (names > 32 bytes)
+             let dst = self.locate(name, h);
+             self.stats[dst].merge(&other.stats[i]);
+         }
+@@ -203,8 +219,14 @@ impl FlatTable {
+             if len == 0 {
+                 continue;
+             }
+-            out.insert(self.keys[i][..len].to_vec(), self.stats[i]);
++            out.insert(self.name(i).to_vec(), self.stats[i]); // DERIVED FIX (names > 32 bytes)
+         }
+         out
+     }
++
++    /// DERIVED FIX (names > 32 bytes): the whole name held by slot `i`.
++    fn name(&self, i: usize) -> &[u8] {
++        let len = self.lens[i] as usize;
++        if len > KEY_MAX { &self.long[i] } else { &self.keys[i][..len] }
++    }
+ }

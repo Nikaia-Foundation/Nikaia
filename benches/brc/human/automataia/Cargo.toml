@@ -1,0 +1,31 @@
+# automataIA/1brc-rs at ab88b1b, cut down to the two binaries this bench runs
+# (README.md here). The package, the edition, the licence and the release
+# profile are the authors'; only the dependencies the two binaries and the
+# library under them do not use are left out, and so are the authors' other
+# binaries, benches and dev-dependencies. `[workspace]` keeps the crate out of
+# the repository's workspace.
+[package]
+name = "rust-1brc"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
+strip = "symbols"
+
+[dependencies]
+memmap2 = "0.9"
+memchr = "2"
+rustc-hash = "2"
+wide = "0.7"
+hashbrown = "0.15"
+rapidhash = "4"
+mimalloc = { version = "0.1", default-features = false }
+
+[workspace]
