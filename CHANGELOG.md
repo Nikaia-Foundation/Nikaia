@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1130] — 2026-10-20
+
+**A map takes its types from what is written into it (built)**
+- An unannotated `HashMap()` or `BTreeMap()` takes its key and value types from the first `insert`, `m[k] = v` or `entry(k).or_insert(v)`: a text key is `String`, number literals among the keys and among the values are one open number each, decided by their uses (D34); two types asked is NK1200, none asked is `i32` (or `i64`), a map nothing writes into or types is NK1153. A key that is a view of text keeps the tier ADR-282 D13 decides (ADR-285 D43, #700).
+
 ## [0.0.1129] — 2026-10-20
 
 **spec: process::run's env, env_remove and env_clear; the program is found on the caller's PATH (ADR-243 D5-D8, #691)**
