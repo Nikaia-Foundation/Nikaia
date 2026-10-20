@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1143] — 2026-10-20
+
+**a ?? whose left is a view and whose fallback owns text is NK1185 again**
+- A `??` whose left side is a view and whose fallback owns text (`opt?.name ?? owned`, `s.strip_suffix(x) ?? owned`) is refused with NK1185 again, as Part III says; #752 had lent the fallback as `str`.
+
 ## [0.0.1142] — 2026-10-20
 
 **Par::fold's step and merge return the accumulator or change it in place (ADR-372 D9, decided)**
