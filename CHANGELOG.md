@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1166] — 2026-10-20
+
+**vectors a program holds, built: simd::Lanes, simd::Fixed, simd::Mask**
+- `std::simd` (ADR-377 D1-D7, #775): `Lanes[T]`, `Fixed[T, N]`, `Mask[T]` / `Mask[T, N]`; `simd::load`, `simd::splat`, `simd::Fixed.from`, `simd::select` take their type from what receives them (NK1245 without one); `v.count()` is the lane count; lane arithmetic named `wrapping_*`/`saturating_*` (`+ - * / %` NK1296), shifts by a literal below the lane width (NK1299); `dot_pairs` saturates `u8`x`i8` into `i16` and wraps `i16`x`i16` into `i32`. A load proved in range has no check. `nikaia run --cpu=LEVEL` builds through Cargo at that level.
+
 ## [0.0.1165] — 2026-10-20
 
 **a fold's hot loop inlined alike at any unit count; text used as a map key checked on a miss**
