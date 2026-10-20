@@ -53,16 +53,20 @@ fn table() -> Table {
 impl Table {
     // The slot of the name `buf[pos..<pos + len]`, whose first sixteen bytes
     // are `w0` and `w1` (zeros past its end), taken where the name is new.
+    // The `assert` before each `return` is its postcondition: a caller knows
+    // the slot lies inside the table, and indexes it without a check.
     fn slot_of(ref mut self, w0: u64, w1: u64, len: i64, buf: ref Bytes, pos: i64) -> i64 {
         let h = (w0 ^ (w1 << 5)).wrapping_mul(0x9E3779B97F4A7C15)
         let mut at = (h >> (64 - BITS)).bits_as_i64()
         while true {
             if self.slots[at].count == 0 {
                 self.claim(at, w0, w1, len, buf, pos)
+                assert(at >= 0 && at < SLOTS)
                 return at
             }
             if self.slots[at].w0 == w0 && self.slots[at].w1 == w1 && self.slots[at].len == len
                 && (len <= 16 || self.slots[at].name[0..<len] == buf[pos..<pos + len]) {
+                assert(at >= 0 && at < SLOTS)
                 return at
             }
             at = (at + 1) & (SLOTS - 1)
