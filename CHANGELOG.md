@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1167] — 2026-10-20
+
+**facts at a call; signed shifts bounded; rotate_left and rotate_right**
+- A function's and a method's postconditions (an `assert` before `return`) are known of the call's result to the bounds walk; the prover reads `e & c` and `(e >> k).bits_as_i64()` as bounded and keeps that through a loop that assigns only such values; `panic(…)` is no exit; a `Bytes` parameter has a length the prover reads (#776). A signed `x >> k` of `w` bits lies in `-2^(w-1-k)..<2^(w-1-k)`, and `^` keeps `-2^m..<2^m`. `rotate_left(n)` and `rotate_right(n)` on `u8`, `u32`, `u64`, the count taken modulo the width. `nikaia lower x.nika` at a project's root no longer refuses the file as declared twice (#774).
+
 ## [0.0.1166] — 2026-10-20
 
 **vectors a program holds, built: simd::Lanes, simd::Fixed, simd::Mask**
