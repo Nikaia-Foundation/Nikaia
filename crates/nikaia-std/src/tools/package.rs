@@ -1472,6 +1472,10 @@ impl Range {
             _ => None,
         }
     }
+    pub fn held_by_type(ty: &str) -> Option<Range> {
+        if ty == "u64" || ty == "usize" { return Some(Range { lo: Some(0), hi: None }); }
+        Range::of_type(ty)
+    }
     pub fn holds(&self, other: &Range) -> bool {
         let mut lo = self.lo.is_none();
         if other.lo.is_some() { lo = self.lo.is_none() || nikaia_std::index::or(self.lo, || 0) <= nikaia_std::index::or(other.lo, || 0); }
@@ -2675,7 +2679,7 @@ fn bounding_range(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, conte
         Expr::Cast { expr, ty, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if ty.generics.is_empty() {
-                let into = match Range::of_type(words.resolve(ty.name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let into = match Range::held_by_type(words.resolve(ty.name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let got = match bounding_range(walk, expr, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return Some(into) };
                 return Some(got.meet(&into));
             }
@@ -2687,7 +2691,7 @@ fn bounding_range(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, conte
                 if name == "len" { return Some(Range { lo: Some(0), hi: None }); }
                 let mut dropped: i64 = 11;
                 if name.starts_with("bits_as_") { dropped = 8; } else if !name.starts_with("truncating_") { return None; }
-                let into = match Range::of_type(&bounding_dropped(name, dropped)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let into = match Range::held_by_type(&bounding_dropped(name, dropped)) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let got = match bounding_range(walk, receiver, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return Some(into) };
                 if into.holds(&got) { return Some(got); }
                 return Some(into);
@@ -3440,7 +3444,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
-            let __keep_61249 = nikaia_std::tether::Keep::new();
+            let __keep_61259 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 Expr::Field { .. } => {
@@ -3755,8 +3759,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
     for list in filled.iter() { outer.lengths.remove(list); }
     bounding_loop_change(walk, facts, &outer, cands);
     for list in filled.iter() {
-        let __keep_78229 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_78229).put(length_of(list)), count);
+        let __keep_78239 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_78239).put(length_of(list)), count);
     }
 }
 

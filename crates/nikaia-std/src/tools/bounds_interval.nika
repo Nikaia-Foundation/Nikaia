@@ -59,6 +59,18 @@ impl Range {
         }
     }
 
+    /// **What a value of type `ty` is known to lie in**, as a fact rather than
+    /// a goal: `of_type`'s range, but a `u64` or `usize` has no upper bound
+    /// the proof can state. `of_type` claims `i64::MAX` for them, which is
+    /// right for a goal (staying below it is stronger) and wrong for a fact:
+    /// `(k.bits_as_u64() >> 56)` is 255 for `k = -1`, not at most 127.
+    pub fn held_by_type(ty: ref String) -> Range? {
+        if ty == "u64" || ty == "usize" {
+            return Range { lo: 0, hi: null }
+        }
+        return Range::of_type(ty)
+    }
+
     /// Whether every number this one admits is one `other` admits too:
     /// `self` holds what `other` claims.
     pub fn holds(ref self, other: ref Range) -> bool {

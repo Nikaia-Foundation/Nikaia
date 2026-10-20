@@ -208,6 +208,30 @@ fn main() {
     prints("wide-bound", source, "5\n");
 }
 
+/// **A `u64` has no upper bound the walk can state**: `bits_as_u64()` of
+/// `-1` is `2^64 - 1`, so shifted by 56 it is 255. Read as at most
+/// `i64::MAX`, it was "at most 127" and the index below was written without
+/// its check, reading past a list of 128.
+#[test]
+fn a_u64_read_as_bits_is_not_bounded_by_i64_max() {
+    let source = "\
+fn pick(xs: ref Vec[i64], k: i64) -> i64 {
+    assert(xs.len() == 128)
+    let u = (k.bits_as_u64() >> 56).bits_as_i64()
+    return xs[u]
+}
+
+fn main() {
+    let mut xs: Vec[i64] = []
+    xs.resize(128, 1)
+    println(f\"{pick(xs, -1)}\")
+}
+";
+    let rust = lowered(source, Level::Aggressive);
+    assert!(!rust.contains("proven::read(&xs"), "{rust}");
+    stops("u64-bits", source, "index");
+}
+
 /// **Every write counts**: one value past the bound, written after the loop,
 /// and the read is not proved - it stops at the index.
 #[test]
