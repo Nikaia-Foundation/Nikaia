@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1111] — 2026-10-20
+
+**Four programs the checker accepted now compile, and a fifth is refused**
+- `x ?? 1` on an `f64?` (and a float beside an integer) is NK1103. A struct pattern that leaves a field out without `..` is NK1234, at any depth. `with` keeps a function put into a field of code. A `catch` on a call through a parameter of code opens the box by type, and a function that cannot fail can be handed to a `fn(..) throws` parameter. A trait method returning a literal keeps the trait's result type (#732).
+
 ## [0.0.1110] — 2026-10-20
 
 **Every program a checker test accepts is checked by rustc**
