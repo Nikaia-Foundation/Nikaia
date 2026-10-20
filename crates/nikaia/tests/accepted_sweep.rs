@@ -52,29 +52,29 @@ const KNOWN: &[(&str, &str)] = &[
     ),
     (
         "3c72391dcb6b4e69",
-        "struct_patterns: a pattern that leaves fields out without `..`, refused by the checker or by `rustc`",
+        "#732 item 5, struct_patterns: a pattern that leaves fields out without `..`, refused by the checker or by `rustc`",
     ),
     // Open issues.
     (
         "a10522b5e28c4937",
         "#730 item 5: `Shared(Vec())` whose first use is a read (E0282)",
     ),
-    // Found by this sweep, to be filed (#705's report).
+    // Found by this sweep: #732.
     (
         "3315c3836a172b28",
-        "nullable: `x ?? 1` with `x: f64?` lowers the fallback as an integer (E0308)",
+        "#732 item 1, nullable: `x ?? 1` with `x: f64?` lowers the fallback as an integer (E0308)",
     ),
     (
         "895410c570324e0b",
-        "function_value_errors: `job with { run: worse }` stores a `fn() throws` unwrapped (E0308)",
+        "#732 item 2, function_value_errors: `job with { run: worse }` stores a `fn() throws` unwrapped (E0308)",
     ),
     (
         "d4e9a97dbeb5f651",
-        "function_value_errors: a `catch` on a `fn() throws` parameter matches the boxed error by variant (E0308)",
+        "#732 item 3, function_value_errors: a `catch` on a `fn() throws` parameter matches the boxed error by variant (E0308)",
     ),
     (
         "f109da5e437ff5cc",
-        "shape_bounds: a trait method `-> ref String` and its impl returning a literal disagree on the lifetime",
+        "#732 item 4, shape_bounds: a trait method `-> ref String` and its impl returning a literal disagree on the lifetime",
     ),
 ];
 
