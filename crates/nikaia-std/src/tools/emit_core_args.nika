@@ -157,6 +157,15 @@ impl EmitState {
         return emit_arg_lends_own(contract, i, world.library, self.described)
     }
 
+    /// Whether `callee` takes its parameter `i` as a `Bytes` with its owner
+    /// (ADR-373 D1, D4): a `ref Bytes` it keeps, lowered to `&Bytes`.
+    fn emit_arg_keeps_bytes(ref self, world: ref EmitWorld, callee: ref String, i: i64) -> bool {
+        if self.own_contracts.functions.contains_key(callee) {
+            return keeps_its_bytes(self.own_contracts.functions.get(callee) ?? return false, i)
+        }
+        return keeps_its_bytes(world.library.functions.get(callee) ?? return false, i)
+    }
+
     /// The opening a lent view gets inside the option a nullable parameter is:
     /// the declaration's own where this unit has the callee, else the one every
     /// method of that name agrees on (#462). Empty where there is none.
@@ -316,6 +325,13 @@ impl EmitState {
         if either {
             out.push("nikaia_std::either_text::either(")
         }
+        // **A `Bytes` kept by the callee is handed over with its owner**
+        // (ADR-373 D1, D4): a `Bytes` as it is, a mapping's at a count, and a
+        // run of bytes - a text's, a cut - copied into one.
+        let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, i)
+        if keeps_bytes {
+            out.push("&*nikaia_std::bytes::kept(")
+        }
         // **A nullable view is lent inside its option** (issue #171).
         let mut how: String = ""
         let mut has_how = false
@@ -427,6 +443,9 @@ impl EmitState {
             out.push(")")
         }
         if kept_here {
+            out.push(")")
+        }
+        if keeps_bytes {
             out.push(")")
         }
         if either {

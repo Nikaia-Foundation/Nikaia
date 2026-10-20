@@ -4234,6 +4234,21 @@ impl<'p> Emitter<'p> {
                 }
                 _ => written,
             };
+            // **A `ref Bytes` the body keeps takes the `Bytes` with its owner**
+            // (ADR-373 D1, D4): a clone of it is a count, where a run of bytes
+            // would have to be copied. One the result points into stays a run,
+            // so a caller lending a mapping's `Bytes` borrows no temporary.
+            let written = match lent.is_some_and(|c| {
+                plain_bytes
+                    && receiver.is_none()
+                    && nikaia_std::tools::keeps::keeps_its_bytes(c, at as i64)
+            }) {
+                true => match written.strip_suffix("[u8]") {
+                    Some(reference) if reference.starts_with('&') => format!("{reference}Bytes"),
+                    _ => written,
+                },
+                false => written,
+            };
             // **A published parameter both kinds of text flow into takes
             // whatever hands over as either** (ADR-282 D23): a caller elsewhere
             // hands over text of its own, as the ledger says, and this

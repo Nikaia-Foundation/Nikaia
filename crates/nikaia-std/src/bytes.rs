@@ -235,6 +235,39 @@ impl ByteCopy for [u8] {
     }
 }
 
+/// **A `Bytes` handed to a parameter that keeps it** (ADR-373 D1, D4): a
+/// `ref Bytes` the callee keeps is a `&Bytes`, and each caller hands over what
+/// it has - a `Bytes` as it is, a mapping at a count, a run of bytes (a text's,
+/// a cut) copied into one.
+pub trait KeptBytes {
+    /// This value as a `Bytes` with its owner, borrowed where it is one.
+    fn kept_bytes(&self) -> std::borrow::Cow<'_, Bytes>;
+}
+
+impl KeptBytes for Bytes {
+    fn kept_bytes(&self) -> std::borrow::Cow<'_, Bytes> {
+        std::borrow::Cow::Borrowed(self)
+    }
+}
+
+impl KeptBytes for [u8] {
+    fn kept_bytes(&self) -> std::borrow::Cow<'_, Bytes> {
+        std::borrow::Cow::Owned(Bytes::from(self))
+    }
+}
+
+impl<T: KeptBytes + ?Sized> KeptBytes for &T {
+    fn kept_bytes(&self) -> std::borrow::Cow<'_, Bytes> {
+        (**self).kept_bytes()
+    }
+}
+
+/// What the lowering writes at such an argument: `&*kept(&m)` (the `&`
+/// the call writes for a lent argument stays, and is looked through).
+pub fn kept<T: KeptBytes + ?Sized>(value: &T) -> std::borrow::Cow<'_, Bytes> {
+    value.kept_bytes()
+}
+
 impl std::ops::Deref for Bytes {
     type Target = [u8];
 

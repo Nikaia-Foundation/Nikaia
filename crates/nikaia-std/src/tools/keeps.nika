@@ -38,6 +38,10 @@ pub struct KeepsBody {
     /// The two ledgers' functions by a method's name.
     pub own_methods: ref MethodIndex,
     pub library_methods: ref MethodIndex,
+    /// **The `ref Bytes` parameters**, which a `.clone()` keeps (ADR-373 D1,
+    /// D4): the clone is a count on the caller's owner, so the parameter takes
+    /// the `Bytes` with its owner rather than a run of bytes to copy.
+    pub cloned_keeps: collections::BTreeSet[String],
 }
 
 // The walk's state: what it found, and the names a `let` bound to what may be
@@ -323,6 +327,25 @@ fn a_position_the_result_points_into(callee: ref String?, at: i64, own: ref Ledg
         return points_into_at(own.functions[known] ?? return false, at)
     }
     return points_into_at(library.functions[known] ?? return false, at)
+}
+
+/// **Whether position `at` takes a `Bytes` with its owner** (ADR-373 D1, D4):
+/// a `ref Bytes` parameter of a function, not a method, that the body keeps and
+/// the result does not point into. It is lowered to `&Bytes`, so a clone is a
+/// count, and each call hands over the `Bytes` it has, a mapping's at a count
+/// and a run of bytes copied into one. A `ref Bytes` only read, or one the
+/// result views, stays a run of bytes, which any caller lends as it is.
+pub fn keeps_its_bytes(contract: ref FnContract, at: i64) -> bool {
+    let signature = contract.signature ?? return false
+    if signature.takes_a_receiver() || at < 0 || at >= signature.params.len() {
+        return false
+    }
+    let parameter = signature.params[at].0
+    let is_bytes = match signature.params[at].1 {
+        Ty::Named { name, args, view } => view && args.len() == 0 && name == "Bytes",
+        else => false,
+    }
+    return is_bytes && contract.keeps.contains(parameter) && !points_into_at(contract, at)
 }
 
 fn points_into_at(contract: ref FnContract, at: i64) -> bool {
@@ -650,6 +673,9 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
     let mut names: Vec[String] = []
     match receiver {
         Expr::Variable(ident, _) => {
+            if method == "clone" && context.cloned_keeps.contains(interner.resolve(ident)) {
+                walk.uses.kept.insert(interner.resolve(ident).clone())
+            }
             if context.parameters.contains(interner.resolve(ident)) {
                 names.push(interner.resolve(ident).clone())
             }

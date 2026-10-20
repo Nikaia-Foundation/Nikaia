@@ -34666,6 +34666,10 @@ impl EmitState {
         if signature.takes_a_receiver() { return false; }
         emit_arg_lends_own(&contract, i, world.library, &self.described)
     }
+    fn emit_arg_keeps_bytes(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> bool {
+        if self.own_contracts.functions.contains_key(callee) { return keeps_its_bytes(match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
+        keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i)
+    }
     fn emit_arg_opening(&self, callee: &str, i: i64) -> String {
         if self.own_contracts.functions.contains_key(callee) {
             let contract = match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -34772,6 +34776,8 @@ impl EmitState {
         let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
         out.push(&before);
         if either { out.push("nikaia_std::either_text::either("); }
+        let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, i);
+        if keeps_bytes { out.push("&*nikaia_std::bytes::kept("); }
         let mut how: String = String::from("");
         let mut has_how = false;
         if lend {
@@ -34818,6 +34824,7 @@ impl EmitState {
         if has_how && how != "" { out.push(&how); }
         if count { out.push(")"); }
         if kept_here { out.push(")"); }
+        if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         out.push(&after);
         if duplicate { out.push(".clone()"); }
@@ -43377,6 +43384,7 @@ pub struct KeepsBody<'a, 'a1> {
     pub unresolved: bool,
     pub own_methods: &'a MethodIndex,
     pub library_methods: &'a1 MethodIndex,
+    pub cloned_keeps: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43561,6 +43569,17 @@ fn a_position_the_result_points_into(callee: Option<&str>, at: i64, own: &Ledger
     let known = match callee { Some(__nikaia_value) => __nikaia_value, None => return false }.to_owned();
     if own.functions.contains_key(&known) { return points_into_at(match *nikaia_std::index::get(&own.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return false }, at); }
     points_into_at(match *nikaia_std::index::get(&library.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return false }, at)
+}
+
+pub fn keeps_its_bytes(contract: &FnContract, at: i64) -> bool {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if signature.takes_a_receiver() || at < 0 || at >= signature.params.len() as i64 { return false; }
+    let parameter = &nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).0;
+    let is_bytes = match &nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1 {
+        Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == "Bytes" },
+        _ => false,
+    };
+    is_bytes && nikaia_std::list::contains(&contract.keeps, &parameter) && !points_into_at(contract, at)
 }
 
 fn points_into_at(contract: &FnContract, at: i64) -> bool {
@@ -43763,6 +43782,7 @@ fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_grammar::Inter
     match receiver {
         Expr::Variable(ident, _) => {
             let ident = *ident;
+            if method == "clone" && context.cloned_keeps.contains(interner.resolve(ident)) { walk.uses.kept.insert(interner.resolve(ident).to_owned()); }
             if context.parameters.contains(interner.resolve(ident)) { names.push(interner.resolve(ident).to_owned()); }
             for one in keeps_viewed_of(receiver, interner, context, own, library, &walk) { names.push(one); }
         },
@@ -69355,7 +69375,7 @@ pub mod keep {
 }
 pub mod keeps {
     #[allow(unused_imports)]
-    pub use super::{KeepsBody, uses_in};
+    pub use super::{KeepsBody, uses_in, keeps_its_bytes};
 }
 pub mod leaves {
     #[allow(unused_imports)]

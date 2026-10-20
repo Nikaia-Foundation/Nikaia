@@ -540,6 +540,13 @@ impl From<Mapped> for crate::bytes::Bytes {
     }
 }
 
+/// A mapping handed to a parameter that keeps a `Bytes`: at a count.
+impl crate::bytes::KeptBytes for Mapped {
+    fn kept_bytes(&self) -> std::borrow::Cow<'_, crate::bytes::Bytes> {
+        std::borrow::Cow::Owned(self.bytes())
+    }
+}
+
 impl Mapped {
     /// **The mapping as a `Bytes`** (ADR-373 D3): the same pages at one more
     /// count, kept mapped while the `Bytes` or a cut of it lives.

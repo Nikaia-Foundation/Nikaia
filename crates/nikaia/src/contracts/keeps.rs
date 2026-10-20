@@ -363,6 +363,18 @@ fn uses_of(
         unresolved,
         own_methods,
         library_methods,
+        // **A `ref Bytes` a `.clone()` keeps** (ADR-373 D1, D4).
+        cloned_keeps: args
+            .iter()
+            .filter(|a| {
+                a.ty.is_view
+                    && !a.ty.is_nullable
+                    && !a.ty.is_slice
+                    && a.ty.generics.is_empty()
+                    && parsed.text(a.ty.name) == "Bytes"
+            })
+            .map(|a| parsed.text(a.name).to_string())
+            .collect(),
     };
     let mut uses = nikaia_std::tools::keeps::uses_in(
         body,
