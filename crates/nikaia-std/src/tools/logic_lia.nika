@@ -752,8 +752,12 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
         }
     }
     let mut ranks: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut rank_names: Vec[String] = []
+    let mut quotients: Vec[bool] = []
     for name in every {
         ranks.insert(name.clone(), ranks.len())
+        rank_names.push(name.clone())
+        quotients.push(name.starts_with("quot#"))
     }
     let mut index = 0
     for bound in bounds {
@@ -781,59 +785,72 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
             forms.push(lg_form_of(one.lin.terms, ranks))
         }
         let ordered = lg_sorted_places(held, live, forms)
-        let mut bounds_now: Vec[LgHeld] = []
+        // The bounds that count, by their place in `held`.
+        let mut now: Vec[i64] = []
         let mut kept = -1
         for place in ordered {
             if kept >= 0 && lg_form_cmp(forms[kept], forms[place]) == 0 {
                 continue
             }
-            bounds_now.push(held[place].clone())
+            now.push(place)
             kept = place
         }
-        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
-        for one in bounds_now {
-            for (name, _) in one.lin.terms {
-                names.insert(name.clone())
+        // How many bounds each name is above and below in, by its rank.
+        let mut present: Vec[bool] = []
+        let mut ups: Vec[i64] = []
+        let mut downs: Vec[i64] = []
+        for _ in quotients {
+            present.push(false)
+            ups.push(0)
+            downs.push(0)
+        }
+        for place in now {
+            let form = forms[place]
+            let mut at = 0
+            while at + 1 < form.len() {
+                let rank = form[at]
+                let k = form[at + 1]
+                present[rank] = true
+                if k > 0 {
+                    ups[rank] += 1
+                }
+                if k < 0 {
+                    downs[rank] += 1
+                }
+                at += 2
             }
         }
         // Eliminate the name whose elimination makes the fewest new bounds -
         // a quotient's name last (ADR-359 D5), so that what is left of it is
         // a bound of its own, tightened to the integers: `2·q = -7` has no
         // integer `q`.
-        let mut chosen: String = ""
+        let mut chosen = -1
         let mut have = false
         let mut fewest = 0
         let mut others = false
-        for name in names {
-            if !name.starts_with("quot#") {
+        let mut rank = 0
+        while rank < quotients.len() {
+            if present[rank] && !quotients[rank] {
                 others = true
             }
+            rank += 1
         }
-        for name in names {
-            if others && name.starts_with("quot#") {
-                continue
-            }
-            let mut up = 0
-            let mut down = 0
-            for one in bounds_now {
-                let k = one.lin.terms.get(name) ?? 0
-                if k > 0 {
-                    up += 1
-                }
-                if k < 0 {
-                    down += 1
+        rank = 0
+        while rank < quotients.len() {
+            if present[rank] && !(others && quotients[rank]) {
+                let made = ups[rank] * downs[rank]
+                if !have || made < fewest {
+                    have = true
+                    chosen = rank
+                    fewest = made
                 }
             }
-            if !have || up * down < fewest {
-                have = true
-                chosen = name.clone()
-                fewest = up * down
-            }
+            rank += 1
         }
         if !have {
             return lg_consistent(round_names, round_bounds)
         }
-        let eliminated = lg_eliminate(bounds_now, chosen, budget, steps, round_names, round_bounds)
+        let eliminated = lg_eliminate(held, now, rank_names[chosen], budget, steps, round_names, round_bounds)
         match eliminated {
             LgEliminated::Next(next) => {
                 held = next.clone()
@@ -853,29 +870,31 @@ enum LgEliminated {
 
 /// The bounds that hold once `name` is eliminated: those without it, and each
 /// pair of an upper and a lower bound on it, combined.
-fn lg_eliminate(bounds_now: ref Vec[LgHeld], name: ref String, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_names: Vec[String], mut round_bounds: Vec[Vec[LgLin]]) -> LgEliminated {
+fn lg_eliminate(held: ref Vec[LgHeld], now: ref Vec[i64], name: ref String, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_names: Vec[String], mut round_bounds: Vec[Vec[LgLin]]) -> LgEliminated {
     let mut without: Vec[LgHeld] = []
-    let mut up: Vec[LgHeld] = []
-    let mut down: Vec[LgHeld] = []
+    let mut up: Vec[i64] = []
+    let mut down: Vec[i64] = []
     let mut with_lins: Vec[LgLin] = []
-    for one in bounds_now {
-        let k = one.lin.terms.get(name)
+    for place in now {
+        let k = held[place].lin.terms.get(name)
         if k == null {
-            without.push(one.clone())
+            without.push(held[place].clone())
             continue
         }
-        with_lins.push(one.lin.clone())
+        with_lins.push(held[place].lin.clone())
         if (k ?? 0) > 0 {
-            up.push(one.clone())
+            up.push(place)
         } else {
-            down.push(one.clone())
+            down.push(place)
         }
     }
     round_names.push(name.clone())
     round_bounds.push(with_lins)
     let mut next = without
-    for u in up {
-        for d in down {
+    for up_at in up {
+        let u = held[up_at]
+        for down_at in down {
+            let d = held[down_at]
             let a = u.lin.terms.get(name) ?? 0
             let b = -(d.lin.terms.get(name) ?? 0)
             // b·u + a·d cancels `name`; both are `<= 0`, so is the sum.
