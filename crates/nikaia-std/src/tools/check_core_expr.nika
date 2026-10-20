@@ -507,10 +507,8 @@ fn check_core_expr_unary[H: CheckHost](mut state: CheckState, world: ref CheckWo
         UnaryOp::Not => {
             let boolean = check_core_expr_named("bool")
             let value = value_of_a_copy(found.unseen())
-            if integer_named(value) != null {
-                value
-            } else if check_simd_kind(value).len() > 0 {
-                // **`!` on a vector or a mask flips each lane** (ADR-377 D3).
+            // **`!` on a vector or a mask flips each lane** (ADR-377 D3).
+            if integer_named(value) != null || check_simd_kind(value).len() > 0 {
                 value
             } else if found.fits(boolean) {
                 boolean
