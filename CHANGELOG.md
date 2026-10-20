@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1126] — 2026-10-20
+
+**A lambda's text item compares with text; a keep through a chain of calls; a literal beside a lent field**
+- `xs.iter().any(fn(w) { w == s.cfg })` and the like over a `Vec[String]` compile: a lambda's lent text item is compared as `str` (#688). A parameter kept in another argument's place through two or more calls ties the same lifetime, and a local handed down such a chain into a longer-lived list is handed over (ADR-283 D27, ADR-282 D25, #740). A text literal beside a field read through a `ref` parameter is a view of static text, so the result lends (ADR-282 D13, #740).
+
 ## [0.0.1125] — 2026-10-20
 
 **mut p: ref T is mut p: T; a list into Vec[T?] wraps its elements**
