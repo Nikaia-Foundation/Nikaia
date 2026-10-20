@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1122] — 2026-10-20
+
+**An element or field read through a borrowed parameter is lent into the result; a local kept in a longer-lived list is handed over**
+- `v[0]` from a `ref` list is a view (ADR-282 D13). A field read through a `ref` parameter is lent into a mixed result in the tail form and the `return` form alike (D13, D15); a published mixed result refuses either with NK1131 (D22). A field tail of a `ref` parameter no longer reports a false NK1104. A local that a callee keeps in a list living longer than the local is handed over, and a later read of it is NK2105 (D7, D25; #738).
+
 ## [0.0.1121] — 2026-10-20
 
 **A String? parameter handed back is lent; mixed text into a published position is refused; an unlinked list keeps one type**
