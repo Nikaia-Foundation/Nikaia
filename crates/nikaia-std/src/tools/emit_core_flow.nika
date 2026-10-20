@@ -401,6 +401,17 @@ impl EmitState {
                 return
             }
         }
+        // **Text ordered against text** (#733): `&str < String` does not exist
+        // below, so both sides are read as `str`, whichever tier each lowered to.
+        if self.facts.ordered_texts.contains(site) {
+            let symbol = binary_op(op)
+            out.push("AsRef::<str>::as_ref(&(")
+            host.expr(walk, out, lhs, depth, wide, scope)
+            out.push(f")) {symbol} AsRef::<str>::as_ref(&(")
+            host.expr(walk, out, rhs, depth, wide, scope)
+            out.push("))")
+            return
+        }
         // **An operation proved to stay inside its type** is written without its
         // check, naming the type the proof was about (ADR-306 D10).
         if self.proven_arithmetic.contains_key(site) && !wide.widen && !wide.inferred {

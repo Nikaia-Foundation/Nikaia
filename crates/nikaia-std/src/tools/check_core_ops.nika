@@ -313,6 +313,11 @@ fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckW
         state.an_operator_needs_a_bound(world, op, left, right, at)
         state.a_maybe_compared_with_a_value(left, right, span)
         state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at)
+        // **Text ordered against text** (#733): a view and an owned text do not
+        // order against each other below, so both are read as `str`.
+        if is_text_type(left.unseen()) && is_text_type(right.unseen()) {
+            let added = state.facts.ordered_texts.insert(at.start as i64)
+        }
         return check_core_ops_named("bool")
     }
     // **A `+` where either side is text is a concatenation** (ADR-081 D2).

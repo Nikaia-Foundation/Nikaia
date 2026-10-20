@@ -238,6 +238,9 @@ pub struct CheckFacts {
     pub wrapped: collections::BTreeMap[i64, FactWrap],
     pub compared_views: collections::BTreeSet[(i64, String)],
     pub compared_numbers: collections::BTreeSet[(i64, String)],
+    /// **Text ordered against text** (#733), by the operator's span: both
+    /// sides are read as `str`, owned or viewed.
+    pub ordered_texts: collections::BTreeSet[i64],
     pub claims: collections::BTreeMap[(i64, i64), FactClaim],
     pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
     pub reaches: collections::BTreeMap[(String, String), CallReach],
@@ -408,6 +411,7 @@ impl CheckFacts {
             wrapped: collections::BTreeMap(),
             compared_views: collections::BTreeSet(),
             compared_numbers: collections::BTreeSet(),
+            ordered_texts: collections::BTreeSet(),
             claims: collections::BTreeMap(),
             entries: collections::BTreeMap(),
             reaches: collections::BTreeMap(),

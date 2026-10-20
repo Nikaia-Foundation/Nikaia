@@ -388,3 +388,21 @@ fn ref_string_in_a_variant_payload_is_a_warning() {
     same_rust("variant_payload", written, &plain);
     assert_eq!(ran("variant_payload", &plain), "hi 1\n");
 }
+
+/// **Text ordered against text** (#733): a view beside an owned text lowered to
+/// `&str < String`, which `rustc` refused. All four orderings, both ways round.
+#[test]
+fn a_view_orders_against_owned_text() {
+    let source = r#"fn less(a: String, b: String) -> bool {
+    let owned = b.clone() + "x"
+    a < owned
+}
+
+fn main() {
+    let s = "abc"
+    let t = "a".clone() + "b"
+    print(f"{less(s, "abd")} {s.trim() >= t} {t > s} {t <= s.trim()}")
+}
+"#;
+    assert_eq!(ran("view_orders_owned", source), "true true false true");
+}
