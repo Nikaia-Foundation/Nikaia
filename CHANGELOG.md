@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1160] — 2026-10-20
+
+**unsafe { assume(claim) }**
+- A claim the program vouches for is `unsafe { assume(claim) }` (ADR-376, #772): written only inside `unsafe` (NK1294), never in `std` (NK1295), read as an `assert`'s claim and a fact from where it stands. Checked as an `assert` where the build removes no checks; lowered to `core::hint::assert_unchecked` where `remove-bounds-checks` or `remove-overflow-checks` is on. `--asserts` lists every `assume`. Part I 1.3 lists it in the prelude.
+
 ## [0.0.1159] — 2026-10-20
 
 **A grammar's par_fold names winnow_grammar's ParseContext in full**

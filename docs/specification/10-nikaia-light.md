@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1159 (Draft)
+**Version:** 0.0.1160 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -81,7 +81,7 @@ Some names need no `use`. They are these, and there are no others:
   **`Bytes`**;
 * the printing functions: **`println`**, **`print`**, **`eprintln`**,
   **`eprint`**;
-* **`assert`** and **`panic`**;
+* **`assert`** and **`panic`**, and **`assume`**, written only inside `unsafe` (Part III, 14.2);
 * the doors over several locks: **`access_all`** and **`update_all`**
   (Part II, 12.3);
 * the shared types: **`Shared`**, **`SharedMut`** and **`Locked`** (6.2);
