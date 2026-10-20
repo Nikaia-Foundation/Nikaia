@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1132] — 2026-10-20
+
+**process::run sets the child's environment: env, env_remove, env_clear; the program is found on the caller's PATH (built)**
+- The child's environment is the caller's, changed by `env_clear`, then `env_remove`, then `env`; a later pair wins, a name both removed and set is set; names compare as the platform does (ADR-243 D5, #691).
+- A `program` with no path separator is looked up on the caller's `PATH` (`PATHEXT` on Windows) and started by the full path found; a file there that is not executable is skipped, and none found is `NotFound(program)` (D6).
+- An empty name, `=` or NUL in a name, or NUL in a value starts nothing: one `io::IoError::Other` names every invalid entry, and a literal one is `NK1286` (D7).
+- A list of text literals, or of tuples of them, handed to an option becomes owned text as at a positional parameter; a list default of an owned option lowers to `vec![..]`.
+
 ## [0.0.1131] — 2026-10-20
 
 **bits_as_ reads the same bits with the other sign; u8 gets every fixed-width name; S {} is a struct literal after throw (built)**
