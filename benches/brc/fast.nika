@@ -34,6 +34,7 @@ struct Slot {
 struct Table {
     slots: Vec[Slot],
     used: i64,
+    assert(slots.len() == SLOTS; message: "the table holds `SLOTS` slots")
 }
 
 comptime BITS: i64 = 14
@@ -53,7 +54,7 @@ impl Table {
     // The slot of the name `buf[pos..<pos + len]`, whose first sixteen bytes
     // are `w0` and `w1` (zeros past its end), taken where the name is new.
     fn slot_of(ref mut self, w0: u64, w1: u64, len: i64, buf: ref Bytes, pos: i64) -> i64 {
-        let h = (w0 ^ w1.wrapping_mul(0x517CC1B727220A95) ^ len.bits_as_u64()).wrapping_mul(0x9E3779B97F4A7C15)
+        let h = (w0 ^ (w1 << 5)).wrapping_mul(0x9E3779B97F4A7C15)
         let mut at = (h >> (64 - BITS)).bits_as_i64()
         while true {
             if self.slots[at].count == 0 {
@@ -81,10 +82,13 @@ impl Table {
     // Every row of `buf` that starts before `stop`.
     fn run(ref mut self, buf: ref Bytes, stop: i64) {
         if stop == 0 { return }
+        // A row starts before `stop`, which leaves `MARGIN` bytes behind it.
+        assert(stop > 0 && stop <= buf.len() - MARGIN; message: "a row starts `MARGIN` bytes before the end")
         let mut pos = 0
         for sep in buf.find_all(bytes::ByteSet([';'])) {
             // The name's first two words, zeros past its end.
             let len = sep - pos
+            assert(len >= 0 && len <= 100; message: "a station's name has at most 100 bytes")
             let mut w0 = buf.u64_le(pos)
             let mut w1 = buf.u64_le(pos + 8)
             if len <= 8 {

@@ -62,7 +62,7 @@ impl Table {
     // The slot of the name `buf[pos..<pos + len]`, whose first sixteen bytes
     // are `w0` and `w1` (zeros past its end), taken where the name is new.
     fn slot_of(ref mut self, w0: u64, w1: u64, len: i64, buf: ref Bytes, pos: i64) -> i64 {
-        let h = (w0 ^ w1.wrapping_mul(0x517CC1B727220A95) ^ len.bits_as_u64()).wrapping_mul(0x9E3779B97F4A7C15)
+        let h = (w0 ^ (w1 << 5)).wrapping_mul(0x9E3779B97F4A7C15)
         let mut at = (h >> (64 - BITS)).bits_as_i64()
         while true {
             // The table holds `SLOTS` slots and `at` is masked into them; a
