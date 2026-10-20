@@ -81,7 +81,20 @@ fn check_core_places_unrolled_default(unrolling: ref CheckUnrolling?) -> Ty {
 
 /// The types a cast may name (`OFFERED`).
 fn check_core_places_offered(name: ref String) -> bool {
-    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str"
+    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str"
+}
+
+/// Whether a float literal, negated or not, is a finite value beyond the
+/// `f32` range.
+fn check_core_places_beyond_f32(value: ref Expr) -> bool {
+    return match check_peeled(value) {
+        Expr::LitFloat(written, _) => {
+            let number = text::parse_f64(written) ?? 0.0
+            number > 340282346638528859811704183484516925440.0
+        },
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_core_places_beyond_f32(expr),
+        else => false,
+    }
 }
 
 /// The integer types a `char` is cast into as its code (`INTEGERS`).
@@ -1123,8 +1136,20 @@ pub fn check_core_cast[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         },
         else => {}
     }
-    // A cast out of an open number is recorded once the number has its type.
-    if !(from.is_unknown() && state.open_number_cast(world, inner, into)) {
+    // **A float written out converts into an `f32` where it is written**
+    // (ADR-285 D33): within the range it is the nearest `f32`, beyond it
+    // `NK1116`.
+    let into_f32 = match into {
+        Ty::Named { name, args, .. } => name == "f32" && args.len() == 0,
+        else => false,
+    }
+    if into_f32 && check_floats_written(inner) {
+        if check_core_places_beyond_f32(inner) {
+            state.findings.push(check_refusal("NK1116", span, "This number is beyond the range of an `f32`.", ["An `f32` holds finite values up to about 3.4e38 either side of zero.".clone()], "Keep it an `f64`, or write a number within the `f32` range.".clone()))
+        }
+        let added = state.flow.widening_casts.insert(id_of(inner) as i64)
+    } else if !(from.is_unknown() && state.open_number_cast(world, inner, into)) {
+        // A cast out of an open number is recorded once the number has its type.
         state.record_cast(from, into, id_of(inner) as i64)
     }
     let from_a_char = match from {

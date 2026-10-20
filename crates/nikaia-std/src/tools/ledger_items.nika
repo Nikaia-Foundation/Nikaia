@@ -14,7 +14,7 @@ use std::collections
 /// names a type this language has (ADR-285 D1), and whether an `impl`'s type
 /// argument is a parameter or a type.
 fn is_offered(name: ref String) -> bool {
-    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" || name == "Self"
+    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" || name == "Self"
 }
 
 /// Every type name this file declares.

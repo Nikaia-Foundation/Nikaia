@@ -18073,7 +18073,18 @@ fn check_core_places_unrolled_default(unrolling: Option<&CheckUnrolling>) -> Ty 
     Ty::Nullable(Box::new(u.field.ty.clone()))
 }
 
-fn check_core_places_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" }
+fn check_core_places_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" }
+
+fn check_core_places_beyond_f32(value: &Expr) -> bool {
+    match check_peeled(value) {
+        Expr::LitFloat(written, _) => {
+            let number = nikaia_std::index::or(text::parse_f64(written), || 0.0);
+            number > 340282346638528859811704183484516925440.0
+        },
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && check_core_places_beyond_f32(expr) },
+        _ => false,
+    }
+}
 
 fn check_core_places_an_integer(name: &str) -> bool { name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64" }
 
@@ -18878,7 +18889,14 @@ pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         Ty::Named { ref name, .. } => { if !check_core_places_offered(name) { state.cast_names_a_foreign_type(name, span); } },
         _ => { },
     }
-    if !(from.is_unknown() && state.open_number_cast(world, inner, &into)) { state.record_cast(&from, &into, id_of(inner) as i64); }
+    let into_f32 = match into {
+        Ty::Named { ref name, ref args, .. } => name == "f32" && args.is_empty(),
+        _ => false,
+    };
+    if into_f32 && check_floats_written(inner) {
+        if check_core_places_beyond_f32(inner) { state.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec!["An `f32` holds finite values up to about 3.4e38 either side of zero.".to_owned()], Some("Keep it an `f64`, or write a number within the `f32` range.".to_owned()))); }
+        let added = state.flow.widening_casts.insert(id_of(inner) as i64);
+    } else if !(from.is_unknown() && state.open_number_cast(world, inner, &into)) { state.record_cast(&from, &into, id_of(inner) as i64); }
     let from_a_char = match from {
         Ty::Named { ref name, .. } => name == "char" || name == "scalar",
         _ => false,
@@ -20304,7 +20322,7 @@ impl CheckState {
     pub fn cast_names_a_foreign_type(&mut self, into: &str, span: &Span) {
         let mut help: String = "Convert to one of the types above, or leave the cast out.".to_owned();
         if into == "usize" || into == "isize" || into == "u16" || into == "u32" || into == "u64" || into == "u128" || into == "i8" || into == "i16" || into == "i128" { help = "Lengths and indexes are `i64`, and the compiler converts them for the machine itself, so just remove the cast. To cut a number down to a narrower type, use `truncating_i32`.".to_owned(); }
-        self.findings.push(check_refusal("NK1122", span, format!("You can't convert to `{}` with `as`: Nikaia has no such type.", into), vec!["The number types are `i32`, `i64`, `u8`, `u32`, `u64` and `f64`.".to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK1122", span, format!("You can't convert to `{}` with `as`: Nikaia has no such type.", into), vec!["The number types are `i32`, `i64`, `u8`, `u32`, `u64`, `f32` and `f64`.".to_owned()], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -27606,7 +27624,7 @@ fn check_counts_first(key: &str) -> bool { key == "Seq::take" || key == "Seq::sk
 
 fn check_counts_second(key: &str) -> bool { key == "Vec::swap" }
 
-fn check_numeric(name: &str) -> bool { name == "i32" || name == "i64" || name == "f64" || name == "u8" || name == "u32" || name == "u64" }
+fn check_numeric(name: &str) -> bool { name == "i32" || name == "i64" || name == "f32" || name == "f64" || name == "u8" || name == "u32" || name == "u64" }
 
 fn check_owned_text(ty: &Ty) -> bool {
     match ty {
@@ -27848,10 +27866,12 @@ impl CheckState {
         let fits_i64 = from_name == "i32" && into_name == "i64";
         let fits_from_u8 = from_name == "u8" && (into_name == "i32" || into_name == "i64" || into_name == "u32" || into_name == "u64");
         let fits_from_u32 = from_name == "u32" && (into_name == "i64" || into_name == "u64");
-        let always_fits = from_name == into_name || into_name == "f64" || fits_i64 || fits_from_u8 || fits_from_u32;
+        let from_a_float = from_name == "f32" || from_name == "f64";
+        let fits_f32 = into_name == "f32" && from_name != "f64";
+        let always_fits = from_name == into_name || into_name == "f64" || fits_f32 || fits_i64 || fits_from_u8 || fits_from_u32;
         let checked = check_numeric(&from_name) && check_numeric(&into_name) && !always_fits;
         let at = operand;
-        if !checked { let added = self.flow.widening_casts.insert(at); } else if from_name == "f64" { self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat); } else { self.facts.narrowing_casts.insert(at, FactNarrowing::Integer); }
+        if !checked { let added = self.flow.widening_casts.insert(at); } else if from_a_float { self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat); } else { self.facts.narrowing_casts.insert(at, FactNarrowing::Integer); }
     }
 }
 
@@ -44369,7 +44389,7 @@ fn is_lower(c: scalar) -> bool { c >= 'a' && c <= 'z' }
 
 // --- ledger_items.nika ---
 
-fn is_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" || name == "Self" }
+fn is_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" || name == "Self" }
 
 pub fn types_this_file_declares(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();

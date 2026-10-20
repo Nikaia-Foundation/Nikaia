@@ -373,7 +373,7 @@ impl CheckState {
         if into == "usize" || into == "isize" || into == "u16" || into == "u32" || into == "u64" || into == "u128" || into == "i8" || into == "i16" || into == "i128" {
             help = "Lengths and indexes are `i64`, and the compiler converts them for the machine itself, so just remove the cast. To cut a number down to a narrower type, use `truncating_i32`.".clone()
         }
-        self.findings.push(check_refusal("NK1122", span, f"You can't convert to `{into}` with `as`: Nikaia has no such type.", ["The number types are `i32`, `i64`, `u8`, `u32`, `u64` and `f64`.".clone()], help))
+        self.findings.push(check_refusal("NK1122", span, f"You can't convert to `{into}` with `as`: Nikaia has no such type.", ["The number types are `i32`, `i64`, `u8`, `u32`, `u64`, `f32` and `f64`.".clone()], help))
     }
 
     /// Whether `variant` is a variant of the enum `ty`.

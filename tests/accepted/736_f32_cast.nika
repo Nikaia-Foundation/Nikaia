@@ -1,0 +1,15 @@
+// #736: `as f32` goes where `as f64` goes (Part I 2.2, ADR-285 D33): an
+// integer into an `f32`, an `f32` into an `f64` and into an integer, a float
+// written out into an `f32`, and an `f64` within the `f32` range.
+
+fn main() {
+    let x: i64 = 3
+    let n: i32 = 7
+    let b: u8 = 200
+    let c: f32 = 1.75
+    let k: f64 = 2.5
+    let t = 3
+    println(f"{x as f32} {n as f32} {b as f32} {t as f32}")
+    println(f"{c as f64} {c as i64} {c as i32} {c as u8} {c as u32} {c as u64}")
+    println(f"{1.5 as f32} {-0.25 as f32} {k as f32} {k as u8} {k as u64}")
+}

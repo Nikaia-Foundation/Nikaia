@@ -61,7 +61,7 @@ fn to_int<T: TryFrom<i128>>(value: f64) -> T {
     }
 }
 
-/// A `f64` as an `i32`, or an abort.
+/// A float as an `i32`, or an abort.
 ///
 /// `#[track_caller]`, so the abort names the line the conversion was written on
 /// rather than this file. Without it [ADR-300](../../../docs/specification/adr/adr-300.md)'s
@@ -69,16 +69,56 @@ fn to_int<T: TryFrom<i128>>(value: f64) -> T {
 /// Nikaia line maps.
 #[inline]
 #[track_caller]
-pub fn to_i32(value: f64) -> i32 {
-    to_int(value)
+pub fn to_i32(value: impl Into<f64>) -> i32 {
+    to_int(value.into())
 }
 
 /// A `f64` as an `i64`, or an abort. `#[track_caller]`, for the reason
 /// [`to_i32`] gives.
 #[inline]
 #[track_caller]
-pub fn to_i64(value: f64) -> i64 {
-    to_int(value)
+pub fn to_i64(value: impl Into<f64>) -> i64 {
+    to_int(value.into())
+}
+
+/// A float as a `u8`, or an abort. `#[track_caller]`, for the reason
+/// [`to_i32`] gives.
+#[inline]
+#[track_caller]
+pub fn to_u8(value: impl Into<f64>) -> u8 {
+    to_int(value.into())
+}
+
+/// A float as a `u32`, or an abort. `#[track_caller]`, for the reason
+/// [`to_i32`] gives.
+#[inline]
+#[track_caller]
+pub fn to_u32(value: impl Into<f64>) -> u32 {
+    to_int(value.into())
+}
+
+/// A float as a `u64`, or an abort. `#[track_caller]`, for the reason
+/// [`to_i32`] gives.
+#[inline]
+#[track_caller]
+pub fn to_u64(value: impl Into<f64>) -> u64 {
+    to_int(value.into())
+}
+
+/// An `f64` as an `f32`, the nearest one, or an abort where a finite value
+/// is beyond the `f32` range
+/// ([ADR-285](../../../docs/specification/adr/adr-285.md) D33). An infinity
+/// and "not a number" convert as they are: losing digits is not a failure,
+/// only leaving the range is. `#[track_caller]`, for the reason [`to_i32`]
+/// gives.
+#[inline]
+#[track_caller]
+pub fn to_f32(value: f64) -> f32 {
+    let near = value as f32;
+    if near.is_infinite() && value.is_finite() {
+        panic!("the value does not fit in an `f32`: {value}");
+    }
+    near
 }
 
 /// A `f64` as a `usize`, or an abort.
@@ -88,15 +128,15 @@ pub fn to_i64(value: f64) -> i64 {
 /// per machine, which is [`to_int`]'s reason for going through `i128`.
 #[inline]
 #[track_caller]
-pub fn to_usize(value: f64) -> usize {
-    to_int(value)
+pub fn to_usize(value: impl Into<f64>) -> usize {
+    to_int(value.into())
 }
 
 /// A `f64` as an `isize`, or an abort. [`to_usize`]'s reason, signed.
 #[inline]
 #[track_caller]
-pub fn to_isize(value: f64) -> isize {
-    to_int(value)
+pub fn to_isize(value: impl Into<f64>) -> isize {
+    to_int(value.into())
 }
 
 /// **What a cast's operand is, where it arrived as a view**
@@ -213,6 +253,27 @@ mod tests {
         assert_eq!(signed_with_unsigned(i64::MIN, 0), Less);
         assert_eq!(signed_with_unsigned(i64::MAX, u64::MAX), Less);
         assert_eq!(signed_with_unsigned(7, 7), Equal);
+    }
+
+    /// **An `f64` into an `f32` is the nearest one**, an infinity and "not a
+    /// number" as they are, and a float into an integer goes through `f64`
+    /// (#736).
+    #[test]
+    fn a_float_converts_into_an_f32_and_from_one() {
+        assert_eq!(to_f32(2.5), 2.5f32);
+        assert_eq!(to_f32(f64::INFINITY), f32::INFINITY);
+        assert!(to_f32(f64::NAN).is_nan());
+        assert_eq!(to_f32(f32::MAX as f64), f32::MAX);
+        assert_eq!(to_i32(1.75f32), 1);
+        assert_eq!(to_u8(200.5f32), 200);
+        assert_eq!(to_u64(2.5f64), 2);
+    }
+
+    /// **A finite `f64` beyond the `f32` range aborts.**
+    #[test]
+    #[should_panic(expected = "does not fit in an `f32`")]
+    fn a_finite_f64_beyond_the_f32_range_aborts() {
+        to_f32(1e300);
     }
 
     /// **A cast's operand reaches the number through any number of views**,
