@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1137] — 2026-10-20
+
+**spec: a Bytes searches for a set of ASCII bytes: AsciiSet, find, find_all, split; a sequence never loses its producer (ADR-375)**
+- `bytes::AsciiSet` is a set of ASCII bytes built once (NK1287 for a literal byte at 0x80 or above); `Bytes::find` takes one, `find_all` gives a `Seq[i64]` of every position, `split` the pieces by text's rules (ADR-375 D2, D3).
+- A consumer right after a sequence `std` produces is the one the ledger names for it: `find_all(set).count()` counts per block and makes no position (D4).
+
 ## [0.0.1136] — 2026-10-20
 
 **--cpu wins over the user's RUSTFLAGS; a ?? fallback name of text and a text literal in a tuple of text lower (ADR-002 D6)**
