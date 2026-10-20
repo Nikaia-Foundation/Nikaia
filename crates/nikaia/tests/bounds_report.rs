@@ -10,7 +10,9 @@ fn report(source: &str, bounds: BoundsChecks, overflow: OverflowChecks) -> Strin
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std ships a ledger");
-    nikaia::bounds_report::report(&parsed, source, "p.nika", &own, &library, bounds, overflow)
+    nikaia::bounds_report::report(
+        &parsed, source, "p.nika", &own, &library, bounds, overflow, false,
+    )
 }
 
 const SOURCE: &str = "\

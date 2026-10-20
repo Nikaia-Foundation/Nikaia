@@ -19,6 +19,9 @@ enum Ask {
     /// A `break` that leaves this loop: not one inside a loop, a lambda or a
     /// task within it.
     Breaks,
+    /// **Every `break` and `continue` that leaves this loop's turn**, counted:
+    /// not one inside a loop, a lambda or a task within it.
+    Jumps,
     /// What changes `list`'s length or hands it on: one for a method
     /// `keeps_length` does not know, two for passing it to a call.
     Changes(String),
@@ -50,6 +53,14 @@ pub fn breaks(body: ref Block, words: ref winnow_grammar::InternerContext) -> bo
     let mut found = tally()
     tally_block(body, Ask::Breaks, false, words, found)
     return found.found
+}
+
+/// **How many `break`s and `continue`s leave this loop's turn** from its
+/// body (ADR-361 D10): each is a place an invariant must hold.
+pub fn turn_jumps(body: ref Block, words: ref winnow_grammar::InternerContext) -> i64 {
+    let mut found = tally()
+    tally_block(body, Ask::Jumps, false, words, found)
+    return found.count
 }
 
 /// **The names a lambda, a task, an `overlap` branch or a `select` arm in
@@ -202,6 +213,13 @@ fn tally_statement(stmt: ref Stmt, ask: ref Ask, deferred: bool, words: ref winn
             Stmt::While { .. } => return,
             else => {},
         },
+        Ask::Jumps => match stmt {
+            Stmt::Break => { tally.count += 1 },
+            Stmt::Continue => { tally.count += 1 },
+            Stmt::For { .. } => return,
+            Stmt::While { .. } => return,
+            else => {},
+        },
         Ask::Pinned => {
             if deferred {
                 match stmt {
@@ -301,6 +319,11 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             Expr::Break(_) => { tally.found = true },
             else => {},
         },
+        Ask::Jumps => match expr {
+            Expr::Break(_) => { tally.count += 1 },
+            Expr::Continue(_) => { tally.count += 1 },
+            else => {},
+        },
         Ask::Changes(list) => match expr {
             Expr::MethodCall { receiver, method, args, .. } => {
                 if (variable_text(receiver, words) ?? "") == list && !keeps_length(words.resolve(method)) {
@@ -364,6 +387,11 @@ fn tally_expr(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
     let mut stops = false
     match ask {
         Ask::Breaks => match expr {
+            Expr::Closure { .. } => { stops = true },
+            Expr::Spawn { .. } => { stops = true },
+            else => {},
+        },
+        Ask::Jumps => match expr {
             Expr::Closure { .. } => { stops = true },
             Expr::Spawn { .. } => { stops = true },
             else => {},

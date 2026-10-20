@@ -39,9 +39,11 @@ struct Site {
     blocked: Option<String>,
 }
 
-/// The report, for one file. What is proved does not depend on the build
-/// (ADR-306 D14); the first line says whether this build writes it without
-/// its check.
+/// The report, for one file. What is proved does not depend on what the
+/// build drops (ADR-306 D14), only on `through_loops`
+/// (`prove-through-loops:on`, ADR-361 D10); the first line says whether this
+/// build writes it without its check.
+#[allow(clippy::too_many_arguments)]
 pub fn report(
     parsed: &Parsed,
     source: &str,
@@ -50,6 +52,7 @@ pub fn report(
     library: &Ledger,
     bounds: BoundsChecks,
     overflow: OverflowChecks,
+    through_loops: bool,
 ) -> String {
     let checked = crate::check::check(parsed, own, library);
     let proven = crate::bounds::proven(
@@ -57,6 +60,7 @@ pub fn report(
         &crate::bounds::Sites::of(&checked.facts),
         &[own, library],
         &std::collections::BTreeSet::new(),
+        through_loops,
     );
     let mut walk = Walk {
         parsed,

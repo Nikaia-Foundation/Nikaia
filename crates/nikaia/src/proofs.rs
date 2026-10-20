@@ -398,6 +398,19 @@ pub fn invariants_here() -> BTreeMap<i64, String> {
 /// **Keep the invariants a walk of the file being checked used** (ADR-361
 /// D4), by the byte each loop starts at.
 pub fn record_invariants(used: &BTreeMap<i64, String>) {
+    record_at(used, "");
+}
+
+/// **Keep the invariants the bounds walk of the file being lowered used**
+/// (ADR-361 D10, D4), by the byte each loop starts at: under the loop's place
+/// and `/bounds`, beside the prover's own, which reads only its own.
+pub fn record_bound_invariants(used: &BTreeMap<i64, String>) {
+    if !used.is_empty() {
+        record_at(used, "/bounds");
+    }
+}
+
+fn record_at(used: &BTreeMap<i64, String>, kind: &str) {
     let held = IN_FILE.with(|held| held.borrow().clone());
     let Some((path, source)) = held else {
         return;
@@ -418,7 +431,7 @@ pub fn record_invariants(used: &BTreeMap<i64, String>) {
         }
         let file = book.file_of(&path);
         for (at, parts) in used {
-            let place = format!("{file}:{}", place_of(*at as usize, &source));
+            let place = format!("{file}:{}{kind}", place_of(*at as usize, &source));
             book.invariants.insert(place.clone(), parts.clone());
             book.used.insert(place);
         }

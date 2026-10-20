@@ -23,6 +23,7 @@ fn report(source: &str) -> String {
         &library,
         BoundsChecks::Removed,
         OverflowChecks::Removed,
+        false,
     )
 }
 

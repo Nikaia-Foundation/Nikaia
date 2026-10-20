@@ -189,12 +189,11 @@ pub fn optimizations(
                     )
                 })?;
             }
-            // Read by `skip_free_at_exit`; checked here with the rest.
-            "skip-free-at-exit" => {
+            // Read by `skip_free_at_exit` and `prove_through_loops`; checked
+            // here with the rest.
+            "skip-free-at-exit" | "prove-through-loops" => {
                 if !matches!(level, "on" | "off") {
-                    return Err(anyhow!(
-                        "`skip-free-at-exit` is `on` or `off`, not `{level}`"
-                    ));
+                    return Err(anyhow!("`{name}` is `on` or `off`, not `{level}`"));
                 }
             }
             "remove-overflow-checks" => {
@@ -208,12 +207,27 @@ pub fn optimizations(
             _ => {
                 return Err(anyhow!(
                     "there is no optimization called `{name}`: the ones there are, are \
-                     `remove-bounds-checks`, `remove-overflow-checks` and `skip-free-at-exit`"
+                     `remove-bounds-checks`, `remove-overflow-checks`, `prove-through-loops` \
+                     and `skip-free-at-exit`"
                 ));
             }
         }
     }
     Ok((bounds, overflow))
+}
+
+/// **`prove-through-loops:on`**
+/// ([ADR-361](../../docs/specification/adr/adr-361.md) D10): an index's, an
+/// overflow's or a shift's check a loop leaves open is asked once more through
+/// the loop's invariant. The last word for the name wins; [`optimizations`]
+/// has already refused a word that is not `on` or `off`.
+pub fn prove_through_loops(words: &str) -> bool {
+    words
+        .split(',')
+        .map(str::trim)
+        .filter_map(|w| w.strip_prefix("prove-through-loops:"))
+        .next_back()
+        .is_some_and(|level| level == "on")
 }
 
 /// **`skip-free-at-exit:on`**
@@ -318,6 +332,7 @@ impl Settings {
         let mut build = Build::parse(&target, &user_parallelism, &reentrancy_check)?;
         (build.bounds, build.overflow) = optimizations(&optimization)?;
         build.skip_free_at_exit = skip_free_at_exit(&optimization);
+        build.prove_through_loops = prove_through_loops(&optimization);
         build.called_from_c = artifact == "c-library";
         Ok(Settings {
             build,
@@ -404,6 +419,7 @@ impl Settings {
         let words = flags.join(",");
         (self.build.bounds, self.build.overflow) = optimizations(&words)?;
         self.build.skip_free_at_exit = skip_free_at_exit(&words);
+        self.build.prove_through_loops = prove_through_loops(&words);
         self.optimization = words;
         Ok(())
     }
@@ -457,6 +473,7 @@ impl Settings {
         let mut build = Build::parse(&target, &user_parallelism, &reentrancy_check)?;
         (build.bounds, build.overflow) = optimizations(&optimization)?;
         build.skip_free_at_exit = skip_free_at_exit(&optimization);
+        build.prove_through_loops = prove_through_loops(&optimization);
         build.called_from_c = artifact == "c-library";
         Ok(Settings {
             build,
@@ -486,7 +503,7 @@ impl Settings {
     pub fn choices(&self) -> Choices {
         Choices::new(
             format!(
-                "{}/{}/{}{}{}{}{}{}{}",
+                "{}/{}/{}{}{}{}{}{}{}{}",
                 self.target,
                 self.user_parallelism,
                 self.reentrancy_check,
@@ -508,6 +525,10 @@ impl Settings {
                 },
                 match self.build.skip_free_at_exit {
                     true => "/skip-free-at-exit:on",
+                    false => "",
+                },
+                match self.build.prove_through_loops {
+                    true => "/prove-through-loops:on",
                     false => "",
                 },
                 // A library's lowering carries its entry points' wrappers,
@@ -2499,6 +2520,7 @@ pub fn explain(
                     library,
                     settings.build.bounds,
                     settings.build.overflow,
+                    settings.build.prove_through_loops,
                 )
             );
         }

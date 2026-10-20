@@ -52,11 +52,14 @@ pub struct Cli {
     pub user_parallelism: Option<String>,
 
     /// An optimization that changes nothing a program means, as `NAME:on` or
-    /// `NAME:off` (ADR-306 D14). There are two: `remove-bounds-checks:on`
-    /// writes an index the compiler proved inside without its check, and
+    /// `NAME:off` (ADR-306 D14). `remove-bounds-checks:on` writes an index
+    /// the compiler proved inside without its check, and
     /// `remove-overflow-checks:on` a `+`, `-` or `*` it proved stays inside its
-    /// type. Both are `off` by default. What is proved does not depend on them,
-    /// and a check nothing proves stays either way.
+    /// type; what is proved does not depend on them, and a check nothing
+    /// proves stays either way. `prove-through-loops:on` asks a check a loop
+    /// leaves open once more through the loop's invariant (ADR-361 D10).
+    /// `skip-free-at-exit:on` leaves what `main` holds at its end to the
+    /// operating system. All are `off` by default.
     ///
     /// May be given more than once; overrides `nikaia.toml`'s
     /// `[build] optimization`.

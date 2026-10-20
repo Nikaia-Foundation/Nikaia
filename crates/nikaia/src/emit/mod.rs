@@ -154,6 +154,11 @@ pub struct Build {
     /// ([ADR-348](../../docs/specification/adr/adr-348.md) D1): what `main`
     /// still holds at its end is not freed.
     pub skip_free_at_exit: bool,
+    /// `--optimization=prove-through-loops:on`
+    /// ([ADR-361](../../docs/specification/adr/adr-361.md) D10): a check a
+    /// loop leaves open is asked once more through the loop's invariant. It
+    /// changes what is proved, never what a program means.
+    pub prove_through_loops: bool,
     /// **Code run while the program is built counts its steps**
     /// ([ADR-321](../../docs/specification/adr/adr-321.md) D7): every function
     /// it enters and every turn of a loop, against the budget
@@ -183,6 +188,7 @@ impl Build {
             bounds: crate::bounds::BoundsChecks::default(),
             overflow: crate::bounds::OverflowChecks::default(),
             skip_free_at_exit: false,
+            prove_through_loops: false,
             counts_steps: false,
             leaves_values: false,
             called_from_c: false,
@@ -1971,6 +1977,7 @@ impl<'p> Emitter<'p> {
             },
             &[&own_contracts, std_ledger()],
             &std::collections::BTreeSet::new(),
+            build.prove_through_loops,
         );
 
         // ADR-037 D7: which count each `Shared` value gets. Computed over the

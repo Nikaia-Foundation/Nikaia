@@ -64,6 +64,9 @@ pub struct BoundsContext {
     /// **The length an `Array[T, N]`'s type says**, by the node of the
     /// array read or counted: `len()` is `N` (#711).
     pub array_lengths: collections::BTreeMap[i64, i64],
+    /// **`prove-through-loops:on`** (ADR-361 D10): a check a loop leaves
+    /// open is asked once more through the loop's invariant.
+    pub through_loops: bool,
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -89,6 +92,10 @@ pub struct BoundsProven {
     /// Of the context's `negations`, those proved not to negate the type's
     /// least value.
     pub negations: collections::BTreeSet[i64],
+    /// **The invariants that carried a check through a loop** (ADR-361 D4,
+    /// D10), by the byte the loop starts at: its parts as `nikaia.proofs`
+    /// keeps them, each with the strategy that found it.
+    pub loops: collections::BTreeMap[i64, String],
 }
 
 /// What holds at one point of a body.
@@ -159,6 +166,29 @@ struct BoundsWalk {
     grow_failed: collections::BTreeSet[String],
     /// How many values at a loop's start the walk has named.
     entries: i64,
+    /// **How many goals the walk has left open** (ADR-361 D2): a loop that
+    /// left none is not asked through its invariant.
+    open: i64,
+    /// **The names a goal left open read**, each with the open count when it
+    /// last did: a loop is asked through its invariant only where one of
+    /// them is a name it changes.
+    missed: collections::BTreeMap[String, i64],
+    /// The newest goals left open, for that test.
+    missed_goals: Vec[BoundsMissed],
+    /// `prove-through-loops:on`: the walk keeps `open` and `missed`.
+    through_loops: bool,
+    /// **The loops whose invariant is being checked**, innermost last
+    /// (ADR-361 D4): what a turn's end, a `continue` or a `break` must keep.
+    turns: Vec[BoundsTurn],
+}
+
+/// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
+/// the guesses assumed at the head of a turn, those an end of a turn or a
+/// `break` did not keep, and where those ends were checked.
+struct BoundsTurn {
+    guesses: Vec[i64],
+    failed: collections::BTreeSet[i64],
+    jumps: collections::BTreeSet[i64],
 }
 
 /// No length of a container whose elements take space reaches this (#383):
@@ -189,7 +219,7 @@ fn call_depth() -> i64 {
 }
 
 fn no_proofs() -> BoundsProven {
-    return BoundsProven { indices: collections::BTreeSet(), arithmetic: collections::BTreeSet(), nonnegative: collections::BTreeSet(), negations: collections::BTreeSet() }
+    return BoundsProven { indices: collections::BTreeSet(), arithmetic: collections::BTreeSet(), nonnegative: collections::BTreeSet(), negations: collections::BTreeSet(), loops: collections::BTreeMap() }
 }
 
 fn nothing_changed() -> BoundsChanged {
@@ -248,6 +278,11 @@ pub fn bounds_aggressive(args: ref Vec[FnArg], body: ref Block, nonnegative: col
         growing: collections::BTreeSet(),
         grow_failed: collections::BTreeSet(),
         entries: 0,
+        open: 0,
+        missed: collections::BTreeMap(),
+        missed_goals: [],
+        through_loops: context.through_loops,
+        turns: [],
     }
     let mut settled = false
     if !walk.shape.roots.is_empty() {
@@ -404,6 +439,36 @@ fn bounding_join(mut walk: BoundsWalk, key: ref String, range: Range) {
         joined = (was ?? Range::open()).join(range)
     }
     walk.written.insert(key.clone(), joined)
+}
+
+/// **A goal's question** (an index, an operation, a conversion): as
+/// [`bounding_proves`], and where it is left open, the names it reads are
+/// what the walk missed (ADR-361 D2), stamped with the open count.
+fn bounding_proves_goal(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    if bounding_proves(walk, facts, goal, ask) {
+        return true
+    }
+    if walk.through_loops {
+        walk.open += 1
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(goal, read)
+        for name in read {
+            walk.missed.insert(name.clone(), walk.open)
+        }
+        walk.missed_goals.push(BoundsMissed { stamp: walk.open, goal: goal, facts: facts.facts.clone() })
+        if walk.missed_goals.len() > 64 {
+            walk.missed_goals.remove(0)
+        }
+    }
+    return false
+}
+
+/// **A goal left open**, with what held where it was asked: the cheap test
+/// of whether a loop's candidates could prove anything (ADR-361 D2).
+struct BoundsMissed {
+    stamp: i64,
+    goal: i64,
+    facts: Vec[i64],
 }
 
 /// Whether `goal` follows from what holds, on a certificate the checker
@@ -643,7 +708,7 @@ fn bounding_fits(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref
         } else if side < 0 {
             goal = above
         }
-        return bounding_proves(walk, facts, goal, ask)
+        return bounding_proves_goal(walk, facts, goal, ask)
     }
     let range = bounding_range_of(walk, op, lhs, rhs, facts, context, program, words, ask) ?? return false
     return bounds.holds(range)
@@ -661,7 +726,7 @@ fn bounding_count_fits(mut walk: BoundsWalk, count: ref Expr, ty: ref String, fa
         let above = walk.arena.ge(k, zero)
         let below = walk.arena.le(k, most)
         let goal = walk.arena.and([above, below])
-        return bounding_proves(walk, facts, goal, ask)
+        return bounding_proves_goal(walk, facts, goal, ask)
     }
     let range = bounding_range(walk, count, facts, context, program, words, ask) ?? return false
     let lo = range.lo ?? return false
@@ -978,8 +1043,10 @@ fn bounding_negation(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFact
     let term = bounding_lin(walk, operand, facts, context, program, words) ?? return
     let k = walk.arena.int(above)
     let goal = walk.arena.ge(term, k)
-    if bounding_proves(walk, facts, goal, ask) {
+    if bounding_proves_goal(walk, facts, goal, ask) {
         walk.proven.negations.insert(node)
+    } else {
+        walk.open += 1
     }
 }
 
@@ -1435,7 +1502,7 @@ fn bounding_inside(mut walk: BoundsWalk, list: ref String, node: i64, index: ref
                 high = walk.arena.lt(to, len)
             }
             let goal = walk.arena.and([low, ordered, high])
-            return bounding_proves(walk, facts, goal, ask)
+            return bounding_proves_goal(walk, facts, goal, ask)
         },
         else => {},
     }
@@ -1451,14 +1518,14 @@ fn bounding_inside(mut walk: BoundsWalk, list: ref String, node: i64, index: ref
         }
         let most = walk.arena.int(hi)
         let goal = walk.arena.lt(most, len)
-        return bounding_proves(walk, facts, goal, ask)
+        return bounding_proves_goal(walk, facts, goal, ask)
     }
     let position = at ?? 0
     let zero = walk.arena.int(0)
     let low = walk.arena.ge(position, zero)
     let high = walk.arena.lt(position, len)
     let goal = walk.arena.and([low, high])
-    return bounding_proves(walk, facts, goal, ask)
+    return bounding_proves_goal(walk, facts, goal, ask)
 }
 
 /// Whether the `width` elements from `at` lie inside `list`, as the cut
@@ -1475,7 +1542,7 @@ fn bounding_word_inside(mut walk: BoundsWalk, list: ref String, node: i64, at: r
     let low = walk.arena.ge(from, zero)
     let high = walk.arena.le(to, len)
     let goal = walk.arena.and([low, high])
-    return bounding_proves(walk, facts, goal, ask)
+    return bounding_proves_goal(walk, facts, goal, ask)
 }
 
 /// `base[index]`, read or written: proved where `base` is a list by name.
@@ -1483,6 +1550,8 @@ fn bounding_index(mut walk: BoundsWalk, base: ref Expr, index: ref Expr, facts: 
     let list = path_of(base, words) ?? return
     if bounding_inside(walk, list, node_key(base), index, facts, context, program, words, ask) {
         walk.proven.indices.insert(node_key(base))
+    } else {
+        walk.open += 1
     }
 }
 
@@ -1586,63 +1655,12 @@ fn bounding_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, c
             }
             return false
         },
-        Stmt::For { bindings, iter, body, .. } => {
-            let changed = bounding_changed(body, context, words)
-            let mut cands = bounding_candidates(walk, changed, facts)
-            if cands.is_empty() {
-                bounding_for(walk, bindings, iter, body, facts, cands, context, program, words, ask)
-                return false
-            }
-            let start = facts.clone()
-            let proven = walk.proven.clone()
-            let written = walk.written.clone()
-            let poisoned = walk.poisoned.clone()
-            // **Walked again without the counters that did not grow**, until
-            // every one left did: each pass takes fewer.
-            while true {
-                let added = bounding_grow(walk, cands)
-                bounding_for(walk, bindings, iter, body, facts, cands, context, program, words, ask)
-                let failed = bounding_grew(walk, cands, added)
-                if failed.is_empty() {
-                    return false
-                }
-                walk.proven = proven.clone()
-                walk.written = written.clone()
-                walk.poisoned = poisoned.clone()
-                facts.facts = start.facts.clone()
-                facts.ints = start.ints.clone()
-                cands = bounding_without(cands, failed)
-            }
+        Stmt::For { .. } => {
+            bounding_loop_stmt(walk, stmt, facts, context, program, words, ask)
             return false
         },
-        Stmt::While { cond, body } => {
-            let mut changed = bounding_changed(body, context, words)
-            bounding_extend(changed, bounding_changed_in_expr(cond, context, words))
-            let mut cands = bounding_candidates(walk, changed, facts)
-            if cands.is_empty() {
-                bounding_while(walk, cond, body, changed, cands, facts, context, program, words, ask)
-                return false
-            }
-            let start = facts.clone()
-            let proven = walk.proven.clone()
-            let written = walk.written.clone()
-            let poisoned = walk.poisoned.clone()
-            // **Walked again without the counters that did not grow**, until
-            // every one left did: each pass takes fewer.
-            while true {
-                let added = bounding_grow(walk, cands)
-                bounding_while(walk, cond, body, changed, cands, facts, context, program, words, ask)
-                let failed = bounding_grew(walk, cands, added)
-                if failed.is_empty() {
-                    return false
-                }
-                walk.proven = proven.clone()
-                walk.written = written.clone()
-                walk.poisoned = poisoned.clone()
-                facts.facts = start.facts.clone()
-                facts.ints = start.ints.clone()
-                cands = bounding_without(cands, failed)
-            }
+        Stmt::While { .. } => {
+            bounding_loop_stmt(walk, stmt, facts, context, program, words, ask)
             return false
         },
         Stmt::Return(value) => {
@@ -1650,19 +1668,372 @@ fn bounding_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, c
             bounding_expr(walk, returned, facts, context, program, words, ask)
             return true
         },
-        Stmt::Break => return true,
-        Stmt::Continue => return true,
+        Stmt::Break => {
+            bounding_turn_end(walk, facts, true, ask)
+            return true
+        },
+        Stmt::Continue => {
+            bounding_turn_end(walk, facts, true, ask)
+            return true
+        },
         Stmt::Expr(expr) => return bounding_expr_leaves(walk, expr, facts, context, program, words, ask),
     }
 }
 
+/// `for bindings in iter { body }`, with `invariant` assumed at the head of
+/// each turn (ADR-361 D10).
+fn bounding_for_stmt(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, mut facts: BoundsFacts, invariant: ref Vec[i64], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+        let changed = bounding_changed(body, context, words)
+        let mut cands = bounding_candidates(walk, changed, facts)
+        if cands.is_empty() {
+            bounding_for(walk, bindings, iter, body, facts, cands, invariant, context, program, words, ask)
+            return
+        }
+        let start = facts.clone()
+        let proven = walk.proven.clone()
+        let written = walk.written.clone()
+        let poisoned = walk.poisoned.clone()
+        // **Walked again without the counters that did not grow**, until
+        // every one left did: each pass takes fewer.
+        while true {
+            let added = bounding_grow(walk, cands)
+            bounding_for(walk, bindings, iter, body, facts, cands, invariant, context, program, words, ask)
+            let failed = bounding_grew(walk, cands, added)
+            if failed.is_empty() {
+                return
+            }
+            walk.proven = proven.clone()
+            walk.written = written.clone()
+            walk.poisoned = poisoned.clone()
+            facts.facts = start.facts.clone()
+            facts.ints = start.ints.clone()
+            cands = bounding_without(cands, failed)
+        }
+        return
+}
+
+/// `while cond { body }`, with `invariant` assumed at the head of each turn.
+fn bounding_while_stmt(mut walk: BoundsWalk, cond: ref Expr, body: ref Block, mut facts: BoundsFacts, invariant: ref Vec[i64], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+        let mut changed = bounding_changed(body, context, words)
+        bounding_extend(changed, bounding_changed_in_expr(cond, context, words))
+        let mut cands = bounding_candidates(walk, changed, facts)
+        if cands.is_empty() {
+            bounding_while(walk, cond, body, changed, cands, facts, invariant, context, program, words, ask)
+            return
+        }
+        let start = facts.clone()
+        let proven = walk.proven.clone()
+        let written = walk.written.clone()
+        let poisoned = walk.poisoned.clone()
+        // **Walked again without the counters that did not grow**, until
+        // every one left did: each pass takes fewer.
+        while true {
+            let added = bounding_grow(walk, cands)
+            bounding_while(walk, cond, body, changed, cands, facts, invariant, context, program, words, ask)
+            let failed = bounding_grew(walk, cands, added)
+            if failed.is_empty() {
+                return
+            }
+            walk.proven = proven.clone()
+            walk.written = written.clone()
+            walk.poisoned = poisoned.clone()
+            facts.facts = start.facts.clone()
+            facts.ints = start.ints.clone()
+            cands = bounding_without(cands, failed)
+        }
+        return
+}
+
+/// **A loop, and under `prove-through-loops:on` its invariant** (ADR-361 D2,
+/// D4, D10). The loop is walked as ADR-306 walks it; where that leaves a goal
+/// open, it is walked again with a candidate invariant assumed at the head of
+/// each turn: the facts before it that the loop's changes take away, an
+/// equality as its two halves (D5's guess and check, its candidates the
+/// facts the loop is reached with). Each candidate is asked where the loop is
+/// reached, and at each end of a turn, `continue` and `break` while all of
+/// them are assumed; one that fails is dropped and the loop walked again,
+/// until none fails. What that walk proves stands only where it proves more
+/// than the walk without it; its invariant is kept for `nikaia.proofs` (D7).
+fn bounding_loop_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    let start = walk.at
+    let open = walk.open
+    if !context.through_loops || walk.collecting {
+        bounding_loop_framed(walk, stmt, facts, context, program, words, ask)
+        return
+    }
+    let entry = facts.clone()
+    let proven = walk.proven.clone()
+    let written = walk.written.clone()
+    let poisoned = walk.poisoned.clone()
+    bounding_loop_framed(walk, stmt, facts, context, program, words, ask)
+    if walk.open == open {
+        return
+    }
+    // **Only a goal that reads a name the loop changes** is asked through
+    // it (D10): the names such goals left open, and of the candidates only
+    // those that read one of them.
+    let changed = bounding_loop_changed(stmt, context, words)
+    let mut wanted: collections::BTreeSet[String] = collections::BTreeSet()
+    for (name, stamp) in walk.missed {
+        if stamp > open && bounding_changes_name(changed, name) {
+            wanted.insert(name.clone())
+        }
+    }
+    if wanted.is_empty() {
+        return
+    }
+    let ways = match stmt {
+        Stmt::For { body, .. } => turn_jumps(body, words),
+        Stmt::While { body, .. } => turn_jumps(body, words),
+        else => return,
+    }
+    let mut guesses: Vec[i64] = []
+    for guess in bounding_loop_guesses(walk, stmt, entry, changed, words) {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(guess, read)
+        let mut useful = false
+        for name in read {
+            if wanted.contains(name) {
+                useful = true
+            }
+        }
+        // D4's first query: it holds where the loop is reached.
+        if useful && bounding_proves(walk, entry, guess, ask) {
+            guesses.push(guess)
+        }
+    }
+    if guesses.is_empty() {
+        return
+    }
+    // **Worth a walk only where it could pay**: a goal this loop left open
+    // that its candidates, added to what held there, prove. A guess only -
+    // what the walk then proves is what counts.
+    if !bounding_could_pay(walk, guesses, open, ask) {
+        return
+    }
+    let after = facts.clone()
+    let after_proven = walk.proven.clone()
+    let after_written = walk.written.clone()
+    let after_poisoned = walk.poisoned.clone()
+    let after_open = walk.open
+    // **The candidates settle first in walks that ask no goal** (they only
+    // carry the facts to each end of a turn), then one walk asks the goals
+    // with what is left assumed and checks it once more.
+    let mut settled = false
+    for _round in 0..<4 {
+        walk.written = written.clone()
+        walk.poisoned = poisoned.clone()
+        let mut here = entry.clone()
+        walk.collecting = true
+        walk.turns.push(BoundsTurn { guesses: guesses.clone(), failed: collections::BTreeSet(), jumps: collections::BTreeSet() })
+        bounding_loop_walk(walk, stmt, here, guesses, context, program, words, ask)
+        walk.collecting = false
+        let frame = walk.turns.pop() ?? break
+        // A way out the walk did not reach is one nothing checked.
+        if frame.jumps.len() != ways {
+            break
+        }
+        if frame.failed.is_empty() {
+            settled = true
+            break
+        }
+        let mut kept: Vec[i64] = []
+        for k in 0..<guesses.len() {
+            if !frame.failed.contains(k) {
+                kept.push(guesses[k])
+            }
+        }
+        guesses = kept
+        if guesses.is_empty() {
+            break
+        }
+    }
+    // The candidates left are asked the same once more.
+    if settled && bounding_could_pay(walk, guesses, open, ask) {
+        walk.proven = proven.clone()
+        walk.written = written.clone()
+        walk.poisoned = poisoned.clone()
+        walk.open = open
+        let mut here = entry.clone()
+        walk.turns.push(BoundsTurn { guesses: guesses.clone(), failed: collections::BTreeSet(), jumps: collections::BTreeSet() })
+        bounding_loop_walk(walk, stmt, here, guesses, context, program, words, ask)
+        let frame = walk.turns.pop() ?? BoundsTurn { guesses: [], failed: collections::BTreeSet(), jumps: collections::BTreeSet() }
+        if frame.failed.is_empty() && frame.jumps.len() == ways && bounding_proven_count(walk.proven) > bounding_proven_count(after_proven) {
+            let mut parts: Vec[(i64, String)] = []
+            for guess in guesses {
+                parts.push((guess, "guess and check".clone()))
+            }
+            walk.proven.loops.insert(start, loop_parts_text(walk.arena, LoopFound { parts: parts }))
+            facts.facts = here.facts.clone()
+            facts.ints = here.ints.clone()
+            return
+        }
+    }
+    walk.proven = after_proven
+    walk.written = after_written
+    walk.poisoned = after_poisoned
+    walk.open = after_open
+    facts.facts = after.facts.clone()
+    facts.ints = after.ints.clone()
+}
+
+/// **Whether `guesses` could pay for a walk**: a goal left open since the
+/// open count was `open` that they, added to what held there, prove.
+fn bounding_could_pay(mut walk: BoundsWalk, guesses: ref Vec[i64], open: i64, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    for missed in walk.missed_goals {
+        if missed.stamp <= open {
+            continue
+        }
+        let mut there = BoundsFacts { ints: collections::BTreeSet(), facts: missed.facts.clone() }
+        for guess in guesses {
+            there.facts.push(guess)
+        }
+        if bounding_proves(walk, there, missed.goal, ask) {
+            return true
+        }
+    }
+    return false
+}
+
+/// A loop walked once, in a frame of its own where an outer loop's
+/// invariant is being checked: its `break`s and `continue`s are its own.
+fn bounding_loop_framed(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    let none: Vec[i64] = []
+    if walk.turns.is_empty() {
+        bounding_loop_walk(walk, stmt, facts, none, context, program, words, ask)
+        return
+    }
+    walk.turns.push(BoundsTurn { guesses: [], failed: collections::BTreeSet(), jumps: collections::BTreeSet() })
+    bounding_loop_walk(walk, stmt, facts, none, context, program, words, ask)
+    walk.turns.pop()
+}
+
+fn bounding_loop_walk(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, invariant: ref Vec[i64], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    match stmt {
+        Stmt::For { bindings, iter, body, .. } => bounding_for_stmt(walk, bindings, iter, body, facts, invariant, context, program, words, ask),
+        Stmt::While { cond, body } => bounding_while_stmt(walk, cond, body, facts, invariant, context, program, words, ask),
+        else => {},
+    }
+}
+
+/// **The candidates of a loop's invariant**: the facts it is reached with
+/// that its changes take away, an equality as its two halves, none that
+/// reads a `for`'s binding.
+fn bounding_loop_guesses(mut walk: BoundsWalk, stmt: ref Stmt, entry: ref BoundsFacts, changed: ref BoundsChanged, words: ref winnow_grammar::InternerContext) -> Vec[i64] {
+    let mut bound: Vec[String] = []
+    match stmt {
+        Stmt::For { bindings, .. } => {
+            for binding in bindings {
+                bound.push(words.resolve(binding).clone())
+            }
+        },
+        else => {},
+    }
+    let mut head = entry.clone()
+    bounding_after_change(walk, head, changed)
+    let mut kept: collections::BTreeSet[i64] = collections::BTreeSet()
+    for fact in head.facts {
+        kept.insert(fact)
+    }
+    let mut out: Vec[i64] = []
+    for fact in entry.facts {
+        if kept.contains(fact) {
+            continue
+        }
+        let mut reads_bound = false
+        for name in bound {
+            if bounding_touches(walk, fact, name) {
+                reads_bound = true
+            }
+        }
+        if reads_bound {
+            continue
+        }
+        match walk.arena.at(fact) {
+            SolverTerm::Eq(a, b) => {
+                out.push(walk.arena.le(a, b))
+                out.push(walk.arena.ge(a, b))
+            },
+            else => out.push(fact),
+        }
+    }
+    return out
+}
+
+/// What a loop's turn may change: its body's changes, and a `while`'s
+/// condition's.
+fn bounding_loop_changed(stmt: ref Stmt, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> BoundsChanged {
+    let mut changed = nothing_changed()
+    match stmt {
+        Stmt::For { body, .. } => {
+            changed = bounding_changed(body, context, words)
+        },
+        Stmt::While { cond, body } => {
+            changed = bounding_changed(body, context, words)
+            bounding_extend(changed, bounding_changed_in_expr(cond, context, words))
+        },
+        else => {},
+    }
+    return changed
+}
+
+/// Whether `name`, a name of the walk, is one `changed` changes: a value, a
+/// path of fields from one, or a length.
+fn bounding_changes_name(changed: ref BoundsChanged, name: ref String) -> bool {
+    for value in changed.values {
+        if path_within(name, value) {
+            return true
+        }
+    }
+    for list in changed.lengths {
+        if name == length_of(list) {
+            return true
+        }
+    }
+    for part in changed.parts {
+        if path_within(name, part) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **An end of a turn, a `continue` or a `break`** (ADR-361 D4): each
+/// candidate of the innermost loop whose invariant is being checked is asked
+/// of what holds here; one that does not follow is dropped. `jump` where it
+/// is a `break` or a `continue`, counted by where it stands.
+fn bounding_turn_end(mut walk: BoundsWalk, facts: ref BoundsFacts, jump: bool, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    if walk.turns.is_empty() {
+        return
+    }
+    let mut frame = walk.turns.pop() ?? return
+    if jump {
+        frame.jumps.insert(walk.at)
+    }
+    for k in 0..<frame.guesses.len() {
+        if !frame.failed.contains(k) && !bounding_proves(walk, facts, frame.guesses[k], ask) {
+            frame.failed.insert(k)
+        }
+    }
+    walk.turns.push(frame)
+}
+
+fn bounding_proven_count(proven: ref BoundsProven) -> i64 {
+    return proven.indices.len() + proven.arithmetic.len() + proven.nonnegative.len() + proven.negations.len()
+}
+
 /// `while cond { body }`, with the counters `cands` taken to only grow.
-fn bounding_while(mut walk: BoundsWalk, cond: ref Expr, body: ref Block, changed: ref BoundsChanged, cands: ref Vec[String], mut facts: BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn bounding_while(mut walk: BoundsWalk, cond: ref Expr, body: ref Block, changed: ref BoundsChanged, cands: ref Vec[String], mut facts: BoundsFacts, invariant: ref Vec[i64], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
     bounding_loop_change(walk, facts, changed, cands)
+    for fact in invariant {
+        bounding_push(walk, facts, fact)
+    }
     bounding_expr(walk, cond, facts, context, program, words, ask)
     let mut inner = facts.clone()
     bounding_assume(walk, inner, cond, context, program, words)
-    bounding_block(walk, body, inner, context, program, words, ask)
+    if !bounding_block(walk, body, inner, context, program, words, ask) {
+        bounding_turn_end(walk, inner, false, ask)
+    }
     if !breaks(body, words) {
         bounding_assume_not(walk, facts, cond, context, program, words)
     }
@@ -1868,10 +2239,12 @@ fn bounding_compound(mut walk: BoundsWalk, op: ref BinaryOp?, target: ref Expr, 
     let ty = context.arithmetic[at] ?? return
     if bounding_fits(walk, operation, target, value, ty, facts, context, program, words, ask) {
         walk.proven.arithmetic.insert(at)
+    } else {
+        walk.open += 1
     }
 }
 
-fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, mut facts: BoundsFacts, cands: ref Vec[String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, mut facts: BoundsFacts, cands: ref Vec[String], invariant: ref Vec[i64], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
     bounding_expr(walk, iter, facts, context, program, words, ask)
     let changed = bounding_changed(body, context, words)
     // `for k in low..<high`: the binding, its ends as terms, and whether the
@@ -1899,6 +2272,9 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
         let bound = words.resolve(binding)
         bounding_forget(walk, inner, bound)
         inner.ints.remove(bound)
+    }
+    for fact in invariant {
+        bounding_push(walk, inner, fact)
     }
     // `for d in x.chars()` over a text binding: `d` is in its class
     // (ADR-314 D1).
@@ -1973,7 +2349,9 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
             }
         }
     }
-    bounding_block(walk, body, inner, context, program, words, ask)
+    if !bounding_block(walk, body, inner, context, program, words, ask) {
+        bounding_turn_end(walk, inner, false, ask)
+    }
     if classed != null {
         walk.loop_classes.remove(classed ?? "")
     }
@@ -2016,6 +2394,9 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
         outer.lengths.remove(list)
     }
     bounding_loop_change(walk, facts, outer, cands)
+    for fact in invariant {
+        bounding_push(walk, facts, fact)
+    }
     for list in filled {
         bounding_shift(walk, facts, length_of(list), count)
     }
@@ -2175,8 +2556,14 @@ fn bounding_expr_leaves(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsF
             bounding_expr(walk, returned, facts, context, program, words, ask)
             return true
         },
-        Expr::Break(_) => return true,
-        Expr::Continue(_) => return true,
+        Expr::Break(_) => {
+            bounding_turn_end(walk, facts, true, ask)
+            return true
+        },
+        Expr::Continue(_) => {
+            bounding_turn_end(walk, facts, true, ask)
+            return true
+        },
         Expr::Throw(value, _) => {
             bounding_expr(walk, value, facts, context, program, words, ask)
             return true
@@ -2311,8 +2698,10 @@ fn bounding_nonnegative(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsF
     let term = bounding_lin(walk, expr, facts, context, program, words) ?? return
     let zero = walk.arena.int(0)
     let goal = walk.arena.ge(term, zero)
-    if bounding_proves(walk, facts, goal, ask) {
+    if bounding_proves_goal(walk, facts, goal, ask) {
         walk.proven.nonnegative.insert(node)
+    } else {
+        walk.open += 1
     }
 }
 
@@ -2371,6 +2760,8 @@ fn bounding_binary(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: r
     if shifted != null {
         if !walk.collecting && bounding_count_fits(walk, rhs, shifted ?? "", facts, context, program, words, ask) {
             walk.proven.arithmetic.insert(at)
+        } else if !walk.collecting {
+            walk.open += 1
         }
         return
     }
@@ -2388,6 +2779,8 @@ fn bounding_binary(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: r
     let ty = context.arithmetic[at] ?? return
     if bounding_fits(walk, op, lhs, rhs, ty, facts, context, program, words, ask) {
         walk.proven.arithmetic.insert(at)
+    } else {
+        walk.open += 1
     }
 }
 
@@ -2409,8 +2802,12 @@ fn bounding_method_call(mut walk: BoundsWalk, receiver: ref Expr, method: ref St
         // **A word read lies inside where its cut does** (ADR-320 D12):
         // `0 <= at` and `at + n <= len`.
         let width = bytes_word_width(method)
-        if width > 0 && args.len() == 1 && bounding_word_inside(walk, name, node_key(receiver), args[0], width, facts, context, program, words, ask) {
-            walk.proven.indices.insert(node_key(receiver))
+        if width > 0 && args.len() == 1 {
+            if bounding_word_inside(walk, name, node_key(receiver), args[0], width, facts, context, program, words, ask) {
+                walk.proven.indices.insert(node_key(receiver))
+            } else {
+                walk.open += 1
+            }
         }
         // **A method that may change its receiver changes the paths of
         // fields from it** (ADR-306 D17): one of this program's that takes

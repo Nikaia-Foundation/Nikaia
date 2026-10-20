@@ -2408,6 +2408,9 @@ impl<'a> Checker<'a> {
             &crate::bounds::Sites::of(&self.s.facts),
             &[self.world.own, self.world.library],
             &nodes,
+            // What the checker accepts does not depend on an optimization
+            // (ADR-361 D10).
+            false,
         );
         for slot in slots {
             if proven.nonnegative.contains(&((slot.node as usize) as i64)) {

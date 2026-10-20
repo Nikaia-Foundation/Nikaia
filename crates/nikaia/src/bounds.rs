@@ -194,6 +194,7 @@ pub fn proven(
     sites: &Sites<'_>,
     ledgers: &[&crate::contracts::Ledger],
     nonnegative: &BTreeSet<i64>,
+    through_loops: bool,
 ) -> Proven {
     let Sites {
         lengths,
@@ -279,6 +280,7 @@ pub fn proven(
         around,
         whole_fields: whole_fields.iter().copied().collect(),
         array_lengths: array_lengths.iter().map(|(k, v)| (*k, *v)).collect(),
+        through_loops,
     };
     let mut bodies: Vec<&Spanned<Item>> = Vec::new();
     for item in &parsed.program.items {
@@ -320,6 +322,9 @@ pub fn proven(
                 },
             )
         });
+        // **The invariants that carried a check through a loop** go into
+        // `nikaia.proofs` (ADR-361 D4, D10).
+        crate::proofs::record_bound_invariants(&walked.loops);
         out.indices.extend(walked.indices);
         out.arithmetic.extend(walked.arithmetic);
         out.nonnegative.extend(walked.nonnegative);
@@ -377,6 +382,7 @@ pub fn proven(
                         )
                     },
                 );
+                crate::proofs::record_bound_invariants(&walked.loops);
                 out.indices.extend(walked.indices);
                 out.arithmetic.extend(walked.arithmetic);
                 out.nonnegative.extend(walked.nonnegative);
