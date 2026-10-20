@@ -6958,9 +6958,12 @@ impl<'p> Emitter<'p> {
                 // **A tail is a `return` written without the word**, so the `&`
                 // it may owe is the same one — `fn text(ref self) -> ref String
                 // { self.text }` and the `return` form are one program.
+                // A `match` or `if` whose arms all leave has no value to wrap
+                // (#696): only the arms that come to one are handed back.
                 let either = tail == Tail::Return
                     && self.returns_either(flow.function)
                     && !matches!(expr, Expr::LitNull(_))
+                    && !nikaia_std::tools::emit_ops::never_a_value(expr)
                     && !self
                         .s
                         .facts
@@ -7217,7 +7220,19 @@ impl<'p> Emitter<'p> {
                 true => "nikaia_std::either_text::either_maybe(",
                 false => "nikaia_std::either_text::either(",
             });
-            self.expr_unmixed(out, expr, depth, flow)?;
+            // `either_maybe` hands a present value in as `Some` itself, and an
+            // arm that is a `String?` already as it is: the nullable wrap of a
+            // plain arm would make the one an `Option` too many and wrap the
+            // other twice (#696).
+            let node = crate::check::value_node(expr);
+            if nullable
+                && (self.s.facts.some_tails.contains(&node)
+                    || self.s.facts.wrapped.contains_key(&node))
+            {
+                self.expr_as_written(out, expr, depth, flow)?;
+            } else {
+                self.expr_unmixed(out, expr, depth, flow)?;
+            }
             out.push(")");
             return Ok(());
         }

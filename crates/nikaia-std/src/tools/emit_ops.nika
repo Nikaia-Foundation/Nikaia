@@ -114,6 +114,40 @@ fn block_jumps_at_the_end(block: ref Block) -> bool {
     }
 }
 
+/// Whether this expression **never comes to a value**: on every path it
+/// leaves at its end - a jump, a block that ends in one, a `match` whose arms
+/// all leave, an `if` whose branches both do (#696). Such an expression is
+/// not wrapped as the value of a result.
+pub fn never_a_value(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Match { arms, .. } => {
+            let mut all = arms.len() > 0
+            for arm in arms {
+                if !never_a_value(arm.body) {
+                    all = false
+                }
+            }
+            all
+        },
+        Expr::If { then_branch, else_branch, .. } => if else_branch == null { false } else { block_never_a_value(then_branch) && block_never_a_value(else_branch ?? return false) },
+        Expr::Block(block, _) => block_never_a_value(block),
+        else => jumps_at_the_end(expr),
+    }
+}
+
+fn block_never_a_value(block: ref Block) -> bool {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        Stmt::Expr(inner) => never_a_value(inner),
+        else => false,
+    }
+}
+
 /// Whether this expression is a **number written down**, sign and all
 /// (ADR-285 D21): the negation is part of the answer rather than a wrapper
 /// around it.

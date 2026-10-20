@@ -36457,7 +36457,7 @@ impl EmitState {
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_sites, at, value);
         out.push(&before);
         let is_null = matches!(value, Expr::LitNull(_));
-        let either = call_returns_either(world.words, world.items, &scope.function) && !is_null && !self.facts.mixed_choices.contains(&node_key(value));
+        let either = call_returns_either(world.words, world.items, &scope.function) && !is_null && !self.facts.mixed_choices.contains(&node_key(value)) && !never_a_value(value);
         if either { out.push("nikaia_std::either_text::either("); }
         if self.facts.lent_returns.contains(&at) { out.push("&"); }
         host.expr(walk, out, value, depth, flow, scope)?;
@@ -40091,6 +40091,30 @@ fn block_jumps_at_the_end(block: &Block) -> bool {
         Stmt::Break => true,
         Stmt::Continue => true,
         Stmt::Expr(inner) => jumps_at_the_end(inner),
+        _ => false,
+    }
+}
+
+pub fn never_a_value(expr: &Expr) -> bool {
+    match expr {
+        Expr::Match { arms, .. } => {
+            let mut all = !arms.is_empty();
+            for arm in arms.iter() { if !never_a_value(&arm.body) { all = false; } }
+            all
+        },
+        Expr::If { then_branch, else_branch, .. } => if else_branch.is_none() { false } else { block_never_a_value(then_branch) && block_never_a_value(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false }) },
+        Expr::Block(block, _) => block_never_a_value(block),
+        _ => jumps_at_the_end(expr),
+    }
+}
+
+fn block_never_a_value(block: &Block) -> bool {
+    if block.stmts.is_empty() { return false; }
+    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        Stmt::Expr(inner) => never_a_value(inner),
         _ => false,
     }
 }
@@ -67954,7 +67978,7 @@ pub mod emit_misc {
 }
 pub mod emit_ops {
     #[allow(unused_imports)]
-    pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, a_number, only_literals, a_negation_inside, is_length, is_count, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
+    pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, never_a_value, a_number, only_literals, a_negation_inside, is_length, is_count, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
 }
 pub mod emit_out {
     #[allow(unused_imports)]

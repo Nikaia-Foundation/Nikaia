@@ -1971,3 +1971,22 @@ fn main() {
     );
     assert!(rust.contains("let q = longest(t, \"abcdefg\");"), "{rust}");
 }
+
+/// **A mixed `String?` result lowers** (#696, ADR-282 D14): a `match` whose
+/// arms all leave is not wrapped as a value, and an arm that is a `String?`
+/// already goes into `either_maybe` as it is, beside a view - on a tail, an
+/// early `return` and `return null`.
+#[test]
+fn a_mixed_nullable_text_result_lowers() {
+    let source = include_str!("../../../tests/accepted/696_mixed_nullable_text_result.nika");
+    let rust = lowered(source, Build::default());
+    assert!(!rust.contains("either(match"), "{rust}");
+    assert!(!rust.contains("either(if"), "{rust}");
+    assert!(rust.contains("either_maybe(own(a))"), "{rust}");
+    assert!(!rust.contains("Some(own("), "{rust}");
+    runs(
+        "mixed-nullable-result",
+        source,
+        "x1!\nx1\nx1 x1!\nx1 x1!\nx1 - x1!\n- x1 x1!",
+    );
+}

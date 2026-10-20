@@ -1,0 +1,57 @@
+// #696: a function whose `String?` result is fed by views and by text of its
+// own (a mixed result) lowers. A `match` whose arms all leave is not wrapped
+// as a value, and an arm of an `if` or a `match` that is a `String?` already
+// goes into the result as it is, beside a view.
+
+fn ns(name: ref String) -> ref String? {
+    if name == "self" { return null }
+    return name
+}
+
+fn own(n: ref String) -> String? {
+    if n == "" { return null }
+    return f"{n}!"
+}
+
+fn part(n: ref String, c: bool) -> String? {
+    match c {
+        true => {
+            let d = ns(n) ?? return null
+            return d
+        }
+        else => { return own(n) }
+    }
+}
+
+fn leaving_if(a: ref String, c: bool) -> String? {
+    if c { return a } else { return own(a) }
+}
+
+fn by_if(a: ref String, c: bool) -> String? {
+    if c { a } else { own(a) }
+}
+
+fn by_match(a: ref String, c: i64) -> String? {
+    match c {
+        0 => a,
+        1 => null,
+        else => own(a),
+    }
+}
+
+fn early(a: ref String, c: i64) -> String? {
+    if c == 0 { return null }
+    if c == 1 { return a }
+    let o = own(a) ?? return null
+    return o
+}
+
+fn main() {
+    let x = f"x{1}"
+    println(part(x, false) ?? "-")
+    println(part(x, true) ?? "-")
+    println(f"{leaving_if(x, true) ?? "-"} {leaving_if(x, false) ?? "-"}")
+    println(f"{by_if(x, true) ?? "-"} {by_if(x, false) ?? "-"}")
+    println(f"{by_match(x, 0) ?? "-"} {by_match(x, 1) ?? "-"} {by_match(x, 2) ?? "-"}")
+    println(f"{early(x, 0) ?? "-"} {early(x, 1) ?? "-"} {early(x, 2) ?? "-"}")
+}

@@ -234,7 +234,8 @@ impl EmitState {
             Expr::LitNull(_) => true,
             else => false,
         }
-        let either = call_returns_either(world.words, world.items, scope.function) && !is_null && !self.facts.mixed_choices.contains(node_key(value))
+        // An expression that leaves on every path has no value to wrap (#696).
+        let either = call_returns_either(world.words, world.items, scope.function) && !is_null && !self.facts.mixed_choices.contains(node_key(value)) && !never_a_value(value)
         if either {
             out.push("nikaia_std::either_text::either(")
         }
