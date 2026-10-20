@@ -1007,6 +1007,17 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                     walk.held.insert((span.start as i64, node_key(cond)), ClaimHeld::Proved)
                     return false
                 }
+                // **An `assume` is a fact from where it stands** (ADR-376 D1),
+                // as a proved `assert` is, and never a goal.
+                if prover_an_assume(func, words) {
+                    prover_expr(walk, cond, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+                    let vouched = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                    if vouched != null {
+                        scope.facts.push(vouched ?? 0)
+                    }
+                    walk.held.insert((span.start as i64, node_key(cond)), ClaimHeld::Proved)
+                    return false
+                }
                 prover_expr(walk, cond, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
                 // The `message:` a failure says, where it is text as written:
                 // a precondition checked elsewhere says it too.
@@ -1064,6 +1075,19 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
         },
         Expr::Break(_) => return true,
         Expr::Continue(_) => return true,
+        // **An `assume` holds past the `unsafe` around it** (ADR-376 D1):
+        // the block's own walk is blind, and what it vouches for is the
+        // function's from here on.
+        Expr::Unsafe(block, _) => {
+            prover_expr(walk, expr, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            for cond in prover_assumed_in_unsafe(block, words) {
+                let vouched = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                if vouched != null {
+                    scope.facts.push(vouched ?? 0)
+                }
+            }
+            return false
+        },
         else => {},
     }
     prover_expr(walk, expr, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
@@ -1665,6 +1689,38 @@ pub fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, cl
         return false
     }
     return claims.contains((span.start as i64, node_key(args[0])))
+}
+
+/// **The claims of an `unsafe` block of nothing but `assume`s** (ADR-376
+/// D1), which hold after it: a block that does anything else may change what
+/// they speak of, and keeps them to itself.
+pub fn prover_assumed_in_unsafe(block: ref Block, words: ref winnow_grammar::InternerContext) -> Vec[Expr] {
+    let mut out: Vec[Expr] = []
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Expr(inner) => {
+                match inner {
+                    Expr::Call { func, args, .. } => {
+                        if !prover_an_assume(func, words) || args.len() != 1 {
+                            return []
+                        }
+                        out.push(args[0].clone())
+                    },
+                    else => return [],
+                }
+            },
+            else => return [],
+        }
+    }
+    return out
+}
+
+/// Whether a claim the checker kept is an `assume` (ADR-376 D1).
+pub fn prover_an_assume(func: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match func {
+        Expr::Variable(name, _) => words.resolve(name) == "assume",
+        else => false,
+    }
 }
 
 /// Whether an `assert` is a type's rule the compiler gives at an entry

@@ -232,6 +232,8 @@ impl EmitState {
     }
 
     /// An `assert`: a claim checked here unless it was proved (ADR-269 D2, D4).
+    /// An `assume` (ADR-376 D2): checked as an `assert` is where the build
+    /// removes no checks, and believed where it removes them.
     /// `true` where it has been written.
     fn emit_call_assert[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         if args.len() != 1 {
@@ -239,7 +241,8 @@ impl EmitState {
         }
         match func {
             Expr::Variable(name, _) => {
-                if emit_text(world, name) != "assert" {
+                let word = emit_text(world, name)
+                if word != "assert" && word != "assume" {
                     return false
                 }
             },
@@ -251,16 +254,26 @@ impl EmitState {
             return false
         }
         let claim = self.facts.claims.get(at) ?? return false
+        let mut failed: String = "assertion_failed"
+        if claim.assumed {
+            if self.unchecked_assumes {
+                out.push("core::hint::assert_unchecked(")
+                host.expr(walk, out, condition, depth, flow, scope)
+                out.push(")")
+                return true
+            }
+            failed = "assumption_failed"
+        }
         // **A claim held before the program runs costs nothing when it does**
         // (ADR-269 D4, D5): a precondition is checked by the calls that do not
         // prove it, and every other claim here.
-        if emit_call_claim_held(claim) {
+        if !claim.assumed && emit_call_claim_held(claim) {
             out.push("()")
             return true
         }
         out.push("if !(")
         host.expr(walk, out, condition, depth, flow, scope)
-        out.push(f") {{ nikaia_std::abort::assertion_failed({rust_string(claim.written)}, ")
+        out.push(f") {{ nikaia_std::abort::{failed}({rust_string(claim.written)}, ")
         let message = emit_call_option_named(world, config, "message")
         if message.len() > 0 {
             out.push("Some(&(")

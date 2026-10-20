@@ -2091,6 +2091,8 @@ impl<'p> Emitter<'p> {
             is_std: false,
             fails,
             trusted_input: provenance == crate::contracts::Provenance::Trusted,
+            unchecked_assumes: build.bounds == crate::bounds::BoundsChecks::Removed
+                || build.overflow == crate::bounds::OverflowChecks::Removed,
             trusted_lets: plan.lets.clone(),
             escaped_lets: plan.escaped.clone(),
             fast_slots: plan.slots.clone(),

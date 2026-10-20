@@ -143,6 +143,10 @@ pub struct EmitState {
     pub fails: bool,
     /// The whole input is trusted.
     pub trusted_input: bool,
+    /// **The build removes checks** (`remove-bounds-checks:on` or
+    /// `remove-overflow-checks:on`), so an `assume` is believed, not checked
+    /// (ADR-376 D2).
+    pub unchecked_assumes: bool,
     /// The file is the entry of the package.
     pub entry: bool,
 }

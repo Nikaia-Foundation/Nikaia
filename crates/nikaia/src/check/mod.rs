@@ -3090,6 +3090,35 @@ pub fn claims_report(
 /// The prelude's claim ([ADR-269](../../docs/specification/adr/adr-269.md) D2).
 pub const ASSERT: &str = "assert";
 
+/// **`std` assumes nothing** ([ADR-376](../../docs/specification/adr/adr-376.md)
+/// D3): every `assume` of a file of `std`'s Nikaia is refused (`NK1295`). The
+/// checker keeps each `assume` as a claim; only the caller that checks `std`
+/// knows the file is `std`'s.
+pub fn refuse_assumes_in_std(checked: &mut Checked) {
+    for ((start, _), claim) in &checked.facts.claims {
+        if !claim.assumed {
+            continue;
+        }
+        let start = *start as u32;
+        checked.findings.push(Finding {
+            severity: Severity::Error,
+            span: Span {
+                start,
+                end: start + "assume".len() as u32,
+            },
+            code: "NK1295".to_string(),
+            message: "`std` assumes nothing: an `assume` is refused in `std`'s Nikaia.".to_string(),
+            notes: vec![
+                "`std`'s `unsafe` lives in the small crates of ADR-218, each listed.".to_string(),
+            ],
+            help: Some(
+                "Prove the claim with `assert`, or move the code into a listed crate.".to_string(),
+            ),
+            labels: Vec::new(),
+        });
+    }
+}
+
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
 pub fn written(parsed: &Parsed, expr: &Expr) -> String {
     nikaia_std::tools::written::written_expression(&parsed.interner, expr)

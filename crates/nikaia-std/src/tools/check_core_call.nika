@@ -48,11 +48,11 @@ fn check_core_call_is_variable(func: ref Expr) -> bool {
     }
 }
 
-/// `assert(…)` of the prelude: the name, with nothing of the program's own
-/// called that.
-fn check_core_call_the_prelude_assert(state: ref CheckState, world: ref CheckWorld, func: ref Expr) -> bool {
+/// `assert(…)` or `assume(…)` of the prelude, as `word` says: the name, with
+/// nothing of the program's own called that.
+fn check_core_call_the_prelude_claim(state: ref CheckState, world: ref CheckWorld, func: ref Expr, word: String) -> bool {
     return match func {
-        Expr::Variable(name, _) => world.words.resolve(name) == "assert" && state.lookup("assert") == null && !world.own.functions.contains_key("assert"),
+        Expr::Variable(name, _) => world.words.resolve(name) == word && state.lookup(word) == null && !world.own.functions.contains_key(word),
         else => false,
     }
 }
@@ -803,8 +803,14 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
 
 /// **The arm `Call`**: the prelude's `assert`, or a free call.
 pub fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
-    if check_core_call_the_prelude_assert(state, world, func) {
-        return check_core_an_assert(state, world, host, args, config, span)
+    if check_core_call_the_prelude_claim(state, world, func, "assert") {
+        return check_core_an_assert(state, world, host, args, config, span, false)
+    }
+    // **`unsafe { assume(claim) }`** (ADR-376 D1): read as an `assert`'s
+    // claim, written only inside `unsafe`.
+    if check_core_call_the_prelude_claim(state, world, func, "assume") {
+        state.an_assume_outside_unsafe(span)
+        return check_core_an_assert(state, world, host, args, config, span, true)
     }
     return check_core_free_call(state, world, host, func, args, config, span)
 }

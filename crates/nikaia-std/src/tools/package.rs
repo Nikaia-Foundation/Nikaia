@@ -4115,7 +4115,10 @@ fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut BoundsFacts, co
             bounding_after_change(walk, facts, &changed);
         },
         Expr::Block(block, _) => { bounding_inner_block(walk, block, facts, context, program, words, ask); },
-        Expr::Unsafe(block, _) => { bounding_inner_block(walk, block, facts, context, program, words, ask); },
+        Expr::Unsafe(block, _) => {
+            bounding_inner_block(walk, block, facts, context, program, words, ask);
+            for cond in prover_assumed_in_unsafe(block, words) { bounding_assume(walk, facts, &cond, context, program, words); }
+        },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
             bounding_expr(walk, value, facts, context, program, words, ask);
@@ -4139,7 +4142,8 @@ fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut BoundsFacts, co
             bounding_expr(walk, func, facts, context, program, words, ask);
             for arg in args.iter() { bounding_expr(walk, arg, facts, context, program, words, ask); }
             for c in config.iter() { bounding_expr(walk, &c.value, facts, context, program, words, ask); }
-            if args.len() == 1 && nikaia_std::index::or(bounding_variable(func, words), || "".into()) == "assert" { bounding_assume(walk, facts, nikaia_std::index::get(&args, 0), context, program, words); }
+            let claimed = nikaia_std::index::or(bounding_variable(func, words), || "".into());
+            if args.len() == 1 && (claimed == "assert" || claimed == "assume") { bounding_assume(walk, facts, nikaia_std::index::get(&args, 0), context, program, words); }
             let callee = callee_params(func, &context.around, words);
             for at in 0..args.len() as i64 {
                 let handed = match path_of(nikaia_std::index::get(&args, nikaia_std::index::at(at)), words) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -13914,9 +13918,9 @@ fn check_core_call_opaque(ty: &Ty) -> bool { matches!(ty, Ty::Unknown | Ty::Fn {
 
 fn check_core_call_is_variable(func: &Expr) -> bool { matches!(func, Expr::Variable(_, _)) }
 
-fn check_core_call_the_prelude_assert(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> bool {
+fn check_core_call_the_prelude_claim(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr, word: &str) -> bool {
     match func {
-        Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "assert" && state.lookup("assert").is_none() && !world.own.functions.contains_key("assert") },
+        Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == word && state.lookup(word).is_none() && !world.own.functions.contains_key(word) },
         _ => false,
     }
 }
@@ -14521,7 +14525,11 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
-    if check_core_call_the_prelude_assert(&state, world, func) { return check_core_an_assert(state, world, host, args, config, span); }
+    if check_core_call_the_prelude_claim(&state, world, func, "assert") { return check_core_an_assert(state, world, host, args, config, span, false); }
+    if check_core_call_the_prelude_claim(&state, world, func, "assume") {
+        state.an_assume_outside_unsafe(span);
+        return check_core_an_assert(state, world, host, args, config, span, true);
+    }
     check_core_free_call(state, world, host, func, args, config, span)
 }
 
@@ -16047,8 +16055,12 @@ fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckW
         if !nullable || state.reading_only { return ty; }
         return check_narrow_read_as_proved(state, expr, &name, &ty, span);
     }
-    if check_core_call_the_prelude_assert(&state, world, expr) {
+    if check_core_call_the_prelude_claim(&state, world, expr, "assert") {
         state.an_assert_of_another_shape("`assert` is a function, and is called: write `assert(cond)`".to_owned(), span);
+        return Ty::Unknown;
+    }
+    if check_core_call_the_prelude_claim(&state, world, expr, "assume") {
+        state.an_assert_of_another_shape("`assume` is a function, and is called: write `unsafe { assume(cond) }`".to_owned(), span);
         return Ty::Unknown;
     }
     let as_value: Option<Ty> = state.function_as_a_value(world, &name);
@@ -17346,7 +17358,7 @@ fn check_core_shown_operand(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, oper
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[Expr], config: &[ConfigArg], span: &Span, assumed: bool) -> Ty {
     let unit = Ty::Named { name: String::from("()"), args: vec![], view: false };
     if args.len() != 1 {
         state.an_assert_of_another_shape(format!("`assert` claims one condition, and this hands it {}", args.len() as i64), span);
@@ -17415,10 +17427,12 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
         },
         _ => { },
     }
-    let mut claimed: String = format!("assert({}", written_expression(world.words, &condition));
+    let mut word: &'static str = "assert";
+    if assumed { word = "assume"; }
+    let mut claimed: String = format!("{}({}", word, written_expression(world.words, &condition));
     if message >= 0 { claimed = format!("{}; message: {}", claimed, written_expression(world.words, &nikaia_std::index::get(&config, nikaia_std::index::at(message)).value)); }
     claimed = format!("{})", claimed);
-    state.facts.claims.insert((span.start as i64, id_of(&condition) as i64), FactClaim { held: None, written: claimed, left, right });
+    state.facts.claims.insert((span.start as i64, id_of(&condition) as i64), FactClaim { held: None, written: claimed, left, right, assumed });
     unit
 }
 
@@ -21464,6 +21478,12 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn an_assume_outside_unsafe(&mut self, span: &Span) {
+        if self.inside_unsafe { return; }
+        self.findings.push(check_refusal("NK1294", span, "`assume` is written only inside an `unsafe` block.".to_owned(), vec!["An `assume` is a claim the program vouches for: the compiler takes it as a fact without a proof, and a build that removes checks does not check it.".to_owned(), "`unsafe` marks the place that has to be right; `assert` is the claim that is proved or checked.".to_owned()], Some("Write `unsafe { assume(…) }`, or `assert(…)` to have the claim checked.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_door_that_is_not_written(&mut self, on: &Ty, written: &str, span: &Span) {
         if written != "set_after" { return; }
         let held = match on {
@@ -22231,6 +22251,7 @@ pub struct FactClaim {
     pub written: String,
     pub left: Option<String>,
     pub right: Option<String>,
+    pub assumed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22421,6 +22442,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     let mut proved: Vec<String> = vec![];
     let mut through_loops = 0;
     let mut preconditions: Vec<String> = vec![];
+    let mut assumed: Vec<String> = vec![];
     let mut mains: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut line = 1;
     let mut at: i64 = 0;
@@ -22433,6 +22455,10 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
                 if c == b'\x0a' { line = line + 1; }
             }
             at = start;
+        }
+        if claim.assumed {
+            assumed.push(format!("  {}:{}  {}  assumed: a fact the program vouches for in `unsafe`, checked only where the build removes no checks", path, line, claim.written));
+            continue;
         }
         let how = check_claim_held((claim.held).as_ref());
         let row = format!("  {}:{}  {}  {}", path, line, claim.written, how);
@@ -22461,7 +22487,9 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     let done = proved.len() as i64 + preconditions.len() as i64;
     let mut looped: String = String::from("");
     if through_loops > 0 { looped = format!(", through a loop {}", through_loops); }
-    let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {})\n", path, unproved + arrives.len() as i64 + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64);
+    let mut vouched: String = String::from("");
+    if !assumed.is_empty() { vouched = format!("; assumed {}", assumed.len() as i64); }
+    let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {}){}\n", path, unproved + arrives.len() as i64 + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64, vouched);
     let mut red: Vec<String> = vec![];
     red.extend(refused);
     red.extend(at_run_time);
@@ -22471,6 +22499,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     green.extend(preconditions);
     out.push_str(&check_report_rows(&red, "\x1b[31m", colour));
     out.push_str(&check_report_rows(&arrives, "\x1b[94m", colour));
+    out.push_str(&check_report_rows(&assumed, "\x1b[33m", colour));
     out.push_str(&check_report_rows(&green, "\x1b[32m", colour));
     out
 }
@@ -24427,7 +24456,7 @@ impl CheckState {
         Some(out)
     }
     pub fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
-        let declared = self.lookup(name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || imports_a_package(view, name);
+        let declared = self.lookup(name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || name == "assume" || imports_a_package(view, name);
         if declared { return; }
         let mut known: Vec<String> = vec![];
         for key in world.own.functions.keys() { if !key.contains("::") { known.push(key.to_owned()); } }
@@ -36273,7 +36302,8 @@ impl EmitState {
         match func {
             Expr::Variable(name, _) => {
                 let name = *name;
-                if emit_text(world, name) != "assert" { return Ok(false); }
+                let word = emit_text(world, name);
+                if word != "assert" && word != "assume" { return Ok(false); }
             },
             _ => { return Ok(false); },
         }
@@ -36281,13 +36311,23 @@ impl EmitState {
         let at = (flow.statement, node_key(&condition));
         if !self.facts.claims.contains_key(&at) { return Ok(false); }
         let claim = match self.facts.claims.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
-        if emit_call_claim_held(&claim) {
+        let mut failed: &'static str = "assertion_failed";
+        if claim.assumed {
+            if self.unchecked_assumes {
+                out.push("core::hint::assert_unchecked(");
+                host.expr(walk, out, &condition, depth, flow, scope)?;
+                out.push(")");
+                return Ok(true);
+            }
+            failed = "assumption_failed";
+        }
+        if !claim.assumed && emit_call_claim_held(&claim) {
             out.push("()");
             return Ok(true);
         }
         out.push("if !(");
         host.expr(walk, out, &condition, depth, flow, scope)?;
-        out.push(&format!(") {{ nikaia_std::abort::assertion_failed({}, ", rust_string(&claim.written)));
+        out.push(&format!(") {{ nikaia_std::abort::{}({}, ", failed, rust_string(&claim.written)));
         let message = emit_call_option_named(world, config, "message");
         if !message.is_empty() {
             out.push("Some(&(");
@@ -41708,6 +41748,7 @@ pub struct EmitState {
     pub is_std: bool,
     pub fails: bool,
     pub trusted_input: bool,
+    pub unchecked_assumes: bool,
     pub entry: bool,
 }
 
@@ -54932,6 +54973,13 @@ fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &mut 
                     walk.held.insert((span.start as i64, node_key(&cond)), ClaimHeld::Proved);
                     return false;
                 }
+                if prover_an_assume(func, words) {
+                    prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+                    let vouched = claim_term(&cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                    if vouched.is_some() { scope.facts.push(nikaia_std::index::or(vouched, || 0)); }
+                    walk.held.insert((span.start as i64, node_key(&cond)), ClaimHeld::Proved);
+                    return false;
+                }
                 prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
                 let message = prover_message(config, words);
                 let names = claim_names_in(&cond, words, holes_of);
@@ -54978,6 +55026,14 @@ fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &mut 
         },
         Expr::Break(_) => { return true; },
         Expr::Continue(_) => { return true; },
+        Expr::Unsafe(block, _) => {
+            prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            for cond in prover_assumed_in_unsafe(block, words) {
+                let vouched = claim_term(&cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                if vouched.is_some() { scope.facts.push(nikaia_std::index::or(vouched, || 0)); }
+            }
+            return false;
+        },
         _ => { },
     }
     prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
@@ -55144,7 +55200,7 @@ fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &Prove
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, unaliased);
             if callee.is_some() {
-                let __keep_71058 = nikaia_std::tether::Keep::new();
+                let __keep_72612 = nikaia_std::tether::Keep::new();
                 prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition);
             }
         },
@@ -55416,6 +55472,33 @@ pub fn prover_an_assert_call(func: &Expr, args: &[Expr], span: &Span, claims: &c
     let named = matches!(func, Expr::Variable(_, _));
     if !named || args.len() != 1 { return false; }
     claims.contains(&(span.start as i64, node_key(nikaia_std::index::get(&args, 0))))
+}
+
+pub fn prover_assumed_in_unsafe(block: &Block, words: &winnow_grammar::InternerContext) -> Vec<Expr> {
+    let mut out: Vec<Expr> = vec![];
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Expr(inner) => {
+                match inner {
+                    Expr::Call { func, args, .. } => {
+                        let func = nikaia_std::boxed::open(func);
+                        if !prover_an_assume(func, words) || args.len() != 1 { return vec![]; }
+                        out.push((*nikaia_std::index::get(&args, 0)).clone());
+                    },
+                    _ => { return vec![]; },
+                }
+            },
+            _ => { return vec![]; },
+        }
+    }
+    out
+}
+
+pub fn prover_an_assume(func: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+    match func {
+        Expr::Variable(name, _) => { let name = *name; words.resolve(name) == "assume" },
+        _ => false,
+    }
 }
 
 fn prover_a_given_rule(config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> bool {
@@ -69983,7 +70066,7 @@ pub mod prover_state {
 }
 pub mod prover_walk {
     #[allow(unused_imports)]
-    pub use super::{ProverWalk, prover_bodies, prover_an_assert_call};
+    pub use super::{ProverWalk, prover_bodies, prover_an_assert_call, prover_assumed_in_unsafe, prover_an_assume};
 }
 pub mod render {
     #[allow(unused_imports)]

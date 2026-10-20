@@ -66,6 +66,8 @@ pub struct FactClaim {
     pub written: String,
     pub left: String?,
     pub right: String?,
+    /// **An `assume`** (ADR-376): a fact from where it stands, never a goal.
+    pub assumed: bool,
 }
 
 pub struct CheckFacts {
@@ -545,6 +547,7 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     let mut proved: Vec[String] = []
     let mut through_loops = 0
     let mut preconditions: Vec[String] = []
+    let mut assumed: Vec[String] = []
     let mut mains: collections::BTreeSet[String] = collections::BTreeSet()
     let mut line = 1
     let mut at = 0
@@ -560,6 +563,11 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
                 }
             }
             at = start
+        }
+        // **Every `assume` is listed** (ADR-376 D3): vouched for, not proved.
+        if claim.assumed {
+            assumed.push(f"  {path}:{line}  {claim.written}  assumed: a fact the program vouches for in `unsafe`, checked only where the build removes no checks")
+            continue
         }
         let how = check_claim_held(claim.held)
         let row = f"  {path}:{line}  {claim.written}  {how}"
@@ -602,7 +610,11 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     if through_loops > 0 {
         looped = f", through a loop {through_loops}"
     }
-    let mut out: String = f"asserts in {path}: {unproved + arrives.len() + done} - not proved {unproved} (refused {refused.len()}, checked at run time {at_run_time.len()}, checked by a test {by_the_test.len()}); checked where the words arrive {arrives.len()}; proved {done} (proved {proved.len()}{looped}, preconditions proved at every call {preconditions.len()})\n"
+    let mut vouched: String = ""
+    if assumed.len() > 0 {
+        vouched = f"; assumed {assumed.len()}"
+    }
+    let mut out: String = f"asserts in {path}: {unproved + arrives.len() + done} - not proved {unproved} (refused {refused.len()}, checked at run time {at_run_time.len()}, checked by a test {by_the_test.len()}); checked where the words arrive {arrives.len()}; proved {done} (proved {proved.len()}{looped}, preconditions proved at every call {preconditions.len()}){vouched}\n"
     let mut red: Vec[String] = []
     red.extend(refused)
     red.extend(at_run_time)
@@ -612,6 +624,7 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     green.extend(preconditions)
     out.push_str(check_report_rows(red, "\x1b[31m", colour))
     out.push_str(check_report_rows(arrives, "\x1b[94m", colour))
+    out.push_str(check_report_rows(assumed, "\x1b[33m", colour))
     out.push_str(check_report_rows(green, "\x1b[32m", colour))
     return out
 }

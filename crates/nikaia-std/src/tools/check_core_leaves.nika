@@ -428,8 +428,9 @@ fn check_core_shown_operand(world: ref CheckWorld, operand: ref Expr) -> String?
 
 /// **`assert(condition; message: text)`** (ADR-269): one `bool` condition that
 /// changes nothing (`NK1194`), an optional text message, and the claim as
-/// written kept for the run.
-pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+/// written kept for the run. An `assume` (ADR-376 D1), as `assumed` says, is
+/// read the same way and kept as one.
+pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span, assumed: bool) -> Ty sync {
     let unit = Ty::Named { name: "()", args: [], view: false }
     if args.len() != 1 {
         state.an_assert_of_another_shape(f"`assert` claims one condition, and this hands it {args.len()}", span)
@@ -507,11 +508,15 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         else => {}
     }
-    let mut claimed: String = f"assert({written_expression(world.words, condition)}"
+    let mut word: String = "assert"
+    if assumed {
+        word = "assume"
+    }
+    let mut claimed: String = f"{word}({written_expression(world.words, condition)}"
     if message >= 0 {
         claimed = f"{claimed}; message: {written_expression(world.words, config[message].value)}"
     }
     claimed = f"{claimed})"
-    state.facts.claims.insert((span.start as i64, id_of(condition) as i64), FactClaim { held: null, written: claimed, left: left, right: right })
+    state.facts.claims.insert((span.start as i64, id_of(condition) as i64), FactClaim { held: null, written: claimed, left: left, right: right, assumed: assumed })
     return unit
 }

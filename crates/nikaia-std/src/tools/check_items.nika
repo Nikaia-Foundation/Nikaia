@@ -594,7 +594,7 @@ impl CheckState {
 
     /// `NK1117`: a function called by a name nothing declares.
     pub fn a_function_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, name: ref String, span: ref Span) {
-        let declared = self.lookup(name) != null || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || imports_a_package(view, name)
+        let declared = self.lookup(name) != null || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || name == "assume" || imports_a_package(view, name)
         if declared {
             return
         }

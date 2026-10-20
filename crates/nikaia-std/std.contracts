@@ -442,6 +442,17 @@ sync = true
 touches = []
 signature = "(cond: bool; message: ref String = \"\")"
 
+# Claim that `cond` holds whenever this line is reached, vouched for by the
+# program rather than proved: written only inside `unsafe`, a fact from where
+# it stands. Checked as an `assert` is in a build that removes no checks, and
+# not checked at all in one that does, where a false claim is undefined
+# behaviour (ADR-376).
+[fn."assume"]
+pub = true
+sync = true
+touches = []
+signature = "(cond: bool; message: ref String = \"\")"
+
 # Write text to standard output, with no line break after it.
 [fn."print"]
 pub = true

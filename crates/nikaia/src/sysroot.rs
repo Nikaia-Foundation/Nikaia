@@ -362,7 +362,7 @@ pub fn lower_std_module(path: &Path) -> Result<String> {
     let beside: Vec<&crate::parser::Parsed> = Vec::new();
     let units: Vec<&crate::parser::Parsed> = vec![&parsed];
     let own = crate::contracts::Ledger::infer_package(&units, &library);
-    let checked = crate::check::check_against(
+    let mut checked = crate::check::check_against(
         &parsed,
         &beside,
         &own,
@@ -371,6 +371,7 @@ pub fn lower_std_module(path: &Path) -> Result<String> {
         &crate::check::Newly::default(),
         &crate::assets::Reads::none(),
     );
+    crate::check::refuse_assumes_in_std(&mut checked);
     let refusals: Vec<&crate::check::Finding> = checked
         .findings
         .iter()
@@ -528,7 +529,7 @@ pub fn lower_tools_files_on(
             .collect();
         // **Checked before it is lowered** (Part III C.1), with the package
         // beside it.
-        let checked = crate::check::check_against(
+        let mut checked = crate::check::check_against(
             unit,
             &beside,
             &own,
@@ -537,6 +538,7 @@ pub fn lower_tools_files_on(
             &crate::check::Newly::default(),
             &crate::assets::Reads::none(),
         );
+        crate::check::refuse_assumes_in_std(&mut checked);
         let refusals: Vec<&crate::check::Finding> = checked
             .findings
             .iter()

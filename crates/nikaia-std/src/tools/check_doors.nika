@@ -136,6 +136,14 @@ impl CheckState {
         self.findings.push(check_refusal("NK1143", span, f"`{name}` is a C function, so calling it has to happen inside an `unsafe` block.", ["C isn't memory-safe, so every call into it is marked where it happens.".clone(), "Everything inside the block is still checked as usual.".clone()], f"Write `unsafe {{ {name}(…) }}`."))
     }
 
+    /// `NK1294`: an `assume` outside an `unsafe` block (ADR-376 D1).
+    pub fn an_assume_outside_unsafe(ref mut self, span: ref Span) sync {
+        if self.inside_unsafe {
+            return
+        }
+        self.findings.push(check_refusal("NK1294", span, "`assume` is written only inside an `unsafe` block.".clone(), ["An `assume` is a claim the program vouches for: the compiler takes it as a fact without a proof, and a build that removes checks does not check it.".clone(), "`unsafe` marks the place that has to be right; `assert` is the claim that is proved or checked.".clone()], "Write `unsafe { assume(…) }`, or `assert(…)` to have the claim checked.".clone()))
+    }
+
     /// `NK2208`: `set_after`, which is written `set(…; after: …)`.
     pub fn a_door_that_is_not_written(ref mut self, on: ref Ty, written: ref String, span: ref Span) sync {
         if written != "set_after" {

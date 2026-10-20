@@ -2244,7 +2244,13 @@ fn bounding_expr(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFacts, c
             bounding_after_change(walk, facts, changed)
         },
         Expr::Block(block, _) => bounding_inner_block(walk, block, facts, context, program, words, ask),
-        Expr::Unsafe(block, _) => bounding_inner_block(walk, block, facts, context, program, words, ask),
+        Expr::Unsafe(block, _) => {
+            bounding_inner_block(walk, block, facts, context, program, words, ask)
+            // **An `assume` holds past the `unsafe` around it** (ADR-376 D1).
+            for cond in prover_assumed_in_unsafe(block, words) {
+                bounding_assume(walk, facts, cond, context, program, words)
+            }
+        },
         Expr::Match { value, arms, .. } => {
             bounding_expr(walk, value, facts, context, program, words, ask)
             let mut changed = nothing_changed()
@@ -2274,8 +2280,10 @@ fn bounding_expr(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFacts, c
                 bounding_expr(walk, c.value, facts, context, program, words, ask)
             }
             // **What an `assert` claims holds after it** (ADR-269 D4): the
-            // program stops where it does not.
-            if args.len() == 1 && (bounding_variable(func, words) ?? "") == "assert" {
+            // program stops where it does not. An `assume` is vouched for
+            // (ADR-376 D1).
+            let claimed = bounding_variable(func, words) ?? ""
+            if args.len() == 1 && (claimed == "assert" || claimed == "assume") {
                 bounding_assume(walk, facts, args[0], context, program, words)
             }
             let callee = callee_params(func, context.around, words)

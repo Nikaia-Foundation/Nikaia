@@ -67,6 +67,21 @@ pub fn assertion_failed(
     std::panic!("{}", failed_claim(written, message, operands))
 }
 
+/// **A false `assume`, in a build that removes no checks**
+/// ([ADR-376](../../../docs/specification/adr/adr-376.md) D2): stops as a false
+/// `assert` does, saying it was an assumption.
+#[cold]
+#[track_caller]
+pub fn assumption_failed(
+    written: &str,
+    message: Option<&dyn std::fmt::Display>,
+    operands: &[(&str, Option<String>)],
+) -> ! {
+    let mut text = failed_claim(written, message, operands);
+    text.replace_range(.."assertion failed".len(), "assumption failed");
+    std::panic!("{text}")
+}
+
 /// The text [`assertion_failed`] stops with.
 fn failed_claim(
     written: &str,

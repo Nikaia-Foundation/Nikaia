@@ -355,8 +355,12 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
         return check_narrow_read_as_proved(state, expr, name, ty, span)
     }
     // **`assert` is called** (ADR-269 D2).
-    if check_core_call_the_prelude_assert(state, world, expr) {
+    if check_core_call_the_prelude_claim(state, world, expr, "assert") {
         state.an_assert_of_another_shape("`assert` is a function, and is called: write `assert(cond)`".clone(), span)
+        return Ty::Unknown
+    }
+    if check_core_call_the_prelude_claim(state, world, expr, "assume") {
+        state.an_assert_of_another_shape("`assume` is a function, and is called: write `unsafe { assume(cond) }`".clone(), span)
         return Ty::Unknown
     }
     // **A function or a type's constructor named as a value** (#502, #507).
