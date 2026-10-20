@@ -1156,8 +1156,8 @@ fn main() {
 
 /// **A field on the left of `??` is a place, as a name is** (ADR-279 D5).
 /// Over a `ref self`, `self.parameter ?? "none"` handed to a reading position
-/// lends the field; bound by a `let`, it is a part of a loan handed over,
-/// `NK2106`. Unrecorded, both reached `rustc` as *cannot move out of
+/// lends the field; bound by a `let`, the name is a view of the field too
+/// (#735), and the program runs. Unrecorded, both reached `rustc` as *cannot move out of
 /// `self.parameter`* (found moving the ledger's records into Nikaia, ADR-294).
 #[test]
 fn a_field_on_the_left_of_a_coalesce_is_a_place() {
@@ -1189,7 +1189,8 @@ fn main() {
         "        let parameter = self.parameter ?? \"none\"\n        return shown(parameter)",
     );
     let found = findings(&kept);
-    assert!(found.iter().any(|f| f.code == "NK2106"), "{found:#?}");
+    assert!(!found.iter().any(|f| f.code == "NK2106"), "{found:#?}");
+    assert!(lowered(&kept).contains("self.parameter.as_deref()"));
 }
 
 /// **The other positions that only read a `??`** (issue #98): an
