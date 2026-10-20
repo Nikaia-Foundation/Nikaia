@@ -68,6 +68,45 @@ fn emit_call_option_named(world: ref EmitWorld, config: ref Vec[ConfigArg], want
     return found
 }
 
+/// The bytes of `bytes::ByteSet([…])` written with one to three byte
+/// literals, the set `find_all` searches for without a way to look up
+/// (ADR-375 D2); none for any other argument.
+fn emit_call_few_bytes(world: ref EmitWorld, arg: ref Expr) -> Vec[Expr] {
+    let mut few: Vec[Expr] = []
+    match arg {
+        Expr::Call { func, args, .. } => {
+            let named = match func {
+                Expr::Path(segments, _) => unaliased_in(world.aliases, emit_arg_joined(world, segments)),
+                else => "",
+            }
+            if named != "bytes::ByteSet" || args.len() != 1 {
+                return few
+            }
+            match args[0] {
+                Expr::ListLit { items, .. } => {
+                    for item in items {
+                        match item {
+                            Expr::LitChar(_, _) => few.push(item.clone()),
+                            Expr::LitInt { negative, .. } => {
+                                if !negative {
+                                    few.push(item.clone())
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                    if few.len() != items.len() || few.len() > 3 {
+                        few.clear()
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return few
+}
+
 /// Which hull constructor a name is: the three types whose hull a program
 /// writes by calling their name (ADR-281 D2).
 fn emit_call_is_a_hull(name: ref String) -> bool {
@@ -304,7 +343,10 @@ impl EmitState {
             Expr::Binary { lhs, rhs, .. } => {
                 self.emit_call_operand(walk, out, host, claim.left, lhs, depth, flow, scope)
                 self.emit_call_operand(walk, out, host, claim.right, rhs, depth, flow, scope)
+                let around = walk.believing
+                walk.believing = true
             },
+                walk.believing = around
             else => {},
         }
         out.push("]) }")
@@ -846,6 +888,34 @@ impl EmitState {
             declared = self.facts.collected_into.contains(node_key(on))
         }
         if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(on_node) {
+        // **A set of one to three bytes written at `find_all` is fixed when the
+        // program is compiled** (ADR-375 D2): `nikaia_std::bytes::Few`, which
+        // compares each block with its bytes directly, with no way to look up
+        // at each block.
+        if name == "find_all" && args.len() == 1 && emit_candidates(self.own_contracts, "find_all").len() == 0 {
+            let few = emit_call_few_bytes(world, args[0])
+            if few.len() > 0 {
+                self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+                out.push(".find_all(nikaia_std::bytes::Few([")
+                let mut first = true
+                for item in few {
+                    if !first {
+                        out.push(", ")
+                    }
+                    first = false
+                    host.expr(walk, out, item, depth, flow, scope)
+                }
+                out.push("]), ")
+                let from = emit_call_option_named(world, config, "from")
+                if from.len() > 0 {
+                    host.expr(walk, out, from[0], depth, flow, scope)
+                } else {
+                    out.push("0")
+                }
+                out.push(")")
+                return
+            }
+        }
             out.push("::<Vec<_>>")
         }
         if kind == 0 {

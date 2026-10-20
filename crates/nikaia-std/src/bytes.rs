@@ -19,7 +19,7 @@
 
 use shared_bytes::Shared;
 
-pub use crate::byteset::{ByteSet, FindAll, Needle, Split, split};
+pub use crate::byteset::{Blocks, ByteSet, Few, FindAll, Needle, Searched, Split, split};
 
 /// A run of bytes that several holders may share
 /// ([ADR-283](../../../docs/specification/adr/adr-283.md) D20, ADR-373 D1):
@@ -106,8 +106,8 @@ impl Bytes {
     /// Every position at or after `from` that holds a byte of `set`, rising
     /// (ADR-375 D3).
     #[inline]
-    pub fn find_all(&self, set: impl Into<ByteSet>, from: i64) -> FindAll<'_> {
-        FindAll::new(self.as_slice(), set.into(), from)
+    pub fn find_all<S: Searched>(&self, set: S, from: i64) -> FindAll<'_, S::Blocks> {
+        FindAll::new(self.as_slice(), set.blocks(), from)
     }
 
     /// The pieces between the bytes of `set`, by text's `split` rules
@@ -169,7 +169,7 @@ pub trait ByteReads {
     fn find<N: Needle>(&self, byte: N, from: i64) -> Option<i64>;
     /// Every position of a byte of `set` from `from`: [`Bytes::find_all`].
     /// (`split` is [`split`]: a slice's own `split` would be the one called.)
-    fn find_all(&self, set: impl Into<ByteSet>, from: i64) -> FindAll<'_>;
+    fn find_all<S: Searched>(&self, set: S, from: i64) -> FindAll<'_, S::Blocks>;
     /// The 4 bytes from `at`, least significant first: [`Bytes::u32_le`].
     fn u32_le(&self, at: i64) -> u32;
     /// The 4 bytes from `at`, most significant first: [`Bytes::u32_be`].
@@ -196,8 +196,8 @@ impl ByteReads for [u8] {
     }
 
     #[inline]
-    fn find_all(&self, set: impl Into<ByteSet>, from: i64) -> FindAll<'_> {
-        FindAll::new(self, set.into(), from)
+    fn find_all<S: Searched>(&self, set: S, from: i64) -> FindAll<'_, S::Blocks> {
+        FindAll::new(self, set.blocks(), from)
     }
 
     #[inline]
@@ -473,5 +473,112 @@ mod tests {
         assert_eq!(bytes.to_vec(), vec![7u8]);
         assert_eq!(Bytes::new().len(), 0);
         assert_eq!((1u8..=3).collect::<Bytes>().to_vec(), vec![1, 2, 3]);
+    }
+}
+
+/// **Two cuts compared, `a[i..<j] == b[k..<l]`** (#776 step 4 of the 1BRC
+/// work): the lowering writes `nikaia_std::same!(a, b)` for an `==` or `!=`
+/// whose sides are both cuts. It means `a == b`, whatever the types; two runs
+/// of bytes, or two texts, are compared a word at a time in the caller's
+/// code, so that a compare in a hot loop is no call into `memcmp`, whose
+/// clobbered registers the loop would pay for on every row, even where the
+/// call is taken on few of them (measured on `benches/brc`: 4.4 instructions
+/// a row for a call kept on a cold path).
+#[doc(hidden)]
+#[macro_export]
+macro_rules! same {
+    ($a:expr, $b:expr) => {{
+        #[allow(unused_imports)]
+        use $crate::bytes::{SameAny as _, SameBytes as _};
+        (&$crate::bytes::Same(&$a, &$b)).same()
+    }};
+}
+
+/// The two sides of a [`same!`].
+#[doc(hidden)]
+pub struct Same<'a, A: ?Sized, B: ?Sized>(pub &'a A, pub &'a B);
+
+/// [`same!`] of two runs of bytes or two texts: a word at a time.
+#[doc(hidden)]
+pub trait SameBytes {
+    fn same(&self) -> bool;
+}
+
+impl SameBytes for Same<'_, &[u8], &[u8]> {
+    #[inline(always)]
+    fn same(&self) -> bool {
+        same_bytes(self.0, self.1)
+    }
+}
+
+impl SameBytes for Same<'_, &str, &str> {
+    #[inline(always)]
+    fn same(&self) -> bool {
+        same_bytes(self.0.as_bytes(), self.1.as_bytes())
+    }
+}
+
+/// [`same!`] of anything else: `==` itself.
+#[doc(hidden)]
+pub trait SameAny {
+    fn same(&self) -> bool;
+}
+
+impl<A: ?Sized + PartialEq<B>, B: ?Sized> SameAny for &Same<'_, A, B> {
+    #[inline(always)]
+    fn same(&self) -> bool {
+        *self.0 == *self.1
+    }
+}
+
+/// Whether `a` and `b` hold the same bytes: a word at a time, the last word
+/// read where it ends; below a word, two overlapping halves or three bytes.
+#[inline(always)]
+pub fn same_bytes(a: &[u8], b: &[u8]) -> bool {
+    let n = a.len();
+    if n != b.len() {
+        return false;
+    }
+    if let (Some(x), Some(y)) = (a.last_chunk::<8>(), b.last_chunk::<8>()) {
+        let (words_a, _) = a.as_chunks::<8>();
+        let (words_b, _) = b.as_chunks::<8>();
+        return words_a
+            .iter()
+            .zip(words_b)
+            .all(|(p, q)| u64::from_ne_bytes(*p) == u64::from_ne_bytes(*q))
+            && u64::from_ne_bytes(*x) == u64::from_ne_bytes(*y);
+    }
+    if let (Some(x), Some(y)) = (a.first_chunk::<4>(), b.first_chunk::<4>()) {
+        let (p, q) = (a.last_chunk::<4>(), b.last_chunk::<4>());
+        return u32::from_ne_bytes(*x) == u32::from_ne_bytes(*y) && p == q;
+    }
+    match n {
+        0 => true,
+        _ => a[0] == b[0] && a[n / 2] == b[n / 2] && a[n - 1] == b[n - 1],
+    }
+}
+
+#[cfg(test)]
+mod same_tests {
+    use super::same_bytes;
+
+    /// Every length to 200, equal and with each single byte changed, against
+    /// `==`.
+    #[test]
+    fn same_bytes_is_equality() {
+        for n in 0..200 {
+            let a: Vec<u8> = (0..n).map(|i| (i * 7 + 3) as u8).collect();
+            assert!(same_bytes(&a, &a.clone()));
+            for at in 0..n {
+                let mut b = a.clone();
+                b[at] ^= 0x20;
+                assert!(!same_bytes(&a, &b), "{n} {at}");
+            }
+            assert!(!same_bytes(&a, &a[..n.saturating_sub(1)]) || n == 0);
+        }
+        assert!(crate::same!("abc", "abc"));
+        assert!(!crate::same!(&b"abc"[..], &b"abd"[..]));
+        assert!(crate::same!(&[1i64, 2][..], &[1i64, 2][..]));
+        assert!(crate::same!(String::from("x"), "x"));
     }
 }

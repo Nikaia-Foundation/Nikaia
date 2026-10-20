@@ -47,6 +47,23 @@ fn emit_flow_compared(op: BinaryOp) -> String {
     }
 }
 
+/// Whether an expression is a cut, `x[i..<j]`.
+fn emit_flow_is_cut(node: ref Expr) -> bool {
+    return match node {
+        Expr::Index { index, .. } => match index {
+            Expr::Range { .. } => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// Whether a type the checker named for an operator is a whole number.
+fn emit_flow_is_whole(ty: ref String) -> bool {
+    let signed = ty == "i8" || ty == "i16" || ty == "i32" || ty == "i64" || ty == "i128" || ty == "isize"
+    return signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
+}
+
 fn emit_flow_wrapping(op: BinaryOp) -> String {
     return match op {
         BinaryOp::Add => "wrapping_add",
@@ -412,6 +429,26 @@ impl EmitState {
             out.push("))")
             return
         }
+        // **The arithmetic of a believed `assume` is exact** (ADR-376 D2): a
+        // claim whose arithmetic overflows is false, and a false believed
+        // claim is undefined behaviour, so `+`, `-` and `*` in it are written
+        // as operations that do not overflow, without their check.
+        if walk.believing && !wide.widen && !wide.inferred && (op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul) && self.believed_arithmetic.contains_key(site) {
+            let ty = (self.believed_arithmetic.get(site) ?? "").clone()
+            if emit_flow_is_whole(ty) {
+                let name = match op {
+                    BinaryOp::Add => "unchecked_add",
+                    BinaryOp::Sub => "unchecked_sub",
+                    else => "unchecked_mul",
+                }
+                out.push(f"<{ty}>::{name}(")
+                host.expr(walk, out, lhs, depth, wide, scope)
+                out.push(", ")
+                host.expr(walk, out, rhs, depth, wide, scope)
+                out.push(")")
+                return
+            }
+        }
         // **An operation proved to stay inside its type** is written without its
         // check, naming the type the proof was about (ADR-306 D10).
         if self.proven_arithmetic.contains_key(site) && !wide.widen && !wide.inferred {
@@ -456,6 +493,22 @@ impl EmitState {
         if number_right {
             self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)
             out.push(f" {symbol} nikaia_std::num::value(")
+            host.expr(walk, out, rhs, depth, wide, scope)
+            out.push(")")
+            return
+        }
+        // **Two cuts compared are compared in place** (`nikaia_std::same!`):
+        // what `==` means, and two short runs of bytes or texts a word at a
+        // time, without the call into `memcmp` that a hot loop pays for in
+        // the registers the call clobbers.
+        let viewed = self.facts.compared_views.contains((site, "lhs".clone())) || self.facts.compared_views.contains((site, "rhs".clone()))
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && !viewed && emit_flow_is_cut(lhs) && emit_flow_is_cut(rhs) {
+            if op == BinaryOp::Ne {
+                out.push("!")
+            }
+            out.push("nikaia_std::same!(")
+            host.expr(walk, out, lhs, depth, wide, scope)
+            out.push(", ")
             host.expr(walk, out, rhs, depth, wide, scope)
             out.push(")")
             return

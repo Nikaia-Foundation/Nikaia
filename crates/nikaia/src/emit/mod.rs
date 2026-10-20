@@ -2103,6 +2103,13 @@ impl<'p> Emitter<'p> {
             trusted_input: provenance == crate::contracts::Provenance::Trusted,
             unchecked_assumes: build.bounds == crate::bounds::BoundsChecks::Removed
                 || build.overflow == crate::bounds::OverflowChecks::Removed,
+            // **The arithmetic of a believed `assume` is exact** (ADR-376 D2).
+            believed_arithmetic: match build.bounds == crate::bounds::BoundsChecks::Removed
+                || build.overflow == crate::bounds::OverflowChecks::Removed
+            {
+                true => propagation.arithmetic.clone(),
+                false => Default::default(),
+            },
             trusted_lets: plan.lets.clone(),
             escaped_lets: plan.escaped.clone(),
             fast_slots: plan.slots.clone(),

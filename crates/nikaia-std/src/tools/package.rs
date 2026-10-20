@@ -36999,6 +36999,38 @@ impl EmitState {
                     }
                 }
             },
+fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Expr> {
+    let mut few: Vec<Expr> = vec![];
+    match arg {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let named = match func {
+                Expr::Path(segments, _) => unaliased_in(world.aliases, &emit_arg_joined(world, segments)),
+                _ => String::from(""),
+            };
+            if named != "bytes::ByteSet" || args.len() != 1 { return few; }
+            match nikaia_std::index::get(&args, 0) {
+                Expr::ListLit { items, .. } => {
+                    for item in items.iter() {
+                        match item {
+                            Expr::LitChar(_, _) => { few.push(item.clone()); },
+                            Expr::LitInt { negative, .. } => {
+                                let negative = *negative;
+                                if !negative { few.push(item.clone()); }
+                            },
+                            _ => { },
+                        }
+                    }
+                    if (few.len() as i64) != items.len() as i64 || few.len() > 3 { few.clear(); }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    few
+}
+
             _ => { },
         }
         let loaded = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.simd_loads, &(node_key(func))), || 0);
@@ -37162,7 +37194,10 @@ impl EmitState {
                 let kept = match self.facts.kept_calls.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 let pauses = kept.0;
                 let fails = kept.1;
+                let around = walk.believing;
+                walk.believing = true;
                 out.push(&format!("{}(", escaped_name(&emit_text(world, name))));
+                walk.believing = around;
                 let mut at = 0;
                 for arg in args.iter() {
                     if at > 0 { out.push(", "); }
@@ -37492,6 +37527,24 @@ impl EmitState {
         if held.is_none() { return; }
         let mut by_arg: collections::BTreeMap<i64, Vec<i64>> = collections::BTreeMap::new();
         for (arg, keeps) in nikaia_std::index::or(held, || vec![].into()) { by_arg.insert(arg, keeps.to_owned()); }
+        if name == "find_all" && args.len() == 1 && emit_candidates(&self.own_contracts, "find_all").is_empty() {
+            let few = emit_call_few_bytes(world, nikaia_std::index::get(&args, 0));
+            if !few.is_empty() {
+                self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+                out.push(".find_all(nikaia_std::bytes::Few([");
+                let mut first = true;
+                for item in few.iter() {
+                    if !first { out.push(", "); }
+                    first = false;
+                    host.expr(walk, out, item, depth, flow, scope)?;
+                }
+                out.push("]), ");
+                let from = emit_call_option_named(world, config, "from");
+                if !from.is_empty() { host.expr(walk, out, nikaia_std::index::get(&from, 0), depth, flow, scope)?; } else { out.push("0"); }
+                out.push(")");
+                return Ok(());
+            }
+        }
         walk.hold_args = Some(by_arg);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -37742,6 +37795,18 @@ impl EmitState {
         for each in mutable.iter() {
             let each = *each;
             if !copied { changed.push(each.to_owned()); }
+fn emit_flow_is_cut(node: &Expr) -> bool {
+    match node {
+        Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); matches!(index, Expr::Range { .. }) },
+        _ => false,
+    }
+}
+
+fn emit_flow_is_whole(ty: &str) -> bool {
+    let signed = ty == "i8" || ty == "i16" || ty == "i32" || ty == "i64" || ty == "i128" || ty == "isize";
+    signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
+}
+
         }
         let inside = EmitFlow { in_lambda: !pauses, statement: flow.statement, ..EmitFlow::plain() };
         if fails {
@@ -37965,6 +38030,22 @@ impl EmitState {
     pub fn emit_core_coalesce<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, fallback: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.facts.plain_reaches.contains(&node_key(node)) {
             host.expr(walk, out, value, depth, flow, scope)?;
+        if walk.believing && !wide.widen && !wide.inferred && (op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul) && self.believed_arithmetic.contains_key(&site) {
+            let ty = nikaia_std::index::or(self.believed_arithmetic.get(&site), || "").to_owned();
+            if emit_flow_is_whole(&ty) {
+                let name = match op {
+                    BinaryOp::Add => "unchecked_add",
+                    BinaryOp::Sub => "unchecked_sub",
+                    _ => "unchecked_mul",
+                };
+                out.push(&format!("<{}>::{}(", ty, name));
+                host.expr(walk, out, lhs, depth, wide, scope)?;
+                out.push(", ");
+                host.expr(walk, out, rhs, depth, wide, scope)?;
+                out.push(")");
+                return Ok(());
+            }
+        }
             return Ok(());
         }
         if jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) {
@@ -38002,6 +38083,16 @@ impl EmitState {
         }
         let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(&node_key(fallback)) || self.facts.view_coalesces.contains(&node_key(node));
         if self.facts.optional_fallbacks.contains(&node_key(node)) {
+        let viewed = self.facts.compared_views.contains(&(site, "lhs".to_owned())) || self.facts.compared_views.contains(&(site, "rhs".to_owned()));
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && !viewed && emit_flow_is_cut(lhs) && emit_flow_is_cut(rhs) {
+            if op == BinaryOp::Ne { out.push("!"); }
+            out.push("nikaia_std::same!(");
+            host.expr(walk, out, lhs, depth, wide, scope)?;
+            out.push(", ");
+            host.expr(walk, out, rhs, depth, wide, scope)?;
+            out.push(")");
+            return Ok(());
+        }
             out.push("nikaia_std::index::or_maybe(");
             host.expr(walk, out, value, depth, flow, scope)?;
             out.push(", || ");
@@ -42555,7 +42646,7 @@ pub struct EmitWalk {
 }
 
 impl EmitWalk {
-    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false } }
+    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false } }
 }
 
 
@@ -42618,6 +42709,7 @@ impl EmitState {
     }
     pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }
+    pub believed_arithmetic: collections::BTreeMap<i64, String>,
         for members in self.sums.keys() {
             let name = match self.sums.get(members) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut borrows = false;
@@ -42645,6 +42737,7 @@ impl EmitState {
             let mut timed_out = false;
             for member in members.iter() {
                 if member == "task::Crashed" { crashed = true; }
+    pub believing: bool,
                 if member == "task::TimedOut" { timed_out = true; }
             }
             let mut escalated = false;

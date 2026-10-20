@@ -197,6 +197,15 @@ fn main() {\n\
                 if got != want || first != want_first || count != want.len() || last != want_last {\n\
                     wrong += 1\n\
                 }\n\
+                let one: Vec[i64] = data.find_all(bytes::ByteSet([';']); from: from).collect()\n\
+                let two: Vec[i64] = data.find_all(bytes::ByteSet([';', '\\n']); from: from).collect()\n\
+                let three: Vec[i64] = data.find_all(bytes::ByteSet(['\\x00', '\\x80', '\\xFF']); from: from).collect()\n\
+                let ones: Vec[u8] = [';']\n\
+                let twos: Vec[u8] = [';', '\\n']\n\
+                let threes: Vec[u8] = ['\\x00', '\\x80', '\\xFF']\n\
+                if one != reference(raw, ones, from) || two != reference(raw, twos, from) || three != reference(raw, threes, from) {\n\
+                    wrong += 1\n\
+                }\n\
                 checked += 1\n\
             }\n\
             let mut pieces = 0\n\
@@ -360,7 +369,8 @@ fn a_ref_argument_keeps_its_length_and_a_mut_one_does_not() {
 }
 
 /// ADR-002 D6: the same program at x86-64's baseline (SSE2) and at
-/// `x86-64-v3` (AVX2) prints the same.
+/// `x86-64-v3` (AVX2) prints the same; sets written at `find_all`, which are
+/// fixed when compiling, included.
 #[test]
 fn every_cpu_level_finds_the_same() {
     if !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
@@ -396,4 +406,58 @@ fn every_cpu_level_finds_the_same() {
     }
     assert_eq!(printed[0], "9000 0\n");
     assert_eq!(printed[0], printed[1]);
+}
+
+/// A set of one to three byte literals written at `find_all` is fixed when
+/// the program is compiled (ADR-375 D2): `nikaia_std::bytes::Few`, with no way
+/// to look up at each block, and it finds what the built set finds.
+const WRITTEN_AT_FIND_ALL: &str = "use std::bytes\n\
+\n\
+fn main() {\n\
+    let b = Bytes([';', 'a', '\\n', ';', 'x'])\n\
+    let mut s = 0\n\
+    for p in b.find_all(bytes::ByteSet([';', '\\n'])) { s = s * 10 + p }\n\
+    let seps = bytes::ByteSet([';', '\\n'])\n\
+    let mut t = 0\n\
+    for p in b.find_all(seps; from: 1) { t = t * 10 + p }\n\
+    let mut u = 0\n\
+    for p in b.find_all(bytes::ByteSet([';']); from: 1) { u = u * 10 + p }\n\
+    println(f\"{s} {t} {u} {b.find_all(bytes::ByteSet([59])).count()}\")\n\
+}\n";
+
+#[test]
+fn a_set_written_at_find_all_is_fixed_when_compiling() {
+    let rust = lowered("byte-sets-few", WRITTEN_AT_FIND_ALL);
+    assert!(
+        rust.contains("b.find_all(nikaia_std::bytes::Few([b';', b'\\x0a']), 0)"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("b.find_all(nikaia_std::bytes::Few([b';']), 1)"),
+        "{rust}"
+    );
+    assert!(rust.contains("b.find_all(seps, 1)"), "{rust}");
+    assert_eq!(run("byte-sets-few-run", WRITTEN_AT_FIND_ALL), "23 23 3 2\n");
+}
+
+/// Two cuts compared are compared in place (`nikaia_std::same!`): what `==`
+/// means, for bytes a word at a time, with no call into `memcmp`.
+const CUTS: &str = "fn main() {\n\
+    let a = Bytes(['n', 'a', 'm', 'e', 's', ' ', 'o', 'f', ' ', 's', 't', 'a', 't', 'i', 'o', 'n', 's', '!'])\n\
+    let b = Bytes(['-', 'n', 'a', 'm', 'e', 's', ' ', 'o', 'f', ' ', 's', 't', 'a', 't', 'i', 'o', 'n', 's', '?'])\n\
+    let mut same = 0\n\
+    for n in 0..<18 {\n\
+        if a[0..<n] == b[1..<n + 1] { same += 1 }\n\
+        if a[0..<n + 1] != b[1..<n + 2] { same += 100 }\n\
+    }\n\
+    let xs: Vec[i64] = [1, 2, 3, 1, 2]\n\
+    println(f\"{same} {xs[0..<2] == xs[3..<5]} {xs[0..<2] != xs[1..<3]}\")\n\
+}\n";
+
+#[test]
+fn two_cuts_compared_are_compared_in_place() {
+    let rust = lowered("byte-sets-cuts", CUTS);
+    assert_eq!(rust.matches("nikaia_std::same!(").count(), 4, "{rust}");
+    assert!(rust.contains("!nikaia_std::same!("), "{rust}");
+    assert_eq!(run("byte-sets-cuts-run", CUTS), "118 true true\n");
 }

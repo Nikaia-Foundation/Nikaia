@@ -151,6 +151,11 @@ pub struct EmitState {
     pub entry: bool,
 }
 
+    /// **The arithmetic of a believed `assume` is exact** (ADR-376 D2): the
+    /// type of each operator, by site, where `unchecked_assumes` holds; the
+    /// walk inside a believed claim writes them without their check, as
+    /// operations that do not overflow.
+    pub believed_arithmetic: collections::BTreeMap[i64, String],
 /// The places the walk writes to as it goes.
 pub struct EmitWalk {
     /// The `let` names bound to a task whose body cannot fail: their `join`
@@ -204,7 +209,9 @@ pub struct EmitWalk {
 
 impl EmitWalk {
     /// Nothing written yet.
+    /// The walk is inside the claim of a believed `assume` (ADR-376 D2).
+    pub believing: bool,
     pub fn fresh() -> EmitWalk {
-        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", nonnegative: collections::BTreeMap(), specialising: null, at_field: null, code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false }
+        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", nonnegative: collections::BTreeMap(), specialising: null, at_field: null, code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false }
     }
 }

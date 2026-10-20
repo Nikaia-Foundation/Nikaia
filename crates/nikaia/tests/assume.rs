@@ -240,3 +240,49 @@ fn a_checked_assume_is_no_rust_unsafe() {
     assert!(pick.contains("assumption_failed"), "{pick}");
     assert!(!pick.contains("unsafe"), "{pick}");
 }
+
+/// D2: the arithmetic of a believed claim is exact. A claim whose arithmetic
+/// overflows is false, and a false believed claim is undefined behaviour, so
+/// `+`, `-` and `*` in it are written without their check, as operations that
+/// do not overflow; where the claim is checked, they keep it.
+const SUMS: &str = "fn f(a: i64, b: i64, n: i64) -> i64 {\n\
+                    \x20   unsafe { assume(a + b <= n && a - b >= 0 && a * 2 <= n) }\n\
+                    \x20   return a\n\
+                    }\n\
+                    \n\
+                    fn main() {\n\
+                    \x20   println(f\"{f(3, 1, 10)}\")\n\
+                    }\n";
+
+#[test]
+fn the_arithmetic_of_a_believed_claim_has_no_check() {
+    let parsed = parse_to_ast(SUMS).expect("the source parses");
+    let believed = Build {
+        overflow: nikaia::bounds::OverflowChecks::Removed,
+        ..Build::default()
+    };
+    let rust = emit_program(&parsed, believed).expect("it lowers").rust;
+    let f = body(&rust, "f");
+    assert!(f.contains("core::hint::assert_unchecked("), "{f}");
+    for op in [
+        "<i64>::unchecked_add(a, b)",
+        "<i64>::unchecked_sub(a, b)",
+        "<i64>::unchecked_mul(a, 2)",
+    ] {
+        assert!(f.contains(op), "{op}:\n{f}");
+    }
+    let rust = emit_program(&parsed, Build::default())
+        .expect("it lowers")
+        .rust;
+    let f = body(&rust, "f");
+    assert!(
+        !f.contains("unchecked_"),
+        "a checked claim keeps its checks:\n{f}"
+    );
+    let (ok, out, err) = run("sums-on", SUMS, "remove-overflow-checks:on", "");
+    assert!(ok, "{err}");
+    assert_eq!(out.trim(), "3");
+    let (ok, out, err) = run("sums-off", SUMS, "remove-overflow-checks:off", "");
+    assert!(ok, "{err}");
+    assert_eq!(out.trim(), "3");
+}

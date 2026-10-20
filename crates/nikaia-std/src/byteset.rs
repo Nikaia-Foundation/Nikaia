@@ -104,17 +104,6 @@ impl ByteSet {
         }
     }
 
-    /// The mask of the block at the start of `run`; a run shorter than a
-    /// block is read from a copy with zeros behind it, and its bits past the
-    /// end are cleared.
-    #[inline(always)]
-    fn mask_of(&self, run: &[u8]) -> u64 {
-        match run.first_chunk::<BLOCK>() {
-            Some(block) => self.mask(block),
-            None => self.short_mask(run),
-        }
-    }
-
     /// The mask of the last, short block: off the hot loop, so that the copy
     /// takes no registers from it. The set comes by value, so that no
     /// reference into the caller's iterator escapes into the call.
@@ -130,6 +119,96 @@ impl ByteSet {
 impl From<&ByteSet> for ByteSet {
     fn from(set: &ByteSet) -> ByteSet {
         *set
+    }
+}
+
+/// **What a search compares each block with**: a [`ByteSet`], whose way is
+/// chosen when it is built and looked up at each block, or a [`Few`], a set
+/// written in the program whose way is fixed when the program is compiled.
+pub trait Blocks: Copy {
+    /// Whether it holds no byte: then nothing is found and nothing is read.
+    fn holds_none(&self) -> bool;
+    /// The block's mask: bit `i` where `block[i]` is in the set.
+    fn mask(&self, block: &[u8; BLOCK]) -> u64;
+    /// The mask of the last, short block, its bits past the end cleared.
+    fn short_mask(self, run: &[u8]) -> u64;
+}
+
+impl Blocks for ByteSet {
+    #[inline(always)]
+    fn holds_none(&self) -> bool {
+        self.is_empty()
+    }
+
+    #[inline(always)]
+    fn mask(&self, block: &[u8; BLOCK]) -> u64 {
+        ByteSet::mask(self, block)
+    }
+
+    #[inline(always)]
+    fn short_mask(self, run: &[u8]) -> u64 {
+        ByteSet::short_mask(self, run)
+    }
+}
+
+/// **A set of one to three bytes written in the program**, compared directly
+/// in every block (ADR-375 D2): the lowering hands one to `find_all` where
+/// the set is written there as a list of byte literals,
+/// `b.find_all(bytes::ByteSet([';']))`, so that the search has no way to look
+/// up at each block. It finds what the [`ByteSet`] of the same bytes finds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Few<const N: usize>(pub [u8; N]);
+
+impl<const N: usize> Blocks for Few<N> {
+    #[inline(always)]
+    fn holds_none(&self) -> bool {
+        N == 0
+    }
+
+    #[inline(always)]
+    fn mask(&self, block: &[u8; BLOCK]) -> u64 {
+        byte_blocks::any_of(block, self.0)
+    }
+
+    /// Off the hot loop, as [`ByteSet`]'s is.
+    #[cold]
+    #[inline(never)]
+    fn short_mask(self, run: &[u8]) -> u64 {
+        let mut padded = [0u8; BLOCK];
+        padded[..run.len()].copy_from_slice(run);
+        self.mask(&padded) & ((1u64 << run.len()) - 1)
+    }
+}
+
+/// **What `find_all` takes**: a [`ByteSet`], one by reference, or a [`Few`].
+pub trait Searched {
+    /// What each block is compared with.
+    type Blocks: Blocks;
+    /// It, ready for the blocks.
+    fn blocks(self) -> Self::Blocks;
+}
+
+impl Searched for ByteSet {
+    type Blocks = ByteSet;
+    #[inline(always)]
+    fn blocks(self) -> ByteSet {
+        self
+    }
+}
+
+impl Searched for &ByteSet {
+    type Blocks = ByteSet;
+    #[inline(always)]
+    fn blocks(self) -> ByteSet {
+        *self
+    }
+}
+
+impl<const N: usize> Searched for Few<N> {
+    type Blocks = Few<N>;
+    #[inline(always)]
+    fn blocks(self) -> Few<N> {
+        self
     }
 }
 
@@ -179,60 +258,58 @@ impl Needle for &ByteSet {
 /// `last` (D4) read whole blocks: a count adds the bits of each mask and
 /// makes no position.
 #[derive(Clone, Debug)]
-pub struct FindAll<'a> {
-    /// The bytes no mask has covered yet.
-    rest: &'a [u8],
-    set: ByteSet,
-    /// Where bit 0 of `mask` stands.
-    base: usize,
-    /// Where `rest` starts, while it holds a byte.
+pub struct FindAll<'a, S: Blocks = ByteSet> {
+    /// The whole run searched: it does not change, so only `at` and `mask`
+    /// change from one position to the next.
+    hay: &'a [u8],
+    set: S,
+    /// Where the bytes no mask has covered yet start; bit 0 of `mask` stands
+    /// a block before it.
     at: usize,
     /// The hits of the current block not handed out yet.
     mask: u64,
 }
 
-impl<'a> FindAll<'a> {
+impl<'a, S: Blocks> FindAll<'a, S> {
     /// The search of `hay` for `set` from `from`: a position before the start
     /// searches from the start, one past the end finds nothing. Inlined, so
     /// that the iterator's fields live in registers at the caller.
     #[inline]
-    pub fn new(hay: &'a [u8], set: ByteSet, from: i64) -> FindAll<'a> {
+    pub fn new(hay: &'a [u8], set: S, from: i64) -> FindAll<'a, S> {
         let start = usize::try_from(from.max(0))
             .unwrap_or(usize::MAX)
             .min(hay.len());
-        let start = if set.is_empty() { hay.len() } else { start };
-        let (_, rest) = hay.split_at(start);
+        let start = if set.holds_none() { hay.len() } else { start };
         FindAll {
-            rest,
+            hay,
             set,
-            base: start,
             at: start,
             mask: 0,
         }
+    }
+
+    /// The bytes no mask has covered yet.
+    #[inline(always)]
+    fn rest(&self) -> &'a [u8] {
+        self.hay.get(self.at..).unwrap_or_default()
     }
 
     /// The next block's mask into `mask`; `false` at the end. A whole block
     /// costs one length test; the last, short one is the cold path.
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        match self.rest.split_first_chunk::<BLOCK>() {
-            Some((block, tail)) => {
-                self.mask = self.set.mask(block);
-                self.rest = tail;
-            }
-            None if self.rest.is_empty() => return false,
-            None => {
-                self.mask = self.set.short_mask(self.rest);
-                self.rest = &[];
-            }
+        let rest = self.rest();
+        match rest.first_chunk::<BLOCK>() {
+            Some(block) => self.mask = self.set.mask(block),
+            None if rest.is_empty() => return false,
+            None => self.mask = self.set.short_mask(rest),
         }
-        self.base = self.at;
         self.at += BLOCK;
         true
     }
 }
 
-impl Iterator for FindAll<'_> {
+impl<S: Blocks> Iterator for FindAll<'_, S> {
     type Item = i64;
 
     #[inline]
@@ -244,14 +321,14 @@ impl Iterator for FindAll<'_> {
         }
         let bit = self.mask.trailing_zeros() as usize;
         self.mask &= self.mask - 1;
-        Some((self.base + bit) as i64)
+        Some((self.at.wrapping_sub(BLOCK) + bit) as i64)
     }
 
     /// **A count adds the bits of each block's mask** (ADR-375 D4): no
     /// position is made.
     fn count(self) -> usize {
         let mut n = self.mask.count_ones() as usize;
-        let mut rest = self.rest;
+        let mut rest = self.rest();
         while let Some((block, tail)) = rest.split_first_chunk::<BLOCK>() {
             n += self.set.mask(block).count_ones() as usize;
             rest = tail;
@@ -283,10 +360,15 @@ impl Iterator for FindAll<'_> {
 
     /// **The last is looked for from the end**, block by block (ADR-375 D4).
     fn last(self) -> Option<i64> {
-        if !self.rest.is_empty() {
-            let mut from = (self.rest.len() - 1) / BLOCK * BLOCK;
+        let rest = self.rest();
+        if !rest.is_empty() {
+            let mut from = (rest.len() - 1) / BLOCK * BLOCK;
             loop {
-                let mask = self.set.mask_of(&self.rest[from..]);
+                let run = &rest[from..];
+                let mask = match run.first_chunk::<BLOCK>() {
+                    Some(block) => self.set.mask(block),
+                    None => self.set.short_mask(run),
+                };
                 if mask != 0 {
                     return Some((self.at + from + 63 - mask.leading_zeros() as usize) as i64);
                 }
@@ -298,17 +380,17 @@ impl Iterator for FindAll<'_> {
         }
         match self.mask {
             0 => None,
-            mask => Some((self.base + 63 - mask.leading_zeros() as usize) as i64),
+            mask => Some((self.at.wrapping_sub(BLOCK) + 63 - mask.leading_zeros() as usize) as i64),
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let left = self.rest.len() + self.mask.count_ones() as usize;
+        let left = self.rest().len() + self.mask.count_ones() as usize;
         (0, Some(left))
     }
 }
 
-impl std::iter::FusedIterator for FindAll<'_> {}
+impl<S: Blocks> std::iter::FusedIterator for FindAll<'_, S> {}
 
 /// **The pieces between the bytes of a set** (ADR-375 D3), by text's `split`
 /// rules: two neighbouring bytes of the set give an empty piece, one at the
@@ -367,7 +449,36 @@ pub fn split<'a, R: AsRef<[u8]> + ?Sized>(run: &'a R, set: impl Into<ByteSet>) -
 
 #[cfg(test)]
 mod tests {
-    use super::{ByteSet, FindAll, Needle, Split};
+    use super::{Blocks, ByteSet, Few, FindAll, Needle, Split};
+
+    /// What a [`Few`] finds, counts and finds last against the [`ByteSet`] of
+    /// the same bytes.
+    fn same_as_the_set<S: Blocks>(few: S, members: &[u8]) {
+        let set = ByteSet(members);
+        let mut seed = 11u64;
+        let alphabet: Vec<u8> = vec![b';', b'\n', b'a', 0x00, 0x80, 0xFF, b'x'];
+        for n in 0..200 {
+            let hay = bytes(&mut seed, n, &alphabet);
+            for from in [0i64, -1, 1, 31, 63, 64, 65, 130, 250] {
+                let want: Vec<i64> = FindAll::new(&hay, set, from).collect();
+                let got: Vec<i64> = FindAll::new(&hay, few, from).collect();
+                assert_eq!(got, want, "{members:?} {n} {from}");
+                assert_eq!(FindAll::new(&hay, few, from).count(), want.len());
+                assert_eq!(FindAll::new(&hay, few, from).last(), want.last().copied());
+                assert_eq!(FindAll::new(&hay, few, from).nth(2), want.get(2).copied());
+            }
+        }
+    }
+
+    /// A set written in the program finds what the built set finds.
+    #[test]
+    fn a_few_bytes_find_what_their_set_finds() {
+        same_as_the_set(Few(*b";"), b";");
+        same_as_the_set(Few(*b";\n"), b";\n");
+        same_as_the_set(Few([0x00, 0x80, 0xFF]), &[0x00, 0x80, 0xFF]);
+        same_as_the_set(Few(*b";;"), b";");
+        same_as_the_set(Few::<0>([]), &[]);
+    }
 
     /// A small generator, the same on every run.
     fn bytes(seed: &mut u64, n: usize, alphabet: &[u8]) -> Vec<u8> {
