@@ -144,7 +144,8 @@ fn a_literal_is_proved_or_checked() {
         "{main}"
     );
     let ring = body(&rust, "ring");
-    assert!(ring.contains("assert(ring.slots.len() == CAP)"), "{ring}");
+    assert!(ring.contains("assert(ring.slots.len() == CAP"), "{ring}");
+    assert!(ring.contains("the rule of `Ring`"), "{ring}");
 }
 
 /// D2: a method that changes the value checks the rule when it ends, and
@@ -219,9 +220,6 @@ fn a_rule_is_an_assert_over_the_fields() {
         };
         assert!(refused.contains("NK1288"), "{refused}");
         assert!(refused.contains(said), "{refused}");
-    }
-}
-     assert!(refused.contains(said), "{refused}");
     }
 }
 
@@ -388,4 +386,36 @@ fn a_generic_struct_states_no_rule() {
     };
     assert!(refused.contains("NK1288"), "{refused}");
     assert!(refused.contains("`P` is generic"), "{refused}");
+}
+
+/// D2: a failure names the type, with the rule's message or without one.
+#[test]
+fn a_failure_names_the_type() {
+    let source = r#"
+struct Count {
+    n: i64,
+    assert(n >= 0)
+}
+
+impl Count {
+    fn down(ref mut self) {
+        self.n -= 1
+    }
+}
+
+fn main() {
+    let mut c = Count { n: 0 }
+    c.down()
+    print(f"{c.n}")
+}
+"#;
+    let (ok, _, err) = run("names", source);
+    assert!(!ok, "the count went below 0");
+    assert!(err.contains("the rule of `Count`"), "{err}");
+    let (ok, _, err) = run("names-said", &RING.replace("WIDEN", "-9"));
+    assert!(!ok);
+    assert!(
+        err.contains("the rule of `Piece`: a piece ends after it starts"),
+        "{err}"
+    );
 }

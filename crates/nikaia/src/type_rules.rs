@@ -368,9 +368,24 @@ fn asserts(
                     id: NodeId::fresh(),
                 },
             });
-        } else if let Some(said) = message {
-            let mut said = said.clone();
-            crate::ast::set_id(&mut said, NodeId::fresh());
+        } else {
+            // **A failure names the type** (D2): its message is the rule's,
+            // after the type's name.
+            let said = match message {
+                None => Expr::LitStr {
+                    text: format!("the rule of `{type_name}`"),
+                    id: NodeId::fresh(),
+                },
+                Some(Expr::LitStr { text, .. }) => Expr::LitStr {
+                    text: format!("the rule of `{type_name}`: {text}"),
+                    id: NodeId::fresh(),
+                },
+                Some(said) => {
+                    let mut said = said.clone();
+                    crate::ast::set_id(&mut said, NodeId::fresh());
+                    said
+                }
+            };
             config.push(ConfigArg {
                 name: interner.intern_string("message"),
                 value: said,
