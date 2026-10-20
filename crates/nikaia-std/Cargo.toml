@@ -39,6 +39,9 @@ memchr = "2"
 # Views that outlive the scope that read their buffer (ADR-283); the `unsafe`
 # it takes lives there, with its own checks (ADR-218).
 tether = { path = "../unsafe/tether" }
+# A `Bytes` as a pointer, a length and a counted handle on what owns the
+# memory: a vector handed over, a mapped file (ADR-373 D1).
+shared-bytes = { path = "../unsafe/shared-bytes" }
 # Bytes checked as text once, in chunks across the pool, and a file mapped and
 # checked (Part III 17.1).
 checked-text = { path = "../unsafe/checked-text", features = ["rayon", "map", "simd"] }

@@ -9,24 +9,28 @@
 //! compiler refuses the programs that would need it (`NK2303`) rather than
 //! letting them reach this type.
 //!
-//! `Arc<[u8]>` and not `Arc<Vec<u8>>`: one allocation and one indirection, and
-//! the buffer is immutable once it exists, which is what lets a clone be a
-//! count. A program that wants to *build* bytes builds a `Vec[u8]` and hands it
-//! over, which is the `From` below and the one copy in the whole type.
+//! **A `Bytes` carries what owns its memory**
+//! ([ADR-373](../../../docs/specification/adr/adr-373.md) D1): where its bytes
+//! are and how many, and a counted handle on the owner - memory it allocated,
+//! a `Vec[u8]` handed over (`Bytes(v)`, D2, nothing copied), or a mapped file
+//! (D3). Reading is the same for each, the buffer is immutable once it exists,
+//! and a clone is a count. The pointer handling is `shared_bytes`'s
+//! (ADR-218), which says why it is sound.
 
-use std::sync::Arc;
+use shared_bytes::Shared;
 
 /// A run of bytes that several holders may share
-/// ([ADR-283](../../../docs/specification/adr/adr-283.md) D20).
+/// ([ADR-283](../../../docs/specification/adr/adr-283.md) D20, ADR-373 D1):
+/// equal, ordered and hashed by content, whoever owns it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Bytes {
-    buffer: Arc<[u8]>,
+    buffer: Shared,
 }
 
 /// Bytes are a buffer a view of text may be cut from (ADR-283 D15).
 impl crate::tether::Viewed for Bytes {
     fn bytes(&self) -> &[u8] {
-        &self.buffer
+        self.buffer.as_slice()
     }
 }
 
@@ -34,7 +38,32 @@ impl Bytes {
     /// No bytes at all.
     pub fn new() -> Bytes {
         Bytes {
-            buffer: Arc::from(Vec::new()),
+            buffer: Shared::default(),
+        }
+    }
+
+    /// The bytes `owner` lends, owned by the `Bytes` from now on: nothing is
+    /// copied (ADR-373 D1). What a mapped file hands over.
+    pub fn from_owner<O: AsRef<[u8]> + Send + Sync + 'static>(owner: O) -> Bytes {
+        Bytes {
+            buffer: Shared::from_owner(owner),
+        }
+    }
+
+    /// The bytes an owner counted elsewhere lends, at one more count.
+    pub fn from_arc<O: AsRef<[u8]> + Send + Sync + 'static>(owner: std::sync::Arc<O>) -> Bytes {
+        Bytes {
+            buffer: Shared::from_arc(owner),
+        }
+    }
+
+    /// The bytes `range` names, as a `Bytes` of their own that shares this
+    /// one's owner: it keeps the memory alive as long as it lives. Stops the
+    /// program as a cut does where the range is not inside.
+    #[track_caller]
+    pub fn cut(&self, range: impl std::ops::RangeBounds<usize>) -> Bytes {
+        Bytes {
+            buffer: self.buffer.cut(range),
         }
     }
 
@@ -49,8 +78,9 @@ impl Bytes {
     }
 
     /// The bytes, as the language below spells a run of them.
+    #[inline(always)]
     pub fn as_slice(&self) -> &[u8] {
-        &self.buffer
+        self.buffer.as_slice()
     }
 
     /// The bytes as text, where they are text (ADR-320 D7).
@@ -59,7 +89,7 @@ impl Bytes {
     /// as the borrow does. `NotText` where the bytes are not UTF-8, the
     /// failure `fs::read_to_string` reports for the same bytes.
     pub fn text(&self) -> Result<&str, crate::io::IoError> {
-        ByteReads::text(&*self.buffer)
+        ByteReads::text(self.as_slice())
     }
 
     /// The first `byte` at or after the position `from`, or `None`
@@ -67,7 +97,7 @@ impl Bytes {
     /// the start searches from the start; one past the end finds nothing.
     #[inline]
     pub fn find(&self, byte: u8, from: i64) -> Option<i64> {
-        ByteReads::find(&*self.buffer, byte, from)
+        ByteReads::find(self.as_slice(), byte, from)
     }
 
     /// The 4 bytes from `at` as an unsigned number, least significant byte
@@ -75,7 +105,7 @@ impl Bytes {
     #[inline]
     #[track_caller]
     pub fn u32_le(&self, at: i64) -> u32 {
-        ByteReads::u32_le(&*self.buffer, at)
+        ByteReads::u32_le(self.as_slice(), at)
     }
 
     /// The 4 bytes from `at` as an unsigned number, most significant byte
@@ -83,7 +113,7 @@ impl Bytes {
     #[inline]
     #[track_caller]
     pub fn u32_be(&self, at: i64) -> u32 {
-        ByteReads::u32_be(&*self.buffer, at)
+        ByteReads::u32_be(self.as_slice(), at)
     }
 
     /// The 8 bytes from `at` as an unsigned number, least significant byte
@@ -91,7 +121,7 @@ impl Bytes {
     #[inline]
     #[track_caller]
     pub fn u64_le(&self, at: i64) -> u64 {
-        ByteReads::u64_le(&*self.buffer, at)
+        ByteReads::u64_le(self.as_slice(), at)
     }
 
     /// The 8 bytes from `at` as an unsigned number, most significant byte
@@ -99,7 +129,7 @@ impl Bytes {
     #[inline]
     #[track_caller]
     pub fn u64_be(&self, at: i64) -> u64 {
-        ByteReads::u64_be(&*self.buffer, at)
+        ByteReads::u64_be(self.as_slice(), at)
     }
 
     /// A copy of the bytes, owned by the caller.
@@ -107,7 +137,7 @@ impl Bytes {
     /// The one place this type allocates on the way out, and it says so: Part I
     /// 6.6's promotion to `Owned` is never automatic.
     pub fn to_vec(&self) -> Vec<u8> {
-        self.buffer.to_vec()
+        self.as_slice().to_vec()
     }
 }
 
@@ -208,30 +238,31 @@ impl ByteCopy for [u8] {
 impl std::ops::Deref for Bytes {
     type Target = [u8];
 
+    #[inline(always)]
     fn deref(&self) -> &[u8] {
-        &self.buffer
+        self.buffer.as_slice()
     }
 }
 
 impl AsRef<[u8]> for Bytes {
     fn as_ref(&self) -> &[u8] {
-        &self.buffer
+        self.buffer.as_slice()
     }
 }
 
+/// **`Bytes(v)`: the vector is handed over and nothing is copied**
+/// (ADR-373 D2): its memory becomes the buffer.
 impl From<Vec<u8>> for Bytes {
     fn from(bytes: Vec<u8>) -> Bytes {
-        Bytes {
-            buffer: Arc::from(bytes),
-        }
+        Bytes::from_owner(bytes)
     }
 }
 
+/// A run of bytes copied into a `Bytes` of its own: one allocation of exactly
+/// its length.
 impl From<&[u8]> for Bytes {
     fn from(bytes: &[u8]) -> Bytes {
-        Bytes {
-            buffer: Arc::from(bytes.to_vec()),
-        }
+        Bytes::from_owner(Box::<[u8]>::from(bytes))
     }
 }
 
@@ -243,7 +274,7 @@ impl From<String> for Bytes {
 
 impl From<&str> for Bytes {
     fn from(text: &str) -> Bytes {
-        Bytes::from(text.as_bytes().to_vec())
+        Bytes::from(text.as_bytes())
     }
 }
 
@@ -258,7 +289,7 @@ impl<'a> IntoIterator for &'a Bytes {
     type IntoIter = std::slice::Iter<'a, u8>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.buffer.iter()
+        self.as_slice().iter()
     }
 }
 
@@ -274,6 +305,28 @@ mod tests {
         let two = one.clone();
         assert_eq!(one.as_slice().as_ptr(), two.as_slice().as_ptr());
         assert_eq!(&*two, &[1u8, 2, 3]);
+    }
+
+    /// **`Bytes(v)` hands the vector over** (ADR-373 D2): the buffer is the
+    /// vector's memory. And **a `Bytes` is its content**, whatever owns it
+    /// (D1): a vector handed over, a copy of a run, text, a cut.
+    #[test]
+    fn a_vec_is_handed_over_and_equal_by_content_across_owners() {
+        use std::hash::{BuildHasher, RandomState};
+        let v = b"Oslo;3".to_vec();
+        let at = v.as_ptr();
+        let handed = Bytes::from(v);
+        assert_eq!(handed.as_slice().as_ptr(), at, "nothing copied");
+        let copied = Bytes::from(&b"Oslo;3"[..]);
+        let text = Bytes::from(String::from("Oslo;3"));
+        let cut = Bytes::from("x Oslo;3 x").cut(2..8);
+        let hashes = RandomState::new();
+        for other in [&copied, &text, &cut] {
+            assert_eq!(&handed, other);
+            assert_eq!(hashes.hash_one(&handed), hashes.hash_one(other));
+        }
+        assert!(handed < Bytes::from("Oslo;4"));
+        assert_eq!(Bytes::default(), Bytes::new());
     }
 
     /// **It reads as a run of bytes**, so everything written against `&[u8]`

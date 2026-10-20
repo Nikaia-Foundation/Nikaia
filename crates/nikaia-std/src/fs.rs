@@ -448,8 +448,13 @@ pub fn read_dir(path: impl AsRef<FilePath>, root: &Root) -> Result<DirEntries, c
 /// ADR-296 D15 allows a large read-only mapping to be left to the OS at process
 /// exit. Nothing here does that yet: the mapping is released when the value is
 /// dropped, and the drop is what `main` returning costs.
+///
+/// **A mapping is a `Bytes`** ([ADR-373](../../../docs/specification/adr/adr-373.md)
+/// D3): the pages are held in an `Arc`, so a `Bytes` made from a mapping
+/// ([`Mapped::bytes`], `Bytes::from`) is the mapping at one more count, and
+/// the file stays mapped while any of them lives.
 pub struct Mapped {
-    pages: Pages,
+    pages: std::sync::Arc<Pages>,
 }
 
 /// **What a mapping derefs to**: its bytes, read as any `Bytes` is read
@@ -513,7 +518,35 @@ impl std::ops::Deref for Pages {
     }
 }
 
+/// The pages lend their bytes, so a `Bytes` can own them (ADR-373 D3).
+impl AsRef<[u8]> for Pages {
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
+}
+
+/// **A mapping handed where a `Bytes` is taken** (ADR-373 D3): the mapping,
+/// at a count; nothing is copied.
+impl From<&Mapped> for crate::bytes::Bytes {
+    fn from(mapped: &Mapped) -> crate::bytes::Bytes {
+        mapped.bytes()
+    }
+}
+
+/// As by reference: the mapping moves into the `Bytes`.
+impl From<Mapped> for crate::bytes::Bytes {
+    fn from(mapped: Mapped) -> crate::bytes::Bytes {
+        crate::bytes::Bytes::from_arc(mapped.pages)
+    }
+}
+
 impl Mapped {
+    /// **The mapping as a `Bytes`** (ADR-373 D3): the same pages at one more
+    /// count, kept mapped while the `Bytes` or a cut of it lives.
+    pub fn bytes(&self) -> crate::bytes::Bytes {
+        crate::bytes::Bytes::from_arc(self.pages.clone())
+    }
+
     /// **The mapped file, as bytes**: what the ledger's `fs::Mapped::deref`
     /// names, written as a call (#452). The lowering writes `data.deref()`,
     /// and the trait's method is reached only where `Deref` is in scope.
@@ -605,10 +638,10 @@ pub async fn map(path: impl AsRef<FilePath>, root: &Root) -> Result<Mapped, crat
         ))
     };
     Ok(Mapped {
-        pages: Pages {
+        pages: std::sync::Arc::new(Pages {
             map,
             asked: asked.to_path_buf(),
-        },
+        }),
     })
 }
 
@@ -1145,6 +1178,43 @@ mod tests {
             assert_eq!(empty.len(), 0);
             assert_eq!(empty.text().expect("text"), "");
             assert!(crate::tether::Viewed::bytes(&empty).is_empty());
+        });
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **A mapping is a `Bytes`, at a count** (ADR-373 D3): a cut of it
+    /// outlives the `Mapped` binding and still reads the file, it equals the
+    /// same bytes owned by a vector, and the file is unmapped when the last
+    /// holder goes, not before.
+    #[test]
+    fn a_cut_of_a_mapping_outlives_the_binding_and_unmaps_last() {
+        let dir = std::env::temp_dir().join(format!("nikaia-mapped-bytes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let root = super::Root::Dir(dir.clone());
+        std::fs::write(dir.join("page"), "Oslo;3\nRome;9\n").expect("write");
+        crate::rt::exec::block_on(async {
+            let mapped = super::map("page", &root).await.expect("maps");
+            let unmapped = std::sync::Arc::downgrade(&mapped.pages);
+            let whole = crate::bytes::Bytes::from(&mapped);
+            assert_eq!(
+                whole.as_slice().as_ptr(),
+                mapped.deref().as_ptr(),
+                "no copy"
+            );
+            assert_eq!(
+                whole,
+                crate::bytes::Bytes::from(b"Oslo;3\nRome;9\n".to_vec())
+            );
+            let rome = whole.cut(7..13);
+            drop(whole);
+            drop(mapped);
+            assert!(unmapped.upgrade().is_some(), "the cut keeps it mapped");
+            assert_eq!(rome.as_slice(), b"Rome;9");
+            let by_value = super::map("page", &root).await.expect("maps");
+            let kept = crate::bytes::Bytes::from(by_value);
+            assert_eq!(kept.len(), 14);
+            drop(rome);
+            assert!(unmapped.upgrade().is_none(), "the last holder unmapped it");
         });
         std::fs::remove_dir_all(&dir).ok();
     }
