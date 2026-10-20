@@ -18386,6 +18386,13 @@ fn check_core_ops_held_named(name: &str, args: &[Ty]) -> Ty {
     Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false }
 }
 
+fn check_core_ops_a_word(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => args.is_empty() && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar"),
+        _ => false,
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
@@ -18410,6 +18417,7 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     let inner = check_core_ops_inside(&left);
     let place = check_core_ops_place(value);
     if from_a_map && nullable && moves(&inner) && state.jumps(world, fallback) { state.facts.map_read_views.insert(id_of(expr) as i64); }
+    if nullable && leaves && check_core_ops_a_word(&inner) && (check_core_stmt_an_index(value) || check_core_stmt_a_get(world, value)) { state.facts.copied_jump_reads.insert(id_of(expr) as i64); }
     if place && state.jumps(world, fallback) && nullable && state.takes_away(world, &inner.unseen()) && (check_core_ops_lent_root(&state, world, value) || check_core_ops_behind_a_view(&state, world, value)) {
         if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned()); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".to_owned()); }
         return view_of_type(&inner);

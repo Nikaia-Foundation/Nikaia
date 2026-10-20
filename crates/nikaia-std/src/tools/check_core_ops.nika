@@ -667,6 +667,15 @@ fn check_core_ops_held_named(name: ref String, args: ref Vec[Ty]) -> Ty sync {
     return Ty::Named { name: name.clone(), args: args.clone(), view: false }
 }
 
+/// A number, a `bool` or a character, seen through a view or not: what a
+/// `match` arm copies out of what it read.
+fn check_core_ops_a_word(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, .. } => args.len() == 0 && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar"),
+        else => false,
+    }
+}
+
 /// **`a ?? b`** (Part I 3.5, ADR-279, ADR-293): the first that has a value.
 pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, fallback: ref Expr, span: ref Span) -> Ty sync {
     let outer = state.flow.read_a_map
@@ -695,6 +704,13 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     // **A map read past a jump is a view of the map** (ADR-293 D28, #739).
     if from_a_map && nullable && moves(inner) && state.jumps(world, fallback) {
         state.facts.map_read_views.insert(id_of(expr) as i64)
+    }
+    // **A number read through brackets past a jump is the number, wherever
+    // the `??` stands** (#456): each arm of the `match` it lowers to hands back
+    // the number and not a view of it, as under a `let`, also as an index or
+    // an argument.
+    if nullable && leaves && check_core_ops_a_word(inner) && (check_core_stmt_an_index(value) || check_core_stmt_a_get(world, value)) {
+        state.facts.copied_jump_reads.insert(id_of(expr) as i64)
     }
     // **A loan on the left and a jump on the right is a view** (ADR-279 D10).
     if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && (check_core_ops_lent_root(state, world, value) || check_core_ops_behind_a_view(state, world, value)) {

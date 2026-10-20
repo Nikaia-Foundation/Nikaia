@@ -572,3 +572,25 @@ fn main() {
 ";
     assert_eq!(ran("two-maps-of-numbers", source), "4 3 -1");
 }
+
+/// **A number read past a jump is the number wherever the `??` stands**
+/// (#456): as a list's index and as an argument, not only under a `let`.
+/// `rustc` refused both before (`[i64]` cannot be indexed by `&i64`).
+#[test]
+fn a_number_read_past_a_jump_is_copied_out_in_place() {
+    let source = "use std::collections
+
+fn twice(n: i64) -> i64 {
+    return 2 * n
+}
+
+fn main() {
+    let v: Vec[i64] = [10, 20, 30]
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.insert(\"a\", 2)
+    let x = v[m[\"a\"] ?? panic(\"gone\")]
+    println(f\"{x} {twice(m[\"a\"] ?? return)}\")
+}
+";
+    assert_eq!(ran("a-number-read-in-place", source), "30 4");
+}
