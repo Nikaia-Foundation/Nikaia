@@ -1,0 +1,26 @@
+// #730 items 7 and 8: a struct pattern that only binds covers every value,
+// and a `with` that names every field takes nothing from its base.
+
+struct Point {
+    x: i64,
+    y: i64,
+}
+
+fn first(p: Point) -> i64 {
+    return match p {
+        Point { x, .. } => x,
+    }
+}
+
+fn both(p: Point) -> i64 {
+    return match p {
+        Point { x: a, y: _ } => a * 2,
+    }
+}
+
+fn main() {
+    let p = Point { x: 3, y: 4 }
+    println(f"{first(p)} {both(p)}")
+    let q = p with { x: 5, y: 6 }
+    println(f"{q.x} {q.y}")
+}

@@ -559,6 +559,20 @@ impl EmitState {
             throw EmitRefused { message: "The type of this `with` is unknown. This is a compiler bug: the check should have reported it first.".clone(), at: at as i64 }
         }
         let owner = (known ?? "").clone()
+        // **A `with` that names every field takes nothing from a named base**
+        // (#730): `..p` would leave `p` unread, which the language below
+        // warns about, so the base is read as `_` and the struct is written
+        // whole.
+        let a_name = match base {
+            Expr::Variable(_, _) => true,
+            else => false,
+        }
+        let whole = a_name && emit_core_with_names_every_field(world, owner, fields.len())
+        if whole {
+            out.push("{ let _ = ")
+            host.expr(walk, out, base, depth, flow, scope)
+            out.push("; ")
+        }
         out.push(f"{owner} {{ ")
         for field in fields {
             let written = escaped_name(emit_text(world, field.name))
@@ -591,8 +605,28 @@ impl EmitState {
             }
             out.push(", ")
         }
+        if whole {
+            out.push("} }")
+            return
+        }
         out.push("..")
         host.expr(walk, out, base, depth, flow, scope)
         out.push(" }")
     }
+}
+
+/// Whether the struct `owner` of this file has exactly `count` fields.
+fn emit_core_with_names_every_field(world: ref EmitWorld, owner: ref String, count: i64) -> bool {
+    let own = emit_base(owner)
+    for item in world.items {
+        match item.node {
+            Item::Struct { name, fields, .. } => {
+                if world.words.resolve(name) == own {
+                    return fields.len() == count
+                }
+            },
+            else => {},
+        }
+    }
+    return false
 }

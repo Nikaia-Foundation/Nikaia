@@ -203,3 +203,19 @@ fn a_value_with_no_type_this_compiler_worked_out_is_refused() {
     assert_eq!(found.code, "NK1173");
     assert!(!found.message.contains('?'), "{}", found.message);
 }
+
+/// #730: a `with` that names every field takes nothing from its base, so the
+/// base is read as `_` rather than left an unread `..p`.
+#[test]
+fn a_with_that_names_every_field_reads_its_base_as_underscore() {
+    let rust = lower(&format!(
+        "{POINT}\n\
+         fn main() {{\n\
+         \x20   let p = Point {{ x: 1, y: 2, z: 3 }}\n\
+         \x20   let q = p with {{ x: 4, y: 5, z: 6 }}\n\
+         \x20   println(f\"{{q.x}}\")\n\
+         }}"
+    ));
+    assert!(rust.contains("{ let _ = p; Point { x: 4, y: 5, z: 6, } }"), "{rust}");
+    assert!(!rust.contains("..p"), "{rust}");
+}

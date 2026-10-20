@@ -37470,6 +37470,13 @@ impl EmitState {
         let known = self.facts.with_types.get(&node_key(node));
         if known.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: "The type of this `with` is unknown. This is a compiler bug: the check should have reported it first.".to_owned(), at: Some(at as i64) }, &"emit_core_with")); }
         let owner = nikaia_std::index::or(known, || "").to_owned();
+        let a_name = matches!(base, Expr::Variable(_, _));
+        let whole = a_name && emit_core_with_names_every_field(world, &owner, fields.len() as i64);
+        if whole {
+            out.push("{ let _ = ");
+            host.expr(walk, out, base, depth, flow, scope)?;
+            out.push("; ");
+        }
         out.push(&format!("{} {{ ", owner));
         for field in fields.iter() {
             let written = escaped_name(&emit_text(world, field.name));
@@ -37497,11 +37504,29 @@ impl EmitState {
             } else if either { out.push(&format!(": nikaia_std::either_text::either({})", written)); }
             out.push(", ");
         }
+        if whole {
+            out.push("} }");
+            return Ok(());
+        }
         out.push("..");
         host.expr(walk, out, base, depth, flow, scope)?;
         out.push(" }");
         Ok(())
     }
+}
+
+fn emit_core_with_names_every_field(world: &EmitWorld<'_, '_, '_, '_>, owner: &str, count: i64) -> bool {
+    let own = emit_base(owner);
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Struct { name, fields, .. } => {
+                let name = *name;
+                if world.words.resolve(name) == own { return (fields.len() as i64) == count; }
+            },
+            _ => { },
+        }
+    }
+    false
 }
 
 
