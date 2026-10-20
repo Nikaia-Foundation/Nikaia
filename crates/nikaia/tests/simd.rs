@@ -186,7 +186,14 @@ fn main() {
 /// D3: a load reads what its cut reads, and stops where the cut would.
 #[test]
 fn a_load_past_the_end_stops() {
-    let (ok, _, err) = run_at("past", "--cpu=x86-64", PAST_THE_END);
+    // The baseline of the machine the test runs on: `aarch64` has no
+    // `x86-64` level.
+    let cpu = if cfg!(target_arch = "x86_64") {
+        "--cpu=x86-64"
+    } else {
+        "--cpu=generic"
+    };
+    let (ok, _, err) = run_at("past", cpu, PAST_THE_END);
     assert!(!ok, "it ran to the end");
     assert!(
         err.contains("out of bounds") || err.contains("index"),
