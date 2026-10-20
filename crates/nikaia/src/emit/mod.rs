@@ -5258,6 +5258,17 @@ impl<'p> Emitter<'p> {
         };
 
         out.push(&format!("{name}({rule}, "));
+        // **`init` makes the accumulator** (#704 item 7): the backend calls
+        // it once per accumulator. A function's or a type's name, or a
+        // lambda, is that maker as written; any other expression is the
+        // starting value, and is handed over as a lambda that makes it.
+        let maker = matches!(
+            &spec.init,
+            Expr::Variable(..) | Expr::Path(..) | Expr::Closure { .. }
+        );
+        if !maker {
+            out.push("|| ");
+        }
         self.expr(out, &spec.init, 0, Flow::PLAIN)?;
         out.push(", ");
         self.fold_step(out, &spec.step)?;
@@ -5278,20 +5289,27 @@ impl<'p> Emitter<'p> {
     /// what the program declares - `record` takes `&mut self` and returns
     /// nothing, so the accumulator is changed in place; a method that returns a new
     /// accumulator is left exactly as written.
+    ///
+    /// A step whose last statement assigns to a part of the accumulator,
+    /// `acc.lines += 1`, hands back nothing either: it changes the
+    /// accumulator in place too (#704 item 7).
     fn fold_step(&self, out: &mut Out, step: &Expr) -> Result<()> {
         if let Expr::Closure { params, body, .. } = step
             && let [accumulator, item] = params.as_slice()
-            && let Some(Stmt::Expr(Expr::MethodCall {
-                receiver, method, ..
-            })) = body.stmts.last().map(|s| &s.node)
         {
-            let on_accumulator =
-                matches!(&**receiver, Expr::Variable(name, _) if name == accumulator);
-            let mutates = self
-                .s
-                .by_name
-                .get(self.text(*method))
-                .is_some_and(Method::mutates_in_place);
+            let (on_accumulator, mutates) = match body.stmts.last().map(|s| &s.node) {
+                Some(Stmt::Expr(Expr::MethodCall {
+                    receiver, method, ..
+                })) => (
+                    matches!(&**receiver, Expr::Variable(name, _) if name == accumulator),
+                    self.s
+                        .by_name
+                        .get(self.text(*method))
+                        .is_some_and(Method::mutates_in_place),
+                ),
+                Some(Stmt::Assign { target, .. }) => (a_part_of(target, *accumulator), true),
+                _ => (false, false),
+            };
 
             // **Changed in place, not threaded** (`winnow-grammar` ADR 24
             // §11): a step whose accumulator is written `&mut` is run by a
@@ -8578,6 +8596,17 @@ fn template_hole_tables(parsed: &Parsed) -> HoleTables {
         .map(|((site, text), expr)| ((site as i64, text), expr))
         .collect();
     (holes, errors)
+}
+
+/// Whether `target` is a field or an element of the name `root`, at any
+/// depth: `acc.lines`, `acc.rows[i].n`. The name itself is not a part.
+fn a_part_of(target: &Expr, root: Symbol) -> bool {
+    match target {
+        Expr::Field { base, .. } | Expr::Index { base, .. } => {
+            matches!(&**base, Expr::Variable(name, _) if *name == root) || a_part_of(base, root)
+        }
+        _ => false,
+    }
 }
 
 /// **The names a `fold`'s or a `par_fold`'s step calls directly** (#433): a
