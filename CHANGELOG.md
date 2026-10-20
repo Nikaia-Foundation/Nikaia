@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1135] — 2026-10-20
+
+**A T? beside an unsettled number is refused; a ref String name as a text view's ?? fallback lowers (built)**
+- `opt == 5`, `5 != opt`, `opt == -5` and `opt == k` with `k` typed by its uses are NK1102, as with a typed value (Part I 2.3); before, they passed the checker and failed in rustc (#748).
+- `(n.strip_suffix(s) ?? n).clone()` with `n` a loop variable over `ref Vec[String]` compiles: the fallback is read as `str`; `tools/prover_scope.nika` is back to that form (#719).
+
 ## [0.0.1134] — 2026-10-20
 
 **codegen-units in [build.<target>]; --cpu=LEVEL on build, run and test (built)**
