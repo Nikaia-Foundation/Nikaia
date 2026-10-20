@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1151] — 2026-10-20
+
+**prove-through-loops: the compiler's own checks asked through a loop (ADR-361 D10, decided)**
+- ADR-361 D10, Part III 13.3: the optimization `prove-through-loops:on` asks an index's or an overflow's check that reads a name a loop changes, and that ADR-306's walk leaves open, once more through the loop's invariant, as an `assert` is asked; it changes what is proved, never what a program means. `off` by default. Decided, not yet built.
+
 ## [0.0.1150] — 2026-10-20
 
 **The bounds walk: a u64 is not bounded by i64::MAX; facts survive a bound as wide as i64**
