@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1148] — 2026-10-20
+
+**A grammar's par_fold claims its pieces while the work runs (ADR-372 D4, built)**
+- Nikaia pins winnow-grammar 0fb343f: a `par_fold` rule hands `piece:` and `order:` to the backend's claimed pieces instead of cutting one piece per worker before the work starts.
+
 ## [0.0.1147] — 2026-10-20
 
 **Bytes::par_pieces and par_fold options (ADR-372 D3-D8, built in part)**
