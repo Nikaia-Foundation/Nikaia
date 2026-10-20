@@ -117,6 +117,33 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
         .collect();
     let mut changed = changed_outside(&interner, &fields, &mut items);
     changed.extend(fails_changed(&interner, &ruled, &items));
+    // Each type's methods in this file, and of them those that change `self`.
+    let mut own: BTreeMap<String, Methods> = BTreeMap::new();
+    for item in &items {
+        let Item::Impl {
+            target, methods, ..
+        } = &item.node
+        else {
+            continue;
+        };
+        let entry = own
+            .entry(interner.resolve(target.name).to_string())
+            .or_default();
+        for method in methods {
+            if let Item::Fn {
+                name: Some(name),
+                receiver: Some(how),
+                ..
+            } = &method.node
+            {
+                let name = interner.resolve(*name).to_string();
+                if how.is_mut {
+                    entry.changing.insert(name.clone());
+                }
+                entry.all.insert(name);
+            }
+        }
+    }
     for item in &mut items {
         match &mut item.node {
             Item::Impl {
@@ -129,6 +156,7 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
                         &interner,
                         &ruled,
                         &changed,
+                        &own,
                         &spans,
                         &mut method.node,
                         Some(&owner),
@@ -142,6 +170,7 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
                     &interner,
                     &ruled,
                     &changed,
+                    &own,
                     &spans,
                     &mut item.node,
                     None,
@@ -361,6 +390,21 @@ fn asserts(
     span: Span,
     given: bool,
 ) -> Vec<Spanned<Stmt>> {
+    asserts_as(interner, ruled, type_name, base, span, given, !given)
+}
+
+/// [`asserts`], given where `given` says so and with its `message:` where
+/// `said` does: a rule a method keeps ([`kept_by`]) is both, so that it is a
+/// check again where another file breaks the rule ([`drop_given_in`]).
+fn asserts_as(
+    interner: &InternerContext,
+    ruled: &Ruled,
+    type_name: &str,
+    base: &Expr,
+    span: Span,
+    given: bool,
+    said: bool,
+) -> Vec<Spanned<Stmt>> {
     let mut out = Vec::new();
     for (claim, message, _) in &ruled.rules {
         let Some(condition) = on(interner, claim, base, &ruled.fields) else {
@@ -375,7 +419,8 @@ fn asserts(
                     id: NodeId::fresh(),
                 },
             });
-        } else {
+        }
+        if said {
             // **A failure names the type** (D2): its message is the rule's,
             // after the type's name.
             let said = match message {
@@ -417,10 +462,20 @@ fn named(interner: &InternerContext, ty: &Type) -> String {
     interner.resolve(ty.name).to_string()
 }
 
+/// A type's methods in the file: every one that takes `self`, and those that
+/// change it.
+#[derive(Default)]
+struct Methods {
+    all: BTreeSet<String>,
+    changing: BTreeSet<String>,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn rewrite_fn(
     interner: &InternerContext,
     ruled: &BTreeMap<String, Ruled>,
     changed: &BTreeSet<String>,
+    own: &BTreeMap<String, Methods>,
     spans: &BTreeMap<u32, Span>,
     item: &mut Item,
     owner: Option<&str>,
@@ -441,11 +496,52 @@ fn rewrite_fn(
     check_literals(interner, ruled, spans, body, span);
     let self_name = interner.intern_string("self");
     let self_rules = owner.and_then(|o| ruled.get(o).map(|r| (o, r)));
-    // **A method that changes its receiver keeps the rule when it leaves**.
+    let no_methods = Methods::default();
+    let methods = owner.and_then(|o| own.get(o)).unwrap_or(&no_methods);
+    // **A rule the method cannot break is not checked in it** ([`kept_by`]):
+    // given at each point instead, with its message for where another file
+    // breaks it.
+    let mut kept: Option<Ruled> = None;
+    let mut checked: Option<Ruled> = None;
     if let (Some((type_name, rules)), Some(how)) = (self_rules, &receiver)
         && how.is_mut
     {
+        let mut keeps = Vec::new();
+        let mut checks = Vec::new();
+        for rule in &rules.rules {
+            if !changed.contains(type_name)
+                && kept_by(interner, &rule.0, &rules.fields, &methods.all, body)
+            {
+                keeps.push(rule.clone());
+            } else {
+                checks.push(rule.clone());
+            }
+        }
+        let part = |rules_of: Vec<(Expr, Option<Expr>, Span)>| Ruled {
+            fields: rules.fields.clone(),
+            rules: rules_of,
+            binding: rules.binding,
+        };
+        kept = Some(part(keeps));
+        checked = Some(part(checks));
+    }
+    if let (Some((type_name, rules)), Some(_)) = (self_rules, &receiver)
+        && !changed.contains(type_name)
+    {
+        given_after_calls(interner, rules, type_name, &methods.changing, body);
+    }
+    // **A method that changes its receiver keeps the rule when it leaves**.
+    if let (Some((type_name, _)), Some(how), Some(kept), Some(checked)) =
+        (self_rules, &receiver, &kept, &checked)
+        && how.is_mut
+    {
         let base = Expr::Variable(self_name, NodeId::fresh());
+        let asserts = |_: &InternerContext, _: &Ruled, _: &str, base: &Expr, at: Span, _: bool| {
+            let mut out = asserts_as(interner, checked, type_name, base, at, false, true);
+            out.extend(asserts_as(interner, kept, type_name, base, at, true, true));
+            out
+        };
+        let rules = checked;
         let mut in_lambdas = BTreeSet::new();
         crate::text_tiers::visit_block_mut(
             body,
@@ -497,7 +593,8 @@ fn rewrite_fn(
             },
             &mut |_, _| {},
         );
-        before_returns(interner, rules, type_name, &base, body);
+        before_returns(interner, checked, type_name, &base, false, body);
+        before_returns(interner, kept, type_name, &base, true, body);
         let falls_through = !matches!(body.stmts.last().map(|s| &s.node), Some(Stmt::Return(_)));
         if !ret_type && falls_through {
             let at = body.stmts.last().map_or(span, |s| s.span);
@@ -581,21 +678,22 @@ fn before_returns(
     rules: &Ruled,
     type_name: &str,
     base: &Expr,
+    given: bool,
     block: &mut Block,
 ) {
     let stmts = std::mem::take(&mut block.stmts);
     for mut stmt in stmts {
         match &mut stmt.node {
             Stmt::Return(_) => {
-                block
-                    .stmts
-                    .extend(asserts(interner, rules, type_name, base, stmt.span, false));
+                block.stmts.extend(asserts_as(
+                    interner, rules, type_name, base, stmt.span, given, true,
+                ));
             }
             Stmt::For { body, .. } | Stmt::While { body, .. } => {
-                before_returns(interner, rules, type_name, base, body);
+                before_returns(interner, rules, type_name, base, given, body);
             }
             Stmt::Let { value, .. } | Stmt::Expr(value) => {
-                nested_returns(interner, rules, type_name, base, value);
+                nested_returns(interner, rules, type_name, base, given, value);
             }
             _ => {}
         }
@@ -610,6 +708,7 @@ fn nested_returns(
     rules: &Ruled,
     type_name: &str,
     base: &Expr,
+    given: bool,
     expr: &mut Expr,
 ) {
     match expr {
@@ -618,17 +717,17 @@ fn nested_returns(
             else_branch,
             ..
         } => {
-            before_returns(interner, rules, type_name, base, then_branch);
+            before_returns(interner, rules, type_name, base, given, then_branch);
             if let Some(other) = else_branch {
-                before_returns(interner, rules, type_name, base, other);
+                before_returns(interner, rules, type_name, base, given, other);
             }
         }
         Expr::Block(block, _) | Expr::Unsafe(block, _) => {
-            before_returns(interner, rules, type_name, base, block);
+            before_returns(interner, rules, type_name, base, given, block);
         }
         Expr::Match { arms, .. } => {
             for arm in arms {
-                nested_returns(interner, rules, type_name, base, &mut arm.body);
+                nested_returns(interner, rules, type_name, base, given, &mut arm.body);
             }
         }
         _ => {}
@@ -985,15 +1084,7 @@ fn drop_given(interner: &InternerContext, changed: &BTreeSet<String>, item: &mut
         Item::Fn { body, .. } | Item::Test { body, .. } | Item::Bench { body, .. } => body,
         _ => return,
     };
-    body.stmts.retain(|stmt| {
-        let Stmt::Expr(Expr::Call { config, .. }) = &stmt.node else {
-            return true;
-        };
-        !config.iter().any(|arg| {
-            interner.resolve(arg.name) == GIVEN
-                && matches!(&arg.value, Expr::LitStr { text, .. } if changed.contains(text))
-        })
-    });
+    drop_given_in(interner, changed, body);
 }
 
 fn is_self(interner: &InternerContext, expr: &Expr) -> bool {
@@ -1002,4 +1093,242 @@ fn is_self(interner: &InternerContext, expr: &Expr) -> bool {
 
 fn expr_id(expr: &Expr) -> u32 {
     crate::check::value_node(expr) as u32
+}
+
+/// **What a rule reads of each field**: `true` where only its length
+/// (`xs.len()`), `false` where anything more.
+fn rule_reads(
+    interner: &InternerContext,
+    claim: &Expr,
+    fields: &BTreeSet<String>,
+    out: &mut BTreeMap<String, bool>,
+) {
+    match claim {
+        Expr::MethodCall {
+            receiver,
+            method,
+            args,
+            ..
+        } => {
+            if let Expr::Variable(name, _) = &**receiver
+                && fields.contains(interner.resolve(*name))
+                && interner.resolve(*method) == "len"
+                && args.is_empty()
+            {
+                out.entry(interner.resolve(*name).to_string())
+                    .or_insert(true);
+                return;
+            }
+            rule_reads(interner, receiver, fields, out);
+            for arg in args {
+                rule_reads(interner, arg, fields, out);
+            }
+        }
+        Expr::Variable(name, _) if fields.contains(interner.resolve(*name)) => {
+            out.insert(interner.resolve(*name).to_string(), false);
+        }
+        Expr::Binary { lhs, rhs, .. } => {
+            rule_reads(interner, lhs, fields, out);
+            rule_reads(interner, rhs, fields, out);
+        }
+        Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => {
+            rule_reads(interner, expr, fields, out);
+        }
+        Expr::Field { base, .. } => rule_reads(interner, base, fields, out),
+        _ => {}
+    }
+}
+
+/// **A rule a method cannot break** (D2, proved by what the method does):
+/// every use of `self` in its body reads a field the rule does not read,
+/// counts one it reads only the length of (`self.xs.len()`) or indexes it
+/// (`self.xs[i]`, which keeps its length), or calls a method of the type,
+/// whose exits hold the rule. The rule then holds wherever the body stands as
+/// it held at the entry, and no point of it needs a check.
+fn kept_by(
+    interner: &InternerContext,
+    claim: &Expr,
+    fields: &BTreeSet<String>,
+    methods: &BTreeSet<String>,
+    body: &mut Block,
+) -> bool {
+    let mut reads = BTreeMap::new();
+    rule_reads(interner, claim, fields, &mut reads);
+    let field_of_self = |e: &Expr| match e {
+        Expr::Field { base, name, .. } if is_self(interner, base) => {
+            Some(interner.resolve(*name).to_string())
+        }
+        _ => None,
+    };
+    let mut seen = 0usize;
+    let mut allowed = 0usize;
+    crate::text_tiers::visit_block_mut(
+        body,
+        &mut |expr| match &*expr {
+            Expr::Variable(..) if is_self(interner, expr) => seen += 1,
+            Expr::Field { .. } => {
+                if let Some(name) = field_of_self(expr)
+                    && !reads.contains_key(&name)
+                {
+                    allowed += 1;
+                }
+            }
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+                ..
+            } => {
+                let method = interner.resolve(*method);
+                if is_self(interner, receiver) && methods.contains(method) {
+                    allowed += 1;
+                } else if let Some(name) = field_of_self(receiver)
+                    && reads.contains_key(&name)
+                    && method == "len"
+                    && args.is_empty()
+                {
+                    allowed += 1;
+                }
+            }
+            Expr::Index { base, .. } => {
+                if let Some(name) = field_of_self(base)
+                    && reads.get(&name) == Some(&true)
+                {
+                    allowed += 1;
+                }
+            }
+            _ => {}
+        },
+        &mut |_, _| {},
+    );
+    seen == allowed
+}
+
+/// **After a call of a method of the type that changes `self`, the rule
+/// holds again** (D2, D3): the call's exits hold it, so each statement whose
+/// value is such a call - `self.m(…)`, `let x = self.m(…)`, `x = self.m(…)` -
+/// is followed by the rule, given.
+fn given_after_calls(
+    interner: &InternerContext,
+    rules: &Ruled,
+    type_name: &str,
+    changing: &BTreeSet<String>,
+    block: &mut Block,
+) {
+    let changes_self = |e: &Expr| {
+        matches!(e, Expr::MethodCall { receiver, method, .. }
+            if is_self(interner, receiver) && changing.contains(interner.resolve(*method)))
+    };
+    let stmts = std::mem::take(&mut block.stmts);
+    for mut stmt in stmts {
+        let called = match &mut stmt.node {
+            Stmt::For { body, .. } | Stmt::While { body, .. } => {
+                given_after_calls(interner, rules, type_name, changing, body);
+                false
+            }
+            Stmt::Let { value, .. } | Stmt::Expr(value) => {
+                nested_given(interner, rules, type_name, changing, value);
+                changes_self(value)
+            }
+            Stmt::Assign { target, value, .. } => {
+                matches!(target, Expr::Variable(..))
+                    && !is_self(interner, target)
+                    && changes_self(value)
+            }
+            _ => false,
+        };
+        let at = stmt.span;
+        block.stmts.push(stmt);
+        if called {
+            let base = Expr::Variable(interner.intern_string("self"), NodeId::fresh());
+            block
+                .stmts
+                .extend(asserts(interner, rules, type_name, &base, at, true));
+        }
+    }
+}
+
+/// The blocks an expression holds as statements of its own, for
+/// [`given_after_calls`].
+fn nested_given(
+    interner: &InternerContext,
+    rules: &Ruled,
+    type_name: &str,
+    changing: &BTreeSet<String>,
+    expr: &mut Expr,
+) {
+    match expr {
+        Expr::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            given_after_calls(interner, rules, type_name, changing, then_branch);
+            if let Some(other) = else_branch {
+                given_after_calls(interner, rules, type_name, changing, other);
+            }
+        }
+        Expr::Block(block, _) | Expr::Unsafe(block, _) => {
+            given_after_calls(interner, rules, type_name, changing, block);
+        }
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                nested_given(interner, rules, type_name, changing, &mut arm.body);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The given rules of a type another file changes, in every block of a
+/// body: one at an entry or after a call is dropped; one a method keeps
+/// ([`kept_by`]), which also carries its `message:`, is a check again.
+fn drop_given_in(interner: &InternerContext, changed: &BTreeSet<String>, body: &mut Block) {
+    let drop = |stmts: &mut Vec<Spanned<Stmt>>| {
+        stmts.retain_mut(|stmt| {
+            let Stmt::Expr(Expr::Call { config, .. }) = &mut stmt.node else {
+                return true;
+            };
+            let given = |arg: &ConfigArg| {
+                interner.resolve(arg.name) == GIVEN
+                    && matches!(&arg.value, Expr::LitStr { text, .. } if changed.contains(text))
+            };
+            if !config.iter().any(given) {
+                return true;
+            }
+            if config
+                .iter()
+                .any(|arg| interner.resolve(arg.name) == "message")
+            {
+                config.retain(|arg| !given(arg));
+                return true;
+            }
+            false
+        });
+    };
+    drop(&mut body.stmts);
+    crate::text_tiers::visit_block_mut(
+        body,
+        &mut |expr| match expr {
+            Expr::Block(block, _) | Expr::Unsafe(block, _) | Expr::Closure { body: block, .. } => {
+                drop(&mut block.stmts)
+            }
+            Expr::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                drop(&mut then_branch.stmts);
+                if let Some(other) = else_branch {
+                    drop(&mut other.stmts);
+                }
+            }
+            _ => {}
+        },
+        &mut |stmt, _| {
+            if let Stmt::For { body, .. } | Stmt::While { body, .. } = stmt {
+                drop(&mut body.stmts);
+            }
+        },
+    );
 }

@@ -477,3 +477,80 @@ fn main() {
         "{err}"
     );
 }
+
+const TABLE: &str = r#"
+struct Table {
+    slots: Vec[i64],
+    used: i64,
+    assert(slots.len() == 16; message: "sixteen slots")
+}
+
+impl Table {
+    fn find(ref mut self, i: i64) -> i64 {
+        let at = i & 15
+        if self.slots[at] == 0 {
+            self.claim(at)
+        }
+        return at
+    }
+
+    fn claim(ref mut self, at: i64) {
+        self.used += 1
+        self.slots[at] = 1
+    }
+
+    fn put(ref mut self, i: i64) {
+        let at = self.find(i)
+        self.slots[i & 15] += at
+    }
+
+    fn grow(ref mut self) {
+        self.slots.push(0)
+    }
+}
+
+fn main() {
+    let mut slots: Vec[i64] = []
+    slots.resize(16, 0)
+    let mut t = Table { slots: slots, used: 0 }
+    t.put(3)
+    t.put(19)
+    print(f"{t.used} {t.slots[3]}")
+}
+"#;
+
+/// D2: a method whose every use of `self` keeps what the rule reads - a
+/// field it does not read, a length only counted or indexed, a call of the
+/// type's own methods - is proved to keep it, and checks it nowhere; one
+/// that changes the length checks it.
+#[test]
+fn a_method_that_cannot_break_the_rule_checks_it_nowhere() {
+    let rust = lowered(TABLE);
+    for name in ["find", "claim", "put"] {
+        let method = body(&rust, name);
+        assert!(
+            !method.contains("sixteen slots"),
+            "`{name}` keeps the rule and checks it nowhere:\n{method}"
+        );
+    }
+    let grow = body(&rust, "grow");
+    assert!(
+        grow.contains("sixteen slots"),
+        "`grow` changes the length and checks the rule:\n{grow}"
+    );
+}
+
+/// D3: after a call of the type's own method that changes `self`, the rule
+/// holds again: `self.slots[i & 15]` after `self.find(i)` is proved.
+#[test]
+fn the_rule_holds_again_after_a_call_of_an_own_method() {
+    let rust = lowered(TABLE);
+    let put = body(&rust, "put");
+    assert!(
+        put.contains("proven::"),
+        "the index after `self.find(i)` is proved:\n{put}"
+    );
+    let (ok, out, err) = run("own-call", TABLE);
+    assert!(ok, "{err}");
+    assert_eq!(out, "1 7");
+}
