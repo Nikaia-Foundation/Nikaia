@@ -193,6 +193,126 @@ fn a_fold_is_the_sequential_fold_at_both_settings_and_both_orders() {
     assert_eq!(lines[0], threads.to_string());
 }
 
+/// **`b.par_pieces(sep; piece:)`** (ADR-372 D3, D4, D7): for every piece size,
+/// the pieces' lengths add up to the bytes', none is empty, each but the last
+/// ends in `sep`, and a fold counting lines under either order is the count a
+/// loop over the whole makes. Empty bytes have no pieces; `piece: 0` panics.
+const PIECES: &str = r#"use std::par
+
+fn lines_in(p: ref Bytes) -> i64 {
+    let mut n = 0
+    let mut at = p.find('\n') ?? -1
+    while at >= 0 {
+        n += 1
+        at = p.find('\n'; from: at + 1) ?? -1
+    }
+    return n
+}
+
+fn report(b: ref Bytes, piece: i64) {
+    let lens: Vec[i64] = b.par_pieces('\n'; piece: piece).map(fn(p) { p.len() }).collect()
+    let mut total = 0
+    let mut empty = 0
+    let mut unended = 0
+    for i in 0..<lens.len() {
+        if lens[i] == 0 {
+            empty += 1
+        }
+        total += lens[i]
+        if i + 1 < lens.len() && (b.find('\n'; from: total - 1) ?? -1) != total - 1 {
+            unended += 1
+        }
+    }
+    let kept = b.par_pieces('\n'; piece: piece).fold(fn { 0 }, fn(n, p) { n + lines_in(p) }, fn(x, y) { x + y })
+    let any = b.par_pieces('\n'; piece: piece).fold(fn { 0 }, fn(n, p) { n + lines_in(p) }, fn(x, y) { x + y }; order: par::Order::Any)
+    println(f"{piece}: {lens.len()} {total} {empty} {unended} {kept} {any}")
+}
+
+fn main() {
+    let mut text = ""
+    for i in 0..<5000 {
+        text.push_str(f"station{i % 37};{i % 90}.{i % 10}\n")
+    }
+    let ended = text.clone()
+    text += "unterminated"
+    let b = text.bytes
+    println(f"{b.len()} {lines_in(b)} {ended.bytes.len()}")
+    report(b, 1)
+    report(b, 64)
+    report(b, 1_000_000)
+    report(ended.bytes, 7)
+    let whole = b.par_pieces('\n').fold(fn { 0 }, fn(n, p) { n + p.len() }, fn(x, y) { x + y }; order: par::Order::Any)
+    let none = ""
+    let nothing = none.bytes.par_pieces('\n').map(fn(p) { p.len() }).count()
+    let flat = "no separator".bytes.par_pieces('\n'; piece: 2).map(fn(p) { p.len() }).count()
+    println(f"{whole} {nothing} {flat}")
+    let zero = b.par_pieces('\n'; piece: 0).count()
+    println(f"not reached {zero}")
+}
+"#;
+
+/// How many pieces D3 cuts `bytes` into near every `size` bytes: one per grid
+/// point whose next line end differs from the one after it.
+fn cuts(bytes: &[u8], size: usize) -> usize {
+    let after = |at: usize| -> usize {
+        if at == 0 {
+            return 0;
+        }
+        (at..bytes.len())
+            .find(|i| bytes[*i] == b'\n')
+            .map_or(bytes.len(), |i| i + 1)
+    };
+    (0..bytes.len().div_ceil(size))
+        .filter(|k| after(k * size) != after((k + 1) * size))
+        .count()
+}
+
+/// The lines [`PIECES`] prints after the lengths, for bytes of `len` with
+/// `lines` line ends, the last line unterminated, and `ended` bytes that end
+/// in one.
+fn the_pieces(out: &Output) {
+    let lines: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    let mut ended = String::new();
+    for i in 0..5000 {
+        ended += &format!("station{};{}.{}\n", i % 37, i % 90, i % 10);
+    }
+    let whole = format!("{ended}unterminated").into_bytes();
+    let len = whole.len();
+    let ended = ended.len();
+    assert_eq!(
+        lines,
+        [
+            format!("{len} 5000 {ended}"),
+            format!("1: 5001 {len} 0 0 5000 5000"),
+            format!("64: {} {len} 0 0 5000 5000", cuts(&whole, 64)),
+            format!("1000000: 1 {len} 0 0 5000 5000"),
+            format!("7: 5000 {ended} 0 0 5000 5000"),
+            format!("{len} 0 1"),
+        ],
+        "{lines:?}"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "{lines:?}");
+    assert!(stderr.contains("`piece:` is 0"), "{stderr}");
+}
+
+#[test]
+fn bytes_are_cut_into_pieces_that_end_after_the_separator() {
+    let dir = common::scratch_dir("parallel-pieces");
+    let (at_no, rust) = build(&dir.join("no"), PIECES, "no");
+    assert!(
+        rust.contains("nikaia_std::par::pieces_in_order(&"),
+        "{rust}"
+    );
+    the_pieces(&run(&at_no, &dir.join("run-no"), None));
+    let (at_yes, rust) = build(&dir.join("yes"), PIECES, "yes");
+    assert!(rust.contains("nikaia_std::par::pieces(&"), "{rust}");
+    the_pieces(&run(&at_yes, &dir.join("run-yes"), Some("user-pool = 4\n")));
+}
+
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     use nikaia::contracts::LedgerOps;
     let parsed = nikaia::parser::parse_to_ast(source).expect("the source parses");

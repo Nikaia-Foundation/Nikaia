@@ -137,6 +137,68 @@ pub fn iter<T: Sync>(items: &[T]) -> Par<rayon::slice::Iter<'_, T>> {
     Par(items.par_iter())
 }
 
+/// **The size a piece of `Bytes` is cut near** where `piece:` is left out
+/// (ADR-372 D3, D6): large enough that claiming one costs nothing beside
+/// scanning it, small enough that a slow core holds back little.
+pub const PIECE_BYTES: usize = 1 << 20;
+
+/// Where the piece that is cut near `at` begins: just after the first `sep` at
+/// or after `at`, the start for `0`, the end where no `sep` follows.
+fn cut_after(bytes: &[u8], sep: u8, at: usize) -> usize {
+    if at == 0 {
+        return 0;
+    }
+    if at >= bytes.len() {
+        return bytes.len();
+    }
+    memchr::memchr(sep, &bytes[at..]).map_or(bytes.len(), |found| at + found + 1)
+}
+
+/// **The pieces of `bytes` that each end just after a `sep`**
+/// (`b.par_pieces(sep; piece:)`, ADR-372 D3, D4): piece `k` is cut near
+/// `k * piece` and runs to where piece `k + 1` begins, so every byte is in
+/// exactly one; a piece that a record longer than `piece` leaves empty is
+/// none. Each piece is its own claim: a worker that is done takes the next
+/// one while the work runs.
+#[track_caller]
+pub fn pieces<'a, B: AsRef<[u8]> + ?Sized>(
+    bytes: &'a B,
+    sep: u8,
+    piece: Option<i64>,
+) -> Par<impl ParallelIterator<Item = &'a [u8]> + 'a> {
+    let bytes = bytes.as_ref();
+    let size = piece.map_or(PIECE_BYTES, |n| at_least_one("piece", n));
+    let count = bytes.len().div_ceil(size);
+    Par((0..count)
+        .into_par_iter()
+        .with_max_len(1)
+        .map(move |k| piece_at(bytes, sep, size, k))
+        .filter(|cut| !cut.is_empty()))
+}
+
+/// [`pieces`] at `user_parallelism = no` (ADR-372 D7): the same pieces, in
+/// order, on this thread.
+#[track_caller]
+pub fn pieces_in_order<'a, B: AsRef<[u8]> + ?Sized>(
+    bytes: &'a B,
+    sep: u8,
+    piece: Option<i64>,
+) -> impl Iterator<Item = &'a [u8]> + 'a {
+    let bytes = bytes.as_ref();
+    let size = piece.map_or(PIECE_BYTES, |n| at_least_one("piece", n));
+    let count = bytes.len().div_ceil(size);
+    (0..count)
+        .map(move |k| piece_at(bytes, sep, size, k))
+        .filter(|cut| !cut.is_empty())
+}
+
+/// Piece `k` of `bytes` cut near every `size` bytes.
+fn piece_at(bytes: &[u8], sep: u8, size: usize, k: usize) -> &[u8] {
+    let start = cut_after(bytes, sep, k.saturating_mul(size));
+    let end = cut_after(bytes, sep, (k + 1).saturating_mul(size));
+    &bytes[start..end]
+}
+
 impl<I: ParallelIterator> Par<I> {
     /// Each element through a function, on every core.
     pub fn map<U: Send, F: Fn(I::Item) -> U + Sync + Send>(
@@ -331,6 +393,49 @@ impl<I: ParallelIterator> IntoIterator for Par<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pieces of `b`, parallel and in order, checked against D3: together
+    /// they are `b`, none is empty, each but the last ends in `sep`.
+    fn cut_both_ways(b: &[u8], piece: Option<i64>) -> Vec<Vec<u8>> {
+        let par: Vec<Vec<u8>> = pieces(b, b'\n', piece).map(|p| p.to_vec()).collect();
+        let seq: Vec<Vec<u8>> = pieces_in_order(b, b'\n', piece)
+            .map(|p| p.to_vec())
+            .collect();
+        assert_eq!(par, seq);
+        assert_eq!(par.concat(), b);
+        for (at, p) in par.iter().enumerate() {
+            assert!(!p.is_empty());
+            if at + 1 < par.len() {
+                assert_eq!(p.last(), Some(&b'\n'));
+            }
+        }
+        par
+    }
+
+    #[test]
+    fn bytes_are_cut_after_the_separator_into_pieces_that_cover_them() {
+        let lines: Vec<u8> = (0..2000)
+            .flat_map(|n| format!("station{};{}.{}\n", n % 37, n % 90, n % 10).into_bytes())
+            .collect();
+        for piece in [None, Some(1), Some(7), Some(64), Some(1_000_000)] {
+            cut_both_ways(&lines, piece);
+            cut_both_ways(&lines[..lines.len() - 1], piece);
+            cut_both_ways(b"no separator at all", piece);
+        }
+        assert_eq!(cut_both_ways(&lines, Some(1)).len(), 2000);
+        assert!(cut_both_ways(b"", None).is_empty());
+        assert!(cut_both_ways(b"", Some(1)).is_empty());
+        // The first piece runs to the line end after its grid point 1.
+        assert_eq!(cut_both_ways(b"\n\n\n", Some(1)).len(), 2);
+        let counted = pieces(&lines, b'\n', Some(64)).fold_merged(
+            || 0usize,
+            |n, p| n + p.iter().filter(|b| **b == b'\n').count(),
+            |a, b| a + b,
+            Order::Any,
+            4,
+        );
+        assert_eq!(counted, 2000);
+    }
 
     #[test]
     fn the_walk_keeps_the_lists_order_and_seqs_surface() {

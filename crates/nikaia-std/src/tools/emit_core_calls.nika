@@ -761,6 +761,31 @@ impl EmitState {
             }
             return
         }
+        // **`par_pieces(sep)` cuts bytes into pieces claimed on every core at
+        // `yes`, and walks the same pieces in order at `no`** (ADR-372 D3, D4,
+        // D7); `piece:` is read at both.
+        if name == "par_pieces" && args.len() == 1 && emit_candidates(self.own_contracts, "par_pieces").len() == 0 {
+            let piece = emit_call_option_named(world, config, "piece")
+            if host.user_parallelism() {
+                out.push("nikaia_std::par::pieces(&")
+            } else {
+                out.push("nikaia_std::par::pieces_in_order(&")
+            }
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(", ")
+            host.expr(walk, out, args[0], depth, flow, scope)
+            if piece.len() > 0 {
+                out.push(", Some(")
+                host.expr(walk, out, piece[0], depth, flow, scope)
+                out.push("))")
+            } else {
+                out.push(", None)")
+            }
+            if boxed {
+                out.push(")")
+            }
+            return
+        }
         // **A lambda that pauses, handed to a `std` entry** (ADR-233 D1, D2): the
         // entry's counterpart in `nikaia_std::seq`, which takes the `async`
         // closure the lambda is written as.

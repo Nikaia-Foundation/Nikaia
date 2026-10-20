@@ -5311,6 +5311,24 @@ sync = true
 touches = []
 signature = "(ref self, set: bytes::ByteSet) -> Seq[ref(self) Bytes] sync"
 
+# **Pieces claimed while the work runs** ([ADR-372](../../docs/specification/adr/adr-372.md)
+# D3, D4): a fold over them is a scan written by hand on every core. At
+# `user_parallelism = no` they are walked in order on one thread (D7). `piece:`
+# below 1 panics; where it is left out the runtime decides, and the `0`
+# written here is never read: the call is lowered without it.
+# The bytes in pieces that each end just after a byte `sep`, the last at the
+# end, walked on every core at once.
+#
+# Every byte is in exactly one piece, and no piece is empty: empty bytes have
+# none. A piece is cut near every `piece` bytes and runs on to the next `sep`,
+# so it holds whole records. What `fold`, `map` and `for_each` are handed runs
+# in parallel, so it may not pause and may not change a name outside it.
+[fn."Bytes::par_pieces"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self, sep: u8; piece: i64 = 0) -> Par[ref(self) Bytes] sync"
+
 # The 4 bytes from `at` as an unsigned number, least significant byte first
 # (ADR-320 D12): checked as the cut `b[at..<at + 4]` is, and proved as it is.
 [fn."Bytes::u32_le"]

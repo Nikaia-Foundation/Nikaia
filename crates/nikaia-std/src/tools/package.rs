@@ -36357,6 +36357,20 @@ impl EmitState {
             if boxed { out.push(")"); }
             return Ok(());
         }
+        if name == "par_pieces" && args.len() == 1 && emit_candidates(&self.own_contracts, "par_pieces").is_empty() {
+            let piece = emit_call_option_named(world, config, "piece");
+            if host.user_parallelism() { out.push("nikaia_std::par::pieces(&"); } else { out.push("nikaia_std::par::pieces_in_order(&"); }
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+            out.push(", ");
+            host.expr(walk, out, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+            if !piece.is_empty() {
+                out.push(", Some(");
+                host.expr(walk, out, nikaia_std::index::get(&piece, 0), depth, flow, scope)?;
+                out.push("))");
+            } else { out.push(", None)"); }
+            if boxed { out.push(")"); }
+            return Ok(());
+        }
         let (kind, entry) = emit_call_pausing_entry(&self.facts, args);
         if kind == 1 {
             out.push(&format!("nikaia_std::seq::{}(", entry));
@@ -57007,7 +57021,7 @@ fn class_before(a: &Class, b: &Class) -> bool {
     a.count.rank() < b.count.rank()
 }
 
-const PARALLEL: [&str; 3] = ["par_iter", "par_fold", "par_map"];
+const PARALLEL: [&str; 4] = ["par_iter", "par_pieces", "par_fold", "par_map"];
 
 pub fn declared_here(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -57549,7 +57563,7 @@ fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], 
             a_lambda_handed_on((described).as_ref(), at, &arg, asked, holes_of, ty_of, walk);
             continue;
         }
-        let __keep_63470 = nikaia_std::tether::Keep::new();
+        let __keep_63484 = nikaia_std::tether::Keep::new();
         a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk);
     }
     for setting in config.iter() {

@@ -751,7 +751,7 @@ fn class_before(a: ref Class, b: ref Class) -> bool {
 
 // Methods that run their lambda on a thread the program asked for: a closed
 // list, so a name this file does not know contributes nothing.
-comptime PARALLEL: Array[ref String, 3] = ["par_iter", "par_fold", "par_map"]
+comptime PARALLEL: Array[ref String, 4] = ["par_iter", "par_pieces", "par_fold", "par_map"]
 
 /// Everything a file declares that a slot can belong to: its structs and
 /// enums, its functions, its `impl` targets and their methods as
