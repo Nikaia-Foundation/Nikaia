@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1149] — 2026-10-20
+
+**A number read through brackets past a jump is the number in any position**
+- `v[m[k] ?? panic(..)]` and `f(m[k] ?? return)` lowered to an arm that handed back `&i64`, which rustc refused. The `??` now copies a number, `bool` or character read through brackets or `get` out itself where its fallback leaves, not only under a `let`.
+
 ## [0.0.1148] — 2026-10-20
 
 **A grammar's par_fold claims its pieces while the work runs (ADR-372 D4, built)**
