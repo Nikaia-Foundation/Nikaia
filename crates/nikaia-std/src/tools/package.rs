@@ -39041,8 +39041,10 @@ struct NnState {
 
 pub fn nonnegative_locals(body: &Block) -> Vec<winnow_grammar::Symbol> {
     let mut state = NnState { declared: collections::BTreeMap::new(), candidates: collections::BTreeMap::new(), symbols: vec![], spoiled: collections::BTreeSet::new(), seen: collections::BTreeSet::new() };
-    nn_every(body, &mut state);
-    for expr in visited_in_block(body) {
+    let visited = visited_in_block(body);
+    nn_every(body, &visited, &mut state);
+    for expr in visited.iter() {
+        let expr = *expr;
         match expr {
             Expr::Call { args, .. } => { nn_spoil_all(args, &mut state); },
             Expr::MethodCall { args, .. } => { nn_spoil_all(args, &mut state); },
@@ -39166,44 +39168,38 @@ fn nn_held(value: Option<&Expr>) -> i64 {
     node_key(held)
 }
 
-fn nn_every(block: &Block, state: &mut NnState) {
-    for stmt in block.stmts.iter() {
-        let key = nn_key(stmt);
-        if state.seen.contains(&key) { continue; }
-        state.seen.insert(key);
-        nn_note(&stmt.node, state);
-        match &stmt.node {
-            Stmt::For { body, .. } => { nn_every(body, state); },
-            Stmt::While { body, .. } => { nn_every(body, state); },
-            _ => { },
-        }
-    }
-    for inner in nn_blocks_in(block) { nn_every(inner, state); }
-}
-
-fn nn_blocks_in(block: &Block) -> Vec<&Block> {
-    let mut out: Vec<&Block> = vec![];
-    for expr in visited_in_block(block) {
+fn nn_every(body: &Block, visited: &[&Expr], state: &mut NnState) {
+    let mut blocks: Vec<&Block> = vec![body];
+    for expr in visited.iter() {
+        let expr = *expr;
         match expr {
-            Expr::Block(inner, _) => { out.push(inner); },
-            Expr::Unsafe(inner, _) => { out.push(inner); },
-            Expr::Overlap(inner, _) => { out.push(inner); },
+            Expr::Block(inner, _) => { blocks.push(inner); },
+            Expr::Unsafe(inner, _) => { blocks.push(inner); },
+            Expr::Overlap(inner, _) => { blocks.push(inner); },
             Expr::If { then_branch, else_branch, .. } => {
-                out.push(then_branch);
-                out.extend(nn_maybe_block((else_branch).as_ref()));
+                blocks.push(then_branch);
+                blocks.extend(nn_maybe_block((else_branch).as_ref()));
             },
-            Expr::Closure { body, .. } => { out.push(body); },
+            Expr::Closure { body, .. } => { blocks.push(body); },
             _ => { },
         }
     }
-    for stmt in block.stmts.iter() {
-        match &stmt.node {
-            Stmt::For { body, .. } => { out.push(body); },
-            Stmt::While { body, .. } => { out.push(body); },
-            _ => { },
+    let mut at: i64 = 0;
+    while ((at) as usize) < blocks.len() {
+        let block = *nikaia_std::index::get(&blocks, (at) as usize);
+        for stmt in block.stmts.iter() {
+            match &stmt.node {
+                Stmt::For { body, .. } => { blocks.push(body); },
+                Stmt::While { body, .. } => { blocks.push(body); },
+                _ => { },
+            }
+            let key = nn_key(stmt);
+            if state.seen.contains(&key) { continue; }
+            state.seen.insert(key);
+            nn_note(&stmt.node, state);
         }
+        at += 1;
     }
-    out
 }
 
 fn nn_maybe_block(block: Option<&Block>) -> Vec<&Block> {

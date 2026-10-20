@@ -21,9 +21,11 @@ struct NnState {
 /// The names of the body's locals that are never negative.
 pub fn nonnegative_locals(body: ref Block) -> Vec[winnow_grammar::Symbol] {
     let mut state = NnState { declared: collections::BTreeMap(), candidates: collections::BTreeMap(), symbols: [], spoiled: collections::BTreeSet(), seen: collections::BTreeSet() }
-    nn_every(body, state)
+    // Every expression of the body, nested blocks included, read once.
+    let visited = visited_in_block(body)
+    nn_every(body, visited, state)
     // A name handed to a call may be changed by it (`mut` parameters).
-    for expr in visited_in_block(body) {
+    for expr in visited {
         match expr {
             Expr::Call { args, .. } => nn_spoil_all(args, state),
             Expr::MethodCall { args, .. } => nn_spoil_all(args, state),
@@ -159,50 +161,43 @@ fn nn_held(value: ref Expr?) -> i64 {
     return node_key(held)
 }
 
-fn nn_every(block: ref Block, mut state: NnState) {
-    for stmt in block.stmts {
-        let key = nn_key(stmt)
-        if state.seen.contains(key) {
-            continue
-        }
-        state.seen.insert(key)
-        nn_note(stmt.node, state)
-        match stmt.node {
-            Stmt::For { body, .. } => nn_every(body, state),
-            Stmt::While { body, .. } => nn_every(body, state),
-            else => {},
-        }
-    }
-    for inner in nn_blocks_in(block) {
-        nn_every(inner, state)
-    }
-}
-
-/// The blocks inside a block, other than through a statement of its own: the
-/// blocks of its expressions, and the bodies of its loops.
-fn nn_blocks_in(block: ref Block) -> Vec[ref Block] {
-    let mut out: Vec[ref Block] = []
-    for expr in visited_in_block(block) {
+/// Every statement of `body` and of every block inside it, each noted once:
+/// the blocks of its expressions come from `visited`, every expression of the
+/// body, and the bodies of its loops from the loops - so no block is walked
+/// twice.
+fn nn_every(body: ref Block, visited: ref Vec[ref Expr], mut state: NnState) {
+    let mut blocks: Vec[ref Block] = [body]
+    for expr in visited {
         match expr {
-            Expr::Block(inner, _) => out.push(inner),
-            Expr::Unsafe(inner, _) => out.push(inner),
-            Expr::Overlap(inner, _) => out.push(inner),
+            Expr::Block(inner, _) => blocks.push(inner),
+            Expr::Unsafe(inner, _) => blocks.push(inner),
+            Expr::Overlap(inner, _) => blocks.push(inner),
             Expr::If { then_branch, else_branch, .. } => {
-                out.push(then_branch)
-                out.extend(nn_maybe_block(else_branch))
+                blocks.push(then_branch)
+                blocks.extend(nn_maybe_block(else_branch))
             },
-            Expr::Closure { body, .. } => out.push(body),
+            Expr::Closure { body, .. } => blocks.push(body),
             else => {},
         }
     }
-    for stmt in block.stmts {
-        match stmt.node {
-            Stmt::For { body, .. } => out.push(body),
-            Stmt::While { body, .. } => out.push(body),
-            else => {},
+    let mut at = 0
+    while at < blocks.len() {
+        let block = blocks[at]
+        for stmt in block.stmts {
+            match stmt.node {
+                Stmt::For { body, .. } => blocks.push(body),
+                Stmt::While { body, .. } => blocks.push(body),
+                else => {},
+            }
+            let key = nn_key(stmt)
+            if state.seen.contains(key) {
+                continue
+            }
+            state.seen.insert(key)
+            nn_note(stmt.node, state)
         }
+        at += 1
     }
-    return out
 }
 
 fn nn_maybe_block(block: ref Block?) -> Vec[ref Block] {
