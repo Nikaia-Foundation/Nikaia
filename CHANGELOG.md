@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1116] — 2026-10-20
+
+**A result's sources are what it borrows from; a field behind a view is lent (#735)**
+- A callee's result is fed only by the arguments its contract says it borrows from: a parameter used as a map key or only compared is no source, so it is not kept alive for the result. A field read through a field that is a view is borrowed, not moved.
+
 ## [0.0.1115] — 2026-10-20
 
 **A mut argument says mut, and a float literal is an f32 where one is asked**
