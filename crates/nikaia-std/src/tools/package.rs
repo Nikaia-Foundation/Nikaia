@@ -38560,6 +38560,10 @@ impl EmitState {
             out.push_str("str");
             return out;
         }
+        if ty.is_view && name == "Bytes" && ty.generics.is_empty() && walk.holding.is_none() {
+            out.push_str("[u8]");
+            return out;
+        }
         if name == "SharedMut" && !ty.generics.is_empty() {
             let shared = self.written_name(world, crossings, walk.trusting, "Shared", count);
             let locked = self.written_name(world, crossings, walk.trusting, "Locked", count);

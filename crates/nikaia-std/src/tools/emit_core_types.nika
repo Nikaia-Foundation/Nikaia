@@ -286,6 +286,14 @@ impl EmitState {
             out.push_str("str")
             return out
         }
+        // **A view of bytes is a run of them** (ADR-373 D4, #700), as a view
+        // of text is a `&str`: a text's `s.bytes`, a cut of a `Bytes` and a
+        // `Bytes` by `Deref` all reach it, and a map keyed by such views holds
+        // the cuts as they are.
+        if ty.is_view && name == "Bytes" && ty.generics.len() == 0 && walk.holding == null {
+            out.push_str("[u8]")
+            return out
+        }
         // `SharedMut[T]` is one name and two hulls (ADR-281 D1).
         if name == "SharedMut" && ty.generics.len() > 0 {
             let shared = self.written_name(world, crossings, walk.trusting, "Shared", count)

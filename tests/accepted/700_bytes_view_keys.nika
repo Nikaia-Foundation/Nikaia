@@ -1,0 +1,18 @@
+// #700 d02: a map keyed by views of a text's bytes, counted in place.
+
+use std::collections
+
+fn main() {
+    let s = f"a;b;a{""}"
+    let mut m: collections::HashMap[ref Bytes, i64] = collections::HashMap()
+    let b = s.bytes
+    m.entry(b[0..<1]).and_modify(fn(v) { v += 1 }).or_insert(1)
+    m.entry(b[4..<5]).and_modify(fn(v) { v += 1 }).or_insert(1)
+    m.insert(b[2..<3], 7)
+    println(f"{m[b[0..<1]] ?? 0} {m[b[2..<3]] ?? 0} {m.len()}")
+    let mut total = 0
+    for (k, v) in m {
+        total += k[0] as i64 * v
+    }
+    println(total)
+}

@@ -1,0 +1,36 @@
+// #700 d01: a `ref Bytes` is a run of bytes (ADR-373 D4): a text's
+// `s.bytes`, a name bound to it and a `Bytes` all reach it, read or handed back.
+
+fn count(b: ref Bytes) -> i64 {
+    let mut n = 0
+    for x in b {
+        if x == 59 {
+            n += 1
+        }
+    }
+    return n
+}
+
+fn head(b: ref Bytes) -> String {
+    let t = b[0..<2].text() catch {
+        return "?"
+    }
+    return t.clone()
+}
+
+fn first(b: ref Bytes) -> ref Bytes {
+    return b[0..<1]
+}
+
+fn main() {
+    let s = f"a;b;c{1}"
+    println(count(s.bytes))
+    println(head(s.bytes))
+    let c = s.bytes
+    println(count(c))
+    println(first(s.bytes).len())
+    let owned = s.bytes.clone()
+    println(count(owned))
+    println(head(owned))
+    println(first(owned).len())
+}
