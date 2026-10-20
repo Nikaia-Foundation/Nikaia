@@ -197,6 +197,8 @@ pub struct TierAsk {
     pub names: ref winnow_grammar::InternerContext,
     pub aliases: ref collections::BTreeMap[String, String],
     pub library: ref Ledger,
+    /// `library`'s functions by their last `::` segment (`method_index`).
+    pub methods: ref MethodIndex,
 }
 
 /// A value handed over inside an `f"…"` hole: a copy of it, whose shape is
@@ -926,13 +928,7 @@ fn any_still(given: ref Vec[Kinds]) -> bool {
 
 /// Whether `std` declares a method of this name on any type.
 fn std_has_method(method: ref String, ask: ref TierAsk) -> bool {
-    let within = f"::{method}"
-    for (key, _) in ask.library.functions {
-        if key.ends_with(ref within) {
-            return true
-        }
-    }
-    return false
+    return method_keys(ask.methods, method).len() > 0
 }
 
 /// Each argument a view of static text is in, kept where no position says
@@ -3356,7 +3352,10 @@ fn std_declares(method: ref String, of: ref String?, ask: ref TierAsk) -> bool {
     let receiver = of ?? return false
     let own = f"{last_segment(receiver)}::{method}"
     let within = f"::{own}"
-    for (key, _) in ask.library.functions {
+    // A key equal to `own` or ending in `::{own}` ends in `method`: its
+    // bucket of the index holds it.
+    let bucket = ask.methods.keys[method] ?? return false
+    for key in bucket {
         if key == own || key.ends_with(ref within) {
             return true
         }
@@ -3375,10 +3374,12 @@ fn std_method_views(method: ref String, of: ref String?, ask: ref TierAsk) -> bo
     let own = f"{last_segment(receiver)}::{method}"
     let within = f"::{own}"
     let mut any = false
-    for (key, contract) in ask.library.functions {
+    let bucket = ask.methods.keys[method] ?? return false
+    for key in bucket {
         if key != own && !key.ends_with(ref within) {
             continue
         }
+        let contract = ask.library.functions[key] ?? continue
         let signature = contract.signature ?? return false
         if !signature.takes_a_receiver() {
             continue

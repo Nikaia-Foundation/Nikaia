@@ -139,11 +139,21 @@ pub fn resolve_method(world: ref CheckWorld, key: ref String) -> CheckResolved? 
     if world.own.functions.contains_key(key) {
         return CheckResolved { key: key.clone(), contract: world.own.functions[key]?.clone() ?? return null }
     }
-    let suffix = f"::{key}"
-    for (entry_name, entry_value) in world.library.functions {
-        if entry_name == key || entry_name.ends_with(ref suffix) {
-            return CheckResolved { key: entry_name.clone(), contract: entry_value.clone() }
-        }
+    // The first key, in key order, that is `key` or ends in `::{key}`: the
+    // index's bucket holds every key that ends so, in key order.
+    let mut best: String = ""
+    let mut have = false
+    if world.library.functions.contains_key(key) {
+        best = key.clone()
+        have = true
+    }
+    let ends = method_keys(world.library_methods, key)
+    if ends.len() > 0 && (!have || ends[0] < best) {
+        best = ends[0].clone()
+        have = true
+    }
+    if have {
+        return CheckResolved { key: best.clone(), contract: world.library.functions[best]?.clone() ?? return null }
     }
     // `collections::HashMap::len` was asked for; `HashMap::len` is the key.
     let at = key.find("::") ?? return null

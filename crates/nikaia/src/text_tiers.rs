@@ -141,10 +141,12 @@ pub fn refine(parsed: &mut Parsed) {
     separate_repeated_ids(parsed);
     use nikaia_std::tools::text_tiers::{TierAsk, hand_number, text_tiers};
     let library = crate::contracts::std_ledger();
+    let methods = nikaia_std::tools::ty::method_index(library);
     let ask = TierAsk {
         names: &parsed.interner,
         aliases: &parsed.aliases,
         library,
+        methods: &methods,
     };
     let decided = text_tiers(&parsed.program, &ask);
     parsed.viewed_arms = decided.viewed_arms.clone();
