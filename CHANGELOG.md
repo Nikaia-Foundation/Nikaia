@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1119] — 2026-10-20
+
+**A float beyond f32 is NK1116 in every f32 place; a mixed String? result lowers**
+- `let w: f32 = 1e40`, and the same literal as an argument, `return`, field, list, assignment or operand beside an `f32`, is NK1116, as `as f32` already was (#737). A function whose `String?` result mixes views and owned text compiles: a `match`/`if` whose arms all leave is not wrapped in `either`, and a `String?` arm goes into `either_maybe` without a second `Some` (#696).
+
 ## [0.0.1118] — 2026-10-20
 
 **f32 is a whole type: as f32, comparisons and arithmetic**
