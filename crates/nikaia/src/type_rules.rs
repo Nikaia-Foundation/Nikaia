@@ -110,7 +110,11 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
     }
     let spans = parsed.expr_spans.clone();
     let mut items = std::mem::take(&mut parsed.program.items);
-    let mut changed = changed_outside(&interner, &ruled, &mut items);
+    let fields: BTreeMap<String, BTreeSet<String>> = ruled
+        .iter()
+        .map(|(name, r)| (name.clone(), r.fields.clone()))
+        .collect();
+    let mut changed = changed_outside(&interner, &fields, &mut items);
     changed.extend(fails_changed(&interner, &ruled, &items));
     for item in &mut items {
         match &mut item.node {
@@ -618,14 +622,14 @@ const READERS: [&str; 12] = [
 /// an entry (D3), and what is lost is a proof, never a check.
 fn changed_outside(
     interner: &InternerContext,
-    ruled: &BTreeMap<String, Ruled>,
+    ruled: &BTreeMap<String, BTreeSet<String>>,
     items: &mut [Spanned<Item>],
 ) -> BTreeSet<String> {
     let owners_of = |field: Symbol| -> Vec<String> {
         let text = interner.resolve(field);
         ruled
             .iter()
-            .filter(|(_, r)| r.fields.contains(text))
+            .filter(|(_, fields)| fields.contains(text))
             .map(|(name, _)| name.clone())
             .collect()
     };
@@ -698,6 +702,143 @@ fn changed_outside(
         });
     }
     changed.into_inner()
+}
+
+/// **A package of several files keeps a rule as a fact only where no other
+/// file can break it** (D3). The rules are written out one file at a time
+/// ([`expand`]), so a file does not check a rule of a type another file
+/// declares: a literal of it, a method of it that changes `self`, and a
+/// field of it written, set by a `with` or handed on, each as
+/// [`changed_outside`] reads them, take the type's rule out of the facts at
+/// every entry of the package.
+pub(crate) fn across_files(files: &mut [&mut Parsed]) {
+    if files.len() < 2 {
+        return;
+    }
+    let declared: Vec<BTreeMap<String, BTreeSet<String>>> =
+        files.iter().map(|file| ruled_fields(file)).collect();
+    if declared.iter().all(BTreeMap::is_empty) {
+        return;
+    }
+    let mut changed = BTreeSet::new();
+    for (at, file) in files.iter_mut().enumerate() {
+        let foreign: BTreeMap<String, BTreeSet<String>> = declared
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != at)
+            .flat_map(|(_, types)| types.clone())
+            .collect();
+        if foreign.is_empty() {
+            continue;
+        }
+        let interner = file.interner.clone();
+        changed.extend(changed_outside(
+            &interner,
+            &foreign,
+            &mut file.program.items,
+        ));
+        changed.extend(built_elsewhere(
+            &interner,
+            &foreign,
+            &mut file.program.items,
+        ));
+    }
+    if changed.is_empty() {
+        return;
+    }
+    for file in files.iter_mut() {
+        let interner = file.interner.clone();
+        for item in &mut file.program.items {
+            match &mut item.node {
+                Item::Impl { methods, .. } => {
+                    for method in methods {
+                        drop_given(&interner, &changed, &mut method.node);
+                    }
+                }
+                other => drop_given(&interner, &changed, other),
+            }
+        }
+    }
+}
+
+/// The structs of a file that state rules, with their fields' names.
+fn ruled_fields(parsed: &Parsed) -> BTreeMap<String, BTreeSet<String>> {
+    let mut out = BTreeMap::new();
+    for item in &parsed.program.items {
+        if let Item::Struct {
+            name,
+            fields,
+            rules,
+            ..
+        } = &item.node
+            && !rules.is_empty()
+        {
+            out.insert(
+                parsed.interner.resolve(*name).to_string(),
+                fields
+                    .iter()
+                    .map(|f| parsed.interner.resolve(f.name).to_string())
+                    .collect(),
+            );
+        }
+    }
+    out
+}
+
+/// The types of `ruled` this file builds a literal of, or writes a method
+/// for that changes `self`: neither is checked here.
+fn built_elsewhere(
+    interner: &InternerContext,
+    ruled: &BTreeMap<String, BTreeSet<String>>,
+    items: &mut [Spanned<Item>],
+) -> BTreeSet<String> {
+    let found = std::cell::RefCell::new(BTreeSet::new());
+    for item in items.iter_mut() {
+        if let Item::Impl {
+            target, methods, ..
+        } = &item.node
+        {
+            let owner = interner.resolve(target.name).to_string();
+            let changes_self = methods
+                .iter()
+                .any(|m| matches!(&m.node, Item::Fn { receiver: Some(how), .. } if how.is_mut));
+            if changes_self && ruled.contains_key(&owner) {
+                found.borrow_mut().insert(owner);
+            }
+        }
+        crate::text_tiers::each_block(&mut item.node, &mut |block| {
+            crate::text_tiers::visit_block_mut(
+                block,
+                &mut |expr| {
+                    if let Expr::StructLit { name, .. } = expr {
+                        let type_name = interner.resolve(*name).to_string();
+                        if ruled.contains_key(&type_name) {
+                            found.borrow_mut().insert(type_name);
+                        }
+                    }
+                },
+                &mut |_, _| {},
+            );
+        });
+    }
+    found.into_inner()
+}
+
+/// A function's entry without the facts of the rules of `changed`.
+fn drop_given(interner: &InternerContext, changed: &BTreeSet<String>, item: &mut Item) {
+    let body = match item {
+        Item::Fn { body, .. } | Item::Test { body, .. } | Item::Bench { body, .. } => body,
+        _ => return,
+    };
+    body.stmts.retain(|stmt| {
+        let Stmt::Expr(Expr::Call { config, .. }) = &stmt.node else {
+            return true;
+        };
+        !config.iter().any(|arg| {
+            interner.resolve(arg.name) == GIVEN
+                && matches!(&arg.value, Expr::LitStr { text, .. } if changed.contains(text))
+        })
+    });
 }
 
 fn is_self(interner: &InternerContext, expr: &Expr) -> bool {

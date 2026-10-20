@@ -282,3 +282,83 @@ fn main() {
     assert!(!ok, "the slot read past the end:\n{out}");
     assert!(err.contains("out of bounds"), "{err}");
 }
+
+const RING_FILE: &str = r#"
+comptime CAP: i64 = 4
+
+pub struct Ring {
+    pub slots: Vec[i64],
+    assert(slots.len() == CAP; message: "a ring has CAP slots")
+}
+
+impl Ring {
+    pub fn at(ref self, x: i64) -> i64 {
+        return self.slots[x & (CAP - 1)]
+    }
+}
+
+pub fn ring() -> Ring {
+    let mut slots: Vec[i64] = []
+    slots.resize(CAP, 7)
+    return Ring { slots: slots }
+}
+"#;
+
+/// A package of two files, `ring.nika` and `main.nika` with `main`'s body,
+/// run with its index checks removed where proved: whether it ran to the
+/// end, and what it printed to each stream.
+fn run_package(purpose: &str, main: &str) -> (bool, String, String) {
+    let dir = common::scratch_dir(&format!("type-rules-{purpose}"));
+    std::fs::create_dir_all(dir.join("src")).expect("make src");
+    std::fs::write(
+        dir.join("nikaia.toml"),
+        "[package]\nname = \"ringed\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write the manifest");
+    std::fs::write(dir.join("src/ring.nika"), RING_FILE).expect("write ring.nika");
+    std::fs::write(
+        dir.join("src/main.nika"),
+        format!("fn main() {{\n{main}}}\n"),
+    )
+    .expect("write main.nika");
+    let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["run", "--optimization", "remove-bounds-checks:on"])
+        .env_remove("RUST_BACKTRACE")
+        .output()
+        .expect("the nikaia binary runs");
+    std::fs::remove_dir_all(&dir).ok();
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).to_string(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+    )
+}
+
+/// D3 across the files of a package: a file that writes a field of a type
+/// another file states a rule of, or builds a literal of it, checks no rule,
+/// so the rule is no fact anywhere in the package; a file that only reads
+/// leaves it one.
+#[test]
+fn another_file_of_the_package_leaves_the_rule_no_fact() {
+    for (purpose, main) in [
+        (
+            "file-write",
+            "    let mut r = ring()\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(3)}\")\n",
+        ),
+        (
+            "file-literal",
+            "    let r = Ring { slots: [1, 2] }\n    print(f\"{r.at(3)}\")\n",
+        ),
+    ] {
+        let (ok, out, err) = run_package(purpose, main);
+        assert!(!ok, "{purpose}: the slot read past the end:\n{out}");
+        assert!(err.contains("out of bounds"), "{purpose}: {err}");
+    }
+    let (ok, out, err) = run_package(
+        "file-read",
+        "    let r = ring()\n    print(f\"{r.slots.len()} {r.at(3)}\")\n",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(out.trim(), "4 7");
+}

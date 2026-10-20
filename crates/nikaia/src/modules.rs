@@ -681,6 +681,13 @@ impl Program {
                 .items
                 .retain(|item| !matches!(item.node, Item::Test { .. }));
         }
+        // **A type's rule is a fact only where no file of its package can
+        // break it** (ADR-369 D3).
+        for range in groups(&units) {
+            let mut files: Vec<&mut crate::parser::Parsed> =
+                units[range].iter_mut().map(|u| &mut u.parsed).collect();
+            crate::type_rules::across_files(&mut files);
+        }
         let mut contracts = crate::contracts::Ledger::empty();
         let mut as_its_own: std::collections::BTreeMap<String, crate::contracts::Ledger> =
             std::collections::BTreeMap::new();
