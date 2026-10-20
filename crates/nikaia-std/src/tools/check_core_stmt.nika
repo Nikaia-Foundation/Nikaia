@@ -891,6 +891,9 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         let waiting = state.slots_waiting(span)
         // **A number assigned where no integer goes** (#703) is the `i64` it
         // would be, and the mismatch says so.
+        if check_float_literal_fits(value, into) {
+            return check_core_stmt_unit()
+        }
         let mut assigned: Ty = found.clone()
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(into) {
             assigned = Ty::Named { name: "i64".clone(), args: [], view: false }

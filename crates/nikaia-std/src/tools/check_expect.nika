@@ -16,6 +16,48 @@ pub fn several_errors_of(ty: ref Ty) -> Vec[Ty] sync {
     }
 }
 
+/// **A float written out where its use asks for an `f32`** (Part I 2.2,
+/// #728): a float literal is an `f64` unless its use asks for an `f32`, so a
+/// float written out - negated, in parentheses, or worked out of others - goes
+/// into an `f32` place, an `f32?`, or a list of them, as it is written.
+pub fn check_float_literal_fits(value: ref Expr, want: ref Ty) -> bool {
+    return match want {
+        Ty::Nullable(inner) => check_float_literal_fits(value, inner),
+        Ty::Named { name, args, .. } => {
+            if name == "f32" && args.len() == 0 {
+                return check_floats_written(value)
+            }
+            if (name == "Vec" || name == "Array") && args.len() >= 1 {
+                return match check_peeled(value) {
+                    Expr::ListLit { items, .. } => {
+                        let mut all = items.len() > 0
+                        for item in items {
+                            if !check_float_literal_fits(item, args[0]) {
+                                all = false
+                            }
+                        }
+                        all
+                    },
+                    Expr::ListRepeat { value: repeated, .. } => check_float_literal_fits(repeated, args[0]),
+                    else => false,
+                }
+            }
+            false
+        },
+        else => false,
+    }
+}
+
+/// Whether a value is floats written out and nothing else.
+pub fn check_floats_written(value: ref Expr) -> bool {
+    return match check_peeled(value) {
+        Expr::LitFloat(_, _) => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_floats_written(expr),
+        Expr::Binary { op, lhs, rhs, .. } => (op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem) && check_floats_written(lhs) && check_floats_written(rhs),
+        else => false,
+    }
+}
+
 /// The code a position's mismatch is told with.
 fn expect_code(what: ref String) -> String sync {
     return match what {
@@ -117,6 +159,9 @@ impl CheckState {
         // back.
         if value != null {
             let given = value ?? return
+            if check_float_literal_fits(given, want) {
+                return
+            }
             self.number_asked(world, given, want, span, true)
             let asked = integer_named(value_of_a_copy(want.unseen()))
             if asked != null && shifts_literals(given) {

@@ -503,6 +503,11 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
             check_core_a_kept_lambda(state, world, host, agreed, item, span)
         }
     }
+    // **A list refused for its elements has no type to compare** (#728):
+    // `NK1154` is the one thing said about it.
+    if said {
+        return Ty::Unknown
+    }
     return Ty::Named { name: "Vec".clone(), args: [agreed], view: false }
 }
 

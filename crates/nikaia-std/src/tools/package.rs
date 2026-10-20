@@ -10044,6 +10044,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             continue;
         }
         if state.a_name_in_text(world, &want, given_here, span) { continue; }
+        if given_here.is_some() {
+            let floats = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if check_float_literal_fits(floats, &want) { continue; }
+        }
         let named = check_arguments_named(world, given_here);
         let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
         let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.text())];
@@ -13273,6 +13277,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
         _ => { },
     }
     if a_fn { for item in items.iter() { check_core_a_kept_lambda(state, world, host, &agreed, item, span); } }
+    if said { return Ty::Unknown; }
     Ty::Named { name: "Vec".to_owned(), args: vec![agreed], view: false }
 }
 
@@ -19525,6 +19530,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         let at = check_span_at(world, value, span);
         let pushed = state.findings.len() as i64;
         let waiting = state.slots_waiting(span);
+        if check_float_literal_fits(value, &into) { return check_core_stmt_unit(); }
         let mut assigned: Ty = found.clone();
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(&into) { assigned = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
         state.expect_type(world, &assigned, &into, span, "assign", &|was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
@@ -20481,6 +20487,37 @@ pub fn several_errors_of(ty: &Ty) -> Vec<Ty> {
     }
 }
 
+pub fn check_float_literal_fits(value: &Expr, want: &Ty) -> bool {
+    match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_float_literal_fits(value, inner) },
+        Ty::Named { name, args, .. } => {
+            if name == "f32" && args.is_empty() { return check_floats_written(value); }
+            if (name == "Vec" || name == "Array") && !args.is_empty() {
+                return match check_peeled(value) {
+                    Expr::ListLit { items, .. } => {
+                        let mut all = !items.is_empty();
+                        for item in items.iter() { if !check_float_literal_fits(item, nikaia_std::index::get(&args, 0)) { all = false; } }
+                        all
+                    },
+                    Expr::ListRepeat { value: repeated, .. } => { let repeated = nikaia_std::boxed::open(repeated); check_float_literal_fits(repeated, nikaia_std::index::get(&args, 0)) },
+                    _ => false,
+                };
+            }
+            false
+        },
+        _ => false,
+    }
+}
+
+pub fn check_floats_written(value: &Expr) -> bool {
+    match check_peeled(value) {
+        Expr::LitFloat(_, _) => true,
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && check_floats_written(expr) },
+        Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); (*op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul || *op == BinaryOp::Div || *op == BinaryOp::Rem) && check_floats_written(lhs) && check_floats_written(rhs) },
+        _ => false,
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn expect_code(what: &str) -> String {
@@ -20558,6 +20595,7 @@ impl CheckState {
     pub fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            if check_float_literal_fits(given, want) { return; }
             self.number_asked(world, given, want, span, true);
             let asked = integer_named(&value_of_a_copy(&want.unseen()));
             if asked.is_some() && shifts_literals(given) { self.a_shift_asked_as(world, given, &match asked { Some(__nikaia_value) => __nikaia_value, None => return }, span); }
@@ -31205,7 +31243,12 @@ pub fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
         Ty::Named { name, args, .. } => {
             if name == "Vec" && args.len() == 1 && a_float_type(nikaia_std::index::get(&args, 0)) {
                 match value {
-                    Expr::ListLit { items, .. } => { for item in items.iter() { if an_integer_literal(item) { return Some(Ty::Named { name: String::from("Vec"), args: vec![Ty::Named { name: String::from("i64"), args: vec![], view: false }], view: false }); } } },
+                    Expr::ListLit { items, .. } => {
+                        let mut integer = false;
+                        let mut float = false;
+                        for item in items.iter() { if an_integer_literal(item) { integer = true; } else if check_floats_written(item) { float = true; } }
+                        if integer && !float { return Some(Ty::Named { name: String::from("Vec"), args: vec![Ty::Named { name: String::from("i64"), args: vec![], view: false }], view: false }); }
+                    },
                     _ => { },
                 }
             }
@@ -67558,7 +67601,7 @@ pub mod check_decls {
 pub mod check_doors {}
 pub mod check_expect {
     #[allow(unused_imports)]
-    pub use super::{several_errors_of};
+    pub use super::{several_errors_of, check_float_literal_fits, check_floats_written};
 }
 pub mod check_exprs {
     #[allow(unused_imports)]

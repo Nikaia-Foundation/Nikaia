@@ -412,6 +412,13 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if state.a_name_in_text(world, want, given_here, span) {
             continue
         }
+        // **A float written out where an `f32` is asked** (Part I 2.2, #728).
+        if given_here != null {
+            let floats = given_here ?? continue
+            if check_float_literal_fits(floats, want) {
+                continue
+            }
+        }
         let named = check_arguments_named(world, given_here)
         let keeper = f"`{key}` keeps its `{name}` after the call returns"
         let mut notes: Vec[String] = [f"It's declared as `{key}{signature.text()}`."]

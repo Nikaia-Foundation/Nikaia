@@ -142,10 +142,19 @@ pub fn number_where_no_number_is(want: ref Ty, value: ref Expr) -> Ty? sync {
             if name == "Vec" && args.len() == 1 && a_float_type(args[0]) {
                 match value {
                     Expr::ListLit { items, .. } => {
+                        // One beside a float is `NK1154`'s, said of the list
+                        // alone (#728).
+                        let mut integer = false
+                        let mut float = false
                         for item in items {
                             if an_integer_literal(item) {
-                                return Ty::Named { name: "Vec", args: [Ty::Named { name: "i64", args: [], view: false }], view: false }
+                                integer = true
+                            } else if check_floats_written(item) {
+                                float = true
                             }
+                        }
+                        if integer && !float {
+                            return Ty::Named { name: "Vec", args: [Ty::Named { name: "i64", args: [], view: false }], view: false }
                         }
                     },
                     else => {},

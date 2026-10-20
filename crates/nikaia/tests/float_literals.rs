@@ -154,3 +154,34 @@ fn an_integer_literal_is_no_float() {
     let fine = "fn half(x: f64) -> f64 { return x / 2.0 }\nfn main() {\n    let x: f64 = 2.0\n    let n = 3\n    println(f\"{half(x * 2.0 + 1.5)} {n * 2} {-x}\")\n}\n";
     assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
 }
+
+/// **A float written out takes `f32` where its use asks for one** (#728,
+/// Part I 2.2): a `let`, an argument, a `return`, a field, a list and an
+/// assignment. A name bound to one is an `f64` and stays one.
+#[test]
+fn a_float_literal_is_an_f32_where_one_is_asked() {
+    let fine = "struct S { a: f32 }\n\
+                fn half(x: f32) -> f32 { return x * 0.5 }\n\
+                fn one() -> f32 { return -1.5 }\n\
+                fn main() {\n    let y: f32 = 0.5\n    let s = S { a: 2.5 }\n    let v: Vec[f32] = [1.0, 2.25]\n    let o: f32? = 0.5\n    let mut m: f32 = 1.0\n    m = 2.0 * 0.5\n    println(f\"{y} {s.a} {v[0]} {o ?? 0.0} {half(3.0)} {one()} {m}\")\n}\n";
+    assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
+    let wrong = "fn main() {\n    let x = 0.5\n    let y: f32 = x\n    println(f\"{y}\")\n}\n";
+    assert!(
+        findings(wrong).iter().any(|f| f.code == "NK1103"),
+        "{:#?}",
+        findings(wrong)
+    );
+}
+
+/// **A list that mixes a float and an integer is told once** (#728): `NK1154`
+/// about the list, and not `NK1103` about the `let` it goes into as well.
+#[test]
+fn a_mixed_list_is_only_nk1154() {
+    for want in ["Vec[f64]", "Vec[i64]"] {
+        let source = format!(
+            "fn main() {{\n    let v: {want} = [1.0, 2]\n    println(f\"{{v.len()}}\")\n}}\n"
+        );
+        let codes: Vec<String> = findings(&source).into_iter().map(|f| f.code).collect();
+        assert_eq!(codes, ["NK1154"], "{source}");
+    }
+}

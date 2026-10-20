@@ -1,0 +1,27 @@
+// #728: a float literal is an `f64` unless its use asks for an `f32`
+// (Part I 2.2): a `let`, an argument, a `return`, a field, a list, an
+// option, an assignment and a compound assignment.
+
+struct S { a: f32 }
+
+fn half(x: f32) -> f32 { return x * 0.5 }
+
+fn one() -> f32 { return 1.5 }
+
+fn neg() -> f32 { return -(0.25 + 0.5) }
+
+fn main() {
+    let y: f32 = 0.5
+    let s = S { a: 2.5 }
+    let mut v: Vec[f32] = [1.0, 2.25]
+    v.push(0.75)
+    let r: Vec[f32] = [0.5; 2]
+    let o: f32? = 0.5
+    let z = half(3.0)
+    let w = y * 0.5
+    let mut m: f32 = 1.0
+    println(f"{m}")
+    m = 2.0
+    m += 0.25
+    println(f"{y} {s.a} {v[0]} {v[1]} {v[2]} {r[1]} {o ?? 0.0} {z} {one()} {neg()} {w} {m} {y < 1.0}")
+}
