@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1156] — 2026-10-20
+
+**A type's rule is a fact only where nothing can break it unchecked (ADR-369 D2, D3)**
+- A type whose method changes `self` and `throws`, or whose fields or literals another file of the package touches, keeps no entry fact (both were reads past the end under `remove-bounds-checks:on`); a failure names the type ("the rule of `T`: …"); a generic struct's rule is refused as generic (`NK1288`).
+
 ## [0.0.1155] — 2026-10-20
 
 **A type's rule: an assert after a struct's fields (ADR-369 D1-D3, built in part)**
