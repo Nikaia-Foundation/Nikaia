@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# What `examples/1brc.nika`, `naive.nika` and `fast.nika` cost against the same aggregation
-# written in Rust: instructions and mispredicted branches per row, counted with
-# callgrind, and each program's length in tokens. It prints the table
-# `README.md` keeps.
+# What `examples/1brc.nika`, `naive.nika`, `fast.nika` and `fast-unsafe.nika`
+# cost against the same aggregation written in Rust, by an AI assistant and by
+# humans (`human/humans.sh`): instructions and mispredicted branches per row,
+# counted with callgrind, and each program's length in tokens. It prints the
+# table `README.md` keeps.
 #
 # Counts, not a clock: on a shared machine the same binaries swap places from
 # one round to the next, and a count does not.
@@ -60,7 +61,7 @@ version = "0.1.0"
 
 [build]
 user-parallelism = "$1"
-optimization = "remove-bounds-checks:on,remove-overflow-checks:on,prove-through-loops:on,skip-free-at-exit:on"
+optimization = "${OPTIMIZATION:-remove-bounds-checks:on,remove-overflow-checks:on,prove-through-loops:on,skip-free-at-exit:on}"
 
 [build.x86_64-linux]
 opt-level = 3
@@ -92,6 +93,14 @@ for u in $units; do
     build_nikaia "$u" fast no "$fast"
     RUSTFLAGS="-C overflow-checks=off" build_nikaia "$u" fast-unchecked no "$fast"
     build_nikaia "$u" fast-v3 no "$fast" x86-64-v3
+    # `fast.nika` with `unsafe { assume(…) }` (ADR-376): believed where the
+    # build removes checks, as every build here does; checked where it removes
+    # none, which leaves the other optimizations on.
+    unsafe_src="$root/benches/brc/fast-unsafe.nika"
+    build_nikaia "$u" fast-unsafe no "$unsafe_src"
+    build_nikaia "$u" fast-unsafe-v3 no "$unsafe_src" x86-64-v3
+    OPTIMIZATION="prove-through-loops:on,skip-free-at-exit:on" \
+        build_nikaia "$u" fast-unsafe-checked no "$unsafe_src"
     # On every core: checked for its output, not counted.
     build_nikaia "$u" fast-parallel yes "$fast"
 done
@@ -104,11 +113,19 @@ for u in $units; do
         "$work/nikaia.checked.cu$u" \
         "$work/nikaia.unchecked.cu$u" "$work/nikaia.parallel.cu$u" "$work/nikaia.naive.cu$u" \
         "$work/target-v3-cu$u/release/ai2" "$work/nikaia.fast.cu$u" "$work/nikaia.fast-unchecked.cu$u" \
-        "$work/nikaia.fast-v3.cu$u" "$work/nikaia.fast-parallel.cu$u"; do
+        "$work/nikaia.fast-v3.cu$u" "$work/nikaia.fast-parallel.cu$u" "$work/nikaia.fast-unsafe.cu$u" \
+        "$work/nikaia.fast-unsafe-v3.cu$u" "$work/nikaia.fast-unsafe-checked.cu$u"; do
         "$p" "$input" | cmp -s - "$work/out.naive" \
             || { echo "FAIL: $p disagrees with naive"; exit 1; }
     done
 done
+
+# The human-written Rust programs (`human/humans.sh`): built, their output
+# compared with `naive`'s at each setting, then counted; their rows are kept
+# for the table below.
+cp "$work/out.naive" "$work/out.naive.$rows"
+NIKAIA="$nikaia" "$root/benches/brc/human/humans.sh" "$rows" > "$work/humans.rows" \
+    || { echo "human/humans.sh failed"; exit 1; }
 
 # --- then the counts -------------------------------------------------------
 
@@ -117,10 +134,10 @@ count() {
     valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file="$work/cg.out" "$@" >/dev/null 2>&1
     awk -v r="$rows" '/^summary:/ { printf "%.1f | %.2f", $2 / r, ($4 + $6) / r }' "$work/cg.out"
 }
-# Lengths by `scripts/tokens.nika`, one run for all six files.
+# Lengths by `scripts/tokens.nika`, one run for all seven files.
 nikaia_tokens="$work/tokens.txt"
 ( cd "$root" && "$nikaia" run scripts/tokens.nika -- benches/brc/src/bin/naive.rs \
-    benches/brc/src/bin/ai1.rs benches/brc/src/bin/ai2.rs examples/1brc.nika benches/brc/naive.nika benches/brc/fast.nika ) > "$nikaia_tokens" 2>/dev/null \
+    benches/brc/src/bin/ai1.rs benches/brc/src/bin/ai2.rs examples/1brc.nika benches/brc/naive.nika benches/brc/fast.nika benches/brc/fast-unsafe.nika ) > "$nikaia_tokens" 2>/dev/null \
     || { echo "scripts/tokens.nika failed"; exit 1; }
 tokens() { awk -v f="$1" '$2 == f {print $1}' "$nikaia_tokens"; }
 
@@ -150,5 +167,9 @@ row '**Nikaia**, `examples/1brc.nika`' "$(tokens examples/1brc.nika)" "$work/nik
 row 'Nikaia, overflow checks off' '' "$work/nikaia.unchecked.cu@"
 row '**Nikaia**, `fast.nika`' "$(tokens benches/brc/fast.nika)" "$work/nikaia.fast.cu@"
 row 'Nikaia, `fast.nika`, overflow checks off' '' "$work/nikaia.fast-unchecked.cu@"
+row '**Nikaia**, `fast-unsafe.nika`, assumes believed' "$(tokens benches/brc/fast-unsafe.nika)" "$work/nikaia.fast-unsafe.cu@"
+row 'Nikaia, `fast-unsafe.nika`, assumes checked' '' "$work/nikaia.fast-unsafe-checked.cu@"
 row 'Rust, AI variant 2 (`ai2`), `x86-64-v3`' '' "$work/target-v3-cu@/release/ai2"
 row 'Nikaia, `fast.nika`, `x86-64-v3`' '' "$work/nikaia.fast-v3.cu@"
+row 'Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3`' '' "$work/nikaia.fast-unsafe-v3.cu@"
+cat "$work/humans.rows"
