@@ -236,22 +236,22 @@ pub fn signed_with_unsigned(signed: i64, unsigned: u64) -> std::cmp::Ordering {
     unsigned_with_signed(unsigned, signed).reverse()
 }
 
-/// **A count of bits, cut to `0..=width`**
-/// ([Part I](../../../docs/specification/10-nikaia-light.md), `low_bits`): a
-/// count of any integer type, a negative one as `0`, one past the width as the
-/// width, so no count aborts. A view of one is its value, as for [`Value`].
+/// **A count of bits, of any integer type** (Part I, `low_bits`): a negative
+/// one keeps none, one at or past the width keeps all, so no count aborts. A
+/// view of one is its value, as for [`Value`].
 pub trait BitCount {
-    /// The count in `0..=width`.
-    fn clamped(self, width: u32) -> u32;
+    /// Whether the count is at least `width`, and the count's low bits, which
+    /// are the count where it is in `0..width` and `0` where it is negative.
+    fn split(self, width: u32) -> (bool, u32);
 }
 
 macro_rules! signed_count {
-    ($($t:ty => $wide:ty),*) => {
+    ($($t:ty),*) => {
         $(
             impl BitCount for $t {
                 #[inline(always)]
-                fn clamped(self, width: u32) -> u32 {
-                    (self as $wide).clamp(0, width as $wide) as u32
+                fn split(self, width: u32) -> (bool, u32) {
+                    (self >= width as $t, self.max(0) as u32)
                 }
             }
         )*
@@ -259,25 +259,26 @@ macro_rules! signed_count {
 }
 
 macro_rules! unsigned_count {
-    ($($t:ty => $wide:ty),*) => {
+    ($($t:ty),*) => {
         $(
             impl BitCount for $t {
                 #[inline(always)]
-                fn clamped(self, width: u32) -> u32 {
-                    (self as $wide).min(width as $wide) as u32
+                fn split(self, width: u32) -> (bool, u32) {
+                    (self >= width as $t, self as u32)
                 }
             }
         )*
     };
 }
 
-signed_count!(i8 => i64, i16 => i64, i32 => i64, i64 => i64, isize => i64, i128 => i128);
-unsigned_count!(u8 => u64, u16 => u64, u32 => u64, u64 => u64, usize => u64, u128 => u128);
+// `i8` and `u8` hold every width (at most 64).
+signed_count!(i8, i16, i32, i64, isize, i128);
+unsigned_count!(u8, u16, u32, u64, usize, u128);
 
 impl<T: BitCount + Copy> BitCount for &T {
     #[inline(always)]
-    fn clamped(self, width: u32) -> u32 {
-        (*self).clamped(width)
+    fn split(self, width: u32) -> (bool, u32) {
+        (*self).split(width)
     }
 }
 
@@ -286,8 +287,12 @@ impl<T: BitCount + Copy> BitCount for &T {
 /// 0`, all where `n` is at least the width. On `u8`, `u32` and `u64`, a method
 /// because the program writes one; in the prelude so the call resolves.
 ///
-/// Branch-free: the count clamped with selects, then one `bzhi` where the
-/// build has BMI2 (`x86-64-v3`), two shifts elsewhere.
+/// Branch-free: the mask below the count, then a select of all of `x` where
+/// the count reaches the width - about eight instructions where nothing is
+/// known of the count, fewer where its range is. LLVM folds the select into
+/// the mask, so this is not one `bzhi` at `x86-64-v3`: that is reached only
+/// through `std::arch`'s `_bzhi_u64`, which needs `unsafe`, and the forms
+/// LLVM does select `bzhi` for cost more instructions around it.
 pub trait LowBits: Sized {
     /// `self` with only its `n` lowest bits kept.
     fn low_bits<C: BitCount>(self, n: C) -> Self;
@@ -296,50 +301,70 @@ pub trait LowBits: Sized {
 impl LowBits for u64 {
     #[inline(always)]
     fn low_bits<C: BitCount>(self, n: C) -> u64 {
-        low_bits_u64(self, n.clamped(64))
+        let (all, k) = n.split(64);
+        let kept = self & ((1u64 << (k & 63)) - 1);
+        if all { self } else { kept }
     }
 }
 
 impl LowBits for u32 {
     #[inline(always)]
     fn low_bits<C: BitCount>(self, n: C) -> u32 {
-        low_bits_u32(self, n.clamped(32))
+        let (all, k) = n.split(32);
+        let kept = self & ((1u32 << (k & 31)) - 1);
+        if all { self } else { kept }
     }
 }
 
 impl LowBits for u8 {
     #[inline(always)]
     fn low_bits<C: BitCount>(self, n: C) -> u8 {
-        low_bits_u32(u32::from(self), n.clamped(8)) as u8
-    }
-}
-
-/// `x` with its `k` lowest bits kept, `k` in `0..=64`. Written as a shift
-/// down of all ones, which LLVM selects as one `bzhi` where the build has BMI2
-/// (`x86-64-v3`) and as two shifts elsewhere; the `k == 0` select goes where
-/// the count is known not to be `0`. No `unsafe` (`std::arch`'s `_bzhi_u64`
-/// would need one, and this crate forbids it).
-#[inline(always)]
-fn low_bits_u64(x: u64, k: u32) -> u64 {
-    if k == 0 {
-        0
-    } else {
-        x & (u64::MAX >> (64 - k))
-    }
-}
-
-/// `x` with its `k` lowest bits kept, `k` in `0..=32`.
-#[inline(always)]
-fn low_bits_u32(x: u32, k: u32) -> u32 {
-    if k == 0 {
-        0
-    } else {
-        x & (u32::MAX >> (32 - k))
+        let (all, k) = n.split(8);
+        let kept = u32::from(self) & ((1u32 << (k & 31)) - 1);
+        if all { self } else { kept as u8 }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::LowBits;
+
+    /// A view of a count, as a loop over a list lends one.
+    fn by_view(x: u8, n: &u8) -> u8 {
+        x.low_bits(n)
+    }
+
+    /// `low_bits` against the definition, for every count around each width,
+    /// of a signed and an unsigned count type.
+    #[test]
+    fn low_bits_keep_the_lowest_bits() {
+        let a: u64 = 0x0123_4567_89ab_cdef;
+        for n in -70i64..=140 {
+            let k = n.clamp(0, 128) as u32;
+            let keep = |w: u32| if k >= w { u64::MAX } else { (1u64 << k) - 1 };
+            assert_eq!(a.low_bits(n), a & keep(64), "u64 {n}");
+            assert_eq!(
+                (a as u32).low_bits(n),
+                (a as u32) & keep(32) as u32,
+                "u32 {n}"
+            );
+            assert_eq!(
+                (a as u8).low_bits(n as i32),
+                (a as u8) & keep(8) as u8,
+                "u8 {n}"
+            );
+            if n >= 0 {
+                assert_eq!(a.low_bits(n as u64), a & keep(64), "u64 count {n}");
+                let count = n as u8;
+                assert_eq!(by_view(a as u8, &count), (a as u8) & keep(8) as u8);
+            }
+        }
+        assert_eq!(a.low_bits(u64::MAX), a);
+        assert_eq!(a.low_bits(i64::MIN), 0);
+        assert_eq!(a.low_bits(1i64 << 40), a);
+        assert_eq!(a.low_bits(i128::MAX), a);
+    }
+
     use super::*;
 
     /// **Every `u64` is above every negative number**, and the two compare
