@@ -27,6 +27,7 @@ use nikaia_std::tools::logic_normal::{
 use nikaia_std::tools::logic_search::{lg_check, lg_verify, lg_verify_model};
 use nikaia_std::tools::proofs_book::{PbLine, pb_read, pb_render};
 use nikaia_std::tools::prover_arena::TermArena;
+use nikaia_std::tools::solver_terms::SolverTerm;
 
 /// The file, beside `nikaia.contracts`.
 pub const FILE: &str = "nikaia.proofs";
@@ -94,6 +95,11 @@ pub struct AskedSoFar {
 
 thread_local! {
     static BOOK: RefCell<Option<Book>> = const { RefCell::new(None) };
+    /// **A question asked before, by its terms as written** (#727): the
+    /// book's key, the entry it found there and what that came to. A bounds
+    /// pass asks the same questions again under fresh term ids; this answers
+    /// them without normalising, as long as the book still holds that entry.
+    static KNOWN: RefCell<std::collections::HashMap<String, (String, Entry, Asked)>> = RefCell::new(std::collections::HashMap::new());
     static IN_FILE: RefCell<Option<(PathBuf, String)>> = const { RefCell::new(None) };
     /// Where each line break of the file being checked is, for [`here`].
     static BREAKS: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
@@ -227,8 +233,106 @@ pub fn with_book<R>(book: Book, run: impl FnOnce() -> R) -> (R, Book) {
     (out, book)
 }
 
+/// The question as its terms are written, every node in full: two questions
+/// written alike have one normal form, whatever their term ids.
+fn written(arena: &TermArena, facts: &[i64], goal: i64) -> String {
+    let mut out = String::new();
+    for fact in facts {
+        write_term(arena, *fact, &mut out);
+        out.push(';');
+    }
+    out.push('|');
+    write_term(arena, goal, &mut out);
+    out
+}
+
+fn write_term(arena: &TermArena, id: i64, out: &mut String) {
+    use std::fmt::Write;
+    let Some(node) = arena.nodes.get(id as usize) else {
+        out.push('?');
+        return;
+    };
+    let two = |tag: char, a: i64, b: i64, out: &mut String| {
+        out.push(tag);
+        write_term(arena, a, out);
+        write_term(arena, b, out);
+    };
+    match node {
+        SolverTerm::Bool(value) => out.push(if *value { 'T' } else { 'F' }),
+        SolverTerm::Int(value) => {
+            let _ = write!(out, "i{value},");
+        }
+        SolverTerm::Var(name) => {
+            let _ = write!(out, "v{}:{name}", name.len());
+        }
+        SolverTerm::Add(a, b) => two('+', *a, *b, out),
+        SolverTerm::Sub(a, b) => two('-', *a, *b, out),
+        SolverTerm::Mul(a, b) => two('*', *a, *b, out),
+        SolverTerm::Le(a, b) => two('l', *a, *b, out),
+        SolverTerm::Lt(a, b) => two('<', *a, *b, out),
+        SolverTerm::Ge(a, b) => two('g', *a, *b, out),
+        SolverTerm::Gt(a, b) => two('>', *a, *b, out),
+        SolverTerm::Eq(a, b) => two('=', *a, *b, out),
+        SolverTerm::Ne(a, b) => two('!', *a, *b, out),
+        SolverTerm::Neg(a) => {
+            out.push('n');
+            write_term(arena, *a, out);
+        }
+        SolverTerm::Not(a) => {
+            out.push('~');
+            write_term(arena, *a, out);
+        }
+        SolverTerm::Quot(a, k) => {
+            let _ = write!(out, "q{k},");
+            write_term(arena, *a, out);
+        }
+        SolverTerm::And(parts) | SolverTerm::Or(parts) => {
+            let tag = if matches!(node, SolverTerm::And(_)) {
+                '&'
+            } else {
+                '|'
+            };
+            let _ = write!(out, "{tag}{},", parts.len());
+            for part in parts {
+                write_term(arena, *part, out);
+            }
+        }
+        SolverTerm::Other => out.push('o'),
+    }
+}
+
+/// What a question written so came to, if the open book still holds the
+/// entry it came from; the key is marked asked, as a lookup would.
+fn known(written: &str) -> Option<Asked> {
+    let (key, entry, asked) = KNOWN.with(|held| held.borrow().get(written).cloned())?;
+    BOOK.with(|held| {
+        let mut held = held.borrow_mut();
+        let book = held.as_mut()?;
+        if book.entries.get(&key) != Some(&entry) {
+            return None;
+        }
+        book.asked.insert(key);
+        Some(asked)
+    })
+}
+
+fn remember(written: Option<String>, key: &str, entry: &Entry, asked: &Asked) {
+    if let Some(written) = written {
+        KNOWN.with(|held| {
+            held.borrow_mut()
+                .insert(written, (key.to_string(), entry.clone(), asked.clone()))
+        });
+    }
+}
+
 /// Whether the facts imply the goal, and if not, why not.
 pub fn ask(arena: &TermArena, facts: &[i64], goal: i64) -> Asked {
+    let written = book_open().then(|| written(arena, facts, goal));
+    if let Some(written) = &written
+        && let Some(asked) = known(written)
+    {
+        return asked;
+    }
     let normal = lg_normal_of(arena, facts, goal);
     if !book_open() {
         // Nothing is recorded or looked up: no key to make (#727).
@@ -245,9 +349,15 @@ pub fn ask(arena: &TermArena, facts: &[i64], goal: i64) -> Asked {
     if let Some(entry) = recorded
         && let Some(asked) = read(&normal, &entry)
     {
+        remember(written, &key, &entry, &asked);
         return asked;
     }
     let (asked, entry) = search(&normal);
+    if let Some(entry) = &entry {
+        // What a read of this entry comes to: the search checked the same
+        // certificate or model.
+        remember(written, &key, entry, &asked);
+    }
     BOOK.with(|held| {
         if let Some(book) = held.borrow_mut().as_mut() {
             book.searched += 1;
