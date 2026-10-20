@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1141] — 2026-10-20
+
+**task::cores(), Par::fold(init, step, merge; order:, workers:), par_iter(piece:) (built, ADR-372 D1, D2, D4-D7)**
+- `task::cores()` is 1 at `user_parallelism = no` and the user pool's size at `yes` (`user-pool`, 0 = the threads the process may run on) (#717).
+- `Par::fold` folds with nothing shared: `par::Order::Kept` (default) merges contiguous runs in input order, `Any` keeps one accumulator per worker; `workers:` sizes the pool; at `no` it is one sequential fold and `merge` is not called.
+- `par_iter(piece: n)` sets the piece size; `workers:` or `piece:` below 1 stops the program naming the option. A walk made from a `Par` is a `Par`, so `fold` is found after `map` and `filter`.
+
 ## [0.0.1140] — 2026-10-20
 
 **A ref Bytes the body keeps takes the Bytes with its owner (built, ADR-373 D1, D4)**
