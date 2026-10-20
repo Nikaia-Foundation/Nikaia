@@ -1,0 +1,21 @@
+// #730 item 3: a stored function type that hands back one of two views it is
+// handed holds no view of the struct's own: its result is the call's.
+
+struct Picker {
+    pick: fn(ref String, ref String) -> ref String sync,
+}
+
+fn longer(a: ref String, b: ref String) -> ref String sync {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    let p = Picker { pick: longer }
+    let a = "abc"
+    let b = "de"
+    println(p.pick(a, b))
+    println(p.pick(b, "wxyz"))
+}

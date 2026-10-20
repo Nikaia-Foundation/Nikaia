@@ -8902,6 +8902,15 @@ fn names_outside(parsed: &Parsed, ty: &Type, outside: &std::collections::BTreeSe
 
 pub(crate) fn names_borrowing(ty: &Type, borrowing: &HashSet<Symbol>) -> bool {
     if let Some(code) = &*ty.code {
+        // A result that is one of two views handed in is the call's (#730).
+        let named = ty
+            .generics
+            .iter()
+            .filter(|g| !holds_view(g) && names_borrowing(g, borrowing))
+            .count();
+        if nikaia_std::tools::views::views_the_call_s(ty, named as i64) {
+            return false;
+        }
         return (*code.result)
             .as_ref()
             .is_some_and(|result| names_borrowing(result, borrowing));

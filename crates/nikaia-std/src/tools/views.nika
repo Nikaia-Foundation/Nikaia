@@ -278,11 +278,34 @@ fn any_names_borrowing(names: ref winnow_grammar::InternerContext, types: ref Ve
 
 // Whether a type is, or holds, a view. **A function type holds what its
 // result holds**: what it is handed is borrowed for the call alone, and is
-// written below with no lifetime of its own (0.0.405).
+// written below with no lifetime of its own (0.0.405). **Unless the result
+// is one of two views it was handed** (#730): that one is the call's too
+// (`for<'call>`), and the type holds nothing.
 pub fn holds_view(ty: ref Type) -> bool {
     let code = ty.code ?? return holds_view_written(ty)
     let result = code.result ?? return false
+    if views_the_call_s(ty, 0) {
+        return false
+    }
     return holds_view(result)
+}
+
+/// Whether a function type's result is the call's own (#703, #730): `sync`,
+/// and handed two views or more, of which it gives back one. The lowering
+/// writes it `for<'call> Fn(&'call A, &'call B) -> &'call R`. `borrowing`
+/// counts the parameters that name a type holding a view.
+pub fn views_the_call_s(ty: ref Type, borrowing: i64) -> bool {
+    let code = ty.code ?? return false
+    if !code.is_sync {
+        return false
+    }
+    let mut lent = borrowing
+    for part in ty.generics {
+        if holds_view(part) {
+            lent += 1
+        }
+    }
+    return lent > 1
 }
 
 fn holds_view_written(ty: ref Type) -> bool {
@@ -303,6 +326,15 @@ fn names_borrowing(names: ref winnow_grammar::InternerContext, ty: ref Type, bor
     if ty.code != null {
         let code = ty.code ?? return false
         let result = code.result ?? return false
+        let mut named = 0
+        for part in ty.generics {
+            if !holds_view(part) && names_borrowing(names, part, borrowing) {
+                named += 1
+            }
+        }
+        if views_the_call_s(ty, named) {
+            return false
+        }
         return names_borrowing(names, result, borrowing)
     }
     if borrowing.contains(names.resolve(ty.name)) {

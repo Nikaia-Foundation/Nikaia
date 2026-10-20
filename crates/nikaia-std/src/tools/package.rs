@@ -65065,7 +65065,16 @@ fn any_names_borrowing(names: &winnow_grammar::InternerContext, types: &[Type], 
 pub fn holds_view(ty: &Type) -> bool {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return holds_view_written(ty) };
     let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if views_the_call_s(ty, 0) { return false; }
     holds_view(result)
+}
+
+pub fn views_the_call_s(ty: &Type, borrowing: i64) -> bool {
+    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !code.is_sync { return false; }
+    let mut lent = borrowing;
+    for part in ty.generics.iter() { if holds_view(part) { lent += 1; } }
+    lent > 1
 }
 
 fn holds_view_written(ty: &Type) -> bool {
@@ -65078,6 +65087,9 @@ fn names_borrowing(names: &winnow_grammar::InternerContext, ty: &Type, borrowing
     if (*ty.code).is_some() {
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let mut named: i64 = 0;
+        for part in ty.generics.iter() { if !holds_view(part) && names_borrowing(names, part, borrowing) { named += 1; } }
+        if views_the_call_s(ty, named) { return false; }
         return names_borrowing(names, result, borrowing);
     }
     if borrowing.contains(names.resolve(ty.name)) { return true; }
@@ -67955,7 +67967,7 @@ pub mod types {
 }
 pub mod views {
     #[allow(unused_imports)]
-    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources, PlacesStored, places_stored};
+    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, views_the_call_s, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources, PlacesStored, places_stored};
 }
 pub mod written {
     #[allow(unused_imports)]
