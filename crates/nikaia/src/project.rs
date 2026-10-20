@@ -2797,6 +2797,9 @@ impl Project {
             && Some(self.settings.build.target) == Target::host()
             && self.settings.panic_strategy() == "unwind"
             && self.settings.build.reentrancy_check.is_on()
+            // **A CPU level is `std`'s too** (ADR-002 D6): the library this
+            // path links was built at the baseline, so `--cpu` takes Cargo's.
+            && self.settings.cpu.is_none()
             && self.manifest.codegen_for(&self.settings.target).is_empty()
             // A trace is asked about the wrapper Cargo runs.
             && std::env::var_os(TRACE_VAR).is_none()
