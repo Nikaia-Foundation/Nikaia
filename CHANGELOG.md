@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1129] — 2026-10-20
+
+**spec: process::run's env, env_remove and env_clear; the program is found on the caller's PATH (ADR-243 D5-D8, #691)**
+- Part III 17.2: `process::run` takes `env`, `env_remove` and `env_clear`, applied as clear, remove, set; names are compared as the platform does; `program` is looked up on the caller's `PATH`; every entry is checked before the start, a literal one while building (`NK1286`); `env_clear` is not a sandbox (ADR-243 D5-D8, #691).
+
 ## [0.0.1128] — 2026-10-20
 
 **spec: a text position is a text::Pos; find gives a Match, a text is cut by before/after/between (ADR-374, #743)**
