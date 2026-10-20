@@ -299,9 +299,21 @@ jobs:
       - name: No clippy warnings
         run: cargo clippy --all-targets -- -D warnings
 
-      # Every failure at once, rather than the first test binary's.
+      # Every failure at once, rather than the first test binary's. Each
+      # one-file program a checker test accepts is written to the dump the
+      # next step reads (#705).
       - name: Test
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: cargo test --workspace --release --no-fail-fast
+
+      # **Every program a checker test accepts compiles in `rustc`** (#705):
+      # lowered and checked by `rustc --emit=metadata`, in batches. A refusal
+      # not on the test's allow-list fails, and so does an entry that compiles.
+      - name: Accepted-programs sweep (accepted-sweep)
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
+        run: cargo test --release -p nikaia --test accepted_sweep -- --ignored
 
       # The driver needs a file, so run it on the samples rather than bare
       # `cargo run`, which only refuses with nothing to do. `interpret` runs

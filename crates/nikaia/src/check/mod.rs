@@ -242,9 +242,61 @@ pub fn check_against<'a>(
     // nothing.
     reads: &'a Reads,
 ) -> Checked {
-    walked(
+    let checked = walked(
         parsed, beside, own, library, modules, newly, reads, false, true,
-    )
+    );
+    if beside.is_empty() && modules.is_empty() {
+        dump_accepted(parsed, &checked);
+    }
+    checked
+}
+
+/// **Where the sweep of accepted programs collects them** (#705): the
+/// directory `NIKAIA_DUMP_ACCEPTED` names, read once. Unset in every build
+/// and every ordinary test run.
+pub(crate) fn accepted_dump_dir() -> Option<&'static std::path::Path> {
+    static DIR: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        std::env::var_os("NIKAIA_DUMP_ACCEPTED")
+            .filter(|dir| !dir.is_empty())
+            .map(std::path::PathBuf::from)
+    })
+    .as_deref()
+}
+
+/// **A file the check accepted, written where the sweep reads it** (#705):
+/// `<binary>-<hash>.nika`, the binary being the test that checked it and the
+/// hash the source's (FNV-1a), so the same program checked twice is one file.
+/// A file of a program of several is not written: it needs its project.
+fn dump_accepted(parsed: &Parsed, checked: &Checked) {
+    let (Some(dir), Some(source)) = (accepted_dump_dir(), parsed.dumped_source.as_deref()) else {
+        return;
+    };
+    if parsed.package.is_some()
+        || checked
+            .findings
+            .iter()
+            .any(|f| f.severity == Severity::Error)
+    {
+        return;
+    }
+    let binary = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .unwrap_or_default();
+    // A test binary is `<name>-<cargo's hash>`; the name is what a reader knows.
+    let binary = match binary.rsplit_once('-') {
+        Some((name, hash)) if hash.chars().all(|c| c.is_ascii_hexdigit()) => name.to_string(),
+        _ => binary,
+    };
+    let hash = source.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    });
+    let path = dir.join(format!("{binary}-{hash:016x}.nika"));
+    if !path.exists() {
+        let _ = std::fs::create_dir_all(dir);
+        let _ = std::fs::write(path, source);
+    }
 }
 
 /// **The pass the ledger's inference reads**: the same walk, asked for what a

@@ -462,6 +462,11 @@ pub struct Parsed {
     /// A node the compiler built has none; who reports on it falls back to
     /// the enclosing statement's span.
     pub expr_spans: std::collections::BTreeMap<u32, ast::Span>,
+    /// **The text this file was parsed from, kept only for the sweep of
+    /// accepted programs** (#705): `None` unless `NIKAIA_DUMP_ACCEPTED` names a
+    /// directory, where [`crate::check::check_against`] writes each source it
+    /// accepts.
+    pub(crate) dumped_source: Option<String>,
 }
 
 impl Parsed {
@@ -616,6 +621,7 @@ impl Parsed {
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
             expr_spans: self.expr_spans.clone(),
+            dumped_source: None,
         }
     }
 
@@ -656,6 +662,7 @@ impl Parsed {
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
             expr_spans: self.expr_spans.clone(),
+            dumped_source: None,
         }
     }
 
@@ -905,6 +912,7 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         kept_calls: Default::default(),
         next_id: std::sync::Mutex::new(after_ids),
         expr_spans,
+        dumped_source: crate::check::accepted_dump_dir().map(|_| input.to_string()),
     };
     // ADR-347: a one-variant enum written by its type's name becomes the long
     // form here, before any reader sees the tree.
