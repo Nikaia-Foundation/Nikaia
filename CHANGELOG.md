@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1114] — 2026-10-20
+
+**Text orders against text; the prover answers repeats without normalising (#733, #727)**
+- Ordering a text view against owned text (`a < owned`) compiles; it lowered to `&str < String`. The prover answers a question asked again under fresh term ids without normalising it again.
+
 ## [0.0.1113] — 2026-10-20
 
 **Five more programs the checker accepted now compile or are refused**
