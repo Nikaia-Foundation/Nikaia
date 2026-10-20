@@ -326,7 +326,7 @@ pub fn keeps_length(method: ref String) -> bool {
         "windows" => true, "chunks" => true, "rev" => true, "fold" => true,
         "binary_search" => true, "to_string" => true, "chars" => true,
         "bytes" => true, "u32_le" => true, "u32_be" => true, "u64_le" => true,
-        "u64_be" => true,
+        "u64_be" => true, "find_all" => true,
         else => false,
     }
 }

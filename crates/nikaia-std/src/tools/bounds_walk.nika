@@ -180,6 +180,10 @@ struct BoundsWalk {
     /// **The loops whose invariant is being checked**, innermost last
     /// (ADR-361 D4): what a turn's end, a `continue` or a `break` must keep.
     turns: Vec[BoundsTurn],
+    /// **The candidates a `break` need not keep** (ADR-361 D4): `!c` of a
+    /// guard `if c { break }`, which holds at each turn's head and not where
+    /// the loop is left, so nothing past the loop reads it.
+    leaving: collections::BTreeSet[i64],
 }
 
 /// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
@@ -283,6 +287,7 @@ pub fn bounds_aggressive(args: ref Vec[FnArg], body: ref Block, nonnegative: col
         missed_goals: [],
         through_loops: context.through_loops,
         turns: [],
+        leaving: collections::BTreeSet(),
     }
     let mut settled = false
     if !walk.shape.roots.is_empty() {
@@ -531,7 +536,7 @@ fn bounding_range(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFacts, 
         return bounding_term(walk, term ?? 0, facts, ask)
     }
     match expr {
-        Expr::Binary { op, lhs, rhs, .. } => return bounding_range_of(walk, op, lhs, rhs, facts, context, program, words, ask),
+        Expr::Binary { op, lhs, rhs, span, .. } => return bounding_range_of(walk, op, lhs, rhs, span.start as i64, facts, context, program, words, ask),
         Expr::Unary { op, expr, .. } => {
             match op {
                 UnaryOp::Neg => {
@@ -591,7 +596,7 @@ fn bounding_dropped(text: ref String, count: i64) -> String {
 }
 
 /// `lhs op rhs`, where it is not a linear term.
-fn bounding_range_of(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Range? {
+fn bounding_range_of(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, at: i64, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Range? {
     match op {
         BinaryOp::Add => {
             let a = bounding_range(walk, lhs, facts, context, program, words, ask) ?? return null
@@ -627,12 +632,22 @@ fn bounding_range_of(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs:
             if k != same || k < 0 || k >= 64 {
                 return null
             }
-            let x = bounding_range(walk, lhs, facts, context, program, words, ask) ?? return null
-            let lo = x.lo ?? return null
-            if lo < 0 {
-                return null
+            // **An unsigned value shifted right by `k` is below `2^(w - k)`**
+            // for its type's width `w`, whatever the walk knows of it.
+            let mut widest: Range? = null
+            let ty = context.shifts[at] ?? ""
+            let width = bounding_bits(ty) ?? 0
+            if ty.starts_with("u") && width > 0 && k >= 1 && k < width {
+                let most = (1 << (width - k).min(62)) - 1
+                widest = Range { lo: 0, hi: most }
             }
-            let mut shifted = Range { lo: lo >> k, hi: null }
+            let known = bounding_range(walk, lhs, facts, context, program, words, ask)
+            let x = known ?? return widest
+            let lo = x.lo ?? return widest
+            if lo < 0 {
+                return widest
+            }
+            let mut shifted = Range { lo: lo >> k, hi: (widest ?? Range { lo: 0, hi: null }).hi }
             if x.hi != null {
                 shifted.hi = (x.hi ?? 0) >> k
             }
@@ -710,8 +725,49 @@ fn bounding_fits(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref
         }
         return bounding_proves_goal(walk, facts, goal, ask)
     }
-    let range = bounding_range_of(walk, op, lhs, rhs, facts, context, program, words, ask) ?? return false
+    // **A side the walk only bounds** (#714): `l + x` with `a <= x <= b`
+    // lies between `l + a` and `l + b`, linear goals the solver can state.
+    let adds = match op {
+        BinaryOp::Add => true,
+        else => false,
+    }
+    let subtracts = match op {
+        BinaryOp::Sub => true,
+        else => false,
+    }
+    if (adds || subtracts) && bounding_mixed_fits(walk, lhs, rhs, subtracts, lo, hi, facts, context, program, words, ask) {
+        return true
+    }
+    if adds && bounding_mixed_fits(walk, rhs, lhs, false, lo, hi, facts, context, program, words, ask) {
+        return true
+    }
+    let range = bounding_range_of(walk, op, lhs, rhs, -1, facts, context, program, words, ask) ?? return false
     return bounds.holds(range)
+}
+
+/// `linear + ranged` (or `linear - ranged` where `subtracts`) inside `lo..=hi`:
+/// `linear` a term of the solver, `ranged` a value between two constants.
+fn bounding_mixed_fits(mut walk: BoundsWalk, linear: ref Expr, ranged: ref Expr, subtracts: bool, lo: i64, hi: i64, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    let l = bounding_lin(walk, linear, facts, context, program, words) ?? return false
+    let r = bounding_range(walk, ranged, facts, context, program, words, ask) ?? return false
+    let a = r.lo ?? return false
+    let b = r.hi ?? return false
+    let mut least = a
+    let mut most = b
+    if subtracts {
+        least = 0 - b
+        most = 0 - a
+    }
+    let least_term = walk.arena.int(least)
+    let most_term = walk.arena.int(most)
+    let low = walk.arena.add(l, least_term)
+    let high = walk.arena.add(l, most_term)
+    let floor = walk.arena.int(lo)
+    let ceiling = walk.arena.int(hi)
+    let above = walk.arena.ge(low, floor)
+    let below = walk.arena.le(high, ceiling)
+    let goal = walk.arena.and([above, below])
+    return bounding_proves_goal(walk, facts, goal, ask)
 }
 
 /// **A shift's count lies in `0..<w`** (ADR-306 D18), `w` the width of the
@@ -732,6 +788,14 @@ fn bounding_count_fits(mut walk: BoundsWalk, count: ref Expr, ty: ref String, fa
     let lo = range.lo ?? return false
     let hi = range.hi ?? return false
     return lo >= 0 && hi < width
+}
+
+/// A whole-number literal.
+fn bounding_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
 }
 
 /// How many bits a whole-number type has.
@@ -1669,11 +1733,11 @@ fn bounding_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, c
             return true
         },
         Stmt::Break => {
-            bounding_turn_end(walk, facts, true, ask)
+            bounding_turn_end(walk, facts, true, true, ask)
             return true
         },
         Stmt::Continue => {
-            bounding_turn_end(walk, facts, true, ask)
+            bounding_turn_end(walk, facts, true, false, ask)
             return true
         },
         Stmt::Expr(expr) => return bounding_expr_leaves(walk, expr, facts, context, program, words, ask),
@@ -1788,7 +1852,7 @@ fn bounding_loop_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFac
         else => return,
     }
     let mut guesses: Vec[i64] = []
-    for guess in bounding_loop_guesses(walk, stmt, entry, changed, words) {
+    for guess in bounding_loop_guesses(walk, stmt, entry, changed, context, program, words) {
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         walk.arena.variables(guess, read)
         let mut useful = false
@@ -1866,6 +1930,19 @@ fn bounding_loop_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFac
             walk.proven.loops.insert(start, loop_parts_text(walk.arena, LoopFound { parts: parts }))
             facts.facts = here.facts.clone()
             facts.ints = here.ints.clone()
+            // What a guess a `break` need not keep says of the names the
+            // loop changes does not hold past it.
+            for guess in guesses {
+                if walk.leaving.contains(guess) {
+                    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                    walk.arena.variables(guess, read)
+                    for name in read {
+                        if bounding_changes_name(changed, name) {
+                            bounding_forget(walk, facts, name)
+                        }
+                    }
+                }
+            }
             return
         }
     }
@@ -1919,7 +1996,7 @@ fn bounding_loop_walk(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFac
 /// **The candidates of a loop's invariant**: the facts it is reached with
 /// that its changes take away, an equality as its two halves, none that
 /// reads a `for`'s binding.
-fn bounding_loop_guesses(mut walk: BoundsWalk, stmt: ref Stmt, entry: ref BoundsFacts, changed: ref BoundsChanged, words: ref winnow_grammar::InternerContext) -> Vec[i64] {
+fn bounding_loop_guesses(mut walk: BoundsWalk, stmt: ref Stmt, entry: ref BoundsFacts, changed: ref BoundsChanged, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext) -> Vec[i64] {
     let mut bound: Vec[String] = []
     match stmt {
         Stmt::For { bindings, .. } => {
@@ -1957,7 +2034,48 @@ fn bounding_loop_guesses(mut walk: BoundsWalk, stmt: ref Stmt, entry: ref Bounds
             else => out.push(fact),
         }
     }
+    // **A guard that leaves the loop holds the other way where the next turn
+    // starts** (D4): `if c { break }` in the body makes `!c` a candidate,
+    // asked where the loop is reached as any other.
+    let body = match stmt {
+        Stmt::For { body, .. } => body,
+        Stmt::While { body, .. } => body,
+        else => return out,
+    }
+    for each in body.stmts {
+        let guard = bounding_break_guard(each.node) ?? continue
+        let denied = bounding_denial(walk, guard, entry, context, program, words) ?? continue
+        let mut reads_bound = false
+        for name in bound {
+            if bounding_touches(walk, denied, name) {
+                reads_bound = true
+            }
+        }
+        if !reads_bound {
+            walk.leaving.insert(denied)
+            out.push(denied)
+        }
+    }
     return out
+}
+
+/// The condition `c` of a statement `if c { break }`.
+fn bounding_break_guard(stmt: ref Stmt) -> Expr? {
+    return match stmt {
+        Stmt::Expr(expr) => match expr {
+            Expr::If { cond, then_branch, else_branch, .. } => {
+                if else_branch != null || then_branch.stmts.len() != 1 {
+                    return null
+                }
+                match then_branch.stmts[0].node {
+                    Stmt::Break => cond.clone(),
+                    else => null,
+                }
+            },
+            else => null,
+        },
+        else => null,
+    }
 }
 
 /// What a loop's turn may change: its body's changes, and a `while`'s
@@ -2002,7 +2120,7 @@ fn bounding_changes_name(changed: ref BoundsChanged, name: ref String) -> bool {
 /// candidate of the innermost loop whose invariant is being checked is asked
 /// of what holds here; one that does not follow is dropped. `jump` where it
 /// is a `break` or a `continue`, counted by where it stands.
-fn bounding_turn_end(mut walk: BoundsWalk, facts: ref BoundsFacts, jump: bool, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn bounding_turn_end(mut walk: BoundsWalk, facts: ref BoundsFacts, jump: bool, leaves: bool, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
     if walk.turns.is_empty() {
         return
     }
@@ -2011,6 +2129,9 @@ fn bounding_turn_end(mut walk: BoundsWalk, facts: ref BoundsFacts, jump: bool, a
         frame.jumps.insert(walk.at)
     }
     for k in 0..<frame.guesses.len() {
+        if leaves && walk.leaving.contains(frame.guesses[k]) {
+            continue
+        }
         if !frame.failed.contains(k) && !bounding_proves(walk, facts, frame.guesses[k], ask) {
             frame.failed.insert(k)
         }
@@ -2032,7 +2153,7 @@ fn bounding_while(mut walk: BoundsWalk, cond: ref Expr, body: ref Block, changed
     let mut inner = facts.clone()
     bounding_assume(walk, inner, cond, context, program, words)
     if !bounding_block(walk, body, inner, context, program, words, ask) {
-        bounding_turn_end(walk, inner, false, ask)
+        bounding_turn_end(walk, inner, false, false, ask)
     }
     if !breaks(body, words) {
         bounding_assume_not(walk, facts, cond, context, program, words)
@@ -2350,7 +2471,7 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
         }
     }
     if !bounding_block(walk, body, inner, context, program, words, ask) {
-        bounding_turn_end(walk, inner, false, ask)
+        bounding_turn_end(walk, inner, false, false, ask)
     }
     if classed != null {
         walk.loop_classes.remove(classed ?? "")
@@ -2557,11 +2678,11 @@ fn bounding_expr_leaves(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsF
             return true
         },
         Expr::Break(_) => {
-            bounding_turn_end(walk, facts, true, ask)
+            bounding_turn_end(walk, facts, true, true, ask)
             return true
         },
         Expr::Continue(_) => {
-            bounding_turn_end(walk, facts, true, ask)
+            bounding_turn_end(walk, facts, true, false, ask)
             return true
         },
         Expr::Throw(value, _) => {
@@ -2757,7 +2878,7 @@ fn bounding_binary(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: r
     // **A shift's count is a goal, as an index is** (ADR-306 D18): `0 <= k`
     // and `k` below the width of the shifted value's type.
     let shifted = context.shifts[at]
-    if shifted != null {
+    if shifted != null && !bounding_literal(rhs) {
         if !walk.collecting && bounding_count_fits(walk, rhs, shifted ?? "", facts, context, program, words, ask) {
             walk.proven.arithmetic.insert(at)
         } else if !walk.collecting {

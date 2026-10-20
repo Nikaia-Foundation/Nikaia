@@ -188,3 +188,105 @@ fn prove_through_loops_is_on_or_off() {
         "{stderr}"
     );
 }
+
+/// What `nikaia --bounds lower` reports of `source` with every optimization on.
+fn bounds_report(purpose: &str, source: &str) -> String {
+    let dir = common::scratch_dir(purpose);
+    std::fs::write(dir.join("main.nika"), source).expect("the source");
+    let out = nikaia(
+        &dir,
+        &["--bounds", "lower", "main.nika", "--optimization", ALL_ON],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    String::from_utf8_lossy(&out.stdout).to_string()
+}
+
+/// The report's line for the check written `what`.
+fn report_line<'a>(report: &'a str, what: &str) -> &'a str {
+    report
+        .lines()
+        .find(|l| l.contains(what))
+        .unwrap_or_else(|| panic!("no `{what}` in:\n{report}"))
+}
+
+const SCANNED: &str = "use std::bytes
+
+fn scan(buf: ref Bytes, stop: i64) -> u64 {
+    if stop == 0 { return 0 }
+    assert(stop > 0 && stop <= buf.len() - 16)
+    let mut pos = 0
+    let mut acc: u64 = 0
+    for sep in buf.find_all(bytes::ByteSet([';'])) {
+        acc = acc ^ buf.u64_le(pos)
+        pos = sep + 1
+        if pos >= stop { break }
+    }
+    return acc
+}
+
+fn main() {
+    let mut v: Vec[u8] = []
+    for _ in 0..<40 { v.push(59) }
+    println(f\"{scan(Bytes(v), 10)}\")
+}
+";
+
+/// ADR-361 D4: a guard `if c { break }` makes `!c` a candidate that holds at
+/// each turn's head (not where the loop is left), and `find_all` keeps the
+/// length of what it searches: the word read at `pos` is proved inside.
+#[test]
+fn a_break_guard_carries_its_bound_through_the_loop() {
+    let report = bounds_report("break-guard", SCANNED);
+    assert!(
+        report_line(&report, "buf.u64_le(pos)").ends_with("proved"),
+        "{report}"
+    );
+}
+
+/// A guess a `break` need not keep says nothing past the loop: `pos < stop`
+/// is false where the loop is left.
+#[test]
+fn a_break_guard_does_not_hold_past_the_loop() {
+    let source = SCANNED.replace(
+        "    return acc\n",
+        "    let xs: Vec[i64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n    return acc + (xs[pos] as u64)\n",
+    );
+    let report = bounds_report("break-guard-past", &source);
+    assert!(
+        report_line(&report, "xs[pos]").contains("checked"),
+        "{report}"
+    );
+}
+
+/// An unsigned value shifted right by a constant is below `2^(64 - k)`, and
+/// `l + x` with `x` between constants stays inside its type where `l` does.
+#[test]
+fn an_unsigned_shift_bounds_an_index_and_a_sum() {
+    let source = "fn pick(xs: ref Vec[i64], h: u64, d: u64, s: i64) -> i64 {
+    assert(xs.len() == 16384 && s >= 0 && s < 1000)
+    if d > 28 { return 0 }
+    let at = (h >> 50).bits_as_i64()
+    return xs[at] ^ (s + 4 + ((d >> 3) as i64))
+}
+
+fn main() {
+    let mut xs: Vec[i64] = []
+    xs.resize(16384, 1)
+    println(f\"{pick(xs, 12345678901234, 20, 3)}\")
+}
+";
+    let report = bounds_report("unsigned-shift", source);
+    assert!(
+        report_line(&report, "xs[at]").ends_with("proved"),
+        "{report}"
+    );
+    assert!(
+        report_line(&report, "s + 4 + (…)").ends_with("proved"),
+        "{report}"
+    );
+}

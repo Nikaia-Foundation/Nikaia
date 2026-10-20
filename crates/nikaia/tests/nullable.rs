@@ -2070,3 +2070,24 @@ fn a_fallback_of_another_kind_is_refused() {
         );
     }
 }
+
+/// A compound value put into a nullable field is converted as a whole:
+/// `hi: (a - 1).into()`, not `a - 1.into()`.
+#[test]
+fn a_compound_value_in_a_nullable_field_is_converted_whole() {
+    let out = ran(
+        "nullable-field-compound",
+        "struct R { lo: i64?, hi: i64? }
+
+fn f(w: i64, k: i64) -> R {
+    return R { lo: 0, hi: (1 << (w - k).min(62)) - 1 }
+}
+
+fn main() {
+    let r = f(64, 50)
+    println(f\"{r.hi ?? 0}\")
+}
+",
+    );
+    assert_eq!(out.trim(), "16383");
+}
