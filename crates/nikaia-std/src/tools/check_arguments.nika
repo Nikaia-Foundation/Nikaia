@@ -338,6 +338,12 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if state.a_count_at_the_boundary(written, want, found_here) {
             continue
         }
+        // **A list written out for a `Vec[T?]` holds `T?`s** (#700), lent
+        // or handed over.
+        if given_here != null {
+            let value = given_here ?? continue
+            check_overflow_list_into_nullables(state, value, found_here, want)
+        }
         // **The compiler writes the `&` at the call** (ADR-094 D1), where the
         // callee lends this position and the value is not already a view.
         if state.the_compiler_writes_the_reference(world, contract, at, given_here, found_here, want, own, written, span) {

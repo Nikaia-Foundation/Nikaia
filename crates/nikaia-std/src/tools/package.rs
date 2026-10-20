@@ -9995,6 +9995,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             continue;
         }
         if state.a_count_at_the_boundary(written, &want, &found_here) { continue; }
+        if given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            check_overflow_list_into_nullables(state, value, &found_here, &want);
+        }
         if state.the_compiler_writes_the_reference(world, contract, at, given_here, &found_here, &want, own, written, span) { continue; }
         if check_arguments_a_print(written) && given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -27135,6 +27139,10 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
             return Some(FactWrap::Unsigned(into.to_owned()));
         }
     }
+    if value.is_some() {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if check_overflow_list_into_nullables(state, given, found, want) { return None; }
+    }
     let how = match check_wrap_for(found, want, literal) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let widen: String = match how {
         FactWrap::Widen(ref into) => into.to_owned(),
@@ -27146,6 +27154,40 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     }
     Some(how)
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
+    let items = match given {
+        Expr::ListLit { items, .. } => items,
+        _ => return false,
+    };
+    let wants_nullable = match want {
+        Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && check_overflow_a_nullable(nikaia_std::index::get(&args, 0)),
+        _ => false,
+    };
+    let mut open = false;
+    let found_plain = match found {
+        Ty::Named { name, args, .. } => {
+            open = args.len() == 1 && (*nikaia_std::index::get(&args, 0)).is_unknown();
+            name == "Vec" && args.len() == 1 && !check_overflow_a_nullable(nikaia_std::index::get(&args, 0))
+        },
+        _ => false,
+    };
+    if !wants_nullable || !found_plain { return false; }
+    let mut any = false;
+    for item in items.iter() {
+        if !open || is_a_literal(item) {
+            state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Constructor);
+            any = true;
+        }
+    }
+    any
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_overflow_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -68302,7 +68344,7 @@ pub mod check_numbers5 {
 }
 pub mod check_overflow {
     #[allow(unused_imports)]
-    pub use super::{check_wrap_for, check_widened_slot, check_unsigned_slot_refused};
+    pub use super::{check_wrap_for, check_widened_slot, check_overflow_list_into_nullables, check_unsigned_slot_refused};
 }
 pub mod check_parts {}
 pub mod check_patterns {

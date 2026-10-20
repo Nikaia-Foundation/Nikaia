@@ -217,6 +217,12 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
             return FactWrap::Unsigned(into.clone())
         }
     }
+    if value != null {
+        let given = value ?? return null
+        if check_overflow_list_into_nullables(state, given, found, want) {
+            return null
+        }
+    }
     let how = check_wrap_for(found, want, literal) ?? return null
     let widen: String = match how {
         FactWrap::Widen(into) => into.clone(),
@@ -229,6 +235,49 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
     }
     return how
+}
+
+/// **A list written out into a `Vec[T?]` holds each element as a `T?`** (Part
+/// I, 3.5; #700): `[f"{1}"]` where `Vec[String?]` is wanted is
+/// `vec![Some(..)]`, element by element, as the same value is in a `let` of
+/// its own. True where the elements were wrapped.
+pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
+    let items = match given {
+        Expr::ListLit { items, .. } => items,
+        else => return false,
+    }
+    let wants_nullable = match want {
+        Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && check_overflow_a_nullable(args[0]),
+        else => false,
+    }
+    // An element whose type is still open, `[1, 2]`, is wrapped where it is
+    // a literal: a value of no known type may be a `T?` already.
+    let mut open = false
+    let found_plain = match found {
+        Ty::Named { name, args, .. } => {
+            open = args.len() == 1 && args[0].is_unknown()
+            name == "Vec" && args.len() == 1 && !check_overflow_a_nullable(args[0])
+        },
+        else => false,
+    }
+    if !wants_nullable || !found_plain {
+        return false
+    }
+    let mut any = false
+    for item in items {
+        if !open || is_a_literal(item) {
+            state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Constructor)
+            any = true
+        }
+    }
+    return any
+}
+
+fn check_overflow_a_nullable(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
 }
 
 /// **A signed value in an unsigned slot the walk could not show is not

@@ -1,0 +1,19 @@
+// #700: a list written out where `Vec[T?]` is wanted holds each element as a
+// `T?`, as the same value does in a `let` of its own.
+
+fn present(xs: Vec[String?]) -> i64 {
+    let mut n = 0
+    for x in xs {
+        if x != null {
+            n += 1
+        }
+    }
+    return n
+}
+
+fn main() {
+    let s = "a"
+    let texts: Vec[String?] = [f"{1}", "x", s]
+    let numbers: Vec[i64?] = [1, 2]
+    println(f"{texts.len()} {numbers.len()} {present([f"{2}"])} {texts[0] ?? ""}")
+}
