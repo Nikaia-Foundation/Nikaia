@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1131] — 2026-10-20
+
+**bits_as_ reads the same bits with the other sign; u8 gets every fixed-width name; S {} is a struct literal after throw (built)**
+- `u32::bits_as_i32`, `i32::bits_as_u32`, `u64::bits_as_i64`, `i64::bits_as_u64` keep every bit; `u64::truncating_i64` and `i64::truncating_u64` are gone, and a same-width `truncating_` is NK1210 with help naming `bits_as_`; new `u64::truncating_i32`, `f64::truncating_u32`, `f64::truncating_u64` (ADR-285 D42, #742).
+- `u8` has `wrapping_`, `saturating_` and `checked_` arithmetic, `truncating_u8` out of every wider integer and `f64`, `checked_u8` out of every wider integer (ADR-285 D41, #729; `f64::checked_*` still to build).
+- `throw S {}`, `return S {}` and `let x = S {}` with empty braces are struct literals (#726).
+
 ## [0.0.1130] — 2026-10-20
 
 **A map takes its types from what is written into it (built)**
