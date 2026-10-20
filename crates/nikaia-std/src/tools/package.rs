@@ -46131,41 +46131,69 @@ fn lg_tighten_step(bound: &LgLin, steps: &mut Vec<LgStep>) -> LgHeld {
     LgHeld { lin: tight, step: steps.len() as i64 - 1 }
 }
 
-fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
-    if places.len() < 2 { return places.to_owned(); }
-    let middle = places.len() as i64 / 2;
-    let mut left: Vec<i64> = vec![];
-    let mut right: Vec<i64> = vec![];
-    let mut at: i64 = 0;
-    while ((at) as usize) < places.len() {
-        if at < middle { left.push(*nikaia_std::index::get(&places, (at) as usize)); } else { right.push(*nikaia_std::index::get(&places, (at) as usize)); }
-        at += 1;
-    }
-    let a = lg_sorted_places(held, &left);
-    let b = lg_sorted_places(held, &right);
+fn lg_form_of(terms: &collections::BTreeMap<String, i64>, ranks: &collections::BTreeMap<String, i64>) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
-    let mut i: i64 = 0;
-    let mut j: i64 = 0;
-    while ((i) as usize) < a.len() && ((j) as usize) < b.len() {
-        let mut order = lg_terms_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.terms, &nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.terms);
-        if order == 0 { if nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.constant { order = -1; } else if nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.constant { order = 1; } }
-        if order < 0 {
-            out.push(*nikaia_std::index::get(&b, (j) as usize));
-            j += 1;
-        } else {
-            out.push(*nikaia_std::index::get(&a, (i) as usize));
-            i += 1;
-        }
-    }
-    while ((i) as usize) < a.len() {
-        out.push(*nikaia_std::index::get(&a, (i) as usize));
-        i += 1;
-    }
-    while ((j) as usize) < b.len() {
-        out.push(*nikaia_std::index::get(&b, (j) as usize));
-        j += 1;
+    for (name, k) in terms.iter() {
+        let k = nikaia_std::num::value(k);
+        out.push(nikaia_std::index::or(ranks.get(name), || -1));
+        out.push(k);
     }
     out
+}
+
+fn lg_form_cmp(a: &[i64], b: &[i64]) -> i64 {
+    let mut at: i64 = 0;
+    while ((at) as usize) < a.len() && ((at) as usize) < b.len() {
+        if *nikaia_std::index::get(&a, (at) as usize) < *nikaia_std::index::get(&b, (at) as usize) { return -1; }
+        if *nikaia_std::index::get(&b, (at) as usize) < *nikaia_std::index::get(&a, (at) as usize) { return 1; }
+        at += 1;
+    }
+    if (a.len() as i64) < b.len() as i64 { return -1; }
+    if (b.len() as i64) < a.len() as i64 { return 1; }
+    0
+}
+
+fn lg_place_before(held: &[LgHeld], forms: &[Vec<i64>], b: i64, a: i64) -> bool {
+    let order = lg_form_cmp(nikaia_std::index::get(&forms, nikaia_std::index::at(b)), nikaia_std::index::get(&forms, nikaia_std::index::at(a)));
+    if order != 0 { return order < 0; }
+    nikaia_std::index::get(&held, nikaia_std::index::at(a)).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(b)).lin.constant
+}
+
+fn lg_sorted_places(held: &[LgHeld], places: &[i64], forms: &[Vec<i64>]) -> Vec<i64> {
+    let n = places.len() as i64;
+    let mut from = places.to_owned();
+    let mut width: i64 = 1;
+    while width < n {
+        let mut out: Vec<i64> = vec![];
+        let mut start: i64 = 0;
+        while start < n {
+            let middle = if start + width < n { start + width } else { n };
+            let end = if start + 2 * width < n { start + 2 * width } else { n };
+            let mut i: i64 = start;
+            let mut j = middle;
+            while i < middle && j < end {
+                if lg_place_before(held, forms, *nikaia_std::index::get(&from, nikaia_std::index::at(j)), *nikaia_std::index::get(&from, nikaia_std::index::at(i))) {
+                    out.push(*nikaia_std::index::get(&from, nikaia_std::index::at(j)));
+                    j += 1;
+                } else {
+                    out.push(*nikaia_std::index::get(&from, nikaia_std::index::at(i)));
+                    i += 1;
+                }
+            }
+            while i < middle {
+                out.push(*nikaia_std::index::get(&from, nikaia_std::index::at(i)));
+                i += 1;
+            }
+            while j < end {
+                out.push(*nikaia_std::index::get(&from, nikaia_std::index::at(j)));
+                j += 1;
+            }
+            start = end;
+        }
+        from = out;
+        width = width * 2;
+    }
+    from
 }
 
 fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
@@ -46173,6 +46201,10 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     let mut round_names: Vec<String> = vec![];
     let mut round_bounds: Vec<Vec<LgLin>> = vec![];
     let mut held: Vec<LgHeld> = vec![];
+    let mut every: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for bound in bounds.iter() { for (name, _) in bound.terms.iter() { every.insert(name.to_owned()); } }
+    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for name in every.iter() { ranks.insert(name.to_owned(), ranks.len() as i64); }
     let mut index = 0;
     for bound in bounds.iter() {
         steps.push(LgStep::Hypothesis(index));
@@ -46187,12 +46219,14 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
             if !nikaia_std::index::get(&held, nikaia_std::index::at(at)).lin.terms.is_empty() { live.push(at); }
             at += 1;
         }
-        let ordered = lg_sorted_places(&held, &live);
+        let mut forms: Vec<Vec<i64>> = vec![];
+        for one in held.iter() { forms.push(lg_form_of(&one.lin.terms, &ranks)); }
+        let ordered = lg_sorted_places(&held, &live, &forms);
         let mut bounds_now: Vec<LgHeld> = vec![];
         let mut kept: i64 = -1;
         for place in ordered.iter() {
             let place = nikaia_std::num::value(place);
-            if kept >= 0 && lg_terms_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(kept)).lin.terms, &nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms) == 0 { continue; }
+            if kept >= 0 && lg_form_cmp(nikaia_std::index::get(&forms, nikaia_std::index::at(kept)), nikaia_std::index::get(&forms, nikaia_std::index::at(place))) == 0 { continue; }
             bounds_now.push((*nikaia_std::index::get(&held, nikaia_std::index::at(place))).clone());
             kept = place;
         }
@@ -46367,18 +46401,11 @@ struct LgOrdered {
 }
 
 pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
-    let mut turned = TermArena { nodes: arena.nodes.to_owned() };
-    let mut turned_facts: Vec<i64> = vec![];
+    let mut ordered: Vec<LgOrdered> = vec![];
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
-        turned_facts.push(lg_turn(&mut turned, fact));
-    }
-    let turned_goal = lg_turn(&mut turned, goal);
-    let mut ordered: Vec<LgOrdered> = vec![];
-    for fact in turned_facts.iter() {
-        let fact = nikaia_std::num::value(fact);
-        let shape = lg_written(&turned, fact, true);
-        let named = lg_written(&turned, fact, false);
+        let shape = lg_written(arena, fact, true, true);
+        let named = lg_written(arena, fact, false, true);
         let mut seen = false;
         for one in ordered.iter() { if one.named == named { seen = true; } }
         if !seen {
@@ -46390,79 +46417,95 @@ pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
     let mut normal = LgNormal { arena: TermArena::empty(), facts: vec![], goal: 0, names: vec![] };
     let mut renamed: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for one in ordered.iter() {
-        let copied = lg_copy(&mut normal, &turned, one.fact, &mut renamed);
+        let copied = lg_copy(&mut normal, arena, one.fact, &mut renamed, true);
         normal.facts.push(copied);
     }
-    normal.goal = lg_copy(&mut normal, &turned, turned_goal, &mut renamed);
+    normal.goal = lg_copy(&mut normal, arena, goal, &mut renamed, true);
     normal
 }
 
-fn lg_turn(arena: &mut TermArena, id: i64) -> i64 {
+fn lg_written(arena: &TermArena, id: i64, shape: bool, turn: bool) -> String {
     let node = arena.at(id);
-    match node {
-        SolverTerm::Ge(a, b) => arena.le(b, a),
-        SolverTerm::Gt(a, b) => arena.lt(b, a),
-        SolverTerm::Not(a) => {
-            let turned = lg_turn(arena, a);
-            arena.not(turned)
-        },
-        SolverTerm::And(ref parts) => {
-            let mut made: Vec<i64> = vec![];
-            for part in parts.iter() {
-                let part = nikaia_std::num::value(part);
-                made.push(lg_turn(arena, part));
-            }
-            arena.and(made)
-        },
-        SolverTerm::Or(ref parts) => {
-            let mut made: Vec<i64> = vec![];
-            for part in parts.iter() {
-                let part = nikaia_std::num::value(part);
-                made.push(lg_turn(arena, part));
-            }
-            arena.or(made)
-        },
-        _ => id,
+    if turn {
+        match node {
+            SolverTerm::Ge(a, b) => { return lg_binary("<=", arena, b, a, shape); },
+            SolverTerm::Gt(a, b) => { return lg_binary("<", arena, b, a, shape); },
+            SolverTerm::Not(a) => { return format!("(not {})", lg_written(arena, a, shape, true)); },
+            SolverTerm::And(ref parts) => { return lg_joined("and", arena, parts, shape, true); },
+            SolverTerm::Or(ref parts) => { return lg_joined("or", arena, parts, shape, true); },
+            _ => { },
+        }
     }
-}
-
-fn lg_written(arena: &TermArena, id: i64, shape: bool) -> String {
-    let node = arena.at(id);
     match node {
         SolverTerm::Bool(b) => if b { String::from("true") } else { String::from("false") },
         SolverTerm::Int(n) => format!("{}", n),
         SolverTerm::Var(ref name) => if shape { String::from("?") } else { name.to_owned() },
-        SolverTerm::Neg(a) => format!("(- {})", lg_written(arena, a, shape)),
-        SolverTerm::Not(a) => format!("(not {})", lg_written(arena, a, shape)),
+        SolverTerm::Neg(a) => format!("(- {})", lg_written(arena, a, shape, false)),
+        SolverTerm::Not(a) => format!("(not {})", lg_written(arena, a, shape, false)),
         SolverTerm::Add(a, b) => lg_binary("+", arena, a, b, shape),
         SolverTerm::Sub(a, b) => lg_binary("-", arena, a, b, shape),
         SolverTerm::Mul(a, b) => lg_binary("*", arena, a, b, shape),
-        SolverTerm::Quot(a, k) => format!("(quot {} {})", lg_written(arena, a, shape), k),
+        SolverTerm::Quot(a, k) => format!("(quot {} {})", lg_written(arena, a, shape, false), k),
         SolverTerm::Le(a, b) => lg_binary("<=", arena, a, b, shape),
         SolverTerm::Lt(a, b) => lg_binary("<", arena, a, b, shape),
         SolverTerm::Ge(a, b) => lg_binary(">=", arena, a, b, shape),
         SolverTerm::Gt(a, b) => lg_binary(">", arena, a, b, shape),
         SolverTerm::Eq(a, b) => lg_binary("=", arena, a, b, shape),
         SolverTerm::Ne(a, b) => lg_binary("distinct", arena, a, b, shape),
-        SolverTerm::And(ref parts) => lg_joined("and", arena, parts, shape),
-        SolverTerm::Or(ref parts) => lg_joined("or", arena, parts, shape),
+        SolverTerm::And(ref parts) => lg_joined("and", arena, parts, shape, false),
+        SolverTerm::Or(ref parts) => lg_joined("or", arena, parts, shape, false),
         SolverTerm::Other => String::from("false"),
     }
 }
 
-fn lg_binary(op: &str, arena: &TermArena, a: i64, b: i64, shape: bool) -> String { format!("({} {} {})", op, lg_written(arena, a, shape), lg_written(arena, b, shape)) }
+fn lg_binary(op: &str, arena: &TermArena, a: i64, b: i64, shape: bool) -> String { format!("({} {} {})", op, lg_written(arena, a, shape, false), lg_written(arena, b, shape, false)) }
 
-fn lg_joined(op: &str, arena: &TermArena, parts: &[i64], shape: bool) -> String {
+fn lg_joined(op: &str, arena: &TermArena, parts: &[i64], shape: bool, turn: bool) -> String {
     let mut written: Vec<String> = vec![];
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
-        written.push(lg_written(arena, part, shape));
+        written.push(lg_written(arena, part, shape, turn));
     }
     format!("({} {})", op, written.join(" "))
 }
 
-fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut collections::BTreeMap<String, String>) -> i64 {
+fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut collections::BTreeMap<String, String>, turn: bool) -> i64 {
     let node = from.at(id);
+    if turn {
+        match node {
+            SolverTerm::Ge(a, b) => {
+                let x = lg_copy(normal, from, b, renamed, false);
+                let y = lg_copy(normal, from, a, renamed, false);
+                return normal.arena.le(x, y);
+            },
+            SolverTerm::Gt(a, b) => {
+                let x = lg_copy(normal, from, b, renamed, false);
+                let y = lg_copy(normal, from, a, renamed, false);
+                return normal.arena.lt(x, y);
+            },
+            SolverTerm::Not(a) => {
+                let x = lg_copy(normal, from, a, renamed, true);
+                return normal.arena.not(x);
+            },
+            SolverTerm::And(ref parts) => {
+                let mut made: Vec<i64> = vec![];
+                for part in parts.iter() {
+                    let part = nikaia_std::num::value(part);
+                    made.push(lg_copy(normal, from, part, renamed, true));
+                }
+                return normal.arena.and(made);
+            },
+            SolverTerm::Or(ref parts) => {
+                let mut made: Vec<i64> = vec![];
+                for part in parts.iter() {
+                    let part = nikaia_std::num::value(part);
+                    made.push(lg_copy(normal, from, part, renamed, true));
+                }
+                return normal.arena.or(made);
+            },
+            _ => { },
+        }
+    }
     match node {
         SolverTerm::Bool(b) => normal.arena.boolean(b),
         SolverTerm::Int(n) => normal.arena.int(n),
@@ -46482,67 +46525,67 @@ fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut colle
             normal.arena.var(&fresh)
         },
         SolverTerm::Neg(a) => {
-            let x = lg_copy(normal, from, a, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
             normal.arena.neg(x)
         },
         SolverTerm::Not(a) => {
-            let x = lg_copy(normal, from, a, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
             normal.arena.not(x)
         },
         SolverTerm::Add(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.add(x, y)
         },
         SolverTerm::Sub(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.sub(x, y)
         },
         SolverTerm::Mul(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.mul(x, y)
         },
         SolverTerm::Quot(a, k) => {
-            let x = lg_copy(normal, from, a, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
             normal.arena.quot(x, k)
         },
         SolverTerm::Le(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.le(x, y)
         },
         SolverTerm::Lt(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.lt(x, y)
         },
         SolverTerm::Ge(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.ge(x, y)
         },
         SolverTerm::Gt(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.gt(x, y)
         },
         SolverTerm::Eq(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.equal(x, y)
         },
         SolverTerm::Ne(a, b) => {
-            let x = lg_copy(normal, from, a, renamed);
-            let y = lg_copy(normal, from, b, renamed);
+            let x = lg_copy(normal, from, a, renamed, false);
+            let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.unequal(x, y)
         },
         SolverTerm::And(ref parts) => {
             let mut made: Vec<i64> = vec![];
             for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
-                made.push(lg_copy(normal, from, part, renamed));
+                made.push(lg_copy(normal, from, part, renamed, false));
             }
             normal.arena.and(made)
         },
@@ -46550,7 +46593,7 @@ fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut colle
             let mut made: Vec<i64> = vec![];
             for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
-                made.push(lg_copy(normal, from, part, renamed));
+                made.push(lg_copy(normal, from, part, renamed, false));
             }
             normal.arena.or(made)
         },
@@ -46562,11 +46605,11 @@ impl LgNormal {
         let mut out: String = String::from("");
         for fact in self.facts.iter() {
             let fact = nikaia_std::num::value(fact);
-            out.push_str(&lg_written(&self.arena, fact, false));
+            out.push_str(&lg_written(&self.arena, fact, false, false));
             out.push_str("\n");
         }
         out.push_str("|- ");
-        out.push_str(&lg_written(&self.arena, self.goal, false));
+        out.push_str(&lg_written(&self.arena, self.goal, false, false));
         out
     }
     pub fn named(&self, model: &LgModel) -> LgModel {

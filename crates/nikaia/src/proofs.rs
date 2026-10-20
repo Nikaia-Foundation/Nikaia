@@ -230,6 +230,10 @@ pub fn with_book<R>(book: Book, run: impl FnOnce() -> R) -> (R, Book) {
 /// Whether the facts imply the goal, and if not, why not.
 pub fn ask(arena: &TermArena, facts: &[i64], goal: i64) -> Asked {
     let normal = lg_normal_of(arena, facts, goal);
+    if !book_open() {
+        // Nothing is recorded or looked up: no key to make (#727).
+        return search(&normal).0;
+    }
     let text = normal.text();
     let key = orchestrator::cache::sha256_hex(text.as_bytes());
     let recorded = BOOK.with(|held| {

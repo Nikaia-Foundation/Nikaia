@@ -39,18 +39,13 @@ struct LgOrdered {
 
 /// `query` in normal form.
 pub fn lg_normal_of(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> LgNormal {
-    // Turned round first, so that the shape a fact is sorted by is the shape it
-    // is written in.
-    let mut turned = TermArena { nodes: arena.nodes.clone() }
-    let mut turned_facts: Vec[i64] = []
-    for fact in facts {
-        turned_facts.push(lg_turn(turned, fact))
-    }
-    let turned_goal = lg_turn(turned, goal)
+    // Read turned round (`lg_written` and `lg_copy` with `turn`), so that the
+    // shape a fact is sorted by is the shape it is written in; nothing of the
+    // arena is copied but the terms the normal form reaches.
     let mut ordered: Vec[LgOrdered] = []
-    for fact in turned_facts {
-        let shape = lg_written(turned, fact, true)
-        let named = lg_written(turned, fact, false)
+    for fact in facts {
+        let shape = lg_written(arena, fact, true, true)
+        let named = lg_written(arena, fact, false, true)
         let mut seen = false
         for one in ordered {
             if one.named == named {
@@ -69,84 +64,100 @@ pub fn lg_normal_of(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> LgN
     let mut normal = LgNormal { arena: TermArena::empty(), facts: [], goal: 0, names: [] }
     let mut renamed: collections::BTreeMap[String, String] = collections::BTreeMap()
     for one in ordered {
-        let copied = lg_copy(normal, turned, one.fact, renamed)
+        let copied = lg_copy(normal, arena, one.fact, renamed, true)
         normal.facts.push(copied)
     }
-    normal.goal = lg_copy(normal, turned, turned_goal, renamed)
+    normal.goal = lg_copy(normal, arena, goal, renamed, true)
     return normal
 }
 
-/// `a >= b` as `b <= a` and `a > b` as `b < a`, all the way down: one way of
-/// writing each comparison, so that the two spellings share a key.
-fn lg_turn(mut arena: TermArena, id: i64) -> i64 {
-    let node = arena.at(id)
-    return match node {
-        SolverTerm::Ge(a, b) => arena.le(b, a),
-        SolverTerm::Gt(a, b) => arena.lt(b, a),
-        SolverTerm::Not(a) => {
-            let turned = lg_turn(arena, a)
-            arena.not(turned)
-        },
-        SolverTerm::And(parts) => {
-            let mut made: Vec[i64] = []
-            for part in parts {
-                made.push(lg_turn(arena, part))
-            }
-            arena.and(made)
-        },
-        SolverTerm::Or(parts) => {
-            let mut made: Vec[i64] = []
-            for part in parts {
-                made.push(lg_turn(arena, part))
-            }
-            arena.or(made)
-        },
-        else => id,
-    }
-}
-
 /// A term in prefix form, each variable written by its name, or as `?` where
-/// `shape` is asked for.
-fn lg_written(arena: ref TermArena, id: i64, shape: bool) -> String {
+/// `shape` is asked for. With `turn`, `a >= b` is read as `b <= a` and `a > b`
+/// as `b < a`, down through `not`, `and` and `or`: one way of writing each
+/// comparison, so that the two spellings share a key.
+fn lg_written(arena: ref TermArena, id: i64, shape: bool, turn: bool) -> String {
     let node = arena.at(id)
+    if turn {
+        match node {
+            SolverTerm::Ge(a, b) => return lg_binary("<=", arena, b, a, shape),
+            SolverTerm::Gt(a, b) => return lg_binary("<", arena, b, a, shape),
+            SolverTerm::Not(a) => return f"(not {lg_written(arena, a, shape, true)})",
+            SolverTerm::And(parts) => return lg_joined("and", arena, parts, shape, true),
+            SolverTerm::Or(parts) => return lg_joined("or", arena, parts, shape, true),
+            else => {},
+        }
+    }
     return match node {
         SolverTerm::Bool(b) => if b { "true" } else { "false" },
         SolverTerm::Int(n) => f"{n}",
         SolverTerm::Var(name) => if shape { "?" } else { name.clone() },
-        SolverTerm::Neg(a) => f"(- {lg_written(arena, a, shape)})",
-        SolverTerm::Not(a) => f"(not {lg_written(arena, a, shape)})",
+        SolverTerm::Neg(a) => f"(- {lg_written(arena, a, shape, false)})",
+        SolverTerm::Not(a) => f"(not {lg_written(arena, a, shape, false)})",
         SolverTerm::Add(a, b) => lg_binary("+", arena, a, b, shape),
         SolverTerm::Sub(a, b) => lg_binary("-", arena, a, b, shape),
         SolverTerm::Mul(a, b) => lg_binary("*", arena, a, b, shape),
-        SolverTerm::Quot(a, k) => f"(quot {lg_written(arena, a, shape)} {k})",
+        SolverTerm::Quot(a, k) => f"(quot {lg_written(arena, a, shape, false)} {k})",
         SolverTerm::Le(a, b) => lg_binary("<=", arena, a, b, shape),
         SolverTerm::Lt(a, b) => lg_binary("<", arena, a, b, shape),
         SolverTerm::Ge(a, b) => lg_binary(">=", arena, a, b, shape),
         SolverTerm::Gt(a, b) => lg_binary(">", arena, a, b, shape),
         SolverTerm::Eq(a, b) => lg_binary("=", arena, a, b, shape),
         SolverTerm::Ne(a, b) => lg_binary("distinct", arena, a, b, shape),
-        SolverTerm::And(parts) => lg_joined("and", arena, parts, shape),
-        SolverTerm::Or(parts) => lg_joined("or", arena, parts, shape),
+        SolverTerm::And(parts) => lg_joined("and", arena, parts, shape, false),
+        SolverTerm::Or(parts) => lg_joined("or", arena, parts, shape, false),
         SolverTerm::Other => "false",
     }
 }
 
 fn lg_binary(op: ref String, arena: ref TermArena, a: i64, b: i64, shape: bool) -> String {
-    return f"({op} {lg_written(arena, a, shape)} {lg_written(arena, b, shape)})"
+    return f"({op} {lg_written(arena, a, shape, false)} {lg_written(arena, b, shape, false)})"
 }
 
-fn lg_joined(op: ref String, arena: ref TermArena, parts: ref Vec[i64], shape: bool) -> String {
+fn lg_joined(op: ref String, arena: ref TermArena, parts: ref Vec[i64], shape: bool, turn: bool) -> String {
     let mut written: Vec[String] = []
     for part in parts {
-        written.push(lg_written(arena, part, shape))
+        written.push(lg_written(arena, part, shape, turn))
     }
     return f"({op} {written.join(" ")})"
 }
 
 /// A term of `from`, copied into the normal form with its variables renamed by
-/// first occurrence.
-fn lg_copy(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: collections::BTreeMap[String, String]) -> i64 {
+/// first occurrence, read turned round where `turn` says so (`lg_written`).
+fn lg_copy(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: collections::BTreeMap[String, String], turn: bool) -> i64 {
     let node = from.at(id)
+    if turn {
+        match node {
+            SolverTerm::Ge(a, b) => {
+                let x = lg_copy(normal, from, b, renamed, false)
+                let y = lg_copy(normal, from, a, renamed, false)
+                return normal.arena.le(x, y)
+            },
+            SolverTerm::Gt(a, b) => {
+                let x = lg_copy(normal, from, b, renamed, false)
+                let y = lg_copy(normal, from, a, renamed, false)
+                return normal.arena.lt(x, y)
+            },
+            SolverTerm::Not(a) => {
+                let x = lg_copy(normal, from, a, renamed, true)
+                return normal.arena.not(x)
+            },
+            SolverTerm::And(parts) => {
+                let mut made: Vec[i64] = []
+                for part in parts {
+                    made.push(lg_copy(normal, from, part, renamed, true))
+                }
+                return normal.arena.and(made)
+            },
+            SolverTerm::Or(parts) => {
+                let mut made: Vec[i64] = []
+                for part in parts {
+                    made.push(lg_copy(normal, from, part, renamed, true))
+                }
+                return normal.arena.or(made)
+            },
+            else => {},
+        }
+    }
     return match node {
         SolverTerm::Bool(b) => normal.arena.boolean(b),
         SolverTerm::Int(n) => normal.arena.int(n),
@@ -163,73 +174,73 @@ fn lg_copy(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: coll
             normal.arena.var(fresh)
         },
         SolverTerm::Neg(a) => {
-            let x = lg_copy(normal, from, a, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
             normal.arena.neg(x)
         },
         SolverTerm::Not(a) => {
-            let x = lg_copy(normal, from, a, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
             normal.arena.not(x)
         },
         SolverTerm::Add(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.add(x, y)
         },
         SolverTerm::Sub(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.sub(x, y)
         },
         SolverTerm::Mul(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.mul(x, y)
         },
         SolverTerm::Quot(a, k) => {
-            let x = lg_copy(normal, from, a, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
             normal.arena.quot(x, k)
         },
         SolverTerm::Le(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.le(x, y)
         },
         SolverTerm::Lt(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.lt(x, y)
         },
         SolverTerm::Ge(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.ge(x, y)
         },
         SolverTerm::Gt(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.gt(x, y)
         },
         SolverTerm::Eq(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.equal(x, y)
         },
         SolverTerm::Ne(a, b) => {
-            let x = lg_copy(normal, from, a, renamed)
-            let y = lg_copy(normal, from, b, renamed)
+            let x = lg_copy(normal, from, a, renamed, false)
+            let y = lg_copy(normal, from, b, renamed, false)
             normal.arena.unequal(x, y)
         },
         SolverTerm::And(parts) => {
             let mut made: Vec[i64] = []
             for part in parts {
-                made.push(lg_copy(normal, from, part, renamed))
+                made.push(lg_copy(normal, from, part, renamed, false))
             }
             normal.arena.and(made)
         },
         SolverTerm::Or(parts) => {
             let mut made: Vec[i64] = []
             for part in parts {
-                made.push(lg_copy(normal, from, part, renamed))
+                made.push(lg_copy(normal, from, part, renamed, false))
             }
             normal.arena.or(made)
         },
@@ -241,11 +252,11 @@ impl LgNormal {
     pub fn text(ref self) -> String {
         let mut out: String = ""
         for fact in self.facts {
-            out.push_str(lg_written(self.arena, fact, false))
+            out.push_str(lg_written(self.arena, fact, false, false))
             out.push_str("\n")
         }
         out.push_str("|- ")
-        out.push_str(lg_written(self.arena, self.goal, false))
+        out.push_str(lg_written(self.arena, self.goal, false, false))
         return out
     }
 
