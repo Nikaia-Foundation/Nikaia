@@ -1,0 +1,13 @@
+// A list `std` built, or one bound without a type, handed to a `mut`
+// parameter: its elements stay text of its own, and the parameter takes
+// what it keeps as text of its own (#738 item 3, ADR-282 D16, D19).
+fn fill(a: String, mut into: Vec[String]) { into.push(a) }
+fn main() {
+    let mut v: Vec[String] = "a b".split(" ").map(fn(p) { p.clone() }).collect()
+    let s = f"y{2}"
+    fill(s.clone(), v)
+    println(v.len())
+    let mut w = "c d".lines().map(fn(p) { p.clone() }).collect()
+    fill(s, w)
+    println(w.len())
+}

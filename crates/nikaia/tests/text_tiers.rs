@@ -2052,3 +2052,22 @@ fn a_mixed_value_unwrapped_into_a_published_position_is_refused() {
         "{found:#?}"
     );
 }
+
+/// **A list the walk cannot link, handed to a parameter, keeps one type**
+/// (#738 item 3, ADR-282 D16, D19, D25): a view pushed into the parameter is
+/// refused with the reason, not lowered into a `Vec<EitherText>` the
+/// caller's `Vec<String>` is not.
+#[test]
+fn a_view_kept_in_a_list_the_walk_cannot_link_is_refused() {
+    let source = "fn fill(a: ref String, mut into: Vec[String]) { into.push(a) }\n\
+                  fn main() {\n    let mut w = \"c d\".lines().map(fn(p) { p.clone() }).collect()\n    let s = f\"y{2}\"\n    fill(s, w)\n    println(w.len())\n}\n";
+    let found = findings(source);
+    assert!(
+        found
+            .iter()
+            .any(|f| f.code == "NK1102" && f.help.iter().any(|h| h.contains("Declare `a: String`"))),
+        "{found:#?}"
+    );
+    let owned = include_str!("../../../tests/accepted/738_unlinked_list_argument.nika");
+    runs("unlinked-list-argument", owned, "3\n2");
+}

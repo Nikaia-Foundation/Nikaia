@@ -517,6 +517,9 @@ struct Flows {
     /// D13, D22): where that one stays text of its own because it is
     /// published, a mixed one it is read out of does too.
     read_into: collections::BTreeSet[(String, String)],
+    /// Positions inside a parameter a list goes into whole that the walk
+    /// cannot link to it: never both kinds (#738).
+    unlinked: collections::BTreeSet[String],
     arg_uses: collections::BTreeMap[String, i64],
     /// Positions changed in place, or read into a name that is assigned
     /// again: not handed back unchanged.
@@ -531,7 +534,7 @@ struct Flows {
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap() }
 }
 
 struct TierWalk {
@@ -1255,6 +1258,26 @@ fn demote_inside(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: re
     }
 }
 
+/// Every `String` position inside a type, remembered as one a list the walk
+/// cannot link goes into whole (#738).
+fn unlinked_inside(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref TierAsk, mut walk: TierWalk) {
+    if plain_string(ask.names, ty) {
+        let word = seen(owner, path, walk)
+        walk.flows.unlinked.insert(word)
+        return
+    }
+    if !a_container(ask.names, ty) {
+        return
+    }
+    let mut at = 0
+    for arg in ty.generics {
+        path.push(at)
+        unlinked_inside(owner, arg, path.clone(), ask, walk)
+        path.pop()
+        at += 1
+    }
+}
+
 /// Every position a value's text may be read out of whole: through the
 /// branches of an `if` or a `match`, a block's last value and both sides of
 /// `??`.
@@ -1398,7 +1421,23 @@ fn flow_whole(going: ref TierGoing, value: ref Expr, ask: ref TierAsk, mut walk:
 }
 
 fn link_from(going: ref TierGoing, value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
-    let from = source_of(value, ask, walk) ?? return
+    let source = source_of(value, ask, walk)
+    // **A list handed to a parameter from where the walk cannot link it** -
+    // what `std` built, a name bound without a type - has one type below
+    // already, so the parameter's elements cannot be both kinds (ADR-282
+    // D16, D19): a view kept there is refused (D25), not a `Vec` of another
+    // type (#738).
+    if source == null {
+        let parameter = match going.owner {
+            TextOwner::Param(_, _) => true,
+            else => false,
+        }
+        if parameter {
+            unlinked_inside(going.owner, going.ty, going.path.clone(), ask, walk)
+        }
+        return
+    }
+    let from = source ?? return
     let to = Declaring { owner: going.owner.clone(), ty: going.ty.clone() }
     link(from, [], to, going.path.clone(), ask, walk)
 }
@@ -4037,6 +4076,8 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     let mut fixed: collections::BTreeSet[String] = collections::BTreeSet()
     // Positions that are never static text.
     let mut never: collections::BTreeSet[String] = collections::BTreeSet()
+    // Positions never both kinds, and what is linked to them (#738).
+    let mut unmixed = flows.unlinked.clone()
     // Every position the walk saw, also one only linked to another (a list
     // handed back whole from a call): a published one stays text of its own.
     for (word, _) in flows.known {
@@ -4099,6 +4140,11 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
                 never.insert(b.clone())
                 changed = true
             }
+            if unmixed.contains(a) != unmixed.contains(b) {
+                unmixed.insert(a.clone())
+                unmixed.insert(b.clone())
+                changed = true
+            }
         }
         // **A mixed position read into one that is fixed is fixed** (ADR-282
         // D13, D22, #696): both kinds would leave through it, so the view
@@ -4121,7 +4167,7 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     let mut out: collections::BTreeMap[String, Tier] = collections::BTreeMap()
     for (word, kinds) in positions {
         let mut tier = tier_of_kinds(kinds)
-        if mixed(tier) && fixed.contains(word) {
+        if mixed(tier) && (fixed.contains(word) || unmixed.contains(word)) {
             tier = Tier::Owned
         }
         // **What is published keeps text of its own** where only literals
