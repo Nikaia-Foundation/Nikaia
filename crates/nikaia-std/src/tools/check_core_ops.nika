@@ -264,6 +264,16 @@ fn check_core_ops_same(state: ref CheckState, op: BinaryOp, lhs: ref Expr, left:
     return (Ty::Unknown, named)
 }
 
+/// Whether `side` names a text parameter of a lambda handed a lent item.
+fn check_core_ops_lent_text_item(state: ref CheckState, world: ref CheckWorld, side: ref Expr) -> bool sync {
+    let name = check_core_flow_variable(world, side)
+    if name == "" {
+        return false
+    }
+    let local: CheckLocal = state.binding(name) ?? return false
+    return state.flow.lent_text_params.contains(local.id)
+}
+
 /// **`==` and `!=`** (ADR-279 D5): a comparison only reads its sides.
 fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span, span: ref Span) -> Ty sync {
     state.a_pending_coalesce_of_text_is_lent(lhs)
@@ -278,6 +288,13 @@ fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWor
         state.a_maybe_compared_with_a_value(left, right, span)
     }
     state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at)
+    // **A lambda's item compared with text** (#688): the item is a view of
+    // the walk's, `&String` or `&&str` below, so both sides are read as `str`,
+    // as text ordered against text is (#733).
+    let lent_item = check_core_ops_lent_text_item(state, world, lhs) || check_core_ops_lent_text_item(state, world, rhs)
+    if lent_item && is_text_type(left.unseen()) && is_text_type(right.unseen()) {
+        let added = state.facts.ordered_texts.insert(at.start as i64)
+    }
     if names_a_path(left, right) {
         state.facts.path_comparisons.insert(at.start as i64)
     }

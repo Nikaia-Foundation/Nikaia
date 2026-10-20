@@ -249,8 +249,9 @@ pub struct CheckFacts {
     pub wrapped: collections::BTreeMap[i64, FactWrap],
     pub compared_views: collections::BTreeSet[(i64, String)],
     pub compared_numbers: collections::BTreeSet[(i64, String)],
-    /// **Text ordered against text** (#733), by the operator's span: both
-    /// sides are read as `str`, owned or viewed.
+    /// **Text ordered against text** (#733), and a lambda's lent item
+    /// compared with text (#688), by the operator's span: both sides are
+    /// read as `str`, owned or viewed.
     pub ordered_texts: collections::BTreeSet[i64],
     pub claims: collections::BTreeMap[(i64, i64), FactClaim],
     pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],

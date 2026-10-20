@@ -269,8 +269,15 @@ impl CheckState {
         let opened = self.flow.open_params.remove(local.name)
         // **Handed a lent item, a tuple is a view of the walk's** (#626): a
         // `let` that takes it apart binds views, a number among them read out.
-        if self.flow.lent_params.remove(local.name) && a_tuple(local.ty) {
-            local.lent = true
+        // **A text handed so is a view of it** (#688), whose depth below
+        // depends on the walk: a comparison reads it as `str`.
+        if self.flow.lent_params.remove(local.name) {
+            if a_tuple(local.ty) {
+                local.lent = true
+            }
+            if check_owned_text(local.ty) {
+                self.flow.lent_text_params.insert(local.id)
+            }
         }
         if opened != null && local.ty.is_unknown() {
             local.open_number = opened

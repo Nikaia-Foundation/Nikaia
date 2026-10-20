@@ -1,0 +1,31 @@
+// A lambda handed the items of a list of text compares them with a field,
+// a literal, a local and another item, either side of `==` and `!=` (#688).
+struct S { cfg: String }
+
+fn mk(n: i64) -> String { f"B{n}" }
+
+fn main() {
+    let which: Vec[String] = ["A", "B"]
+    let s = S { cfg: "B" }
+    let a = which.iter().any(fn(w) { w == s.cfg })
+    let b = which.iter().any(fn(w) { s.cfg == w })
+    let c = which.iter().any(fn(w) { w == "B" })
+    let d = which.iter().all(fn(w) { w != s.cfg })
+    let e = which.iter().all(fn(w) { s.cfg != w })
+    let t = "A"
+    let f = which.iter().filter(fn(w) { w == t }).count()
+    println(f"{a} {b} {c} {d} {e} {f}")
+    let made: Vec[String] = [mk(1), mk(2)]
+    let o = S { cfg: mk(2) }
+    let g = made.iter().any(fn(w) { w == o.cfg })
+    let h = made.iter().any(fn(w) { s.cfg == w })
+    let i = made.iter().filter(fn(w) { w != o.cfg }).count()
+    let j = made.iter().any(fn(w) { which.iter().any(fn(v) { v == w }) })
+    let mut k = 0
+    for w in made {
+        if w == s.cfg || o.cfg == w {
+            k += 1
+        }
+    }
+    println(f"{g} {h} {i} {j} {k}")
+}

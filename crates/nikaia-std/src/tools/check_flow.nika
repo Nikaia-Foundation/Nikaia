@@ -220,6 +220,9 @@ pub struct CheckFlow {
     /// The parameters of a lambda the call being walked hands a lent item
     /// to, by name, for `lambda_parameter` to bind as lent.
     pub lent_params: collections::BTreeSet[String],
+    /// **The text parameters of such a lambda** (#688), by binding: a view
+    /// of the item one level or two below, so compared as `str`.
+    pub lent_text_params: collections::BTreeSet[i64],
     /// Whether the method call just checked hands back a walk that lends.
     pub walk_lent: bool,
     /// The `fn` type the place a lambda stands in declares (#497).
@@ -314,6 +317,7 @@ impl CheckFlow {
             walk_view: false,
             lent_walks: collections::BTreeSet(),
             lent_params: collections::BTreeSet(),
+            lent_text_params: collections::BTreeSet(),
             walk_lent: false,
             lambda_expected: null,
             lent_tail_leaves: collections::BTreeSet(),
