@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1117] — 2026-10-20
+
+**A function's contract is found as a view; owned fields keep no view (#727, #735)**
+- Finding a function's contract in the checker hands back a view of the stored contract instead of a copy. A struct field that owns its value keeps no view of what it was cut from, and a parameter taking text of either kind is used as a map key as it is.
+
 ## [0.0.1116] — 2026-10-20
 
 **A result's sources are what it borrows from; a field behind a view is lent (#735)**
