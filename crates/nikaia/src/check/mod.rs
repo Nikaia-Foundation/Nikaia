@@ -449,69 +449,75 @@ fn walked<'a>(
     // A separate walk because it answers a question about a *statement's
     // holes* rather than about a type, and it needs no ledger to answer it.
     checker.s.findings.extend(crate::dsl::check(parsed));
-    // **Every `assert` outside a test is proved where it can be**
-    // ([ADR-269](../../docs/specification/adr/adr-269.md) D4), and checked
-    // when the program runs where it cannot. After the walk,
-    // because the checker is what decided which calls are the prelude's.
-    let keys: BTreeSet<(usize, usize)> = checker
-        .s
-        .facts
-        .claims
-        .keys()
-        .map(|(a, b)| (*a as usize, *b as usize))
-        .collect();
-    let comptimes = crate::prove::Comptimes::of(parsed, &checker.s.facts.comptime_values);
-    // **A call an open claim reads is run as a `comptime` is**
-    // ([ADR-359](../../docs/specification/adr/adr-359.md) D11-D13), where this
-    // build has a place to compile it.
-    let host = checker.host();
-    let runner = |call: &Expr, callee: &str, args: &[i64]| {
-        host.run_for_a_claim(call, callee, args, &comptimes.by_name)
-    };
-    let run: Option<crate::prove::ClaimRunner<'_>> = match reads.workshop().somewhere() {
-        true => Some(&runner),
-        false => None,
-    };
-    let proved = crate::prove::prove(parsed, own, library, &keys, &comptimes, run);
-    checker.s.findings.extend(proved.findings);
-    checker.s.facts.entries = proved.entries;
-    checker.s.facts.reaches = proved.reaches;
-    checker.s.facts.published = proved.published;
-    for (key, held) in proved.held {
-        if let Some(claim) = checker
+    // **The ledger's pass reports nothing** (#727): what its caller reads is
+    // which calls resolve where and what each body stores (`methods`,
+    // `stored_code`), never a finding or a proof, so the walks below that
+    // answer only with findings and proofs run in the check that reports them.
+    if computes {
+        // **Every `assert` outside a test is proved where it can be**
+        // ([ADR-269](../../docs/specification/adr/adr-269.md) D4), and checked
+        // when the program runs where it cannot. After the walk,
+        // because the checker is what decided which calls are the prelude's.
+        let keys: BTreeSet<(usize, usize)> = checker
             .s
             .facts
             .claims
-            .get_mut(&(key.0 as i64, key.1 as i64))
-        {
-            claim.held = Some(held);
+            .keys()
+            .map(|(a, b)| (*a as usize, *b as usize))
+            .collect();
+        let comptimes = crate::prove::Comptimes::of(parsed, &checker.s.facts.comptime_values);
+        // **A call an open claim reads is run as a `comptime` is**
+        // ([ADR-359](../../docs/specification/adr/adr-359.md) D11-D13), where this
+        // build has a place to compile it.
+        let host = checker.host();
+        let runner = |call: &Expr, callee: &str, args: &[i64]| {
+            host.run_for_a_claim(call, callee, args, &comptimes.by_name)
+        };
+        let run: Option<crate::prove::ClaimRunner<'_>> = match reads.workshop().somewhere() {
+            true => Some(&runner),
+            false => None,
+        };
+        let proved = crate::prove::prove(parsed, own, library, &keys, &comptimes, run);
+        checker.s.findings.extend(proved.findings);
+        checker.s.facts.entries = proved.entries;
+        checker.s.facts.reaches = proved.reaches;
+        checker.s.facts.published = proved.published;
+        for (key, held) in proved.held {
+            if let Some(claim) = checker
+                .s
+                .facts
+                .claims
+                .get_mut(&(key.0 as i64, key.1 as i64))
+            {
+                claim.held = Some(held);
+            }
         }
+        // A naked view parameter that is kept past the call (`NK2302`). Also a
+        // separate walk, and for the same reason: it asks where a *value* goes
+        // rather than what a type is. It reads both ledgers, because **a call says
+        // which of its arguments its result may point into** and a parameter that
+        // is none of them does not escape through it.
+        checker
+            .s
+            .findings
+            .extend(crate::views::check(parsed, own, library));
+        // A change in place of data a view still to be used may point into
+        // (`NK2305`, ADR-353 D4). A walk of its own, like `views`: it asks where a
+        // view points and when it is used, not what a type is.
+        let (changed, _) =
+            crate::view_changes::analyse(parsed, own, library, &checker.s.facts.lent_lets);
+        checker.s.findings.extend(changed);
+        // A view handed back that points into a buffer the body owns (`NK2303`).
+        // The tether's own refusal
+        // ([ADR-283](../../docs/specification/adr/adr-283.md) D9), and a walk of
+        // its own for the same reason `views` is: it asks where a *value* points
+        // rather than what a type is. It reads both ledgers, because which calls
+        // make a buffer is what they say.
+        checker
+            .s
+            .findings
+            .extend(crate::contracts::tether::check(parsed, own, library));
     }
-    // A naked view parameter that is kept past the call (`NK2302`). Also a
-    // separate walk, and for the same reason: it asks where a *value* goes
-    // rather than what a type is. It reads both ledgers, because **a call says
-    // which of its arguments its result may point into** and a parameter that
-    // is none of them does not escape through it.
-    checker
-        .s
-        .findings
-        .extend(crate::views::check(parsed, own, library));
-    // A change in place of data a view still to be used may point into
-    // (`NK2305`, ADR-353 D4). A walk of its own, like `views`: it asks where a
-    // view points and when it is used, not what a type is.
-    let (changed, _) =
-        crate::view_changes::analyse(parsed, own, library, &checker.s.facts.lent_lets);
-    checker.s.findings.extend(changed);
-    // A view handed back that points into a buffer the body owns (`NK2303`).
-    // The tether's own refusal
-    // ([ADR-283](../../docs/specification/adr/adr-283.md) D9), and a walk of
-    // its own for the same reason `views` is: it asks where a *value* points
-    // rather than what a type is. It reads both ledgers, because which calls
-    // make a buffer is what they say.
-    checker
-        .s
-        .findings
-        .extend(crate::contracts::tether::check(parsed, own, library));
     // Kap 4.7: what an `impl` owes the `trait` it names. Separate for a reason
     // of its own - it reads the ledger's **finished** `sync` column, and the
     // type walk runs before `sync::infer` fills that in
