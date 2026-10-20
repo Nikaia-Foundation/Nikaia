@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1139] — 2026-10-20
+
+**A Bytes carries what owns its memory; Bytes(v) copies nothing; a mapping is a Bytes (built, ADR-373 D1-D3)**
+- A `Bytes` is a pointer, a length and a counted owner (memory it allocated, a `Vec[u8]` handed over, a mapped file); a clone is a count, equality, order and hash go by content (#718).
+- `Bytes(v)` and `fs::read` hand the vector over without a copy; an `fs::Mapped` may be given wherever a `Bytes` is taken by value, at a count, and stays mapped while any holder lives.
+
 ## [0.0.1138] — 2026-10-20
 
 **spec: a ByteSet holds any byte; a set proved empty is refused, one empty at run time finds nothing (ADR-375 D2)**
