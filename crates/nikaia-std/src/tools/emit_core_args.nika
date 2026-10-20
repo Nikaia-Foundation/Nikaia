@@ -817,6 +817,13 @@ impl EmitState {
             out.push(option.default)
             return
         }
+        // **A list handed over is built** (ADR-243 D5): `env: Vec[(String,
+        // String)] = []` is a `Vec` of its own where nothing was passed.
+        if option.default.starts_with("[") {
+            out.push("vec!")
+            out.push(option.default)
+            return
+        }
         // **A default not computed yet** stands only in a run that computes
         // another one (#468): a call the run reaches with it would be a ring,
         // which `NK1168` refuses first.

@@ -10087,6 +10087,52 @@ fn arith_exit_code_outside(first: &Expr) -> Option<String> {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn arith_env_literal<H: CheckHost>(host: &H, expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::LitStr { text, .. } => host.decoded(text),
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn arith_env_name_fault<H: CheckHost>(host: &H, expr: &Expr) -> Option<String> {
+    let name = match arith_env_literal(host, expr) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    arith_env_name_says(&name)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn arith_env_name_says(name: &str) -> Option<String> {
+    if name == "" { return Some("An environment name is empty.".to_owned()); }
+    let shown = name.replace("\0", "\\0");
+    if name.contains('=') { return Some(format!("The environment name `{}` holds `=`.", shown)); }
+    if name.contains("\0") { return Some(format!("The environment name `{}` holds a NUL.", shown)); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn arith_env_pair_fault<H: CheckHost>(host: &H, expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Tuple(parts, _) => if parts.len() == 2 { arith_env_parts_fault(host, nikaia_std::index::get(&parts, 0), nikaia_std::index::get(&parts, 1)) } else { None },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn arith_env_parts_fault<H: CheckHost>(host: &H, name: &Expr, value: &Expr) -> Option<String> {
+    let named: Option<String> = arith_env_name_fault(host, name);
+    if named.is_some() { return std::convert::identity(named); }
+    let text = match arith_env_literal(host, value) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !text.contains("\0") { return None; }
+    let label = nikaia_std::index::or(arith_env_literal(host, name), || "".into()).to_owned();
+    Some(format!("The value of the environment variable `{}` holds a NUL.", label))
+}
+
 fn arith_negated_literal(expr: &Expr) -> Option<String> {
     match expr {
         Expr::LitInt { value, .. } => { let value = *value; if value > 0u64 { Some(format!("-{}", value)) } else { None } },
@@ -10100,6 +10146,27 @@ impl CheckState {
         let code = match arith_exit_code_outside(nikaia_std::index::get(&args, 0)) { Some(__nikaia_value) => __nikaia_value, None => return };
         let note: String = String::from("An exit status is one byte; the system would keep only part of it.");
         self.findings.push(check_refusal("NK1116", span, format!("The exit code {} is not in 0..=255.", code), vec![note], Some("Give `process::exit` a code from 0 to 255.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_environment_entry_invalid<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, config: &[ConfigArg], span: &Span) {
+        if key != "process::run" { return; }
+        for option in config.iter() {
+            let named = world.words.resolve(option.name);
+            if named != "env" && named != "env_remove" { continue; }
+            match &option.value {
+                Expr::ListLit { items, .. } => {
+                    for item in items.iter() {
+                        let fault: Option<String> = if named == "env" { arith_env_pair_fault(host, item) } else { arith_env_name_fault(host, item) };
+                        let message = match fault { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        let at = check_span_at(world, item, span);
+                        let note: String = String::from("The operating system keeps the environment as `NAME=value` entries ended by a NUL, so a name holding `=` or a NUL, or a value holding a NUL, would be cut into another variable.");
+                        self.findings.push(check_refusal("NK1286", &at, message, vec![note], Some("An environment name is not empty and holds no `=` and no NUL; its value holds no NUL.".to_owned())));
+                    }
+                },
+                _ => { },
+            }
+        }
     }
     pub fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
         let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge;
@@ -13865,7 +13932,8 @@ fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &Check
     }
     state.flow.option_values = options;
     state.flow.option_literals = literals;
-    let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, passed, span);
+    let typed_options = check_core_call_option_texts(state, world, contract, config, passed);
+    let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, &typed_options, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
     let bound = argument_bindings(contract, found);
@@ -13874,6 +13942,28 @@ fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &Check
     check_crossings_a_standard_bound_not_met(state, world, key, &bound, span);
     let typed: Ty = nikaia_std::index::or(constructed, || substitute(&result, &bound).into());
     state.stamped_through(contract, found, typed)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_call_option_texts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, config: &[ConfigArg], passed: &[(String, Ty)]) -> Vec<(String, Ty)> {
+    let mut out: Vec<(String, Ty)> = passed.to_owned();
+    let options = lowered_options(contract);
+    let mut at: i64 = 0;
+    for option in config.iter() {
+        let index: i64 = at;
+        at += 1;
+        let listed = matches!(option.value, Expr::ListLit { .. });
+        if !listed || index >= out.len() as i64 { continue; }
+        let name = nikaia_std::index::get(&out, nikaia_std::index::at(index)).0.to_owned();
+        for declared in options.iter() {
+            if declared.name == name {
+                let ty = match state.text_literal(world, &declared.ty, &option.value, true) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                { let __nikaia_stored = (name.to_owned(), ty); nikaia_std::index::set(&mut out, nikaia_std::index::at(index), __nikaia_stored); }
+            }
+        }
+    }
+    out
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -13953,7 +14043,10 @@ fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     }
     let outer_paused: Vec<i64> = state.flow.paused_args.to_owned();
     state.flow.paused_args = vec![];
-    if have { state.an_exit_code_out_of_range(&key, args, span); }
+    if have {
+        state.an_exit_code_out_of_range(&key, args, span);
+        state.an_environment_entry_invalid(world, host, &key, config, span);
+    }
     let declared_here = have && world.own.functions.contains_key(&key);
     let feeds = declared_here && !key.contains("::") && check_core_call_takes_code((callee).as_ref());
     if feeds { state.stored_frames.push(CheckStoredCode::empty()); }
@@ -30616,14 +30709,26 @@ impl CheckState {
                 return None;
             },
             Expr::ListLit { items, .. } => {
-                let a_list_of_text = match want {
-                    Ty::Named { name, args, view } => { let view = *view; !view && name == "Vec" && args.len() == 1 && a_plain_string(nikaia_std::index::get(&args, 0)) },
-                    _ => false,
+                let element: Ty = match want {
+                    Ty::Named { name, args, view } => { let view = *view; if !view && name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown } },
+                    _ => Ty::Unknown,
                 };
-                if a_list_of_text && !items.is_empty() {
-                    for item in items.iter() { if !a_text_literal_expr(item) { return None; } }
-                    let text = a_string_type();
-                    for item in items.iter() { self.text_literal(world, &text, item, true); }
+                if !items.is_empty() && check_texts_all_text(&element, items) {
+                    for item in items.iter() { self.text_literal(world, &element, item, true); }
+                    return Some(want.clone());
+                }
+            },
+            Expr::Tuple(parts, _) => {
+                let wanted: Vec<Ty> = match want {
+                    Ty::Tuple(each) => each.to_owned(),
+                    _ => vec![],
+                };
+                if !parts.is_empty() && (wanted.len() as i64) == parts.len() as i64 && check_texts_tuple_all_text(&wanted, parts) {
+                    let mut i: i64 = 0;
+                    while ((i) as usize) < parts.len() {
+                        self.text_literal(world, nikaia_std::index::get(&wanted, (i) as usize), nikaia_std::index::get(&parts, (i) as usize), true);
+                        i += 1;
+                    }
                     return Some(want.clone());
                 }
             },
@@ -30858,6 +30963,39 @@ impl CheckState {
         }
         self.flow.high_bytes = collections::BTreeMap::new();
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_texts_all_text(element: &Ty, items: &[Expr]) -> bool {
+    for item in items.iter() { if !check_texts_text_for(element, item) { return false; } }
+    true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_texts_text_for(element: &Ty, item: &Expr) -> bool {
+    if a_plain_string(element) { return a_text_literal_expr(item); }
+    let each: Vec<Ty> = match element {
+        Ty::Tuple(each) => each.to_owned(),
+        _ => vec![],
+    };
+    if each.is_empty() { return false; }
+    match item {
+        Expr::Tuple(parts, _) => (parts.len() as i64) == each.len() as i64 && check_texts_tuple_all_text(&each, parts),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_texts_tuple_all_text(each: &[Ty], parts: &[Expr]) -> bool {
+    let mut i: i64 = 0;
+    while ((i) as usize) < parts.len() {
+        if !check_texts_text_for(nikaia_std::index::get(&each, (i) as usize), nikaia_std::index::get(&parts, (i) as usize)) { return false; }
+        i += 1;
+    }
+    true
 }
 
 
@@ -34820,6 +34958,11 @@ impl EmitState {
         }
         if option.default.starts_with('[') && option.ty.is_a_view() {
             out.push("&vec!");
+            out.push(&option.default);
+            return Ok(());
+        }
+        if option.default.starts_with('[') {
+            out.push("vec!");
             out.push(&option.default);
             return Ok(());
         }

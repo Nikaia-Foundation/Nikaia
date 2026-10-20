@@ -547,7 +547,8 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
     }
     state.flow.option_values = options
     state.flow.option_literals = literals
-    let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, passed, span)
+    let typed_options = check_core_call_option_texts(state, world, contract, config, passed)
+    let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, typed_options, span)
     state.flow.option_values = []
     state.flow.option_literals = []
     // **What the arguments tell the signature** (ADR-295 D2), and a bound
@@ -558,6 +559,34 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
     check_crossings_a_standard_bound_not_met(state, world, key, bound, span)
     let typed: Ty = constructed ?? substitute(result, bound)
     return state.stamped_through(contract, found, typed)
+}
+
+/// **A list of text written out, handed to an option, is text of its own**
+/// (ADR-282 D4), as it is at a parameter: `env: [("A", "1")]` is the
+/// `Vec[(String, String)]` the option takes, built where it is kept.
+fn check_core_call_option_texts(mut state: CheckState, world: ref CheckWorld, contract: ref FnContract, config: ref Vec[ConfigArg], passed: ref Vec[(String, Ty)]) -> Vec[(String, Ty)] sync {
+    let mut out: Vec[(String, Ty)] = passed.clone()
+    let options = lowered_options(contract)
+    let mut at = 0
+    for option in config {
+        let index = at
+        at += 1
+        let listed = match option.value {
+            Expr::ListLit { .. } => true,
+            else => false,
+        }
+        if !listed || index >= out.len() {
+            continue
+        }
+        let name = out[index].0.clone()
+        for declared in options {
+            if declared.name == name {
+                let ty = state.text_literal(world, declared.ty, option.value, true) ?? continue
+                out[index] = (name.clone(), ty)
+            }
+        }
+    }
+    return out
 }
 
 /// What a call's named options were handed, walked.
@@ -648,6 +677,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     state.flow.paused_args = []
     if have {
         state.an_exit_code_out_of_range(key, args, span)
+        state.an_environment_entry_invalid(world, host, key, config, span)
     }
     let declared_here = have && world.own.functions.contains_key(key)
     // **A parameter of code is a place, given what every caller hands it**

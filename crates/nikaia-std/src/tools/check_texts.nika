@@ -251,20 +251,32 @@ impl CheckState {
                 }
                 return null
             },
+            // **A list of text written out, or of tuples of it, is text of
+            // its own** (ADR-282 D4): `[("A", "1")]` handed to a
+            // `Vec[(String, String)]` builds each `String` where it is kept
+            // (ADR-243 D5's `env`).
             Expr::ListLit { items, .. } => {
-                let a_list_of_text = match want {
-                    Ty::Named { name, args, view } => !view && name == "Vec" && args.len() == 1 && a_plain_string(args[0]),
-                    else => false,
+                let element: Ty = match want {
+                    Ty::Named { name, args, view } => if !view && name == "Vec" && args.len() == 1 { args[0].clone() } else { Ty::Unknown },
+                    else => Ty::Unknown,
                 }
-                if a_list_of_text && items.len() > 0 {
+                if items.len() > 0 && check_texts_all_text(element, items) {
                     for item in items {
-                        if !a_text_literal_expr(item) {
-                            return null
-                        }
+                        self.text_literal(world, element, item, true)
                     }
-                    let text = a_string_type()
-                    for item in items {
-                        self.text_literal(world, text, item, true)
+                    return want.clone()
+                }
+            },
+            Expr::Tuple(parts, _) => {
+                let wanted: Vec[Ty] = match want {
+                    Ty::Tuple(each) => each.clone(),
+                    else => [],
+                }
+                if parts.len() > 0 && wanted.len() == parts.len() && check_texts_tuple_all_text(wanted, parts) {
+                    let mut i = 0
+                    while i < parts.len() {
+                        self.text_literal(world, wanted[i], parts[i], true)
+                        i += 1
                     }
                     return want.clone()
                 }
@@ -566,4 +578,43 @@ impl CheckState {
         }
         self.flow.high_bytes = collections::BTreeMap()
     }
+}
+
+/// Whether each of `items` is text written out for `element`: a text literal
+/// for a `String`, a tuple of them for a tuple of `String`s.
+fn check_texts_all_text(element: ref Ty, items: ref Vec[Expr]) -> bool sync {
+    for item in items {
+        if !check_texts_text_for(element, item) {
+            return false
+        }
+    }
+    return true
+}
+
+fn check_texts_text_for(element: ref Ty, item: ref Expr) -> bool sync {
+    if a_plain_string(element) {
+        return a_text_literal_expr(item)
+    }
+    let each: Vec[Ty] = match element {
+        Ty::Tuple(each) => each.clone(),
+        else => [],
+    }
+    if each.len() == 0 {
+        return false
+    }
+    return match item {
+        Expr::Tuple(parts, _) => parts.len() == each.len() && check_texts_tuple_all_text(each, parts),
+        else => false,
+    }
+}
+
+fn check_texts_tuple_all_text(each: ref Vec[Ty], parts: ref Vec[Expr]) -> bool sync {
+    let mut i = 0
+    while i < parts.len() {
+        if !check_texts_text_for(each[i], parts[i]) {
+            return false
+        }
+        i += 1
+    }
+    return true
 }

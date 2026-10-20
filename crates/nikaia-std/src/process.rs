@@ -26,7 +26,9 @@
 // after both pipes are read to their end - waiting first would leave a child
 // that fills a pipe blocked for ever.
 
+use std::ffi::{OsStr, OsString};
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -71,9 +73,18 @@ struct Ran {
 /// Start the program, read both pipes to their end - standard error on a
 /// thread of its own, so that neither pipe fills while the other is read -
 /// and only then wait for it.
-fn started(program: &str, args: &[String], dir: &str) -> std::io::Result<Ran> {
+fn started(
+    program: &Path,
+    args: &[String],
+    dir: &str,
+    environment: Option<Vec<(OsString, OsString)>>,
+) -> std::io::Result<Ran> {
     let started = Instant::now();
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    if let Some(environment) = environment {
+        command.env_clear().envs(environment);
+    }
+    let mut child = command
         .args(args)
         .current_dir(dir)
         .stdin(Stdio::null())
@@ -110,15 +121,49 @@ fn started(program: &str, args: &[String], dir: &str) -> std::io::Result<Ran> {
 /// Start `program` with `args` in the directory `dir`, wait for it to finish,
 /// and hand back what it said.
 ///
-/// `program` is looked for on `PATH` where it has no `/` in it, as a shell
-/// would. It fails with `IoError::NotFound(program)` where nothing is there,
+/// `program` is looked for on the caller's `PATH` where it has no path
+/// separator in it, and started by the full name found (ADR-243 D6). The
+/// child's environment is the caller's, changed by `env_clear`, then
+/// `env_remove`, then `env` (D5); an entry no platform accepts starts nothing
+/// and throws `IoError::Other` naming every one (D7). It fails with
+/// `IoError::NotFound(program)` where nothing is there,
 /// `IoError::PermissionDenied(program)` where it may not be run, and
 /// `IoError::NotText` where either stream is not UTF-8.
-pub async fn run(program: &str, args: Vec<String>, dir: &str) -> Result<Output, IoError> {
-    let program = program.to_string();
+pub async fn run(
+    program: &str,
+    args: Vec<String>,
+    dir: &str,
+    env: Vec<(String, String)>,
+    env_remove: Vec<String>,
+    env_clear: bool,
+) -> Result<Output, IoError> {
+    let invalid = invalid_entries(&env, &env_remove);
+    if !invalid.is_empty() {
+        return Err(IoError::Other(format!(
+            "{program}: the environment has entries no platform accepts: {}",
+            invalid.join("; ")
+        )));
+    }
+    let named = program.to_string();
+    let path = std::env::var_os("PATH");
+    let found = found_on_path(
+        program,
+        path.as_deref(),
+        std::env::var_os("PATHEXT").as_deref(),
+        cfg!(windows),
+    )
+    .ok_or_else(|| IoError::NotFound(PathBuf::from(&named)))?;
+    let environment = (env_clear || !env_remove.is_empty() || !env.is_empty()).then(|| {
+        merged(
+            std::env::vars_os(),
+            env_clear,
+            &env_remove,
+            &env,
+            cfg!(windows),
+        )
+    });
     let dir = dir.to_string();
-    let named = program.clone();
-    let finished = crate::rt::io::beside(move || started(&program, &args, &dir))
+    let finished = crate::rt::io::beside(move || started(&found, &args, &dir, environment))
         .await
         .map_err(|e| IoError::of(e, &named))?;
     let stdout = String::from_utf8(finished.stdout)
@@ -136,6 +181,141 @@ pub async fn run(program: &str, args: Vec<String>, dir: &str) -> Result<Output, 
         system_time: finished.waited.system_time,
         max_rss_kib: finished.waited.max_rss_kib,
     })
+}
+
+/// **Every environment entry no platform accepts**, described (ADR-243 D7): a
+/// name that is empty or holds `=` or a NUL, in `env` or in `env_remove`, and
+/// a value in `env` that holds a NUL. All of them, so one error names each.
+pub fn invalid_entries(env: &[(String, String)], env_remove: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    let name_fault = |name: &str| -> Option<&'static str> {
+        if name.is_empty() {
+            Some("is empty")
+        } else if name.contains('=') {
+            Some("holds `=`")
+        } else if name.contains('\0') {
+            Some("holds a NUL")
+        } else {
+            None
+        }
+    };
+    for (name, value) in env {
+        if let Some(fault) = name_fault(name) {
+            found.push(format!("the name {name:?} in `env` {fault}"));
+        }
+        if value.contains('\0') {
+            found.push(format!("the value of {name:?} in `env` holds a NUL"));
+        }
+    }
+    for name in env_remove {
+        if let Some(fault) = name_fault(name) {
+            found.push(format!("the name {name:?} in `env_remove` {fault}"));
+        }
+    }
+    found
+}
+
+/// Whether two environment names are the same variable: byte for byte, or
+/// without regard to ASCII case where `windows` (ADR-243 D5).
+fn same_name(a: &OsStr, b: &OsStr, windows: bool) -> bool {
+    if windows {
+        a.as_encoded_bytes()
+            .eq_ignore_ascii_case(b.as_encoded_bytes())
+    } else {
+        a == b
+    }
+}
+
+/// **The child's environment** (ADR-243 D5): `inherited`, or nothing where
+/// `clear`; without each name in `remove`; then each pair in `set`, in order,
+/// a later pair replacing an earlier one of the same name. Names compare as
+/// the platform compares them, `windows` saying which.
+pub fn merged(
+    inherited: impl IntoIterator<Item = (OsString, OsString)>,
+    clear: bool,
+    remove: &[String],
+    set: &[(String, String)],
+    windows: bool,
+) -> Vec<(OsString, OsString)> {
+    let mut environment: Vec<(OsString, OsString)> = if clear {
+        Vec::new()
+    } else {
+        inherited.into_iter().collect()
+    };
+    for name in remove {
+        environment.retain(|(held, _)| !same_name(held, OsStr::new(name), windows));
+    }
+    for (name, value) in set {
+        environment.retain(|(held, _)| !same_name(held, OsStr::new(name), windows));
+        environment.push((OsString::from(name), OsString::from(value)));
+    }
+    environment
+}
+
+/// **Where `program` is started from** (ADR-243 D6): itself where it holds a
+/// path separator, otherwise the first file of that name on the caller's
+/// `path` that may be run - with each `pathext` ending tried where `windows`
+/// and the name has none. A directory on `path` that is relative, the empty
+/// one among them, is the caller's working directory, so the name found does
+/// not depend on the child's `dir`.
+pub fn found_on_path(
+    program: &str,
+    path: Option<&OsStr>,
+    pathext: Option<&OsStr>,
+    windows: bool,
+) -> Option<PathBuf> {
+    let separated = program.contains('/') || (windows && program.contains('\\'));
+    if separated {
+        return Some(PathBuf::from(program));
+    }
+    if program.is_empty() {
+        return None;
+    }
+    let endings: Vec<String> = if windows && Path::new(program).extension().is_none() {
+        pathext
+            .and_then(OsStr::to_str)
+            .unwrap_or(".COM;.EXE;.BAT;.CMD")
+            .split(';')
+            .filter(|ending| !ending.is_empty())
+            .map(str::to_string)
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+    let here = std::env::current_dir().ok();
+    for directory in std::env::split_paths(path?) {
+        let directory = match (directory.is_absolute(), &here) {
+            (true, _) => directory,
+            (false, Some(here)) => here.join(directory),
+            (false, None) => directory,
+        };
+        for ending in &endings {
+            let candidate = directory.join(format!("{program}{ending}"));
+            if runnable(&candidate) {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Whether `candidate` is a file this process may start.
+fn runnable(candidate: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(candidate) else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 // **`exit` throws `Exit`, a fatal error** ([ADR-345](../../../docs/specification/adr/adr-345.md)).
@@ -293,5 +473,100 @@ mod exit_tests {
     fn exit_throws_its_code() {
         let thrown = super::exit(3).unwrap_err();
         assert_eq!(thrown.exit_code(), Some(3));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pairs(list: &[(&str, &str)]) -> Vec<(OsString, OsString)> {
+        list.iter()
+            .map(|(n, v)| (OsString::from(n), OsString::from(v)))
+            .collect()
+    }
+
+    fn owned(list: &[(&str, &str)]) -> Vec<(String, String)> {
+        list.iter()
+            .map(|(n, v)| (n.to_string(), v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn set_after_remove_and_later_pair_wins() {
+        let inherited = pairs(&[("HOME", "/h"), ("A", "old"), ("B", "b")]);
+        let got = merged(
+            inherited,
+            false,
+            &["A".to_string(), "B".to_string()],
+            &owned(&[("A", "1"), ("C", "x"), ("C", "y")]),
+            false,
+        );
+        assert_eq!(got, pairs(&[("HOME", "/h"), ("A", "1"), ("C", "y")]));
+    }
+
+    #[test]
+    fn clear_then_remove_does_nothing() {
+        let got = merged(
+            pairs(&[("HOME", "/h")]),
+            true,
+            &["HOME".to_string(), "NOPE".to_string()],
+            &owned(&[("ONLY", "1")]),
+            false,
+        );
+        assert_eq!(got, pairs(&[("ONLY", "1")]));
+    }
+
+    #[test]
+    fn names_compare_by_case_on_unix_and_without_on_windows() {
+        let inherited = pairs(&[("Path", "C:\\w"), ("path", "/u")]);
+        let unix = merged(
+            inherited.clone(),
+            false,
+            &[],
+            &owned(&[("PATH", "/p")]),
+            false,
+        );
+        assert_eq!(
+            unix,
+            pairs(&[("Path", "C:\\w"), ("path", "/u"), ("PATH", "/p")])
+        );
+        let windows = merged(
+            inherited.clone(),
+            false,
+            &[],
+            &owned(&[("PATH", "x")]),
+            true,
+        );
+        assert_eq!(windows, pairs(&[("PATH", "x")]));
+        let removed = merged(inherited, false, &["PATH".to_string()], &[], true);
+        assert!(removed.is_empty());
+    }
+
+    #[test]
+    fn every_invalid_entry_is_named() {
+        let found = invalid_entries(
+            &owned(&[("", "x"), ("A=B", "y"), ("OK", "v\0w"), ("FINE", "z")]),
+            &["N\0".to_string()],
+        );
+        assert_eq!(found.len(), 4, "{found:?}");
+        assert!(invalid_entries(&owned(&[("FINE", "z")]), &["X".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn a_name_with_a_separator_is_not_looked_up() {
+        assert_eq!(
+            found_on_path("./x", Some(OsStr::new("")), None, false),
+            Some(PathBuf::from("./x"))
+        );
+        assert_eq!(
+            found_on_path(
+                "definitely-not-a-program-726",
+                std::env::var_os("PATH").as_deref(),
+                None,
+                false
+            ),
+            None
+        );
     }
 }

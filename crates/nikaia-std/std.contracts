@@ -4731,10 +4731,25 @@ fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: St
 # call is written as it reads.
 # Start a program, wait for it to finish, and hand back what it said.
 #
-# `program` is looked for on `PATH` where it has no `/` in it; `dir` is the
-# directory it starts in. A non-zero exit is not a failure - it is `code` and
-# `ok`, and the caller decides what it means. It fails where the program cannot
-# be started, and where what it wrote is not UTF-8.
+# `program` is looked for on the caller's `PATH`, as it is at the call, where
+# it has no path separator in it, and started by the full name found - never
+# on the child's `PATH` (ADR-243 D6). `dir` is the directory it starts in. A
+# non-zero exit is not a failure - it is `code` and `ok`, and the caller
+# decides what it means. It fails where the program cannot be started, and
+# where what it wrote is not UTF-8.
+#
+# **The child's environment** is the caller's, changed in this order
+# (ADR-243 D5): `env_clear` starts it empty; each name in `env_remove` is
+# taken out, which after `env_clear` does nothing; each pair in `env` is set
+# in the order written, a later pair replacing an earlier one of the same
+# name, so a name both removed and set is set. Names compare as the platform
+# compares them: byte for byte on Unix, without regard to case on Windows.
+# `env_clear` is not a sandbox: the child runs with the caller's rights.
+#
+# **An entry no platform accepts** - a name that is empty or holds `=` or a
+# NUL, a value that holds a NUL - starts nothing: every entry is checked
+# first, and the call throws `io::IoError::Other` naming each invalid one
+# (D7). One written as a literal is refused while building (`NK1286`).
 #
 # The wait gives the thread up, so other tasks run while the program does.
 [fn."process::run"]
@@ -4742,7 +4757,7 @@ pub = true
 throws = ["io::IoError"]
 provenance = "untrusted"
 keeps = ["args"]
-signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\") -> process::Output"
+signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false) -> process::Output"
 
 # Throw `process::Exit::Code(code)`, with `code` from 0 to 255: a fatal error
 # (ADR-345), which a `catch` takes only in an arm naming it. At the end of

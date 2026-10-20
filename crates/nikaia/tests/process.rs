@@ -44,6 +44,7 @@ fn ran(purpose: &str, source: &str, how: Build) -> String {
     );
     let out = Command::new(&binary)
         .current_dir(&dir)
+        .env("NK_INHERITED", "inherited")
         .output()
         .expect("run it");
     assert!(
@@ -168,5 +169,98 @@ fn what_the_run_cost_comes_back() {
         "costs",
         source,
         "waited=true rss=true busy=true\nelapsed=true rss=true\n",
+    );
+}
+
+/// **The child's environment** (ADR-243 D5, D6): `env` sets, a later pair
+/// winning; `env_remove` takes an inherited variable out; `env_clear` with
+/// `env` leaves only what was given; `env_remove` after `env_clear` neither
+/// fails nor matters; a name both removed and set is set; and a `PATH` given
+/// to the child does not change where the program is found.
+#[test]
+fn the_childs_environment_is_the_callers_changed_in_order() {
+    let source = r#"use std::process
+
+fn main() throws {
+    let a = process::run("printenv", ["NK_A"]; env: [("NK_A", "one")])
+    print(a.stdout)
+    let b = process::run("printenv", ["NK_A"]; env: [("NK_A", "one"), ("NK_A", "two")])
+    print(b.stdout)
+    let kept = process::run("printenv", ["NK_INHERITED"])
+    print(kept.stdout)
+    let c = process::run("printenv", ["NK_INHERITED"]; env_remove: ["NK_INHERITED"])
+    println(f"removed={c.code}")
+    let d = process::run("/usr/bin/env", []; env_clear: true, env: [("ONLY", "1")])
+    print(d.stdout)
+    let e = process::run("/usr/bin/env", []; env_clear: true, env_remove: ["NK_INHERITED", "NOPE"])
+    println(f"cleared={e.code} [{e.stdout}]")
+    let f = process::run("printenv", ["NK_INHERITED"]; env_remove: ["NK_INHERITED"], env: [("NK_INHERITED", "set")])
+    print(f.stdout)
+    let g = process::run("printenv", ["PATH"]; env: [("PATH", "/nonexistent")])
+    print(g.stdout)
+}
+"#;
+    runs(
+        "env",
+        source,
+        "one\ntwo\ninherited\nremoved=1\nONLY=1\ncleared=0 []\nset\n/nonexistent\n",
+    );
+}
+
+/// **An entry no platform accepts starts nothing** (ADR-243 D7): both invalid
+/// entries are named in the one `io::IoError::Other`, and the child that would
+/// have made the marker never ran.
+#[test]
+fn every_invalid_entry_is_named_and_nothing_starts() {
+    let source = r#"use std::process
+use std::io
+
+fn main() throws {
+    let name: String = "A=B"
+    let mut pairs: Vec[(String, String)] = []
+    pairs.push((name, "x".clone()))
+    pairs.push(("", "y"))
+    let h = process::run("touch", ["marker"]; env: pairs) catch {
+        match error {
+            io::IoError::Other(what) => println(f"refused: {what}"),
+            else => println("something else"),
+        }
+        let seen = process::run("sh", ["-c", "test -e marker && echo started || echo none"])
+        print(seen.stdout)
+        return
+    }
+    println(f"ran {h.code}")
+}
+"#;
+    runs(
+        "env-invalid",
+        source,
+        "refused: touch: the environment has entries no platform accepts: \
+         the name \"A=B\" in `env` holds `=`; the name \"\" in `env` is empty\nnone\n",
+    );
+}
+
+/// **`NK1286`: an invalid entry written as a literal is refused while
+/// building** (ADR-243 D7), each at its own place.
+#[test]
+fn a_literal_invalid_entry_is_refused() {
+    let source = "use std::process\n\
+                  \n\
+                  fn main() throws {\n\
+                  \x20   let a = process::run(\"true\", []; env: [(\"A=B\", \"x\"), (\"\", \"x\"), (\"OK\", \"fine\")], env_remove: [\"GONE\"])\n\
+                  \x20   println(a.code)\n\
+                  }\n";
+    let refused: Vec<String> = findings(source)
+        .into_iter()
+        .filter(|f| f.code == "NK1286")
+        .map(|f| f.message)
+        .collect();
+    assert_eq!(
+        refused,
+        [
+            "The environment name `A=B` holds `=`.",
+            "An environment name is empty.",
+        ],
+        "{refused:#?}"
     );
 }

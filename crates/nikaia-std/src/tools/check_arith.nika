@@ -26,6 +26,56 @@ fn arith_exit_code_outside(first: ref Expr) -> String? {
     }
 }
 
+/// The text a string literal stands for, or null where `expr` is none.
+fn arith_env_literal[H: CheckHost](host: ref H, expr: ref Expr) -> String? sync {
+    return match expr {
+        Expr::LitStr { text, .. } => host.decoded(text),
+        else => null,
+    }
+}
+
+/// What is wrong with `env_remove`'s literal name `expr`, or null.
+fn arith_env_name_fault[H: CheckHost](host: ref H, expr: ref Expr) -> String? sync {
+    let name = arith_env_literal(host, expr) ?? return null
+    return arith_env_name_says(name)
+}
+
+/// What is wrong with an environment name, or null where nothing is.
+fn arith_env_name_says(name: String) -> String? sync {
+    if name == "" {
+        return "An environment name is empty.".clone()
+    }
+    let shown = name.replace("\0", "\\0")
+    if name.contains("=") {
+        return f"The environment name `{shown}` holds `=`."
+    }
+    if name.contains("\0") {
+        return f"The environment name `{shown}` holds a NUL."
+    }
+    return null
+}
+
+/// What is wrong with `env`'s literal pair `expr`, or null.
+fn arith_env_pair_fault[H: CheckHost](host: ref H, expr: ref Expr) -> String? sync {
+    return match expr {
+        Expr::Tuple(parts, _) => if parts.len() == 2 { arith_env_parts_fault(host, parts[0], parts[1]) } else { null },
+        else => null,
+    }
+}
+
+fn arith_env_parts_fault[H: CheckHost](host: ref H, name: ref Expr, value: ref Expr) -> String? sync {
+    let named: String? = arith_env_name_fault(host, name)
+    if named != null {
+        return named
+    }
+    let text = arith_env_literal(host, value) ?? return null
+    if !text.contains("\0") {
+        return null
+    }
+    let label = (arith_env_literal(host, name) ?? "").clone()
+    return f"The value of the environment variable `{label}` holds a NUL."
+}
+
 fn arith_negated_literal(expr: ref Expr) -> String? {
     return match expr {
         Expr::LitInt { value, .. } => if value > 0 { f"-{value}" } else { null },
@@ -43,6 +93,35 @@ impl CheckState {
         let code = arith_exit_code_outside(args[0]) ?? return
         let note: String = "An exit status is one byte; the system would keep only part of it."
         self.findings.push(check_refusal("NK1116", span, f"The exit code {code} is not in 0..=255.", [note], "Give `process::exit` a code from 0 to 255.".clone()))
+    }
+
+    /// **`NK1286`: an environment entry no platform accepts, written as a
+    /// literal in a `process::run` call** (ADR-243 D7). A name in `env` or
+    /// `env_remove` that is empty or holds `=` or a NUL, and a value in `env`
+    /// that holds a NUL, is refused where it is written; one the program
+    /// computes is `run`'s to refuse when it is called.
+    pub fn an_environment_entry_invalid[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, key: ref String, config: ref Vec[ConfigArg], span: ref Span) sync {
+        if key != "process::run" {
+            return
+        }
+        for option in config {
+            let named = world.words.resolve(option.name)
+            if named != "env" && named != "env_remove" {
+                continue
+            }
+            match option.value {
+                Expr::ListLit { items, .. } => {
+                    for item in items {
+                        let fault: String? = if named == "env" { arith_env_pair_fault(host, item) } else { arith_env_name_fault(host, item) }
+                        let message = fault ?? continue
+                        let at = check_span_at(world, item, span)
+                        let note: String = "The operating system keeps the environment as `NAME=value` entries ended by a NUL, so a name holding `=` or a NUL, or a value holding a NUL, would be cut into another variable."
+                        self.findings.push(check_refusal("NK1286", at, message, [note], "An environment name is not empty and holds no `=` and no NUL; its value holds no NUL.".clone()))
+                    }
+                },
+                else => {},
+            }
+        }
     }
 
     /// **`NK1248`: `<` or `==` on a type parameter no bound lets compare.**
