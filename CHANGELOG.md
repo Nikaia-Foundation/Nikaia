@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1127] — 2026-10-20
+
+**A map takes its types from what is written into it**
+- An unannotated `HashMap()` filled with `insert("a", 1)`, `m["a"] = 1` or `entry("a").or_insert(1)` is a map from `String` to one open number, decided by its uses as a list's numbers are (ADR-285 D43, Part I 4.5); a map nothing writes into or types is NK1153 (#700). Decided, not yet built.
+
 ## [0.0.1126] — 2026-10-20
 
 **A lambda's text item compares with text; a keep through a chain of calls; a literal beside a lent field**

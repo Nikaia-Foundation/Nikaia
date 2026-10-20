@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1126 (Draft)
+**Version:** 0.0.1127 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -1564,6 +1564,12 @@ The standard library provides types for groups of values.
     `get` gives the same. A list's `xs[i]` stays a `T`, and a wrong index
     aborts (Part III, Appendix A). A `+=` on a map slot is refused with the
     written-out form (`NK1162`).
+
+    A map made without an annotation takes its key and value types from the
+    first write that says them: after `scores.insert("Player1", 100)` it is a
+    map from `String` to one number without a type, decided by its uses as a
+    list's numbers are (2.4, [ADR-285](adr/adr-285.md) D43). A map nothing
+    writes into or types is refused with `NK1153`.
 
     The value reached is a **view** of the map where it does not copy, and
     `m[k] ?? 0` on a map of numbers is the number. Kept where a `T?` of its
