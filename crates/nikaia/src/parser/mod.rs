@@ -1672,8 +1672,11 @@ grammar! {
         // ([ADR-369](../../docs/specification/adr/adr-369.md) D1). Any
         // expression parses here; the checker refuses one that is not an
         // `assert(claim)` (`NK1288`), as it says why rather than where the
-        // parse stopped.
+        // parse stopped. What reads as a field - a name before `:`, `ref` or a
+        // type's name - is not taken for a rule, so a field missing its `,` or
+        // its `:` keeps the field's message (tests/errors A1, C1).
         rule struct_rule -> Spanned<Expr> @=
+            not((NAME ":")) not((NAME KW_REF)) not((NAME NAME))
             e:expr ","? -> { Spanned::new(e, Span::from(_span)) }
 
         // Kap 4.4. The three shapes the specification shows and no others: a
