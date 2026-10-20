@@ -487,6 +487,25 @@ fn a_forgotten_handle_is_refused() {
     assert!(message.contains("`h`"), "{message}");
 }
 
+/// #730: a handle a call hands back is bound as much as a `spawn`'s, and is
+/// `NK2109` when nobody takes it; taken, it is not.
+#[test]
+fn a_forgotten_handle_from_a_call_is_refused() {
+    let (code, message) = one("fn start(c: bool) -> TaskHandle[i64] {\n\
+         \x20   return spawn fn { 1 }\n\
+         }\n\
+         fn f() {\n\
+         \x20   let h = start(true)\n\
+         \x20   println(\"x\")\n\
+         }\n");
+    assert_eq!(code, "NK2109");
+    assert!(message.contains("`h`"), "{message}");
+    let found = findings(
+        "fn start(c: bool) -> TaskHandle[i64] {\n    return spawn fn { 1 }\n}\nfn f() throws {\n    let h = start(true)\n    println(f\"{h.join()}\")\n}\n",
+    );
+    assert!(!found.iter().any(|f| f.code == "NK2109"), "{found:#?}");
+}
+
 /// ADR-346 D3: a handle taken in one branch only, or left by a `return`, is `NK2109`.
 #[test]
 fn a_handle_taken_on_some_paths_is_refused() {

@@ -634,6 +634,14 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if !mutable {
         immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let }
     }
+    match bound {
+        Ty::Named { name, .. } => {
+            if name == "TaskHandle" {
+                state.flow.handle_lets.insert(span.start as i64)
+            }
+        },
+        else => {},
+    }
     let mut local = CheckLocal::free(name, bound, id)
     local.constant = constant
     local.lent = read_through_a_jump

@@ -192,9 +192,9 @@ fn check_crossings_joined(branches: ref Vec[CheckCrossingsPath], falls: bool) ->
     return CheckCrossingsPath::Left
 }
 
-/// The name a `let` binds a `spawn` to, where it binds one name that is not
-/// `_`.
-fn check_crossings_spawned(world: ref CheckWorld, stmt: ref Stmt) -> String? {
+/// The name a `let` binds a task's handle to - a `spawn`, or a call that
+/// hands one back - where it binds one name that is not `_`.
+fn check_crossings_spawned(world: ref CheckWorld, handles: ref collections::BTreeSet[i64], stmt: ref Stmt, at: i64) -> String? {
     match stmt {
         Stmt::Let { names, value, .. } => {
             if names.len() != 1 {
@@ -202,7 +202,11 @@ fn check_crossings_spawned(world: ref CheckWorld, stmt: ref Stmt) -> String? {
             }
             match value {
                 Expr::Spawn { .. } => {}
-                else => return null,
+                else => {
+                    if !handles.contains(at) {
+                        return null
+                    }
+                },
             }
             let name: String = f"{world.words.resolve(names[0])}"
             if name == "_" {
@@ -216,13 +220,14 @@ fn check_crossings_spawned(world: ref CheckWorld, stmt: ref Stmt) -> String? {
 
 /// **`NK2109`: a bound handle is used up before it leaves its scope**
 /// ([ADR-346](../../../docs/specification/adr/adr-346.md) D3). A `let h =
-/// spawn …` whose name no later statement of the block mentions is forgotten:
-/// nobody joins, cancels, detaches or hands it on.
+/// spawn …`, or a `let` of a call that hands back a `TaskHandle`, whose name
+/// no later statement of the block mentions is forgotten: nobody joins,
+/// cancels, detaches or hands it on.
 pub fn check_crossings_a_bound_handle_is_taken(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
     let mut at = 0
     for stmt in block.stmts {
         at += 1
-        let spawned: String? = check_crossings_spawned(world, stmt.node)
+        let spawned: String? = check_crossings_spawned(world, state.flow.handle_lets, stmt.node, stmt.span.start as i64)
         if spawned != null {
             let name: String = spawned ?? ""
             let flow = check_crossings_path(world, name, block.stmts, at, false)

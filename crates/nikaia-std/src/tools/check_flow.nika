@@ -181,6 +181,10 @@ pub struct CheckFlow {
     pub receiver_from_text: bool,
     /// The bindings of a file's name made from text, by binding (D5).
     pub text_paths: collections::BTreeSet[i64],
+    /// The `let`s that bind one name to a `TaskHandle`, by the `let`'s byte:
+    /// the handle has to be taken before its scope ends (`NK2109`), whatever
+    /// made it - a `spawn` or a call that hands one back.
+    pub handle_lets: collections::BTreeSet[i64],
     /// The `let`s whose value was an empty list and whose element type nothing
     /// has said yet (ADR-135 D2), by the `let`'s byte.
     pub empty_lists: collections::BTreeMap[i64, (String, Span)],
@@ -293,6 +297,7 @@ impl CheckFlow {
             receiver_name: null,
             receiver_from_text: false,
             text_paths: collections::BTreeSet(),
+            handle_lets: collections::BTreeSet(),
             empty_lists: collections::BTreeMap(),
             open_numbers: collections::BTreeMap(),
             open_chars: collections::BTreeMap(),
