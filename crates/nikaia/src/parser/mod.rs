@@ -1755,6 +1755,14 @@ grammar! {
         // does not read the value, never that the signature is shorter.
         rule fn_arg_def -> FnArg @=
             attributes:attribute* mutable:kw_mut? name:NAME ":" ty:type_ref -> {
+                // **`mut p: ref T` is `mut p: T`** (Part I, 6.5): a `ref` in a
+                // parameter type only asserts *this is a view*, and a `mut`
+                // parameter is passed `ref mut` already, so the word adds
+                // nothing (#700 d04).
+                let mut ty = ty;
+                if mutable.is_some() && ty.is_view && !ty.is_mut {
+                    ty.is_view = false;
+                }
                 FnArg { name, ty, mutable: mutable.is_some(), span: Span::from(_span), attributes }
             }
           | attributes:attribute* UNDERSCORE ":" ty:type_ref -> {

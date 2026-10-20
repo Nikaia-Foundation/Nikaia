@@ -28120,6 +28120,14 @@ impl CheckState {
         }
         if changes {
             let given_expr = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if check_reference_written(given_expr) && !takes_a_receiver && !found.is_unknown() {
+                let mut under = false;
+                for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { under = true; } }
+                if under {
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137".to_owned(), message: "You don't need the `ref` here: the compiler lends where it's needed.".to_owned(), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some("Remove the `ref`.".to_owned()), labels: vec![] });
+                    return true;
+                }
+            }
             if !(found.fits(want) || self.fits_through_deref(world, found, want)) { return false; }
             if self.a_name_that_changes(world, given_expr) { return true; }
             let root: Option<String> = self.rooted_at(world, given_expr);

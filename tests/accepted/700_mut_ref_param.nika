@@ -1,0 +1,17 @@
+// #700 d04: `mut p: ref T` is `mut p: T` (Part I 6.5): the `ref` asserts a
+// view, which a `mut` parameter is already, passed `ref mut`.
+
+struct Table {
+    used: i64,
+}
+
+fn put(mut tab: ref Table) {
+    tab.used = tab.used + 1
+}
+
+fn main() {
+    let mut t = Table { used: 0 }
+    put(t)
+    put(t)
+    println(t.used)
+}

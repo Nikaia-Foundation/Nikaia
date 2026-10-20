@@ -395,3 +395,36 @@ fn main() {
     let lowered = lowered(source);
     assert!(lowered.contains("else if !has(&r.items, x)"), "{lowered}");
 }
+
+/// **A `mut` parameter is passed `ref mut` by the compiler** (Part I 6.5,
+/// #700): a `ref` written at its call is `NK1137` as at any other, and the
+/// `ref` in `mut tab: ref Table` adds nothing, so the plain call is the one
+/// that fits.
+#[test]
+fn a_written_ref_at_a_mut_parameter_is_refused() {
+    let declared = "struct Table { used: i64 }\n\
+         fn put(mut tab: ref Table) { tab.used = 1 }\n";
+    let given = |call: &str| {
+        format!(
+            "{declared}fn main() {{\n    let mut t = Table {{ used: 0 }}\n    {call}\n    println(f\"{{t.used}}\")\n}}\n"
+        )
+    };
+    let with_ref = findings(&given("put(ref t)"));
+    assert!(with_ref.iter().any(|f| f.code == "NK1137"), "{with_ref:#?}");
+    assert!(
+        !with_ref.iter().any(|f| f.code == "NK1102"),
+        "{with_ref:#?}"
+    );
+    let plain = findings(&given("put(t)"));
+    assert!(
+        !plain
+            .iter()
+            .any(|f| f.code == "NK1102" || f.code == "NK1137"),
+        "{plain:#?}"
+    );
+    let rust = lowered(&given("put(t)"));
+    assert!(
+        rust.contains("tab: &mut Table") && rust.contains("put(&mut t)"),
+        "{rust}"
+    );
+}
