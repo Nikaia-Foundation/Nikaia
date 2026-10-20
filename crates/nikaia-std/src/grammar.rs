@@ -147,7 +147,7 @@ pub fn parse_pieces<'a, S, O: Send>(
     options: crate::par::FoldOptions,
     parallel: bool,
     run: impl FnOnce(&'a str, winnow_grammar::rt::Parallelism) -> Result<O, winnow_grammar::ParseError>
-    + Send,
+        + Send,
 ) -> Result<O, ParseError>
 where
     S: Source + ?Sized,
@@ -167,11 +167,16 @@ fn in_pieces<O: Send>(
     if !parallel {
         return run(winnow_grammar::rt::Parallelism::Off);
     }
-    // One piece per worker, cut before the work starts, merged in input order,
-    // which either order allows; `piece:` tunes and changes no result. The
-    // backend's claimed pieces (`Parallelism::Claimed { piece, order }`) wait
-    // for the winnow-grammar pin that has them (#717 step 5).
-    let how = winnow_grammar::rt::Parallelism::Pieces(options.workers);
+    // Pieces are claimed while the work runs (ADR-372 D4); `order:` says how
+    // the accumulators are kept and merged (D5).
+    let order = match options.order {
+        crate::par::Order::Kept => winnow_grammar::rt::Order::Kept,
+        crate::par::Order::Any => winnow_grammar::rt::Order::Any,
+    };
+    let how = winnow_grammar::rt::Parallelism::Claimed {
+        piece: options.piece,
+        order,
+    };
     crate::par::on_workers(options.workers, move || run(how))
 }
 
@@ -196,7 +201,7 @@ pub fn parse_bytes_pieces<'a, O: Send>(
     options: crate::par::FoldOptions,
     parallel: bool,
     run: impl FnOnce(&'a [u8], winnow_grammar::rt::Parallelism) -> Result<O, winnow_grammar::ParseError>
-    + Send,
+        + Send,
 ) -> Result<O, ParseError> {
     in_pieces(options, parallel, |how| run(source, how))
         .map_err(|error| ParseError::of(error.render(source)))
