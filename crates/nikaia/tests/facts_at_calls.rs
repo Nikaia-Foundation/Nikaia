@@ -2,6 +2,8 @@
 //! postconditions say of its result proves an index after the call, a mask's
 //! or a shift's value is a bounded whole number to the prover, a loop that
 //! gives a name only such values keeps it bounded, and `panic(…)` is no exit.
+//! A signed value shifted right by all but one of its bits is `0` or `-1`, and
+//! `^` of two values inside `-2^m..<2^m` stays inside it.
 
 mod common;
 
@@ -101,4 +103,23 @@ fn a_methods_postcondition_proves_the_index_after_its_call() {
     );
     let add = body(&rust, "add");
     assert!(!add.contains("index::get"), "{add}");
+}
+
+/// A signed value shifted right by 63 is `0` or `-1`; `a ^ s` of a value in
+/// `0..=1023` with it is inside `-1024..=1023`, and `- s` fits.
+#[test]
+fn a_sign_mask_and_its_xor_stay_inside_their_type() {
+    let source = "fn tenths(w: u64, a: u64) -> i64 {
+    let s = (w << 59).bits_as_i64() >> 63
+    let abs = (a & 0x3FF).bits_as_i64()
+    return (abs ^ s) - s
+}
+
+fn main() {
+    println(f\"{tenths(0, 5)} {tenths(16, 5)}\")
+}
+";
+    let (rust, _) = lowered("facts-at-calls-sign", source);
+    let tenths = body(&rust, "tenths");
+    assert!(tenths.contains("wrapping_sub"), "{tenths}");
 }

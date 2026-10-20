@@ -644,6 +644,15 @@ fn bounding_range_of(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs:
                 let most = (1 << (width - k).min(62)) - 1
                 widest = Range { lo: 0, hi: most }
             }
+            // **A signed value shifted right by `k` is inside
+            // `-2^(w - 1 - k)..<2^(w - 1 - k)`**: the shift keeps the sign,
+            // so `x >> 63` of an `i64` is `0` or `-1` (#776).
+            if ty.starts_with("i") && width > 0 && k >= 1 && k < width {
+                let by = width - 1 - k
+                let half: i64 = 1 << by
+                let below = half - 1
+                widest = Range { lo: -half, hi: below }
+            }
             let known = bounding_range(walk, lhs, facts, context, program, words, ask)
             let x = known ?? return widest
             let lo = x.lo ?? return widest
@@ -655,6 +664,16 @@ fn bounding_range_of(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs:
                 shifted.hi = (x.hi ?? 0) >> k
             }
             return shifted
+        },
+        // **`a ^ b` of two values inside `-2^m..<2^m` stays inside it**: in
+        // two's complement both have only copies of their sign above bit
+        // `m`, and so has the result (#776).
+        BinaryOp::BitXor => {
+            let a = bounding_range(walk, lhs, facts, context, program, words, ask) ?? return null
+            let b = bounding_range(walk, rhs, facts, context, program, words, ask) ?? return null
+            let m = (bounding_sign_bits(a) ?? return null).max(bounding_sign_bits(b) ?? return null)
+            let half = 1 << m
+            return Range { lo: -half, hi: half - 1 }
         },
         BinaryOp::BitAnd => {
             let mut mask: i64? = null
@@ -670,6 +689,20 @@ fn bounding_range_of(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs:
             return Range { lo: 0, hi: most }
         },
         else => {},
+    }
+    return null
+}
+
+/// The least `m <= 62` with `range` inside `-2^m..<2^m`; nothing where it
+/// is open or wider.
+fn bounding_sign_bits(range: ref Range) -> i64? {
+    let lo = range.lo ?? return null
+    let hi = range.hi ?? return null
+    for m in 0..<63 {
+        let half = 1 << m
+        if lo >= -half && hi < half {
+            return m
+        }
     }
     return null
 }
