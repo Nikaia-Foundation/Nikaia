@@ -389,7 +389,8 @@ pub fn path_root(path: ref String) -> String {
 /// Whether `path` is `within` or a part of it: `t.slots` is within `t` and
 /// within `t.slots`, not within `t.used`.
 pub fn path_within(path: ref String, within: ref String) -> bool {
-    return path == within || path.starts_with(f"{within}.")
+    // No text is made for the test (#727): what follows `within` starts a field.
+    return path == within || (path.strip_prefix(within)?.starts_with(".") ?? false)
 }
 
 /// Whether `expr` is a path that `list` is, or is a part of: a change there

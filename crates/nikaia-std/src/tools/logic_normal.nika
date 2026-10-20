@@ -76,55 +76,93 @@ pub fn lg_normal_of(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> LgN
 /// as `b < a`, down through `not`, `and` and `or`: one way of writing each
 /// comparison, so that the two spellings share a key.
 fn lg_written(arena: ref TermArena, id: i64, shape: bool, turn: bool) -> String {
-    let node = arena.at(id)
+    let mut out: String = ""
+    lg_write(arena, id, shape, turn, out)
+    return out
+}
+
+/// `lg_written`, appended to `out`: one buffer for the whole term, not a
+/// text per node (#727).
+fn lg_write(arena: ref TermArena, id: i64, shape: bool, turn: bool, mut out: String) {
+    let node = arena.nodes[id]
     if turn {
         match node {
-            SolverTerm::Ge(a, b) => return lg_binary("<=", arena, b, a, shape),
-            SolverTerm::Gt(a, b) => return lg_binary("<", arena, b, a, shape),
-            SolverTerm::Not(a) => return f"(not {lg_written(arena, a, shape, true)})",
-            SolverTerm::And(parts) => return lg_joined("and", arena, parts, shape, true),
-            SolverTerm::Or(parts) => return lg_joined("or", arena, parts, shape, true),
+            SolverTerm::Ge(a, b) => return lg_write_binary("<=", arena, b, a, shape, out),
+            SolverTerm::Gt(a, b) => return lg_write_binary("<", arena, b, a, shape, out),
+            SolverTerm::Not(a) => {
+                out.push_str("(not ")
+                lg_write(arena, a, shape, true, out)
+                out.push_str(")")
+                return
+            },
+            SolverTerm::And(parts) => return lg_write_joined("and", arena, parts, shape, true, out),
+            SolverTerm::Or(parts) => return lg_write_joined("or", arena, parts, shape, true, out),
             else => {},
         }
     }
-    return match node {
-        SolverTerm::Bool(b) => if b { "true" } else { "false" },
-        SolverTerm::Int(n) => f"{n}",
-        SolverTerm::Var(name) => if shape { "?" } else { name.clone() },
-        SolverTerm::Neg(a) => f"(- {lg_written(arena, a, shape, false)})",
-        SolverTerm::Not(a) => f"(not {lg_written(arena, a, shape, false)})",
-        SolverTerm::Add(a, b) => lg_binary("+", arena, a, b, shape),
-        SolverTerm::Sub(a, b) => lg_binary("-", arena, a, b, shape),
-        SolverTerm::Mul(a, b) => lg_binary("*", arena, a, b, shape),
-        SolverTerm::Quot(a, k) => f"(quot {lg_written(arena, a, shape, false)} {k})",
-        SolverTerm::Le(a, b) => lg_binary("<=", arena, a, b, shape),
-        SolverTerm::Lt(a, b) => lg_binary("<", arena, a, b, shape),
-        SolverTerm::Ge(a, b) => lg_binary(">=", arena, a, b, shape),
-        SolverTerm::Gt(a, b) => lg_binary(">", arena, a, b, shape),
-        SolverTerm::Eq(a, b) => lg_binary("=", arena, a, b, shape),
-        SolverTerm::Ne(a, b) => lg_binary("distinct", arena, a, b, shape),
-        SolverTerm::And(parts) => lg_joined("and", arena, parts, shape, false),
-        SolverTerm::Or(parts) => lg_joined("or", arena, parts, shape, false),
-        SolverTerm::Other => "false",
+    match node {
+        SolverTerm::Bool(b) => out.push_str(if b { "true" } else { "false" }),
+        SolverTerm::Int(n) => out.push_str(f"{n}"),
+        SolverTerm::Var(name) => out.push_str(if shape { "?" } else { name }),
+        SolverTerm::Neg(a) => {
+            out.push_str("(- ")
+            lg_write(arena, a, shape, false, out)
+            out.push_str(")")
+        },
+        SolverTerm::Not(a) => {
+            out.push_str("(not ")
+            lg_write(arena, a, shape, false, out)
+            out.push_str(")")
+        },
+        SolverTerm::Add(a, b) => lg_write_binary("+", arena, a, b, shape, out),
+        SolverTerm::Sub(a, b) => lg_write_binary("-", arena, a, b, shape, out),
+        SolverTerm::Mul(a, b) => lg_write_binary("*", arena, a, b, shape, out),
+        SolverTerm::Quot(a, k) => {
+            out.push_str("(quot ")
+            lg_write(arena, a, shape, false, out)
+            out.push_str(f" {k})")
+        },
+        SolverTerm::Le(a, b) => lg_write_binary("<=", arena, a, b, shape, out),
+        SolverTerm::Lt(a, b) => lg_write_binary("<", arena, a, b, shape, out),
+        SolverTerm::Ge(a, b) => lg_write_binary(">=", arena, a, b, shape, out),
+        SolverTerm::Gt(a, b) => lg_write_binary(">", arena, a, b, shape, out),
+        SolverTerm::Eq(a, b) => lg_write_binary("=", arena, a, b, shape, out),
+        SolverTerm::Ne(a, b) => lg_write_binary("distinct", arena, a, b, shape, out),
+        SolverTerm::And(parts) => lg_write_joined("and", arena, parts, shape, false, out),
+        SolverTerm::Or(parts) => lg_write_joined("or", arena, parts, shape, false, out),
+        SolverTerm::Other => out.push_str("false"),
     }
 }
 
-fn lg_binary(op: ref String, arena: ref TermArena, a: i64, b: i64, shape: bool) -> String {
-    return f"({op} {lg_written(arena, a, shape, false)} {lg_written(arena, b, shape, false)})"
+fn lg_write_binary(op: ref String, arena: ref TermArena, a: i64, b: i64, shape: bool, mut out: String) {
+    out.push_str("(")
+    out.push_str(op)
+    out.push_str(" ")
+    lg_write(arena, a, shape, false, out)
+    out.push_str(" ")
+    lg_write(arena, b, shape, false, out)
+    out.push_str(")")
 }
 
-fn lg_joined(op: ref String, arena: ref TermArena, parts: ref Vec[i64], shape: bool, turn: bool) -> String {
-    let mut written: Vec[String] = []
+fn lg_write_joined(op: ref String, arena: ref TermArena, parts: ref Vec[i64], shape: bool, turn: bool, mut out: String) {
+    out.push_str("(")
+    out.push_str(op)
+    out.push_str(" ")
+    let mut first = true
     for part in parts {
-        written.push(lg_written(arena, part, shape, turn))
+        if !first {
+            out.push_str(" ")
+        }
+        first = false
+        lg_write(arena, part, shape, turn, out)
     }
-    return f"({op} {written.join(" ")})"
+    out.push_str(")")
 }
 
 /// A term of `from`, copied into the normal form with its variables renamed by
 /// first occurrence, read turned round where `turn` says so (`lg_written`).
 fn lg_copy(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: collections::BTreeMap[String, String], turn: bool) -> i64 {
-    let node = from.at(id)
+    let node = from.nodes[id]
     if turn {
         match node {
             SolverTerm::Ge(a, b) => {
@@ -252,11 +290,11 @@ impl LgNormal {
     pub fn text(ref self) -> String {
         let mut out: String = ""
         for fact in self.facts {
-            out.push_str(lg_written(self.arena, fact, false, false))
+            lg_write(self.arena, fact, false, false, out)
             out.push_str("\n")
         }
         out.push_str("|- ")
-        out.push_str(lg_written(self.arena, self.goal, false, false))
+        lg_write(self.arena, self.goal, false, false, out)
         return out
     }
 

@@ -1980,9 +1980,11 @@ pub fn method_index(ledger: ref Ledger) -> MethodIndex {
 /// what a scan with `key.ends_with(f"::{method}")` finds. A key ending so has
 /// the same last `::` segment as the suffix, so the bucket holds them all.
 pub fn method_keys(index: ref MethodIndex, method: ref String) -> Vec[String] {
-    let suffix = f"::{method}"
-    let last = (suffix.rsplit("::").next() ?? "").clone()
+    // The last segment of `::{method}` is the method's own: no text is made
+    // for a name no key ends in (#727).
+    let last = method.rsplit("::").next() ?? ""
     let bucket = index.keys[last] ?? return []
+    let suffix = f"::{method}"
     let mut out: Vec[String] = []
     for key in bucket {
         if key.ends_with(ref suffix) {

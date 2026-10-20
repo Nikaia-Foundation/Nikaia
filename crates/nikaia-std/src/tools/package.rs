@@ -883,7 +883,12 @@ pub fn path_root(path: &str) -> String {
     (*nikaia_std::index::get(&parts, 0)).to_owned()
 }
 
-pub fn path_within(path: &str, within: &str) -> bool { path == within || path.starts_with(&format!("{}.", within)) }
+pub fn path_within(path: &str, within: &str) -> bool {
+    path == within || nikaia_std::index::or(match path.strip_prefix(within) {
+        Some(__nikaia_it) => Some(__nikaia_it.starts_with(".")),
+        None => None,
+    }, || false)
+}
 
 fn holds_path(expr: &Expr, list: &str, words: &winnow_grammar::InternerContext) -> bool {
     let path = match path_of(expr, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -46682,69 +46687,112 @@ pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
 }
 
 fn lg_written(arena: &TermArena, id: i64, shape: bool, turn: bool) -> String {
-    let node = arena.at(id);
+    let mut out: String = String::from("");
+    lg_write(arena, id, shape, turn, &mut out);
+    out
+}
+
+fn lg_write(arena: &TermArena, id: i64, shape: bool, turn: bool, out: &mut String) {
+    let node = nikaia_std::index::get(&arena.nodes, nikaia_std::index::at(id));
     if turn {
         match node {
-            SolverTerm::Ge(a, b) => { return lg_binary("<=", arena, b, a, shape); },
-            SolverTerm::Gt(a, b) => { return lg_binary("<", arena, b, a, shape); },
-            SolverTerm::Not(a) => { return format!("(not {})", lg_written(arena, a, shape, true)); },
-            SolverTerm::And(ref parts) => { return lg_joined("and", arena, parts, shape, true); },
-            SolverTerm::Or(ref parts) => { return lg_joined("or", arena, parts, shape, true); },
+            SolverTerm::Ge(a, b) => { let a = *a; let b = *b; return lg_write_binary("<=", arena, b, a, shape, out); },
+            SolverTerm::Gt(a, b) => { let a = *a; let b = *b; return lg_write_binary("<", arena, b, a, shape, out); },
+            SolverTerm::Not(a) => {
+                let a = *a;
+                out.push_str("(not ");
+                lg_write(arena, a, shape, true, out);
+                out.push_str(")");
+                return;
+            },
+            SolverTerm::And(parts) => { return lg_write_joined("and", arena, parts, shape, true, out); },
+            SolverTerm::Or(parts) => { return lg_write_joined("or", arena, parts, shape, true, out); },
             _ => { },
         }
     }
     match node {
-        SolverTerm::Bool(b) => if b { String::from("true") } else { String::from("false") },
-        SolverTerm::Int(n) => format!("{}", n),
-        SolverTerm::Var(ref name) => if shape { String::from("?") } else { name.to_owned() },
-        SolverTerm::Neg(a) => format!("(- {})", lg_written(arena, a, shape, false)),
-        SolverTerm::Not(a) => format!("(not {})", lg_written(arena, a, shape, false)),
-        SolverTerm::Add(a, b) => lg_binary("+", arena, a, b, shape),
-        SolverTerm::Sub(a, b) => lg_binary("-", arena, a, b, shape),
-        SolverTerm::Mul(a, b) => lg_binary("*", arena, a, b, shape),
-        SolverTerm::Quot(a, k) => format!("(quot {} {})", lg_written(arena, a, shape, false), k),
-        SolverTerm::Le(a, b) => lg_binary("<=", arena, a, b, shape),
-        SolverTerm::Lt(a, b) => lg_binary("<", arena, a, b, shape),
-        SolverTerm::Ge(a, b) => lg_binary(">=", arena, a, b, shape),
-        SolverTerm::Gt(a, b) => lg_binary(">", arena, a, b, shape),
-        SolverTerm::Eq(a, b) => lg_binary("=", arena, a, b, shape),
-        SolverTerm::Ne(a, b) => lg_binary("distinct", arena, a, b, shape),
-        SolverTerm::And(ref parts) => lg_joined("and", arena, parts, shape, false),
-        SolverTerm::Or(ref parts) => lg_joined("or", arena, parts, shape, false),
-        SolverTerm::Other => String::from("false"),
+        SolverTerm::Bool(b) => { let b = *b; out.push_str(if b { "true" } else { "false" }); },
+        SolverTerm::Int(n) => { let n = *n; out.push_str(&format!("{}", n)); },
+        SolverTerm::Var(name) => { out.push_str(if shape { "?" } else { name }); },
+        SolverTerm::Neg(a) => {
+            let a = *a;
+            out.push_str("(- ");
+            lg_write(arena, a, shape, false, out);
+            out.push_str(")");
+        },
+        SolverTerm::Not(a) => {
+            let a = *a;
+            out.push_str("(not ");
+            lg_write(arena, a, shape, false, out);
+            out.push_str(")");
+        },
+        SolverTerm::Add(a, b) => { let a = *a; let b = *b; lg_write_binary("+", arena, a, b, shape, out); },
+        SolverTerm::Sub(a, b) => { let a = *a; let b = *b; lg_write_binary("-", arena, a, b, shape, out); },
+        SolverTerm::Mul(a, b) => { let a = *a; let b = *b; lg_write_binary("*", arena, a, b, shape, out); },
+        SolverTerm::Quot(a, k) => {
+            let a = *a; let k = *k;
+            out.push_str("(quot ");
+            lg_write(arena, a, shape, false, out);
+            out.push_str(&format!(" {})", k));
+        },
+        SolverTerm::Le(a, b) => { let a = *a; let b = *b; lg_write_binary("<=", arena, a, b, shape, out); },
+        SolverTerm::Lt(a, b) => { let a = *a; let b = *b; lg_write_binary("<", arena, a, b, shape, out); },
+        SolverTerm::Ge(a, b) => { let a = *a; let b = *b; lg_write_binary(">=", arena, a, b, shape, out); },
+        SolverTerm::Gt(a, b) => { let a = *a; let b = *b; lg_write_binary(">", arena, a, b, shape, out); },
+        SolverTerm::Eq(a, b) => { let a = *a; let b = *b; lg_write_binary("=", arena, a, b, shape, out); },
+        SolverTerm::Ne(a, b) => { let a = *a; let b = *b; lg_write_binary("distinct", arena, a, b, shape, out); },
+        SolverTerm::And(parts) => { lg_write_joined("and", arena, parts, shape, false, out); },
+        SolverTerm::Or(parts) => { lg_write_joined("or", arena, parts, shape, false, out); },
+        SolverTerm::Other => { out.push_str("false"); },
     }
 }
 
-fn lg_binary(op: &str, arena: &TermArena, a: i64, b: i64, shape: bool) -> String { format!("({} {} {})", op, lg_written(arena, a, shape, false), lg_written(arena, b, shape, false)) }
+fn lg_write_binary(op: &str, arena: &TermArena, a: i64, b: i64, shape: bool, out: &mut String) {
+    out.push_str("(");
+    out.push_str(op);
+    out.push_str(" ");
+    lg_write(arena, a, shape, false, out);
+    out.push_str(" ");
+    lg_write(arena, b, shape, false, out);
+    out.push_str(")");
+}
 
-fn lg_joined(op: &str, arena: &TermArena, parts: &[i64], shape: bool, turn: bool) -> String {
-    let mut written: Vec<String> = vec![];
+fn lg_write_joined(op: &str, arena: &TermArena, parts: &[i64], shape: bool, turn: bool, out: &mut String) {
+    out.push_str("(");
+    out.push_str(op);
+    out.push_str(" ");
+    let mut first = true;
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
-        written.push(lg_written(arena, part, shape, turn));
+        if !first { out.push_str(" "); }
+        first = false;
+        lg_write(arena, part, shape, turn, out);
     }
-    format!("({} {})", op, written.join(" "))
+    out.push_str(")");
 }
 
 fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut collections::BTreeMap<String, String>, turn: bool) -> i64 {
-    let node = from.at(id);
+    let node = nikaia_std::index::get(&from.nodes, nikaia_std::index::at(id));
     if turn {
         match node {
             SolverTerm::Ge(a, b) => {
+                let a = *a; let b = *b;
                 let x = lg_copy(normal, from, b, renamed, false);
                 let y = lg_copy(normal, from, a, renamed, false);
                 return normal.arena.le(x, y);
             },
             SolverTerm::Gt(a, b) => {
+                let a = *a; let b = *b;
                 let x = lg_copy(normal, from, b, renamed, false);
                 let y = lg_copy(normal, from, a, renamed, false);
                 return normal.arena.lt(x, y);
             },
             SolverTerm::Not(a) => {
+                let a = *a;
                 let x = lg_copy(normal, from, a, renamed, true);
                 return normal.arena.not(x);
             },
-            SolverTerm::And(ref parts) => {
+            SolverTerm::And(parts) => {
                 let mut made: Vec<i64> = vec![];
                 for part in parts.iter() {
                     let part = nikaia_std::num::value(part);
@@ -46752,7 +46800,7 @@ fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut colle
                 }
                 return normal.arena.and(made);
             },
-            SolverTerm::Or(ref parts) => {
+            SolverTerm::Or(parts) => {
                 let mut made: Vec<i64> = vec![];
                 for part in parts.iter() {
                     let part = nikaia_std::num::value(part);
@@ -46764,10 +46812,10 @@ fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut colle
         }
     }
     match node {
-        SolverTerm::Bool(b) => normal.arena.boolean(b),
-        SolverTerm::Int(n) => normal.arena.int(n),
+        SolverTerm::Bool(b) => { let b = *b; normal.arena.boolean(b) },
+        SolverTerm::Int(n) => { let n = *n; normal.arena.int(n) },
         SolverTerm::Other => normal.arena.boolean(false),
-        SolverTerm::Var(ref name) => {
+        SolverTerm::Var(name) => {
             let known = renamed.get(name);
             let mut fresh = format!("v{}", renamed.len() as i64);
             if known.is_some() {
@@ -46782,63 +46830,75 @@ fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut colle
             normal.arena.var(&fresh)
         },
         SolverTerm::Neg(a) => {
+            let a = *a;
             let x = lg_copy(normal, from, a, renamed, false);
             normal.arena.neg(x)
         },
         SolverTerm::Not(a) => {
+            let a = *a;
             let x = lg_copy(normal, from, a, renamed, false);
             normal.arena.not(x)
         },
         SolverTerm::Add(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.add(x, y)
         },
         SolverTerm::Sub(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.sub(x, y)
         },
         SolverTerm::Mul(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.mul(x, y)
         },
         SolverTerm::Quot(a, k) => {
+            let a = *a; let k = *k;
             let x = lg_copy(normal, from, a, renamed, false);
             normal.arena.quot(x, k)
         },
         SolverTerm::Le(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.le(x, y)
         },
         SolverTerm::Lt(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.lt(x, y)
         },
         SolverTerm::Ge(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.ge(x, y)
         },
         SolverTerm::Gt(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.gt(x, y)
         },
         SolverTerm::Eq(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.equal(x, y)
         },
         SolverTerm::Ne(a, b) => {
+            let a = *a; let b = *b;
             let x = lg_copy(normal, from, a, renamed, false);
             let y = lg_copy(normal, from, b, renamed, false);
             normal.arena.unequal(x, y)
         },
-        SolverTerm::And(ref parts) => {
+        SolverTerm::And(parts) => {
             let mut made: Vec<i64> = vec![];
             for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
@@ -46846,7 +46906,7 @@ fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut colle
             }
             normal.arena.and(made)
         },
-        SolverTerm::Or(ref parts) => {
+        SolverTerm::Or(parts) => {
             let mut made: Vec<i64> = vec![];
             for part in parts.iter() {
                 let part = nikaia_std::num::value(part);
@@ -46862,11 +46922,11 @@ impl LgNormal {
         let mut out: String = String::from("");
         for fact in self.facts.iter() {
             let fact = nikaia_std::num::value(fact);
-            out.push_str(&lg_written(&self.arena, fact, false, false));
+            lg_write(&self.arena, fact, false, false, &mut out);
             out.push_str("\n");
         }
         out.push_str("|- ");
-        out.push_str(&lg_written(&self.arena, self.goal, false, false));
+        lg_write(&self.arena, self.goal, false, false, &mut out);
         out
     }
     pub fn named(&self, model: &LgModel) -> LgModel {
@@ -64334,9 +64394,9 @@ pub fn method_index(ledger: &Ledger) -> MethodIndex {
 }
 
 pub fn method_keys(index: &MethodIndex, method: &str) -> Vec<String> {
+    let last = nikaia_std::index::or(method.rsplit("::").next(), || "");
+    let bucket = match *nikaia_std::index::get(&index.keys, last) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let suffix = format!("::{}", method);
-    let last = nikaia_std::index::or(suffix.rsplit("::").next(), || "").to_owned();
-    let bucket = match *nikaia_std::index::get(&index.keys, &last) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<String> = vec![];
     for key in bucket.iter() { if key.ends_with(&suffix) { out.push(key.to_owned()); } }
     out
