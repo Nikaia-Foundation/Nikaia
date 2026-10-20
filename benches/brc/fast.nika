@@ -42,7 +42,6 @@ comptime SLOTS: i64 = 16384
 // How far behind the last row start a word read may reach: a name of 100
 // bytes, its temperature and a word beyond.
 comptime MARGIN: i64 = 256
-comptime ONES: u64 = 0xFFFFFFFFFFFFFFFF
 
 fn table() -> Table {
     let mut slots: Vec[Slot] = []
@@ -54,8 +53,11 @@ impl Table {
     // The slot of the name `buf[pos..<pos + len]`, whose first sixteen bytes
     // are `w0` and `w1` (zeros past its end), taken where the name is new.
     // The `assert` before each `return` is its postcondition: a caller knows
-    // the slot lies inside the table, and indexes it without a check.
+    // the slot lies inside the table, and indexes it without a check. The
+    // first is its precondition: the name lies inside `buf`, which a caller
+    // proves, so the cut of a long name is taken without a check.
     fn slot_of(ref mut self, w0: u64, w1: u64, len: i64, buf: ref Bytes, pos: i64) -> i64 {
+        assert(pos >= 0 && len >= 0 && pos + len <= buf.len())
         let h = (w0 ^ (w1 << 5)).wrapping_mul(0x9E3779B97F4A7C15)
         let mut at = (h >> (64 - BITS)).bits_as_i64()
         while true {
@@ -65,7 +67,7 @@ impl Table {
                 return at
             }
             if self.slots[at].w0 == w0 && self.slots[at].w1 == w1 && self.slots[at].len == len
-                && (len <= 16 || self.slots[at].name[0..<len] == buf[pos..<pos + len]) {
+                && (len <= 16 || self.slots[at].name == buf[pos..<pos + len]) {
                 assert(at >= 0 && at < SLOTS)
                 return at
             }
@@ -78,6 +80,7 @@ impl Table {
     // loop that runs once per row.
     @inline(never)
     fn claim(ref mut self, at: i64, w0: u64, w1: u64, len: i64, buf: ref Bytes, pos: i64) {
+        assert(pos >= 0 && len >= 0 && pos + len <= buf.len())
         self.used += 1
         if self.used > 10000 { panic("more than 10 000 stations") }
         self.slots[at] = Slot { w0: w0, w1: w1, len: len, name: buf[pos..<pos + len].clone(), min: 999, max: -999, sum: 0, count: 0 }
@@ -93,14 +96,8 @@ impl Table {
             // The name's first two words, zeros past its end.
             let len = sep - pos
             assert(len >= 0 && len <= 100; message: "a station's name has at most 100 bytes")
-            let mut w0 = buf.u64_le(pos)
-            let mut w1 = buf.u64_le(pos + 8)
-            if len <= 8 {
-                w0 = w0 & (ONES >> (64 - 8 * len))
-                w1 = 0
-            } else if len < 16 {
-                w1 = w1 & (ONES >> (128 - 8 * len))
-            }
+            let w0 = buf.u64_le(pos).low_bits(8 * len)
+            let w1 = buf.u64_le(pos + 8).low_bits(8 * len - 64)
 
             // The temperature, `-?d?d.d`, from one word: where the `.` is
             // says how long it is, and the sign becomes a mask.

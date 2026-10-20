@@ -45,6 +45,41 @@ pub fn free_function(program: ref Program, words: ref winnow_grammar::InternerCo
     return null
 }
 
+/// The method `wanted` of `owner`'s own `impl` (not a trait's), as a call
+/// `self.wanted(…)` in a method of `owner` reaches it: its parameters without
+/// the receiver (#776).
+pub fn own_method(program: ref Program, words: ref winnow_grammar::InternerContext, owner: ref String, wanted: ref String) -> FreeFunction? {
+    for item in program.items {
+        match item.node {
+            Item::Impl { methods, target, trait_name } => {
+                if trait_name == null && words.resolve(target.name) == owner {
+                    for method in methods {
+                        match method.node {
+                            Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
+                                if receiver != null && named_as(name, words, wanted) {
+                                    let mut params: Vec[String] = []
+                                    for arg in args {
+                                        params.push(words.resolve(arg.name).clone())
+                                    }
+                                    let mut options: Vec[(String, Expr)] = []
+                                    for option in config {
+                                        params.push(words.resolve(option.name).clone())
+                                        options.push((words.resolve(option.name).clone(), option.default.clone()))
+                                    }
+                                    return FreeFunction { params: params, options: options, can_throw: can_throw, whole_result: whole_type(ret_type, words) }
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
 /// **A call's arguments in the order of `function`'s parameters**: the
 /// positional ones as written, then each option as the call names it, or its
 /// default where the call leaves it out (ADR-318), so a claim about an option

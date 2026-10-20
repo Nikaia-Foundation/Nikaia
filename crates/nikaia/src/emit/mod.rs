@@ -2148,6 +2148,10 @@ impl<'p> Emitter<'p> {
                 })
                 .map(|(at, ty)| (*at, ty.clone()))
                 .collect(),
+            // **A method call whose precondition is proved where it stands**
+            // calls the entry that does not check it (ADR-269 D20, #776), as
+            // a call the prover proved does, whatever the build removes.
+            proven_calls: proven.calls.clone(),
             facts: propagation,
             cleaned_types: own_contracts
                 .implementations

@@ -205,6 +205,51 @@ pub fn bm_ensured(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collect
     return out
 }
 
+/// **What each callee the ledgers describe requires** (ADR-269 D5, #776),
+/// read back over its parameters, by the ledger's key. The first ledger that
+/// has an entry answers; an entry with a condition that does not read back is
+/// left out whole, since proving the rest would not prove it.
+pub fn bm_required(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
+    let mut out: collections::BTreeMap[String, Ensured] = collections::BTreeMap()
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    for ledger in ledgers {
+        for (key, contract) in ledger.functions {
+            if contract.requires.len() == 0 || seen.contains(key) {
+                continue
+            }
+            seen.insert(key.clone())
+            let signature = contract.signature ?? continue
+            let mut params: Vec[String] = []
+            let mut chars: Vec[bool] = []
+            for (name, ty) in signature.params {
+                if name != "self" {
+                    params.push(name.clone())
+                    chars.push(bm_char(ty))
+                }
+            }
+            // A parameter's length is a name of the condition too.
+            let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+            for name in params {
+                names.insert(name.clone())
+                names.insert(length_of(name))
+            }
+            let mut conditions: Vec[Vec[SolverTerm]] = []
+            let mut whole = true
+            for text in contract.requires {
+                let nodes = read(text, names)
+                if nodes.len() == 0 {
+                    whole = false
+                }
+                conditions.push(nodes)
+            }
+            if whole {
+                out.insert(key.clone(), Ensured { params: params, chars: chars, options: [], conditions: conditions })
+            }
+        }
+    }
+    return out
+}
+
 /// **What each sequence the ledgers describe holds of each element**
 /// (ADR-375 D5), read back over the parameters, the options, `self.len()` and
 /// `item`, by the ledger's key (`Bytes::find_all`). The first ledger that has

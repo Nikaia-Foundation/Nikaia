@@ -300,6 +300,36 @@ impl std::ops::Deref for Bytes {
     }
 }
 
+/// **Bytes equal a cut of bytes with the same content** (#776):
+/// `name == buf[a..<b]`, either way round.
+impl PartialEq<[u8]> for Bytes {
+    #[inline(always)]
+    fn eq(&self, other: &[u8]) -> bool {
+        self.buffer.as_slice() == other
+    }
+}
+
+impl PartialEq<&[u8]> for Bytes {
+    #[inline(always)]
+    fn eq(&self, other: &&[u8]) -> bool {
+        self.buffer.as_slice() == *other
+    }
+}
+
+impl PartialEq<Bytes> for [u8] {
+    #[inline(always)]
+    fn eq(&self, other: &Bytes) -> bool {
+        self == other.buffer.as_slice()
+    }
+}
+
+impl PartialEq<Bytes> for &[u8] {
+    #[inline(always)]
+    fn eq(&self, other: &Bytes) -> bool {
+        *self == other.buffer.as_slice()
+    }
+}
+
 impl AsRef<[u8]> for Bytes {
     fn as_ref(&self) -> &[u8] {
         self.buffer.as_slice()

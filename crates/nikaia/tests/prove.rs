@@ -272,7 +272,9 @@ fn a_caller_the_prover_does_not_see_reaches_the_checked_entry() {
     assert!(rust.contains("pub fn half__unchecked(n: i64)"), "{rust}");
     assert!(rust.contains("half__unchecked(4)"), "{rust}");
     assert!(rust.contains("let g = half;"), "{rust}");
-    assert!(rust.contains("c.add(2)"), "{rust}");
+    // The bounds walk proves a method's precondition at a call on another
+    // receiver (#776).
+    assert!(rust.contains("c.add__unchecked(2)"), "{rust}");
     assert!(rust.contains("self.add__unchecked(n)"), "{rust}");
 }
 

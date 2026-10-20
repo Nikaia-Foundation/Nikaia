@@ -1388,7 +1388,8 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
                 prover_calls_in(walk, c.value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             }
         },
-        Expr::MethodCall { receiver, args, config, .. } => {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            prover_a_method_call(walk, receiver, method, args, config, span, scope, at, program, words, ask, model, escape, written_of)
             prover_calls_in(walk, receiver, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             for arg in args {
                 prover_calls_in(walk, arg, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
@@ -1481,7 +1482,16 @@ fn prover_calls_in_maybe(mut walk: ProverWalk, expr: ref Expr?, span: Span, scop
 /// lambda's body - which runs during the call it is given to - included.
 fn prover_blocks_in(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     match expr {
-        Expr::Block(block, _) => prover_nested(walk, block, null, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+        // **A call checked against a type's rule first** (ADR-369 D3): the
+        // block of `assert`s and the call changes no name, so it reads what
+        // is known where it stands (#776).
+        Expr::Block(block, _) => {
+            if prover_claims_then_value(block, words) {
+                prover_block(walk, block, scope.clone(), at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            } else {
+                prover_nested(walk, block, null, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            }
+        },
         Expr::Unsafe(block, _) => prover_nested(walk, block, null, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         Expr::Overlap(block, _) => prover_nested(walk, block, null, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         Expr::Closure { params, mutable, body, .. } => {
@@ -1593,6 +1603,26 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], 
     if !foreign.requires.is_empty() {
         prover_record_call(walk, callee, foreign.params, foreign.requires, args, span, scope, at, words, ask, model, escape, written_of)
     }
+}
+
+/// **A call `self.m(…)` in a method of a type to that type's own method**
+/// (ADR-269 D5, #776): `m`'s precondition is proved here as a free
+/// function's is at a call by name, or carried back to the caller's entry.
+fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync) {
+    if (prover_variable_named(receiver, words) ?? "") != "self" {
+        return
+    }
+    let function = carrying_function(at.function) ?? return
+    let cut = function.rfind("::") ?? return
+    let owner = function[0..<cut].clone()
+    let name = words.resolve(method).clone()
+    let callee = f"{owner}::{name}"
+    walk.state.edges.insert((function.clone(), callee.clone()))
+    let pre = if walk.state.collecting { prover_precondition_in(walk.state.known, callee) } else { prover_precondition_in(walk.state.preconditions, callee) }
+    let found = pre ?? return
+    let target = own_method(program, words, owner, name) ?? return
+    let all = arguments_in_order(target, args, config, words)
+    prover_record_call(walk, callee, target.params, found.claims, all, span, scope, at, words, ask, model, escape, written_of)
 }
 
 /// What a call shows of its callee's precondition, recorded: its findings,
@@ -1794,6 +1824,24 @@ fn prover_a_claim_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContex
             Expr::Call { func, args, .. } => args.len() == 1 && (prover_variable_named(func, words) ?? "") == "assert",
             else => false,
         },
+        else => false,
+    }
+}
+
+/// Whether a block is `assert`s and then one expression, which binds and
+/// changes nothing.
+fn prover_claims_then_value(block: ref Block, words: ref winnow_grammar::InternerContext) -> bool {
+    let last = block.stmts.len() - 1
+    if last < 0 {
+        return false
+    }
+    for k in 0..<last {
+        if !prover_a_claim_stmt(block.stmts[k].node, words) {
+            return false
+        }
+    }
+    return match block.stmts[last].node {
+        Stmt::Expr(_) => true,
         else => false,
     }
 }

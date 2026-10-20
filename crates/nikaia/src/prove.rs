@@ -498,13 +498,21 @@ fn model_of(held: &TermArena, facts: &[i64], goal: i64) -> Option<BTreeMap<Strin
 
 /// **The ledger with what the prover published of each function** (ADR-269
 /// D17, #776): its postconditions are facts about a call's result for the
-/// bounds walk, as a described callee's are (ADR-314 D3). The ledger file gets
+/// bounds walk, as a described callee's are (ADR-314 D3), and its
+/// preconditions goals at a call. The ledger file gets
 /// them only after the program is lowered.
 pub fn with_published(own: &Ledger, published: &BTreeMap<String, Published>) -> Ledger {
     let mut ledger = own.clone();
     for (key, found) in published {
         if let Some(contract) = ledger.functions.get_mut(key) {
             contract.ensures.extend(found.ensures.iter().cloned());
+            // Its preconditions, which the bounds walk proves at a method's
+            // call that the prover does not see prove them (ADR-269 D20).
+            for required in &found.requires {
+                if !contract.requires.contains(required) {
+                    contract.requires.push(required.clone());
+                }
+            }
         }
     }
     ledger

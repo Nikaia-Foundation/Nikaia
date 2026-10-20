@@ -279,6 +279,35 @@ impl EmitState {
         }
     }
 
+    /// **A method call whose precondition is proved where it stands** reaches
+    /// the method's second entry, as a call by name does (ADR-269 D20, #776):
+    /// one the bounds walk proved, or a call `self.m(…)` the prover saw prove
+    /// it.
+    fn emit_call_method_proved[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, receiver: ref Expr?, on_node: i64, name: ref String, args: ref Vec[Expr], scope: ref EmitScope) -> bool {
+        let walked = self.proven_calls[on_node]
+        if walked != null && self.facts.entries.contains_key(walked ?? "") {
+            return true
+        }
+        if !emit_call_on_self(world, receiver) {
+            return false
+        }
+        let owner = emit_call_owner(scope.function) ?? return false
+        let callee = f"{owner}::{name}"
+        if !self.facts.entries.contains_key(callee) {
+            return false
+        }
+        let mut written: Vec[String] = []
+        for arg in args {
+            written.push(host.written(arg))
+        }
+        let key = (callee, written.join(", "))
+        let reach = self.facts.reaches.get(key) ?? return false
+        return match reach.clone() {
+            CallReach::Proved => true,
+            else => false,
+        }
+    }
+
     fn emit_call_required(ref self, qualified: String) -> String? {
         let contract = self.own_contracts.functions.get(qualified) ?? return null
         if contract.requires.len() == 0 {
@@ -314,7 +343,10 @@ impl EmitState {
         if claim.assumed {
             if self.unchecked_assumes {
                 out.push("core::hint::assert_unchecked(")
+                let around = walk.believing
+                walk.believing = true
                 host.expr(walk, out, condition, depth, flow, scope)
+                walk.believing = around
                 out.push(")")
                 return true
             }
@@ -343,10 +375,7 @@ impl EmitState {
             Expr::Binary { lhs, rhs, .. } => {
                 self.emit_call_operand(walk, out, host, claim.left, lhs, depth, flow, scope)
                 self.emit_call_operand(walk, out, host, claim.right, rhs, depth, flow, scope)
-                let around = walk.believing
-                walk.believing = true
             },
-                walk.believing = around
             else => {},
         }
         out.push("]) }")
@@ -859,35 +888,6 @@ impl EmitState {
             }
             return
         }
-        // **A lambda that pauses, handed to a `std` entry** (ADR-233 D1, D2): the
-        // entry's counterpart in `nikaia_std::seq`, which takes the `async`
-        // closure the lambda is written as.
-        let (kind, entry) = emit_call_pausing_entry(self.facts, args)
-        if kind == 1 {
-            out.push(f"nikaia_std::seq::{entry}(")
-            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
-            out.push(", ")
-        } else if kind == 2 {
-            out.push(f"nikaia_std::seq::{entry}(&mut ")
-            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
-            out.push(", ")
-        } else if kind == 3 {
-            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
-            out.push(f".{entry}(")
-        } else {
-            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
-            out.push(f".{written}")
-        }
-        // Nikaia's `collect` builds a List; Rust's needs to be told what to build,
-        // and with no types here that is `Vec<_>`. **Except over a sequence whose
-        // step pauses** (ADR-172 D5), **and except where the place it goes
-        // declares what it builds** (ADR-293 D25).
-        let mut declared = false
-        if receiver != null {
-            let on = receiver ?? return
-            declared = self.facts.collected_into.contains(node_key(on))
-        }
-        if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(on_node) {
         // **A set of one to three bytes written at `find_all` is fixed when the
         // program is compiled** (ADR-375 D2): `nikaia_std::bytes::Few`, which
         // compares each block with its bytes directly, with no way to look up
@@ -916,6 +916,38 @@ impl EmitState {
                 return
             }
         }
+        // **A lambda that pauses, handed to a `std` entry** (ADR-233 D1, D2): the
+        // entry's counterpart in `nikaia_std::seq`, which takes the `async`
+        // closure the lambda is written as.
+        let (kind, entry) = emit_call_pausing_entry(self.facts, args)
+        if kind == 1 {
+            out.push(f"nikaia_std::seq::{entry}(")
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(", ")
+        } else if kind == 2 {
+            out.push(f"nikaia_std::seq::{entry}(&mut ")
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(", ")
+        } else if kind == 3 {
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(f".{entry}(")
+        } else {
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(f".{written}")
+            if self.emit_call_method_proved(world, host, receiver, on_node, name, args, scope) {
+                out.push("__unchecked")
+            }
+        }
+        // Nikaia's `collect` builds a List; Rust's needs to be told what to build,
+        // and with no types here that is `Vec<_>`. **Except over a sequence whose
+        // step pauses** (ADR-172 D5), **and except where the place it goes
+        // declares what it builds** (ADR-293 D25).
+        let mut declared = false
+        if receiver != null {
+            let on = receiver ?? return
+            declared = self.facts.collected_into.contains(node_key(on))
+        }
+        if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(on_node) {
             out.push("::<Vec<_>>")
         }
         if kind == 0 {

@@ -1889,6 +1889,41 @@ pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeS
     out
 }
 
+pub fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+    let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for ledger in ledgers.iter() {
+        let ledger = *ledger;
+        for (key, contract) in ledger.functions.iter() {
+            if contract.requires.is_empty() || seen.contains(key) { continue; }
+            seen.insert(key.to_owned());
+            let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut params: Vec<String> = vec![];
+            let mut chars: Vec<bool> = vec![];
+            for (name, ty) in signature.params.iter() {
+                if name != "self" {
+                    params.push(name.to_owned());
+                    chars.push(bm_char(ty));
+                }
+            }
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+            for name in params.iter() {
+                names.insert(name.to_owned());
+                names.insert(length_of(name));
+            }
+            let mut conditions: Vec<Vec<SolverTerm>> = vec![];
+            let mut whole = true;
+            for text in contract.requires.iter() {
+                let nodes = read(text, &names);
+                if nodes.is_empty() { whole = false; }
+                conditions.push(nodes);
+            }
+            if whole { out.insert(key.to_owned(), Ensured { params, chars, options: vec![], conditions }); }
+        }
+    }
+    out
+}
+
 pub fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     for ledger in ledgers.iter() {
@@ -2477,6 +2512,7 @@ pub struct BoundsContext {
     pub nonnegative: collections::BTreeSet<i64>,
     pub char_codes: collections::BTreeSet<i64>,
     pub ensured: collections::BTreeMap<String, Ensured>,
+    pub required: collections::BTreeMap<String, Ensured>,
     pub each: collections::BTreeMap<String, Ensured>,
     pub std_receivers: collections::BTreeMap<i64, String>,
     pub simd_loads: collections::BTreeMap<i64, i64>,
@@ -2506,6 +2542,7 @@ pub struct BoundsProven {
     pub arithmetic: collections::BTreeSet<i64>,
     pub nonnegative: collections::BTreeSet<i64>,
     pub negations: collections::BTreeSet<i64>,
+    pub calls: collections::BTreeMap<i64, String>,
     pub loops: collections::BTreeMap<i64, String>,
 }
 
@@ -2566,7 +2603,7 @@ fn most_facts() -> i64 { 48 }
 
 fn call_depth() -> i64 { 4 }
 
-fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), loops: collections::BTreeMap::new() } }
+fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new() } }
 
 fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new() } }
 
@@ -2635,8 +2672,8 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
             if ty.starts_with('u') { bounding_at_least_zero(walk, &mut facts, &name); }
         }
         if ty == "Vec" || ty == "List" || ty == "Array" {
-            let __keep_16389 = nikaia_std::tether::Keep::new();
-            bounding_at_least_zero(walk, &mut facts, (&__keep_16389).put(length_of(&name)));
+            let __keep_16893 = nikaia_std::tether::Keep::new();
+            bounding_at_least_zero(walk, &mut facts, (&__keep_16893).put(length_of(&name)));
         }
     }
     for (name, range) in context.given.iter() {
@@ -2649,8 +2686,8 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
     for (name, range) in context.text_lengths.iter() {
         let range = *range;
         if !walk.shape.bound.contains(name) {
-            let __keep_16944 = nikaia_std::tether::Keep::new();
-            bounding_bounded(walk, &mut facts, (&__keep_16944).put(length_of(name)), &range);
+            let __keep_17448 = nikaia_std::tether::Keep::new();
+            bounding_bounded(walk, &mut facts, (&__keep_17448).put(length_of(name)), &range);
         }
     }
     bounding_block(walk, body, &mut facts, context, program, words, ask);
@@ -3324,6 +3361,45 @@ fn bounding_ensured(walk: &mut BoundsWalk, ensured: &Ensured, args: &[Expr], fac
     Some(result)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn bounding_required(walk: &mut BoundsWalk, expr: &Expr, receiver: &Expr, method: &str, args: &[Expr], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    if walk.collecting { return; }
+    let ty = match *nikaia_std::index::get(&context.std_receivers, &(node_key(expr))) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let key = format!("{}::{}", ty, method);
+    let required = match *nikaia_std::index::get(&context.required, &key) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if (args.len() as i64) != required.params.len() as i64 || required.conditions.is_empty() { return; }
+    let on = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if walk.pinned.contains(&path_root(&on)) { return; }
+    let mut conditions: Vec<i64> = vec![];
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for nodes in required.conditions.iter() {
+        let condition = walk.arena.adopt(nodes);
+        walk.arena.variables(condition, &mut read);
+        conditions.push(condition);
+    }
+    let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for k in 0..args.len() as i64 {
+        let param = (*nikaia_std::index::get(&required.params, (k) as usize)).to_owned();
+        if *nikaia_std::index::get(&required.chars, (k) as usize) && read.contains(&param) { return; }
+        let term = bounding_lin(walk, nikaia_std::index::get(&args, (k) as usize), facts, context, program, words);
+        let path = path_of(nikaia_std::index::get(&args, (k) as usize), words);
+        if term.is_none() && path.is_none() { return; }
+        given.insert(param.to_owned(), nikaia_std::index::or(term, || bounding_fresh(walk).into()));
+        let length = length_of(&param);
+        if read.contains(&length) {
+            if path.is_none() || walk.pinned.contains(&path_root(nikaia_std::index::or(path.as_deref(), || ""))) { return; }
+            given.insert(length, bounding_length_named(walk, nikaia_std::index::or(path.as_deref(), || ""), true));
+        }
+    }
+    let mut goals: Vec<i64> = vec![];
+    for condition in conditions.iter() {
+        let condition = nikaia_std::num::value(condition);
+        goals.push(walk.arena.substitute(condition, &given));
+    }
+    let goal = walk.arena.and(goals);
+    if bounding_proves_goal(walk, facts, goal, ask) { walk.proven.calls.insert(node_key(receiver), key); } else { walk.open += 1; }
+}
+
 fn bounding_each(walk: &mut BoundsWalk, iter: &Expr, item: i64, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
     match iter {
@@ -3732,7 +3808,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
-            let __keep_75900 = nikaia_std::tether::Keep::new();
+            let __keep_78872 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 Expr::Field { .. } => {
@@ -4336,8 +4412,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
         bounding_push(&walk, facts, fact);
     }
     for list in filled.iter() {
-        let __keep_109685 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_109685).put(length_of(list)), count);
+        let __keep_112657 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_112657).put(length_of(list)), count);
     }
 }
 
@@ -4546,7 +4622,11 @@ fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut BoundsFacts, co
         Expr::Spawn { .. } => { },
         Expr::Overlap(_, _) => { },
         Expr::Select(_, _) => { },
-        Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; bounding_method_call(walk, receiver, words.resolve(method), args, facts, context, program, words, ask); },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            bounding_required(walk, expr, receiver, words.resolve(method), args, &facts, context, program, words, ask);
+            bounding_method_call(walk, receiver, words.resolve(method), args, facts, context, program, words, ask);
+        },
         Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; bounding_method_call(walk, receiver, words.resolve(method), args, facts, context, program, words, ask); },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -36922,6 +37002,38 @@ fn emit_call_option_named(world: &EmitWorld<'_, '_, '_, '_>, config: &[ConfigArg
     found
 }
 
+fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Expr> {
+    let mut few: Vec<Expr> = vec![];
+    match arg {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let named = match func {
+                Expr::Path(segments, _) => unaliased_in(world.aliases, &emit_arg_joined(world, segments)),
+                _ => String::from(""),
+            };
+            if named != "bytes::ByteSet" || args.len() != 1 { return few; }
+            match nikaia_std::index::get(&args, 0) {
+                Expr::ListLit { items, .. } => {
+                    for item in items.iter() {
+                        match item {
+                            Expr::LitChar(_, _) => { few.push(item.clone()); },
+                            Expr::LitInt { negative, .. } => {
+                                let negative = *negative;
+                                if !negative { few.push(item.clone()); }
+                            },
+                            _ => { },
+                        }
+                    }
+                    if (few.len() as i64) != items.len() as i64 || few.len() > 3 { few.clear(); }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    few
+}
+
 fn emit_call_is_a_hull(name: &str) -> bool { name == "Shared" || name == "SharedMut" || name == "Locked" }
 
 fn emit_call_builds_a_hull(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> bool {
@@ -36999,38 +37111,6 @@ impl EmitState {
                     }
                 }
             },
-fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Expr> {
-    let mut few: Vec<Expr> = vec![];
-    match arg {
-        Expr::Call { func, args, .. } => {
-            let func = nikaia_std::boxed::open(func);
-            let named = match func {
-                Expr::Path(segments, _) => unaliased_in(world.aliases, &emit_arg_joined(world, segments)),
-                _ => String::from(""),
-            };
-            if named != "bytes::ByteSet" || args.len() != 1 { return few; }
-            match nikaia_std::index::get(&args, 0) {
-                Expr::ListLit { items, .. } => {
-                    for item in items.iter() {
-                        match item {
-                            Expr::LitChar(_, _) => { few.push(item.clone()); },
-                            Expr::LitInt { negative, .. } => {
-                                let negative = *negative;
-                                if !negative { few.push(item.clone()); }
-                            },
-                            _ => { },
-                        }
-                    }
-                    if (few.len() as i64) != items.len() as i64 || few.len() > 3 { few.clear(); }
-                },
-                _ => { },
-            }
-        },
-        _ => { },
-    }
-    few
-}
-
             _ => { },
         }
         let loaded = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.simd_loads, &(node_key(func))), || 0);
@@ -37077,6 +37157,20 @@ fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Exp
             _ => None,
         }
     }
+    #[allow(clippy::too_many_arguments)]
+    fn emit_call_method_proved<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, receiver: Option<&Expr>, on_node: i64, name: &str, args: &[Expr], scope: &EmitScope) -> bool {
+        let walked = *nikaia_std::index::get(&self.proven_calls, &on_node);
+        if walked.is_some() && self.facts.entries.contains_key(nikaia_std::index::or(walked, || "")) { return true; }
+        if !emit_call_on_self(world, receiver) { return false; }
+        let owner = match emit_call_owner(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let callee = format!("{}::{}", owner, name);
+        if !self.facts.entries.contains_key(&callee) { return false; }
+        let mut written: Vec<String> = vec![];
+        for arg in args.iter() { written.push(host.written(arg)); }
+        let key = (callee, written.join(", "));
+        let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        matches!(reach.clone(), CallReach::Proved)
+    }
     fn emit_call_required(&self, qualified: String) -> Option<String> {
         let contract = match self.own_contracts.functions.get(&qualified) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if contract.requires.is_empty() { return None; }
@@ -37103,7 +37197,10 @@ fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Exp
         if claim.assumed {
             if self.unchecked_assumes {
                 out.push("core::hint::assert_unchecked(");
+                let around = walk.believing;
+                walk.believing = true;
                 host.expr(walk, out, &condition, depth, flow, scope)?;
+                walk.believing = around;
                 out.push(")");
                 return Ok(true);
             }
@@ -37194,10 +37291,7 @@ fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Exp
                 let kept = match self.facts.kept_calls.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 let pauses = kept.0;
                 let fails = kept.1;
-                let around = walk.believing;
-                walk.believing = true;
                 out.push(&format!("{}(", escaped_name(&emit_text(world, name))));
-                walk.believing = around;
                 let mut at = 0;
                 for arg in args.iter() {
                     if at > 0 { out.push(", "); }
@@ -37436,6 +37530,24 @@ fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Exp
             if boxed { out.push(")"); }
             return Ok(());
         }
+        if name == "find_all" && args.len() == 1 && emit_candidates(&self.own_contracts, "find_all").is_empty() {
+            let few = emit_call_few_bytes(world, nikaia_std::index::get(&args, 0));
+            if !few.is_empty() {
+                self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+                out.push(".find_all(nikaia_std::bytes::Few([");
+                let mut first = true;
+                for item in few.iter() {
+                    if !first { out.push(", "); }
+                    first = false;
+                    host.expr(walk, out, item, depth, flow, scope)?;
+                }
+                out.push("]), ");
+                let from = emit_call_option_named(world, config, "from");
+                if !from.is_empty() { host.expr(walk, out, nikaia_std::index::get(&from, 0), depth, flow, scope)?; } else { out.push("0"); }
+                out.push(")");
+                return Ok(());
+            }
+        }
         let (kind, entry) = emit_call_pausing_entry(&self.facts, args);
         if kind == 1 {
             out.push(&format!("nikaia_std::seq::{}(", entry));
@@ -37451,6 +37563,7 @@ fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Exp
         } else {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
             out.push(&format!(".{}", written));
+            if self.emit_call_method_proved(world, host, receiver, on_node, &name, args, scope) { out.push("__unchecked"); }
         }
         let mut declared = false;
         if receiver.is_some() {
@@ -37527,24 +37640,6 @@ fn emit_call_few_bytes(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<Exp
         if held.is_none() { return; }
         let mut by_arg: collections::BTreeMap<i64, Vec<i64>> = collections::BTreeMap::new();
         for (arg, keeps) in nikaia_std::index::or(held, || vec![].into()) { by_arg.insert(arg, keeps.to_owned()); }
-        if name == "find_all" && args.len() == 1 && emit_candidates(&self.own_contracts, "find_all").is_empty() {
-            let few = emit_call_few_bytes(world, nikaia_std::index::get(&args, 0));
-            if !few.is_empty() {
-                self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
-                out.push(".find_all(nikaia_std::bytes::Few([");
-                let mut first = true;
-                for item in few.iter() {
-                    if !first { out.push(", "); }
-                    first = false;
-                    host.expr(walk, out, item, depth, flow, scope)?;
-                }
-                out.push("]), ");
-                let from = emit_call_option_named(world, config, "from");
-                if !from.is_empty() { host.expr(walk, out, nikaia_std::index::get(&from, 0), depth, flow, scope)?; } else { out.push("0"); }
-                out.push(")");
-                return Ok(());
-            }
-        }
         walk.hold_args = Some(by_arg);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -37703,6 +37798,18 @@ fn emit_flow_compared(op: BinaryOp) -> &'static str {
     }
 }
 
+fn emit_flow_is_cut(node: &Expr) -> bool {
+    match node {
+        Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); matches!(index, Expr::Range { .. }) },
+        _ => false,
+    }
+}
+
+fn emit_flow_is_whole(ty: &str) -> bool {
+    let signed = ty == "i8" || ty == "i16" || ty == "i32" || ty == "i64" || ty == "i128" || ty == "isize";
+    signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
+}
+
 fn emit_flow_wrapping(op: BinaryOp) -> &'static str {
     match op {
         BinaryOp::Add => "wrapping_add",
@@ -37795,18 +37902,6 @@ impl EmitState {
         for each in mutable.iter() {
             let each = *each;
             if !copied { changed.push(each.to_owned()); }
-fn emit_flow_is_cut(node: &Expr) -> bool {
-    match node {
-        Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); matches!(index, Expr::Range { .. }) },
-        _ => false,
-    }
-}
-
-fn emit_flow_is_whole(ty: &str) -> bool {
-    let signed = ty == "i8" || ty == "i16" || ty == "i32" || ty == "i64" || ty == "i128" || ty == "isize";
-    signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
-}
-
         }
         let inside = EmitFlow { in_lambda: !pauses, statement: flow.statement, ..EmitFlow::plain() };
         if fails {
@@ -37938,6 +38033,22 @@ fn emit_flow_is_whole(ty: &str) -> bool {
             out.push("))");
             return Ok(());
         }
+        if walk.believing && !wide.widen && !wide.inferred && (op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul) && self.believed_arithmetic.contains_key(&site) {
+            let ty = nikaia_std::index::or(self.believed_arithmetic.get(&site), || "").to_owned();
+            if emit_flow_is_whole(&ty) {
+                let name = match op {
+                    BinaryOp::Add => "unchecked_add",
+                    BinaryOp::Sub => "unchecked_sub",
+                    _ => "unchecked_mul",
+                };
+                out.push(&format!("<{}>::{}(", ty, name));
+                host.expr(walk, out, lhs, depth, wide, scope)?;
+                out.push(", ");
+                host.expr(walk, out, rhs, depth, wide, scope)?;
+                out.push(")");
+                return Ok(());
+            }
+        }
         if self.proven_arithmetic.contains_key(&site) && !wide.widen && !wide.inferred {
             let ty = nikaia_std::index::or(self.proven_arithmetic.get(&site), || "").to_owned();
             if op == BinaryOp::Shl || op == BinaryOp::Shr {
@@ -37971,6 +38082,16 @@ fn emit_flow_is_whole(ty: &str) -> bool {
         if number_right {
             self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)?;
             out.push(&format!(" {} nikaia_std::num::value(", symbol));
+            host.expr(walk, out, rhs, depth, wide, scope)?;
+            out.push(")");
+            return Ok(());
+        }
+        let viewed = self.facts.compared_views.contains(&(site, "lhs".to_owned())) || self.facts.compared_views.contains(&(site, "rhs".to_owned()));
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && !viewed && emit_flow_is_cut(lhs) && emit_flow_is_cut(rhs) {
+            if op == BinaryOp::Ne { out.push("!"); }
+            out.push("nikaia_std::same!(");
+            host.expr(walk, out, lhs, depth, wide, scope)?;
+            out.push(", ");
             host.expr(walk, out, rhs, depth, wide, scope)?;
             out.push(")");
             return Ok(());
@@ -38030,22 +38151,6 @@ fn emit_flow_is_whole(ty: &str) -> bool {
     pub fn emit_core_coalesce<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, fallback: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.facts.plain_reaches.contains(&node_key(node)) {
             host.expr(walk, out, value, depth, flow, scope)?;
-        if walk.believing && !wide.widen && !wide.inferred && (op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul) && self.believed_arithmetic.contains_key(&site) {
-            let ty = nikaia_std::index::or(self.believed_arithmetic.get(&site), || "").to_owned();
-            if emit_flow_is_whole(&ty) {
-                let name = match op {
-                    BinaryOp::Add => "unchecked_add",
-                    BinaryOp::Sub => "unchecked_sub",
-                    _ => "unchecked_mul",
-                };
-                out.push(&format!("<{}>::{}(", ty, name));
-                host.expr(walk, out, lhs, depth, wide, scope)?;
-                out.push(", ");
-                host.expr(walk, out, rhs, depth, wide, scope)?;
-                out.push(")");
-                return Ok(());
-            }
-        }
             return Ok(());
         }
         if jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) {
@@ -38083,16 +38188,6 @@ fn emit_flow_is_whole(ty: &str) -> bool {
         }
         let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(&node_key(fallback)) || self.facts.view_coalesces.contains(&node_key(node));
         if self.facts.optional_fallbacks.contains(&node_key(node)) {
-        let viewed = self.facts.compared_views.contains(&(site, "lhs".to_owned())) || self.facts.compared_views.contains(&(site, "rhs".to_owned()));
-        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && !viewed && emit_flow_is_cut(lhs) && emit_flow_is_cut(rhs) {
-            if op == BinaryOp::Ne { out.push("!"); }
-            out.push("nikaia_std::same!(");
-            host.expr(walk, out, lhs, depth, wide, scope)?;
-            out.push(", ");
-            host.expr(walk, out, rhs, depth, wide, scope)?;
-            out.push(")");
-            return Ok(());
-        }
             out.push("nikaia_std::index::or_maybe(");
             host.expr(walk, out, value, depth, flow, scope)?;
             out.push(", || ");
@@ -42589,6 +42684,7 @@ pub struct EmitState {
     pub proven_indices: collections::BTreeSet<i64>,
     pub proven_arithmetic: collections::BTreeMap<i64, String>,
     pub proven_negations: collections::BTreeMap<i64, String>,
+    pub proven_calls: collections::BTreeMap<i64, String>,
     pub cleaned_types: collections::BTreeSet<String>,
     pub shared: collections::BTreeMap<String, Count>,
     pub built_at_build_time: collections::BTreeSet<String>,
@@ -42616,6 +42712,7 @@ pub struct EmitState {
     pub fails: bool,
     pub trusted_input: bool,
     pub unchecked_assumes: bool,
+    pub believed_arithmetic: collections::BTreeMap<i64, String>,
     pub entry: bool,
 }
 
@@ -42643,6 +42740,7 @@ pub struct EmitWalk {
     pub hull_count: Option<Count>,
     pub trusting: bool,
     pub unpinned: bool,
+    pub believing: bool,
 }
 
 impl EmitWalk {
@@ -42709,7 +42807,6 @@ impl EmitState {
     }
     pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }
-    pub believed_arithmetic: collections::BTreeMap<i64, String>,
         for members in self.sums.keys() {
             let name = match self.sums.get(members) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut borrows = false;
@@ -42737,7 +42834,6 @@ impl EmitState {
             let mut timed_out = false;
             for member in members.iter() {
                 if member == "task::Crashed" { crashed = true; }
-    pub believing: bool,
                 if member == "task::TimedOut" { timed_out = true; }
             }
             let mut escalated = false;
@@ -52887,6 +52983,38 @@ pub fn free_function(program: &Program, words: &winnow_grammar::InternerContext,
     None
 }
 
+pub fn own_method(program: &Program, words: &winnow_grammar::InternerContext, owner: &str, wanted: &str) -> Option<FreeFunction> {
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Impl { methods, target, trait_name } => {
+                let trait_name = *trait_name;
+                if trait_name.is_none() && words.resolve(target.name) == owner {
+                    for method in methods.iter() {
+                        match &method.node {
+                            Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
+                                let can_throw = *can_throw; let name = *name;
+                                if receiver.is_some() && named_as((name).as_ref(), words, wanted) {
+                                    let mut params: Vec<String> = vec![];
+                                    for arg in args.iter() { params.push(words.resolve(arg.name).to_owned()); }
+                                    let mut options: Vec<(String, Expr)> = vec![];
+                                    for option in config.iter() {
+                                        params.push(words.resolve(option.name).to_owned());
+                                        options.push((words.resolve(option.name).to_owned(), option.default.clone()));
+                                    }
+                                    return Some(FreeFunction { params, options, can_throw, whole_result: whole_type((ret_type).as_ref(), words) });
+                                }
+                            },
+                            _ => { },
+                        }
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    None
+}
+
 pub fn arguments_in_order(function: &FreeFunction, args: &[Expr], config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Vec<Expr> {
     let mut all: Vec<Expr> = args.to_owned();
     for (option, default) in function.options.iter() {
@@ -56142,8 +56270,9 @@ fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &Prove
             for arg in args.iter() { prover_calls_in(walk, arg, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
             for c in config.iter() { prover_calls_in(walk, &c.value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
         },
-        Expr::MethodCall { receiver, args, config, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver);
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            prover_a_method_call(walk, receiver, method, args, config, span, scope, at, program, words, ask, model, escape, written_of);
             prover_calls_in(walk, receiver, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
             for arg in args.iter() { prover_calls_in(walk, arg, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
             for c in config.iter() { prover_calls_in(walk, &c.value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
@@ -56218,7 +56347,7 @@ fn prover_calls_in_maybe(walk: &mut ProverWalk, expr: Option<&Expr>, span: Span,
 #[allow(clippy::too_many_arguments)]
 fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     match expr {
-        Expr::Block(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
+        Expr::Block(block, _) => { if prover_claims_then_value(block, words) { prover_block(walk, block, &mut scope.clone(), &at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } else { prover_nested(walk, block, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } },
         Expr::Unsafe(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Overlap(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Closure { params, mutable, body, .. } => {
@@ -56305,6 +56434,22 @@ fn prover_a_call(walk: &mut ProverWalk, callee: &str, args: &[Expr], config: &[C
     }
     let foreign = match prover_foreign_contract(walk, callee, own, condition) { Some(__nikaia_value) => __nikaia_value, None => return };
     if !foreign.requires.is_empty() { prover_record_call(walk, callee, &foreign.params, &foreign.requires, args, span, scope, at, words, ask, model, escape, written_of); }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prover_a_method_call(walk: &mut ProverWalk, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String) {
+    if nikaia_std::index::or(prover_variable_named(Some(receiver), words), || "".into()) != "self" { return; }
+    let function = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let cut = match nikaia_std::search::rfind(&function, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+    let owner = nikaia_std::index::get(&function, nikaia_std::index::at(0..cut)).to_owned();
+    let name = words.resolve(method).to_owned();
+    let callee = format!("{}::{}", owner, name);
+    walk.state.edges.insert((function.to_owned(), callee.to_owned()));
+    let pre = if walk.state.collecting { prover_precondition_in(&walk.state.known, &callee) } else { prover_precondition_in(&walk.state.preconditions, &callee) };
+    let found = match pre { Some(__nikaia_value) => __nikaia_value, None => return };
+    let target = match own_method(program, words, &owner, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let all = arguments_in_order(&target, args, config, words);
+    prover_record_call(walk, &callee, &target.params, &found.claims, &all, span, scope, at, words, ask, model, escape, written_of);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -56454,6 +56599,13 @@ fn prover_a_claim_stmt(stmt: &Stmt, words: &winnow_grammar::InternerContext) -> 
         },
         _ => false,
     }
+}
+
+fn prover_claims_then_value(block: &Block, words: &winnow_grammar::InternerContext) -> bool {
+    let last = block.stmts.len() as i64 - 1;
+    if last < 0 { return false; }
+    for k in 0..last { if !prover_a_claim_stmt(&nikaia_std::index::get(&block.stmts, (k) as usize).node, words) { return false; } }
+    matches!(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(last)).node, Stmt::Expr(_))
 }
 
 fn prover_returned_name(stmt: &Stmt, words: &winnow_grammar::InternerContext) -> Option<String> {
@@ -70445,7 +70597,7 @@ pub mod bounds_interval {
 }
 pub mod bounds_matched {
     #[allow(unused_imports)]
-    pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_each, bm_changing_methods};
+    pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_required, bm_each, bm_changing_methods};
 }
 pub mod bounds_reasons {
     #[allow(unused_imports)]
@@ -71053,7 +71205,7 @@ pub mod prover_arena {
 }
 pub mod prover_calls {
     #[allow(unused_imports)]
-    pub use super::{FreeFunction, free_function, arguments_in_order, may_throw, from_outside};
+    pub use super::{FreeFunction, free_function, own_method, arguments_in_order, may_throw, from_outside};
 }
 pub mod prover_claims {
     #[allow(unused_imports)]

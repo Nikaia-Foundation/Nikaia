@@ -113,6 +113,10 @@ pub struct Proven {
     /// both walks borrow: the emitter reads them back rather than walking the
     /// body a second time.
     pub nonnegative_locals: std::collections::HashMap<usize, HashSet<winnow_grammar::Symbol>>,
+    /// **The method calls whose callee's precondition holds where they
+    /// stand** ([ADR-269](../../docs/specification/adr/adr-269.md) D20, #776),
+    /// by the receiver's node, with the callee's ledger key.
+    pub calls: BTreeMap<i64, String>,
 }
 
 /// **What each callee the ledgers describe ensures**
@@ -122,6 +126,15 @@ pub struct Proven {
 /// which only ever proves less.
 fn ensured(ledgers: &[&crate::contracts::Ledger]) -> BTreeMap<String, Ensured> {
     nikaia_std::tools::bounds_matched::bm_ensured(ledgers, &|text, names| {
+        crate::prove::condition_nodes(text, names)
+    })
+}
+
+/// **What each callee the ledgers describe requires** (ADR-269 D5, #776),
+/// read back over its parameters, by the ledger's key: an entry whose every
+/// condition reads back, or none.
+fn required(ledgers: &[&crate::contracts::Ledger]) -> BTreeMap<String, Ensured> {
+    nikaia_std::tools::bounds_matched::bm_required(ledgers, &|text, names| {
         crate::prove::condition_nodes(text, names)
     })
 }
@@ -265,6 +278,7 @@ pub fn proven(
         sized: sized.iter().copied().collect(),
         char_codes: char_codes.iter().copied().collect(),
         ensured: ensured(ledgers),
+        required: required(ledgers),
         each: each(ledgers),
         std_receivers: std_receivers.clone(),
         simd_loads: simd_loads.clone(),
@@ -334,6 +348,7 @@ pub fn proven(
         out.arithmetic.extend(walked.arithmetic);
         out.nonnegative.extend(walked.nonnegative);
         out.negations.extend(walked.negations);
+        out.calls.extend(walked.calls);
     }
     // **A grammar's actions, walked like a function's body**
     // ([ADR-314](../../docs/specification/adr/adr-314.md) D1), from what each
@@ -392,6 +407,7 @@ pub fn proven(
                 out.arithmetic.extend(walked.arithmetic);
                 out.nonnegative.extend(walked.nonnegative);
                 out.negations.extend(walked.negations);
+                out.calls.extend(walked.calls);
             }
         }
     }

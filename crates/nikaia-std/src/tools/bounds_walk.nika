@@ -35,6 +35,9 @@ pub struct BoundsContext {
     /// What a callee's ledger entry ensures, by the name a call writes
     /// (ADR-314 D3).
     pub ensured: collections::BTreeMap[String, Ensured],
+    /// What a callee's ledger entry requires, by the name a call writes:
+    /// every condition read back, or no entry (ADR-269 D5, #776).
+    pub required: collections::BTreeMap[String, Ensured],
     /// What each element of a sequence a ledger entry hands back holds, by
     /// the entry's key (ADR-375 D5).
     pub each: collections::BTreeMap[String, Ensured],
@@ -95,6 +98,10 @@ pub struct BoundsProven {
     /// Of the context's `negations`, those proved not to negate the type's
     /// least value.
     pub negations: collections::BTreeSet[i64],
+    /// **The method calls whose callee's precondition holds where they
+    /// stand** (ADR-269 D5, D20, #776), by the receiver's node, with the
+    /// callee's ledger key: each reaches the entry that does not check it.
+    pub calls: collections::BTreeMap[i64, String],
     /// **The invariants that carried a check through a loop** (ADR-361 D4,
     /// D10), by the byte the loop starts at: its parts as `nikaia.proofs`
     /// keeps them, each with the strategy that found it.
@@ -226,7 +233,7 @@ fn call_depth() -> i64 {
 }
 
 fn no_proofs() -> BoundsProven {
-    return BoundsProven { indices: collections::BTreeSet(), arithmetic: collections::BTreeSet(), nonnegative: collections::BTreeSet(), negations: collections::BTreeSet(), loops: collections::BTreeMap() }
+    return BoundsProven { indices: collections::BTreeSet(), arithmetic: collections::BTreeSet(), nonnegative: collections::BTreeSet(), negations: collections::BTreeSet(), calls: collections::BTreeMap(), loops: collections::BTreeMap() }
 }
 
 fn nothing_changed() -> BoundsChanged {
@@ -1252,6 +1259,64 @@ fn bounding_ensured(mut walk: BoundsWalk, ensured: ref Ensured, args: ref Vec[Ex
     }
     walk.axioms.insert(name, holds)
     return result
+}
+
+/// **A method call's precondition, proved where the call stands** (ADR-269
+/// D5, #776): each condition the callee's ledger entry requires, with the
+/// call's arguments for its parameters and their lengths, from what holds
+/// before the call. Only where the receiver and every argument are read
+/// without running anything; a call proved is recorded by its receiver.
+fn bounding_required(mut walk: BoundsWalk, expr: ref Expr, receiver: ref Expr, method: ref String, args: ref Vec[Expr], facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    if walk.collecting {
+        return
+    }
+    let ty = context.std_receivers[node_key(expr)] ?? return
+    let key = f"{ty}::{method}"
+    let required = context.required[key] ?? return
+    if args.len() != required.params.len() || required.conditions.is_empty() {
+        return
+    }
+    let on = path_of(receiver, words) ?? return
+    if walk.pinned.contains(path_root(on)) {
+        return
+    }
+    let mut conditions: Vec[i64] = []
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    for nodes in required.conditions {
+        let condition = walk.arena.adopt(nodes)
+        walk.arena.variables(condition, read)
+        conditions.push(condition)
+    }
+    let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for k in 0..<args.len() {
+        let param = required.params[k].clone()
+        if required.chars[k] && read.contains(param) {
+            return
+        }
+        let term = bounding_lin(walk, args[k], facts, context, program, words)
+        let path = path_of(args[k], words)
+        if term == null && path == null {
+            return
+        }
+        given.insert(param.clone(), term ?? bounding_fresh(walk))
+        let length = length_of(param)
+        if read.contains(length) {
+            if path == null || walk.pinned.contains(path_root(path ?? "")) {
+                return
+            }
+            given.insert(length, bounding_length_named(walk, path ?? "", true))
+        }
+    }
+    let mut goals: Vec[i64] = []
+    for condition in conditions {
+        goals.push(walk.arena.substitute(condition, given))
+    }
+    let goal = walk.arena.and(goals)
+    if bounding_proves_goal(walk, facts, goal, ask) {
+        walk.proven.calls.insert(node_key(receiver), key)
+    } else {
+        walk.open += 1
+    }
 }
 
 /// **What `std`'s ledger states of each element a sequence yields**
@@ -2849,7 +2914,10 @@ fn bounding_expr(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFacts, c
         Expr::Spawn { .. } => {},
         Expr::Overlap(_, _) => {},
         Expr::Select(_, _) => {},
-        Expr::MethodCall { receiver, method, args, .. } => bounding_method_call(walk, receiver, words.resolve(method), args, facts, context, program, words, ask),
+        Expr::MethodCall { receiver, method, args, .. } => {
+            bounding_required(walk, expr, receiver, words.resolve(method), args, facts, context, program, words, ask)
+            bounding_method_call(walk, receiver, words.resolve(method), args, facts, context, program, words, ask)
+        },
         Expr::SafeMethod { receiver, method, args, .. } => bounding_method_call(walk, receiver, words.resolve(method), args, facts, context, program, words, ask),
         Expr::Call { func, args, config, .. } => {
             bounding_expr(walk, func, facts, context, program, words, ask)
