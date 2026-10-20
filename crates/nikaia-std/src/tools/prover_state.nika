@@ -314,7 +314,7 @@ impl ProverState {
         let at_byte = span.start as i64
         // A claim about the value the next statement returns is a candidate
         // postcondition (D17).
-        if self.collecting && at.free && !at.lambda && claim != null {
+        if self.collecting && at.posts && !at.lambda && claim != null {
             let function = carrying_function(at.function)
             let returned = returned_before(self.before_return, at_byte)
             if function != null && returned != null {
@@ -322,7 +322,16 @@ impl ProverState {
                 if term != null {
                     let owner = function ?? ""
                     let mut posts = self.candidates.remove(owner) ?? []
-                    posts.push(PostClaim { term: term ?? 0, written: written.clone() })
+                    // The same claim at a second exit is one postcondition.
+                    let mut again = false
+                    for post in posts {
+                        if post.written == written {
+                            again = true
+                        }
+                    }
+                    if !again {
+                        posts.push(PostClaim { term: term ?? 0, written: written.clone() })
+                    }
                     self.candidates.insert(owner, posts)
                 }
             }
@@ -988,8 +997,11 @@ pub struct ProverWhere {
     pub no_precondition: String?,
     /// The function body's own statements, not a nested block.
     pub top: bool,
-    /// A free function's body, called by name: what has a postcondition.
+    /// A free function's body, called by name: what has a result summary.
     pub free: bool,
+    /// A free function's or a method's body, not a trait's implementation's
+    /// nor a test's: what has a postcondition (ADR-269 D17).
+    pub posts: bool,
     /// Inside a lambda, whose `return` is not the function's.
     pub lambda: bool,
     /// The function `throws`, so a call in it may leave it.

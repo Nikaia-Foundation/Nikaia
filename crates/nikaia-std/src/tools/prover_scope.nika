@@ -64,6 +64,16 @@ pub struct ProverScope {
     /// that changed one leaves. A claim what is known leaves open is asked
     /// once more with them (D2).
     pub history: Vec[i64],
+    /// **The whole numbers a mask or a shift bounds**, by name: the bounds
+    /// the value they were last given has (`prover_bit_range`), kept so a
+    /// loop that gives them only such values keeps them (D-a, #776).
+    pub bits: collections::BTreeMap[String, ProverBits],
+}
+
+/// The bounds `lo <= x <= hi` a mask or a shift gives a whole number.
+pub struct ProverBits {
+    pub lo: i64,
+    pub hi: i64,
 }
 
 impl ProverScope {
@@ -84,6 +94,7 @@ impl ProverScope {
             mutables: collections::BTreeSet(),
             loops: [],
             history: [],
+            bits: collections::BTreeMap(),
         }
     }
 
@@ -121,6 +132,7 @@ impl ProverScope {
         self.calls_of.remove(name)
         self.summed.remove(name)
         self.leaned.remove(name)
+        self.bits.remove(name)
         if !self.loops.is_empty() {
             let mut standing: Vec[LoopRecord] = []
             for record in self.loops {
@@ -168,6 +180,7 @@ impl ProverScope {
     /// known of `earlier`, a name of its own among the history, and `name`
     /// itself is known of nothing yet.
     pub fn renamed(ref mut self, mut arena: TermArena, name: ref String, earlier: ref String) {
+        self.bits.remove(name)
         let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
         given.insert(name.clone(), arena.var(earlier))
         let mut history: Vec[i64] = []
@@ -382,6 +395,21 @@ impl ProverScope {
             }
         }
         return names
+    }
+
+    /// **`name` is a whole number inside `bits`** (#776): a mask's or a
+    /// shift's value, of which nothing more is known.
+    pub fn bounded_bits(ref mut self, mut arena: TermArena, name: ref String, bits: ref ProverBits) {
+        self.ints.insert(name.clone())
+        self.loose.insert(name.clone())
+        let named = arena.var(name)
+        let lo = arena.int(bits.lo)
+        let above = arena.le(lo, named)
+        self.facts.push(above)
+        let hi = arena.int(bits.hi)
+        let below = arena.le(named, hi)
+        self.facts.push(below)
+        self.bits.insert(name.clone(), ProverBits { lo: bits.lo, hi: bits.hi })
     }
 
     /// A block whose bindings this walk cannot see: no facts, no variables.

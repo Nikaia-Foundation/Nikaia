@@ -218,6 +218,21 @@ fn check_core_method_ledger_type(on: ref Ty, bytes: bool) -> String {
     }
 }
 
+/// The name of the program's own type, without type arguments, whose
+/// method `written` is; empty for any other.
+fn check_core_method_own_type(world: ref CheckWorld, on: ref Ty, written: ref String) -> String sync {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            if args.len() == 0 && resolve_method(world, f"{name}::{written}") != null {
+                name.clone()
+            } else {
+                "".clone()
+            }
+        },
+        else => "".clone(),
+    }
+}
+
 /// Whether the type is a map, by its last segment.
 fn check_core_method_a_map(on: ref Ty) -> bool {
     return match on {
@@ -453,6 +468,13 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     let std_type = check_core_method_ledger_type(on, bytes)
     if std_type != "" {
         state.facts.std_receivers.insert(id_of(expr) as i64, std_type)
+    } else {
+        // **And on the program's own type** (ADR-269 D17, #776): what its
+        // method's postconditions say of the result.
+        let own_type = check_core_method_own_type(world, on, written)
+        if own_type != "" {
+            state.facts.std_receivers.insert(id_of(expr) as i64, own_type)
+        }
     }
     // **A pattern of one scalar is that character** (#617): the same match, and
     // the language below searches a `char` with `memchr` where it builds a

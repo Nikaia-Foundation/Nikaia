@@ -55,10 +55,11 @@ pub fn report(
     through_loops: bool,
 ) -> String {
     let checked = crate::check::check(parsed, own, library);
+    let published = crate::prove::with_published(own, &checked.facts.published);
     let proven = crate::bounds::proven(
         parsed,
         &crate::bounds::Sites::of(&checked.facts),
-        &[own, library],
+        &[&published, library],
         &std::collections::BTreeSet::new(),
         through_loops,
     );

@@ -1048,9 +1048,37 @@ fn bounding_lin(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFacts, co
             }
         },
         Expr::Binary { op, lhs, rhs, .. } => return bounding_lin_of(walk, op, lhs, rhs, facts, context, program, words),
+        // **A call checked against a type's rule first** (ADR-369 D3): the
+        // block the rule's `assert`s are put in has the call's value (#776).
+        Expr::Block(block, _) => {
+            let last = block.stmts.len() - 1
+            if last < 0 {
+                return null
+            }
+            for k in 0..<last {
+                if !bounding_an_assert(block.stmts[k].node, words) {
+                    return null
+                }
+            }
+            return match block.stmts[last].node {
+                Stmt::Expr(inner) => bounding_lin(walk, inner, facts, context, program, words),
+                else => null,
+            }
+        },
         else => {},
     }
     return null
+}
+
+/// Whether a statement is an `assert(…)` and nothing else.
+fn bounding_an_assert(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> bool {
+    return match stmt {
+        Stmt::Expr(inner) => match inner {
+            Expr::Call { func, args, .. } => args.len() == 1 && (bounding_variable(func, words) ?? "") == "assert",
+            else => false,
+        },
+        else => false,
+    }
 }
 
 /// **A `char`'s code** (ADR-314 D2): a number in `0..=0x10FFFF`, and a new
@@ -1174,7 +1202,9 @@ fn bounding_ensured(mut walk: BoundsWalk, ensured: ref Ensured, args: ref Vec[Ex
         if ensured.chars[k] {
             given.insert(ensured.params[k].clone(), bounding_code_of(walk, args[k], context, words))
         } else {
-            let term = bounding_lin(walk, args[k], facts, context, program, words) ?? return null
+            // An argument the walk does not read is a number of its own: what
+            // the callee ensures holds whatever it is (#776).
+            let term = bounding_lin(walk, args[k], facts, context, program, words) ?? bounding_fresh(walk)
             given.insert(ensured.params[k].clone(), term)
         }
     }

@@ -1959,6 +1959,8 @@ impl<'p> Emitter<'p> {
                 crate::check::propagation_against(parsed, beside, &own_contracts, described, reads)
             }
         };
+        let published_contracts =
+            crate::prove::with_published(&own_contracts, &propagation.published);
         // **Proved at every build, written without the check only where the
         // build says so** (ADR-306 D14): what is proved does not depend on
         // `remove-bounds-checks` or `remove-overflow-checks`.
@@ -1976,7 +1978,7 @@ impl<'p> Emitter<'p> {
                 std_receivers: &propagation.std_receivers,
                 simd_loads: &propagation.simd_loads,
             },
-            &[&own_contracts, std_ledger()],
+            &[&published_contracts, std_ledger()],
             &std::collections::BTreeSet::new(),
             build.prove_through_loops,
         );

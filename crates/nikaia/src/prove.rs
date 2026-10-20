@@ -495,3 +495,17 @@ fn model_of(held: &TermArena, facts: &[i64], goal: i64) -> Option<BTreeMap<Strin
     };
     lg_verify_model(held, facts, goal, &model).then_some(model.values)
 }
+
+/// **The ledger with what the prover published of each function** (ADR-269
+/// D17, #776): its postconditions are facts about a call's result for the
+/// bounds walk, as a described callee's are (ADR-314 D3). The ledger file gets
+/// them only after the program is lowered.
+pub fn with_published(own: &Ledger, published: &BTreeMap<String, Published>) -> Ledger {
+    let mut ledger = own.clone();
+    for (key, found) in published {
+        if let Some(contract) = ledger.functions.get_mut(key) {
+            contract.ensures.extend(found.ensures.iter().cloned());
+        }
+    }
+    ledger
+}

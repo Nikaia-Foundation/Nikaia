@@ -181,7 +181,7 @@ pub fn lowered_first(text: ref String) -> String {
 /// A type whose `len()` the prover reads: a list, text, an array.
 pub fn has_a_length(ty: ref String) -> bool {
     return match ty {
-        "Vec" => true, "String" => true, "str" => true, "Array" => true,
+        "Vec" => true, "String" => true, "str" => true, "Array" => true, "Bytes" => true,
         else => false,
     }
 }

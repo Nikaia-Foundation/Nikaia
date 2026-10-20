@@ -54,7 +54,7 @@ pub fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winn
 /// A test's or a bench's body: every claim in it is the test's verdict (D11).
 fn prover_test(mut walk: ProverWalk, body: ref Block, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     walk.state.in_test = true
-    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a test has no callers", top: true, free: false, lambda: false, throws_out: true }
+    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a test has no callers", top: true, free: false, posts: false, lambda: false, throws_out: true }
     let mut scope = ProverScope::unknown()
     prover_block(walk, body, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     walk.state.in_test = false
@@ -144,7 +144,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 no_precondition = "A method of a trait's implementation can't have a precondition: a call through the trait doesn't know it, and there is no second entry to check it."
             }
             let free = !has_owner && !was_a_test
-            let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, lambda: false, throws_out: can_throw }
+            let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw }
             walk.state.in_test = was_a_test
             // **A result summary** (ADR-359 D1): every exit of a free
             // function's body the walk reads in full.
@@ -185,7 +185,13 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
     for index in 0..<block.stmts.len() {
         let stmt = block.stmts[index]
         if walk.state.collecting && index + 1 < block.stmts.len() {
-            let returned = prover_returned_name(block.stmts[index + 1].node, words)
+            // **Past the claims after it**: a type's rule the compiler checks
+            // before a method's exit stands between them (#776).
+            let mut next = index + 1
+            while next + 1 < block.stmts.len() && prover_a_claim_stmt(block.stmts[next].node, words) {
+                next += 1
+            }
+            let returned = prover_returned_name(block.stmts[next].node, words)
             if returned != null {
                 walk.state.before_return.insert(stmt.span.start as i64, returned ?? "")
             }
@@ -239,6 +245,12 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                     let tainted = from_outside(value, scope.tainted, words, library, holes_of) || (op != null && scope.tainted.contains(n))
                     if !prover_assigned(walk, n, op, value, span, scope, words) {
                         scope.rebind(walk.arena, n)
+                        if op == null && !tainted {
+                            let bits = prover_bit_range(walk, value, scope, words)
+                            if bits != null {
+                                scope.bounded_bits(walk.arena, n, bits ?? return false)
+                            }
+                        }
                     }
                     if tainted {
                         scope.tainted.insert(n)
@@ -274,6 +286,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                     records.push(record ?? return false)
                 }
             }
+            let kept_bits = prover_loop_bits(walk, scope, changed, body, words)
             let mut inner = scope.clone()
             for n in changed {
                 inner.rebind(walk.arena, n)
@@ -284,6 +297,10 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                 inner.loose.insert(n.clone())
                 scope.ints.insert(n.clone())
                 scope.loose.insert(n.clone())
+            }
+            for (n, bits) in kept_bits {
+                inner.bounded_bits(walk.arena, n, bits)
+                scope.bounded_bits(walk.arena, n, bits)
             }
             if !changed.is_empty() {
                 scope.exact = false
@@ -457,6 +474,14 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         if tainted {
             scope.tainted.insert(n.clone())
             scope.loose.insert(n.clone())
+        }
+    }
+    // **A mask's or a shift's value is bounded** (#776), a `let mut`'s too.
+    if names.len() == 1 && value_lin == null && !tainted {
+        let bits = prover_bit_range(walk, value, scope, words)
+        if bits != null {
+            let bound = words.resolve(names[0]).clone()
+            scope.bounded_bits(walk.arena, bound, bits ?? return)
         }
     }
     if names.len() != 1 || mutable {
@@ -903,6 +928,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
             else => {},
         }
     }
+    let kept_bits = prover_loop_bits(walk, scope, changed, body, words)
     let mut inner = scope.clone()
     for n in changed {
         inner.rebind(walk.arena, n)
@@ -913,6 +939,10 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
         inner.loose.insert(n.clone())
         scope.ints.insert(n.clone())
         scope.loose.insert(n.clone())
+    }
+    for (n, bits) in kept_bits {
+        inner.bounded_bits(walk.arena, n, bits)
+        scope.bounded_bits(walk.arena, n, bits)
     }
     scope.loops.extend(records)
     if !changed.is_empty() {
@@ -983,7 +1013,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
 fn prover_return(mut walk: ProverWalk, value: ref Expr?, span: Span, scope: ref ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     let returned = value ?? return
     prover_expr(walk, returned, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-    walk.state.exit(walk.arena, returned, words, scope, at.function, !at.lambda && at.free, at.params, ask)
+    walk.state.exit(walk.arena, returned, words, scope, at.function, !at.lambda && at.posts, at.params, ask)
     if !at.lambda && at.free {
         prover_sum_exit(walk, returned, scope, at, program, words, own, unaliased, condition, written_of)
     }
@@ -1060,6 +1090,16 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                     walk.findings.push(found.clone())
                 }
                 return false
+            }
+            // **`panic(…)` does not come back** (#776): a body that ends in
+            // one has no exit there.
+            let panics = match func {
+                Expr::Variable(name, _) => words.resolve(name) == "panic" && !scope.locals.contains("panic"),
+                else => false,
+            }
+            if panics {
+                prover_expr(walk, expr, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+                return true
             }
         },
         Expr::If { cond, then_branch, else_branch, .. } => {
@@ -1747,6 +1787,17 @@ fn prover_message(config: ref Vec[ConfigArg], words: ref winnow_grammar::Interne
     return null
 }
 
+/// Whether a statement is an `assert` and nothing else: it changes no value.
+fn prover_a_claim_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> bool {
+    return match stmt {
+        Stmt::Expr(inner) => match inner {
+            Expr::Call { func, args, .. } => args.len() == 1 && (prover_variable_named(func, words) ?? "") == "assert",
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// The name a `return name` hands back.
 fn prover_returned_name(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> String? {
     return match stmt {
@@ -2101,4 +2152,117 @@ fn prover_open_reason(held: ref ClaimHeld) -> String? {
         ClaimHeld::AtRunTime(why) => why.clone(),
         else => null,
     }
+}
+
+/// **The bounds a mask or a shift gives a whole number** (#776): `e & c` or
+/// `c & e`, with a constant `c >= 0`, is in `0..=c`; `(e >> k).bits_as_i64()`
+/// - only an unsigned value has `bits_as_i64` - shifted right by a constant
+/// `2 <= k < 64` is in `0..<2^(64 - k)`. Nothing for any other value.
+fn prover_bit_range(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> ProverBits? {
+    match expr {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if op != BinaryOp::BitAnd {
+                return null
+            }
+            let mut mask = prover_constant_of(walk, rhs, scope, words) ?? -1
+            if mask < 0 {
+                mask = prover_constant_of(walk, lhs, scope, words) ?? -1
+            }
+            if mask < 0 {
+                return null
+            }
+            return ProverBits { lo: 0, hi: mask }
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if !args.is_empty() || words.resolve(method) != "bits_as_i64" {
+                return null
+            }
+            match receiver {
+                Expr::Binary { op, rhs, .. } => {
+                    if op != BinaryOp::Shr {
+                        return null
+                    }
+                    let k = prover_constant_of(walk, rhs, scope, words) ?? return null
+                    if k < 2 || k > 63 {
+                        return null
+                    }
+                    let by = 64 - k
+                    let top: i64 = 1 << by
+                    return ProverBits { lo: 0, hi: top - 1 }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+/// The value of `expr` where it reads only numbers the build knows.
+fn prover_constant_of(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> i64? {
+    let term = lin_term(expr, words, fn(name) { false }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return null
+    return walk.arena.constant(term)
+}
+
+/// **The bounded names a loop keeps bounded** (#776): of the names it
+/// changes that a mask or a shift bounds before it, those every assignment in
+/// `body` gives, with `=`, a value inside the same bounds.
+fn prover_loop_bits(mut walk: ProverWalk, scope: ref ProverScope, changed: ref collections::BTreeSet[String], body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, ProverBits] {
+    let mut out: collections::BTreeMap[String, ProverBits] = collections::BTreeMap()
+    for n in changed {
+        if !scope.bits.contains_key(n) {
+            continue
+        }
+        let before = scope.bits[n] ?? continue
+        if prover_assigns_inside(walk, body, n, before, scope, words) {
+            out.insert(n.clone(), ProverBits { lo: before.lo, hi: before.hi })
+        }
+    }
+    return out
+}
+
+/// Whether every assignment to `name` in `block`, at any depth, is an `=` of
+/// a value inside `bounds`.
+fn prover_assigns_inside(mut walk: ProverWalk, block: ref Block, name: ref String, bounds: ref ProverBits, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Assign { target, op, value } => {
+                match target {
+                    Expr::Variable(assigned, _) => {
+                        if words.resolve(assigned) == name {
+                            if op != null {
+                                return false
+                            }
+                            let bits = prover_bit_range(walk, value, scope, words) ?? return false
+                            if bits.lo < bounds.lo || bits.hi > bounds.hi {
+                                return false
+                            }
+                        }
+                    },
+                    else => {},
+                }
+            },
+            Stmt::While { cond, .. } => {
+                for inner in blocks_of_expr(cond) {
+                    if !prover_assigns_inside(walk, inner, name, bounds, scope, words) {
+                        return false
+                    }
+                }
+            },
+            Stmt::For { iter, .. } => {
+                for inner in blocks_of_expr(iter) {
+                    if !prover_assigns_inside(walk, inner, name, bounds, scope, words) {
+                        return false
+                    }
+                }
+            },
+            else => {},
+        }
+        for inner in blocks_of_stmt(stmt.node) {
+            if !prover_assigns_inside(walk, inner, name, bounds, scope, words) {
+                return false
+            }
+        }
+    }
+    return true
 }
