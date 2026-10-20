@@ -424,6 +424,22 @@ fn rewrite_fn(
         crate::text_tiers::visit_block_mut(
             body,
             &mut |expr| {
+                // **`self` handed on holds the rule**: the method or function
+                // it reaches reads the rule as a fact at its entry (D3), so a
+                // rule broken for a while is checked before the call.
+                let hands_self = match &*expr {
+                    Expr::MethodCall { receiver, .. } => is_self(interner, receiver),
+                    Expr::Call { args, .. } => args.iter().any(|a| is_self(interner, a)),
+                    _ => false,
+                };
+                if hands_self {
+                    let at = spans.get(&expr_id(expr)).copied().unwrap_or(span);
+                    let call = std::mem::replace(expr, Expr::LitNull(NodeId::fresh()));
+                    let mut stmts = asserts(interner, rules, type_name, &base, at, false);
+                    stmts.push(Spanned::new(Stmt::Expr(call), at));
+                    *expr = Expr::Block(Block { stmts }, NodeId::fresh());
+                    return;
+                }
                 let (Expr::Return(_, id) | Expr::Throw(_, id)) = expr else {
                     return;
                 };
@@ -640,4 +656,12 @@ fn changed_outside(
         });
     }
     changed.into_inner()
+}
+
+fn is_self(interner: &InternerContext, expr: &Expr) -> bool {
+    matches!(expr, Expr::Variable(n, _) if interner.resolve(*n) == "self")
+}
+
+fn expr_id(expr: &Expr) -> u32 {
+    crate::check::value_node(expr) as u32
 }

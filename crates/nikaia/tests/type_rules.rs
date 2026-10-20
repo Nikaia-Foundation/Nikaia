@@ -33,6 +33,12 @@ impl Piece {
     fn length(ref self) -> i64 {
         return self.end - self.start
     }
+    fn stretch(ref mut self, n: i64) -> i64 {
+        self.end += n
+        let was = self.length()
+        self.start -= n
+        return was
+    }
 }
 
 impl Ring {
@@ -151,6 +157,12 @@ fn a_method_that_changes_the_value_keeps_the_rule() {
         !body(&rust, "length").contains("assertion_failed"),
         "{rust}"
     );
+    // `self` handed on mid-way holds the rule: checked before the call, as
+    // `length` reads it as a fact.
+    let stretch = body(&rust, "stretch");
+    assert_eq!(stretch.matches("assertion_failed").count(), 2, "{stretch}");
+    let call = stretch.find("self.length()").expect("the call");
+    assert!(stretch[..call].contains("assertion_failed"), "{stretch}");
     assert!(!body(&rust, "at").contains("assertion_failed"), "{rust}");
     let (ok, out, _) = run("keeps", &RING.replace("WIDEN", "2"));
     assert!(ok);
