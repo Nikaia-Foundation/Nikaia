@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1142] — 2026-10-20
+
+**Par::fold's step and merge return the accumulator or change it in place (ADR-372 D9, decided)**
+- ADR-372 D9: a fold's `step` and `merge` each either return the accumulator or return nothing and change their first argument (`ref mut`); the result type says which, the two choose independently, any other result type is NK1102. Holds for `Par::fold`, `par_fold` and a grammar's `fold` (Part II 10.7, 12.6). Decided, not yet built (#717).
+
 ## [0.0.1141] — 2026-10-20
 
 **task::cores(), Par::fold(init, step, merge; order:, workers:), par_iter(piece:) (built, ADR-372 D1, D2, D4-D7)**

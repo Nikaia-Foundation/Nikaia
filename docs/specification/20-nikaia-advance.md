@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1141 (Draft)
+**Version:** 0.0.1142 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -1038,7 +1038,7 @@ let bright_pixels = pixels.par_iter()
     .collect()
 ```
 
-**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one; both are lambdas of the walk and are asked what any other is (`NK2209`, `NK2107`). An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
+**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one. Either may instead return nothing and change its first argument in place: a function of type `fn(ref mut A, T)` or `fn(ref mut A, A)`, or a lambda whose body returns nothing, whose first parameter is then `ref mut` (`fn(acc, m) { acc.record(m) }`). The result type says which, the two choose independently, and any other result type is `NK1102` ([ADR-372](adr/adr-372.md) D9). The same holds for `par_fold` and `fold` in a grammar (10.7). Both are lambdas of the walk and are asked what any other is (`NK2209`, `NK2107`). An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
 
 ```nika
 let summary = rows.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summary::merge)
