@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1134] — 2026-10-20
+
+**codegen-units in [build.<target>]; --cpu=LEVEL on build, run and test (built)**
+- `[build.<target>]` takes `codegen-units`, a whole number from 1, written into the generated profile only when set (ADR-002 D6, #692).
+- `--cpu=LEVEL` takes `x86-64` to `x86-64-v4` on x86-64 targets, `native` everywhere and a target's baseline; anything else fails naming the levels. It reaches every crate of the target, `std` included, through Cargo's `--config` rustflags, and is a dimension of the compiled `std`'s cache key; `native` is keyed by the CPU found.
+
 ## [0.0.1133] — 2026-10-20
 
 **spec: codegen-units is a key of [build.<target>], the CPU level is the build command's --cpu; no word is read past the end (ADR-002 D6, ADR-320 D13, #692)**
