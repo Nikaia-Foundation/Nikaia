@@ -181,6 +181,11 @@ pub struct CheckFacts {
     /// count of its parameters. That type's channel is the box, so the
     /// lowering hands over a closure that puts the function's own error in it.
     pub boxed_fn_values: collections::BTreeMap[i64, i64],
+    /// A declared function that cannot fail, named where a parameter of a
+    /// `fn(..) throws` type runs it (ADR-351 D4, #732): the argument and the
+    /// count of its parameters. The lowering hands over a closure that wraps
+    /// its result in `Ok`.
+    pub infallible_fn_values: collections::BTreeMap[i64, i64],
     pub pausing_lambdas: collections::BTreeMap[i64, FactPausing],
     pub paused_scopes: collections::BTreeSet[i64],
     /// The lambdas handed to `task::Scope::spawn` (ADR-346 D7): each fails in
@@ -365,6 +370,7 @@ impl CheckFacts {
             run_code_fails: collections::BTreeSet(),
             sync_functions_run_async: collections::BTreeMap(),
             boxed_fn_values: collections::BTreeMap(),
+            infallible_fn_values: collections::BTreeMap(),
             pausing_lambdas: collections::BTreeMap(),
             paused_scopes: collections::BTreeSet(),
             scope_tasks: collections::BTreeSet(),

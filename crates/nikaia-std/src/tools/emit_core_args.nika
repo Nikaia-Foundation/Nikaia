@@ -522,6 +522,30 @@ impl EmitState {
         // `fn(..) throws` parameter** (ADR-280 D9, #703): a closure that calls
         // it and puts its error in the box, `async` where the parameter may
         // pause.
+        // **A function that cannot fail, run by a `fn(..) throws` parameter**
+        // (ADR-351 D4, #732): a closure that calls it and hands its result
+        // over in an `Ok`, `async` where the parameter may pause.
+        let never_fails = self.facts.infallible_fn_values.get(node_key(arg)) ?? -1
+        if never_fails >= 0 {
+            let mut names: Vec[String] = []
+            for n in 0..<never_fails {
+                names.push(f"__nikaia_a{n}")
+            }
+            let joined = names.join(", ")
+            let key: String = (emit_arg_function_key(world, arg) ?? "").clone()
+            let pauses = key != "" && call_pauses(self.own_contracts, key)
+            if arity >= 0 || pauses {
+                out.push("async ")
+            }
+            out.push(f"|{joined}| Ok(")
+            host.expr(walk, out, arg, depth, inside, scope)
+            out.push(f"({joined})")
+            if pauses {
+                out.push(".await")
+            }
+            out.push(")")
+            return
+        }
         let boxed = self.emit_arg_into_the_box(world, arg)
         if boxed >= 0 {
             let mut names: Vec[String] = []

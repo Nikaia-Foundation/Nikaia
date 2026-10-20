@@ -1,0 +1,41 @@
+// #732 item 3: a `catch` on a call through a parameter of code opens the box
+// by the type each arm names (ADR-351 D4), and a function that cannot fail is
+// handed to such a parameter in an `Ok`.
+enum Bad { Oops }
+impl Error for Bad {
+    fn message(ref self) -> String { "oops" }
+}
+fn fail() throws {
+    throw Bad::Oops
+}
+fn quiet() {
+    println("fine")
+}
+fn guard(run: fn() throws) {
+    run() catch {
+        match error {
+            Bad::Oops => println("oops")
+        }
+    }
+}
+fn checked(n: i64) -> i64 throws {
+    if n > 0 {
+        throw Bad::Oops
+    }
+    return n
+}
+fn twice(n: i64) -> i64 {
+    return n * 2
+}
+fn tried(run: fn(i64) -> i64 sync throws, n: i64) -> i64 {
+    return run(n) catch {
+        match error {
+            Bad::Oops => -1
+        }
+    }
+}
+fn main() {
+    guard(fail)
+    guard(quiet)
+    println(f"{tried(checked, 1)} {tried(checked, 0)} {tried(twice, 4)}")
+}

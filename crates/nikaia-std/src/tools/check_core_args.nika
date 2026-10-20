@@ -147,6 +147,11 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     if declared_here && named && runs && wants_throwing_fn && found_throws {
         state.facts.boxed_fn_values.insert(id_of(arg) as i64, arity)
     }
+    // **And one that cannot fail** (ADR-351 D4, #732): its result goes into
+    // the `Ok` the type's channel wants.
+    if declared_here && named && runs && wants_throwing_fn && found_fn && !found_throws {
+        state.facts.infallible_fn_values.insert(id_of(arg) as i64, arity)
+    }
     // **A declared function, run by a parameter that may pause** (#516).
     if declared_here && named && runs && wants_pausing_fn && found_fn {
         state.facts.sync_functions_run_async.insert(id_of(arg) as i64, arity)

@@ -61,10 +61,6 @@ const KNOWN: &[(&str, &str)] = &[
     ),
     // Found by this sweep: #732.
     (
-        "d4e9a97dbeb5f651",
-        "#732 item 3, function_value_errors: a `catch` on a `fn() throws` parameter matches the boxed error by variant (E0308)",
-    ),
-    (
         "f109da5e437ff5cc",
         "#732 item 4, shape_bounds: a trait method `-> ref String` and its impl returning a literal disagree on the lifetime",
     ),
