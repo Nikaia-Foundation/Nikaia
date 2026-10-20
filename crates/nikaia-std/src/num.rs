@@ -243,6 +243,9 @@ pub trait BitCount {
     /// Whether the count is at least `width`, and the count's low bits, which
     /// are the count where it is in `0..width` and `0` where it is negative.
     fn split(self, width: u32) -> (bool, u32);
+    /// The count saturated to `0..=255`, `bzhi`'s index: every count at or
+    /// past a width (at most 64) stays at or past it.
+    fn index(self) -> u8;
 }
 
 macro_rules! signed_count {
@@ -252,6 +255,10 @@ macro_rules! signed_count {
                 #[inline(always)]
                 fn split(self, width: u32) -> (bool, u32) {
                     (self >= width as $t, self.max(0) as u32)
+                }
+                #[inline(always)]
+                fn index(self) -> u8 {
+                    self.clamp(0, 127) as u8
                 }
             }
         )*
@@ -265,6 +272,10 @@ macro_rules! unsigned_count {
                 #[inline(always)]
                 fn split(self, width: u32) -> (bool, u32) {
                     (self >= width as $t, self as u32)
+                }
+                #[inline(always)]
+                fn index(self) -> u8 {
+                    self.min(255) as u8
                 }
             }
         )*
@@ -280,6 +291,10 @@ impl<T: BitCount + Copy> BitCount for &T {
     fn split(self, width: u32) -> (bool, u32) {
         (*self).split(width)
     }
+    #[inline(always)]
+    fn index(self) -> u8 {
+        (*self).index()
+    }
 }
 
 /// **`x.low_bits(n)`, `x` with only its `n` lowest bits kept**
@@ -287,17 +302,42 @@ impl<T: BitCount + Copy> BitCount for &T {
 /// 0`, all where `n` is at least the width. On `u8`, `u32` and `u64`, a method
 /// because the program writes one; in the prelude so the call resolves.
 ///
-/// Branch-free: the mask below the count, then a select of all of `x` where
-/// the count reaches the width - about eight instructions where nothing is
-/// known of the count, fewer where its range is. LLVM folds the select into
-/// the mask, so this is not one `bzhi` at `x86-64-v3`: that is reached only
-/// through `std::arch`'s `_bzhi_u64`, which needs `unsafe`, and the forms
-/// LLVM does select `bzhi` for cost more instructions around it.
+/// Branch-free either way. Where the build has BMI2 (`x86-64-v3`) it is one
+/// `bzhi` of the count saturated to a byte, through the crate `low-bits`
+/// (ADR-371 D2), since `std::arch` asks for `unsafe`. Elsewhere it is the mask
+/// below the count, then a select of all of `x` where the count reaches the
+/// width - about eight instructions where nothing is known of the count, fewer
+/// where its range is.
 pub trait LowBits: Sized {
     /// `self` with only its `n` lowest bits kept.
     fn low_bits<C: BitCount>(self, n: C) -> Self;
 }
 
+#[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
+impl LowBits for u64 {
+    #[inline(always)]
+    fn low_bits<C: BitCount>(self, n: C) -> u64 {
+        low_bits::u64(self, n.index())
+    }
+}
+
+#[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
+impl LowBits for u32 {
+    #[inline(always)]
+    fn low_bits<C: BitCount>(self, n: C) -> u32 {
+        low_bits::u32(self, n.index())
+    }
+}
+
+#[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
+impl LowBits for u8 {
+    #[inline(always)]
+    fn low_bits<C: BitCount>(self, n: C) -> u8 {
+        low_bits::u32(u32::from(self), n.index()) as u8
+    }
+}
+
+#[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
 impl LowBits for u64 {
     #[inline(always)]
     fn low_bits<C: BitCount>(self, n: C) -> u64 {
@@ -307,6 +347,7 @@ impl LowBits for u64 {
     }
 }
 
+#[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
 impl LowBits for u32 {
     #[inline(always)]
     fn low_bits<C: BitCount>(self, n: C) -> u32 {
@@ -316,6 +357,7 @@ impl LowBits for u32 {
     }
 }
 
+#[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
 impl LowBits for u8 {
     #[inline(always)]
     fn low_bits<C: BitCount>(self, n: C) -> u8 {

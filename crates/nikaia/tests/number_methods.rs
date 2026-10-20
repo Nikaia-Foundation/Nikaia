@@ -236,7 +236,26 @@ fn rotations_are_described_and_lowered_with_any_count() {
 /// `u64`, a count of any integer type (a view of one in a loop), none at `n <=
 /// 0`, all at the width and past it. Lowered as the program wrote it, the trait
 /// in the prelude; and its value does not depend on the width, so no `NK1215`.
-const LOW_BITS: &str = "fn main() {\n    \
+///
+/// Then every count in `-70..=140` against the definition written out, the
+/// same at each CPU level (a mask and a select at the baseline, one `bzhi` at
+/// `x86-64-v3`).
+const LOW_BITS: &str = "fn keep64(a: u64, n: i64) -> u64 {\n    \
+     if n <= 0 {\n        return 0\n    }\n    \
+     if n >= 64 {\n        return a\n    }\n    \
+     a & ((1 << n) - 1)\n\
+     }\n\n\
+     fn keep32(a: u32, n: i64) -> u32 {\n    \
+     if n <= 0 {\n        return 0\n    }\n    \
+     if n >= 32 {\n        return a\n    }\n    \
+     a & ((1 << n) - 1)\n\
+     }\n\n\
+     fn keep8(a: u8, n: i64) -> u8 {\n    \
+     if n <= 0 {\n        return 0\n    }\n    \
+     if n >= 8 {\n        return a\n    }\n    \
+     a & ((1 << n) - 1)\n\
+     }\n\n\
+     fn main() {\n    \
      let a: u64 = 0x0123456789abcdef\n    \
      let b: u32 = 0x89abcdef\n    \
      let c: u8 = 0xa5\n    \
@@ -247,7 +266,16 @@ const LOW_BITS: &str = "fn main() {\n    \
      let k: u8 = 200\n    \
      let s: i32 = -1\n    \
      let wide: u64 = c.low_bits(4)\n    \
-     println(f\"{a.low_bits(m)} {a.low_bits(k)} {b.low_bits(s)} {wide}\")\n\
+     println(f\"{a.low_bits(m)} {a.low_bits(k)} {b.low_bits(s)} {wide}\")\n    \
+     let mut wrong = 0\n    \
+     let mut n = -70\n    \
+     while n <= 140 {\n        \
+     if a.low_bits(n) != keep64(a, n) {\n            wrong += 1\n        }\n        \
+     if b.low_bits(n) != keep32(b, n) {\n            wrong += 1\n        }\n        \
+     if c.low_bits(n) != keep8(c, n) {\n            wrong += 1\n        }\n        \
+     n += 1\n    \
+     }\n    \
+     println(f\"{wrong} wrong of 633\")\n\
      }\n";
 
 #[test]
@@ -267,7 +295,7 @@ fn low_bits_at_every_cpu_level() {
     let expected = "-5 0 0 0\n0 0 0 0\n4 15 15 5\n8 239 239 165\n12 3567 3567 165\n\
          32 2309737967 2309737967 165\n40 444691369455 2309737967 165\n\
          64 81985529216486895 2309737967 165\n70 81985529216486895 2309737967 165\n\
-         7 81985529216486895 0 5\n";
+         7 81985529216486895 0 5\n0 wrong of 633\n";
     for cpu in ["--cpu=x86-64", "--cpu=x86-64-v3"] {
         let dir = common::scratch_dir(&format!("low-bits{cpu}"));
         std::fs::create_dir_all(dir.join("src")).expect("src");

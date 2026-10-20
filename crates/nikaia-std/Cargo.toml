@@ -56,6 +56,8 @@ proven-index = { path = "../unsafe/proven-index" }
 # Which bytes of a block belong to a set, at the build's vector width
 # (ADR-375 D1): `bytes::ByteSet`'s searches.
 byte-blocks = { path = "../unsafe/byte-blocks" }
+# `x.low_bits(n)` as one `bzhi` where the build has BMI2 (ADR-371 D2).
+low-bits = { path = "../unsafe/low-bits" }
 # A child waited for with `wait4`, so `process::run` reports what that one
 # program used (ADR-368 D3).
 child-usage = { path = "../unsafe/child-usage" }
