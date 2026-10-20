@@ -10469,13 +10469,20 @@ impl CheckState {
         if !either && !view { return false; }
         let text = a_string_type();
         let mut lent: Vec<i64> = vec![];
+        let mut literals: Vec<i64> = vec![];
         let mut others_view = true;
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) { continue; }
             let ty = nikaia_std::index::or(self.arm_type_of(leaf), || Ty::Unknown);
-            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) { lent.push(node_key(leaf)); } else if !views_into_text(&ty, &text) { others_view = false; }
+            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) { lent.push(node_key(leaf)); } else if arm_leaves_a_text_literal(leaf) { literals.push(node_key(check_peeled(leaf))); } else if !views_into_text(&ty, &text) { others_view = false; }
         }
         if lent.is_empty() || !either && !others_view { return false; }
+        if !either {
+            for at in literals.iter() {
+                let at = nikaia_std::num::value(at);
+                let built = self.facts.owned_texts.remove(&at);
+            }
+        }
         for node in lent.iter() {
             let node = nikaia_std::num::value(node);
             self.facts.lent_reads.insert(node);
@@ -10780,6 +10787,8 @@ impl CheckState {
         }
     }
 }
+
+fn arm_leaves_a_text_literal(leaf: &Expr) -> bool { matches!(check_peeled(leaf), Expr::LitStr { .. }) }
 
 
 // --- check_arms.nika ---
@@ -53969,7 +53978,10 @@ fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &Prove
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, unaliased);
-            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition); }
+            if callee.is_some() {
+                let __keep_70425 = nikaia_std::tether::Keep::new();
+                prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition);
+            }
         },
         _ => { },
     }
@@ -58664,9 +58676,10 @@ struct Flows {
     changed: collections::BTreeSet<String>,
     viewed_arms: collections::BTreeSet<i64>,
     param_arm_into: collections::BTreeMap<i64, String>,
+    kept_through: collections::BTreeSet<(String, i64)>,
 }
 
-fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new() } }
+fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new(), kept_through: collections::BTreeSet::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 struct TierWalk {
@@ -60106,6 +60119,7 @@ fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_
     while at < args.len() as i64 && at < given.len() as i64 {
         if at < function.params.len() as i64 {
             let owner = TextOwner::Param(key.to_owned(), at);
+            kept_through_a_call(key, at, args, ask, walk);
             if tier_a_choice(nikaia_std::index::get(&args, nikaia_std::index::at(at))) && mixed(tier_of_kinds(nikaia_std::index::get(&given, nikaia_std::index::at(at)))) && plain_string(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
                 let word = seen(&owner, &no_path(), walk);
                 walk.unlent.insert(word);
@@ -61183,6 +61197,7 @@ fn merge_flows(into: &mut Flows, from: &Flows) {
         let node = nikaia_std::num::value(node);
         into.viewed_arms.insert(node.clone());
     }
+    for pair in from.kept_through.iter() { into.kept_through.insert(pair.clone()); }
     for (node, word) in from.param_arm_into.iter() {
         let node = nikaia_std::num::value(node);
         into.param_arm_into.insert(node.clone(), word.to_owned());
@@ -61682,6 +61697,7 @@ fn outlived_by_a_keeper(key: &str, at: i64, args: &[Expr], ask: &TierAsk<'_, '_,
 
 fn tier_kept_into(flows: &Flows) -> collections::BTreeSet<(String, i64)> {
     let mut out: collections::BTreeSet<(String, i64)> = collections::BTreeSet::new();
+    for pair in flows.kept_through.iter() { out.insert(pair.clone()); }
     for (from, to) in flows.param_into.iter() {
         let position = match match *nikaia_std::index::get(&flows.known, to) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -61694,6 +61710,30 @@ fn tier_kept_into(flows: &Flows) -> collections::BTreeSet<(String, i64)> {
         }
     }
     out
+}
+
+fn kept_through_a_call(key: &str, at: i64, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) {
+    let from: String = match handed_parameter(Some(nikaia_std::index::get(&args, nikaia_std::index::at(at))), ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let word = position_word(&TextOwner::Param(key.to_owned(), at), &no_path());
+    let reading = tier_keeping_read(word.to_owned(), walk);
+    let kept = walk.kept_into.to_owned();
+    for (to, other) in kept.iter() {
+        let other = nikaia_std::num::value(other);
+        if *to == word && other < args.len() as i64 {
+            let index = match own_parameter_index(nikaia_std::index::get(&args, nikaia_std::index::at(other)), ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            walk.flows.kept_through.insert((from.to_owned(), index));
+        }
+    }
+}
+
+fn own_parameter_index(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &TierWalk) -> Option<i64> {
+    let root = match tie_root(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let local = match tier_local(&root, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match declared.owner {
+        TextOwner::Param(_, index) => Some(index),
+        _ => None,
+    }
 }
 
 fn changed_keepers(a: &collections::BTreeSet<(String, i64)>, b: &collections::BTreeSet<(String, i64)>) -> collections::BTreeSet<String> {
@@ -67402,8 +67442,24 @@ fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collec
                 if root.is_some() && kept_views && rsrc_may_hold(unit, asked, &flow, &nikaia_std::index::or(root.as_deref(), || "").to_owned()) { rsrc_bind(flow, &nikaia_std::index::or(root.as_deref(), || "").to_owned(), &everything); }
             }
         }
+        for entry in contract.stores.iter() {
+            let parts: Vec<&str> = entry.split(':').collect::<Vec<_>>();
+            if parts.len() != 2 { continue; }
+            let place = rsrc_param_index(&signature, *nikaia_std::index::get(&parts, 0));
+            let source = rsrc_param_index(&signature, *nikaia_std::index::get(&parts, 1));
+            if place >= 0 && source >= 0 && place < args.len() as i64 && source < positional.len() as i64 { rsrc_store(asked, nikaia_std::index::get(&args, nikaia_std::index::at(place)), nikaia_std::index::get(&positional, nikaia_std::index::at(source)), flow); }
+        }
     }
     rsrc_callee(asked, known, &key, &positional, &everything)
+}
+
+fn rsrc_param_index(signature: &Signature, name: &str) -> i64 {
+    let mut at: i64 = 0;
+    for (named, _) in signature.params.iter() {
+        if named == name { return at; }
+        at += 1;
+    }
+    -1
 }
 
 fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeMap<String, ResultSrcKnown>, key: &str, positional: &[collections::BTreeSet<String>], everything: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {

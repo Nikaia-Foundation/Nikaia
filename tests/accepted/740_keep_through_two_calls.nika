@@ -1,0 +1,24 @@
+// A local handed to a parameter that hands it on to one that keeps it in
+// another argument's list, two and three calls deep: handed over, as one
+// kept a call deep is (#740, ADR-282 D7, D25).
+fn fill(a: String, mut into: Vec[String]) { into.push(a) }
+fn fill2(a: String, mut into: Vec[String]) { fill(a, into) }
+fn fill3(b: String, mut list: Vec[String]) { fill2(b, list) }
+fn outer(mut v: Vec[String]) {
+    let s = f"y{2}"
+    fill2(s, v)
+    let t = f"z{3}"
+    fill3(t, v)
+}
+fn main() {
+    let mut v: Vec[String] = Vec()
+    fill2("lit", v)
+    outer(v)
+    let mut w: Vec[String] = Vec()
+    let k = f"k{1}"
+    fill3(k, w)
+    println(k)
+    println(v.len())
+    println(w.len())
+    println(v[1])
+}

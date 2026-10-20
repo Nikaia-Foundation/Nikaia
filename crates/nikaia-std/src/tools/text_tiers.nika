@@ -531,10 +531,14 @@ struct Flows {
     /// choice handed to a parameter that keeps its text, by their nodes, and
     /// the parameter's word (#716).
     param_arm_into: collections::BTreeMap[i64, String],
+    /// The `String` parameters handed to a callee that keeps them in a place
+    /// of another of its parameters, where that one is a parameter of the
+    /// function walked too, with this one's index (#740).
+    kept_through: collections::BTreeSet[(String, i64)],
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet() }
 }
 
 struct TierWalk {
@@ -2430,6 +2434,7 @@ fn flow_args(key: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: r
     while at < args.len() && at < given.len() {
         if at < function.params.len() {
             let owner = TextOwner::Param(key.clone(), at)
+            kept_through_a_call(key, at, args, ask, walk)
             // **A choice of a view and text of its own handed to a `String`
             // parameter** is wrapped arm by arm into a mixed one: such a
             // parameter is not lent (#678), which would need each arm kept.
@@ -3798,6 +3803,9 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
     for node in from.viewed_arms {
         into.viewed_arms.insert(node.clone())
     }
+    for pair in from.kept_through {
+        into.kept_through.insert(pair.clone())
+    }
     for (node, word) in from.param_arm_into {
         into.param_arm_into.insert(node.clone(), word.clone())
     }
@@ -4429,6 +4437,11 @@ fn outlived_by_a_keeper(key: ref String, at: i64, args: ref Vec[Expr], ask: ref 
 /// their function** (#738): a list or a field of it, with its index.
 fn tier_kept_into(flows: ref Flows) -> collections::BTreeSet[(String, i64)] {
     let mut out: collections::BTreeSet[(String, i64)] = collections::BTreeSet()
+    // **And through a callee that keeps it so** (#740): followed one call
+    // further each round, so a chain of any depth settles.
+    for pair in flows.kept_through {
+        out.insert(pair.clone())
+    }
     for (from, to) in flows.param_into {
         let position = flows.known[to]?.clone() ?? continue
         if position.path.len() == 0 {
@@ -4442,6 +4455,34 @@ fn tier_kept_into(flows: ref Flows) -> collections::BTreeSet[(String, i64)] {
         }
     }
     return out
+}
+
+/// **A parameter handed to a callee that keeps it in another argument's
+/// place** (#740): where that argument is a parameter of the function walked
+/// too, the function keeps it there as well. The callee's places are read,
+/// so a change to them walks this unit again.
+fn kept_through_a_call(key: ref String, at: i64, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) {
+    let from: String = handed_parameter(args[at], ask, walk) ?? return
+    let word = position_word(TextOwner::Param(key.clone(), at), no_path())
+    let reading = tier_keeping_read(word.clone(), walk)
+    let kept = walk.kept_into.clone()
+    for (to, other) in kept {
+        if to == word && other < args.len() {
+            let index = own_parameter_index(args[other], ask, walk) ?? continue
+            walk.flows.kept_through.insert((from.clone(), index))
+        }
+    }
+}
+
+/// The index of the parameter of the function walked a place is rooted in.
+fn own_parameter_index(value: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> i64? {
+    let root = tie_root(value, ask) ?? return null
+    let local = tier_local(root, walk) ?? return null
+    let declared = local.declared ?? return null
+    return match declared.owner {
+        TextOwner::Param(_, index) => index,
+        else => null,
+    }
 }
 
 /// The parameters whose places kept into differ between two rounds.

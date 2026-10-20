@@ -2105,3 +2105,40 @@ fn a_local_kept_in_a_parameters_list_is_handed_over() {
         "{found:#?}"
     );
 }
+
+/// **A local handed through a parameter to one that keeps it in a list the
+/// caller's own parameter holds is handed over too** (#740 item 1, ADR-282
+/// D7, D25): the keep is followed through the chain of calls, so a later
+/// read of the local is `NK2105`'s, as one kept a call deep is.
+#[test]
+fn a_local_kept_through_two_calls_is_handed_over() {
+    let source = "fn fill(a: String, mut into: Vec[String]) { into.push(a) }\n\
+                  fn fill2(a: String, mut into: Vec[String]) { fill(a, into) }\n\
+                  fn outer(mut v: Vec[String]) {\n    let s = f\"y{2}\"\n    fill2(s, v)\n    println(s)\n}\n\
+                  fn main() {\n    let mut v: Vec[String] = Vec()\n    fill2(\"lit\", v)\n    outer(v)\n    println(v.len())\n}\n";
+    let found = findings(source);
+    assert!(
+        found.iter().any(|f| f.code == "NK2105"
+            && f.message.contains("`fill2`")
+            && f.help.iter().any(|h| h.contains("s.clone()"))),
+        "{found:#?}"
+    );
+}
+
+/// **A literal beside a field read through a borrowed parameter is a view
+/// of static text** (#740 item 2, ADR-282 D13): the result is views only,
+/// so it lends, and the literal stays `&'static str`.
+#[test]
+fn a_literal_arm_beside_a_lent_field_lends() {
+    let source = "struct Holder { name: String }\n\
+                  fn t(h: ref Holder, c: bool) -> String { if c { h.name } else { \"none\" } }\n\
+                  fn m(h: ref Holder, c: i64) -> String {\n    match c {\n        0 => h.name,\n        else => \"none\",\n    }\n}\n\
+                  fn main() {\n    let h = Holder { name: f\"n{1}\" }\n    println(t(h, true))\n    println(t(h, false))\n    println(m(h, 0))\n    println(m(h, 1))\n}\n";
+    runs("literal-beside-a-lent-field", source, "n1\nnone\nn1\nnone");
+    let rust = lowered(source, Build::default());
+    assert!(
+        rust.contains("fn t(h: &Holder, c: bool) -> &str {")
+            && !rust.contains("String::from(\"none\")"),
+        "{rust}"
+    );
+}

@@ -128,6 +128,7 @@ impl CheckState {
         }
         let text = a_string_type()
         let mut lent: Vec[i64] = []
+        let mut literals: Vec[i64] = []
         let mut others_view = true
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) {
@@ -136,12 +137,20 @@ impl CheckState {
             let ty = self.arm_type_of(leaf) ?? Ty::Unknown
             if ty == text && self.a_place_of_a_lent_parameter(world, leaf) {
                 lent.push(node_key(leaf))
+            } else if arm_leaves_a_text_literal(leaf) {
+                // **A literal is a view of static text** (ADR-282 D13, #740).
+                literals.push(node_key(check_peeled(leaf)))
             } else if !views_into_text(ty, text) {
                 others_view = false
             }
         }
         if lent.len() == 0 || (!either && !others_view) {
             return false
+        }
+        if !either {
+            for at in literals {
+                let built = self.facts.owned_texts.remove(at)
+            }
         }
         for node in lent {
             self.facts.lent_reads.insert(node)
@@ -574,5 +583,13 @@ impl CheckState {
             }
             self.note_mixed(world, whole, nullable)
         }
+    }
+}
+
+/// Whether an arm's leaf is a text literal.
+fn arm_leaves_a_text_literal(leaf: ref Expr) -> bool {
+    return match check_peeled(leaf) {
+        Expr::LitStr { .. } => true,
+        else => false,
     }
 }

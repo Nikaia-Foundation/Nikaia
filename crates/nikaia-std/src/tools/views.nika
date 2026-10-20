@@ -2187,8 +2187,36 @@ fn rsrc_call(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collec
                 }
             }
         }
+        // **A callee that keeps an argument in another's place keeps it in
+        // this function's place given there** (ADR-283 D27, #740):
+        // `fill(a, into)` inside `fill2(a, mut into)` keeps `a` in the
+        // caller's `into`, as a push would. Its `stores` are the round
+        // before's, so a chain settles one call further each round.
+        for entry in contract.stores {
+            let parts: Vec[ref String] = entry.split(":").collect()
+            if parts.len() != 2 {
+                continue
+            }
+            let place = rsrc_param_index(signature, parts[0])
+            let source = rsrc_param_index(signature, parts[1])
+            if place >= 0 && source >= 0 && place < args.len() && source < positional.len() {
+                rsrc_store(asked, args[place], positional[source], flow)
+            }
+        }
     }
     return rsrc_callee(asked, known, key, positional, everything)
+}
+
+// The index of a parameter of a signature by its name, or -1.
+fn rsrc_param_index(signature: ref Signature, name: ref String) -> i64 {
+    let mut at = 0
+    for (named, _) in signature.params {
+        if named == name {
+            return at
+        }
+        at += 1
+    }
+    return -1
 }
 
 // What a callee's result points into, mapped to the arguments it was given.

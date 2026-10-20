@@ -1012,18 +1012,19 @@ pub const PARSE_ERROR: &str = "ParseError";
 /// ever says more).
 fn write_result_sources(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
     // What a round reads of the columns it writes, to tell a round that would
-    // change nothing: `stores` is cleared before each, so a round reads only
-    // `borrows` and `returns`, and where they are what the round before read,
-    // the next would write the same again (#727).
-    let written = |ledger: &Ledger| -> Vec<(Vec<String>, String)> {
+    // change nothing: where `borrows`, `returns` and `stores` are what the
+    // round before read, the next would write the same again (#727). A
+    // round reads the `stores` the one before wrote, so a place kept through
+    // a chain of calls settles one call further each round (#740).
+    let written = |ledger: &Ledger| -> Vec<(Vec<String>, String, Vec<String>)> {
         ledger
             .functions
             .values()
-            .map(|c| (c.borrows.clone(), c.returns.clone()))
+            .map(|c| (c.borrows.clone(), c.returns.clone(), c.stores.clone()))
             .collect()
     };
     let mut before = written(ledger);
-    for round in 0..2 {
+    for round in 0..8 {
         if round > 0 {
             let after = written(ledger);
             if after == before {
@@ -1031,9 +1032,7 @@ fn write_result_sources(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger
             }
             before = after;
         }
-        for contract in ledger.functions.values_mut() {
-            contract.stores.clear();
-        }
+        let mut fresh: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for parsed in units.iter().copied() {
             let sources = crate::views::result_sources(parsed, ledger, library);
             for source in sources {
@@ -1044,10 +1043,11 @@ fn write_result_sources(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger
             }
             // **And what it keeps in a `mut` parameter's place** (D27).
             for stored in crate::views::places_stored(parsed, ledger, library) {
-                if let Some(contract) = ledger.functions.get_mut(&stored.key) {
-                    contract.stores = stored.stores;
-                }
+                fresh.insert(stored.key, stored.stores);
             }
+        }
+        for (key, contract) in ledger.functions.iter_mut() {
+            contract.stores = fresh.remove(key).unwrap_or_default();
         }
     }
 }
