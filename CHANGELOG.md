@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1144] — 2026-10-20
+
+**Par::fold, par_fold and a grammar's fold take an in-place step or merge (ADR-372 D9, built)**
+- A fold's `step` and `merge` are each judged by their result type: returning the accumulator replaces it; returning nothing changes the first argument in place (a lambda is lent it; a declared function takes it `mut` or `ref mut self`; a merge may take its second argument as `ref`). Any other result type, or nothing without a `mut` first parameter, is NK1102. Holds for `Par::fold`, `par_fold` and a grammar's `fold`.
+
 ## [0.0.1143] — 2026-10-20
 
 **a ?? whose left is a view and whose fallback owns text is NK1185 again**
