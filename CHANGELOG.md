@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1108] — 2026-10-20
+
+**A pattern of another type is a refusal; a fold's value start and a text match compile**
+- `match 5 { "a" => … }`, and a variant of another enum, are `NK1103`. A grammar `fold` started from a value such as `Tally { … }` or `0` is lowered as a function that makes that value, and a step that assigns to the accumulator's fields changes it in place. An owned `String` matched against text literals compiles (#704).
+
 ## [0.0.1107] — 2026-10-20
 
 **Lowering: the solver, proofs and diagnostics stop repeating work (#727)**
