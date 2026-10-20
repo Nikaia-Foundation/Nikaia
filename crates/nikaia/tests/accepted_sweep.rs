@@ -55,11 +55,6 @@ const KNOWN: &[(&str, &str)] = &[
         "a10522b5e28c4937",
         "#730 item 5: `Shared(Vec())` whose first use is a read (E0282)",
     ),
-    // Found by this sweep: #732.
-    (
-        "f109da5e437ff5cc",
-        "#732 item 4, shape_bounds: a trait method `-> ref String` and its impl returning a literal disagree on the lifetime",
-    ),
 ];
 
 /// How many programs share one `rustc`.

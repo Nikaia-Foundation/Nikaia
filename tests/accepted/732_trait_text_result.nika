@@ -1,0 +1,18 @@
+// #732 item 4: a trait's method that hands back a literal answers the
+// trait's declaration, not a narrower `'static` one.
+trait Named {
+    fn label(ref self) -> ref String
+    fn tag(ref self) -> String
+}
+struct Point { x: i64 }
+impl Named for Point {
+    fn label(ref self) -> ref String { return "point" }
+    fn tag(ref self) -> String { return "tag" }
+}
+fn describe[T: Named](value: ref T) -> ref String {
+    return value.label()
+}
+fn main() {
+    let p = Point { x: 1 }
+    println(f"{p.label()} {p.tag()} {describe(p)} {p.x}")
+}

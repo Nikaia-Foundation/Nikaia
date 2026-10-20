@@ -3689,6 +3689,12 @@ impl<'p> Emitter<'p> {
             return Err(anyhow!("not a function"));
         };
 
+        // **A trait's method answers the trait's declaration** (#732): its
+        // result is not widened to `'static`, which would be narrower than the
+        // trait's and refused by `rustc`. A bridged method's own half may be.
+        let answers_a_trait = owner
+            .as_ref()
+            .is_some_and(|o| o.declared_by.is_some() && o.bridged.is_none());
         let pad = "    ".repeat(depth);
         if *is_sync {
             out.push(&format!(
@@ -4394,6 +4400,7 @@ impl<'p> Emitter<'p> {
                         .enumerate()
                         .any(|(at, a)| self.carries_a_view(&a.ty) || lowered_as_a_view(at, a));
                 let widens = lifetimes == Lifetimes::Elided
+                    && !answers_a_trait
                     && self.carries_a_view(ty)
                     && (!borrows_from_something || nothing_borrowed);
                 let result = match (widens, kept) {
