@@ -277,3 +277,61 @@ fn a_keyword_standing_alone_no_longer_reads_as_a_variable() {
         );
     }
 }
+
+/// **`S {}` is a struct literal wherever an expression stands** (#726): after
+/// `throw`, after `return`, and as a `let`'s value, an empty pair of braces on
+/// the path's line builds the struct, exactly as `S { code: 1 }` does. The
+/// heads of `if`, `while`, `for` and `match` keep their brace as the body.
+#[test]
+fn an_empty_struct_literal_is_a_struct_literal() {
+    let source = "struct Bad { }
+fn f() throws { throw Bad {} }
+fn g() -> Bad { return Bad {} }
+fn h() {
+    let b = Bad {}
+    if ready {}
+    while ready {}
+    for x in items {}
+}
+";
+    let parsed = parse_to_ast(source).expect("parse failed");
+    let body = |i: usize| match &parsed.program.items[i].node {
+        Item::Fn { body, .. } => body,
+        other => panic!("expected a function, got {other:?}"),
+    };
+    let is_bad = |e: &Expr| matches!(e, Expr::StructLit { name, fields, .. } if parsed.text(*name) == "Bad" && fields.is_empty());
+
+    assert_eq!(body(1).stmts.len(), 1, "`throw Bad {{}}` is one statement");
+    match &body(1).stmts[0].node {
+        Stmt::Expr(Expr::Throw(value, _)) => assert!(is_bad(value), "{value:?}"),
+        other => panic!("expected a throw, got {other:?}"),
+    }
+    assert_eq!(body(2).stmts.len(), 1, "`return Bad {{}}` is one statement");
+    match &body(2).stmts[0].node {
+        Stmt::Return(Some(value)) => assert!(is_bad(value), "{value:?}"),
+        other => panic!("expected a return, got {other:?}"),
+    }
+    let h = body(3);
+    assert_eq!(h.stmts.len(), 4, "{:#?}", h.stmts);
+    match &h.stmts[0].node {
+        Stmt::Let { value, .. } => assert!(is_bad(value), "{value:?}"),
+        other => panic!("expected a let, got {other:?}"),
+    }
+    assert!(
+        matches!(&h.stmts[1].node, Stmt::Expr(Expr::If { cond, .. }) if matches!(&**cond, Expr::Variable(..)))
+    );
+    assert!(matches!(
+        &h.stmts[2].node,
+        Stmt::While {
+            cond: Expr::Variable(..),
+            ..
+        }
+    ));
+    assert!(matches!(
+        &h.stmts[3].node,
+        Stmt::For {
+            iter: Expr::Variable(..),
+            ..
+        }
+    ));
+}

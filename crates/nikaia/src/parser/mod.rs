@@ -4123,9 +4123,19 @@ grammar! {
         rule unsafe_expr -> Expr =
             KW_UNSAFE b:block -> { Expr::Unsafe(b, _state.user().id()) }
 
+        // **`S {}` is a struct literal too** (#726): a path and an empty pair
+        // of braces on its line build a struct without fields, wherever an
+        // expression stands - `throw Bad {}`, `return Bad {}`, `let b = Bad
+        // {}`. Without this alternative the path was read as a value and the
+        // braces as an empty block after it. The heads of `if`, `while`,
+        // `for` and `match` use `head_expr`, which has no struct literal, so
+        // their brace still opens the body.
         rule struct_lit -> Expr =
             name:type_name "{" fields:field_inits "}" -> {
                 Expr::StructLit { name, fields, id: _state.user().id() }
+            }
+          | name:type_name same_line "{" "}" -> {
+                Expr::StructLit { name, fields: Vec::new(), id: _state.user().id() }
             }
 
         rule field_inits -> Vec<FieldInit> =

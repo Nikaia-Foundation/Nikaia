@@ -185,3 +185,22 @@ fn main() {{
     );
     runs("std", &source, "caught");
 }
+
+/// **`throw Bad {}` throws a struct without fields** (#726): the empty braces
+/// are the literal, not a block after a type that has no value.
+#[test]
+fn an_empty_struct_literal_is_thrown() {
+    runs(
+        "empty-struct-throw",
+        r#"struct Bad { }
+impl Error for Bad {
+    fn message(ref self) -> String { "bad" }
+}
+fn f() throws { throw Bad {} }
+fn main() {
+    f() catch { println(f"caught {error}"); return }
+}
+"#,
+        "caught bad",
+    );
+}
