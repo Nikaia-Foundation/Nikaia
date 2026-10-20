@@ -61,10 +61,6 @@ const KNOWN: &[(&str, &str)] = &[
     ),
     // Found by this sweep: #732.
     (
-        "3315c3836a172b28",
-        "#732 item 1, nullable: `x ?? 1` with `x: f64?` lowers the fallback as an integer (E0308)",
-    ),
-    (
         "895410c570324e0b",
         "#732 item 2, function_value_errors: `job with { run: worse }` stores a `fn() throws` unwrapped (E0308)",
     ),

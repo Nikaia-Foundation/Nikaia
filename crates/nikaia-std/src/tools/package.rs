@@ -17505,6 +17505,15 @@ fn check_core_ops_not_plain(inner: &Ty) -> bool {
 
 fn check_core_ops_a_number_written(node: &Expr) -> bool { matches!(node, Expr::LitInt { .. } | Expr::LitFloat { .. }) }
 
+fn check_core_ops_number_written_kind(node: &Expr) -> String {
+    match node {
+        Expr::LitInt { .. } => "integer".to_owned(),
+        Expr::LitFloat { .. } => "float".to_owned(),
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Neg { check_core_ops_number_written_kind(expr) } else { "".to_owned() } },
+        _ => "".to_owned(),
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn check_core_ops_own_type(inner: &Ty) -> bool {
@@ -17624,6 +17633,16 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
             let mut given: String = format!("`{}`", other.text());
             if check_core_ops_a_number_written(fallback) { given = "a number".to_owned(); }
             state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec!["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5).".to_owned()], Some(format!("Write a `{}` as the fallback.", held))));
+        }
+        if held_kind == "number" && given_kind == "number" {
+            let held = inner.text();
+            let written = check_core_ops_number_written_kind(fallback);
+            let held_float = a_float_type(&inner);
+            if written == "integer" && held_float || written == "float" && !held_float {
+                let mut given: String = "an integer".to_owned();
+                if written == "float" { given = "a float".to_owned(); }
+                state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec!["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); an integer and a float are not made into one another (Part I 2.4).".to_owned()], Some(format!("Write a `{}` as the fallback.", held))));
+            } else if written == "" && !inner.is_a_view() && !other.is_a_view() { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
         }
     }
     if nullable && check_core_ops_nullable(&other) {

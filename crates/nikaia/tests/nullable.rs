@@ -2037,6 +2037,11 @@ fn a_fallback_of_another_kind_is_refused() {
         "fn main() {\n    let s: String? = null\n    let t = s ?? 5\n    println(f\"{t}\")\n}",
         "fn main() {\n    let n: i64? = null\n    let t = n ?? \"none\"\n    println(f\"{t}\")\n}",
         "fn main() {\n    let b: bool? = null\n    let t = b ?? 0\n    println(f\"{t}\")\n}",
+        // #732: an integer and a float are not made into one another.
+        "fn main() {\n    let x: f64? = null\n    let t = x ?? 1\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let x: f64? = null\n    println(f\"{x ?? -1}\")\n}",
+        "fn main() {\n    let n: i64? = null\n    let t = n ?? 1.5\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let n: i64 = 3\n    let x: f64? = null\n    let t = x ?? n\n    println(f\"{t}\")\n}",
     ] {
         let found = findings(source);
         assert!(
@@ -2050,7 +2055,10 @@ fn a_fallback_of_another_kind_is_refused() {
     for source in [
         "fn main() {\n    let s: String? = null\n    let t = s ?? \"none\"\n    println(t)\n}",
         "fn main() {\n    let n: i64? = null\n    let t = n ?? 5\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let x: f64? = null\n    let t = x ?? 1\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let x: f64? = null\n    let t = x ?? 1.0\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let x: f32? = null\n    let t = x ?? -1.5\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let n: i32? = null\n    let t = n ?? -5\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let m: i32 = 3\n    let n: i64? = null\n    let t = n ?? m\n    println(f\"{t}\")\n}",
         "fn f(s: String?) -> i64 {\n    let t = s ?? return 0\n    return t.len()\n}\nfn main() { println(f\"{f(null)}\") }",
     ] {
         let found = findings(source);

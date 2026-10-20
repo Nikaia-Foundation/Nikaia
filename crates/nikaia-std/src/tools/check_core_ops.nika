@@ -487,6 +487,17 @@ fn check_core_ops_a_number_written(node: ref Expr) -> bool {
     }
 }
 
+/// **Which number a fallback writes out**: `"integer"` for `5` or `-5`,
+/// `"float"` for `1.5` or `-1.5`, `""` for anything else (#732).
+fn check_core_ops_number_written_kind(node: ref Expr) -> String {
+    return match node {
+        Expr::LitInt { .. } => "integer".clone(),
+        Expr::LitFloat { .. } => "float".clone(),
+        Expr::Unary { op, expr, .. } => if op == UnaryOp::Neg { check_core_ops_number_written_kind(expr) } else { "".clone() },
+        else => "".clone(),
+    }
+}
+
 /// A type of the program's own, owned and without arguments: no number, no text.
 fn check_core_ops_own_type(inner: ref Ty) -> bool sync {
     return match inner {
@@ -671,6 +682,24 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
                 given = "a number".clone()
             }
             state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is {given}, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5).".clone()], f"Write a `{held}` as the fallback."))
+        }
+        // **And one number beside another** (Part I 2.4, 3.5, #732): an
+        // integer written out is not a float, a float written out is not an
+        // integer, and a number of another type goes in only where a `let`
+        // would take it.
+        if held_kind == "number" && given_kind == "number" {
+            let held = inner.text()
+            let written = check_core_ops_number_written_kind(fallback)
+            let held_float = a_float_type(inner)
+            if (written == "integer" && held_float) || (written == "float" && !held_float) {
+                let mut given: String = "an integer".clone()
+                if written == "float" {
+                    given = "a float".clone()
+                }
+                state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is {given}, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); an integer and a float are not made into one another (Part I 2.4).".clone()], f"Write a `{held}` as the fallback."))
+            } else if written == "" && !inner.is_a_view() && !other.is_a_view() {
+                state.expect_type(world, other, inner, span, "let", fn(found, wanted) { f"The fallback of this `??` is `{found}`, but the left side holds `{wanted}`." })
+            }
         }
     }
     // **`a ?? b` where `b` may be `null` too is a `T?`** (Part I 3.5).
