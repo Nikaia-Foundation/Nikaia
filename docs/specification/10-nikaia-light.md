@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1164 (Draft)
+**Version:** 0.0.1165 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -382,6 +382,11 @@ fn main() {
 ```
 
 On a `bool` they are refused (`NK1198`): `&&` and `||` join two `bool`s.
+
+**A rotation puts the bits it moves out back in at the other end**:
+`x.rotate_left(n)` and `x.rotate_right(n)` exist for `u8`, `u32` and `u64`. The
+count `n` may be of any integer type and is taken modulo the type's width, so
+no count aborts: `w.rotate_right(-1)` is `w.rotate_left(1)`.
 
 **One integer type becomes another without `as` where no value can be lost**
 ([ADR-285](adr/adr-285.md) D32). Two integer types have a **common type** when

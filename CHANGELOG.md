@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1165] — 2026-10-20
+
+**a fold's hot loop inlined alike at any unit count; text used as a map key checked on a miss**
+- What a fold's step calls is `#[inline(always)]` (ADR-296 D41), and `std`'s text hash is a call of its own, so a map's `entry` is inlined into the loop at 1 unit as at 16: 1BRC 273.9 -> 244.0 instructions a row at 1 unit, 231.3 -> 222.9 at 16 (#695). Decided: over a `Bytes`, text a grammar yields that the program uses only as a map's key is checked as UTF-8 where the map misses (ADR-366 D5, #664; built next).
+
 ## [0.0.1164] — 2026-10-20
 
 **vectors: simd::Lanes and simd::Fixed (provisional)**
