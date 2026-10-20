@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1118] — 2026-10-20
+
+**f32 is a whole type: as f32, comparisons and arithmetic**
+- `as f32` is accepted wherever `as f64` is (no more NK1122), and an `f32` compares with `==` (no more NK1188). A float written out beside an `f32` is one. A float written out beyond the `f32` range in `as f32` is NK1116, and a run-time `f64 as f32` aborts only when a finite value leaves the range. A float compared with another number type is NK1199. `f64 as u8/u32/u64` compiles (#736).
+
 ## [0.0.1117] — 2026-10-20
 
 **A function's contract is found as a view; owned fields keep no view (#727, #735)**
