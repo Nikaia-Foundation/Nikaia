@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1154] — 2026-10-20
+
+**@inline is built (ADR-370)**
+- `@inline`, `@inline(always)` and `@inline(never)` before a function or method lower to Rust's `#[inline]`, `#[inline(always)]` and `#[inline(never)]`, on both entries of a function with a precondition; a written one replaces the hint on a fold step's callee, so `@inline(never)` wins. Refused before anything else, a trait's method included (NK1235), written twice (NK1236), or with any argument but `always` or `never` (NK1293, new).
+
 ## [0.0.1153] — 2026-10-20
 
 **A shift's count is a goal of the walk (ADR-306 D18, decided)**
