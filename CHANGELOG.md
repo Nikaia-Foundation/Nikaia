@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1153] — 2026-10-20
+
+**A shift's count is a goal of the walk (ADR-306 D18, decided)**
+- ADR-306 D18, Part III 13.3: a shift with a count that is not a literal asks `0 <= k < width` as an index asks its bound; `remove-overflow-checks:on` writes it without its check where that is proved, and a count shown outside is an error as D15 says. Decided, not yet built.
+
 ## [0.0.1152] — 2026-10-20
 
 **A position find_all yields is a fact for the proof (ADR-375 D5, decided)**
