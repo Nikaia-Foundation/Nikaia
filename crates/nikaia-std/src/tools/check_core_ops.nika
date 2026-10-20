@@ -754,6 +754,19 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     if nullable && inner == check_core_ops_view("str") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(other) {
         state.facts.text_view_fallbacks.insert(id_of(expr) as i64)
     }
+    // **A name of text of its own beside a view of text** (#752): lent as
+    // `str`, the answer.
+    else if nullable && inner == check_core_ops_view("str") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_text_base(other) {
+        state.facts.text_mixed_fallbacks.insert(id_of(expr) as i64)
+        return check_core_ops_view("str")
+    }
+    // **A name that is a view of text beside text** (#752): the left may be
+    // `Option<String>` or a list's `Option<&String>` below, and the fallback
+    // `&str` or `&String`; each is made the `String` the answer is. A name on
+    // the left is the lending rule's, below.
+    if nullable && !place && inner == check_core_ops_named("String") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(other) {
+        state.facts.text_owned_fallbacks.insert(id_of(expr) as i64)
+    }
     // **And a name of the type the map holds** (ADR-279 D7).
     if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(inner, other) && moves(other) {
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)

@@ -603,6 +603,23 @@ impl EmitState {
             out.push("&")
         }
         host.expr(walk, out, value, depth, flow, scope)
+        // **A name of text of its own beside a view of text** (#752): lent
+        // as `str`.
+        if self.facts.text_mixed_fallbacks.contains(node_key(node)) {
+            out.push(", || std::convert::AsRef::<str>::as_ref(&")
+            host.expr(walk, out, fallback, depth, flow, scope)
+            out.push("))")
+            return
+        }
+        // **A name that is a view of text beside text** (#752): both sides
+        // are made `String`, whatever each is below, and never `.into()` with
+        // the type left open.
+        if self.facts.text_owned_fallbacks.contains(node_key(node)) {
+            out.push(".map(String::from), || String::from(")
+            host.expr(walk, out, fallback, depth, flow, scope)
+            out.push("))")
+            return
+        }
         // **Text an iterator found is made text of its own** before a literal
         // fallback: `Or` for both `Option<&String>` and `Option<String>` left
         // `"none".into()` ambiguous in rustc.

@@ -557,6 +557,46 @@ fn a_loop_variable_as_the_fallback_of_a_view_of_text_runs() {
     );
 }
 
+/// **A list's text read beside a name of text** (#752):
+/// `names.first() ?? n` was `|| n.into()` with `Option<&String>` on the left,
+/// and rustc could not settle the type. Both sides are made `String`; and a
+/// name of text of its own beside a view of `str` is lent as `str`.
+#[test]
+fn a_name_as_the_fallback_of_a_list_read_of_text_runs() {
+    runs_in(
+        "text-owned-fallback",
+        "fn f(names: ref Vec[String], n: String) -> String {\n\
+         \x20   (names.first() ?? n).clone()\n\
+         }\n\
+         fn k(names: ref Vec[String], n: String) -> String {\n\
+         \x20   let got = names.last() ?? n\n\
+         \x20   got.clone()\n\
+         }\n\
+         fn h(opt: String?, n: String) -> String {\n\
+         \x20   (opt ?? n).clone()\n\
+         }\n\
+         fn g(word: String, s: String) -> String {\n\
+         \x20   let n: String = f\"{s}!\"\n\
+         \x20   (word.strip_suffix(s) ?? n).clone()\n\
+         }\n\
+         fn main() {\n\
+         \x20   let mut v: Vec[String] = Vec()\n\
+         \x20   println(f(v, \"z\"))\n\
+         \x20   println(k(v, \"e\"))\n\
+         \x20   v.push(\"a\".clone())\n\
+         \x20   v.push(\"b\".clone())\n\
+         \x20   println(f(v, \"z\"))\n\
+         \x20   println(k(v, \"e\"))\n\
+         \x20   println(h(null, \"q\"))\n\
+         \x20   println(h(\"p\".clone(), \"q\"))\n\
+         \x20   println(g(\"ab\", \"b\"))\n\
+         \x20   println(g(\"ab\", \"c\"))\n\
+         }\n",
+        "z\ne\na\nb\nq\np\na\nc!\n",
+        |_| {},
+    );
+}
+
 /// **`p with { .. }` over a by-value parameter that is
 /// only read.** `..p` moves the whole of `p`, so the parameter stays a value
 /// rather than a `&T` that `..p` cannot take - for a `Copy` struct and for one

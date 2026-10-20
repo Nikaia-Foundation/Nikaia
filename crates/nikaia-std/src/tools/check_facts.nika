@@ -128,6 +128,13 @@ pub struct CheckFacts {
     /// The `??`s whose left side holds a view of text and whose fallback is
     /// a name that is a view of text (#719): the fallback is read as `str`.
     pub text_view_fallbacks: collections::BTreeSet[i64],
+    /// The `??`s whose left side holds a view of `str` and whose fallback is
+    /// a name of text of its own (#752): the fallback is lent as `str`.
+    pub text_mixed_fallbacks: collections::BTreeSet[i64],
+    /// The `??`s whose left side holds text, `String` or `&String` below,
+    /// and whose fallback is a name that is a view of text (#752): both sides
+    /// are made the `String` the answer is.
+    pub text_owned_fallbacks: collections::BTreeSet[i64],
     pub lent_map_fallbacks: collections::BTreeSet[i64],
     pub optional_fallbacks: collections::BTreeSet[i64],
     pub flat_reads: collections::BTreeSet[i64],
@@ -358,6 +365,8 @@ impl CheckFacts {
             copied_jump_reads: collections::BTreeSet(),
             view_coalesces: collections::BTreeSet(),
             text_view_fallbacks: collections::BTreeSet(),
+            text_mixed_fallbacks: collections::BTreeSet(),
+            text_owned_fallbacks: collections::BTreeSet(),
             lent_map_fallbacks: collections::BTreeSet(),
             optional_fallbacks: collections::BTreeSet(),
             flat_reads: collections::BTreeSet(),
