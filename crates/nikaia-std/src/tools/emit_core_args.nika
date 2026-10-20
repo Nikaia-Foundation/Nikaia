@@ -416,10 +416,21 @@ impl EmitState {
         if self.emit_arg_handed_on_changed(world, scope.function, callee, i, arg) {
             inside = inside.place()
         }
+        // **A fold's step or merge that changes its accumulator in place**
+        // (ADR-372 D9) runs as one that hands it back: a closure that lends
+        // the accumulator to it, typed by the fold before the lambda is.
+        let in_place = self.facts.in_place_folds.get(node) ?? 0
+        if in_place > 0 {
+            let second = if in_place == 2 { "&__nk_x" } else { "__nk_x" }
+            out.push(f"|mut __nk_acc, __nk_x| {{ nikaia_std::par::in_place(&mut __nk_acc, {second}, ")
+        }
         if future {
             self.emit_arg_future(world, walk, out, host, arg, i, depth, inside, scope)
         } else {
             self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)
+        }
+        if in_place > 0 {
+            out.push("); __nk_acc }")
         }
         // `.as_ptr()` and `.as_mut_ptr()`, which a `Vec`, an `Array` and text all
         // answer - so one call writes the address of whatever a caller lends a

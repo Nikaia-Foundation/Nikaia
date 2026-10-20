@@ -87,6 +87,7 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     if paused && !declared_here {
                         state.flow.paused_args.push(id)
                     }
+                    state.flow.lambda_tails.insert(id, came_to.clone())
                     let written: Ty = result?.clone() ?? Ty::Unknown
                     let mut out: Ty? = null
                     if !written.is_unknown() {
@@ -216,6 +217,88 @@ pub fn check_core_arguments_bound[H: CheckHost](mut state: CheckState, world: re
         at += 1
     }
     return out
+}
+
+/// **A fold's `step` or `merge`, returning or in place** (ADR-372 D9): its
+/// result type says which. One that hands back the accumulator replaces it;
+/// one that hands back nothing changes its first argument, which a declared
+/// function takes `mut` and a lambda is lent; any other result is `NK1102`.
+/// An in-place one is recorded by the argument for the lowering, with whether
+/// it takes the second argument as a view.
+pub fn check_core_fold_form(mut state: CheckState, world: ref CheckWorld, part: ref Expr, found: ref Ty, acc: ref Ty, owner: String, role: String, span: ref Span) sync {
+    let mut back: Ty = Ty::Unknown
+    let mut params: Vec[Ty] = []
+    match found {
+        Ty::Fn { params: given, result, .. } => {
+            back = result?.clone() ?? Ty::Tuple([])
+            params = given.clone()
+        }
+        else => {
+            return
+        }
+    }
+    let lambda = match part {
+        Expr::Closure { .. } => true,
+        else => false,
+    }
+    // A lambda's type is the parameter's; what its body ends with is its own.
+    if lambda {
+        back = state.flow.lambda_tails[id_of(part) as i64]?.clone() ?? back
+    }
+    if back.is_unknown() {
+        return
+    }
+    let at = check_span_at(world, part, span)
+    let wanted = acc.text()
+    if back != Ty::Tuple([]) {
+        if back.fits(acc) {
+            return
+        }
+        let written = back.text()
+        let mut have = (written.strip_prefix("ref ") ?? "").clone()
+        if have == "" {
+            have = written
+        }
+        state.findings.push(check_refusal("NK1102", at, f"`{owner}` expects `{role}` to hand back `{wanted}` or nothing, but it hands back `{have}`.", ["A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).".clone()], f"Hand back the `{wanted}`, or change it in place and hand back nothing.".clone()))
+        return
+    }
+    let mut lent = false
+    if !lambda {
+        let key = check_core_fold_form_key(world, part)
+        let contract = ledger_function(world, key) ?? return
+        let signature = contract.signature?.clone() ?? return
+        let mut changes = false
+        if signature.takes_a_receiver() {
+            changes = contract.mutates
+        } else if signature.params.len() > 0 {
+            changes = signature.mutable.contains(signature.params[0].0)
+        }
+        if !changes {
+            state.findings.push(check_refusal("NK1102", at, f"`{owner}` expects `{role}` to hand back `{wanted}`, or to change its first argument in place, but `{key}` does neither.", ["A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).".clone()], f"Hand back the `{wanted}`, or take the first parameter as `mut`.".clone()))
+            return
+        }
+        if params.len() > 1 {
+            lent = params[1].is_a_view()
+        }
+    }
+    let form = if lent { 2 } else { 1 }
+    state.facts.in_place_folds.insert(id_of(part) as i64, form)
+}
+
+/// The ledger's key of a function a fold names: `merge_into`, or
+/// `Summary::merge`.
+fn check_core_fold_form_key(world: ref CheckWorld, part: ref Expr) -> String {
+    return match part {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        Expr::Path(segments, _) => {
+            let mut names: Vec[String] = []
+            for segment in segments {
+                names.push(world.words.resolve(segment).clone())
+            }
+            names.join("::")
+        },
+        else => "".clone(),
+    }
 }
 
 /// The name a door over several locks is written with.

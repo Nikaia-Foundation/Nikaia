@@ -867,6 +867,13 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     }
     let callee: FnContract? = contract.clone()
     let found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
+    // **A fold's step and merge return the accumulator or change it in
+    // place** (ADR-372 D9): the result type says which.
+    if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
+        let acc: Ty = bound["A"]?.clone() ?? Ty::Unknown
+        check_core_fold_form(state, world, args[1], found[1], acc, "Par::fold", "step", span)
+        check_core_fold_form(state, world, args[2], found[2], acc, "Par::fold", "merge", span)
+    }
     state.flow.open_params = outer_params
     state.flow.lent_params = outer_lent
     state.open_walk_result(world, contract, args, items)

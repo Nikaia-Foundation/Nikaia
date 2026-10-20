@@ -157,6 +157,11 @@ pub struct CheckFlow {
     /// The lambdas of the call being walked that paused and were handed to a
     /// `std` entry (ADR-233 D1).
     pub paused_args: Vec[i64],
+    /// What the body of each lambda handed to a parameter of a function type
+    /// ends with, by the lambda, beside the type the parameter says it hands
+    /// back: a fold's step that ends with nothing changes its accumulator in
+    /// place (ADR-372 D9).
+    pub lambda_tails: collections::BTreeMap[i64, Ty],
     /// The next number to give a choice: one per `if` and per `match`.
     pub next_choice: i64,
     /// Which read an expression is, by the expression's id (ADR-293 D1).
@@ -306,6 +311,7 @@ impl CheckFlow {
             pausing_methods: collections::BTreeSet(),
             settled_methods: collections::BTreeSet(),
             paused_args: Vec(),
+            lambda_tails: collections::BTreeMap(),
             next_choice: 0,
             read_index: collections::BTreeMap(),
             pending_coalesces: Vec(),

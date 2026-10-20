@@ -92,6 +92,15 @@ fn on_workers<R: Send>(workers: usize, body: impl FnOnce() -> R + Send) -> R {
     pool_of(workers).install(body)
 }
 
+/// **A step or merge that changes its accumulator in place** (ADR-372 D9):
+/// `f(acc, x)`, called from the closure the lowering wraps it in,
+/// `|mut a, x| { in_place(&mut a, x, f); a }`. Its arguments come first, so
+/// a lambda handed as `f` is typed by the accumulator it is lent.
+#[inline(always)]
+pub fn in_place<A, T, F: FnOnce(&mut A, T)>(acc: &mut A, x: T, f: F) {
+    f(acc, x);
+}
+
 /// **The fold of a walk that is not on every core** - a list's own `iter()` at
 /// `user_parallelism = no` (ADR-372 D7): one accumulator, every element in
 /// order, `merge` never called. The options are checked and do nothing else.

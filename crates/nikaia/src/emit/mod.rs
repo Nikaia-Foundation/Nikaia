@@ -5375,7 +5375,27 @@ impl<'p> Emitter<'p> {
             }
         }
 
+        // **Any other step that changes the accumulator in place** (ADR-372
+        // D9): its result type said so, and it is lent the accumulator.
+        if self.in_place_fold(step).is_some() {
+            out.push("|__nk_acc: &mut _, __nk_x| { nikaia_std::par::in_place(__nk_acc, __nk_x, ");
+            self.expr(out, step, 0, Flow::PLAIN)?;
+            out.push("); }");
+            return Ok(());
+        }
+
         self.expr(out, step, 0, Flow::PLAIN)
+    }
+
+    /// How a fold's step or merge changes the accumulator in place, where its
+    /// result type says it does (ADR-372 D9): `1` takes the second argument by
+    /// value, `2` lent.
+    fn in_place_fold(&self, part: &Expr) -> Option<i64> {
+        self.s
+            .facts
+            .in_place_folds
+            .get(&(crate::ast::id_of(part) as i64))
+            .copied()
     }
 
     /// A fold's merge. `Summary::merge` names a method, and the `impl` says
@@ -5414,6 +5434,20 @@ impl<'p> Emitter<'p> {
                 "|mut a: {owner}, b| {{ a.{}({by_view}b); a }}",
                 self.text(*name)
             ));
+            return Ok(());
+        }
+
+        // **A declared function that changes its first argument in place**
+        // (ADR-372 D9): lent the accumulator, which its own signature types.
+        if let Some(form) = self.in_place_fold(merge)
+            && !matches!(merge, Expr::Closure { .. })
+        {
+            let second = if form == 2 { "&__nk_b" } else { "__nk_b" };
+            out.push(&format!(
+                "|mut __nk_a, __nk_b| {{ nikaia_std::par::in_place(&mut __nk_a, {second}, "
+            ));
+            self.expr(out, merge, 0, Flow::PLAIN)?;
+            out.push("); __nk_a }");
             return Ok(());
         }
 

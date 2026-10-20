@@ -39,6 +39,7 @@ use crate::contracts::{FieldContract, Ledger, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_consts;
+use nikaia_std::tools::check_core_args;
 use nikaia_std::tools::check_core_comptime;
 use nikaia_std::tools::check_core_expr;
 use nikaia_std::tools::check_core_leaves;
@@ -1443,25 +1444,42 @@ impl<'a> Checker<'a> {
             may_pause: true,
             may_fail: true,
         };
-        for (part, given) in [
-            (Some(&spec.step), vec![acc.clone(), item]),
-            (spec.merge.as_ref(), vec![acc.clone(), acc.clone()]),
+        let owner = if spec.merge.is_some() {
+            "par_fold"
+        } else {
+            "fold"
+        };
+        for (part, given, role) in [
+            (Some(&spec.step), vec![acc.clone(), item], "step"),
+            (spec.merge.as_ref(), vec![acc.clone(), acc.clone()], "merge"),
         ] {
             let Some(part) = part else { continue };
-            match part {
+            let found = match part {
                 Expr::Closure {
                     params,
                     mutable,
                     body,
                     ..
                 } => {
-                    self.lambda(params, mutable, body, &given, promised, span);
+                    let (tail, _) = self.lambda(params, mutable, body, &given, promised, span);
+                    Ty::Fn {
+                        params: given,
+                        result: Box::new(Some(tail)),
+                        is_sync: true,
+                        can_throw: false,
+                    }
                 }
                 _ => {
                     let _ = self.a_named_fold_part_that_may_pause(part, span);
-                    self.expr(part, span);
+                    self.expr(part, span)
                 }
-            }
+            };
+            // **Returning or in place, by the result type** (ADR-372 D9).
+            self.nikaia(|state, world, _| {
+                check_core_args::check_core_fold_form(
+                    state, world, part, &found, &acc, owner, role, span,
+                )
+            });
         }
     }
 

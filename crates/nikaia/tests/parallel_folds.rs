@@ -236,3 +236,206 @@ fn a_folds_lambdas_are_asked_what_a_walks_are() {
     let found = findings(sharing);
     assert!(found.iter().any(|f| f.code == "NK2107"), "{found:#?}");
 }
+
+/// **A step and a merge that return the accumulator or change it in place**
+/// (ADR-372 D9), in every pairing, by a lambda and by a declared function,
+/// at both orders: each line is the returning form's answer.
+const IN_PLACE: &str = r#"use std::par
+
+struct Summary {
+    n: i64,
+    total: i64,
+}
+
+impl Summary {
+    pub fn() -> Summary sync {
+        return Summary { n: 0, total: 0 }
+    }
+
+    pub fn record(ref mut self, r: i64) {
+        self.n += 1
+        self.total += r
+    }
+
+    pub fn plus(self, r: i64) -> Summary {
+        return Summary { n: self.n + 1, total: self.total + r }
+    }
+
+    pub fn merge(ref mut self, other: Summary) {
+        self.n += other.n
+        self.total += other.total
+    }
+
+    pub fn joined(self, other: Summary) -> Summary {
+        return Summary { n: self.n + other.n, total: self.total + other.total }
+    }
+}
+
+fn add_into(mut acc: Summary, r: i64) {
+    acc.n += 1
+    acc.total += r
+}
+
+fn merge_ref(mut a: Summary, b: ref Summary) {
+    a.n += b.n
+    a.total += b.total
+}
+
+fn main() {
+    let mut xs: Vec[i64] = []
+    for i in 0..<100_000 {
+        xs.push(i)
+    }
+    let returning = xs.par_iter().fold(Summary, fn(acc, r) { acc.plus(r) }, Summary::joined)
+    println(f"{returning.n} {returning.total}")
+    let both = xs.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summary::merge)
+    println(f"{both.n} {both.total}")
+    let any = xs.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summary::merge; order: par::Order::Any)
+    println(f"{any.n} {any.total}")
+    let step_only = xs.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summary::joined; order: par::Order::Any)
+    println(f"{step_only.n} {step_only.total}")
+    let merge_only = xs.par_iter().fold(Summary, fn(acc, r) { acc.plus(r) }, Summary::merge)
+    println(f"{merge_only.n} {merge_only.total}")
+    let declared = xs.par_iter().fold(Summary, add_into, merge_ref; workers: 2)
+    println(f"{declared.n} {declared.total}")
+    let fields = xs.par_iter().fold(Summary, fn(acc, r) {
+        acc.n += 1
+        acc.total += r
+    }, fn(a, b) { a.merge(b) }; order: par::Order::Any)
+    println(f"{fields.n} {fields.total}")
+}
+"#;
+
+/// **The same fold over a grammar's frames**: a `par_fold` whose step and
+/// merge are declared functions that change the accumulator in place.
+const GRAMMAR_IN_PLACE: &str = r#"grammar Nums {
+    @frame(boundary: "\n")
+    rule LINE -> i64 = d:dec[i64](digit+) frame_end { d }
+
+    entry rule file -> Summary = par_fold(LINE, Summary, add_into, merge_ref)
+}
+
+struct Summary {
+    n: i64,
+    total: i64,
+}
+
+impl Summary {
+    pub fn() -> Summary sync {
+        return Summary { n: 0, total: 0 }
+    }
+}
+
+fn add_into(mut acc: Summary, r: i64) {
+    acc.n += 1
+    acc.total += r
+}
+
+fn merge_ref(mut a: Summary, b: ref Summary) {
+    a.n += b.n
+    a.total += b.total
+}
+
+fn main() {
+    let mut text = ""
+    for i in 0..<100_000 {
+        text = text + f"{i}\n"
+    }
+    let s = Nums::file(text) catch { Summary() }
+    println(f"{s.n} {s.total}")
+}
+"#;
+
+/// **D9**: every pairing gives the returning form's answer, at both settings
+/// and both orders, and an in-place part runs lent the accumulator.
+#[test]
+fn a_fold_that_changes_its_accumulator_in_place_is_the_returning_fold() {
+    let dir = common::scratch_dir("parallel-folds-in-place");
+    let expected = format!("100000 {}", (0..100_000_i64).sum::<i64>());
+    for parallel in ["no", "yes"] {
+        let (binary, rust) = build(&dir.join(parallel), IN_PLACE, parallel);
+        assert!(rust.contains("nikaia_std::par::in_place("), "{rust}");
+        let out = run(
+            &binary,
+            &dir.join(format!("run-{parallel}")),
+            Some("user-pool = 3\n"),
+        );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            out.status.success(),
+            "{stdout}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let lines: Vec<&str> = stdout.lines().collect();
+        assert_eq!(lines, vec![expected.as_str(); 7], "at {parallel}");
+
+        let (binary, rust) = build(
+            &dir.join(format!("grammar-{parallel}")),
+            GRAMMAR_IN_PLACE,
+            parallel,
+        );
+        assert!(rust.contains("nikaia_std::par::in_place("), "{rust}");
+        let out = run(
+            &binary,
+            &dir.join(format!("run-grammar-{parallel}")),
+            Some("user-pool = 3\n"),
+        );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            out.status.success(),
+            "{stdout}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(stdout.trim(), expected, "at {parallel}");
+    }
+}
+
+/// **D9: any other result type is `NK1102`**, as is a declared function that
+/// hands back nothing and does not take the accumulator `mut`.
+#[test]
+fn a_step_that_hands_back_something_else_is_refused() {
+    let text = "struct T {\n\
+         \x20   n: i64,\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let xs: Vec[i64] = [1, 2]\n\
+         \x20   let s = xs.par_iter().fold(fn { T { n: 0 } }, fn(n, x) { \"a\" }, fn(a, b) { T { n: a.n + b.n } })\n\
+         \x20   println(f\"{s.n}\")\n\
+         }\n";
+    let found = findings(text);
+    assert!(found.iter().any(|f| f.code == "NK1102"), "{found:#?}");
+    let merge = "struct T {\n\
+         \x20   n: i64,\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let xs: Vec[i64] = [1, 2]\n\
+         \x20   let s = xs.par_iter().fold(fn { T { n: 0 } }, fn(t, x) { T { n: t.n + x } }, fn(a, b) { \"b\" })\n\
+         \x20   println(f\"{s.n}\")\n\
+         }\n";
+    let found = findings(merge);
+    assert!(found.iter().any(|f| f.code == "NK1102"), "{found:#?}");
+    let unchanged = "struct T {\n\
+         \x20   n: i64,\n\
+         }\n\
+         \n\
+         fn look(t: T, x: i64) {\n\
+         \x20   println(f\"{t.n} {x}\")\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let xs: Vec[i64] = [1, 2]\n\
+         \x20   let t = xs.par_iter().fold(fn { T { n: 0 } }, look, fn(a, b) { T { n: a.n + b.n } })\n\
+         \x20   println(f\"{t.n}\")\n\
+         }\n";
+    let found = findings(unchanged);
+    assert!(found.iter().any(|f| f.code == "NK1102"), "{found:#?}");
+    let fine = "fn main() {\n\
+         \x20   let xs: Vec[i64] = [1, 2]\n\
+         \x20   let s = xs.par_iter().fold(fn { 0 }, fn(n, x) { n + x }, fn(a, b) { a + b })\n\
+         \x20   println(f\"{s}\")\n\
+         }\n";
+    let found = findings(fine);
+    assert!(found.is_empty(), "{found:#?}");
+}

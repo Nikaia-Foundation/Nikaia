@@ -304,6 +304,10 @@ pub struct CheckFacts {
     /// `fold_merged` below, which a list's `iter()` at `no` has as well as a
     /// walk on every core, beside the language below's own two-argument `fold`.
     pub par_folds: collections::BTreeSet[i64],
+    /// **A fold's step or merge that changes its accumulator in place**
+    /// (ADR-372 D9), by the argument: `1` takes the second argument by value,
+    /// `2` lent. The lowering wraps it in `|mut a, x| { f(&mut a, x); a }`.
+    pub in_place_folds: collections::BTreeMap[i64, i64],
     /// The receivers of a `drain()` that stay the caller's - rooted in a `mut`
     /// parameter or in `self` under `ref mut self` - which it empties (#707).
     pub kept_drains: collections::BTreeSet[i64],
@@ -472,6 +476,7 @@ impl CheckFacts {
             byte_copies: collections::BTreeSet(),
             map_drains: collections::BTreeSet(),
             par_folds: collections::BTreeSet(),
+            in_place_folds: collections::BTreeMap(),
             kept_drains: collections::BTreeSet(),
             kept_byte_fields: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),

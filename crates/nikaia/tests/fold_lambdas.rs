@@ -220,3 +220,22 @@ fn nothing_in_the_corpus_is_newly_refused() {
         "the corpus still holds programs that write a fold, and this found {looked_at}"
     );
 }
+
+/// **A grammar's step and merge hand back the accumulator or nothing**
+/// ([ADR-372](../../../docs/specification/adr/adr-372.md) D9): any other
+/// result type is `NK1102`.
+#[test]
+fn a_step_or_merge_that_hands_back_something_else_is_refused() {
+    assert_eq!(
+        codes("entry rule a -> i64 = fold(N, zero, fn(acc, m) { \"a\" })"),
+        ["NK1102"],
+        "the step"
+    );
+    assert_eq!(
+        codes(
+            "entry rule a -> i64 = par_fold(N, zero, fn(acc, m) { acc + m }, fn(a, b) { \"b\" })"
+        ),
+        ["NK1102"],
+        "the merge"
+    );
+}
