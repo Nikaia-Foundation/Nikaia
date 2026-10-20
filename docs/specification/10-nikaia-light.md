@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1127 (Draft)
+**Version:** 0.0.1128 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -745,8 +745,8 @@ marks the construct as a place where code appears.
 
 ### 2.6. Text: Bytes, Scalars and Graphemes
 
-Text is UTF-8, and a position in it is a byte position
-([ADR-320](adr/adr-320.md)). A text is read through a **view** that names what
+Text is UTF-8 ([ADR-320](adr/adr-320.md)), and a position in it is a
+`text::Pos` ([ADR-374](adr/adr-374.md)). A text is read through a **view** that names what
 it counts:
 
 | view | an element | reads |
@@ -766,23 +766,65 @@ let field = record.bytes[0..<8]                     // eight bytes of a fixed fo
 for c in name.scalars { if c == 'ä' { … } }
 ```
 
-**A position the text hands out cuts it without a view.** `s.find(needle; from:
-i64) -> i64?` gives the byte position of the first match at or after `from`
-(default `0`), or `null`; `s.rfind(needle) -> i64?` gives the last. That
-position, a grammar's match in the text, either end of the text (an open end,
-`[..<p]` or `[p..]`), and such a position moved by the byte length of a text
-literal, cut the text they came from:
+**A position in a text is a `text::Pos`, a boundary in that one text.** It
+comes from the text: `s.start()`, `s.end()`, a match, a move, a grammar run
+over the text. No number becomes one, and it takes no arithmetic; two
+positions of one text compare with `<` and `==`. Below the language it is a
+byte offset.
+
+**A search gives a match.** `s.find(needle; from: text::Pos) -> text::Match?`
+finds the first match at or after `from` (default `s.start()`), `s.rfind(needle)
+-> text::Match?` the last. A match has `start` and `end`, positions of `s`, and
+`m.text()`, the matched text.
+
+**A text is cut by name, at its own positions:** `s.before(p)`, `s.after(p)`,
+`s.between(p, q)`, and `s.split_at(p)` for the first two at once. Each is a
+view of `s`. A text takes no `[…]`. `between` with `q` before `p` stops the
+program.
 
 ```nika
-let sep = line.find(";") ?? return
-let name = line[..<sep]
-let rest = line[sep + 1..]
+let m = line.find(";") ?? return
+let name = line.before(m.start)
+let rest = line.after(m.end)
 ```
 
-A number the program makes up does not: `s[0..<10]` is refused (`NK1214`) and
-says the view - `s.bytes[0..<10].text()` for bytes, `s.graphemes.take(10)` for
-what a reader sees. So is a position from one text used on another. A cut inside
-a scalar stops the program.
+**A position moves only in a unit it names:** `p.forward(scalars: n)`,
+`p.forward(graphemes: n)`, `p.forward(bytes: n)`, and `back` with the same
+options. Each gives a `text::Pos?` of the same text, `null` past either end
+and, for `bytes:`, inside a scalar. Exactly one option is written (`NK1285`).
+
+```nika
+let s = "abcdefg"
+let m = s.find("ab") ?? return
+let q = m.end.forward(scalars: 4) ?? return
+println(s.between(m.start, q))                    // abcdef
+```
+
+A number is reached through a view: `s.before(p).bytes.len()` is the byte
+offset of `p`, `s.before(p).scalars.count()` its scalar count.
+
+**A position cuts, moves and searches only the text it came from.** The
+compiler keeps which text that is as it keeps a view's sources (6.6), through
+parameters and results. A position of another text, or of a text chosen at
+run time, is refused (`NK1214`); so is a number, and the help names
+`forward` and the view. A position of `row = t.between(k, e)` is one of
+`row`, not of `t`. A cut at positions is not checked when the program runs.
+
+**A position is kept in a `text::Cursor`, never in a field** (`NK1284`). A
+cursor is a text and a position in it: `text::Cursor(t)` stands at
+`t.start()`; `c.at()` is the position, `c.go(p)` sets it to one of the same
+text; `c.until(needle) -> ref String?` is the text from the position to the
+next `needle` and moves past it, or `null` without moving where none follows;
+`c.rest()` is the text from the position, `c.text()` the whole text.
+
+```nika
+let mut c = text::Cursor(t)
+while true {
+    let row = c.until("\n") ?? break
+    let (name, temp) = row.split_once(";") ?? continue
+    …
+}
+```
 
 **A `Bytes` is one run of bytes, whatever holds its memory:** what it allocated, a `Vec[u8]` handed over with `Bytes(v)`, which copies nothing, or a mapped file (`fs::Mapped` is a `Bytes`, Part III 17.2). It reads the same in each case and is handed on by a count. A `ref Bytes` that a function only reads takes any of them, and a text's `s.bytes`.
 

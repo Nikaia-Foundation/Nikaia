@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1127 (Draft)
+**Version:** 0.0.1128 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -620,8 +620,8 @@ and `rule WS = "" { }` skips nothing.
 | `until(p)` | everything up to `p`, not consuming `p`; an error where `p` never comes | text |
 | `text(p)` | `p`, handing back the text it covered instead of its value | text |
 | `bytes(p)` | `p`, handing back the bytes it covered, unchecked | a view of the input's bytes |
-| `span(p)` | `p`, handing back the byte range it covered | a `Span` (two `u32`) |
-| `here` | the position, consuming nothing | a `u32` |
+| `span(p)` | `p`, handing back the range it covered | over text a `text::Match` of the input; over `Bytes` a `Span` (two `u32`) |
+| `here` | the position, consuming nothing | over text a `text::Pos` of the input; over `Bytes` a `u32` |
 | `same_line` | nothing; fails where the whitespace skipped just before this position held a line break | nothing |
 | `dec[T](p)` | `p`, its text read as the number type `T`; an error where it does not fit | `T` |
 | `intern(p)`, `ident` | `p`'s text interned (10.6); `ident` is an identifier, interned | a symbol |

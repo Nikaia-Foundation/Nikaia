@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1128] — 2026-10-20
+
+**spec: a text position is a text::Pos; find gives a Match, a text is cut by before/after/between (ADR-374, #743)**
+- Part I 2.6: a position in a text is a `text::Pos`, a boundary in that one text, tracked as a view's sources are. `find` and `rfind` give a `text::Match` (`start`, `end`); a text is cut by `before`, `after`, `between` and `split_at`, never with `[…]`; a position moves only in a named unit (`forward`/`back` with `scalars:`, `graphemes:` or `bytes:`); it is kept in a `text::Cursor`, not a field. Part II: a grammar over text hands out `text::Pos` and `text::Match`. Part III: `NK1214` reworded, `NK1284`, `NK1285` (ADR-374, replaces ADR-320 D5, #743).
+
 ## [0.0.1127] — 2026-10-20
 
 **A map takes its types from what is written into it**
