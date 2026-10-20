@@ -148,28 +148,23 @@ impl EmitState {
     /// Which arguments of `callee` are handles to a shared value: its contract
     /// in this unit's ledger or `std`'s, by name or by the last segment.
     pub fn takes_a_handle(ref self, world: ref EmitWorld, callee: ref String) -> Vec[bool] {
-        let mut found = self.handles_in(self.own_contracts, callee)
+        let mut found = self.handles_in(self.own_contracts, self.own_methods, callee)
         if found == null {
-            found = self.handles_in(world.library, callee)
+            found = self.handles_in(world.library, self.library_methods, callee)
         }
         return found ?? []
     }
 
-    fn handles_in(ref self, ledger: ref Ledger, callee: ref String) -> Vec[bool]? {
-        let suffix = f"::{callee}"
+    fn handles_in(ref self, ledger: ref Ledger, index: ref MethodIndex, callee: ref String) -> Vec[bool]? {
+        // The first key in key order that ends in `::{callee}`, from the
+        // ledger's index rather than a scan of every key (#727).
         let mut found: String = callee.clone()
-        let mut have = ledger.functions.contains_key(callee)
-        if !have {
-            for key in ledger.functions.keys() {
-                if key.ends_with(ref suffix) {
-                    found = key.clone()
-                    have = true
-                    break
-                }
+        if !ledger.functions.contains_key(callee) {
+            let ends = method_keys(index, callee)
+            if ends.len() == 0 {
+                return null
             }
-        }
-        if !have {
-            return null
+            found = ends[0].clone()
         }
         let held = ledger.functions.get(found) ?? return null
         let signature = held.signature?.clone() ?? return null

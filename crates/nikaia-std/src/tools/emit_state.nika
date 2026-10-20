@@ -55,6 +55,8 @@ pub struct EmitState {
     pub own_contracts: Ledger,
     /// `own_contracts`' functions by a method's name.
     pub own_methods: MethodIndex,
+    /// The library's functions by a method's name.
+    pub library_methods: MethodIndex,
     /// A described crate's contracts (ADR-290).
     pub described: Ledger,
     /// The structs and enums that hold a view, and so take a lifetime.

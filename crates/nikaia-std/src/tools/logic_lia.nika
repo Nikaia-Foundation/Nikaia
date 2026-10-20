@@ -257,9 +257,6 @@ pub fn lg_terms_cmp(a: ref collections::BTreeMap[String, i64], b: ref collection
     return 0
 }
 
-fn lg_lin_equal(a: ref LgLin, b: ref LgLin) -> bool {
-    return a.constant == b.constant && lg_terms_cmp(a.terms, b.terms) == 0
-}
 
 /// A formula over `lin <= 0` atoms, with negation already pushed inward.
 enum LgFormula {
@@ -641,11 +638,18 @@ enum LgClosed {
 /// own where tightening changed it.
 fn lg_tighten_step(bound: ref LgLin, mut steps: Vec[LgStep], ranks: ref collections::BTreeMap[String, i64]) -> LgHeld {
     let made = steps.len() - 1
+    // Tightening changes the bound exactly where its coefficients have a
+    // common divisor above one (`lg_tightened`): asked first, so an unchanged
+    // bound is neither rebuilt nor compared (#727).
+    let mut g = 0
+    for (_, k) in bound.terms {
+        g = lg_gcd(g, k.abs())
+    }
+    if g <= 1 {
+        return LgHeld { lin: bound.clone(), step: made, form: lg_form_of(bound.terms, ranks) }
+    }
     let tight = lg_tightened(bound)
     let form = lg_form_of(tight.terms, ranks)
-    if lg_lin_equal(tight, bound) {
-        return LgHeld { lin: tight, step: made, form: form }
-    }
     steps.push(LgStep::Tighten(made))
     return LgHeld { lin: tight, step: steps.len() - 1, form: form }
 }
@@ -694,44 +698,23 @@ fn lg_place_before(held: ref Vec[LgHeld], b: i64, a: i64) -> bool {
 
 /// Of the bounds on one form only the strongest counts: `form + c <= 0` with the
 /// largest `c`. Of `held`, the places `places` names, sorted by form, then by
-/// constant, largest first - stably: a merge sort from the bottom up that
-/// moves numbers, not bounds.
+/// constant, largest first - stably, moving numbers, not bounds.
 fn lg_sorted_places(held: ref Vec[LgHeld], places: ref Vec[i64]) -> Vec[i64] {
-    let n = places.len()
-    let mut from = places.clone()
-    let mut width = 1
-    while width < n {
-        let mut out: Vec[i64] = []
-        let mut start = 0
-        while start < n {
-            let middle = if start + width < n { start + width } else { n }
-            let end = if start + 2 * width < n { start + 2 * width } else { n }
-            let mut i = start
-            let mut j = middle
-            while i < middle && j < end {
-                // The right one goes first only where it is strictly before.
-                if lg_place_before(held, from[j], from[i]) {
-                    out.push(from[j])
-                    j += 1
-                } else {
-                    out.push(from[i])
-                    i += 1
-                }
-            }
-            while i < middle {
-                out.push(from[i])
-                i += 1
-            }
-            while j < end {
-                out.push(from[j])
-                j += 1
-            }
-            start = end
+    // An insertion sort in one list: a place moves left only past one it is
+    // strictly before, so places of one form and constant keep their order.
+    let mut out = places.clone()
+    let mut i = 1
+    while i < out.len() {
+        let x = out[i]
+        let mut j = i
+        while j > 0 && lg_place_before(held, x, out[j - 1]) {
+            out[j] = out[j - 1]
+            j -= 1
         }
-        from = out
-        width = width * 2
+        out[j] = x
+        i += 1
     }
-    return from
+    return out
 }
 
 /// Fourier-Motzkin with integer tightening: where the bounds, all `<= 0`, have no
@@ -761,6 +744,16 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
         ranks.insert(name.clone(), ranks.len())
         rank_names.push(name.clone())
         quotients.push(name.starts_with("quot#"))
+    }
+    // How many bounds each name is above and below in, by its rank: made
+    // once, cleared each round (#727).
+    let mut present: Vec[bool] = []
+    let mut ups: Vec[i64] = []
+    let mut downs: Vec[i64] = []
+    for _ in quotients {
+        present.push(false)
+        ups.push(0)
+        downs.push(0)
     }
     let mut index = 0
     for bound in bounds {
@@ -794,14 +787,12 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
             now.push(place)
             kept = place
         }
-        // How many bounds each name is above and below in, by its rank.
-        let mut present: Vec[bool] = []
-        let mut ups: Vec[i64] = []
-        let mut downs: Vec[i64] = []
-        for _ in quotients {
-            present.push(false)
-            ups.push(0)
-            downs.push(0)
+        let mut cleared = 0
+        while cleared < present.len() {
+            present[cleared] = false
+            ups[cleared] = 0
+            downs[cleared] = 0
+            cleared += 1
         }
         for place in now {
             let form = held[place].form

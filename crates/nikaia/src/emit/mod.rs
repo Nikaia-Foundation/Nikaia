@@ -2134,6 +2134,7 @@ impl<'p> Emitter<'p> {
             built_at_build_time: built_at_build_time(parsed).into_iter().collect(),
             pausing_reach: reach,
             own_methods: nikaia_std::tools::ty::method_index(&own_contracts),
+            library_methods: nikaia_std::tools::ty::method_index(library),
             own_contracts,
             dsl_drivers: crate::dsl::drivers(parsed).into_iter().collect(),
             foreign_params: foreign_params(parsed),

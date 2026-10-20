@@ -40070,6 +40070,7 @@ pub struct EmitState {
     pub facts: CheckFacts,
     pub own_contracts: Ledger,
     pub own_methods: MethodIndex,
+    pub library_methods: MethodIndex,
     pub described: Ledger,
     pub borrowing: collections::BTreeSet<String>,
     pub tethered: collections::BTreeSet<String>,
@@ -40558,24 +40559,17 @@ impl EmitState {
     }
     pub fn declares_a_struct(&self, name: &str) -> bool { self.structs.contains(name) || self.structs_beside.contains(name) }
     pub fn takes_a_handle(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str) -> Vec<bool> {
-        let mut found = self.handles_in(&self.own_contracts, callee);
-        if found.is_none() { found = self.handles_in(world.library, callee); }
+        let mut found = self.handles_in(&self.own_contracts, &self.own_methods, callee);
+        if found.is_none() { found = self.handles_in(world.library, &self.library_methods, callee); }
         nikaia_std::index::or(found, || vec![].into())
     }
-    fn handles_in(&self, ledger: &Ledger, callee: &str) -> Option<Vec<bool>> {
-        let suffix = format!("::{}", callee);
+    fn handles_in(&self, ledger: &Ledger, index: &MethodIndex, callee: &str) -> Option<Vec<bool>> {
         let mut found: String = callee.to_owned();
-        let mut have = ledger.functions.contains_key(callee);
-        if !have {
-            for key in ledger.functions.keys() {
-                if key.ends_with(&suffix) {
-                    found = key.to_owned();
-                    have = true;
-                    break;
-                }
-            }
+        if !ledger.functions.contains_key(callee) {
+            let ends = method_keys(index, callee);
+            if ends.is_empty() { return None; }
+            found = (*nikaia_std::index::get(&ends, 0)).to_owned();
         }
-        if !have { return None; }
         let held = match ledger.functions.get(&found) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match match held.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -46083,8 +46077,6 @@ pub fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTr
     0
 }
 
-fn lg_lin_equal(a: &LgLin, b: &LgLin) -> bool { a.constant == b.constant && lg_terms_cmp(&a.terms, &b.terms) == 0 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum LgFormula {
     True,
@@ -46359,9 +46351,14 @@ enum LgClosed {
 
 fn lg_tighten_step(bound: &LgLin, steps: &mut Vec<LgStep>, ranks: &collections::BTreeMap<String, i64>) -> LgHeld {
     let made = steps.len() as i64 - 1;
+    let mut g: i64 = 0;
+    for (_, k) in bound.terms.iter() {
+        let k = nikaia_std::num::value(k);
+        g = lg_gcd(g, k.abs());
+    }
+    if g <= 1 { return LgHeld { lin: bound.clone(), step: made, form: lg_form_of(&bound.terms, ranks) }; }
     let tight = lg_tightened(bound);
     let form = lg_form_of(&tight.terms, ranks);
-    if lg_lin_equal(&tight, bound) { return LgHeld { lin: tight, step: made, form }; }
     steps.push(LgStep::Tighten(made));
     LgHeld { lin: tight, step: steps.len() as i64 - 1, form }
 }
@@ -46395,40 +46392,19 @@ fn lg_place_before(held: &[LgHeld], b: i64, a: i64) -> bool {
 }
 
 fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
-    let n = places.len() as i64;
-    let mut from = places.to_owned();
-    let mut width: i64 = 1;
-    while width < n {
-        let mut out: Vec<i64> = vec![];
-        let mut start: i64 = 0;
-        while start < n {
-            let middle = if start + width < n { start + width } else { n };
-            let end = if start + 2 * width < n { start + 2 * width } else { n };
-            let mut i: i64 = start;
-            let mut j = middle;
-            while i < middle && j < end {
-                if lg_place_before(held, *nikaia_std::index::get(&from, nikaia_std::index::at(j)), *nikaia_std::index::get(&from, nikaia_std::index::at(i))) {
-                    out.push(*nikaia_std::index::get(&from, nikaia_std::index::at(j)));
-                    j += 1;
-                } else {
-                    out.push(*nikaia_std::index::get(&from, nikaia_std::index::at(i)));
-                    i += 1;
-                }
-            }
-            while i < middle {
-                out.push(*nikaia_std::index::get(&from, nikaia_std::index::at(i)));
-                i += 1;
-            }
-            while j < end {
-                out.push(*nikaia_std::index::get(&from, nikaia_std::index::at(j)));
-                j += 1;
-            }
-            start = end;
+    let mut out = places.to_owned();
+    let mut i: i64 = 1;
+    while ((i) as usize) < out.len() {
+        let x = *nikaia_std::index::get(&out, (i) as usize);
+        let mut j: i64 = i;
+        while j > 0 && lg_place_before(held, x, *nikaia_std::index::get(&out, nikaia_std::index::at(j - 1))) {
+            { let __nikaia_stored = *nikaia_std::index::get(&out, nikaia_std::index::at(j - 1)); nikaia_std::index::set(&mut out, nikaia_std::index::at(j), __nikaia_stored); }
+            j -= 1;
         }
-        from = out;
-        width = width * 2;
+        { let __nikaia_stored = x; nikaia_std::index::set(&mut out, nikaia_std::index::at(j), __nikaia_stored); }
+        i += 1;
     }
-    from
+    out
 }
 
 fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
@@ -46445,6 +46421,14 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
         ranks.insert(name.to_owned(), ranks.len() as i64);
         rank_names.push(name.to_owned());
         quotients.push(name.starts_with("quot#"));
+    }
+    let mut present: Vec<bool> = vec![];
+    let mut ups: Vec<i64> = vec![];
+    let mut downs: Vec<i64> = vec![];
+    for _ in quotients.iter() {
+        present.push(false);
+        ups.push(0);
+        downs.push(0);
     }
     let mut index = 0;
     for bound in bounds.iter() {
@@ -46469,13 +46453,12 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
             now.push(place);
             kept = place;
         }
-        let mut present: Vec<bool> = vec![];
-        let mut ups: Vec<i64> = vec![];
-        let mut downs: Vec<i64> = vec![];
-        for _ in quotients.iter() {
-            present.push(false);
-            ups.push(0);
-            downs.push(0);
+        let mut cleared: i64 = 0;
+        while ((cleared) as usize) < present.len() {
+            { let __nikaia_stored = false; nikaia_std::index::set(&mut present, (cleared) as usize, __nikaia_stored); }
+            { let __nikaia_stored = 0; nikaia_std::index::set(&mut ups, (cleared) as usize, __nikaia_stored); }
+            { let __nikaia_stored = 0; nikaia_std::index::set(&mut downs, (cleared) as usize, __nikaia_stored); }
+            cleared += 1;
         }
         for place in now.iter() {
             let place = nikaia_std::num::value(place);
@@ -55814,10 +55797,11 @@ pub struct SharingWalk {
     pub function: String,
     pub scope: collections::BTreeMap<String, Ty>,
     pub library_keys: collections::BTreeMap<String, String>,
+    pub own_keys: collections::BTreeMap<String, String>,
 }
 
 pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, crossings_are_possible: bool) -> Sharing {
-    let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new(), library_keys: collections::BTreeMap::new() };
+    let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new(), library_keys: collections::BTreeMap::new(), own_keys: collections::BTreeMap::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => { sharing_function(&item.node, "", asked, holes_of, ty_of, &mut walk); },
@@ -56170,7 +56154,7 @@ struct SharingCall {
 }
 
 fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
-    let described = parameters_of((called.callee).as_deref(), asked, &mut walk.library_keys);
+    let described = parameters_of((called.callee).as_deref(), asked, &mut walk.own_keys, &mut walk.library_keys);
     for at in 0..args.len() as i64 {
         let arg = nikaia_std::index::get(&args, nikaia_std::index::at(at));
         let handle = named_handle(&arg, asked.names, &walk.scope);
@@ -56179,7 +56163,7 @@ fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], 
             a_lambda_handed_on((described).as_ref(), at, &arg, asked, holes_of, ty_of, walk);
             continue;
         }
-        let __keep_63289 = nikaia_std::tether::Keep::new();
+        let __keep_63470 = nikaia_std::tether::Keep::new();
         a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk);
     }
     for setting in config.iter() {
@@ -56252,10 +56236,11 @@ struct Described {
     keeps: Vec<String>,
 }
 
-fn parameters_of(callee: Option<&str>, asked: &Asked<'_, '_, '_>, library_keys: &mut collections::BTreeMap<String, String>) -> Option<Described> {
+fn parameters_of(callee: Option<&str>, asked: &Asked<'_, '_, '_>, own_keys: &mut collections::BTreeMap<String, String>, library_keys: &mut collections::BTreeMap<String, String>) -> Option<Described> {
     let named = match callee { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let in_own = described_key(named, asked.own);
-    if in_own.is_some() { return described_by(nikaia_std::index::or(in_own.as_deref(), || ""), asked.own); }
+    if !own_keys.contains_key(named) { own_keys.insert(named.to_owned(), nikaia_std::index::or(described_key(named, asked.own), || "".into())); }
+    let in_own = match *nikaia_std::index::get(&own_keys, named) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if in_own != "" { return described_by(in_own, asked.own); }
     if !library_keys.contains_key(named) { library_keys.insert(named.to_owned(), nikaia_std::index::or(described_key(named, asked.library), || "".into())); }
     let in_library = match *nikaia_std::index::get(&library_keys, named) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if in_library == "" { return None; }
