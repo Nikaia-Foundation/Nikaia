@@ -25,11 +25,12 @@ description: >-
     <div class="home-split-text">
       <span class="safe-chip safe-chip-build">Measured</span>
       <h2>1BRC study: the Nikaia compiler vs. human vs. AI</h2>
-      <p><strong>Nikaia's goal is the best code for everything the compiler can see: you write the plain program, and making it fast is the compiler's job.</strong></p>
+      <p><strong>The study sets Nikaia's programs for the One Billion Row Challenge against Rust written by people and by an AI assistant.</strong></p>
+      <p>It shows how well the compiler optimises a plain program on its own, what hand-tuned Nikaia reaches today, safe and unsafe, and where the journey goes. Along the way it shows what Rust can do, who is ahead, and which tricks the fastest programs use: searching sixteen bytes at once, a name read as two words, a temperature without a branch, checks proved instead of made. And how Nikaia lets a program use each of them, most without <code>unsafe</code>.</p>
       <p><a class="safe-in-depth" href="{{ "/fast/against-tuned-rust.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
-<div class="safe-stat"><p class="stat-value">114&nbsp;/&nbsp;126&nbsp;/&nbsp;131&nbsp;/&nbsp;147</p><p class="stat-label">instructions per row, preliminary: unsafe Nikaia / safe Nikaia / the fastest Rust written by a person / AI-written Rust, several measured rounds</p></div>
+<div class="safe-stat"><p class="stat-value">126&nbsp;/&nbsp;131</p><p class="stat-label">instructions per row: safe Nikaia / the fastest Rust written by a person</p></div>
     </div>
   </div>
 </section>
