@@ -39,7 +39,7 @@ fn a_read_allocates_the_file_once() {
     let dir = std::env::temp_dir().join(format!("nikaia-read-once-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("scratch");
     std::fs::write(dir.join("big"), vec![b'x'; SIZE]).expect("write");
-    let root = nikaia_std::fs::Root::Dir(dir.clone().into());
+    let root = nikaia_std::fs::Root::Dir(dir.clone());
     let before = ALLOCATED.load(Ordering::SeqCst);
     let bytes = nikaia_std::rt::exec::block_on(nikaia_std::fs::read("big", &root)).expect("reads");
     let allocated = ALLOCATED.load(Ordering::SeqCst) - before;
