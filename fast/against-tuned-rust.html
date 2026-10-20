@@ -54,16 +54,27 @@ description: >-
         </details>
 
         <dl class="limit-steps">
-          <dt>What is still open</dt>
+          <dt>What is still open, and what it is expected to save</dt>
           <dd>
-            <ul>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/767">#767</a>: checks proved across the turns of a loop</li>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/714">#714</a>: a type's rule as a fact</li>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/772">#772</a>: <code>unsafe { assume(…) }</code>, and an unsafe <code>fast.nika</code> beside the safe one</li>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/770">#770</a>: counters in a table proved without a check</li>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a>: the rest of the vector API</li>
-              <li>the authors' AVX-512 builds, counted on another machine</li>
-            </ul>
+          <div class="markdown-body" style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr><th>Open item</th><th>Issue</th><th><code>fast.nika</code>, instructions per row</th><th><code>1brc.nika</code>, instructions per row</th><th>State</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Checks proved across the turns of a loop: the name's word reads, the long-name slice, the separator's distance</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/767">#767</a></td><td>about −30 to −37</td><td>–</td><td>being built</td></tr>
+              <tr><td>A type's rule as a fact: the table's index</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/714">#714</a></td><td>about −16, together with #767</td><td>–</td><td>built in part</td></tr>
+              <tr><td>Counters in a table proved without a check</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/770">#770</a></td><td>about −1 to −2</td><td>–</td><td>to be decided</td></tr>
+              <tr><td>No UTF-8 check of the whole file</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/664">#664</a></td><td>–</td><td>about −10</td><td>open</td></tr>
+              <tr><td>The hot loop's inlining independent of the codegen-unit partition</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/695">#695</a></td><td>–</td><td>about −40 at 1 unit, 0 at 16</td><td>open</td></tr>
+              <tr><td>The rest of the vector API, <code>crc32c</code> among it</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a></td><td>not estimated yet</td><td>–</td><td>left open on purpose</td></tr>
+              <tr><td><code>unsafe { assume(…) }</code>: an unsafe <code>fast.nika</code> beside the safe one</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/772">#772</a></td><td>a row of its own, expected near the safe program once the rows above are built</td><td>–</td><td>being built</td></tr>
+              <tr><td>The authors' AVX-512 builds, counted on another machine</td><td></td><td colspan="2">rows of their own</td><td>waits for the machine</td></tr>
+              <tr><td><strong>Expected result</strong></td><td></td><td><strong>about 125 to 130</strong> (today 163.6)</td><td><strong>about 221</strong> at 16 units (today 231.2)</td><td>estimate</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <p>The savings are estimates, not measurements: each check was removed by hand from the generated Rust at version 0.0.1150 and the program counted again. They overlap, so they do not simply add up; removing all of them at once gave 132.0 for <code>fast.nika</code> then, before <code>@inline</code> saved another seven. Each row is counted again when it is built. At <code>x86-64-v3</code> the fastest human-written program is at 91.5, far below these numbers: closing that gap needs more than removing checks, and where it lies is still to be analysed.</p>
           </dd>
         </dl>
       </div>
