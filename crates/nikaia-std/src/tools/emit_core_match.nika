@@ -373,7 +373,9 @@ impl EmitState {
         let read = host.names_read(body)
         let mut copied: Vec[String] = []
         for name in host.copied_bindings(node_key(body)) {
-            if read.contains(name) {
+            if read.contains(name) && self.facts.changed_copies.contains((node_key(body), name.clone())) {
+                copied.push(f"let mut {name} = *{name}; ")
+            } else if read.contains(name) {
                 copied.push(f"let {name} = *{name}; ")
             }
         }

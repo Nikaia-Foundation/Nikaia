@@ -1,0 +1,38 @@
+// #730 item 1: a number an arm over a `mut` parameter binds is the arm's own
+// copy (Part I 3.4): handed to a `mut` parameter, or changed in the arm, it
+// changes the copy, not the parameter.
+
+enum E {
+    Num(i64),
+    Word(String),
+}
+
+fn bump(mut n: i64) {
+    n += 1
+    println(f"bumped {n}")
+}
+
+fn walk(mut e: E) {
+    match e {
+        E::Num(n) => bump(n),
+        E::Word(w) => println(w),
+    }
+    match e {
+        E::Num(n) => {
+            n += 10
+            println(f"changed {n}")
+        },
+        else => {},
+    }
+    match e {
+        E::Num(n) => println(f"kept {n}"),
+        else => {},
+    }
+}
+
+fn main() {
+    let mut a = E::Num(4)
+    walk(a)
+    let mut b = E::Word("hi")
+    walk(b)
+}
