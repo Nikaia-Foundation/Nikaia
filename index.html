@@ -158,9 +158,9 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
     <div class="safe-tiles">
       <a class="safe-tile safe-tile-b" href="{{ "/fast/#tuned" | relative_url }}">
         <span class="safe-chip safe-chip-build">Measured</span>
-        <h3>Against tuned Rust</h3>
-        <p>A plain Nikaia program, counted against a Rust program tuned by hand, <code>unsafe</code> and all.</p>
-<div class="safe-stat"><p class="stat-value">300&nbsp;/&nbsp;272</p><p class="stat-label">instructions per row, Nikaia against tuned Rust, with UTF-8 and every overflow checked</p></div>
+        <h3>Against optimised Rust</h3>
+        <p>A plain Nikaia program, counted against two AI-written Rust programs.</p>
+<div class="safe-stat"><p class="stat-value">231&nbsp;/&nbsp;312&nbsp;/&nbsp;147</p><p class="stat-label">instructions per row at 16 codegen units: Nikaia / AI-written Rust, one request / AI-written Rust, several measured rounds</p></div>
         <span class="safe-more">Read more →</span>
       </a>
       <a class="safe-tile safe-tile-b" href="{{ "/fast/#cores" | relative_url }}">

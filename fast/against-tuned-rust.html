@@ -1,8 +1,8 @@
 ---
 layout: home
-title: Against tuned Rust
+title: Against optimised Rust
 description: >-
-  A plain Nikaia program, counted against a Rust program tuned by hand, unsafe and all.
+  A plain Nikaia program for the One Billion Row Challenge, counted against two AI-written Rust programs.
 ---
 <!--
   Level 3: the topic in full. It links on to the specification, the decisions and
@@ -13,28 +13,48 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/fast/#tuned" | relative_url }}">Very fast</a></p>
-    <h1 class="home-heading">Against tuned Rust</h1>
+    <h1 class="home-heading">Against optimised Rust</h1>
     <div class="limit-class">
         <dl class="limit-steps">
-          <dt>The problem</dt>
-          <dd><strong>Fast languages usually ask you to spell out how memory, waiting and sharing should work. Plain code should not cost you speed.</strong></dd>
-          <dt>An example</dt>
-          <dd>The One Billion Row Challenge: read a very large file of measurements and aggregate them. The Rust side is a tuned entry that maps the file, skips UTF-8 validation and hashes a word at a time, with <code>unsafe</code>. The Nikaia side describes the file as a grammar.</dd>
-          <dt>What Nikaia checks</dt>
-          <dd>Both are release builds on one core with the same output. Counted in instructions per row, not in seconds: Nikaia needs 300 where tuned Rust needs 272, with UTF-8 and every overflow checked, and about half the mispredicted branches. The Nikaia source is shorter and has no <code>unsafe</code>.</dd>
-          <dt>The limit</dt>
-          <dd>This is one program on one workload. It shows what the compiler can do for that program, not that every program is this fast. The method and the current tables are in the repository, and the numbers there are the ones to quote.</dd>
+          <dt>The goal</dt>
+          <dd><strong>Nikaia's goal is the best code for everything the compiler can see: you write the plain program, and making it fast is the compiler's job.</strong> You leave that path only to go close to the hardware, for what the standard library does not offer your special case, or for knowledge about your input no compiler can have. Here is our program for the One Billion Row Challenge. Read it, then look at the numbers.</dd>
         </dl>
 
         <details class="limit-details home-code markdown-body" open>
-          <summary>The figures</summary>
-          <div class="stats">
-            <div class="stat"><p class="stat-value">300&nbsp;/&nbsp;272</p><p class="stat-label">instructions per row, Nikaia against tuned Rust</p><p class="stat-detail">with UTF-8 and every overflow checked</p></div>
-            <div class="stat"><p class="stat-value">1.58&nbsp;/&nbsp;3.70</p><p class="stat-label">mispredicted branches per row</p><p class="stat-detail">fewer than half</p></div>
-            <div class="stat"><p class="stat-value">618&nbsp;/&nbsp;809</p><p class="stat-label">tokens of source, and 0 against 1 <code>unsafe</code></p><p class="stat-detail">the Nikaia file also runs on every core</p></div>
-          </div>
-          <p>Counted with callgrind. Where a proof shows an index or overflow check cannot fail, a build that asks for it drops the check.</p>
+          <summary>The program: examples/1brc.nika</summary>
+          <pre><code class="language-nika" id="brc-program"><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/examples/1brc.nika">examples/1brc.nika on GitHub</a></code></pre>
+          <script>
+            fetch("https://raw.githubusercontent.com/Nikaia-Language/Nikaia/main/examples/1brc.nika")
+              .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
+              .then(function (text) { document.getElementById("brc-program").textContent = text; })
+              .catch(function () {});
+          </script>
         </details>
+
+        <details class="limit-details home-code markdown-body" open>
+          <summary>Today's state (version 0.0.1139)</summary>
+          <div class="stats">
+            <div class="stat"><p class="stat-value">231&nbsp;/&nbsp;312&nbsp;/&nbsp;147</p><p class="stat-label">instructions per row at 16 codegen units</p><p class="stat-detail">Nikaia / AI variant 1 / AI variant 2</p></div>
+            <div class="stat"><p class="stat-value">274&nbsp;/&nbsp;271&nbsp;/&nbsp;147</p><p class="stat-label">instructions per row at 1 codegen unit</p><p class="stat-detail">Nikaia / AI variant 1 / AI variant 2</p></div>
+            <div class="stat"><p class="stat-value">1.12&nbsp;/&nbsp;3.61&nbsp;/&nbsp;0.38</p><p class="stat-label">mispredicted branches per row at 16 units</p><p class="stat-detail">at 1 unit: 1.12 / 3.70 / 0.38</p></div>
+            <div class="stat"><p class="stat-value">642&nbsp;/&nbsp;879&nbsp;/&nbsp;1775</p><p class="stat-label">tokens of source</p><p class="stat-detail">Nikaia / AI variant 1 / AI variant 2</p></div>
+          </div>
+          <p>AI variant 1 is an AI assistant's program from one request; AI variant 2 is the same assistant's after several rounds, each measured and improved (<a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/README.md#why-two-ai-variants">why two AI variants</a>). Nikaia's plain program is ahead of AI variant 1 at 16 units, level with it at 1 unit, and behind AI variant 2. The aim is to play at the level of the best hand-optimised programs, so that nobody depends on having the one programmer who optimises every task to the end.</p>
+          <p>Counted with callgrind, release builds on both sides, the same output byte for byte; Nikaia keeps UTF-8 and overflow checked.</p>
+        </details>
+
+        <dl class="limit-steps">
+          <dt>What is still open</dt>
+          <dd>
+            <ul>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/754">#754</a>: searching bytes for a set at the build's vector width</li>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/717">#717</a>: parallel folding without a grammar</li>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/751">#751</a>: the padded end of the input</li>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a>: the rest of the vector API, crc32c among it</li>
+              <li>the program rewritten with these, and measured again</li>
+            </ul>
+          </dd>
+        </dl>
       </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>
@@ -43,4 +63,3 @@ description: >-
     <p class="safe-others">More under Very fast: <a href="{{ "/fast/one-core-or-all.html" | relative_url }}">One core or all of them</a><a href="{{ "/fast/no-garbage-collector.html" | relative_url }}">No garbage collector, no free</a><a href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks that are proved are dropped</a></p>
   </div>
 </section>
-

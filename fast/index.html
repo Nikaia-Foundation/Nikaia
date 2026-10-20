@@ -24,14 +24,12 @@ description: >-
   <div class="home-inner home-split">
     <div class="home-split-text">
       <span class="safe-chip safe-chip-build">Measured</span>
-      <h2>Against tuned Rust</h2>
-      <p><strong>Fast languages usually ask you to spell out how memory, waiting and sharing should work. Plain code should not cost you speed.</strong></p>
-      <p><span class="lead-in">What Nikaia checks.</span> Both are release builds on one core with the same output. Counted in instructions per row, not in seconds: Nikaia needs 300 where tuned Rust needs 272, with UTF-8 and every overflow checked, and about half the mispredicted branches. The Nikaia source is shorter and has no <code>unsafe</code>.</p>
-      <p><span class="lead-in">The limit.</span> This is one program on one workload. It shows what the compiler can do for that program, not that every program is this fast. The method and the current tables are in the repository, and the numbers there are the ones to quote.</p>
+      <h2>Against optimised Rust</h2>
+      <p><strong>Nikaia's goal is the best code for everything the compiler can see: you write the plain program, and making it fast is the compiler's job.</strong></p>
       <p><a class="safe-in-depth" href="{{ "/fast/against-tuned-rust.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
-<div class="safe-stat"><p class="stat-value">300&nbsp;/&nbsp;272</p><p class="stat-label">instructions per row, Nikaia against tuned Rust, with UTF-8 and every overflow checked</p></div>
+<div class="safe-stat"><p class="stat-value">231&nbsp;/&nbsp;312&nbsp;/&nbsp;147</p><p class="stat-label">instructions per row at 16 codegen units: Nikaia / AI-written Rust, one request / AI-written Rust, several measured rounds</p></div>
     </div>
   </div>
 </section>

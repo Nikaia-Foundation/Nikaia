@@ -132,11 +132,10 @@ syntax](guide/syntax.md) shows the language on one page.
 
 ## Performance
 
-The comparison is with Rust as a specialist tunes it, `unsafe` included. On the One Billion
-Row Challenge, Nikaia uses about 10 % more instructions than tuned Rust, fewer than half its
-mispredicted branches, and about a quarter less source, with UTF-8 and overflow still
-checked and no `unsafe`. The counts come from callgrind, not a clock; the table and the
-method are in [benches/brc](benches/brc/README.md).
+On the One Billion Row Challenge, Nikaia's plain program runs 231 instructions a row at 16
+codegen units, against 312 for an AI-written Rust program from one request (AI variant 1) and
+147 for the same assistant's after several measured rounds (AI variant 2), counted with
+callgrind ([benches/brc](benches/brc/README.md)).
 
 ---
 
