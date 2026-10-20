@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1125] — 2026-10-20
+
+**mut p: ref T is mut p: T; a list into Vec[T?] wraps its elements**
+- A `ref` in a `mut` parameter's type adds nothing (Part I 6.5): it lowers to `&mut T`, the plain call is accepted, and `put(ref t)` is NK1137. `[f"{1}"]` where `Vec[String?]` is wanted is `vec![Some(..)]`. An untyped `comptime` written out at its uses no longer draws rustc's "never used" (#700).
+
 ## [0.0.1124] — 2026-10-20
 
 **A view read through ?? is watched; a ref Bytes is a run of bytes**
