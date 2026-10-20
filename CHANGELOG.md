@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1112] — 2026-10-20
+
+**Lowering: the solver and hot lookups stop copying (#727)**
+- The bounds solver makes each bound's form once, checks the gcd before tightening and sorts in place; proof keys are written into one buffer; type, sharing and method lookups no longer clone contracts or build text. Output unchanged; a cold single-file lower costs another 12 % fewer instructions.
+
 ## [0.0.1111] — 2026-10-20
 
 **Four programs the checker accepted now compile, and a fifth is refused**
