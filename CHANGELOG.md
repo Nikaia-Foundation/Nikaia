@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1120] — 2026-10-20
+
+**Lowering: text tiers, the solver and result sources redo only what changed (#727)**
+- Text tiers walk again only the functions whose inputs changed; Fourier-Motzkin keeps its bounds in one arena and an elimination copies none; a second result-sources round runs only where the first changed borrows or returns. Output unchanged; a cold single-file lower costs another 6 % fewer instructions.
+
 ## [0.0.1119] — 2026-10-20
 
 **A float beyond f32 is NK1116 in every f32 place; a mixed String? result lowers**
