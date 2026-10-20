@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1150] — 2026-10-20
+
+**The bounds walk: a u64 is not bounded by i64::MAX; facts survive a bound as wide as i64**
+- A `u64` is no longer assumed to be at most `i64::MAX`: `(k.bits_as_u64() >> 56)` was taken as at most 127, so with `remove-bounds-checks` an index into a list of 128 lost its check and read past it (unsound; facts now come from `Range::held_by_type`, goals still from `of_type`). A `let` bounded only by `i64`'s own range no longer makes the solver refuse every later query in the function; bounds past ±2^62 are not stated as facts (#444's limit).
+
 ## [0.0.1149] — 2026-10-20
 
 **A number read through brackets past a jump is the number in any position**
