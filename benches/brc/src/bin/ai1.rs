@@ -1,3 +1,6 @@
+//! AI variant 1: written by an AI assistant at medium effort, in one request,
+//! as an optimised solution.
+//!
 //! What a 1BRC entry looks like before it is parallelised: `mmap`, raw bytes
 //! with no UTF-8 validation, one `memchr` searcher over the whole file, the
 //! separator found by walking back from the end of the line, integer
@@ -11,7 +14,7 @@ fn main() {
     let path = std::env::args()
         .nth(1)
         .expect("a measurements file is required");
-    tuned(&path);
+    ai1(&path);
 }
 
 /// `rustc-hash`'s mixer, written out rather than depended on.
@@ -53,7 +56,7 @@ impl Hasher for Fx {
 }
 
 /// What a 1BRC entry looks like before it is parallelised.
-fn tuned(path: &str) {
+fn ai1(path: &str) {
     let file = std::fs::File::open(path).expect("open the measurements");
     // SAFETY: the mapping is read-only and private, and the one thing no type
     // system rules out - another process rewriting the file underneath it - is

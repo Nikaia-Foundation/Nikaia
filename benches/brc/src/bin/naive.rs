@@ -1,7 +1,7 @@
 //! What a competent Rust programmer writes first for the One Billion Row
 //! Challenge: `read_to_string`, `str::lines`, `split_once`, and a `HashMap`
 //! with the default hasher. The baseline `examples/1brc.nika` is compared with
-//! beside `tuned`; see `benches/brc/README.md`.
+//! beside `ai1` and `ai2`; see `benches/brc/README.md`.
 
 use std::collections::HashMap;
 

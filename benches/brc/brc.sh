@@ -89,7 +89,8 @@ done
 
 "$(rustbin 16)/naive" "$input" > "$work/out.naive"
 for u in $units; do
-    for p in "$(rustbin "$u")/naive" "$(rustbin "$u")/tuned" "$work/nikaia.checked.cu$u" \
+    for p in "$(rustbin "$u")/naive" "$(rustbin "$u")/ai1" "$(rustbin "$u")/ai2" \
+        "$work/nikaia.checked.cu$u" \
         "$work/nikaia.unchecked.cu$u" "$work/nikaia.parallel.cu$u" "$work/nikaia.naive.cu$u"; do
         "$p" "$input" | cmp -s - "$work/out.naive" \
             || { echo "FAIL: $p disagrees with naive"; exit 1; }
@@ -103,10 +104,10 @@ count() {
     valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file="$work/cg.out" "$@" >/dev/null 2>&1
     awk -v r="$rows" '/^summary:/ { printf "%.1f | %.2f", $2 / r, ($4 + $6) / r }' "$work/cg.out"
 }
-# Lengths by `scripts/tokens.nika`, one run for all four files.
+# Lengths by `scripts/tokens.nika`, one run for all five files.
 nikaia_tokens="$work/tokens.txt"
 ( cd "$root" && "$nikaia" run scripts/tokens.nika -- benches/brc/src/bin/naive.rs \
-    benches/brc/src/bin/tuned.rs examples/1brc.nika benches/brc/naive.nika ) > "$nikaia_tokens" 2>/dev/null \
+    benches/brc/src/bin/ai1.rs benches/brc/src/bin/ai2.rs examples/1brc.nika benches/brc/naive.nika ) > "$nikaia_tokens" 2>/dev/null \
     || { echo "scripts/tokens.nika failed"; exit 1; }
 tokens() { awk -v f="$1" '$2 == f {print $1}' "$nikaia_tokens"; }
 
@@ -130,6 +131,7 @@ echo "| | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units
 echo "|---|---:|---:|---:|---:|---:|"
 row 'Rust, `naive`' "$(tokens benches/brc/src/bin/naive.rs)" "$work/target-cu@/release/naive"
 row 'Nikaia, `naive.nika`' "$(tokens benches/brc/naive.nika)" "$work/nikaia.naive.cu@"
-row 'Rust, `tuned`' "$(tokens benches/brc/src/bin/tuned.rs)" "$work/target-cu@/release/tuned"
+row 'Rust, AI variant 1 (`ai1`)' "$(tokens benches/brc/src/bin/ai1.rs)" "$work/target-cu@/release/ai1"
+row 'Rust, AI variant 2 (`ai2`)' "$(tokens benches/brc/src/bin/ai2.rs)" "$work/target-cu@/release/ai2"
 row '**Nikaia**, `examples/1brc.nika`' "$(tokens examples/1brc.nika)" "$work/nikaia.checked.cu@"
 row 'Nikaia, overflow checks off' '' "$work/nikaia.unchecked.cu@"

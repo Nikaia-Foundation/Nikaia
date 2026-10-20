@@ -9,11 +9,12 @@ in Rust:
 |---|---|
 | [`naive.rs`](src/bin/naive.rs) | what a competent Rust programmer writes first: `read_to_string`, `str::lines`, `split_once`, a `HashMap` with the default hasher |
 | [`naive.nika`](naive.nika) | the same in Nikaia: `fs::read_to_string`, `lines`, `find` and `split_at` at the `;`, the temperature read digit by digit as `naive.rs` reads it, `std`'s `HashMap` (`hashbrown`'s table, with Fx hashing) |
-| [`tuned.rs`](src/bin/tuned.rs) | what a 1BRC entry looks like before it is parallelised: `mmap` (`unsafe`), raw bytes with **no UTF-8 validation**, one `memchr` searcher over the whole file, the separator found by walking back from the line's end, integer temperatures, a word-at-a-time hash |
+| [`ai1.rs`](src/bin/ai1.rs), AI variant 1 | written by an AI assistant at medium effort, in one request, as an optimised solution; what a 1BRC entry looks like before it is parallelised: `mmap` (`unsafe`), raw bytes with **no UTF-8 validation**, one `memchr` searcher over the whole file, the separator found by walking back from the line's end, integer temperatures, a word-at-a-time hash |
+| [`ai2.rs`](src/bin/ai2.rs), AI variant 2 | written by the same AI assistant over several rounds, each measured with callgrind and improved: a SIMD compare finds the `;` (SSE2; AVX2 where the CPU level has it), a word hash of the name (crc32c where the CPU level has it), a branch-free temperature parse, an own open-addressing table, the end of the input run from a padded copy so that nothing reads past the end; `mmap` and `unsafe` throughout, **no UTF-8 validation** |
 | [`examples/1brc.nika`](../../examples/1brc.nika) | a grammar over the whole file, a `par_fold`, names that are slices of a mapped file, `std`'s `HashMap` |
 
 Each pair is compared like for like: `naive.nika` with `naive.rs`, `1brc.nika`
-with `tuned.rs`. `tuned` is the comparison that counts for speed.
+with the two AI variants. They are the comparison that counts for speed.
 
 ## How it is measured
 
@@ -39,7 +40,7 @@ benches/brc/brc.sh 200000     # quicker
   (release's default). Which unit rustc puts a function in decides whether
   LLVM inlines it into the hot loop: `hashbrown`'s `entry` on both sides, and on
   Nikaia's also the grammar runtime's `advance`. That moves a row by about 40
-  instructions, and not the same way on both sides: `tuned` inlines the entry
+  instructions, and not the same way on both sides: AI variant 1 inlines the entry
   at 1 unit and not at 16, `1brc.nika` the other way round. One setting alone
   would pick the winner, so the table shows both. Making Nikaia's side not
   depend on the partition is #695. `brc.sh` sets the count per run:
@@ -59,22 +60,26 @@ benches/brc/brc.sh 200000     # quicker
 ## The table
 
 Nikaia 0.0.1064, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
-per row:
+per row. The AI variant 2 row is measured later, at commit `4a6ee77` with
+rustc 1.97.0 (2d8144b78 2026-07-07), the same machine type and input, at the
+default CPU level (`x86-64`: SSE2, the Fx-style mixer instead of crc32c); the
+other rows are not measured again:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
 | Rust, `naive` | 840.9 | 9.25 | 859.8 | 8.65 | 556 |
 | **Nikaia**, `naive.nika` | **570.2** | **8.75** | **569.1** | **8.51** | **375** |
-| Rust, `tuned` | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
+| Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
+| Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
 | **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.3** | **1.12** | **642** |
 | Nikaia, overflow checks off | 274.9 | 1.12 | 231.2 | 1.09 | |
 
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
 
-Against `tuned`, the instructions are level within what the inliner decides:
-Nikaia runs 26 % fewer at 16 units, `tuned` 1 % fewer at 1 unit. The
-mispredictions are a third of `tuned`'s at both settings. Nikaia's program is a
+Against AI variant 1, the instructions are level within what the inliner
+decides: Nikaia runs 26 % fewer at 16 units, AI variant 1 1 % fewer at 1 unit.
+The mispredictions are a third of AI variant 1's at both settings. Nikaia's program is a
 quarter fewer tokens, with no `unsafe`, with UTF-8 and every overflow checked
 or proved; the same file also runs on every core. The temperature's checks are
 proved (ADR-314), and so are the counter's, `count += 1` and the merge's
@@ -85,8 +90,12 @@ instructions within one, laid out differently.
 
 The mispredictions depend on where the code lies, the instructions do not:
 callgrind's simulated predictor is indexed by address. Every build of
-`1brc.nika` in the table stays at 1.09 to 1.12, a third of `tuned`'s 3.6 to
-3.7.
+`1brc.nika` in the table stays at 1.09 to 1.12, a third of AI variant 1's 3.6
+to 3.7.
+
+AI variant 2 runs 36 % fewer instructions than `1brc.nika` at 16 units and
+46 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
+tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
 ## Where Nikaia's instructions go
 
@@ -108,8 +117,8 @@ what `core` inlines into the generated rule is its own row.
 | the UTF-8 check (`simdutf8`) | 10.3 | 0.09 |
 | the rest: start-up, the output | 3.5 | 0.03 |
 
-`tuned` is one function after inlining, so callgrind cannot split it the same
-way.
+The AI variants are one function after inlining, so callgrind cannot split
+them the same way.
 
 ## Where `naive.nika` differs from `naive.rs`
 
@@ -140,18 +149,32 @@ chose: the hasher, the UTF-8 check, and Nikaia's one-character pattern as a
 | the hot loop's inlining not left to the codegen-unit partition: `hashbrown`'s `entry` and the grammar runtime's `advance` inlined at 1 unit as at 16 (about 40 a row) | the lowering or `winnow-grammar` | [#695](https://github.com/Nikaia-Foundation/Nikaia/issues/695) |
 | no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422) | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
 
+## Why two AI variants
+
+AI variant 1 shows the state after one request: an AI assistant asked once for
+an optimised solution. AI variant 2 is the same assistant after several rounds
+of research and improvement, each round measured with callgrind. The gap
+between them in the table - 147.4 instructions a row against 270.9 and 312.4,
+0.38 mispredictions against 3.70 and 3.61 - shows that today an AI-written
+program is not optimal from one prompt: it needs iterations, review and
+measurement, as Nikaia itself is built in many rounds. That is why Nikaia
+leaves to its compiler what would otherwise cost rounds of prompting and
+fixing. This describes the state at the time of writing; whether stronger
+models change it is left open.
+
 ## What this does not claim
 
 Nothing about the 1BRC leaderboard. The entries there are SWAR over raw bytes,
 hash tables sized to the key count with the keys stored inline, no UTF-8
-anywhere, and every core. `tuned` is a single-threaded, readable version of that
-idea and stops short of it. The question this bench answers is whether a
+anywhere, and every core. AI variant 1 is a single-threaded, readable version
+of that idea and stops short of it; AI variant 2 goes most of the way, still on
+one core. The question this bench answers is whether a
 grammar that describes the file costs you the loop a specialist writes.
 
 ## The files
 
-* `src/bin/naive.rs`, `src/bin/tuned.rs` - the two Rust programs, each a binary
-  of its own.
+* `src/bin/naive.rs`, `src/bin/ai1.rs`, `src/bin/ai2.rs` - the three Rust
+  programs, each a binary of its own.
 * `naive.nika` - the naive Nikaia program; `examples/1brc.nika` is the other.
 * `src/bin/gen.rs` - the input: `gen <rows> <file>`.
 * `brc.sh` - builds everything, checks the outputs agree, counts, prints the
