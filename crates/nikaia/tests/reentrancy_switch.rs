@@ -86,7 +86,7 @@ fn the_compiled_std_does_not_share_a_tree() {
     let sysroot = nikaia::sysroot::Sysroot::resolve();
     let codegen = nikaia::sysroot::Codegen::default();
     assert_ne!(
-        sysroot.rlib_cache("x86_64-linux", &codegen, "yes"),
-        sysroot.rlib_cache("x86_64-linux", &codegen, "no")
+        sysroot.rlib_cache("x86_64-linux", &codegen, "yes", ""),
+        sysroot.rlib_cache("x86_64-linux", &codegen, "no", "")
     );
 }

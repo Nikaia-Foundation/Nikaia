@@ -48818,7 +48818,12 @@ pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>
 
 pub fn targets() -> Vec<String> { vec![String::from("x86_64-linux"), String::from("aarch64-linux"), String::from("wasm32-unknown")] }
 
-pub fn codegen_keys() -> Vec<String> { vec![String::from("opt-level"), String::from("lto"), String::from("incremental"), String::from("debug")] }
+pub fn codegen_keys() -> Vec<String> { vec![String::from("opt-level"), String::from("lto"), String::from("codegen-units"), String::from("incremental"), String::from("debug")] }
+
+pub fn codegen_units(target: &str, units: Option<i64>, written: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+    if nikaia_std::index::or(units, || 0) < 1 { return Err(nikaia_std::error::throwing(Refused::Because(format!("`codegen-units` in `[build.{}]` is a whole number from 1, the number of pieces rustc cuts each crate into, not `{}`.", target, written)), &"codegen_units")); }
+    Ok(())
+}
 
 pub fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&targets(), target) {
@@ -69288,7 +69293,7 @@ pub mod logic_smtlib {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_table, codegen_key, DependencyShape, dependency, crate_name};
+    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name};
 }
 pub mod modules {
     #[allow(unused_imports)]

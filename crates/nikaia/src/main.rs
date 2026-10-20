@@ -63,6 +63,15 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "NAME:LEVEL")]
     pub optimization: Vec<String>,
 
+    /// The least CPU the program runs on, on `build`, `run` and `test`
+    /// ([ADR-002](../../../docs/specification/adr/adr-002.md) D6): the build
+    /// may use every instruction of that level, in the program and in `std`.
+    /// On x86-64 `x86-64` (the default), `x86-64-v2`, `x86-64-v3` and
+    /// `x86-64-v4`; every target takes `native`, the CPU of the machine that
+    /// builds.
+    #[arg(long, global = true, value_name = "LEVEL")]
+    pub cpu: Option<String>,
+
     /// What a claim the compiler shows false with values is
     /// ([ADR-269](../../../docs/specification/adr/adr-269.md) D8): `error`,
     /// the default, refuses the program; `warn` builds it and checks the
@@ -632,6 +641,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             }
             project.settings.bind = Some(language.clone());
             project.settings.optimize(&args.optimization)?;
+            project.settings.choose_cpu(args.cpu.as_deref())?;
             return drive(args, &project, "build", &[]);
         }
         Command::Run {
@@ -647,6 +657,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
                 args.allow_read_from_list.as_deref(),
             )?;
             project.settings.optimize(&args.optimization)?;
+            project.settings.choose_cpu(args.cpu.as_deref())?;
             project
                 .settings
                 .refutations(args.refuted_claims.as_deref())?;
@@ -691,6 +702,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         args.user_parallelism.as_deref(),
     )?;
     project.settings.optimize(&args.optimization)?;
+    project.settings.choose_cpu(args.cpu.as_deref())?;
     project
         .settings
         .refutations(args.refuted_claims.as_deref())?;
@@ -736,6 +748,7 @@ fn test_command(
         args.user_parallelism.as_deref(),
     )?;
     project.settings.optimize(&args.optimization)?;
+    project.settings.choose_cpu(args.cpu.as_deref())?;
     project
         .settings
         .refutations(args.refuted_claims.as_deref())?;
@@ -773,6 +786,7 @@ fn test_command(
                 if testing { "tests" } else { "program" }
             ));
             built.settings.optimize(&args.optimization)?;
+            built.settings.choose_cpu(args.cpu.as_deref())?;
             built.settings.refutations(args.refuted_claims.as_deref())?;
             let (code, binary) = built.drive_to(
                 "build",

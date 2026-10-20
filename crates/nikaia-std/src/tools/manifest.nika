@@ -79,9 +79,19 @@ pub fn targets() -> Vec[String] {
 
 /// What a `[build.<target>]` table may carry (Part III 13.3). Same rule as
 /// `[build]`: a silently ignored `opt_level` leaves a build at a setting its
-/// author believed they had changed. `incremental` and `debug` are ADR-002 D5.
+/// author believed they had changed. `incremental` and `debug` are ADR-002 D5,
+/// `codegen-units` D6.
 pub fn codegen_keys() -> Vec[String] {
-    return ["opt-level", "lto", "incremental", "debug"]
+    return ["opt-level", "lto", "codegen-units", "incremental", "debug"]
+}
+
+/// `codegen-units` is a whole number from 1 (ADR-002 D6), or is refused
+/// saying so. `units` is the value where it is a whole number; `written` is
+/// the value as the manifest has it.
+pub fn codegen_units(target: ref String, units: i64?, written: String) throws {
+    if (units ?? 0) < 1 {
+        throw Refused::Because(f"`codegen-units` in `[build.{target}]` is a whole number from 1, the number of pieces rustc cuts each crate into, not `{written}`.")
+    }
 }
 
 /// `[build.<target>]` names a machine, or is refused naming the ones there are.

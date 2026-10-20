@@ -186,8 +186,8 @@ fn a_different_codegen_table_is_a_different_compiled_std() {
         &BTreeMap::from([("opt-level".to_string(), toml::Value::Integer(3))]),
         "unwind",
     );
-    let a = sysroot.rlib_cache("x86_64-linux", &plain, "yes");
-    let b = sysroot.rlib_cache("x86_64-linux", &tuned, "yes");
+    let a = sysroot.rlib_cache("x86_64-linux", &plain, "yes", "");
+    let b = sysroot.rlib_cache("x86_64-linux", &tuned, "yes", "");
     assert_ne!(a, b);
     assert_eq!(
         a.parent(),

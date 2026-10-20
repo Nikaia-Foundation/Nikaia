@@ -345,7 +345,13 @@ impl Key {
     ///   again. The program's own crates in the directory are the ones the
     ///   compiler does write, and they go stale through the switches file
     ///   instead (ADR-002 D4).
-    pub fn sysroot(toolchain: &str, target: &str, codegen: &str, features: &str) -> Self {
+    pub fn sysroot(
+        toolchain: &str,
+        target: &str,
+        codegen: &str,
+        features: &str,
+        cpu: &str,
+    ) -> Self {
         let mut b = KeyBuilder::new(SYSROOT_DOMAIN);
         b.field("toolchain", toolchain);
         b.field("target", target);
@@ -357,6 +363,14 @@ impl Key {
         // project on the machine links the first one's answer — a guarantee
         // declined in one manifest and shipped from another's cache.
         b.field("features", features);
+        // **The CPU level `--cpu` named** (ADR-002 D6): every crate built for
+        // the target, `std` among them, may use its instructions. Empty for
+        // the baseline, and then not hashed at all, so a build that names no
+        // level keeps the entry it had; for `native` the CPU found, never the
+        // word.
+        if !cpu.is_empty() {
+            b.field("cpu", cpu);
+        }
         Key(b.finish())
     }
 

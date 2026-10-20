@@ -192,12 +192,19 @@ impl Sysroot {
     /// one the project tests share, with a build then failing for want of disk.
     /// Coexisting is right (D7); coexisting forever is the leak. See
     /// [`cache::prune`].
-    pub fn rlib_cache(&self, target: &str, codegen: &Codegen, features: &str) -> PathBuf {
+    pub fn rlib_cache(
+        &self,
+        target: &str,
+        codegen: &Codegen,
+        features: &str,
+        cpu: &str,
+    ) -> PathBuf {
         let key = Key::sysroot(
             env!("NIKAIA_RUSTC_VERSION"),
             target,
             &codegen.render(),
             features,
+            cpu,
         );
         let root = Layout::user_cache_dir().join("rlib");
         let tree = root.join(key.as_str());
@@ -208,10 +215,70 @@ impl Sysroot {
     }
 }
 
+/// **The CPU levels `--cpu` takes for `triple`**, the baseline first
+/// ([ADR-002](../../docs/specification/adr/adr-002.md) D6). x86-64 has its four
+/// named levels; a target without named levels takes only its baseline, the
+/// CPU `rustc` builds for when told none. Every target takes `native`.
+pub fn cpu_levels(triple: &str) -> Result<Vec<String>> {
+    let mut levels: Vec<String> = match triple.starts_with("x86_64") {
+        true => ["x86-64", "x86-64-v2", "x86-64-v3", "x86-64-v4"]
+            .map(str::to_string)
+            .to_vec(),
+        false => {
+            let cpus = rustc_cpus(triple, &[])?;
+            let baseline = cpus
+                .lines()
+                .find(|line| line.contains("default target CPU"))
+                .and_then(|line| line.split_whitespace().next())
+                .unwrap_or("generic");
+            vec![baseline.to_string()]
+        }
+    };
+    levels.push("native".to_string());
+    Ok(levels)
+}
+
+/// **What `native` means on this machine**, as the compiled `std`'s key
+/// holds it (ADR-002 D6): the CPU `rustc` finds and the features it turns on,
+/// never the word, so a cache directory moved to another machine is not
+/// taken for that machine's.
+pub fn native_cpu(triple: &str) -> Result<String> {
+    let said = rustc_cpus(triple, &["--print", "cfg", "-C", "target-cpu=native"])?;
+    let cpu = said
+        .lines()
+        .find(|line| line.trim_start().starts_with("native "))
+        .and_then(|line| line.split("currently ").nth(1))
+        .map(|rest| rest.trim_end_matches([')', '.']))
+        .unwrap_or("");
+    let features: Vec<&str> = said
+        .lines()
+        .filter(|line| line.starts_with("target_feature="))
+        .collect();
+    Ok(format!("native={cpu};{}", features.join(",")))
+}
+
+/// `rustc --print target-cpus` for `triple`, with `more` arguments, started
+/// where every tool is (ADR-325 D1).
+fn rustc_cpus(triple: &str, more: &[&str]) -> Result<String> {
+    let out = std::process::Command::new("rustc")
+        .current_dir(Layout::where_tools_start())
+        .args(["--print", "target-cpus", "--target", triple])
+        .args(more)
+        .output()
+        .with_context(|| format!("asking `rustc` for the CPUs of `{triple}`"))?;
+    if !out.status.success() {
+        anyhow::bail!(
+            "`rustc` names no CPUs for `{triple}`: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
 /// What the machine's codegen table asked for, as a key dimension.
 ///
 /// A rendered string rather than a struct of known keys on purpose: whatever
-/// `[build.<target>]` grows - `target-cpu` being the obvious next one - becomes
+/// `[build.<target>]` grows - `codegen-units` being the latest - becomes
 /// a dimension of the compiled `std` in the same commit that adds it, with
 /// nothing here to remember to update. That is [ADR-021](../../../docs/specification/adr/adr-021.md)
 /// D13's obligation kept by construction rather than by discipline.
@@ -916,8 +983,38 @@ mod tests {
             "unwind",
         );
         assert_ne!(
-            sysroot.rlib_cache("x86_64-linux", &plain, ""),
-            sysroot.rlib_cache("x86_64-linux", &tuned, ""),
+            sysroot.rlib_cache("x86_64-linux", &plain, "", ""),
+            sysroot.rlib_cache("x86_64-linux", &tuned, "", ""),
+        );
+    }
+
+    /// ADR-002 D6: the CPU level is a dimension, so two levels keep two
+    /// compiled `std`s, and `native` is keyed by the CPU found, which is
+    /// never the word or another level's name.
+    #[test]
+    fn the_cpu_level_changes_where_the_compiled_std_goes() {
+        let sysroot = Sysroot::new("/nowhere");
+        let codegen = Codegen::new(&BTreeMap::new(), "unwind");
+        let at = |cpu: &str| sysroot.rlib_cache("x86_64-linux", &codegen, "", cpu);
+        assert_ne!(at(""), at("x86-64-v3"));
+        assert_ne!(at("x86-64-v2"), at("x86-64-v3"));
+        if cfg!(target_arch = "x86_64") {
+            let native = native_cpu("x86_64-unknown-linux-gnu").expect("rustc answers");
+            assert!(
+                native.starts_with("native=") && native.len() > "native=;".len(),
+                "{native}"
+            );
+            assert_ne!(at(&native), at("x86-64-v3"));
+            assert_ne!(at(&native), at("native"));
+        }
+    }
+
+    /// ADR-002 D6: x86-64's four levels and `native`, the baseline first.
+    #[test]
+    fn x86_64_has_four_levels_and_native() {
+        assert_eq!(
+            cpu_levels("x86_64-unknown-linux-gnu").expect("named, no rustc asked"),
+            ["x86-64", "x86-64-v2", "x86-64-v3", "x86-64-v4", "native"]
         );
     }
 
@@ -928,8 +1025,8 @@ mod tests {
         let sysroot = Sysroot::new("/nowhere");
         let codegen = Codegen::new(&BTreeMap::new(), "unwind");
         assert_ne!(
-            sysroot.rlib_cache("x86_64-linux", &codegen, ""),
-            sysroot.rlib_cache("wasm32-unknown", &codegen, ""),
+            sysroot.rlib_cache("x86_64-linux", &codegen, "", ""),
+            sysroot.rlib_cache("wasm32-unknown", &codegen, "", ""),
         );
     }
 

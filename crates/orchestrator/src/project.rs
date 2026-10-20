@@ -58,10 +58,13 @@ pub struct Package {
 /// is the third choice of the codegen table (ADR-002 D5): absent, Cargo's
 /// `dev` default holds and it is on. `debug` is the fourth, and its absence is
 /// **not** Cargo's default: that would be full debug info in every build.
+/// `codegen-units` (D6) is written only where the table says it: absent, rustc
+/// chooses.
 #[derive(Debug, Clone, Default)]
 pub struct Profile {
     pub opt_level: Option<toml::Value>,
     pub lto: Option<toml::Value>,
+    pub codegen_units: Option<toml::Value>,
     pub incremental: Option<toml::Value>,
     pub debug: Option<toml::Value>,
     pub panic: Option<String>,
@@ -248,6 +251,9 @@ impl Workspace {
         if let Some(lto) = &self.profile.lto {
             out.push_str(&format!("lto = {lto}\n"));
         }
+        if let Some(units) = &self.profile.codegen_units {
+            out.push_str(&format!("codegen-units = {units}\n"));
+        }
         if let Some(incremental) = &self.profile.incremental {
             out.push_str(&format!("incremental = {incremental}\n"));
         }
@@ -337,6 +343,9 @@ pub struct Cargo {
     /// Handed to the wrapper, since Cargo owns its argument list and nothing
     /// else can reach it.
     pub env: Vec<(String, OsString)>,
+    /// Each one handed to Cargo as `--config`: what the compiler itself sets
+    /// in Cargo's configuration, such as the CPU level's `rustflags`.
+    pub config: Vec<String>,
 }
 
 /// **Refuse an old toolchain in this compiler's words**
@@ -460,6 +469,9 @@ impl Cargo {
         if let Some(dir) = &self.target_dir {
             command.arg("--target-dir").arg(dir);
         }
+        for config in &self.config {
+            command.arg("--config").arg(config);
+        }
         command.args(args);
         if !after.is_empty() {
             command.arg("--").args(after);
@@ -499,6 +511,9 @@ impl Cargo {
         command.arg("--manifest-path").arg(&self.manifest);
         if let Some(dir) = &self.target_dir {
             command.arg("--target-dir").arg(dir);
+        }
+        for config in &self.config {
+            command.arg("--config").arg(config);
         }
         command.arg("--message-format=json");
         command.args(args);
@@ -910,6 +925,7 @@ mod tests {
             profile: Profile {
                 opt_level: Some(toml::Value::Integer(3)),
                 lto: Some(toml::Value::Boolean(true)),
+                codegen_units: Some(toml::Value::Integer(1)),
                 incremental: Some(toml::Value::Boolean(false)),
                 debug: None,
                 panic: Some("unwind".into()),
@@ -954,6 +970,21 @@ mod tests {
 
         assert!(program.get("bin").is_some() && program.get("lib").is_none());
         assert!(library.get("lib").is_some() && library.get("bin").is_none());
+    }
+
+    /// ADR-002 D6: `codegen-units` is written only where the codegen table
+    /// says it, so a project that says nothing leaves rustc to choose.
+    #[test]
+    fn codegen_units_is_written_only_where_the_table_says_it() {
+        let parsed: toml::Value = toml::from_str(&workspace().render()).expect("parses");
+        assert_eq!(
+            parsed["profile"]["dev"]["codegen-units"].as_integer(),
+            Some(1)
+        );
+        let mut silent = workspace();
+        silent.profile.codegen_units = None;
+        let parsed: toml::Value = toml::from_str(&silent.render()).expect("parses");
+        assert!(parsed["profile"]["dev"].get("codegen-units").is_none());
     }
 
     /// ADR-002 D5: `incremental` is written only where the codegen table says

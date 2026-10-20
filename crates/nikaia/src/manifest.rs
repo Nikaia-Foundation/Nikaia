@@ -310,6 +310,10 @@ fn codegen(target: &str, table: &toml::Table) -> Result<BTreeMap<String, toml::V
     let mut out = BTreeMap::new();
     for (key, value) in table {
         decide::codegen_key(target, key).map_err(refusal)?;
+        if key == "codegen-units" {
+            decide::codegen_units(target, value.as_integer(), &value.to_string())
+                .map_err(refusal)?;
+        }
         out.insert(key.clone(), value.clone());
     }
     Ok(out)
@@ -428,6 +432,28 @@ mod tests {
         let text = format!("{error:#}");
         assert!(text.contains("opt_level"), "{text}");
         assert!(text.contains("opt-level"), "{text}");
+        assert!(text.contains("codegen-units"), "{text}");
+    }
+
+    /// ADR-002 D6: `codegen-units` is a whole number from 1, and anything else
+    /// is refused saying so rather than handed to Cargo.
+    #[test]
+    fn codegen_units_is_a_whole_number_from_one() {
+        let manifest = Manifest::parse("[build.x86_64-linux]\ncodegen-units = 1\n")
+            .expect("one unit is a count");
+        assert_eq!(
+            manifest.codegen_for("x86_64-linux")["codegen-units"].as_integer(),
+            Some(1)
+        );
+        for written in ["0", "\"16\"", "1.5", "-3"] {
+            let error = Manifest::parse(&format!(
+                "[build.x86_64-linux]\ncodegen-units = {written}\n"
+            ))
+            .expect_err("not a count from 1");
+            let text = format!("{error:#}");
+            assert!(text.contains("whole number from 1"), "{written}: {text}");
+            assert!(text.contains(written), "{written}: {text}");
+        }
     }
 
     /// `[build.x86_65-linux]` is a typo, and the codegen in it would apply to

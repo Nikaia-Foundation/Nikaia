@@ -331,6 +331,69 @@ fn a_machine_the_toolchain_cannot_build_for_is_refused() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A CPU level reaches `rustc`** (ADR-002 D6): `--cpu=x86-64-v3` is
+/// `-C target-cpu=x86-64-v3` on the crates built for the target, read from
+/// Cargo's verbose report of the commands it ran. A `main` that calls nothing
+/// keeps the build to the program's own crate.
+#[test]
+fn a_cpu_level_reaches_rustc() {
+    if !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
+        return;
+    }
+    let dir = a_project(
+        "project-cpu",
+        "[package]\nname = \"cpu\"\nversion = \"0.1.0\"\n",
+        "fn main() {\n}\n",
+    );
+    let built = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .args(["build", "--cpu=x86-64-v3", "--project"])
+        .arg(&dir)
+        .env("NIKAIA_CACHE_DIR", shared_cache_dir())
+        .env("CARGO_TERM_VERBOSE", "true")
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .output()
+        .expect("the nikaia binary runs");
+    assert!(built.status.success(), "{}", said(&built));
+    assert!(
+        String::from_utf8_lossy(&built.stderr).contains("target-cpu=x86-64-v3"),
+        "{}",
+        said(&built)
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// ADR-002 D6: a level the target does not have fails the build before
+/// anything is built, naming the ones it has.
+#[test]
+fn a_cpu_level_the_target_lacks_is_refused_naming_its_levels() {
+    let dir = a_project(
+        "project-cpu-unknown",
+        "[package]\nname = \"cpu\"\nversion = \"0.1.0\"\n",
+        HELLO,
+    );
+    let refused = nikaia(
+        &["build", "--target", "x86_64-linux", "--cpu=x86-64-v9"],
+        &dir,
+    );
+    assert!(!refused.status.success(), "{}", said(&refused));
+    let text = said(&refused);
+    for level in [
+        "x86-64-v9",
+        "`x86-64`",
+        "`x86-64-v2`",
+        "`x86-64-v3`",
+        "`x86-64-v4`",
+        "`native`",
+    ] {
+        assert!(text.contains(level), "{level}: {text}");
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **The machine named is the machine built for** (ADR-037 D1): the triple
 /// reaches Cargo as `--target`, which is what puts Cargo's output under a
 /// directory named for it. Until 0.0.218 it was printed and never passed, so a
@@ -565,7 +628,7 @@ fn the_manifest_becomes_a_cargo_manifest() {
         "project-translate",
         "[package]\nname = \"hyper-core\"\nversion = \"0.1.0\"\n\n\
          [dependencies]\nregex = { type = \"rust\", version = \"1.5\" }\n\n\
-         [build.x86_64-linux]\nopt-level = 3\nlto = true\n\n\
+         [build.x86_64-linux]\nopt-level = 3\nlto = true\ncodegen-units = 1\n\n\
          [build.wasm32-unknown]\nopt-level = \"z\"\n",
         HELLO,
     );
@@ -600,6 +663,11 @@ fn the_manifest_becomes_a_cargo_manifest() {
     let parsed: toml::Value = toml::from_str(&root).expect("the root is valid TOML");
     assert_eq!(parsed["profile"]["dev"]["opt-level"].as_integer(), Some(3));
     assert_eq!(parsed["profile"]["dev"]["lto"].as_bool(), Some(true));
+    assert_eq!(
+        parsed["profile"]["dev"]["codegen-units"].as_integer(),
+        Some(1),
+        "ADR-002 D6: the table's unit count is the profile's:\n{root}"
+    );
     assert_eq!(
         parsed["profile"]["dev"]["panic"].as_str(),
         Some("unwind"),

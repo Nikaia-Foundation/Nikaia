@@ -142,6 +142,11 @@ pub struct Settings {
     /// [ADR-284](../../docs/specification/adr/adr-284.md) D26): `python` or `node`,
     /// or none for a plain build.
     pub bind: Option<String>,
+    /// **The CPU level `--cpu` named** ([ADR-002](../../docs/specification/adr/adr-002.md)
+    /// D6), where it is not the target's baseline: the build may use every
+    /// instruction it has, in the program and in `std`. None is the baseline,
+    /// and no `-C target-cpu` at all.
+    pub cpu: Option<String>,
 }
 
 /// `error` or `warn`, what `--refuted-claims` and `[build] refuted-claims`
@@ -325,6 +330,7 @@ impl Settings {
             symbol_prefix,
             tests: false,
             bind: None,
+            cpu: None,
         })
     }
 
@@ -341,6 +347,54 @@ impl Settings {
             self.refuted_claims = refuted_claims(word)?;
         }
         Ok(())
+    }
+
+    /// **`--cpu=LEVEL`** ([ADR-002](../../docs/specification/adr/adr-002.md)
+    /// D6): one of the target's levels, or the build fails naming them. The
+    /// baseline is the same build as no level at all.
+    pub fn choose_cpu(&mut self, level: Option<&str>) -> Result<()> {
+        let Some(level) = level else {
+            return Ok(());
+        };
+        let target = self.build.target;
+        let levels = crate::sysroot::cpu_levels(target.triple())?;
+        if !levels.iter().any(|known| known == level) {
+            let named = levels
+                .iter()
+                .map(|known| format!("`{known}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            refuse!(
+                "`--cpu={level}` is not a CPU level of `{}`. Its levels are: {named}.",
+                target.name()
+            );
+        }
+        self.cpu = (level != levels[0]).then(|| level.to_string());
+        Ok(())
+    }
+
+    /// The CPU level as a dimension of the compiled `std` (ADR-002 D6): empty
+    /// for the baseline, the level's name, and for `native` the CPU `rustc`
+    /// finds on this machine, never the word.
+    pub fn cpu_key(&self) -> Result<String> {
+        match self.cpu.as_deref() {
+            None => Ok(String::new()),
+            Some("native") => crate::sysroot::native_cpu(self.build.target.triple()),
+            Some(level) => Ok(level.to_string()),
+        }
+    }
+
+    /// What Cargo is told for the CPU level: `-C target-cpu` for every crate
+    /// built for the target, the program's and `std`'s, through Cargo's own
+    /// configuration rather than the user's `RUSTFLAGS` (ADR-002 D6, ADR-325).
+    pub fn cpu_config(&self) -> Vec<String> {
+        match &self.cpu {
+            None => Vec::new(),
+            Some(level) => vec![format!(
+                "target.\"{}\".rustflags=[\"-C\", \"target-cpu={level}\"]",
+                self.build.target.triple()
+            )],
+        }
     }
 
     pub fn optimize(&mut self, flags: &[String]) -> Result<()> {
@@ -415,6 +469,7 @@ impl Settings {
             symbol_prefix,
             tests: std::env::var_os(TESTS_VAR).is_some(),
             bind: None,
+            cpu: None,
         })
     }
 
@@ -2754,6 +2809,7 @@ impl Project {
             profile: Profile {
                 opt_level: codegen.get("opt-level").cloned(),
                 lto: codegen.get("lto").cloned(),
+                codegen_units: codegen.get("codegen-units").cloned(),
                 incremental: codegen.get("incremental").cloned(),
                 debug: codegen.get("debug").cloned(),
                 panic: Some(self.settings.panic_strategy().to_string()),
@@ -3112,6 +3168,7 @@ impl Project {
                         &self.settings.target,
                         &self.codegen(),
                         &self.settings.reentrancy_check,
+                        &self.settings.cpu_key()?,
                     );
                     // What projects that are gone left there goes (ADR-021 D12.5).
                     orchestrator::cache::sweep_programs(&tree, &self.root_tag(), &self.root);
@@ -3120,6 +3177,7 @@ impl Project {
             },
             wrapper: std::env::current_exe().context("finding this compiler's own path")?,
             env,
+            config: self.settings.cpu_config(),
         };
 
         // **`build` first, always, and its diagnostics read rather than

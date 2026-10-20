@@ -43,9 +43,8 @@ done
 
 # A Nikaia program is built the way a user builds it: a project with a
 # `nikaia.toml`. `opt-level = 3` as Cargo's release profile has it, no LTO on
-# either side, every optimization the compiler offers on. The unit count goes
-# in through `CARGO_PROFILE_DEV_CODEGEN_UNITS`; a project cannot say it yet
-# (#692).
+# either side, every optimization the compiler offers on. The unit count is
+# the project's `codegen-units` (ADR-002 D6).
 proj="$work/project"
 mkdir -p "$proj/src"
 nikaia_toml() {
@@ -60,6 +59,7 @@ optimization = "remove-bounds-checks:on,remove-overflow-checks:on,skip-free-at-e
 
 [build.x86_64-linux]
 opt-level = 3
+codegen-units = $2
 incremental = false
 TOML
 }
@@ -70,8 +70,8 @@ TOML
 build_nikaia() {
     local u=$1 name=$2 parallel=$3 source=${4:-$root/examples/1brc.nika}
     cp "$source" "$proj/src/main.nika"
-    nikaia_toml "$parallel"
-    ( cd "$proj" && CARGO_PROFILE_DEV_CODEGEN_UNITS=$u "$nikaia" build >/dev/null 2>&1 ) \
+    nikaia_toml "$parallel" "$u"
+    ( cd "$proj" && "$nikaia" build >/dev/null 2>&1 ) \
         || { echo "nikaia build failed ($name, $u units)"; exit 1; }
     cp "$proj/target/nikaia/bin/brc" "$work/nikaia.$name.cu$u"
 }
