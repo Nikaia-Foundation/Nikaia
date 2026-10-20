@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1172] — 2026-10-20
+
+**the grammar runtime's advance always inlined**
+- winnow-grammar is pinned at 64adce9, whose `advance` is always inlined: `examples/1brc.nika` 244.0 -> 235.0 instructions a row at 1 codegen unit, unchanged at 16 (#695).
+
 ## [0.0.1171] — 2026-10-20
 
 **x.low_bits(n)**
