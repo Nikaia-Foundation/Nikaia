@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1155] — 2026-10-20
+
+**A type's rule: an assert after a struct's fields (ADR-369 D1-D3, built in part)**
+- A struct's `assert(claim; message: …)` after its fields is checked or proved at every literal, before every exit of a method that changes the value and before such a method hands `self` on; at each entry it is a fact for `self` and each parameter of the type, so a masked index into a field is proved. A rule that is not an `assert` over fields, paths, pure methods, `comptime` values and literals is `NK1288`. Writes from outside the type's methods and `with` copies switch the entry fact off; D4 and D5 are not built.
+
 ## [0.0.1154] — 2026-10-20
 
 **@inline is built (ADR-370)**
