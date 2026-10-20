@@ -1011,13 +1011,15 @@ pub const PARSE_ERROR: &str = "ParseError";
 /// its unit has been (the first pass reads the declaration's list, which only
 /// ever says more).
 fn write_result_sources(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
-    // What the columns this writes hold, to tell a round that changed nothing:
-    // the next one would read the same ledger and write the same again (#727).
-    let written = |ledger: &Ledger| -> Vec<(Vec<String>, String, Vec<String>)> {
+    // What a round reads of the columns it writes, to tell a round that would
+    // change nothing: `stores` is cleared before each, so a round reads only
+    // `borrows` and `returns`, and where they are what the round before read,
+    // the next would write the same again (#727).
+    let written = |ledger: &Ledger| -> Vec<(Vec<String>, String)> {
         ledger
             .functions
             .values()
-            .map(|c| (c.borrows.clone(), c.returns.clone(), c.stores.clone()))
+            .map(|c| (c.borrows.clone(), c.returns.clone()))
             .collect()
     };
     let mut before = written(ledger);
