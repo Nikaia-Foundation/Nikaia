@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1170] — 2026-10-20
+
+**a method's precondition is proved at its call**
+- A method's precondition is proved where it is called: at `self.m(…)` by the prover, at any call on the program's own type by the bounds walk; a proved call skips the entry check (ADR-269 D20). `Bytes` compares equal with a cut of bytes. Decided: ADR-361 D11's summary of a field of every element is carried across a fold's step and merge, as ADR-367 carries a counter (#770).
+
 ## [0.0.1169] — 2026-10-20
 
 **find_all over a written set fixed at compile time; a believed assume's arithmetic exact; cuts compared in place; low_bits**
