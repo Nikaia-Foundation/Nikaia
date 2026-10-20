@@ -582,6 +582,11 @@ pub struct Program {
     /// [`Program::emit_reading`] reads it rather than inferring the ledger a
     /// second time (#727). `None` where the library held more.
     pub own_checked: Option<Vec<crate::check::Checked>>,
+    /// **What the check of a unit found, by its index in [`Program::units`]**,
+    /// kept where that check asked exactly what the emitter's own would
+    /// (`check::propagation_against`), so the emitter reads it rather than
+    /// walking the unit again (#727).
+    pub checked_facts: BTreeMap<usize, crate::check::CheckFacts>,
 }
 
 /// One `test "…" { … }` of the program, as `nikaia test` names it.
@@ -810,6 +815,7 @@ impl Program {
             paused_by_code,
             pauses,
             own_checked: own_checked.filter(|_| own_groups == 1),
+            checked_facts: BTreeMap::new(),
         })
     }
 
@@ -1106,6 +1112,7 @@ impl Program {
                     // may be written from.
                     at == 0,
                     reads,
+                    self.checked_facts.get(&at).cloned(),
                 )
             })
             // **A refusal from the lowering gets its line here**

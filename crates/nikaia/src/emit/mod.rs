@@ -830,6 +830,7 @@ pub fn emit_module_body(
         &crate::contracts::Ledger::blank(),
         false,
         &Reads::none(),
+        None,
     )
 }
 
@@ -856,6 +857,9 @@ pub fn emit_module_body_at(
     // emitter runs has to be the check that refused, or the two halves
     // disagree about one program ([ADR-310](../../docs/specification/adr/adr-310.md)).
     reads: &Reads,
+    // The facts of a check already run as `check::propagation_against` would
+    // run it, or `None` for the emitter to run it.
+    checked: Option<crate::check::CheckFacts>,
 ) -> Result<Lowered> {
     Emitter::with_contracts(
         parsed,
@@ -865,7 +869,7 @@ pub fn emit_module_body_at(
         contracts.clone(),
         described,
         reads,
-        None,
+        checked,
     )
     .for_entry(entry)
     .items_only()

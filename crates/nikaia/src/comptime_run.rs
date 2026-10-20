@@ -307,6 +307,7 @@ pub(crate) fn lowered_units(
             &crate::contracts::Ledger::blank(),
             at == entry,
             &crate::assets::Reads::none(),
+            None,
         )
         .ok()?;
         map.extend(body.map.placed(rust.len(), at));
@@ -390,6 +391,7 @@ pub(crate) fn dependency_modules(
                 &crate::contracts::Ledger::blank(),
                 false,
                 &crate::assets::Reads::none(),
+                None,
             )
             .ok()?;
             rust.push_str(&body.rust);

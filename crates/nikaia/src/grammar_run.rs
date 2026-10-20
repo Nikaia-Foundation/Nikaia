@@ -368,6 +368,7 @@ fn driver(parsed: &Parsed, ask: &Ask<'_>) -> Result<String, Wall> {
                 &crate::contracts::Ledger::blank(),
                 false,
                 &crate::assets::Reads::none(),
+                None,
             )
             .map_err(|error| Wall::DidNotBuild {
                 detail: format!("lowering a file beside the grammar: {error:#}"),

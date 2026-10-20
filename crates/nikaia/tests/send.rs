@@ -137,6 +137,7 @@ fn refused_at(source: &str, user_parallelism: &str) -> Option<String> {
         "error",
         // A program, not a library (ADR-284 D4).
         false,
+        None,
     )
     .err()
     .map(|error| format!("{error:#}"))

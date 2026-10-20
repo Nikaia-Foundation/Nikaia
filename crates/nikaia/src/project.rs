@@ -1248,8 +1248,17 @@ pub fn lower_reading(
                 false => crate::proofs::Book::default(),
             };
             let mut warnings = String::new();
+            // **The check's facts are the emitter's** where the check asked
+            // exactly what `check::propagation_against` asks: the unit's own
+            // ledger the emitter's, no module and no contract that moved
+            // (#727).
+            let facts_reusable = foreign.packages(&modules).is_empty()
+                && newly.throws.is_empty()
+                && newly.keeps.is_empty()
+                && promised == program.contracts;
+            let mut checked_facts = BTreeMap::new();
             let (checked, book) = crate::proofs::with_book(book, || -> Result<()> {
-                for unit in &program.units {
+                for (at, unit) in program.units.iter().enumerate() {
                     let contracts = match &unit.package {
                         Some(package) => program
                             .as_its_own
@@ -1257,6 +1266,8 @@ pub fn lower_reading(
                             .unwrap_or(&program.contracts),
                         None => &promised,
                     };
+                    let mut facts = None;
+                    let keep = facts_reusable && unit.package.is_none();
                     warnings += &crate::proofs::for_unit(
                         &unit.path,
                         &unit.source,
@@ -1272,9 +1283,13 @@ pub fn lower_reading(
                                 &settings.user_parallelism,
                                 &settings.refuted_claims,
                                 settings.library(),
+                                keep.then_some(&mut facts),
                             )
                         },
                     )?;
+                    if let Some(facts) = facts {
+                        checked_facts.insert(at, facts);
+                    }
                 }
                 Ok(())
             });
@@ -1285,6 +1300,7 @@ pub fn lower_reading(
                     // (ADR-290 D20), which the checker above already read it for.
                     let mut program = program;
                     program.described = foreign.descriptions.clone();
+                    program.checked_facts = checked_facts;
                     let lowered = program.emit_reading(settings.build, &reads)?;
                     (lowered, program)
                 };
@@ -1727,6 +1743,8 @@ pub fn check(
     user_parallelism: &str,
     refuted_claims: &str,
     building_a_library: bool,
+    // Where the walk's facts go, for an emitter that would ask the same.
+    facts_out: Option<&mut Option<check::CheckFacts>>,
 ) -> Result<String> {
     let Around {
         foreign,
@@ -1740,8 +1758,11 @@ pub fn check(
     // `modules` is: a set of words that appear in front of a `::` and are not
     // `std`'s ([`Foreign::packages`]).
     let modules = foreign.packages(modules);
-    let mut all =
-        check::check_against(parsed, beside, own, &library, &modules, newly, reads).findings;
+    let checked = check::check_against(parsed, beside, own, &library, &modules, newly, reads);
+    let mut all = checked.findings;
+    if let Some(out) = facts_out {
+        *out = Some(checked.facts);
+    }
     // **`NK1238` is the checker's answer for a build it knows nothing of**
     // (ADR-284 D4): a library build exports its entry points.
     if building_a_library {
