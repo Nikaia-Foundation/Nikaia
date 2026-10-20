@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1106] — 2026-10-20
+
+**Four more checker gaps from the rustc sweep are refusals**
+- A tuple pattern whose shape is not the value's is the new `NK1283` (`let`, `for`, nested). A struct or enum of the program named as a value without a constructor is `NK1230`. A body with a declared result ending in an `if` without `else` is `NK1104`. `s ?? 5` on a `String?` is `NK1103` (#704).
+
 ## [0.0.1105] — 2026-10-19
 
 **Four checker gaps from the rustc sweep are refusals**
