@@ -46731,8 +46731,9 @@ fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
 fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     let mut steps: Vec<LgStep> = vec![];
     let mut round_names: Vec<String> = vec![];
-    let mut round_bounds: Vec<Vec<LgLin>> = vec![];
+    let mut round_places: Vec<Vec<i64>> = vec![];
     let mut held: Vec<LgHeld> = vec![];
+    let mut alive: Vec<i64> = vec![];
     let mut every: collections::BTreeSet<String> = collections::BTreeSet::new();
     for bound in bounds.iter() { for (name, _) in bound.terms.iter() { every.insert(name.to_owned()); } }
     let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -46754,16 +46755,19 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     let mut index = 0;
     for bound in bounds.iter() {
         steps.push(LgStep::Hypothesis(index));
+        alive.push(held.len() as i64);
         held.push(lg_tighten_step(bound, &mut steps, &ranks));
         index += 1;
     }
     loop {
-        for one in held.iter() { if one.lin.terms.is_empty() && one.lin.constant > 0 { return LgClosed::Refuted(lg_traced(&steps, one.step)); } }
+        for place in alive.iter() {
+            let place = nikaia_std::num::value(place);
+            if nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms.is_empty() && nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.constant > 0 { return LgClosed::Refuted(lg_traced(&steps, nikaia_std::index::get(&held, nikaia_std::index::at(place)).step)); }
+        }
         let mut live: Vec<i64> = vec![];
-        let mut at: i64 = 0;
-        while at < held.len() as i64 {
-            if !nikaia_std::index::get(&held, nikaia_std::index::at(at)).lin.terms.is_empty() { live.push(at); }
-            at += 1;
+        for place in alive.iter() {
+            let place = nikaia_std::num::value(place);
+            if !nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms.is_empty() { live.push(place); }
         }
         let ordered = lg_sorted_places(&held, &live);
         let mut now: Vec<i64> = vec![];
@@ -46785,9 +46789,9 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
             let place = nikaia_std::num::value(place);
             let form = &nikaia_std::index::get(&held, nikaia_std::index::at(place)).form;
             let mut at: i64 = 0;
-            while at + 1 < form.len() as i64 {
-                let rank = *nikaia_std::index::get(&form, nikaia_std::index::at(at));
-                let k = *nikaia_std::index::get(&form, nikaia_std::index::at(at + 1));
+            while ((at + 1) as usize) < form.len() {
+                let rank = *nikaia_std::index::get(&form, (at) as usize);
+                let k = *nikaia_std::index::get(&form, (at + 1) as usize);
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut present, nikaia_std::index::at(rank), __nikaia_stored); }
                 if k > 0 { ups[nikaia_std::index::at(rank)] += 1; }
                 if k < 0 { downs[nikaia_std::index::at(rank)] += 1; }
@@ -46815,32 +46819,43 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
             }
             rank += 1;
         }
-        if !have { return lg_consistent(&round_names, &round_bounds); }
+        if !have {
+            let mut round_bounds: Vec<Vec<LgLin>> = vec![];
+            for places in round_places.iter() {
+                let mut lins: Vec<LgLin> = vec![];
+                for place in places.iter() {
+                    let place = nikaia_std::num::value(place);
+                    lins.push(nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.clone());
+                }
+                round_bounds.push(lins);
+            }
+            return lg_consistent(&round_names, &round_bounds);
+        }
         let mut stop: Vec<LgClosed> = vec![];
-        held = lg_eliminate(&held, &now, nikaia_std::index::get(&rank_names, nikaia_std::index::at(chosen)), budget, &mut steps, &mut round_names, &mut round_bounds, &ranks, &mut stop);
+        alive = lg_eliminate(&mut held, &now, nikaia_std::index::get(&rank_names, nikaia_std::index::at(chosen)), budget, &mut steps, &mut round_names, &mut round_places, &ranks, &mut stop);
         if !stop.is_empty() { return (*nikaia_std::index::get(&stop, 0)).clone(); }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn lg_eliminate(held: &[LgHeld], now: &[i64], name: &str, budget: &LgBudget, steps: &mut Vec<LgStep>, round_names: &mut Vec<String>, round_bounds: &mut Vec<Vec<LgLin>>, ranks: &collections::BTreeMap<String, i64>, stop: &mut Vec<LgClosed>) -> Vec<LgHeld> {
-    let mut without: Vec<LgHeld> = vec![];
+fn lg_eliminate(held: &mut Vec<LgHeld>, now: &[i64], name: &str, budget: &LgBudget, steps: &mut Vec<LgStep>, round_names: &mut Vec<String>, round_places: &mut Vec<Vec<i64>>, ranks: &collections::BTreeMap<String, i64>, stop: &mut Vec<LgClosed>) -> Vec<i64> {
+    let mut without: Vec<i64> = vec![];
     let mut up: Vec<i64> = vec![];
     let mut down: Vec<i64> = vec![];
-    let mut with_lins: Vec<LgLin> = vec![];
+    let mut with_places: Vec<i64> = vec![];
     for place in now.iter() {
         let place = nikaia_std::num::value(place);
         let k = nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms.get(name);
         if k.is_none() {
-            without.push((*nikaia_std::index::get(&held, nikaia_std::index::at(place))).clone());
+            without.push(place);
             continue;
         }
-        with_lins.push(nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.clone());
+        with_places.push(place);
         if nikaia_std::index::or(k, || 0) > 0 { up.push(place); } else { down.push(place); }
     }
     round_names.push(name.to_owned());
-    round_bounds.push(with_lins);
-    let mut next = without;
+    round_places.push(with_places);
+    let mut made: Vec<LgHeld> = vec![];
     for up_at in up.iter() {
         let up_at = nikaia_std::num::value(up_at);
         let u = nikaia_std::index::get(&held, nikaia_std::index::at(up_at));
@@ -46855,14 +46870,19 @@ fn lg_eliminate(held: &[LgHeld], now: &[i64], name: &str, budget: &LgBudget, ste
             let sum = lg_add(&match left { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) }, &match right { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) });
             if sum.is_none() { return lg_stopped(stop, LgUnknown::Overflow); }
             steps.push(LgStep::Combine { left: u.step, by_left: b, right: d.step, by_right: a });
-            next.push(lg_tighten_step(&match sum { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) }, steps, ranks));
-            if (next.len() as i64) > budget.bounds { return lg_stopped(stop, LgUnknown::TooManyBounds); }
+            made.push(lg_tighten_step(&match sum { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) }, steps, ranks));
+            if (without.len() as i64 + made.len() as i64) > budget.bounds { return lg_stopped(stop, LgUnknown::TooManyBounds); }
         }
+    }
+    let mut next = without;
+    for one in made.into_iter() {
+        next.push(held.len() as i64);
+        held.push(one);
     }
     next
 }
 
-fn lg_stopped(stop: &mut Vec<LgClosed>, why: LgUnknown) -> Vec<LgHeld> {
+fn lg_stopped(stop: &mut Vec<LgClosed>, why: LgUnknown) -> Vec<i64> {
     stop.push(LgClosed::Unknown(why));
     vec![]
 }

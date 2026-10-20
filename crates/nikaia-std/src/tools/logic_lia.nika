@@ -728,8 +728,11 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
     let mut steps: Vec[LgStep] = []
     // Each elimination's name and the bounds that held it, for values later.
     let mut round_names: Vec[String] = []
-    let mut round_bounds: Vec[Vec[LgLin]] = []
+    let mut round_places: Vec[Vec[i64]] = []
+    // Every bound made, never removed: `alive` names the places that hold
+    // now, so an elimination copies no bound it keeps (#727).
     let mut held: Vec[LgHeld] = []
+    let mut alive: Vec[i64] = []
     // Every name an elimination meets is one of the case's own: ranked once.
     let mut every: collections::BTreeSet[String] = collections::BTreeSet()
     for bound in bounds {
@@ -758,23 +761,22 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
     let mut index = 0
     for bound in bounds {
         steps.push(LgStep::Hypothesis(index))
+        alive.push(held.len())
         held.push(lg_tighten_step(bound, steps, ranks))
         index += 1
     }
     while true {
         // A bound with no variables left is a verdict: `c <= 0`.
-        for one in held {
-            if one.lin.terms.len() == 0 && one.lin.constant > 0 {
-                return LgClosed::Refuted(lg_traced(steps, one.step))
+        for place in alive {
+            if held[place].lin.terms.len() == 0 && held[place].lin.constant > 0 {
+                return LgClosed::Refuted(lg_traced(steps, held[place].step))
             }
         }
         let mut live: Vec[i64] = []
-        let mut at = 0
-        while at < held.len() {
-            if held[at].lin.terms.len() > 0 {
-                live.push(at)
+        for place in alive {
+            if held[place].lin.terms.len() > 0 {
+                live.push(place)
             }
-            at += 1
         }
         let ordered = lg_sorted_places(held, live)
         // The bounds that count, by their place in `held`.
@@ -838,10 +840,18 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
             rank += 1
         }
         if !have {
+            let mut round_bounds: Vec[Vec[LgLin]] = []
+            for places in round_places {
+                let mut lins: Vec[LgLin] = []
+                for place in places {
+                    lins.push(held[place].lin.clone())
+                }
+                round_bounds.push(lins)
+            }
             return lg_consistent(round_names, round_bounds)
         }
         let mut stop: Vec[LgClosed] = []
-        held = lg_eliminate(held, now, rank_names[chosen], budget, steps, round_names, round_bounds, ranks, stop)
+        alive = lg_eliminate(held, now, rank_names[chosen], budget, steps, round_names, round_places, ranks, stop)
         if stop.len() > 0 {
             return stop[0].clone()
         }
@@ -850,18 +860,19 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
 
 /// The bounds that hold once `name` is eliminated: those without it, and each
 /// pair of an upper and a lower bound on it, combined.
-fn lg_eliminate(held: ref Vec[LgHeld], now: ref Vec[i64], name: ref String, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_names: Vec[String], mut round_bounds: Vec[Vec[LgLin]], ranks: ref collections::BTreeMap[String, i64], mut stop: Vec[LgClosed]) -> Vec[LgHeld] {
-    let mut without: Vec[LgHeld] = []
+/// The places of `held` that hold afterwards; the bounds made are appended.
+fn lg_eliminate(mut held: Vec[LgHeld], now: ref Vec[i64], name: ref String, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_names: Vec[String], mut round_places: Vec[Vec[i64]], ranks: ref collections::BTreeMap[String, i64], mut stop: Vec[LgClosed]) -> Vec[i64] {
+    let mut without: Vec[i64] = []
     let mut up: Vec[i64] = []
     let mut down: Vec[i64] = []
-    let mut with_lins: Vec[LgLin] = []
+    let mut with_places: Vec[i64] = []
     for place in now {
         let k = held[place].lin.terms.get(name)
         if k == null {
-            without.push(held[place].clone())
+            without.push(place)
             continue
         }
-        with_lins.push(held[place].lin.clone())
+        with_places.push(place)
         if (k ?? 0) > 0 {
             up.push(place)
         } else {
@@ -869,8 +880,8 @@ fn lg_eliminate(held: ref Vec[LgHeld], now: ref Vec[i64], name: ref String, budg
         }
     }
     round_names.push(name.clone())
-    round_bounds.push(with_lins)
-    let mut next = without
+    round_places.push(with_places)
+    let mut made: Vec[LgHeld] = []
     for up_at in up {
         let u = held[up_at]
         for down_at in down {
@@ -888,17 +899,22 @@ fn lg_eliminate(held: ref Vec[LgHeld], now: ref Vec[i64], name: ref String, budg
                 return lg_stopped(stop, LgUnknown::Overflow)
             }
             steps.push(LgStep::Combine { left: u.step, by_left: b, right: d.step, by_right: a })
-            next.push(lg_tighten_step(sum ?? return lg_stopped(stop, LgUnknown::Overflow), steps, ranks))
-            if next.len() > budget.bounds {
+            made.push(lg_tighten_step(sum ?? return lg_stopped(stop, LgUnknown::Overflow), steps, ranks))
+            if without.len() + made.len() > budget.bounds {
                 return lg_stopped(stop, LgUnknown::TooManyBounds)
             }
         }
+    }
+    let mut next = without
+    for one in made.drain() {
+        next.push(held.len())
+        held.push(one)
     }
     return next
 }
 
 /// An elimination that cannot go on: why, in `stop`, and no bounds.
-fn lg_stopped(mut stop: Vec[LgClosed], why: LgUnknown) -> Vec[LgHeld] {
+fn lg_stopped(mut stop: Vec[LgClosed], why: LgUnknown) -> Vec[i64] {
     stop.push(LgClosed::Unknown(why))
     return []
 }
