@@ -622,6 +622,8 @@ fn lg_add_constant_checked(a: ref LgLin, c: i64) -> LgLin? {
 struct LgHeld {
     lin: LgLin,
     step: i64,
+    /// The bound's form (`lg_form_of`), made once with the bound.
+    form: Vec[i64],
 }
 
 /// How a case ended.
@@ -637,14 +639,15 @@ enum LgClosed {
 
 /// The bound the last step made, tightened to the integers - with a step of its
 /// own where tightening changed it.
-fn lg_tighten_step(bound: ref LgLin, mut steps: Vec[LgStep]) -> LgHeld {
+fn lg_tighten_step(bound: ref LgLin, mut steps: Vec[LgStep], ranks: ref collections::BTreeMap[String, i64]) -> LgHeld {
     let made = steps.len() - 1
     let tight = lg_tightened(bound)
+    let form = lg_form_of(tight.terms, ranks)
     if lg_lin_equal(tight, bound) {
-        return LgHeld { lin: bound.clone(), step: made }
+        return LgHeld { lin: tight, step: made, form: form }
     }
     steps.push(LgStep::Tighten(made))
-    return LgHeld { lin: tight, step: steps.len() - 1 }
+    return LgHeld { lin: tight, step: steps.len() - 1, form: form }
 }
 
 /// A bound's form as numbers whose order is `lg_terms_cmp`'s: each name's rank
@@ -681,8 +684,8 @@ fn lg_form_cmp(a: ref Vec[i64], b: ref Vec[i64]) -> i64 {
 
 /// Whether the bound at `b` goes before the one at `a`: strictly before in
 /// form, or of one form with a larger constant.
-fn lg_place_before(held: ref Vec[LgHeld], forms: ref Vec[Vec[i64]], b: i64, a: i64) -> bool {
-    let order = lg_form_cmp(forms[b], forms[a])
+fn lg_place_before(held: ref Vec[LgHeld], b: i64, a: i64) -> bool {
+    let order = lg_form_cmp(held[b].form, held[a].form)
     if order != 0 {
         return order < 0
     }
@@ -693,7 +696,7 @@ fn lg_place_before(held: ref Vec[LgHeld], forms: ref Vec[Vec[i64]], b: i64, a: i
 /// largest `c`. Of `held`, the places `places` names, sorted by form, then by
 /// constant, largest first - stably: a merge sort from the bottom up that
 /// moves numbers, not bounds.
-fn lg_sorted_places(held: ref Vec[LgHeld], places: ref Vec[i64], forms: ref Vec[Vec[i64]]) -> Vec[i64] {
+fn lg_sorted_places(held: ref Vec[LgHeld], places: ref Vec[i64]) -> Vec[i64] {
     let n = places.len()
     let mut from = places.clone()
     let mut width = 1
@@ -707,7 +710,7 @@ fn lg_sorted_places(held: ref Vec[LgHeld], places: ref Vec[i64], forms: ref Vec[
             let mut j = middle
             while i < middle && j < end {
                 // The right one goes first only where it is strictly before.
-                if lg_place_before(held, forms, from[j], from[i]) {
+                if lg_place_before(held, from[j], from[i]) {
                     out.push(from[j])
                     j += 1
                 } else {
@@ -762,7 +765,7 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
     let mut index = 0
     for bound in bounds {
         steps.push(LgStep::Hypothesis(index))
-        held.push(lg_tighten_step(bound, steps))
+        held.push(lg_tighten_step(bound, steps, ranks))
         index += 1
     }
     while true {
@@ -780,16 +783,12 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
             }
             at += 1
         }
-        let mut forms: Vec[Vec[i64]] = []
-        for one in held {
-            forms.push(lg_form_of(one.lin.terms, ranks))
-        }
-        let ordered = lg_sorted_places(held, live, forms)
+        let ordered = lg_sorted_places(held, live)
         // The bounds that count, by their place in `held`.
         let mut now: Vec[i64] = []
         let mut kept = -1
         for place in ordered {
-            if kept >= 0 && lg_form_cmp(forms[kept], forms[place]) == 0 {
+            if kept >= 0 && lg_form_cmp(held[kept].form, held[place].form) == 0 {
                 continue
             }
             now.push(place)
@@ -805,7 +804,7 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
             downs.push(0)
         }
         for place in now {
-            let form = forms[place]
+            let form = held[place].form
             let mut at = 0
             while at + 1 < form.len() {
                 let rank = form[at]
@@ -850,27 +849,17 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
         if !have {
             return lg_consistent(round_names, round_bounds)
         }
-        let eliminated = lg_eliminate(held, now, rank_names[chosen], budget, steps, round_names, round_bounds)
-        match eliminated {
-            LgEliminated::Next(next) => {
-                held = next.clone()
-            },
-            LgEliminated::Stop(closed) => {
-                return closed.clone()
-            },
+        let mut stop: Vec[LgClosed] = []
+        held = lg_eliminate(held, now, rank_names[chosen], budget, steps, round_names, round_bounds, ranks, stop)
+        if stop.len() > 0 {
+            return stop[0].clone()
         }
     }
 }
 
-/// How an elimination went on.
-enum LgEliminated {
-    Next(Vec[LgHeld]),
-    Stop(LgClosed),
-}
-
 /// The bounds that hold once `name` is eliminated: those without it, and each
 /// pair of an upper and a lower bound on it, combined.
-fn lg_eliminate(held: ref Vec[LgHeld], now: ref Vec[i64], name: ref String, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_names: Vec[String], mut round_bounds: Vec[Vec[LgLin]]) -> LgEliminated {
+fn lg_eliminate(held: ref Vec[LgHeld], now: ref Vec[i64], name: ref String, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_names: Vec[String], mut round_bounds: Vec[Vec[LgLin]], ranks: ref collections::BTreeMap[String, i64], mut stop: Vec[LgClosed]) -> Vec[LgHeld] {
     let mut without: Vec[LgHeld] = []
     let mut up: Vec[i64] = []
     let mut down: Vec[i64] = []
@@ -901,20 +890,26 @@ fn lg_eliminate(held: ref Vec[LgHeld], now: ref Vec[i64], name: ref String, budg
             let left = lg_scale(u.lin, b)
             let right = lg_scale(d.lin, a)
             if left == null || right == null {
-                return LgEliminated::Stop(LgClosed::Unknown(LgUnknown::Overflow))
+                return lg_stopped(stop, LgUnknown::Overflow)
             }
-            let sum = lg_add(left ?? return LgEliminated::Stop(LgClosed::Unknown(LgUnknown::Overflow)), right ?? return LgEliminated::Stop(LgClosed::Unknown(LgUnknown::Overflow)))
+            let sum = lg_add(left ?? return lg_stopped(stop, LgUnknown::Overflow), right ?? return lg_stopped(stop, LgUnknown::Overflow))
             if sum == null {
-                return LgEliminated::Stop(LgClosed::Unknown(LgUnknown::Overflow))
+                return lg_stopped(stop, LgUnknown::Overflow)
             }
             steps.push(LgStep::Combine { left: u.step, by_left: b, right: d.step, by_right: a })
-            next.push(lg_tighten_step(sum ?? return LgEliminated::Stop(LgClosed::Unknown(LgUnknown::Overflow)), steps))
+            next.push(lg_tighten_step(sum ?? return lg_stopped(stop, LgUnknown::Overflow), steps, ranks))
             if next.len() > budget.bounds {
-                return LgEliminated::Stop(LgClosed::Unknown(LgUnknown::TooManyBounds))
+                return lg_stopped(stop, LgUnknown::TooManyBounds)
             }
         }
     }
-    return LgEliminated::Next(next)
+    return next
+}
+
+/// An elimination that cannot go on: why, in `stop`, and no bounds.
+fn lg_stopped(mut stop: Vec[LgClosed], why: LgUnknown) -> Vec[LgHeld] {
+    stop.push(LgClosed::Unknown(why))
+    return []
 }
 
 
