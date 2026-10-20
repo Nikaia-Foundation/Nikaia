@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1151 (Draft)
+**Version:** 0.0.1152 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -838,7 +838,7 @@ written empty is refused (`NK1287`); one empty at run time finds nothing.
 `from`, `b.find_all(set; from: i64) -> Seq[i64]` every one, rising, and
 `b.split(set) -> Seq[ref Bytes]` the pieces between them by text's `split`
 rules: neighbouring bytes of the set give an empty piece, one at the end an
-empty last piece, an empty `b` one empty piece. `b.find_all(set).count()` counts without making a position.
+empty last piece, an empty `b` one empty piece. `b.find_all(set).count()` counts without making a position. Each position `find_all` yields is at least `from` and below `b.len()`, and a proof may use it (Part III 14.2).
 **A word is read at a position, in the order its name says:** `b.u32_le(i)`
 and `b.u64_le(i)` read 4 or 8 bytes from `i`, least significant first, as a
 `u32` or a `u64`; `b.u32_be(i)` and `b.u64_be(i)` read them most significant

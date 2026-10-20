@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1152] — 2026-10-20
+
+**A position find_all yields is a fact for the proof (ADR-375 D5, decided)**
+- ADR-375 D5, Part I, Part III 14.2: each position `b.find_all(set; from: f)` yields is `f <= s < b.len()` for the walk, stated in `std`'s ledger as `ensures_each` on the sequence's elements and read on the name a `for` binds. Other searches take the same entry only when a program needs it and an `assert` cannot give it. Decided, not yet built.
+
 ## [0.0.1151] — 2026-10-20
 
 **prove-through-loops: the compiler's own checks asked through a loop (ADR-361 D10, decided)**
