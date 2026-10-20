@@ -5281,12 +5281,35 @@ throws = ["io::IoError"]
 signature = "(ref self) -> ref(self) String"
 
 # The first `byte` at or after `from`, or nothing (ADR-320 D6): a byte search
-# of the kind `memchr` does.
+# of the kind `memchr` does. **`byte` may also be a `bytes::ByteSet`**
+# (ADR-375 D3), the first byte of the set; the checker takes either.
 [fn."Bytes::find"]
 pub = true
 sync = true
 touches = []
 signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
+
+# Every position at or after `from` that holds a byte of `set`, rising
+# (ADR-375 D3). **Its consumers are its own** (D4): `count` adds the bits of
+# each block's mask and makes no position, `nth` skips whole blocks by their
+# count, `last` searches from the end. A consumer written right after
+# `find_all` is the one named here; a step between them is another sequence.
+[fn."Bytes::find_all"]
+pub = true
+sync = true
+touches = []
+consumers = ["count", "nth", "last"]
+signature = "(ref self, set: bytes::ByteSet; from: i64 = 0) -> Seq[i64] sync"
+
+# The pieces between the bytes of `set`, each a view into the bytes, by text's
+# `split` rules (ADR-375 D3): neighbouring bytes of the set give an empty
+# piece, one at the end an empty last piece, empty bytes one empty piece, and
+# an empty set the whole as its one piece.
+[fn."Bytes::split"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self, set: bytes::ByteSet) -> Seq[ref(self) Bytes] sync"
 
 # The 4 bytes from `at` as an unsigned number, least significant byte first
 # (ADR-320 D12): checked as the cut `b[at..<at + 4]` is, and proved as it is.
@@ -5328,6 +5351,21 @@ pub = true
 sync = true
 touches = []
 signature = "(ref self) -> Bytes"
+
+# **A set of bytes, `0x00` to `0xFF`, prepared once for the search it serves**
+# (ADR-375 D2): `bytes::ByteSet([';', '\n'])`. One written empty is `NK1287`;
+# one empty at run time finds nothing.
+[type."bytes::ByteSet"]
+pub = true
+crosses = true
+copies = true
+
+# The set of the bytes in the list; a byte written twice is in it once.
+[fn."bytes::ByteSet"]
+pub = true
+sync = true
+touches = []
+signature = "(bytes: Vec[u8]) -> bytes::ByteSet"
 
 # A `Bytes` made from a `Vec[u8]`, which is handed over (ADR-373 D2): the
 # vector's memory becomes the buffer and nothing is copied.

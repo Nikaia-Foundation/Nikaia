@@ -416,6 +416,14 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") {
         state.facts.text_finds.insert(id_of(receiver) as i64)
     }
+    // **A `Bytes` is cut by a set through `std`'s own `split`** (ADR-375 D3).
+    let bytes = match on {
+        Ty::Named { name, args, .. } => args.len() == 0 && (name == "Bytes" || name == "Mapped" || name == "fs::Mapped"),
+        else => false,
+    }
+    if bytes && name == "split" && args.len() == 1 {
+        state.facts.bytes_splits.insert(id_of(receiver) as i64)
+    }
     // **A pattern of one scalar is that character** (#617): the same match, and
     // the language below searches a `char` with `memchr` where it builds a
     // two-way searcher for every `&str`.

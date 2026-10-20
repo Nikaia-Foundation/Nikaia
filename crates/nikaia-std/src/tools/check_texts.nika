@@ -266,6 +266,15 @@ impl CheckState {
                     }
                     return want.clone()
                 }
+                // **A list of `'…'` handed to a `Vec[u8]` is a list of
+                // bytes** (ADR-320 D8, ADR-375 D2): each is the byte it
+                // would be where one `u8` is asked, `bytes::ByteSet([';', '\n'])`.
+                if items.len() > 0 && check_texts_all_chars(element, items) {
+                    for item in items {
+                        self.text_literal(world, element, item, true)
+                    }
+                    return want.clone()
+                }
             },
             Expr::Tuple(parts, _) => {
                 let wanted: Vec[Ty] = match want {
@@ -582,6 +591,31 @@ impl CheckState {
 
 /// Whether each of `items` is text written out for `element`: a text literal
 /// for a `String`, a tuple of them for a tuple of `String`s.
+/// Whether `element` is `u8` and each of `items` a `'…'`, or `element` a
+/// `Vec` of such and each of `items` a list of them: `[[';'], ['\n']]`.
+fn check_texts_all_chars(element: ref Ty, items: ref Vec[Expr]) -> bool sync {
+    let (bytes, inner) = match element {
+        Ty::Named { name, args, view } => (!view && name == "u8" && args.len() == 0, if !view && name == "Vec" && args.len() == 1 { args[0].clone() } else { Ty::Unknown }),
+        else => (false, Ty::Unknown),
+    }
+    for item in items {
+        match item {
+            Expr::LitChar(..) => {
+                if !bytes {
+                    return false
+                }
+            },
+            Expr::ListLit { items: nested, .. } => {
+                if nested.len() == 0 || !check_texts_all_chars(inner, nested) {
+                    return false
+                }
+            },
+            else => return false,
+        }
+    }
+    return bytes || !inner.is_unknown()
+}
+
 fn check_texts_all_text(element: ref Ty, items: ref Vec[Expr]) -> bool sync {
     for item in items {
         if !check_texts_text_for(element, item) {

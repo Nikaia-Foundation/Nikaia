@@ -1109,6 +1109,10 @@ pub struct FnContract {
     /// a consumer in another package drives it in pieces, as the grammar's own
     /// file does. Written only where it holds.
     pub pieces: bool,
+    /// **The consumers a sequence this function produces has of its own**
+    /// (ADR-375 D4, Part III's `Seq`): `count`, `nth`, `last` written right
+    /// after the call are the producer's, not the general walk.
+    pub consumers: Vec[String],
     /// **What a caller has to establish**: the function's preconditions, each
     /// an `assert` of its body carried back to the entry, in the language's
     /// syntax over the parameters
@@ -1151,6 +1155,7 @@ impl FnContract {
             maps: [],
             ends_by_length: false,
             pieces: false,
+            consumers: [],
             requires: [],
             ensures: [],
             inferred: [],

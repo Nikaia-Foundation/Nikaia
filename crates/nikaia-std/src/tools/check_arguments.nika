@@ -96,6 +96,14 @@ fn check_arguments_receiver_node(value: ref Expr) -> i64 sync {
 }
 
 /// The name a variable was written as, for the sentence that names it.
+/// Whether `ty` is a `bytes::ByteSet` (ADR-375 D2).
+fn check_arguments_a_byte_set(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, .. } => args.len() == 0 && (name == "bytes::ByteSet" || name == "ByteSet"),
+        else => false,
+    }
+}
+
 fn check_arguments_named(world: ref CheckWorld, value: ref Expr?) -> String? sync {
     let given = value ?? return null
     return match given {
@@ -312,6 +320,11 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(want) {
                 found_here = Ty::Named { name: "i64".clone(), args: [], view: false }
             }
+        }
+        // **`Bytes::find` takes a byte or a set of them** (ADR-375 D3): the
+        // language below takes either for the one parameter.
+        if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(found_here) {
+            continue
         }
         // **A view handed to a `String` the callee only reads is lent as it
         // is** (ADR-282 D11), for a function this compiler declares; **not a

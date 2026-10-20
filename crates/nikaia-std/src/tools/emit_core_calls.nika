@@ -965,6 +965,16 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **A `Bytes` cut by a set** (ADR-375 D3): `std`'s `split`, which
+        // takes a `Bytes`, a cut and a text's own bytes alike.
+        if name == "split" && args.len() == 1 && self.facts.bytes_splits.contains(node_key(receiver)) {
+            out.push("nikaia_std::bytes::split(&")
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
+            out.push(", ")
+            self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+            out.push(")")
+            return
+        }
         if name == "find" && self.facts.text_finds.contains(node_key(receiver)) {
             out.push("nikaia_std::search::find(&")
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)

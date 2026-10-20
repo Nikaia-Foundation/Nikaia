@@ -19,6 +19,8 @@
 
 use shared_bytes::Shared;
 
+pub use crate::byteset::{ByteSet, FindAll, Needle, Split, split};
+
 /// A run of bytes that several holders may share
 /// ([ADR-283](../../../docs/specification/adr/adr-283.md) D20, ADR-373 D1):
 /// equal, ordered and hashed by content, whoever owns it.
@@ -95,9 +97,24 @@ impl Bytes {
     /// The first `byte` at or after the position `from`, or `None`
     /// (ADR-320 D6): a byte search of the kind `memchr` does. A `from` before
     /// the start searches from the start; one past the end finds nothing.
+    /// `byte` may be a [`ByteSet`]: the first byte of the set (ADR-375 D3).
     #[inline]
-    pub fn find(&self, byte: u8, from: i64) -> Option<i64> {
-        ByteReads::find(self.as_slice(), byte, from)
+    pub fn find<N: Needle>(&self, byte: N, from: i64) -> Option<i64> {
+        byte.first_in(self.as_slice(), from)
+    }
+
+    /// Every position at or after `from` that holds a byte of `set`, rising
+    /// (ADR-375 D3).
+    #[inline]
+    pub fn find_all(&self, set: impl Into<ByteSet>, from: i64) -> FindAll<'_> {
+        FindAll::new(self.as_slice(), set.into(), from)
+    }
+
+    /// The pieces between the bytes of `set`, by text's `split` rules
+    /// (ADR-375 D3).
+    #[inline]
+    pub fn split(&self, set: impl Into<ByteSet>) -> Split<'_> {
+        Split::new(self.as_slice(), set.into())
     }
 
     /// The 4 bytes from `at` as an unsigned number, least significant byte
@@ -147,8 +164,12 @@ impl Bytes {
 pub trait ByteReads {
     /// The bytes as text, where they are text: [`Bytes::text`].
     fn text(&self) -> Result<&str, crate::io::IoError>;
-    /// The first `byte` at or after `from`, or `None`: [`Bytes::find`].
-    fn find(&self, byte: u8, from: i64) -> Option<i64>;
+    /// The first `byte`, or byte of a set, at or after `from`, or `None`:
+    /// [`Bytes::find`].
+    fn find<N: Needle>(&self, byte: N, from: i64) -> Option<i64>;
+    /// Every position of a byte of `set` from `from`: [`Bytes::find_all`].
+    /// (`split` is [`split`]: a slice's own `split` would be the one called.)
+    fn find_all(&self, set: impl Into<ByteSet>, from: i64) -> FindAll<'_>;
     /// The 4 bytes from `at`, least significant first: [`Bytes::u32_le`].
     fn u32_le(&self, at: i64) -> u32;
     /// The 4 bytes from `at`, most significant first: [`Bytes::u32_be`].
@@ -170,11 +191,13 @@ impl ByteReads for [u8] {
     }
 
     #[inline]
-    fn find(&self, byte: u8, from: i64) -> Option<i64> {
-        let start = usize::try_from(from.max(0)).ok()?;
-        let rest = self.get(start..)?;
-        let at = memchr::memchr(byte, rest)?;
-        i64::try_from(start + at).ok()
+    fn find<N: Needle>(&self, byte: N, from: i64) -> Option<i64> {
+        byte.first_in(self, from)
+    }
+
+    #[inline]
+    fn find_all(&self, set: impl Into<ByteSet>, from: i64) -> FindAll<'_> {
+        FindAll::new(self, set.into(), from)
     }
 
     #[inline]

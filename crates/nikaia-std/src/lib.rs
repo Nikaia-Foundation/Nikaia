@@ -34,6 +34,7 @@ pub mod abort;
 pub mod boxed;
 pub mod build_time;
 pub mod bytes;
+pub mod byteset;
 pub mod channel;
 pub mod cleanup;
 pub mod cli;
@@ -607,6 +608,8 @@ pub mod prelude {
     // writes `.shown()` on each, and a method needs its trait in scope.
     pub use crate::abort::{ShownByDebug as _, ShownByNothing as _};
     pub use crate::bytes::Bytes;
+    // `bytes::ByteSet` and its searches (ADR-375).
+    pub use crate::bytes;
     // The reads of a `Bytes` on a `&[u8]` (ADR-320 D11).
     pub use crate::bytes::ByteReads as _;
     // A copy of bytes, from a `Bytes` or a `&[u8]` (ADR-320 D11).

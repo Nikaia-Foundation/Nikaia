@@ -124,6 +124,25 @@ impl CheckState {
         }
     }
 
+    /// **`NK1287`: a `bytes::ByteSet` the build proves empty** (ADR-375 D2):
+    /// its list written as `[]`. A set the program computes may be empty for
+    /// good reasons and finds nothing then; one written empty is a mistake.
+    pub fn a_byte_set_written_empty(ref mut self, world: ref CheckWorld, key: ref String, args: ref Vec[Expr], span: ref Span) sync {
+        if key != "bytes::ByteSet" || args.len() != 1 {
+            return
+        }
+        match args[0] {
+            Expr::ListLit { items, .. } => {
+                if items.len() == 0 {
+                    let at = check_span_at(world, args[0], span)
+                    let note: String = "A set with no bytes finds nothing: `find` is `null`, `find_all` yields nothing, `split` yields the whole as its one piece."
+                    self.findings.push(check_refusal("NK1287", at, "This `bytes::ByteSet` is written empty, so every search with it finds nothing.".clone(), [note], "Name the bytes to search for, `bytes::ByteSet([';', '\\n'])`. A set computed at run time may be empty, and then finds nothing.".clone()))
+                }
+            },
+            else => {},
+        }
+    }
+
     /// **`NK1248`: `<` or `==` on a type parameter no bound lets compare.**
     pub fn an_operator_needs_a_bound(ref mut self, world: ref CheckWorld, op: BinaryOp, left: ref Ty, right: ref Ty, at: ref Span) {
         let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge

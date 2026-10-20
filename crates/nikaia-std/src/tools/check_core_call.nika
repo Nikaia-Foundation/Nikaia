@@ -679,6 +679,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     if have {
         state.an_exit_code_out_of_range(key, args, span)
         state.an_environment_entry_invalid(world, host, key, config, span)
+        state.a_byte_set_written_empty(world, key, args, span)
     }
     let declared_here = have && world.own.functions.contains_key(key)
     // **A parameter of code is a place, given what every caller hands it**

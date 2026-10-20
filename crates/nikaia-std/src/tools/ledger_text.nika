@@ -251,6 +251,9 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
     if contract.pieces {
         out.push_str("pieces = true\n")
     }
+    if contract.consumers.len() > 0 {
+        out.push_str(f"consumers = [{quoted_all(contract.consumers)}]\n")
+    }
     // **The function's contract from its `assert`s** (ADR-269 D18): what a
     // caller establishes, what it may rely on, and the `assert` each came
     // from.
