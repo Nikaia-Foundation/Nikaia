@@ -96,19 +96,13 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
             }
             read.push((claim.clone(), message.cloned(), rule.span));
         }
-        let mut small = type_name.clone();
-        if let Some(first) = small.get(0..1) {
-            small = format!("{}{}", first.to_lowercase(), &small[1..]);
-        }
-        if field_names.contains(&small) || small == type_name {
-            small = format!("{small}_value");
-        }
+        let binding = binding_of(&interner, &type_name, &field_names);
         ruled.insert(
             type_name,
             Ruled {
                 fields: field_names,
                 rules: read,
-                binding: interner.intern_string(&small),
+                binding,
             },
         );
     }
@@ -159,6 +153,19 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
     }
     parsed.program.items = items;
     Ok(())
+}
+
+/// The name a checked literal of `type_name` is bound to: its first letter
+/// small (`piece`), which is what a failure shows.
+fn binding_of(interner: &InternerContext, type_name: &str, fields: &BTreeSet<String>) -> Symbol {
+    let mut small = type_name.to_string();
+    if let Some(first) = small.get(0..1) {
+        small = format!("{}{}", first.to_lowercase(), &small[1..]);
+    }
+    if fields.contains(&small) || small == type_name {
+        small = format!("{small}_value");
+    }
+    interner.intern_string(&small)
 }
 
 /// **The types a method can leave broken through a failure it passes on**:
@@ -431,39 +438,7 @@ fn rewrite_fn(
             Item::Test { body, .. } | Item::Bench { body, .. } => (None, Vec::new(), false, body),
             _ => return,
         };
-    // **Every literal of a type with a rule is checked where it is built**.
-    crate::text_tiers::visit_block_mut(
-        body,
-        &mut |expr| {
-            let Expr::StructLit { name, id, .. } = expr else {
-                return;
-            };
-            let type_name = interner.resolve(*name).to_string();
-            let Some(rules) = ruled.get(&type_name) else {
-                return;
-            };
-            let at = spans.get(&id.get()).copied().unwrap_or(span);
-            let literal = std::mem::replace(expr, Expr::LitNull(NodeId::fresh()));
-            let binding = Expr::Variable(rules.binding, NodeId::fresh());
-            let mut stmts = vec![Spanned::new(
-                Stmt::Let {
-                    names: vec![rules.binding],
-                    shape: Vec::new(),
-                    mutable: false,
-                    ty: None,
-                    value: literal,
-                },
-                at,
-            )];
-            stmts.extend(asserts(interner, rules, &type_name, &binding, at, false));
-            stmts.push(Spanned::new(
-                Stmt::Expr(Expr::Variable(rules.binding, NodeId::fresh())),
-                at,
-            ));
-            *expr = Expr::Block(Block { stmts }, NodeId::fresh());
-        },
-        &mut |_, _| {},
-    );
+    check_literals(interner, ruled, spans, body, span);
     let self_name = interner.intern_string("self");
     let self_rules = owner.and_then(|o| ruled.get(o).map(|r| (o, r)));
     // **A method that changes its receiver keeps the rule when it leaves**.
@@ -555,6 +530,48 @@ fn rewrite_fn(
         given.append(&mut body.stmts);
         body.stmts = given;
     }
+}
+
+/// **Every literal of a type with a rule is checked where it is built** (D2).
+fn check_literals(
+    interner: &InternerContext,
+    ruled: &BTreeMap<String, Ruled>,
+    spans: &BTreeMap<u32, Span>,
+    body: &mut Block,
+    span: Span,
+) {
+    crate::text_tiers::visit_block_mut(
+        body,
+        &mut |expr| {
+            let Expr::StructLit { name, id, .. } = expr else {
+                return;
+            };
+            let type_name = interner.resolve(*name).to_string();
+            let Some(rules) = ruled.get(&type_name) else {
+                return;
+            };
+            let at = spans.get(&id.get()).copied().unwrap_or(span);
+            let literal = std::mem::replace(expr, Expr::LitNull(NodeId::fresh()));
+            let binding = Expr::Variable(rules.binding, NodeId::fresh());
+            let mut stmts = vec![Spanned::new(
+                Stmt::Let {
+                    names: vec![rules.binding],
+                    shape: Vec::new(),
+                    mutable: false,
+                    ty: None,
+                    value: literal,
+                },
+                at,
+            )];
+            stmts.extend(asserts(interner, rules, &type_name, &binding, at, false));
+            stmts.push(Spanned::new(
+                Stmt::Expr(Expr::Variable(rules.binding, NodeId::fresh())),
+                at,
+            ));
+            *expr = Expr::Block(Block { stmts }, NodeId::fresh());
+        },
+        &mut |_, _| {},
+    );
 }
 
 /// A `return` written as a statement, anywhere in the body but a lambda:
@@ -728,47 +745,88 @@ fn changed_outside(
 
 /// **A package of several files keeps a rule as a fact only where no other
 /// file can break it** (D3). The rules are written out one file at a time
-/// ([`expand`]), so a file does not check a rule of a type another file
-/// declares: a literal of it, a method of it that changes `self`, and a
-/// field of it written, set by a `with` or handed on, each as
+/// ([`expand`]), so here a literal of a type another file declares is checked
+/// as one in the type's own file is (D2), its rules read again in the file
+/// that builds it; a method of the type that changes `self` in another file,
+/// and a field of it written, set by a `with` or handed on there, each as
 /// [`changed_outside`] reads them, take the type's rule out of the facts at
 /// every entry of the package.
-pub(crate) fn across_files(files: &mut [&mut Parsed]) {
-    if files.len() < 2 {
-        return;
-    }
-    let declared: Vec<BTreeMap<String, BTreeSet<String>>> =
-        files.iter().map(|file| ruled_fields(file)).collect();
+///
+/// **Nor where another package can break it.** A package is lowered without
+/// the code of the packages that use it: a `pub` field a rule reads may be
+/// written there, and a literal of a `pub` type whose every field is `pub`
+/// (or has a default) may be built there, neither checked. Such a type's
+/// rule is no fact anywhere in its package; what is lost is a proof, never a
+/// check.
+pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
+    let declared: Vec<BTreeMap<String, Declared>> = files
+        .iter()
+        .map(|(file, source)| declared_rules(file, source))
+        .collect();
     if declared.iter().all(BTreeMap::is_empty) {
         return;
     }
-    let mut changed = BTreeSet::new();
-    for (at, file) in files.iter_mut().enumerate() {
-        let foreign: BTreeMap<String, BTreeSet<String>> = declared
+    let mut changed: BTreeSet<String> = declared
+        .iter()
+        .flat_map(|types| {
+            types
+                .iter()
+                .filter(|(_, d)| d.open)
+                .map(|(name, _)| name.clone())
+        })
+        .collect();
+    for (at, (file, _)) in files.iter_mut().enumerate() {
+        let foreign: BTreeMap<String, &Declared> = declared
             .iter()
             .enumerate()
             .filter(|(other, _)| *other != at)
-            .flat_map(|(_, types)| types.clone())
+            .flat_map(|(_, types)| types.iter().map(|(name, d)| (name.clone(), d)))
             .collect();
         if foreign.is_empty() {
             continue;
         }
         let interner = file.interner.clone();
-        changed.extend(changed_outside(
-            &interner,
-            &foreign,
-            &mut file.program.items,
-        ));
+        let fields: BTreeMap<String, BTreeSet<String>> = foreign
+            .iter()
+            .map(|(name, d)| (name.clone(), d.fields.clone()))
+            .collect();
+        let ruled: BTreeMap<String, Ruled> = foreign
+            .iter()
+            .filter_map(|(name, d)| Some((name.clone(), read_again(file, name, d)?)))
+            .collect();
+        changed.extend(changed_outside(&interner, &fields, &mut file.program.items));
         changed.extend(built_elsewhere(
             &interner,
-            &foreign,
+            &fields,
+            &ruled,
             &mut file.program.items,
         ));
+        if ruled.is_empty() {
+            continue;
+        }
+        let spans = file.expr_spans.clone();
+        for item in &mut file.program.items {
+            let span = item.span;
+            match &mut item.node {
+                Item::Impl { methods, .. } => {
+                    for method in methods {
+                        let span = method.span;
+                        if let Item::Fn { body, .. } = &mut method.node {
+                            check_literals(&interner, &ruled, &spans, body, span);
+                        }
+                    }
+                }
+                Item::Fn { body, .. } | Item::Test { body, .. } | Item::Bench { body, .. } => {
+                    check_literals(&interner, &ruled, &spans, body, span);
+                }
+                _ => {}
+            }
+        }
     }
     if changed.is_empty() {
         return;
     }
-    for file in files.iter_mut() {
+    for (file, _) in files.iter_mut() {
         let interner = file.interner.clone();
         for item in &mut file.program.items {
             match &mut item.node {
@@ -783,35 +841,110 @@ pub(crate) fn across_files(files: &mut [&mut Parsed]) {
     }
 }
 
-/// The structs of a file that state rules, with their fields' names.
-fn ruled_fields(parsed: &Parsed) -> BTreeMap<String, BTreeSet<String>> {
+/// A struct of a file that states rules, as another file reads it.
+struct Declared {
+    fields: BTreeSet<String>,
+    /// Each rule as written, `assert(…)`, to be read again in the file that
+    /// builds a literal of the type.
+    rules: Vec<String>,
+    /// A rule reads a `pub` field, or the type is `pub` and every field is
+    /// `pub` or has a default: another package can break the rule unchecked.
+    open: bool,
+}
+
+/// The structs of a file that state rules.
+fn declared_rules(parsed: &Parsed, source: &str) -> BTreeMap<String, Declared> {
+    let interner = &parsed.interner;
     let mut out = BTreeMap::new();
     for item in &parsed.program.items {
-        if let Item::Struct {
+        let Item::Struct {
             name,
             fields,
             rules,
+            is_public,
             ..
         } = &item.node
-            && !rules.is_empty()
-        {
-            out.insert(
-                parsed.interner.resolve(*name).to_string(),
-                fields
-                    .iter()
-                    .map(|f| parsed.interner.resolve(f.name).to_string())
-                    .collect(),
-            );
+        else {
+            continue;
+        };
+        if rules.is_empty() {
+            continue;
         }
+        let public: BTreeSet<String> = fields
+            .iter()
+            .filter(|f| f.is_public)
+            .map(|f| interner.resolve(f.name).to_string())
+            .collect();
+        let buildable = *is_public && fields.iter().all(|f| f.is_public || f.default.is_some());
+        let reads_public = rules.iter().any(|rule| {
+            a_rule(interner, &rule.node).is_none_or(|(claim, _)| reads(interner, claim, &public))
+        });
+        out.insert(
+            interner.resolve(*name).to_string(),
+            Declared {
+                fields: fields
+                    .iter()
+                    .map(|f| interner.resolve(f.name).to_string())
+                    .collect(),
+                rules: rules
+                    .iter()
+                    .map(|rule| {
+                        source
+                            .get(rule.span.start as usize..rule.span.end as usize)
+                            .unwrap_or_default()
+                            .to_string()
+                    })
+                    .collect(),
+                open: buildable || reads_public,
+            },
+        );
     }
     out
 }
 
-/// The types of `ruled` this file builds a literal of, or writes a method
-/// for that changes `self`: neither is checked here.
+/// Whether `claim` reads one of `names` as a field.
+fn reads(interner: &InternerContext, claim: &Expr, names: &BTreeSet<String>) -> bool {
+    let again = |e: &Expr| reads(interner, e, names);
+    match claim {
+        Expr::Variable(name, _) => names.contains(interner.resolve(*name)),
+        Expr::Binary { lhs, rhs, .. } => again(lhs) || again(rhs),
+        Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => again(expr),
+        Expr::Field { base, .. } => again(base),
+        Expr::MethodCall { receiver, args, .. } => again(receiver) || args.iter().any(again),
+        Expr::Path(..)
+        | Expr::LitInt { .. }
+        | Expr::LitBool(..)
+        | Expr::LitChar(..)
+        | Expr::LitFloat(..)
+        | Expr::LitNull(_) => false,
+        _ => true,
+    }
+}
+
+/// A type's rules read again in `file`, with its words: `None` where one
+/// does not read as a rule, and a literal of the type is then not checked.
+fn read_again(file: &Parsed, type_name: &str, declared: &Declared) -> Option<Ruled> {
+    let interner = &file.interner;
+    let mut rules = Vec::new();
+    for text in &declared.rules {
+        let rule = file.read_expression(text).ok()?;
+        let (claim, message) = a_rule(interner, &rule)?;
+        rules.push((claim.clone(), message.cloned(), Span::new(0, 0)));
+    }
+    Some(Ruled {
+        binding: binding_of(interner, type_name, &declared.fields),
+        fields: declared.fields.clone(),
+        rules,
+    })
+}
+
+/// The types of `ruled` this file writes a method for that changes `self`,
+/// or builds a literal of without reading its rules again (`checked`):
+/// neither is checked here.
 fn built_elsewhere(
     interner: &InternerContext,
     ruled: &BTreeMap<String, BTreeSet<String>>,
+    checked: &BTreeMap<String, Ruled>,
     items: &mut [Spanned<Item>],
 ) -> BTreeSet<String> {
     let found = std::cell::RefCell::new(BTreeSet::new());
@@ -834,7 +967,7 @@ fn built_elsewhere(
                 &mut |expr| {
                     if let Expr::StructLit { name, .. } = expr {
                         let type_name = interner.resolve(*name).to_string();
-                        if ruled.contains_key(&type_name) {
+                        if ruled.contains_key(&type_name) && !checked.contains_key(&type_name) {
                             found.borrow_mut().insert(type_name);
                         }
                     }

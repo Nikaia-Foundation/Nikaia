@@ -502,6 +502,17 @@ impl Parsed {
         Ok(expr)
     }
 
+    /// **An expression read into this file's tree**, with words of its
+    /// interner and ids after its own: a type's rule another file of the
+    /// package states, read again where a literal of the type is checked
+    /// (ADR-369 D2).
+    pub fn read_expression(&self, text: &str) -> Result<ast::Expr> {
+        let mut next = self.next_id.lock().expect("a hole parse panicked");
+        let (expr, after) = parse_expression_from(&self.interner, text, *next)?;
+        *next = after;
+        Ok(expr)
+    }
+
     /// **The call a named function stands for where a function value is
     /// kept**: `double` put in a field is `fn(__nikaia_arg0) {
     /// double(__nikaia_arg0) }`, and a method named by its path, `P::add`, is

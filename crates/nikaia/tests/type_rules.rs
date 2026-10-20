@@ -313,7 +313,12 @@ fn run_package(purpose: &str, main: &str) -> (bool, String, String) {
         "[package]\nname = \"ringed\"\nversion = \"0.1.0\"\n",
     )
     .expect("write the manifest");
-    std::fs::write(dir.join("src/ring.nika"), RING_FILE).expect("write ring.nika");
+    // Its field private, so only this package can break the rule.
+    std::fs::write(
+        dir.join("src/ring.nika"),
+        RING_FILE.replace("pub slots", "slots"),
+    )
+    .expect("write ring.nika");
     std::fs::write(
         dir.join("src/main.nika"),
         format!("fn main() {{\n{main}}}\n"),
@@ -334,31 +339,84 @@ fn run_package(purpose: &str, main: &str) -> (bool, String, String) {
 }
 
 /// D3 across the files of a package: a file that writes a field of a type
-/// another file states a rule of, or builds a literal of it, checks no rule,
-/// so the rule is no fact anywhere in the package; a file that only reads
-/// leaves it one.
+/// another file states a rule of checks no rule, so the rule is no fact
+/// anywhere in the package; a file that only reads leaves it one.
 #[test]
 fn another_file_of_the_package_leaves_the_rule_no_fact() {
-    for (purpose, main) in [
-        (
-            "file-write",
-            "    let mut r = ring()\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(3)}\")\n",
-        ),
-        (
-            "file-literal",
-            "    let r = Ring { slots: [1, 2] }\n    print(f\"{r.at(3)}\")\n",
-        ),
-    ] {
-        let (ok, out, err) = run_package(purpose, main);
-        assert!(!ok, "{purpose}: the slot read past the end:\n{out}");
-        assert!(err.contains("out of bounds"), "{purpose}: {err}");
-    }
+    let (ok, out, err) = run_package(
+        "file-write",
+        "    let mut r = ring()\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(3)}\")\n",
+    );
+    assert!(!ok, "the slot read past the end:\n{out}");
+    assert!(err.contains("out of bounds"), "{err}");
     let (ok, out, err) = run_package(
         "file-read",
         "    let r = ring()\n    print(f\"{r.slots.len()} {r.at(3)}\")\n",
     );
     assert!(ok, "{err}");
     assert_eq!(out.trim(), "4 7");
+}
+
+/// D2 across the files of a package: a literal built in another file than
+/// the type's is checked against the type's rule, as one in its own file is.
+#[test]
+fn a_literal_in_another_file_is_checked() {
+    let (ok, out, err) = run_package(
+        "file-literal",
+        "    let r = Ring { slots: [1, 2] }\n    print(f\"{r.at(3)}\")\n",
+    );
+    assert!(!ok, "the literal broke the rule:\n{out}");
+    assert!(
+        err.contains("the rule of `Ring`: a ring has CAP slots"),
+        "{err}"
+    );
+    let (ok, out, err) = run_package(
+        "file-literal-kept",
+        "    let r = Ring { slots: [1, 2, 3, 4] }\n    print(f\"{r.at(3)}\")\n",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(out.trim(), "4");
+}
+
+/// A package another package uses cannot see what that package does with a
+/// `pub` field its rule reads: the rule is no fact in the dependency, so a
+/// slot popped by the consumer leaves the index checked, with the bounds
+/// checks removed where proved.
+#[test]
+fn a_rule_over_a_pub_field_is_no_fact_in_a_dependency() {
+    let dir = common::scratch_dir("type-rules-dependency");
+    for (name, manifest, file, source) in [
+        (
+            "lib",
+            "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n",
+            "lib.nika",
+            RING_FILE.to_string(),
+        ),
+        (
+            "app",
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n",
+            "main.nika",
+            "use lib\n\nfn main() {\n    let mut r = lib::ring()\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(3)}\")\n}\n".to_string(),
+        ),
+    ] {
+        std::fs::create_dir_all(dir.join(name).join("src")).expect("make src");
+        std::fs::write(dir.join(name).join("nikaia.toml"), manifest).expect("write the manifest");
+        std::fs::write(dir.join(name).join("src").join(file), source).expect("write the source");
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(dir.join("app"))
+        .args(["run", "--optimization", "remove-bounds-checks:on"])
+        .env_remove("RUST_BACKTRACE")
+        .output()
+        .expect("the nikaia binary runs");
+    std::fs::remove_dir_all(&dir).ok();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "the slot read past the end:\n{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    assert!(err.contains("out of bounds"), "{err}");
 }
 
 /// D3 holds only where every change is checked: a field of the type changed

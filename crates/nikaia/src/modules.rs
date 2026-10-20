@@ -681,11 +681,13 @@ impl Program {
                 .items
                 .retain(|item| !matches!(item.node, Item::Test { .. }));
         }
-        // **A type's rule is a fact only where no file of its package can
-        // break it** (ADR-369 D3).
+        // **A type's rule is a fact only where no file of its package, and
+        // no package using it, can break it** (ADR-369 D3).
         for range in groups(&units) {
-            let mut files: Vec<&mut crate::parser::Parsed> =
-                units[range].iter_mut().map(|u| &mut u.parsed).collect();
+            let mut files: Vec<(&mut crate::parser::Parsed, &str)> = units[range]
+                .iter_mut()
+                .map(|u| (&mut u.parsed, u.source.as_str()))
+                .collect();
             crate::type_rules::across_files(&mut files);
         }
         let mut contracts = crate::contracts::Ledger::empty();
