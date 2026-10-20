@@ -64,22 +64,37 @@ fn check_core_method_receiver_name(world: ref CheckWorld, receiver: ref Expr) ->
     return null
 }
 
-/// **An empty list's first `push`** (#523, ADR-135 D2), **and an empty
-/// map's first `insert`** (#543): the name, held for `call_on`.
+/// **An empty list's first `push`** (#523, ADR-135 D2), **and a write into a
+/// map whose types are not all said** (#543, ADR-285 D43): `insert`, and
+/// `or_insert` on its `entry`. The name, held for `call_on`.
 fn check_core_method_pushed_into(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr, method: ref String, count: i64) -> String? sync {
     let push = method == "push" && count == 1
     let insert = method == "insert" && count == 2
-    if !push && !insert {
+    let or_insert = method == "or_insert" && count == 1
+    if !push && !insert && !or_insert {
         return null
     }
-    let name: String = check_core_method_receiver_name(world, receiver) ?? return null
+    let mut map = receiver.clone()
+    if or_insert {
+        map = match receiver {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                if world.words.resolve(method) == "entry" && args.len() == 1 {
+                    receiver.clone()
+                } else {
+                    return null
+                }
+            },
+            else => return null,
+        }
+    }
+    let name: String = check_core_method_receiver_name(world, map) ?? return null
     let local: CheckLocal = state.binding(name) ?? return null
     let fits = match local.ty {
         Ty::Named { name, args, .. } => {
             if push {
                 name == "Vec" && (args.len() == 0 || (args.len() == 1 && args[0].is_unknown()))
             } else {
-                a_map_type(name) && (args.len() == 0 || (args.len() == 2 && args[0].is_unknown() && args[1].is_unknown()))
+                a_map_type(name) && (args.len() == 0 || (args.len() == 2 && (args[0].is_unknown() || args[1].is_unknown())))
             }
         },
         else => false,
@@ -88,6 +103,34 @@ fn check_core_method_pushed_into(state: ref CheckState, world: ref CheckWorld, r
         return name
     }
     return null
+}
+
+/// A map type with no parts written as one of two parts not yet said.
+fn check_core_method_map_opened(mut state: CheckState, name: ref String) sync {
+    let local: CheckLocal = state.binding(name) ?? return
+    let bare = match local.ty {
+        Ty::Named { name, args, .. } => a_map_type(name) && args.len() == 0,
+        else => false,
+    }
+    if bare {
+        check_core_call_on_retyped(state, name, [Ty::Unknown, Ty::Unknown])
+    }
+}
+
+/// The `let` of a map nothing has typed yet whose method only reads it or
+/// takes out of it, or `-1`.
+fn check_core_method_an_empty_map_read(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr, method: ref String) -> i64 sync {
+    let reads = method == "len" || method == "is_empty" || method == "contains_key" || method == "get" || method == "keys" || method == "values" || method == "iter" || method == "clear" || method == "remove"
+    if !reads {
+        return -1
+    }
+    let name: String = check_core_method_receiver_name(world, receiver) ?? return -1
+    let local: CheckLocal = state.binding(name) ?? return -1
+    let at: i64 = local.empty_list ?? return -1
+    if !state.flow.empty_maps.contains(at) {
+        return -1
+    }
+    return at
 }
 
 /// The option that is a witness: `set`'s `after`, `join`'s `within`; `-1`
@@ -603,7 +646,18 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     let name: String = f"{world.words.resolve(method)}"
     // **`after:` on a `set` is a witness and not an option** (ADR-281 D26),
     // and the first `push` or `insert` of an empty list or map is held.
-    state.flow.pushed_into = check_core_method_pushed_into(state, world, receiver, name, args.len() as i64)
+    let pushed: String? = check_core_method_pushed_into(state, world, receiver, name, args.len() as i64)
+    let is_pushed = pushed != null
+    if is_pushed {
+        state.flow.pushed_into = pushed
+        state.flow.pushed_receiver = id_of(receiver) as i64
+    }
+    // **`m.entry(k).or_insert(v)` on a map nothing typed yet** (ADR-285 D43)
+    // reaches its `entry` on a map of two parts not yet said.
+    if name == "or_insert" && is_pushed {
+        let opened: String = state.flow.pushed_into?.clone() ?? ""
+        check_core_method_map_opened(state, opened)
+    }
     // `join(within: d)` is `TaskHandle::join(within)` the same way (ADR-346
     // D4).
     let witness = check_core_method_witness(world, name, config)
@@ -635,7 +689,21 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         state.a_grammar_reached_through_a_dot(owner, rule, span)
         return check_core_grammar_call(state, world, host, entry, args, span)
     }
+    // **A map read and not written stays a map nothing types** (ADR-285
+    // D43): `m.len()` says nothing of what it holds.
+    let empty_map: i64 = check_core_method_an_empty_map_read(state, world, receiver, name)
+    let mut empty_entry: Vec[(String, Span)] = []
+    if empty_map >= 0 {
+        for (at, held) in state.flow.empty_lists {
+            if at == empty_map {
+                empty_entry.push(held.clone())
+            }
+        }
+    }
     let mut on: Ty = check_core_expr(state, world, host, receiver, span)
+    for held in empty_entry {
+        state.flow.empty_lists.insert(empty_map, held.clone())
+    }
     on = check_core_method_literal(state, receiver, on)
     // **`x?.m(…)`** (Part I 3.5, ADR-279 D13).
     if safe {

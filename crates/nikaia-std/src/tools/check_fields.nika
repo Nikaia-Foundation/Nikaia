@@ -232,46 +232,6 @@ impl CheckState {
         return lends_in_own(contract, at, [world.library])
     }
 
-    /// **An empty map written to for the first time** (`m["k"] = v`): its
-    /// key and value types are what the write gives, where both are known.
-    pub fn a_map_first_written(ref mut self, world: ref CheckWorld, target: ref Expr, found: ref Ty) sync {
-        let base_name = match target {
-            Expr::Index { base, .. } => match base {
-                Expr::Variable(name, _) => world.words.resolve(name).clone(),
-                else => return,
-            },
-            else => return,
-        }
-        let index_key = match target {
-            Expr::Index { index, .. } => index_key_type(self, world, index),
-            else => return,
-        }
-        let local = self.binding(base_name) ?? return
-        let open = match local.ty {
-            Ty::Named { name, args, .. } => a_map_name(name) && (args.len() == 0 || (args.len() == 2 && args[0].is_unknown() && args[1].is_unknown())),
-            else => false,
-        }
-        if !open || found.is_unknown() || index_key.is_unknown() {
-            return
-        }
-        let value = value_of_a_copy(found)
-        let mut frame = self.scope.len()
-        while frame > 0 {
-            frame = frame - 1
-            let mut at = self.scope[frame].len()
-            while at > 0 {
-                at = at - 1
-                if self.scope[frame][at].name == base_name {
-                    let held = named_or_empty(self.scope[frame][at].ty)
-                    if !held.is_empty() {
-                        self.scope[frame][at].ty = Ty::Named { name: held, args: [index_key, value], view: false }
-                    }
-                    return
-                }
-            }
-        }
-    }
-
     /// **A `comptime` binding used where a type is asked**: the use is written
     /// with the type's suffix (`3u8`), by the node (ADR-287). `ty` is the suffix.
     pub fn comptimes_asked(ref mut self, world: ref CheckWorld, expr: ref Expr, ty: ref String) sync {
@@ -337,6 +297,51 @@ impl CheckState {
             }
         }
         return []
+    }
+}
+
+/// **A map's first writes through the brackets give it its types**
+/// (#543, ADR-285 D43): `m[k] = v` as `insert` does. The value is handed
+/// to an open number by the assignment itself.
+pub fn check_fields_map_first_written(mut state: CheckState, world: ref CheckWorld, target: ref Expr, value: ref Expr, found: ref Ty, span: ref Span) sync {
+    match target {
+        Expr::Index { base, index, .. } => {
+            match base {
+                Expr::Variable(name, _) => {
+                    let base_name: String = world.words.resolve(name).clone()
+                    let local = state.binding(base_name) ?? return
+                    let open = match local.ty {
+                        Ty::Named { name, args, .. } => a_map_name(name) && (args.len() == 0 || (args.len() == 2 && (args[0].is_unknown() || args[1].is_unknown()))),
+                        else => false,
+                    }
+                    if !open {
+                        return
+                    }
+                    let before = check_fields_map_parts(local.ty)
+                    let index_key = index_key_type(state, world, index)
+                    check_core_call_on_map_written(state, world, base_name, index, index_key, false, value, found, false, span)
+                    // **The first write's text is handed over as every later
+                    // one's is** (ADR-285 D43): built as the map's own.
+                    let now = check_fields_map_parts(state.lookup(base_name) ?? Ty::Unknown)
+                    if before[0].is_unknown() && !now[0].is_unknown() {
+                        state.a_map_key(world, now[0], index_key, index, true, span)
+                    }
+                    if before[1].is_unknown() && !now[1].is_unknown() {
+                        state.text_literal(world, now[1], value, true)
+                    }
+                },
+                else => {}
+            }
+        },
+        else => {}
+    }
+}
+
+/// A map's key and value types, `?` where one is not said.
+fn check_fields_map_parts(ty: ref Ty) -> Vec[Ty] sync {
+    return match ty {
+        Ty::Named { args, .. } => if args.len() == 2 { args.clone() } else { [Ty::Unknown, Ty::Unknown] },
+        else => [Ty::Unknown, Ty::Unknown],
     }
 }
 

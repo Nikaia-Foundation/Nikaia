@@ -1,0 +1,29 @@
+// #700, ADR-285 D43: a map's open values are decided by the parameter it is
+// handed to, as a list's elements are (D34); its text keys are owned text,
+// whichever write says them first.
+
+use std::collections
+
+fn total(m: collections::HashMap[String, u8]) -> u8 {
+    let mut s: u8 = 0
+    for (_, v) in m {
+        s = s + v
+    }
+    return s
+}
+
+fn count(m: collections::BTreeMap[u8, String]) -> i64 {
+    return m.len()
+}
+
+fn main() {
+    let mut m = collections::HashMap()
+    m["a"] = 1
+    m["b"] = 2
+    m.insert("c", 3)
+    m.entry("d").or_insert(4)
+    let mut names = collections::BTreeMap()
+    names.insert(1, "one")
+    names[2] = "two"
+    println(f"{total(m)} {count(names)}")
+}

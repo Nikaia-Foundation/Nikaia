@@ -75,8 +75,12 @@ fn main() {
     // pinned by nothing here, and `index::at` - which turns a number into a
     // `usize` - made `m[1] = 2` a map keyed by `usize`. It was the identity on
     // this text key, so what changed is the spelling and not the program.
+    // The map's keys are owned text since 0.0.1128 (ADR-285 D43), so the
+    // written key is built as one.
     assert!(
-        rust.contains("nikaia_std::index::set(&mut scores, \"Player1\", __nikaia_stored)"),
+        rust.contains(
+            "nikaia_std::index::set(&mut scores, String::from(\"Player1\"), __nikaia_stored)"
+        ),
         "the write goes through `set`:\n{rust}"
     );
     assert!(

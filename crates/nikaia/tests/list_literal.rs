@@ -92,6 +92,36 @@ fn an_empty_list_a_push_answers_is_not_refused() {
     );
 }
 
+/// **A map nothing writes into and nothing types** is refused as an empty
+/// list is ([ADR-285](../../../docs/specification/adr/adr-285.md) D43): a
+/// read says nothing of what it holds, a first write does.
+#[test]
+fn a_map_nothing_writes_into_is_refused() {
+    let source = "use std::collections\n\nfn main() {\n    let m = collections::HashMap()\n    \
+                  let has = m.contains_key(\"a\")\n    println(f\"{m.len()} {has}\")\n}\n";
+    let found: Vec<_> = findings(source)
+        .into_iter()
+        .filter(|f| f.code == "NK1153")
+        .collect();
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(
+        found[0].message,
+        "`m` is a map, and nothing says what it holds."
+    );
+    for written in [
+        "m.insert(\"a\", 1)",
+        "m[\"a\"] = 1",
+        "m.entry(\"a\").or_insert(1)",
+    ] {
+        let source = format!(
+            "use std::collections\n\nfn main() {{\n    let mut m = collections::HashMap()\n    \
+             {written}\n    println(f\"{{m.len()}}\")\n}}\n"
+        );
+        let found = findings(&source);
+        assert!(found.is_empty(), "{written}: {found:#?}");
+    }
+}
+
 /// **`[]` that nothing ever uses is refused, and not guessed** (D2). A default
 /// element type would be a type nobody wrote.
 #[test]

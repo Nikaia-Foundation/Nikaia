@@ -191,7 +191,7 @@ impl CheckState {
             },
             Expr::Index { .. } => {
                 let at = self.open_element_of(world, expr)
-                if at != null {
+                if at != null && !self.a_read_of_a_map(world, expr) {
                     out.push(self.open_root(at ?? 0))
                 }
             },
@@ -233,6 +233,14 @@ impl CheckState {
                     out.extend(self.open_numbers_in(world, expr))
                 }
             },
+            // **A read of a map's open values with a number for the missing
+            // key** is that number (ADR-285 D43).
+            Expr::Coalesce { value, fallback, .. } => {
+                if self.a_map_read_of_numbers(world, value, fallback) {
+                    let at = self.open_element_of(world, value)
+                    out.push(self.open_root(at ?? 0))
+                }
+            },
             else => {},
         }
         let mut distinct: Vec[i64] = []
@@ -251,15 +259,41 @@ impl CheckState {
         return match expr {
             Expr::LitInt { .. } => true,
             Expr::Variable(name, _) => self.a_name_of_an_open_number(world, name),
-            Expr::Index { .. } => self.open_element_of(world, expr) != null,
+            Expr::Index { .. } => self.open_element_of(world, expr) != null && !self.a_read_of_a_map(world, expr),
             Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
-            Expr::MethodCall { receiver, .. } => self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver),
+            Expr::MethodCall { receiver, method, .. } => (self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver)) || (world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0),
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Binary { op, lhs, rhs, .. } => an_operation_of_one_type(op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs),
             Expr::Unary { op, expr, .. } => (op == UnaryOp::Neg || op == UnaryOp::Not) && self.number_shaped(world, expr),
+            Expr::Coalesce { value, fallback, .. } => self.a_map_read_of_numbers(world, value, fallback),
             else => false,
         }
+    }
+
+    /// `m[k]`: a map's slot, which may be missing, and not a list's element.
+    fn a_read_of_a_map(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        let base: String = match expr {
+            Expr::Index { base, .. } => match base {
+                Expr::Variable(name, _) => world.words.resolve(name).clone(),
+                else => return false,
+            },
+            else => return false,
+        }
+        let local = self.binding(base) ?? return false
+        return match local.ty {
+            Ty::Named { name, .. } => a_map_type(name),
+            else => false,
+        }
+    }
+
+    /// `m[k] ?? 0` over a map whose values are open (ADR-285 D43).
+    fn a_map_read_of_numbers(ref self, world: ref CheckWorld, value: ref Expr, fallback: ref Expr) -> bool sync {
+        let read = match value {
+            Expr::Index { .. } => self.open_element_of(world, value) != null,
+            else => false,
+        }
+        return read && self.number_shaped(world, fallback)
     }
 
     fn a_name_of_an_open_number(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> bool sync {
@@ -333,11 +367,29 @@ fn number_list_element(ty: ref Ty) -> String? sync {
             if (name == "Vec" || name == "Array") && args.len() > 0 {
                 return integer_named(args[0])
             }
+            // A map's values (ADR-285 D43).
+            if a_map_type(name) && args.len() == 2 {
+                return integer_named(value_of_a_copy(args[1]))
+            }
             return null
         },
         else => {
             return null
         },
+    }
+}
+
+/// The integer type a map type holds its keys as, where it is one.
+fn number_map_key(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Named { name, args, .. } => {
+            if a_map_type(name) && args.len() == 2 {
+                integer_named(value_of_a_copy(args[0]))
+            } else {
+                null
+            }
+        },
+        else => null,
     }
 }
 
@@ -390,8 +442,17 @@ impl CheckState {
     fn elements_asked(ref mut self, world: ref CheckWorld, value: ref Expr, copy: ref Ty, at: ref Span, beside: bool) -> bool sync {
         let name = number_list_name(world, value) ?? return false
         let local = self.binding(name) ?? return false
-        let number = self.flow.open_elements[local.id] ?? return false
-        let ty = number_list_element(copy) ?? return false
+        // **A map's keys** (ADR-285 D43) are asked by a map type's key.
+        let keys = self.flow.open_keys[local.id]
+        let key_ty = number_map_key(copy)
+        let mut asked = false
+        if keys != null && key_ty != null {
+            let root = self.open_root(keys ?? 0)
+            self.add_ask(root, (key_ty ?? "").clone(), at, beside)
+            asked = true
+        }
+        let number = self.flow.open_elements[local.id] ?? return asked
+        let ty = number_list_element(copy) ?? return asked
         let root = self.open_root(number)
         self.add_ask(root, ty, at, beside)
         return true

@@ -228,6 +228,86 @@ fn a_lists_decided_type_is_written() {
     assert!(rust.contains("vec![1, 3000000000i64]"), "{rust}");
 }
 
+/// **A map takes its types from what is written into it** (ADR-285 D43,
+/// #700): its values written in number literals are one open number, decided
+/// by their uses as a list's elements are (D34), and two uses that disagree
+/// are refused in this language's words, wherever the write stands.
+#[test]
+fn a_maps_open_values_are_refused_as_a_lists_elements_are() {
+    for (place, code, message, source) in [
+        (
+            "two reads",
+            "NK1200",
+            "You're using the values of `m` as `u8`s and here as `i64`s.",
+            "use std::collections\n\nfn main() {\n    let mut m = collections::HashMap()\n    \
+             m.insert(\"a\", 1)\n    let x: u8 = m[\"a\"] ?? 0\n    let y: i64 = m[\"a\"] ?? 0\n    \
+             println(f\"{x} {y}\")\n}\n",
+        ),
+        (
+            "a parameter and a typed write",
+            "NK1200",
+            "You're using the values of `m` as `u8`s and here as `i64`s.",
+            "use std::collections\n\nfn total(m: collections::HashMap[String, u8]) -> i64 {\n    \
+             return m.len()\n}\n\nfn main() {\n    let mut m = collections::HashMap()\n    \
+             m.entry(\"a\").or_insert(1)\n    println(f\"{total(m)}\")\n    let n: i64 = 5\n    \
+             m[\"b\"] = n\n}\n",
+        ),
+        (
+            "the keys",
+            "NK1200",
+            "You're using the keys of `m` as `u8`s and here as `u32`s.",
+            "use std::collections\n\nfn a(m: collections::BTreeMap[u8, String]) -> i64 {\n    \
+             return m.len()\n}\n\nfn main() {\n    let mut m = collections::BTreeMap()\n    \
+             m[1] = \"one\"\n    println(f\"{a(m)}\")\n    let k: u32 = 2\n    m.insert(k, \"two\")\n}\n",
+        ),
+        (
+            "an overflow",
+            "NK1116",
+            "`3000000000` doesn't fit in an `i32`.",
+            "use std::collections\n\nfn main() {\n    let mut m = collections::HashMap()\n    \
+             m.insert(\"a\", 3000000000)\n    let x: i32 = m[\"a\"] ?? 0\n    println(f\"{x}\")\n}\n",
+        ),
+    ] {
+        let found = findings(source);
+        assert!(
+            found.len() == 1 && found[0].code == code && found[0].message == message,
+            "{place}: {found:#?}"
+        );
+    }
+}
+
+/// **A map's text keys are owned text** (D43): what a walk over an unannotated
+/// map binds is refused as it is over one that says `HashMap[String, i64]`.
+#[test]
+fn a_maps_text_keys_are_refused_as_an_annotated_maps_are() {
+    let walk = |made: &str| {
+        let source = format!(
+            "use std::collections\n\nfn main() {{\n    let mut m{made}\n    m.insert(\"a\", 1)\n    \
+             for (k, v) in m {{\n        println(f\"{{k.text()}} {{v}}\")\n    }}\n}}\n"
+        );
+        findings(&source)
+            .into_iter()
+            .map(|f| (f.code, f.message))
+            .collect::<Vec<_>>()
+    };
+    let annotated = walk(": collections::HashMap[String, i64] = collections::HashMap()");
+    assert!(!annotated.is_empty());
+    assert_eq!(walk(" = collections::HashMap()"), annotated);
+}
+
+/// **What a map's open number comes to is written on its literals** (D43): a
+/// read by a literal key says nothing the language below infers the map's
+/// type from.
+#[test]
+fn a_maps_decided_number_is_written_on_its_literals() {
+    let rust = lowered(
+        "use std::collections\n\nfn main() {\n    let mut m = collections::HashMap()\n    \
+         m.entry(3000000000).or_insert(1)\n    println(f\"{m[2] ?? 0}\")\n}\n",
+    );
+    assert!(rust.contains("entry(3000000000i64)"), "{rust}");
+    assert!(rust.contains("key(2i64)"), "{rust}");
+}
+
 /// **A choice between numbers is one open number** (#497): `let taken = if c
 /// { 1 } else { 0 }` was unknown to the checker, as `let n = 1` is not. Its
 /// uses decide it, and a use that no number can be is refused.

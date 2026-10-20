@@ -11727,7 +11727,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_empty_list_with_no_element_type(&mut self, name: &str, span: &Span) { self.findings.push(check_refusal("NK1153", span, format!("`{}` is an empty list, and nothing says what it holds.", name), vec!["An empty list gets its element type from how it's used, and it isn't used here.".to_owned()], Some(format!("Write the type, `let {}: Vec[i64] = []`, or give it a first element.", name)))); }
+    pub fn an_empty_list_with_no_element_type(&mut self, name: &str, span: &Span) {
+        if self.flow.empty_maps.contains(&(span.start as i64)) {
+            self.findings.push(check_refusal("NK1153", span, format!("`{}` is a map, and nothing says what it holds.", name), vec!["A map gets its key and value types from what is written into it, and nothing is written into it here.".to_owned()], Some(format!("Write the type, `let {}: collections::HashMap[String, i64] = collections::HashMap()`, or write a first entry into it.", name))));
+            return;
+        }
+        self.findings.push(check_refusal("NK1153", span, format!("`{}` is an empty list, and nothing says what it holds.", name), vec!["An empty list gets its element type from how it's used, and it isn't used here.".to_owned()], Some(format!("Write the type, `let {}: Vec[i64] = []`, or give it a first element.", name))));
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_constructor_written_as_new(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
@@ -14309,6 +14315,181 @@ fn check_core_call_on_takes(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
     false
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_call_on_map_written(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, map_name: &str, key: &Expr, key_ty: &Ty, entry_key: bool, value: &Expr, value_ty: &Ty, give_value: bool, span: &Span) {
+    let local = match state.binding(map_name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let id = local.id;
+    let mut parts: Vec<Ty> = vec![];
+    let mut is_a_map = false;
+    match local.ty {
+        Ty::Named { ref name, ref args, .. } => {
+            is_a_map = a_map_type(name);
+            parts = args.to_owned();
+        },
+        _ => { },
+    }
+    if !is_a_map { return; }
+    if parts.is_empty() { parts = vec![Ty::Unknown, Ty::Unknown]; }
+    if parts.len() != 2 { return; }
+    let other_of_key: String = check_core_call_on_part_text(nikaia_std::index::get(&parts, 1), value_ty);
+    let other_of_value: String = check_core_call_on_part_text(nikaia_std::index::get(&parts, 0), key_ty);
+    let keys = check_core_call_on_map_part(state, world, map_name, id, true, other_of_key, nikaia_std::index::get(&parts, 0), key, key_ty, !entry_key, entry_key, span);
+    let values = check_core_call_on_map_part(state, world, map_name, id, false, other_of_value, nikaia_std::index::get(&parts, 1), value, value_ty, give_value, false, span);
+    check_core_call_on_retyped(state, map_name, vec![keys, values]);
+}
+
+fn check_core_call_on_part_text(held: &Ty, given: &Ty) -> String {
+    if !held.is_unknown() { return held.text(); }
+    if !given.is_unknown() { return check_core_call_on_map_held(given).text(); }
+    "i64".to_owned()
+}
+
+fn check_core_call_on_map_held(given: &Ty) -> Ty {
+    let copy = value_of_a_copy(given);
+    if is_text_type(&copy) { return Ty::Named { name: String::from("String"), args: vec![], view: false }; }
+    copy
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_call_on_map_part(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, map_name: &str, id: i64, keys: bool, other: String, held: &Ty, given: &Expr, given_ty: &Ty, give: bool, entry_key: bool, span: &Span) -> Ty {
+    let mut open: i64 = -1;
+    if keys { open = nikaia_std::index::or(*nikaia_std::index::get(&state.flow.open_keys, &id), || -1); } else { open = nikaia_std::index::or(*nikaia_std::index::get(&state.flow.open_elements, &id), || -1); }
+    if open >= 0 {
+        let root = state.open_root(open);
+        let asked: Option<String> = integer_named(&value_of_a_copy(&given_ty.unseen()));
+        if asked.is_some() { if state.flow.open_numbers.contains_key(&root) { check_core_call_on_ask(state, root, nikaia_std::index::or(asked.as_deref(), || "").to_owned(), span); } } else if give && state.number_shaped(world, given) { state.open_number_given(world, root, given, span); }
+        return held.clone();
+    }
+    if !held.is_unknown() { return held.clone(); }
+    if !given_ty.is_unknown() {
+        let a_view = match given_ty {
+            Ty::Named { view, .. } => { let view = *view; view },
+            _ => false,
+        };
+        let a_literal = matches!(given, Expr::LitStr { .. });
+        if keys && a_view && !a_literal && is_text_type(given_ty) { return held.clone(); }
+        let made = check_core_call_on_map_held(given_ty);
+        if keys && entry_key && check_core_call_on_owned_text(&made) && check_core_call_on_text_to_build(world, given, given_ty) { state.facts.owned_entry_keys.insert(id_of(given) as i64); }
+        return made;
+    }
+    if !state.number_shaped(world, given) { return held.clone(); }
+    let mut at = span.start as i64;
+    if keys { at = span.end as i64; }
+    state.flow.open_numbers.insert(at, CheckOpenNumber { name: map_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] });
+    state.flow.open_map_parts.insert(at, (keys, other));
+    if give || keys { state.open_number_given(world, at, given, span); }
+    if keys { state.flow.open_keys.insert(id, at); } else { state.flow.open_elements.insert(id, at); }
+    held.clone()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_call_on_now_expected(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, expected: Vec<Ty>) -> Vec<Ty> {
+    let mut map = receiver.clone();
+    let mut from: i64 = 0;
+    if entry == "insert" && expected.len() == 2 { from = 0; } else if entry == "or_insert" && expected.len() == 1 {
+        map = match receiver {
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); receiver.clone() },
+            _ => return expected,
+        };
+        from = 1;
+    } else { return expected; }
+    let name: String = match map {
+        Expr::Variable(n, _) => world.words.resolve(n).to_owned(),
+        _ => return expected,
+    };
+    let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return expected };
+    let parts: Vec<Ty> = match local.ty {
+        Ty::Named { ref name, ref args, .. } => if a_map_type(name) && args.len() == 2 { args.to_owned() } else { vec![] },
+        _ => vec![],
+    };
+    if parts.len() != 2 { return expected; }
+    let mut out: Vec<Ty> = vec![];
+    let mut at: i64 = 0;
+    for ty in expected.iter() {
+        let unsaid = matches!(ty, Ty::Unknown | Ty::Var { .. });
+        if unsaid && !(*nikaia_std::index::get(&parts, (from + at) as usize)).is_unknown() { out.push((*nikaia_std::index::get(&parts, (from + at) as usize)).clone()); } else { out.push(ty.clone()); }
+        at += 1;
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_call_on_key_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, map: &Expr, key: &Expr, span: &Span) {
+    let name: String = match map {
+        Expr::Variable(n, _) => { let n = *n; world.words.resolve(n).to_owned() },
+        _ => return,
+    };
+    let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let at: i64 = match (*nikaia_std::index::get(&state.flow.open_keys, &local.id)).copied() { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
+    if state.number_shaped(world, key) { state.open_number_given(world, state.open_root(at), key, span); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_call_on_retyped(state: &mut CheckState, bound_name: &str, parts: Vec<Ty>) {
+    let mut frame = state.scope.len() as i64;
+    while frame > 0 {
+        frame = frame - 1;
+        let mut at = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame))).len() as i64;
+        while at > 0 {
+            at = at - 1;
+            if nikaia_std::index::get(nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).name == bound_name {
+                let mut new_name: String = String::from("");
+                let mut new_view = false;
+                match nikaia_std::index::get(nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).ty {
+                    Ty::Named { ref name, view, .. } => {
+                        new_name = name.to_owned();
+                        new_view = view;
+                    },
+                    _ => { },
+                }
+                if !new_name.is_empty() { state.scope[nikaia_std::index::at(frame)][nikaia_std::index::at(at)].ty = Ty::Named { name: new_name, args: parts, view: new_view }; }
+                return;
+            }
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_call_on_entry_key(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Option<Expr> {
+    match receiver {
+        Expr::MethodCall { method, args, .. } => {
+            let method = *method;
+            if world.words.resolve(method) == "entry" && args.len() == 1 { Some((*nikaia_std::index::get(&args, 0)).clone()) } else { None }
+        },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_call_on_entry_values(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> i64 {
+    match receiver {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if world.words.resolve(method) != "entry" || args.len() != 1 { return -1; }
+            match receiver {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    let local = match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+                    let at: i64 = match (*nikaia_std::index::get(&state.flow.open_elements, &local.id)).copied() { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return -1 };
+                    return state.open_root(at);
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    -1
+}
+
 fn check_core_call_on_hands_back_a_sequence(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -14345,13 +14526,23 @@ fn check_core_call_on_open(state: &CheckState, bound_name: &str) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, entry: &str, args: &[Expr], found: &[Ty], span: &Span) {
-    if state.flow.pushed_into.is_none() { return; }
+fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, args: &[Expr], found: &[Ty], span: &Span) {
+    if state.flow.pushed_into.is_none() || state.flow.pushed_receiver != id_of(receiver) as i64 { return; }
     let pushed_name: String = nikaia_std::index::or(match state.flow.pushed_into.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into());
     state.flow.pushed_into = None;
+    if entry == "insert" && args.len() == 2 && found.len() == 2 {
+        check_core_call_on_map_written(state, world, &pushed_name, nikaia_std::index::get(&args, 0), nikaia_std::index::get(&found, 0), false, nikaia_std::index::get(&args, 1), nikaia_std::index::get(&found, 1), true, span);
+        return;
+    }
+    if entry == "or_insert" && args.len() == 1 && found.len() == 1 {
+        let key: Expr = match check_core_call_on_entry_key(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let key_ty = index_key_type(&state, world, &key);
+        check_core_call_on_map_written(state, world, &pushed_name, &key, &key_ty, true, nikaia_std::index::get(&args, 0), nikaia_std::index::get(&found, 0), true, span);
+        return;
+    }
     let open = check_core_call_on_open(&state, &pushed_name);
     let one_pushed = entry == "push" && found.len() == 1 && args.len() == 1;
     if open < 0 && one_pushed && (*nikaia_std::index::get(&found, 0)).is_unknown() && state.number_shaped(world, nikaia_std::index::get(&args, 0)) && check_core_call_on_empty_list(&state, &pushed_name) {
@@ -14372,9 +14563,6 @@ fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, 
         have = true;
         kind = Some("Vec".to_owned());
         elements = vec![value_of_a_copy(nikaia_std::index::get(&found, 0))];
-    } else if entry == "insert" && found.len() == 2 && !(*nikaia_std::index::get(&found, 0)).is_unknown() && !(*nikaia_std::index::get(&found, 1)).is_unknown() {
-        have = true;
-        elements = vec![value_of_a_copy(nikaia_std::index::get(&found, 0)), value_of_a_copy(nikaia_std::index::get(&found, 1))];
     }
     if !have { return; }
     let mut frame = state.scope.len() as i64;
@@ -14541,6 +14729,14 @@ fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &Ch
         if copied.is_some() {
             { let __nikaia_stored = nikaia_std::index::or(copied, || Ty::Unknown); nikaia_std::index::set(&mut expected, 0usize, __nikaia_stored); }
             state.facts.copied_entry_lambdas.insert(id_of(nikaia_std::index::get(&args, 0)) as i64);
+        } else {
+            let values = check_core_call_on_entry_values(&state, world, receiver);
+            let lambda_param: Option<String> = check_core_call_on_one_param(world, nikaia_std::index::get(&args, 0));
+            if values >= 0 && lambda_param.is_some() {
+                { let __nikaia_stored = check_core_call_on_unviewed_fn(nikaia_std::index::get(&expected, 0)); nikaia_std::index::set(&mut expected, 0usize, __nikaia_stored); }
+                state.facts.copied_entry_lambdas.insert(id_of(nikaia_std::index::get(&args, 0)) as i64);
+                state.flow.open_params.insert(nikaia_std::index::or(lambda_param.as_deref(), || "").to_owned(), values);
+            }
         }
     }
     let callee: Option<FnContract> = Some(contract.clone());
@@ -14551,7 +14747,9 @@ fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.flow.walk_lent = state.a_walk_that_lends(contract, receiver);
     state.in_parallel = outer_parallel;
     state.scoped_task = outer_scoped;
-    check_core_call_on_pushed(state, world, entry, args, &found, span);
+    if (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") && args.len() == 1 { check_core_call_on_key_read(state, world, receiver, nikaia_std::index::get(&args, 0), span); }
+    check_core_call_on_pushed(state, world, receiver, entry, args, &found, span);
+    expected = check_core_call_on_now_expected(&state, world, receiver, entry, expected);
     let paused_here: Vec<i64> = state.flow.paused_args.to_owned();
     state.flow.paused_args = outer_paused;
     let mut lambda_at: i64 = -1;
@@ -14731,6 +14929,30 @@ fn check_core_call_on_copied_entry(want: &Ty, arg: &Expr) -> Option<Ty> {
             } else { None }
         },
         _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_call_on_one_param(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> Option<String> {
+    match arg {
+        Expr::Closure { params, .. } => { if params.len() == 1 { Some(world.words.resolve(*nikaia_std::index::get(&params, 0)).to_owned()) } else { None } },
+        _ => None,
+    }
+}
+
+fn check_core_call_on_unviewed_fn(want: &Ty) -> Ty {
+    match want {
+        Ty::Fn { params, result, is_sync, can_throw } => {
+            let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
+            let mut plain: Vec<Ty> = vec![];
+            for p in params.iter() { plain.push(unviewed_type(p)); }
+            Ty::Fn { params: plain, result: Box::new(match result {
+                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                None => None,
+            }), is_sync, can_throw }
+        },
+        _ => want.clone(),
     }
 }
 
@@ -16770,15 +16992,49 @@ fn check_core_method_receiver_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 fn check_core_method_pushed_into(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str, count: i64) -> Option<String> {
     let push = method == "push" && count == 1;
     let insert = method == "insert" && count == 2;
-    if !push && !insert { return None; }
-    let name: String = match check_core_method_receiver_name(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let or_insert = method == "or_insert" && count == 1;
+    if !push && !insert && !or_insert { return None; }
+    let mut map = receiver.clone();
+    if or_insert {
+        map = match receiver {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                if world.words.resolve(method) == "entry" && args.len() == 1 { receiver.clone() } else { return None; }
+            },
+            _ => return None,
+        };
+    }
+    let name: String = match check_core_method_receiver_name(world, &map) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let fits = match local.ty {
-        Ty::Named { ref name, ref args, .. } => { if push { name == "Vec" && (args.is_empty() || args.len() == 1 && (*nikaia_std::index::get(&args, 0)).is_unknown()) } else { a_map_type(name) && (args.is_empty() || args.len() == 2 && (*nikaia_std::index::get(&args, 0)).is_unknown() && (*nikaia_std::index::get(&args, 1)).is_unknown()) } },
+        Ty::Named { ref name, ref args, .. } => { if push { name == "Vec" && (args.is_empty() || args.len() == 1 && (*nikaia_std::index::get(&args, 0)).is_unknown()) } else { a_map_type(name) && (args.is_empty() || args.len() == 2 && ((*nikaia_std::index::get(&args, 0)).is_unknown() || (*nikaia_std::index::get(&args, 1)).is_unknown())) } },
         _ => false,
     };
     if fits { return Some(name); }
     None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_map_opened(state: &mut CheckState, name: &str) {
+    let local: CheckLocal = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let bare = match local.ty {
+        Ty::Named { ref name, ref args, .. } => a_map_type(name) && args.is_empty(),
+        _ => false,
+    };
+    if bare { check_core_call_on_retyped(state, name, vec![Ty::Unknown, Ty::Unknown]); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_an_empty_map_read(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str) -> i64 {
+    let reads = method == "len" || method == "is_empty" || method == "contains_key" || method == "get" || method == "keys" || method == "values" || method == "iter" || method == "clear" || method == "remove";
+    if !reads { return -1; }
+    let name: String = match check_core_method_receiver_name(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+    let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+    let at: i64 = match local.empty_list { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+    if !state.flow.empty_maps.contains(&at) { return -1; }
+    at
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -17190,11 +17446,23 @@ pub fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_
 #[allow(clippy::too_many_arguments)]
 fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
-    state.flow.pushed_into = check_core_method_pushed_into(&state, world, receiver, &name, args.len() as i64);
+    let pushed: Option<String> = check_core_method_pushed_into(&state, world, receiver, &name, args.len() as i64);
+    let is_pushed = pushed.is_some();
+    if is_pushed {
+        state.flow.pushed_into = pushed;
+        state.flow.pushed_receiver = id_of(receiver) as i64;
+    }
+    if name == "or_insert" && is_pushed {
+        let opened: String = nikaia_std::index::or(match state.flow.pushed_into.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        check_core_method_map_opened(state, &opened);
+    }
     let witness = check_core_method_witness(world, &name, config);
     let mut at: i64 = 0;
     while at < config.len() as i64 {
-        if at != witness { check_core_expr(state, world, host, &nikaia_std::index::get(&config, (at) as usize).value, span); }
+        if at != witness { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(at)).value, span); }
         at += 1;
     }
     let entered: Option<String> = state.grammar_entry(world, receiver, method);
@@ -17212,7 +17480,16 @@ fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckW
         state.a_grammar_reached_through_a_dot(&owner, &rule, span);
         return check_core_grammar_call(state, world, host, &entry, args, span);
     }
+    let empty_map: i64 = check_core_method_an_empty_map_read(&state, world, receiver, &name);
+    let mut empty_entry: Vec<(String, Span)> = vec![];
+    if empty_map >= 0 {
+        for (at, held) in state.flow.empty_lists.iter() {
+            let at = nikaia_std::num::value(at);
+            if at == empty_map { empty_entry.push(held.clone()); }
+        }
+    }
     let mut on: Ty = check_core_expr(state, world, host, receiver, span);
+    for held in empty_entry.iter() { state.flow.empty_lists.insert(empty_map, held.clone()); }
     on = check_core_method_literal(state, receiver, on);
     if safe {
         let mut unknown = false;
@@ -18970,6 +19247,7 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     if (b == "HashMap" || b == "Map" || b == "BTreeMap") && args.len() == 2 {
         state.flow.read_a_map = !writing;
         state.a_map_key(world, nikaia_std::index::get(&args, 0), &key, index, writing, span);
+        if !writing { check_core_call_on_key_read(state, world, base, index, span); }
         let value: Ty = (*nikaia_std::index::get(&args, 1)).clone();
         if !writing {
             match value {
@@ -19420,6 +19698,13 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
                     pending = Some(span.start as i64);
                 }
             },
+            Expr::Call { args, .. } => {
+                if args.is_empty() && names.len() == 1 && shape.is_empty() && check_core_stmt_an_untyped_map(&bound) {
+                    state.flow.empty_lists.insert(span.start as i64, (name.to_owned(), Span { start: span.start, end: span.end }));
+                    state.flow.empty_maps.insert(span.start as i64);
+                    pending = Some(span.start as i64);
+                }
+            },
             _ => { },
         }
     }
@@ -19541,6 +19826,15 @@ fn check_core_stmt_plain_name(ty: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_stmt_an_untyped_map(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => a_map_type(name) && (args.is_empty() || args.len() == 2 && (*nikaia_std::index::get(&args, 0)).is_unknown() && (*nikaia_std::index::get(&args, 1)).is_unknown()),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_stmt_open_target(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr) -> Option<i64> {
     match target {
         Expr::Variable(name, _) => {
@@ -19610,7 +19904,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     if !code_keys.is_empty() { check_core_places_stored_keys(state, world, host, Some(value), &code_keys); }
     if op.is_none() {
         state.a_map_read_assigned(world, &into, value, span);
-        state.a_map_first_written(world, target, &found);
+        check_fields_map_first_written(state, world, target, value, &found, span);
     }
     if op.is_none() { check_core_a_kept_lambda(state, world, host, &into, value, span); }
     if op.is_none() {
@@ -19815,6 +20109,27 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
                     state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(&first, false, span));
                     frame[0].open_number = Some(span.start as i64);
                     for item in items.iter() { state.open_number_given(world, span.start as i64, item, span); }
+                }
+            },
+            _ => { },
+        }
+    }
+    if bindings.len() == 2 && frame.len() == 2 {
+        match iter {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let named: String = format!("{}", world.words.resolve(name));
+                let map = state.binding(&named);
+                if map.is_some() {
+                    let held: CheckLocal = match map { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
+                    let a_map = match held.ty {
+                        Ty::Named { ref name, .. } => a_map_type(name),
+                        _ => false,
+                    };
+                    let keys = state.flow.open_keys.get(&held.id);
+                    if a_map && keys.is_some() && nikaia_std::index::get(&frame, 0).ty.is_unknown() { frame[0].open_number = Some(state.open_root(nikaia_std::index::or(keys, || 0))); }
+                    let values = state.flow.open_elements.get(&held.id);
+                    if a_map && values.is_some() && nikaia_std::index::get(&frame, 1).ty.is_unknown() { frame[1].open_number = Some(state.open_root(nikaia_std::index::or(values, || 0))); }
                 }
             },
             _ => { },
@@ -22016,41 +22331,6 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_first_written(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty) {
-        let base_name = match target {
-            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
-                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
-                _ => return,
-            } },
-            _ => return,
-        };
-        let index_key = match target {
-            Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); index_key_type(self, world, index) },
-            _ => return,
-        };
-        let local = match self.binding(&base_name) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let open = match local.ty {
-            Ty::Named { ref name, ref args, .. } => a_map_name(name) && (args.is_empty() || args.len() == 2 && (*nikaia_std::index::get(&args, 0)).is_unknown() && (*nikaia_std::index::get(&args, 1)).is_unknown()),
-            _ => false,
-        };
-        if !open || found.is_unknown() || index_key.is_unknown() { return; }
-        let value = value_of_a_copy(found);
-        let mut frame = self.scope.len() as i64;
-        while frame > 0 {
-            frame = frame - 1;
-            let mut at = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame))).len() as i64;
-            while at > 0 {
-                at = at - 1;
-                if nikaia_std::index::get(nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).name == base_name {
-                    let held = named_or_empty(&nikaia_std::index::get(nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).ty);
-                    if !held.is_empty() { self.scope[nikaia_std::index::at(frame)][nikaia_std::index::at(at)].ty = Ty::Named { name: held, args: vec![index_key, value], view: false }; }
-                    return;
-                }
-            }
-        }
-    }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
     pub fn comptimes_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, ty: &str) {
         match expr {
             Expr::Variable(name, _) => {
@@ -22104,6 +22384,45 @@ impl CheckState {
         let suffix = format!("::{}", name);
         for (key, contract) in world.library.types.iter() { if key == name || key.ends_with(&suffix) { return contract.fields.to_owned(); } }
         vec![]
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_fields_map_first_written(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty, span: &Span) {
+    match target {
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            match base {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    let base_name: String = world.words.resolve(name).to_owned();
+                    let local = match state.binding(&base_name) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    let open = match local.ty {
+                        Ty::Named { ref name, ref args, .. } => a_map_name(name) && (args.is_empty() || args.len() == 2 && ((*nikaia_std::index::get(&args, 0)).is_unknown() || (*nikaia_std::index::get(&args, 1)).is_unknown())),
+                        _ => false,
+                    };
+                    if !open { return; }
+                    let before = check_fields_map_parts(&local.ty);
+                    let index_key = index_key_type(&state, world, index);
+                    check_core_call_on_map_written(state, world, &base_name, index, &index_key, false, value, found, false, span);
+                    let now = check_fields_map_parts(&nikaia_std::index::or(state.lookup(&base_name), || Ty::Unknown));
+                    if (*nikaia_std::index::get(&before, 0)).is_unknown() && !(*nikaia_std::index::get(&now, 0)).is_unknown() { state.a_map_key(world, nikaia_std::index::get(&now, 0), &index_key, index, true, span); }
+                    if (*nikaia_std::index::get(&before, 1)).is_unknown() && !(*nikaia_std::index::get(&now, 1)).is_unknown() { state.text_literal(world, nikaia_std::index::get(&now, 1), value, true); }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_fields_map_parts(ty: &Ty) -> Vec<Ty> {
+    match ty {
+        Ty::Named { args, .. } => if args.len() == 2 { args.to_owned() } else { vec![Ty::Unknown, Ty::Unknown] },
+        _ => vec![Ty::Unknown, Ty::Unknown],
     }
 }
 
@@ -22209,12 +22528,15 @@ pub struct CheckFlow {
     pub text_paths: collections::BTreeSet<i64>,
     pub handle_lets: collections::BTreeSet<i64>,
     pub empty_lists: collections::BTreeMap<i64, (String, Span)>,
+    pub empty_maps: collections::BTreeSet<i64>,
     pub open_numbers: collections::BTreeMap<i64, CheckOpenNumber>,
     pub open_chars: collections::BTreeMap<i64, CheckOpenChar>,
     pub high_bytes: collections::BTreeMap<i64, (String, Span)>,
     pub wide_chars: collections::BTreeMap<i64, (i64, Span)>,
     pub chars_refused: collections::BTreeSet<i64>,
     pub open_elements: collections::BTreeMap<i64, i64>,
+    pub open_keys: collections::BTreeMap<i64, i64>,
+    pub open_map_parts: collections::BTreeMap<i64, (bool, String)>,
     pub open_walks: collections::BTreeMap<i64, i64>,
     pub open_params: collections::BTreeMap<String, i64>,
     pub walk_open: Option<i64>,
@@ -22238,11 +22560,12 @@ pub struct CheckFlow {
     pub unsigned_slots: collections::BTreeMap<i64, Vec<CheckUnsignedSlot>>,
     pub at_a_write_door: bool,
     pub pushed_into: Option<String>,
+    pub pushed_receiver: i64,
     pub followed: collections::BTreeMap<i64, Integer>,
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), handle_lets: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), lent_text_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, lent_tail_leaves: collections::BTreeSet::new(), open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_lambda_params: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), handle_lets: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), empty_maps: collections::BTreeSet::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_keys: collections::BTreeMap::new(), open_map_parts: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), lent_text_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, lent_tail_leaves: collections::BTreeSet::new(), open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_lambda_params: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None, pushed_receiver: -1 } }
 }
 
 
@@ -26108,7 +26431,14 @@ impl CheckState {
                 if !seen { types.push((ask.0.to_owned(), ask.1.clone())); }
             }
             if types.len() >= 2 {
-                self.findings.push(a_number_asked_for_two_types(&head.name, head.element, &nikaia_std::index::get(&types, 0).0, &nikaia_std::index::get(&types, 1).0, &nikaia_std::index::get(&types, 1).1));
+                if self.flow.open_map_parts.contains_key(&head_at) {
+                    let keys: bool = nikaia_std::index::or((*nikaia_std::index::get(&self.flow.open_map_parts, &head_at)).as_ref().map(|__nikaia_it| __nikaia_it.0), || false);
+                    let other: String = nikaia_std::index::or(match (*nikaia_std::index::get(&self.flow.open_map_parts, &head_at)).as_ref().map(|__nikaia_it| __nikaia_it.1.as_str()) {
+                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                        None => None,
+                    }, || "".into());
+                    self.findings.push(a_map_number_asked_for_two_types(&head.name, keys, &other, &nikaia_std::index::get(&types, 0).0, &nikaia_std::index::get(&types, 1).0, &nikaia_std::index::get(&types, 1).1));
+                } else { self.findings.push(a_number_asked_for_two_types(&head.name, head.element, &nikaia_std::index::get(&types, 0).0, &nikaia_std::index::get(&types, 1).0, &nikaia_std::index::get(&types, 1).1)); }
                 continue;
             }
             let mut decided: Option<String> = None;
@@ -26160,12 +26490,15 @@ impl CheckState {
                     self.record_cast(&from, &into, cast.0);
                 }
             }
+            let mut of_a_map = false;
+            for member in members.iter() { of_a_map = of_a_map || self.flow.open_map_parts.contains_key(&member.0); }
+            if held != "i32" && of_a_map { for member in members.iter() { for put in member.1.written.iter() { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, held.to_owned()); } } } }
             if decided.is_some() || typed {
                 let ty = held.to_owned();
                 for member in members.iter() {
                     let mut written: String = ty.to_owned();
                     if member.1.element { written = format!("Vec<{}>", ty); }
-                    self.facts.number_lets.insert(member.1.at.start as i64, written);
+                    if !self.flow.open_map_parts.contains_key(&member.0) { self.facts.number_lets.insert(member.1.at.start as i64, written); }
                     for site in member.1.sites.iter() {
                         let site = nikaia_std::num::value(site);
                         self.facts.arithmetic.insert(site, ty.to_owned());
@@ -26318,7 +26651,7 @@ impl CheckState {
             },
             Expr::Index { .. } => {
                 let at = self.open_element_of(world, expr);
-                if at.is_some() { out.push(self.open_root(nikaia_std::index::or(at, || 0))); }
+                if at.is_some() && !self.a_read_of_a_map(world, expr) { out.push(self.open_root(nikaia_std::index::or(at, || 0))); }
             },
             Expr::Call { args, .. } => {
                 if !args.is_empty() {
@@ -26346,6 +26679,13 @@ impl CheckState {
                 let expr = nikaia_std::boxed::open(expr);
                 if *op == UnaryOp::Neg || *op == UnaryOp::Not { out.extend(self.open_numbers_in(world, expr)); }
             },
+            Expr::Coalesce { value, fallback, .. } => {
+                let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+                if self.a_map_read_of_numbers(world, value, fallback) {
+                    let at = self.open_element_of(world, value);
+                    out.push(self.open_root(nikaia_std::index::or(at, || 0)));
+                }
+            },
             _ => { },
         }
         let mut distinct: Vec<i64> = vec![];
@@ -26361,15 +26701,41 @@ impl CheckState {
         match expr {
             Expr::LitInt { .. } => true,
             Expr::Variable(name, _) => { let name = *name; self.a_name_of_an_open_number(world, name) },
-            Expr::Index { .. } => self.open_element_of(world, expr).is_some(),
+            Expr::Index { .. } => self.open_element_of(world, expr).is_some() && !self.a_read_of_a_map(world, expr),
             Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
-            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver) },
+            Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver) || world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0 },
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); an_operation_of_one_type(*op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs) },
             Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); (*op == UnaryOp::Neg || *op == UnaryOp::Not) && self.number_shaped(world, expr) },
+            Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); self.a_map_read_of_numbers(world, value, fallback) },
             _ => false,
         }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_read_of_a_map(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+        let base: String = match expr {
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
+                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+                _ => return false,
+            } },
+            _ => return false,
+        };
+        let local = match self.binding(&base) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        match local.ty {
+            Ty::Named { ref name, .. } => a_map_type(name),
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_map_read_of_numbers(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, fallback: &Expr) -> bool {
+        let read = match value {
+            Expr::Index { .. } => self.open_element_of(world, value).is_some(),
+            _ => false,
+        };
+        read && self.number_shaped(world, fallback)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -26438,9 +26804,19 @@ fn number_list_element(ty: &Ty) -> Option<String> {
     match ty {
         Ty::Named { name, args, .. } => {
             if (name == "Vec" || name == "Array") && !args.is_empty() { return integer_named(nikaia_std::index::get(&args, 0)); }
+            if a_map_type(name) && args.len() == 2 { return integer_named(&value_of_a_copy(nikaia_std::index::get(&args, 1))); }
             return None;
         },
         _ => { return None; },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_map_key(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, .. } => { if a_map_type(name) && args.len() == 2 { integer_named(&value_of_a_copy(nikaia_std::index::get(&args, 0))) } else { None } },
+        _ => None,
     }
 }
 
@@ -26475,8 +26851,16 @@ impl CheckState {
     fn elements_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, copy: &Ty, at: &Span, beside: bool) -> bool {
         let name = match number_list_name(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let number = match *nikaia_std::index::get(&self.flow.open_elements, &local.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return false };
-        let ty = match number_list_element(copy) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let keys = *nikaia_std::index::get(&self.flow.open_keys, &local.id);
+        let key_ty = number_map_key(copy);
+        let mut asked = false;
+        if keys.is_some() && key_ty.is_some() {
+            let root = self.open_root(nikaia_std::index::or(keys, || 0));
+            self.add_ask(root, nikaia_std::index::or(key_ty.as_deref(), || "").to_owned(), at, beside);
+            asked = true;
+        }
+        let number = match *nikaia_std::index::get(&self.flow.open_elements, &local.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return asked };
+        let ty = match number_list_element(copy) { Some(__nikaia_value) => __nikaia_value, None => return asked };
         let root = self.open_root(number);
         self.add_ask(root, ty, at, beside);
         true
@@ -31591,6 +31975,19 @@ pub fn a_number_asked_for_two_types(name: &str, element: bool, first: &str, seco
         message = format!("You're using `{}` as {} `{}` and here as {} `{}`.", name, an_or_a(first), first, an_or_a(second), second);
         help = format!("Declare its type, `let {}: {} = …`, and convert with `as` where the other one is needed.", name, first);
     }
+    let notes: Vec<String> = vec!["A number takes its type from how it's used, and these uses want two different types.".to_owned()];
+    check_refusal("NK1200", at, message, notes, Some(help))
+}
+
+pub fn a_map_number_asked_for_two_types(name: &str, keys: bool, other: &str, first: &str, second: &str, at: &Span) -> CheckFinding {
+    let mut part: String = String::from("values");
+    let mut written: String = format!("{}, {}", other, first);
+    if keys {
+        part = "keys".to_owned();
+        written = format!("{}, {}", first, other);
+    }
+    let message = format!("You're using the {} of `{}` as `{}`s and here as `{}`s.", part, name, first, second);
+    let help = format!("Declare its type, `let {}: collections::HashMap[{}] = …`, and convert with `as` where the other one is needed.", name, written);
     let notes: Vec<String> = vec!["A number takes its type from how it's used, and these uses want two different types.".to_owned()];
     check_refusal("NK1200", at, message, notes, Some(help))
 }
@@ -68290,7 +68687,7 @@ pub mod check_core_call {
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]
-    pub use super::{check_core_call_on_reached, check_core_call_on, check_core_a_safe_call};
+    pub use super::{check_core_call_on_reached, check_core_call_on_map_written, check_core_call_on_key_read, check_core_call_on_retyped, check_core_call_on_entry_values, check_core_call_on, check_core_a_safe_call};
 }
 pub mod check_core_comptime {
     #[allow(unused_imports)]
@@ -68354,7 +68751,10 @@ pub mod check_fallible {
     #[allow(unused_imports)]
     pub use super::{CheckCleanup};
 }
-pub mod check_fields {}
+pub mod check_fields {
+    #[allow(unused_imports)]
+    pub use super::{check_fields_map_first_written};
+}
 pub mod check_flow {
     #[allow(unused_imports)]
     pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckFlow};
@@ -68492,7 +68892,7 @@ pub mod check_walks {
 }
 pub mod check_widen {
     #[allow(unused_imports)]
-    pub use super::{common_integer, widened_into, an_integer_that_does_not_widen, unsigned_from_signed, number_where_no_number_is, names_a_path, text_as_a_path, views_into_nullable_text, views_into_text, binary_op_text, a_number_asked_for_two_types, a_list_the_wrong_length_for_its_array, a_repeat_count_unknown_for_its_array, a_repeated_value_that_does_not_copy, two_integer_types_for_one_variable};
+    pub use super::{common_integer, widened_into, an_integer_that_does_not_widen, unsigned_from_signed, number_where_no_number_is, names_a_path, text_as_a_path, views_into_nullable_text, views_into_text, binary_op_text, a_number_asked_for_two_types, a_map_number_asked_for_two_types, a_list_the_wrong_length_for_its_array, a_repeat_count_unknown_for_its_array, a_repeated_value_that_does_not_copy, two_integer_types_for_one_variable};
 }
 pub mod check_with {
     #[allow(unused_imports)]

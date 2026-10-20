@@ -179,7 +179,7 @@ fn compiles(rust: &str, dir: &Path) {
 const READS_NOTHING: &str = "use std::collections\n\n\
      fn size(m: collections::HashMap[ref String, i64]) -> i64 {\n    return m.len()\n}\n\n\
      fn quiet() -> i64 {\n\
-     \x20   let mut m = collections::HashMap()\n\
+     \x20   let mut m: collections::HashMap[ref String, i64] = collections::HashMap()\n\
      \x20   m.insert(\"a\", 1)\n\
      \x20   return size(m)\n}\n";
 

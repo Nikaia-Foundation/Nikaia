@@ -1109,6 +1109,10 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
     if (b == "HashMap" || b == "Map" || b == "BTreeMap") && args.len() == 2 {
         state.flow.read_a_map = !writing
         state.a_map_key(world, args[0], key, index, writing, span)
+        // **A key read is a use of a map's open keys** (ADR-285 D43).
+        if !writing {
+            check_core_call_on_key_read(state, world, base, index, span)
+        }
         let value: Ty = args[1].clone()
         if !writing {
             match value {

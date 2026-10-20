@@ -530,6 +530,15 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
                     pending = span.start as i64
                 }
             },
+            // **A map made without its types** is asked as an empty list is
+            // (ADR-285 D43).
+            Expr::Call { args, .. } => {
+                if args.len() == 0 && names.len() == 1 && shape.len() == 0 && check_core_stmt_an_untyped_map(bound) {
+                    state.flow.empty_lists.insert(span.start as i64, (name.clone(), Span { start: span.start, end: span.end }))
+                    state.flow.empty_maps.insert(span.start as i64)
+                    pending = span.start as i64
+                }
+            },
             else => {},
         }
     }
@@ -705,6 +714,14 @@ fn check_core_stmt_plain_name(ty: ref Ty) -> String? sync {
     }
 }
 
+/// A map type that says neither its key nor its value.
+fn check_core_stmt_an_untyped_map(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, .. } => a_map_type(name) && (args.len() == 0 || (args.len() == 2 && args[0].is_unknown() && args[1].is_unknown())),
+        else => false,
+    }
+}
+
 /// **The open number an assignment's target is**, its root.
 fn check_core_stmt_open_target(state: ref CheckState, world: ref CheckWorld, target: ref Expr) -> i64? sync {
     match target {
@@ -784,7 +801,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     }
     if op == null {
         state.a_map_read_assigned(world, into, value, span)
-        state.a_map_first_written(world, target, found)
+        check_fields_map_first_written(state, world, target, value, found, span)
     }
     // **An assignment keeps what it is given** (ADR-282 D3, ADR-293 D28).
     if op == null {
@@ -1087,6 +1104,32 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
                     frame[0].open_number = span.start as i64
                     for item in items {
                         state.open_number_given(world, span.start as i64, item, span)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    // **A walk over a map written in numbers binds its open key and value**
+    // (ADR-285 D43).
+    if bindings.len() == 2 && frame.len() == 2 {
+        match iter {
+            Expr::Variable(name, _) => {
+                let named: String = f"{world.words.resolve(name)}"
+                let map = state.binding(named)
+                if map != null {
+                    let held: CheckLocal = map ?? return check_core_stmt_unit()
+                    let a_map = match held.ty {
+                        Ty::Named { name, .. } => a_map_type(name),
+                        else => false,
+                    }
+                    let keys = state.flow.open_keys.get(held.id)
+                    if a_map && keys != null && frame[0].ty.is_unknown() {
+                        frame[0].open_number = state.open_root(keys ?? 0)
+                    }
+                    let values = state.flow.open_elements.get(held.id)
+                    if a_map && values != null && frame[1].ty.is_unknown() {
+                        frame[1].open_number = state.open_root(values ?? 0)
                     }
                 }
             },

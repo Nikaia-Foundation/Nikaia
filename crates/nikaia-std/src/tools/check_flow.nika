@@ -188,6 +188,9 @@ pub struct CheckFlow {
     /// The `let`s whose value was an empty list and whose element type nothing
     /// has said yet (ADR-135 D2), by the `let`'s byte.
     pub empty_lists: collections::BTreeMap[i64, (String, Span)],
+    /// Those of `empty_lists` that are an unannotated map (ADR-285 D43): a
+    /// map nothing writes into and nothing types is asked as a list is.
+    pub empty_maps: collections::BTreeSet[i64],
     /// The numbers whose uses decide their type, by the `let` (ADR-285).
     pub open_numbers: collections::BTreeMap[i64, CheckOpenNumber],
     /// The `'…'`s a `let` binds whose uses decide `u8` or `scalar`, by the
@@ -204,6 +207,14 @@ pub struct CheckFlow {
     /// A list written in number literals: the binding and the entry of
     /// `open_numbers` it names (ADR-285 D34).
     pub open_elements: collections::BTreeMap[i64, i64],
+    /// **A map's keys written in number literals** (ADR-285 D43): the binding
+    /// and the entry of `open_numbers` they are; its values are in
+    /// `open_elements`, as a list's elements are.
+    pub open_keys: collections::BTreeMap[i64, i64],
+    /// The entries of `open_numbers` that are a map's keys or values, by the
+    /// entry: `true` for the keys, and the other part's type as written, for
+    /// the message.
+    pub open_map_parts: collections::BTreeMap[i64, (bool, String)],
     /// **A walk whose items are an open number** (ADR-285 D34, #594), by the
     /// call that makes it, and the entry of `open_numbers` it names.
     pub open_walks: collections::BTreeMap[i64, i64],
@@ -258,6 +269,9 @@ pub struct CheckFlow {
     pub at_a_write_door: bool,
     /// The name of an empty list a `push` is being walked on (#523).
     pub pushed_into: String?,
+    /// The receiver of the call `pushed_into` was held for, by its node: a
+    /// call inside it, its receiver's or an argument's, is not that write.
+    pub pushed_receiver: i64,
     /// **What a `let mut` holds where straight-line code has followed it**
     /// (Part III C.4), by binding: its value, and each value assigned to it
     /// in the frame it was bound in. An assignment in a nested block forgets
@@ -305,12 +319,15 @@ impl CheckFlow {
             text_paths: collections::BTreeSet(),
             handle_lets: collections::BTreeSet(),
             empty_lists: collections::BTreeMap(),
+            empty_maps: collections::BTreeSet(),
             open_numbers: collections::BTreeMap(),
             open_chars: collections::BTreeMap(),
             high_bytes: collections::BTreeMap(),
             wide_chars: collections::BTreeMap(),
             chars_refused: collections::BTreeSet(),
             open_elements: collections::BTreeMap(),
+            open_keys: collections::BTreeMap(),
+            open_map_parts: collections::BTreeMap(),
             open_walks: collections::BTreeMap(),
             open_params: collections::BTreeMap(),
             walk_open: null,
@@ -335,6 +352,7 @@ impl CheckFlow {
             unsigned_slots: collections::BTreeMap(),
             at_a_write_door: false,
             pushed_into: null,
+            pushed_receiver: -1,
         }
     }
 }

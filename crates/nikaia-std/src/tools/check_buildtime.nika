@@ -98,6 +98,11 @@ impl CheckState {
     /// silence is a backend message, and the cost of speaking is a correct
     /// program refused.
     pub fn an_empty_list_with_no_element_type(ref mut self, name: ref String, span: ref Span) sync {
+        // **A map nothing writes into and nothing types** (ADR-285 D43).
+        if self.flow.empty_maps.contains(span.start as i64) {
+            self.findings.push(check_refusal("NK1153", span, f"`{name}` is a map, and nothing says what it holds.", ["A map gets its key and value types from what is written into it, and nothing is written into it here.".clone()], f"Write the type, `let {name}: collections::HashMap[String, i64] = collections::HashMap()`, or write a first entry into it."))
+            return
+        }
         self.findings.push(check_refusal("NK1153", span, f"`{name}` is an empty list, and nothing says what it holds.", ["An empty list gets its element type from how it's used, and it isn't used here.".clone()], f"Write the type, `let {name}: Vec[i64] = []`, or give it a first element."))
     }
 

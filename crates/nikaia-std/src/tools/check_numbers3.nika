@@ -96,7 +96,13 @@ impl CheckState {
             // **Two uses that ask two types** (D2): the language below would
             // say *mismatched types* about the generated file.
             if types.len() >= 2 {
-                self.findings.push(a_number_asked_for_two_types(head.name, head.element, types[0].0, types[1].0, types[1].1))
+                if self.flow.open_map_parts.contains_key(head_at) {
+                    let keys: bool = self.flow.open_map_parts[head_at]?.0 ?? false
+                    let other: String = self.flow.open_map_parts[head_at]?.1?.clone() ?? ""
+                    self.findings.push(a_map_number_asked_for_two_types(head.name, keys, other, types[0].0, types[1].0, types[1].1))
+                } else {
+                    self.findings.push(a_number_asked_for_two_types(head.name, head.element, types[0].0, types[1].0, types[1].1))
+                }
                 continue
             }
             let mut decided: String? = null
@@ -181,6 +187,22 @@ impl CheckState {
                     self.record_cast(from, into, cast.0)
                 }
             }
+            // **A map's literals are written with the type** (ADR-285 D43):
+            // a key read by a literal is no write the language below infers
+            // the map's type from.
+            let mut of_a_map = false
+            for member in members {
+                of_a_map = of_a_map || self.flow.open_map_parts.contains_key(member.0)
+            }
+            if held != "i32" && of_a_map {
+                for member in members {
+                    for put in member.1.written {
+                        for literal in put.1 {
+                            self.facts.unsigned_literals.insert(literal.0, held.clone())
+                        }
+                    }
+                }
+            }
             // **The type is written** (D4), and a literal the emitter would
             // otherwise give an `i64`'s suffix is given this one.
             if decided != null || typed {
@@ -192,7 +214,11 @@ impl CheckState {
                     if member.1.element {
                         written = f"Vec<{ty}>"
                     }
-                    self.facts.number_lets.insert(member.1.at.start as i64, written)
+                    // A map's part is written where the map's write is, and
+                    // no `let` stands there.
+                    if !self.flow.open_map_parts.contains_key(member.0) {
+                        self.facts.number_lets.insert(member.1.at.start as i64, written)
+                    }
                     // **An operation over it is a site of the overflow proof**
                     // as one over a typed name is (ADR-306 D6).
                     for site in member.1.sites {

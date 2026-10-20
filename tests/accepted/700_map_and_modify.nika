@@ -1,0 +1,15 @@
+// #700, ADR-285 D43: a map made without an annotation takes its key and value
+// types from its first write, and a value written in number literals is one
+// open number: `and_modify` hands its lambda that number, copied in and
+// written back, as on an annotated map.
+
+use std::collections
+
+fn main() {
+    let mut m = collections::HashMap()
+    m.insert("a", 1)
+    m.entry("b").or_insert(0)
+    m.entry("b").and_modify(fn(v) { v += 1 })
+    m.entry("a").and_modify(fn(v) { v = v * 10 })
+    println(f"{m["a"] ?? 0} {m["b"] ?? 0}")
+}

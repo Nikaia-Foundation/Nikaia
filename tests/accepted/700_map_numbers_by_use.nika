@@ -1,0 +1,19 @@
+// #700, ADR-285 D43: where no use asks, a map's open number is an `i32`, or an
+// `i64` where a written value does not fit; a typed read and a walk over the
+// map are uses of its keys and values.
+
+use std::collections
+
+fn main() {
+    let mut wide = collections::HashMap()
+    wide.entry(1).or_insert(3000000000)
+    wide[2] = 5
+    let mut sum = 0
+    for (k, v) in wide {
+        sum = sum + k + v
+    }
+    let mut small = collections::BTreeMap()
+    small.insert("x", 7)
+    let byte: u8 = small["x"] ?? 0
+    println(f"{sum} {byte} {wide[1] ?? 0}")
+}

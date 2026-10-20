@@ -310,6 +310,253 @@ fn check_core_call_on_takes(state: ref CheckState, world: ref CheckWorld, contra
     return false
 }
 
+/// **A write into an unannotated map** (ADR-285 D43): the key and the value
+/// each give the map its type where it has none yet, a number written in
+/// literals as one open number decided by its uses (D34), and a later write
+/// is a use of that number. `give_value` is `false` where the assignment that
+/// writes the value already hands it to the open number.
+pub fn check_core_call_on_map_written(mut state: CheckState, world: ref CheckWorld, map_name: ref String, key: ref Expr, key_ty: ref Ty, entry_key: bool, value: ref Expr, value_ty: ref Ty, give_value: bool, span: ref Span) sync {
+    let local = state.binding(map_name) ?? return
+    let id = local.id
+    let mut parts: Vec[Ty] = []
+    let mut is_a_map = false
+    match local.ty {
+        Ty::Named { name, args, .. } => {
+            is_a_map = a_map_type(name)
+            parts = args.clone()
+        },
+        else => {}
+    }
+    if !is_a_map {
+        return
+    }
+    if parts.len() == 0 {
+        parts = [Ty::Unknown, Ty::Unknown]
+    }
+    if parts.len() != 2 {
+        return
+    }
+    let other_of_key: String = check_core_call_on_part_text(parts[1], value_ty)
+    let other_of_value: String = check_core_call_on_part_text(parts[0], key_ty)
+    // An `entry` key was handed to the open keys by the `entry` call.
+    let keys = check_core_call_on_map_part(state, world, map_name, id, true, other_of_key, parts[0], key, key_ty, !entry_key, entry_key, span)
+    let values = check_core_call_on_map_part(state, world, map_name, id, false, other_of_value, parts[1], value, value_ty, give_value, false, span)
+    check_core_call_on_retyped(state, map_name, [keys, values])
+}
+
+/// The type a map's other part is written with in a message: what it holds,
+/// else what is written into it, else `i64`.
+fn check_core_call_on_part_text(held: ref Ty, given: ref Ty) -> String {
+    if !held.is_unknown() {
+        return held.text()
+    }
+    if !given.is_unknown() {
+        return check_core_call_on_map_held(given).text()
+    }
+    return "i64".clone()
+}
+
+/// What a map holds of a type written into it: text as owned text (D43), a
+/// view of a number as the number.
+fn check_core_call_on_map_held(given: ref Ty) -> Ty {
+    let copy = value_of_a_copy(given)
+    if is_text_type(copy) {
+        return Ty::Named { name: "String", args: [], view: false }
+    }
+    return copy
+}
+
+/// One part of a map, its key or its value, after a write into it.
+fn check_core_call_on_map_part(mut state: CheckState, world: ref CheckWorld, map_name: ref String, id: i64, keys: bool, other: String, held: ref Ty, given: ref Expr, given_ty: ref Ty, give: bool, entry_key: bool, span: ref Span) -> Ty sync {
+    let mut open: i64 = -1
+    if keys {
+        open = state.flow.open_keys[id] ?? -1
+    } else {
+        open = state.flow.open_elements[id] ?? -1
+    }
+    if open >= 0 {
+        let root = state.open_root(open)
+        let asked: String? = integer_named(value_of_a_copy(given_ty.unseen()))
+        if asked != null {
+            if state.flow.open_numbers.contains_key(root) {
+                check_core_call_on_ask(state, root, (asked ?? "").clone(), span)
+            }
+        } else if give && state.number_shaped(world, given) {
+            state.open_number_given(world, root, given, span)
+        }
+        return held.clone()
+    }
+    if !held.is_unknown() {
+        return held.clone()
+    }
+    if !given_ty.is_unknown() {
+        // **A view of text written first leaves the keys to the uses**: the
+        // lines of a text kept alive (ADR-218) or a parameter written
+        // `HashMap[ref String, i64]` say whether the map holds views.
+        let a_view = match given_ty {
+            Ty::Named { view, .. } => view,
+            else => false,
+        }
+        let a_literal = match given {
+            Expr::LitStr { .. } => true,
+            else => false,
+        }
+        if keys && a_view && !a_literal && is_text_type(given_ty) {
+            return held.clone()
+        }
+        let made = check_core_call_on_map_held(given_ty)
+        // **An `entry` key written first is built as the map's owned text**
+        // (D43, #676), as every later one is.
+        if keys && entry_key && check_core_call_on_owned_text(made) && check_core_call_on_text_to_build(world, given, given_ty) {
+            state.facts.owned_entry_keys.insert(id_of(given) as i64)
+        }
+        return made
+    }
+    if !state.number_shaped(world, given) {
+        return held.clone()
+    }
+    // The keys stand at the end of the write, the values at its start: two
+    // entries of one statement.
+    let mut at = span.start as i64
+    if keys {
+        at = span.end as i64
+    }
+    state.flow.open_numbers.insert(at, CheckOpenNumber { name: map_name.clone(), element: true, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] })
+    state.flow.open_map_parts.insert(at, (keys, other))
+    if give || keys {
+        state.open_number_given(world, at, given, span)
+    }
+    if keys {
+        state.flow.open_keys.insert(id, at)
+    } else {
+        state.flow.open_elements.insert(id, at)
+    }
+    return held.clone()
+}
+
+/// **What a write into a map expects once it has typed the map** (D43): the
+/// first write's text is handed over as every later one's is.
+fn check_core_call_on_now_expected(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr, entry: ref String, expected: Vec[Ty]) -> Vec[Ty] sync {
+    let mut map = receiver.clone()
+    let mut from = 0
+    if entry == "insert" && expected.len() == 2 {
+        from = 0
+    } else if entry == "or_insert" && expected.len() == 1 {
+        map = match receiver {
+            Expr::MethodCall { receiver, .. } => receiver.clone(),
+            else => return expected,
+        }
+        from = 1
+    } else {
+        return expected
+    }
+    let name: String = match map {
+        Expr::Variable(n, _) => world.words.resolve(n).clone(),
+        else => return expected,
+    }
+    let local = state.binding(name) ?? return expected
+    let parts: Vec[Ty] = match local.ty {
+        Ty::Named { name, args, .. } => if a_map_type(name) && args.len() == 2 { args.clone() } else { [] },
+        else => [],
+    }
+    if parts.len() != 2 {
+        return expected
+    }
+    let mut out: Vec[Ty] = []
+    let mut at = 0
+    for ty in expected {
+        let unsaid = match ty {
+            Ty::Unknown => true,
+            Ty::Var { .. } => true,
+            else => false,
+        }
+        if unsaid && !parts[from + at].is_unknown() {
+            out.push(parts[from + at].clone())
+        } else {
+            out.push(ty.clone())
+        }
+        at += 1
+    }
+    return out
+}
+
+/// A key read out of a map whose keys are open: a number in it is that
+/// number, and its literals are written with its type.
+pub fn check_core_call_on_key_read(mut state: CheckState, world: ref CheckWorld, map: ref Expr, key: ref Expr, span: ref Span) sync {
+    let name: String = match map {
+        Expr::Variable(n, _) => world.words.resolve(n).clone(),
+        else => return,
+    }
+    let local = state.binding(name) ?? return
+    let at: i64 = state.flow.open_keys[local.id] ?? return
+    if state.number_shaped(world, key) {
+        state.open_number_given(world, state.open_root(at), key, span)
+    }
+}
+
+/// The binding's type, now a map of these parts.
+pub fn check_core_call_on_retyped(mut state: CheckState, bound_name: ref String, parts: Vec[Ty]) sync {
+    let mut frame = state.scope.len()
+    while frame > 0 {
+        frame = frame - 1
+        let mut at = state.scope[frame].len()
+        while at > 0 {
+            at = at - 1
+            if state.scope[frame][at].name == bound_name {
+                let mut new_name: String = ""
+                let mut new_view = false
+                match state.scope[frame][at].ty {
+                    Ty::Named { name, view, .. } => {
+                        new_name = name.clone()
+                        new_view = view
+                    }
+                    else => {}
+                }
+                if !new_name.is_empty() {
+                    state.scope[frame][at].ty = Ty::Named { name: new_name, args: parts, view: new_view }
+                }
+                return
+            }
+        }
+    }
+}
+
+/// The key of `m.entry(k)`, the receiver of `or_insert`.
+fn check_core_call_on_entry_key(world: ref CheckWorld, receiver: ref Expr) -> Expr? sync {
+    return match receiver {
+        Expr::MethodCall { method, args, .. } => {
+            if world.words.resolve(method) == "entry" && args.len() == 1 {
+                args[0].clone()
+            } else {
+                null
+            }
+        },
+        else => null,
+    }
+}
+
+/// **The open number a map's values are, reached through `m.entry(k)`**
+/// (ADR-285 D43), or `-1`.
+pub fn check_core_call_on_entry_values(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr) -> i64 sync {
+    match receiver {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if world.words.resolve(method) != "entry" || args.len() != 1 {
+                return -1
+            }
+            match receiver {
+                Expr::Variable(name, _) => {
+                    let local = state.binding(world.words.resolve(name)) ?? return -1
+                    let at: i64 = state.flow.open_elements[local.id] ?? return -1
+                    return state.open_root(at)
+                },
+                else => {}
+            }
+        },
+        else => {}
+    }
+    return -1
+}
+
 /// Whether the entry hands back a sequence.
 fn check_core_call_on_hands_back_a_sequence(contract: ref FnContract) -> bool {
     let signature = contract.signature ?? return false
@@ -350,12 +597,23 @@ fn check_core_call_on_open(state: ref CheckState, bound_name: ref String) -> i64
 
 /// **The element type an empty list's first `push` gives it** (#523), and an
 /// open number's elements (ADR-285 D34).
-fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, entry: ref String, args: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
-    if state.flow.pushed_into == null {
+fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, entry: ref String, args: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+    if state.flow.pushed_into == null || state.flow.pushed_receiver != id_of(receiver) as i64 {
         return
     }
     let pushed_name: String = state.flow.pushed_into?.clone() ?? ""
     state.flow.pushed_into = null
+    // **A map takes its types from what is written into it** (ADR-285 D43).
+    if entry == "insert" && args.len() == 2 && found.len() == 2 {
+        check_core_call_on_map_written(state, world, pushed_name, args[0], found[0], false, args[1], found[1], true, span)
+        return
+    }
+    if entry == "or_insert" && args.len() == 1 && found.len() == 1 {
+        let key: Expr = check_core_call_on_entry_key(world, receiver) ?? return
+        let key_ty = index_key_type(state, world, key)
+        check_core_call_on_map_written(state, world, pushed_name, key, key_ty, true, args[0], found[0], true, span)
+        return
+    }
     let open = check_core_call_on_open(state, pushed_name)
     let one_pushed = entry == "push" && found.len() == 1 && args.len() == 1
     if open < 0 && one_pushed && found[0].is_unknown() && state.number_shaped(world, args[0]) && check_core_call_on_empty_list(state, pushed_name) {
@@ -382,9 +640,6 @@ fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, entry
         have = true
         kind = "Vec".clone()
         elements = [value_of_a_copy(found[0])]
-    } else if entry == "insert" && found.len() == 2 && !found[0].is_unknown() && !found[1].is_unknown() {
-        have = true
-        elements = [value_of_a_copy(found[0]), value_of_a_copy(found[1])]
     }
     if !have {
         return
@@ -594,6 +849,16 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         if copied != null {
             expected[0] = copied ?? Ty::Unknown
             state.facts.copied_entry_lambdas.insert(id_of(args[0]) as i64)
+        } else {
+            // **A map's open values are a number too** (ADR-285 D43): the
+            // lambda is handed one, copied in and written back.
+            let values = check_core_call_on_entry_values(state, world, receiver)
+            let lambda_param: String? = check_core_call_on_one_param(world, args[0])
+            if values >= 0 && lambda_param != null {
+                expected[0] = check_core_call_on_unviewed_fn(expected[0])
+                state.facts.copied_entry_lambdas.insert(id_of(args[0]) as i64)
+                state.flow.open_params.insert((lambda_param ?? "").clone(), values)
+            }
         }
     }
     let callee: FnContract? = contract.clone()
@@ -604,7 +869,12 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.flow.walk_lent = state.a_walk_that_lends(contract, receiver)
     state.in_parallel = outer_parallel
     state.scoped_task = outer_scoped
-    check_core_call_on_pushed(state, world, entry, args, found, span)
+    // **A key looked up is a use of a map's open keys** (ADR-285 D43).
+    if (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") && args.len() == 1 {
+        check_core_call_on_key_read(state, world, receiver, args[0], span)
+    }
+    check_core_call_on_pushed(state, world, receiver, entry, args, found, span)
+    expected = check_core_call_on_now_expected(state, world, receiver, entry, expected)
     let paused_here: Vec[i64] = state.flow.paused_args.clone()
     state.flow.paused_args = outer_paused
     let mut lambda_at: i64 = -1
@@ -856,6 +1126,34 @@ fn check_core_call_on_copied_entry(want: ref Ty, arg: ref Expr) -> Ty? {
             }
         },
         else => null,
+    }
+}
+
+/// The one parameter of a lambda, by name.
+fn check_core_call_on_one_param(world: ref CheckWorld, arg: ref Expr) -> String? sync {
+    return match arg {
+        Expr::Closure { params, .. } => {
+            if params.len() == 1 {
+                world.words.resolve(params[0]).clone()
+            } else {
+                null
+            }
+        },
+        else => null,
+    }
+}
+
+/// A `fn` type whose parameter is no view: the slot copied in.
+fn check_core_call_on_unviewed_fn(want: ref Ty) -> Ty {
+    return match want {
+        Ty::Fn { params, result, is_sync, can_throw } => {
+            let mut plain: Vec[Ty] = []
+            for p in params {
+                plain.push(unviewed_type(p))
+            }
+            Ty::Fn { params: plain, result: result?.clone(), is_sync: is_sync, can_throw: can_throw }
+        },
+        else => want.clone(),
     }
 }
 
