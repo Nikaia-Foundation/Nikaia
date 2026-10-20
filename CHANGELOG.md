@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1133] — 2026-10-20
+
+**spec: codegen-units is a key of [build.<target>], the CPU level is the build command's --cpu; no word is read past the end (ADR-002 D6, ADR-320 D13, #692)**
+- `codegen-units` joins `[build.<target>]`; absent, rustc chooses. ADR-002 D5's "stays Cargo's" is replaced: one unit against 16 moved 1BRC by about 42 instructions a row, in opposite directions for Nikaia and Rust.
+- `--cpu=LEVEL` on `build`, `run` and `test` names the least CPU the program runs on (`x86-64` to `x86-64-v4`, `native`); it is never a manifest key, is part of the compiled `std`'s cache key, and decides what ADR-371 D2 allows.
+- A word read never goes past the end; a loop that reads whole words up to its last row pads a copy of the end itself (ADR-320 D13).
+
 ## [0.0.1132] — 2026-10-20
 
 **process::run sets the child's environment: env, env_remove, env_clear; the program is found on the caller's PATH (built)**

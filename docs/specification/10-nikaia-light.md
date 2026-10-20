@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1132 (Draft)
+**Version:** 0.0.1133 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -835,7 +835,9 @@ while true {
 and `b.u64_le(i)` read 4 or 8 bytes from `i`, least significant first, as a
 `u32` or a `u64`; `b.u32_be(i)` and `b.u64_be(i)` read them most significant
 first. Each reads what `b[i..<i + n]` reads and stops the program where that
-cut would.
+cut would. No read goes past the end: a loop that reads whole words up to its
+last row runs over a copy of the last bytes with zeros behind them,
+`Bytes(tail)` ([ADR-320](adr/adr-320.md) D13).
 
 **A `'…'` is a `u8` or a `scalar`, by its use.** One ASCII character is either;
 `'\xNN'` above `\x7F` is only a `u8`; one scalar that is not ASCII is only a
