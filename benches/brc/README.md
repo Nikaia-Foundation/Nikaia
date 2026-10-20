@@ -69,21 +69,21 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1152, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.1156, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
 per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
-| Rust, `naive` | 840.5 | 9.23 | 859.4 | 8.64 | 556 |
-| **Nikaia**, `naive.nika` | **570.2** | **8.25** | **569.1** | **8.44** | **375** |
+| Rust, `naive` | 840.3 | 9.21 | 859.4 | 8.65 | 556 |
+| **Nikaia**, `naive.nika` | **570.2** | **8.24** | **569.1** | **8.44** | **375** |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
-| **Nikaia**, `examples/1brc.nika` | **274.0** | **1.12** | **231.3** | **1.12** | **642** |
-| Nikaia, overflow checks off | 275.0 | 1.12 | 231.3 | 1.12 | |
-| **Nikaia**, `fast.nika` | **166.4** | **1.02** | **166.6** | **1.02** | **1343** |
-| Nikaia, `fast.nika`, overflow checks off | 144.6 | 0.95 | 144.9 | 0.95 | |
+| **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.2** | **1.12** | **642** |
+| Nikaia, overflow checks off | 274.9 | 1.12 | 231.2 | 1.12 | |
+| **Nikaia**, `fast.nika` | **165.4** | **0.95** | **165.6** | **1.04** | **1353** |
+| Nikaia, `fast.nika`, overflow checks off | 147.6 | 0.95 | 147.8 | 0.95 | |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 | |
-| Nikaia, `fast.nika`, `x86-64-v3` | 158.8 | 1.01 | 159.0 | 1.01 | |
+| Nikaia, `fast.nika`, `x86-64-v3` | 153.8 | 0.95 | 154.0 | 0.95 | |
 
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
@@ -108,11 +108,12 @@ AI variant 2 runs 36 % fewer instructions than `1brc.nika` at 16 units and
 46 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
-`fast.nika` runs 13 % more instructions than AI variant 2 at both unit
-counts, 2 % fewer without its overflow checks, and 20 % more at `x86-64-v3`;
-it has about three times AI variant 2's mispredictions. It is 24 % fewer
-tokens, with no `unsafe` and every index and overflow checked. Where the
-difference lies is below.
+`fast.nika` runs 12 % more instructions than AI variant 2 at both unit
+counts, as many within 0.3 % without its overflow checks, and 16 % more at
+`x86-64-v3`; it has about three times AI variant 2's mispredictions. It is
+24 % fewer tokens, with no `unsafe` and every index and overflow checked or
+proved, and a row without a `.` where the temperature's shape puts one stops
+the program. Where the difference lies is below.
 
 ## Where Nikaia's instructions go
 
@@ -167,7 +168,8 @@ inlining, so the blocks are address ranges of it, read off the disassembly).
 `memcmp` only for a longer one; AI variant 2 calls it for every row (19.7 a
 row). What `fast.nika` runs more is checks and what they cost around them:
 each word read tests its position (three a row, two or three branches each),
-the temperature's `28 - dot` and the shift by it are tested, the slice of a
+the temperature's `.` is tested once (`28 - dot` and the shift by it are
+then proved, ADR-306 D18), the slice of a
 long name is computed and tested every row though only a long name uses it,
 the table's index is tested, and six additions test for overflow. The
 values the checks keep alive are stored on the stack and read back. The mispredictions are where `find_all` runs out of
@@ -179,22 +181,22 @@ What each check costs, at 16 units, `x86-64`: the lowered Rust of `fast.nika`
 edited by hand to drop exactly that check (an unchecked read, `wrapping_*`,
 `get_unchecked`), built the same way, its output compared with `naive`'s and
 counted. None of them is proved today; the last column says what a proof
-needs.
+needs. The shift by `28 - dot` is proved from the program's guard on `dot`
+(ADR-306 D18) and is no longer among them.
 
 | check | instructions a row it costs | what proving it needs |
 |---|---:|---|
 | the table's index `self.slots[at]`, in the probe and in the update | 16.1 | `slots.len() == SLOTS` as `Table`'s invariant (ADR-369, not built), `at`'s range carried through the probe's turns, `slot_of`'s result below the length |
 | the name's two word reads, `u64_le(pos)` and `u64_le(pos + 8)` | 15.6 | `0 <= pos < stop` at the read, from the `break` that ends the previous turn (the walk forgets it at the loop's head), and `stop + MARGIN <= buf.len()` stated at `run`'s top |
 | the long name's slice `buf[pos..<pos + len]`, hoisted onto every row | 13.7 | the same facts as the word reads, a separator inside `buf`, and `len >= 0` |
-| the separator's arithmetic, `sep - pos`, `sep + 1`, `sep + 4 + …` | 9.1 | `0 <= sep < buf.len()` for each position `find_all` yields: no record makes it a fact |
-| the shift by `28 - dot` | 4.0 | a shift's count as a goal of the walk: no record has it |
+| the separator's arithmetic, `sep - pos`, `sep + 1`, `sep + 4 + …` | 9.1 | `0 <= sep < buf.len()` is a fact for each position `find_all` yields (ADR-375 D5), but the walk takes `buf` handed to `slot_of` as changing its length, and `sep - pos` needs `pos >= 0` across the turns |
 | `sum += v`, `count += 1` | 2.0 | not provable: the table is scanned again and merged into, so no step count bounds them |
 | `8 * len`, `64 - 8 * len` and the shift by it | 0.6 | `len >= 0`, which a malformed file breaks: only a guard the program writes gives it |
 
 With every check above dropped at once, the last row's by one guard
 `0 <= len <= 100` in their place, `fast.nika` runs 132.0 instructions a row,
 below AI variant 2's 147.4. What stays then guards a malformed file: the
-`.` not where the shape says (`28 - dot`), and the temperature's word read
+`.` not where the shape says (the program's own guard), and the temperature's word read
 past the end after a name longer than `MARGIN`.
 
 ## Where `naive.nika` differs from `naive.rs`
