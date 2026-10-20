@@ -87,6 +87,10 @@ pub struct CheckFacts {
     pub number_lets: collections::BTreeMap[i64, String],
     pub changed_elements: collections::BTreeSet[i64],
     pub text_finds: collections::BTreeSet[i64],
+    /// **A `Bytes` cut by a set** (ADR-375 D3), by the receiver: written
+    /// `nikaia_std::bytes::split(&b, set)`, since a slice's own `split` takes
+    /// a closure and is the one the language below would pick.
+    pub bytes_splits: collections::BTreeSet[i64],
     /// **A text pattern of one scalar is that character** (#617), by the
     /// argument: `split(";")` on text is written `split(';')`, the character
     /// literal kept here as Rust spells it. A `&str` pattern is Rust's two-way
@@ -130,9 +134,6 @@ pub struct CheckFacts {
     /// The `??`s whose left side holds a view of text and whose fallback is
     /// a name that is a view of text (#719): the fallback is read as `str`.
     pub text_view_fallbacks: collections::BTreeSet[i64],
-    /// The `??`s whose left side holds a view of `str` and whose fallback is
-    /// a name of text of its own (#752): the fallback is lent as `str`.
-    pub text_mixed_fallbacks: collections::BTreeSet[i64],
     /// The `??`s whose left side holds text, `String` or `&String` below,
     /// and whose fallback is a name that is a view of text (#752): both sides
     /// are made the `String` the answer is.
@@ -307,6 +308,10 @@ pub struct CheckFacts {
     /// `fold_merged` below, which a list's `iter()` at `no` has as well as a
     /// walk on every core, beside the language below's own two-argument `fold`.
     pub par_folds: collections::BTreeSet[i64],
+    /// **A fold's step or merge that changes its accumulator in place**
+    /// (ADR-372 D9), by the argument: `1` takes the second argument by value,
+    /// `2` lent. The lowering wraps it in `|mut a, x| { f(&mut a, x); a }`.
+    pub in_place_folds: collections::BTreeMap[i64, i64],
     /// The receivers of a `drain()` that stay the caller's - rooted in a `mut`
     /// parameter or in `self` under `ref mut self` - which it empties (#707).
     pub kept_drains: collections::BTreeSet[i64],
@@ -346,6 +351,7 @@ impl CheckFacts {
             number_lets: collections::BTreeMap(),
             changed_elements: collections::BTreeSet(),
             text_finds: collections::BTreeSet(),
+            bytes_splits: collections::BTreeSet(),
             char_patterns: collections::BTreeMap(),
             standard_compares: collections::BTreeMap(),
             count_args: collections::BTreeSet(),
@@ -371,7 +377,6 @@ impl CheckFacts {
             copied_jump_reads: collections::BTreeSet(),
             view_coalesces: collections::BTreeSet(),
             text_view_fallbacks: collections::BTreeSet(),
-            text_mixed_fallbacks: collections::BTreeSet(),
             text_owned_fallbacks: collections::BTreeSet(),
             lent_map_fallbacks: collections::BTreeSet(),
             optional_fallbacks: collections::BTreeSet(),
@@ -476,6 +481,7 @@ impl CheckFacts {
             byte_copies: collections::BTreeSet(),
             map_drains: collections::BTreeSet(),
             par_folds: collections::BTreeSet(),
+            in_place_folds: collections::BTreeMap(),
             kept_drains: collections::BTreeSet(),
             kept_byte_fields: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),

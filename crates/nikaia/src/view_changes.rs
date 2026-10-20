@@ -128,7 +128,7 @@ pub fn analyse(
 
 /// **The `??`s whose answer is a view of their left side** (#739): the
 /// checker's facts, by the id of the `??` (`lent_coalesces`,
-/// `view_coalesces`, `text_view_fallbacks`, `text_mixed_fallbacks`, `lent_list_reads`, `lent_map_fallbacks`,
+/// `view_coalesces`, `text_view_fallbacks`, `lent_list_reads`, `lent_map_fallbacks`,
 /// `map_read_views`) or of its
 /// fallback (`view_fallbacks`). A `let` bound to one lends the place it reads.
 pub fn coalesced(facts: &crate::check::CheckFacts) -> BTreeSet<i64> {
@@ -136,7 +136,6 @@ pub fn coalesced(facts: &crate::check::CheckFacts) -> BTreeSet<i64> {
     for set in [
         &facts.view_coalesces,
         &facts.text_view_fallbacks,
-        &facts.text_mixed_fallbacks,
         &facts.lent_list_reads,
         &facts.lent_map_fallbacks,
         &facts.view_fallbacks,

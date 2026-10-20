@@ -559,8 +559,8 @@ fn a_loop_variable_as_the_fallback_of_a_view_of_text_runs() {
 
 /// **A list's text read beside a name of text** (#752):
 /// `names.first() ?? n` was `|| n.into()` with `Option<&String>` on the left,
-/// and rustc could not settle the type. Both sides are made `String`; and a
-/// name of text of its own beside a view of `str` is lent as `str`.
+/// and rustc could not settle the type. Both sides are made `String`. (A
+/// name of text of its own beside a view of `str` is `NK1185`, nullable.rs.)
 #[test]
 fn a_name_as_the_fallback_of_a_list_read_of_text_runs() {
     runs_in(
@@ -575,10 +575,6 @@ fn a_name_as_the_fallback_of_a_list_read_of_text_runs() {
          fn h(opt: String?, n: String) -> String {\n\
          \x20   (opt ?? n).clone()\n\
          }\n\
-         fn g(word: String, s: String) -> String {\n\
-         \x20   let n: String = f\"{s}!\"\n\
-         \x20   (word.strip_suffix(s) ?? n).clone()\n\
-         }\n\
          fn main() {\n\
          \x20   let mut v: Vec[String] = Vec()\n\
          \x20   println(f(v, \"z\"))\n\
@@ -589,10 +585,8 @@ fn a_name_as_the_fallback_of_a_list_read_of_text_runs() {
          \x20   println(k(v, \"e\"))\n\
          \x20   println(h(null, \"q\"))\n\
          \x20   println(h(\"p\".clone(), \"q\"))\n\
-         \x20   println(g(\"ab\", \"b\"))\n\
-         \x20   println(g(\"ab\", \"c\"))\n\
          }\n",
-        "z\ne\na\nb\nq\np\na\nc!\n",
+        "z\ne\na\nb\nq\np\n",
         |_| {},
     );
 }
