@@ -443,3 +443,64 @@ fn a_named_rest_cannot_be_kept_as_a_list() {
     );
     assert!(found.iter().any(|f| f.code == "NK1106"), "{found:#?}");
 }
+
+/// **An arm's pattern of another type than the value is `NK1103`** (#704):
+/// `match 5 { "a" => … }` reached `rustc` as *mismatched types*. So does a
+/// variant of another of the program's enums. Where both sides are numbers,
+/// or one is a `char`, nothing is claimed.
+#[test]
+fn a_pattern_of_another_type_is_refused() {
+    let source = |subject: &str, arms: &str| {
+        format!(
+            "enum Color {{ Red, Green }}\n\
+             enum Shape {{ Dot, Line }}\n\
+             fn main() {{\n\
+             \x20   let c = Color::Red\n\
+             \x20   let s = \"x\"\n\
+             \x20   let n: i64 = 5\n\
+             \x20   let r = match {subject} {{ {arms} }}\n\
+             \x20   println(f\"{{r}} {{c}} {{s}} {{n}}\")\n\
+             }}\n"
+        )
+    };
+    for (subject, arms, said) in [
+        (
+            "5",
+            "\"a\" => 1, else => 0",
+            "`5` is a number, so the pattern `\"a\"`",
+        ),
+        ("s", "1 => 1, else => 0", "so the pattern `1`"),
+        ("n", "true => 1, else => 0", "so the pattern `true`"),
+        (
+            "c",
+            "Shape::Dot => 1, else => 0",
+            "so the pattern `Shape::Dot`",
+        ),
+        ("c", "3 => 1, else => 0", "so the pattern `3`"),
+        (
+            "n",
+            "1 | \"b\" => 1, else => 0",
+            "so the pattern `1 | \"b\"`",
+        ),
+    ] {
+        let found = findings(&source(subject, arms));
+        let it = found
+            .iter()
+            .find(|f| f.code == "NK1103")
+            .unwrap_or_else(|| panic!("no NK1103 for {subject} / {arms}: {found:#?}"));
+        assert!(it.message.contains(said), "{it:#?}");
+    }
+    for (subject, arms) in [
+        ("5", "1 => 1, else => 0"),
+        ("n", "1 | 2 => 1, else => 0"),
+        ("s", "\"a\" => 1, else => 0"),
+        ("c", "Color::Red => 1, else => 0"),
+        ("n", "'a' => 1, else => 0"),
+    ] {
+        let found = findings(&source(subject, arms));
+        assert!(
+            !found.iter().any(|f| f.code == "NK1103"),
+            "{subject} / {arms}: {found:#?}"
+        );
+    }
+}

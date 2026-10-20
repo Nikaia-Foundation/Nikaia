@@ -15965,9 +15965,14 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let a_variable = matches!(value, Expr::Variable(_, _));
     let through_the_reference = mut_subject.is_some() && a_variable;
     let through_a_view = check_core_flow_through_a_view(&state, world, value);
+    let text = !typed.is_a_view() && check_core_flow_owned_text(&typed) && !shapes_has_a_null_arm(arms) && check_core_flow_text_arms(arms);
     if through_a_view && !typed.is_a_view() && state.takes_away(world, &typed) {
         state.facts.lent_scrutinees.insert(id_of(value) as i64);
         typed = view_of_type(&typed);
+    }
+    if text {
+        state.facts.text_scrutinees.insert(id_of(value) as i64);
+        if !typed.is_a_view() { typed = view_of_type(&typed); }
     }
     let lent_name = check_core_flow_a_lent_name(&state, world, value) || state.a_lent_let(world, value);
     if lent_name && !typed.is_a_view() && state.takes_away(world, &typed) { typed = view_of_type(&typed); }
@@ -16002,8 +16007,23 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     state.a_match_that_misses_a_case(world, &over, arms, span);
     state.a_variant_matched_on_a_nullable(world, &over, value, arms, span);
     state.a_null_arm_on_a_plain_value(world, &over, value, arms, span);
+    state.a_pattern_of_another_type(world, &over, value, arms, span);
     if any && agree { return seen; }
     check_core_flow_meet(state, world, expr, &answered, span)
+}
+
+fn check_core_flow_text_arms(arms: &[MatchArm]) -> bool {
+    for arm in arms.iter() { if check_core_flow_text_pattern(&arm.pattern) { return true; } }
+    false
+}
+
+fn check_core_flow_text_pattern(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Literal(literal) => { return matches!(literal, Expr::LitStr { .. }); },
+        MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { if check_core_flow_text_pattern(alternative) { return true; } } },
+        _ => { },
+    }
+    false
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -21038,6 +21058,7 @@ pub struct CheckFacts {
     pub comptime_names: collections::BTreeSet<String>,
     pub shadowing_reads: collections::BTreeSet<i64>,
     pub lent_scrutinees: collections::BTreeSet<i64>,
+    pub text_scrutinees: collections::BTreeSet<i64>,
     pub arm_subjects: collections::BTreeMap<i64, i64>,
     pub guards_inside_boxes: collections::BTreeMap<i64, collections::BTreeSet<String>>,
     pub collected_into: collections::BTreeSet<i64>,
@@ -21128,7 +21149,7 @@ pub struct CheckFacts {
 }
 
 impl CheckFacts {
-    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_copies: collections::BTreeSet::new(), static_field_reads: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), comptime_names: collections::BTreeSet::new(), shadowing_reads: collections::BTreeSet::new(), lent_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), copied_entry_lambdas: collections::BTreeSet::new(), owned_entry_keys: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), boxed_fn_values: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), bytes_entries: collections::BTreeSet::new(), bytes_grammars: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), mut_arg_bindings: collections::BTreeMap::new(), reborrowed_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), text_scalars: collections::BTreeSet::new(), text_graphemes: collections::BTreeSet::new(), kept_text_bytes: collections::BTreeSet::new(), byte_copies: collections::BTreeSet::new(), map_drains: collections::BTreeSet::new(), kept_drains: collections::BTreeSet::new(), kept_byte_fields: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
+    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_copies: collections::BTreeSet::new(), static_field_reads: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), comptime_names: collections::BTreeSet::new(), shadowing_reads: collections::BTreeSet::new(), lent_scrutinees: collections::BTreeSet::new(), text_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), copied_entry_lambdas: collections::BTreeSet::new(), owned_entry_keys: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), boxed_fn_values: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), bytes_entries: collections::BTreeSet::new(), bytes_grammars: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), mut_arg_bindings: collections::BTreeMap::new(), reborrowed_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), text_scalars: collections::BTreeSet::new(), text_graphemes: collections::BTreeSet::new(), kept_text_bytes: collections::BTreeSet::new(), byte_copies: collections::BTreeSet::new(), map_drains: collections::BTreeSet::new(), kept_drains: collections::BTreeSet::new(), kept_byte_fields: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
 }
 
 fn check_claim_held(held: Option<&ClaimHeld>) -> String {
@@ -23479,6 +23500,26 @@ fn kind_names_a_value_of_the_inner(pattern: &MatchPattern) -> bool {
     }
 }
 
+fn kind_a_number_name(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64" }
+
+fn kind_of_a_literal(literal: &Expr) -> Option<String> {
+    match literal {
+        Expr::LitInt { .. } => return Some(String::from("number")),
+        Expr::LitFloat(..) => return Some(String::from("number")),
+        Expr::LitStr { .. } => return Some(String::from("text")),
+        Expr::LitBool(..) => return Some(String::from("bool")),
+        Expr::LitChar(..) => return Some(String::from("char")),
+        _ => return None,
+    }
+}
+
+fn kind_a_literal_misfit(literal: &Expr, kind: &str) -> bool {
+    let written: String = match kind_of_a_literal(literal) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if written == kind { return false; }
+    if written == "number" && kind == "char" || written == "char" && kind == "number" { return false; }
+    true
+}
+
 fn kind_an_update_only_replaces(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block) -> bool {
     let mut assigned = false;
     let mut read = false;
@@ -23592,6 +23633,70 @@ impl CheckState {
         if !shapes_has_a_null_arm(arms) { return; }
         let written = written_expression(world.words, value);
         self.findings.push(check_refusal("NK1256", span, format!("`{}` is a `{}`, which is never `null`, so a `null` arm can't match.", written, on.text()), vec![format!("A `null` arm belongs to a `match` over a `T?`; `{}` always has a value.", written)], Some("Remove the `null` arm.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_pattern_of_another_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+        let mut kind: String = String::from("");
+        let mut shown: String = String::from("");
+        let known = self.kind_of_the_matched(on);
+        if known.is_some() {
+            kind = nikaia_std::index::or(known.as_deref(), || "").to_owned();
+            shown = format!("a `{}`", on.text());
+        } else {
+            kind = match kind_of_a_literal(value) { Some(__nikaia_value) => __nikaia_value, None => return };
+            shown = match &*kind {
+                "number" => String::from("a number"),
+                "text" => String::from("text"),
+                _ => format!("a `{}`", kind),
+            };
+        }
+        for arm in arms.iter() {
+            if self.kind_a_misfit(world, &arm.pattern, &kind) {
+                let written = written_expression(world.words, value);
+                let pattern = written_pattern(world.words, &arm.pattern);
+                self.findings.push(check_refusal("NK1103", span, format!("`{}` is {}, so the pattern `{}` can't match it.", written, shown, pattern), vec!["An arm's pattern is a value of the type the `match` is over.".to_owned()], Some("Write a pattern of that type, or convert the value before the `match`.".to_owned())));
+                return;
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn kind_of_the_matched(&self, on: &Ty) -> Option<String> {
+        match on {
+            Ty::Named { name, .. } => {
+                if kind_a_number_name(name) { return Some(String::from("number")); }
+                if name == "String" || name == "str" { return Some(String::from("text")); }
+                if name == "bool" || name == "char" || self.structs.contains_key(name) || self.enums.contains_key(name) { return Some(name.to_owned()); }
+            },
+            Ty::Pointed { item, slice, .. } => {
+                let item = nikaia_std::boxed::open(item); let slice = *slice;
+                if !slice { return self.kind_of_the_matched(item); }
+            },
+            _ => { },
+        }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn kind_a_misfit(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, kind: &str) -> bool {
+        match pattern {
+            MatchPattern::Literal(literal) => { return kind_a_literal_misfit(literal, kind); },
+            MatchPattern::Range { start, .. } => { return kind_a_literal_misfit(start, kind); },
+            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { if self.kind_a_misfit(world, alternative, kind) { return true; } } },
+            MatchPattern::Path(path) => { return self.kind_a_variant_misfit(world, path, kind); },
+            MatchPattern::Tuple { path, .. } => { return self.kind_a_variant_misfit(world, path, kind); },
+            MatchPattern::Named { path, .. } => { return self.kind_a_variant_misfit(world, path, kind); },
+            _ => { },
+        }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn kind_a_variant_misfit(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], kind: &str) -> bool {
+        if path.len() != 2 { return false; }
+        let owner = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
+        self.enums.contains_key(&owner) && owner != kind
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -36310,7 +36415,16 @@ fn emit_match_yes_or_no(arms: &[MatchArm]) -> Option<bool> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn emit_match_subject<H: EmitHost>(walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope, deref: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn emit_match_subject<H: EmitHost>(walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope, deref: &str, text: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if text {
+        let plain = matches!(value, Expr::Variable(..) | Expr::Field { .. });
+        out.push("&*");
+        out.push(deref);
+        if !plain { out.push("("); }
+        host.expr(walk, out, value, depth, flow, scope)?;
+        if !plain { out.push(")"); }
+        return Ok(());
+    }
     let mut list = false;
     for arm in arms.iter() { if emit_match_is_list(&arm.pattern) { list = true; } }
     if list { out.push("&("); } else { out.push(deref); }
@@ -36720,8 +36834,8 @@ impl EmitState {
             if !inside_a_box {
                 if !nikaia_std::index::or(answer, || true) { out.push("!"); }
                 out.push("matches!(");
-                let __keep_32438 = nikaia_std::tether::Keep::new();
-                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, (&__keep_32438).put(self.emit_match_lent_subject(world, value)))?;
+                let __keep_33039 = nikaia_std::tether::Keep::new();
+                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, (&__keep_33039).put(self.emit_match_lent_subject(world, value)), self.facts.text_scrutinees.contains(&node_key(value)))?;
                 out.push(", ");
                 let mut i: i64 = 0;
                 for arm in arms.iter() {
@@ -36736,9 +36850,10 @@ impl EmitState {
             }
         }
         out.push("match ");
-        if self.facts.lent_scrutinees.contains(&node_key(value)) { out.push("&"); }
-        let __keep_33343 = nikaia_std::tether::Keep::new();
-        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, (&__keep_33343).put(self.emit_match_lent_subject(world, value)))?;
+        let text = self.facts.text_scrutinees.contains(&node_key(value));
+        if self.facts.lent_scrutinees.contains(&node_key(value)) && !text { out.push("&"); }
+        let __keep_34079 = nikaia_std::tether::Keep::new();
+        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, (&__keep_34079).put(self.emit_match_lent_subject(world, value)), text)?;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let close = "    ".repeat(nikaia_std::count::of(depth));
         out.push(" {\n");
@@ -66872,6 +66987,12 @@ pub fn written_pattern(names: &winnow_grammar::InternerContext, pattern: &MatchP
         MatchPattern::Path(path) => path_written(names, path),
         MatchPattern::Tuple { path, .. } => format!("{}(…)", path_written(names, path)),
         MatchPattern::Named { path, .. } => format!("{} {{ … }}", path_written(names, path)),
+        MatchPattern::Literal(literal) => written_expression(names, literal),
+        MatchPattern::Or(alternatives) => {
+            let mut parts: Vec<String> = vec![];
+            for alternative in alternatives.iter() { parts.push(written_pattern(names, alternative)); }
+            parts.join(" | ")
+        },
         _ => String::from("this pattern"),
     }
 }

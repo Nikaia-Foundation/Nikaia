@@ -736,9 +736,19 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     }
     let through_the_reference = mut_subject != null && a_variable
     let through_a_view = check_core_flow_through_a_view(state, world, value)
+    // **An owned `String` matched against a text literal is matched as a
+    // view** (#704): the language below compares a literal with a `&str`,
+    // so a name the arms bind is a view of the subject.
+    let text = !typed.is_a_view() && check_core_flow_owned_text(typed) && !shapes_has_a_null_arm(arms) && check_core_flow_text_arms(arms)
     if through_a_view && !typed.is_a_view() && state.takes_away(world, typed) {
         state.facts.lent_scrutinees.insert(id_of(value) as i64)
         typed = view_of_type(typed)
+    }
+    if text {
+        state.facts.text_scrutinees.insert(id_of(value) as i64)
+        if !typed.is_a_view() {
+            typed = view_of_type(typed)
+        }
     }
     // **And so is a name lent to this function's walk**, and a `let` over a
     // place (#567).
@@ -789,10 +799,41 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     state.a_match_that_misses_a_case(world, over, arms, span)
     state.a_variant_matched_on_a_nullable(world, over, value, arms, span)
     state.a_null_arm_on_a_plain_value(world, over, value, arms, span)
+    state.a_pattern_of_another_type(world, over, value, arms, span)
     if any && agree {
         return seen
     }
     return check_core_flow_meet(state, world, expr, answered, span)
+}
+
+/// Whether an arm's pattern is a text literal, or an `|` with one.
+fn check_core_flow_text_arms(arms: ref Vec[MatchArm]) -> bool {
+    for arm in arms {
+        if check_core_flow_text_pattern(arm.pattern) {
+            return true
+        }
+    }
+    return false
+}
+
+fn check_core_flow_text_pattern(pattern: ref MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Literal(literal) => {
+            return match literal {
+                Expr::LitStr { .. } => true,
+                else => false,
+            }
+        },
+        MatchPattern::Or(alternatives) => {
+            for alternative in alternatives {
+                if check_core_flow_text_pattern(alternative) {
+                    return true
+                }
+            }
+        },
+        else => {},
+    }
+    return false
 }
 
 /// Mark the nearest guard as one with no answer (ADR-308).

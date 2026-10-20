@@ -116,6 +116,36 @@ fn kind_names_a_value_of_the_inner(pattern: ref MatchPattern) -> bool {
     }
 }
 
+/// The numbers' type names.
+fn kind_a_number_name(name: ref String) -> bool {
+    return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64"
+}
+
+/// What a literal is: `number`, `text`, `bool` or `char`.
+fn kind_of_a_literal(literal: ref Expr) -> String? {
+    match literal {
+        Expr::LitInt { .. } => return "number",
+        Expr::LitFloat(..) => return "number",
+        Expr::LitStr { .. } => return "text",
+        Expr::LitBool(..) => return "bool",
+        Expr::LitChar(..) => return "char",
+        else => return null,
+    }
+}
+
+/// Whether a literal pattern is certainly of another kind than `kind`
+/// (`kind_of_the_matched`). A number against a `char` is not asked.
+fn kind_a_literal_misfit(literal: ref Expr, kind: ref String) -> bool {
+    let written: String = kind_of_a_literal(literal) ?? return false
+    if written == kind {
+        return false
+    }
+    if (written == "number" && kind == "char") || (written == "char" && kind == "number") {
+        return false
+    }
+    return true
+}
+
 /// Whether the block assigns `name` as a whole and never reads it.
 fn kind_an_update_only_replaces(world: ref CheckWorld, name: ref String, body: ref Block) -> bool {
     let mut assigned = false
@@ -260,6 +290,92 @@ impl CheckState {
         }
         let written = written_expression(world.words, value)
         self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.text()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm.".clone()))
+    }
+
+    /// **`NK1103`: an arm's pattern of another type than the value** (#704):
+    /// `match 5 { "a" => … }`, or a variant of another of the program's enums.
+    /// Only where both sides are certain - a number, text, a `bool`, a `char`,
+    /// or one of the program's structs or enums; a number against a `char` is
+    /// not asked. A `T?` is `NK1205`'s, and a type not known stays `?`
+    /// (ADR-291 D3).
+    pub fn a_pattern_of_another_type(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+        let mut kind: String = ""
+        let mut shown: String = ""
+        let known = self.kind_of_the_matched(on)
+        if known != null {
+            kind = (known ?? "").clone()
+            shown = f"a `{on.text()}`"
+        } else {
+            // A number written out is typed by its use, and a `match` is none.
+            kind = kind_of_a_literal(value) ?? return
+            shown = match kind {
+                "number" => "a number",
+                "text" => "text",
+                else => f"a `{kind}`",
+            }
+        }
+        for arm in arms {
+            if self.kind_a_misfit(world, arm.pattern, kind) {
+                let written = written_expression(world.words, value)
+                let pattern = written_pattern(world.words, arm.pattern)
+                self.findings.push(check_refusal("NK1103", span, f"`{written}` is {shown}, so the pattern `{pattern}` can't match it.", ["An arm's pattern is a value of the type the `match` is over.".clone()], "Write a pattern of that type, or convert the value before the `match`.".clone()))
+                return
+            }
+        }
+    }
+
+    /// What a matched value certainly is: `number`, `text`, `bool`, `char`,
+    /// or the name of one of the program's structs or enums.
+    fn kind_of_the_matched(ref self, on: ref Ty) -> String? sync {
+        match on {
+            Ty::Named { name, .. } => {
+                if kind_a_number_name(name) {
+                    return "number"
+                }
+                if name == "String" || name == "str" {
+                    return "text"
+                }
+                if name == "bool" || name == "char" || self.structs.contains_key(name) || self.enums.contains_key(name) {
+                    return name.clone()
+                }
+            },
+            Ty::Pointed { item, slice, .. } => {
+                if !slice {
+                    return self.kind_of_the_matched(item)
+                }
+            },
+            else => {},
+        }
+        return null
+    }
+
+    /// Whether a pattern certainly names a value of another kind than `kind`.
+    fn kind_a_misfit(ref self, world: ref CheckWorld, pattern: ref MatchPattern, kind: ref String) -> bool sync {
+        match pattern {
+            MatchPattern::Literal(literal) => return kind_a_literal_misfit(literal, kind),
+            MatchPattern::Range { start, .. } => return kind_a_literal_misfit(start, kind),
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    if self.kind_a_misfit(world, alternative, kind) {
+                        return true
+                    }
+                }
+            },
+            MatchPattern::Path(path) => return self.kind_a_variant_misfit(world, path, kind),
+            MatchPattern::Tuple { path, .. } => return self.kind_a_variant_misfit(world, path, kind),
+            MatchPattern::Named { path, .. } => return self.kind_a_variant_misfit(world, path, kind),
+            else => {},
+        }
+        return false
+    }
+
+    /// `Shape::Dot` matched on a value that is certainly no `Shape`.
+    fn kind_a_variant_misfit(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], kind: ref String) -> bool sync {
+        if path.len() != 2 {
+            return false
+        }
+        let owner = world.words.resolve(path[0]).clone()
+        return self.enums.contains_key(owner) && owner != kind
     }
 
     /// **`NK1205`: a variant or a literal matched on a `T?`** (issue #180,

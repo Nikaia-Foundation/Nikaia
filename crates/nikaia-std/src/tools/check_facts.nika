@@ -144,6 +144,10 @@ pub struct CheckFacts {
     /// node: each is written under the binding's own name.
     pub shadowing_reads: collections::BTreeSet[i64],
     pub lent_scrutinees: collections::BTreeSet[i64],
+    /// **A `match` over an owned `String` with a text literal among its
+    /// patterns**, by the subject (#704): the language below matches a
+    /// literal against a `&str`, so the subject is written as one.
+    pub text_scrutinees: collections::BTreeSet[i64],
     /// **A `match` on a name an enclosing arm bound**, by the subject: that
     /// arm's body. Where the arm lent the name, it is a reference below, and
     /// the `match` is over what it points to.
@@ -337,6 +341,7 @@ impl CheckFacts {
             comptime_names: collections::BTreeSet(),
             shadowing_reads: collections::BTreeSet(),
             lent_scrutinees: collections::BTreeSet(),
+            text_scrutinees: collections::BTreeSet(),
             arm_subjects: collections::BTreeMap(),
             guards_inside_boxes: collections::BTreeMap(),
             collected_into: collections::BTreeSet(),

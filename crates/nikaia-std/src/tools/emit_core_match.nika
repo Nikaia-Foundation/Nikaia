@@ -90,7 +90,27 @@ fn emit_match_yes_or_no(arms: ref Vec[MatchArm]) -> bool? {
 /// **A list pattern matches a slice** (ADR-355 D5): where an arm writes one,
 /// the subject is matched as `&x[..]`, which a `Vec`, an array and a view all
 /// give, and leaves the list where it was.
-fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope, deref: ref String) sync throws {
+fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope, deref: ref String, text: bool) sync throws {
+    // **An owned `String` matched against text literals is matched as a
+    // `&str`** (#704, `text_scrutinees`): `&*` reaches it whether the value
+    // is lowered owned or as a view.
+    if text {
+        let plain = match value {
+            Expr::Variable(..) => true,
+            Expr::Field { .. } => true,
+            else => false,
+        }
+        out.push("&*")
+        out.push(deref)
+        if !plain {
+            out.push("(")
+        }
+        host.expr(walk, out, value, depth, flow, scope)
+        if !plain {
+            out.push(")")
+        }
+        return
+    }
     let mut list = false
     for arm in arms {
         if emit_match_is_list(arm.pattern) {
@@ -705,7 +725,7 @@ impl EmitState {
                     out.push("!")
                 }
                 out.push("matches!(")
-                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value))
+                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), self.facts.text_scrutinees.contains(node_key(value)))
                 out.push(", ")
                 let mut i = 0
                 for arm in arms {
@@ -724,10 +744,11 @@ impl EmitState {
         out.push("match ")
         // A field reached through a view is matched by reference
         // (`check::Checked::lent_scrutinees`).
-        if self.facts.lent_scrutinees.contains(node_key(value)) {
+        let text = self.facts.text_scrutinees.contains(node_key(value))
+        if self.facts.lent_scrutinees.contains(node_key(value)) && !text {
             out.push("&")
         }
-        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value))
+        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), text)
         let pad = "    ".repeat(depth + 1)
         let close = "    ".repeat(depth)
         out.push(" {\n")

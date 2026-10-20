@@ -1,0 +1,38 @@
+// #704: an owned `String` matched against text literals - a local, a field,
+// a call's result, and the `matches!` form - reaches rustc as a `&str`.
+struct Named {
+    name: String,
+}
+
+fn made(n: i64) -> String {
+    return f"n{n}"
+}
+
+fn pick(k: String) -> String {
+    let kind = f"{k}"
+    let shown: String = match kind {
+        "number" => "a number",
+        "text" | "str" => "text",
+        else => f"a `{kind}`",
+    }
+    return shown
+}
+
+fn direct(k: String) -> i64 {
+    return match k {
+        "a" => 1,
+        else => 0,
+    }
+}
+
+fn main() {
+    println(pick("number"))
+    println(pick("str"))
+    println(pick("char"))
+    let owner = Named { name: "b".clone() }
+    let r = match owner.name { "a" => 1, "b" => 2, else => 3 }
+    let m = match made(1) { "n1" => true, else => false }
+    let k = "x".clone()
+    let o = match k { "x" => "found", other => other }
+    println(f"{r} {m} {o} {direct("a")}")
+}

@@ -164,12 +164,21 @@ fn unary_word(op: ref UnaryOp) -> String {
 }
 
 /// A pattern's path as the source wrote it, with `(…)` or `{ … }` where it
-/// takes a variant apart.
+/// takes a variant apart; a literal, and the alternatives of an `|`, as
+/// written.
 pub fn written_pattern(names: ref winnow_grammar::InternerContext, pattern: ref MatchPattern) -> String {
     return match pattern {
         MatchPattern::Path(path) => path_written(names, path),
         MatchPattern::Tuple { path, .. } => f"{path_written(names, path)}(…)",
         MatchPattern::Named { path, .. } => f"{path_written(names, path)} {{ … }}",
+        MatchPattern::Literal(literal) => written_expression(names, literal),
+        MatchPattern::Or(alternatives) => {
+            let mut parts: Vec[String] = []
+            for alternative in alternatives {
+                parts.push(written_pattern(names, alternative))
+            }
+            parts.join(" | ")
+        },
         else => "this pattern",
     }
 }
