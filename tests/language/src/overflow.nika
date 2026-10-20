@@ -88,3 +88,80 @@ test "a named method on a written number takes the type its use asks" {
     let printed = f"{overflow_f()} {overflow_g()} {x} {overflow_h(5.saturating_add(1))} {7.checked_mul(3) ?? 0}"
     assert(printed == "-5 21 8 7 21")
 }
+
+// **The same bits, read with the other sign** (ADR-285 D42): `bits_as_` keeps
+// every bit, so a number both types hold keeps its value and any other comes
+// out on the other side of zero.
+fn overflow_word(x: u32) -> i32 {
+    return x.bits_as_i32()
+}
+
+fn overflow_key(x: i64) -> u64 {
+    return x.bits_as_u64()
+}
+
+test "bits_as reads the same bits with the other sign" {
+    let big: u32 = 4000000000
+    assert(overflow_word(big) == -294967296)
+    assert(overflow_key(-1 as i64) == 18446744073709551615)
+    assert(overflow_word(big).bits_as_u32() == big)
+    let small: u32 = 7
+    assert(small.bits_as_i32() == 7)
+    let hash: u64 = 18446744073709551615
+    assert(hash.bits_as_i64() == -1)
+}
+
+// **`truncating_` only narrows** (ADR-285 D42): out of a wider integer of
+// either sign, and out of an `f64` toward zero and clamped.
+fn overflow_low(x: u64) -> i32 {
+    return x.truncating_i32()
+}
+
+fn overflow_floored(x: f64) -> u32 {
+    return x.truncating_u32()
+}
+
+fn overflow_floored_wide(x: f64) -> u64 {
+    return x.truncating_u64()
+}
+
+test "truncating keeps the low digits and clamps a float" {
+    assert(overflow_low(4294967297) == 1)
+    assert(overflow_low(4294967295) == -1)
+    assert(overflow_floored(-1.5) == 0)
+    assert(overflow_floored(1e20) == 4294967295)
+    assert(overflow_floored(7.9) == 7)
+    assert(overflow_floored_wide(-3.0) == 0)
+    assert(overflow_floored_wide(12.5) == 12)
+}
+
+// **`u8` has every name the other widths have** (ADR-285 D41).
+fn overflow_digit(c: u8) -> u8 {
+    return c.wrapping_sub(48)
+}
+
+test "u8 wraps, stops and asks as the other widths do" {
+    let c: u8 = 55
+    assert(c.wrapping_sub(48) == 7)
+    assert(overflow_digit(c) == 7)
+    assert((3 as u8).wrapping_sub(5) == 254)
+    assert((200 as u8).wrapping_add(100) == 44)
+    assert((16 as u8).wrapping_mul(17) == 16)
+    assert((250 as u8).saturating_add(10) == 255)
+    assert((3 as u8).saturating_sub(5) == 0)
+    assert((250 as u8).checked_add(10) == null)
+    assert(((250 as u8).checked_add(5) ?? 0) == 255)
+    assert((7 as u8).checked_div(0) == null)
+}
+
+test "truncating_u8 and checked_u8 convert into a byte" {
+    assert(300.truncating_u8() == 44)
+    assert(300.checked_u8() == null)
+    assert((200.checked_u8() ?? 0) == 200)
+    assert((-1.5).truncating_u8() == 0)
+    let big: u64 = 513
+    assert(big.truncating_u8() == 1)
+    assert(big.checked_u8() == null)
+    let n: i64 = -1
+    assert(n.truncating_u8() == 255)
+}

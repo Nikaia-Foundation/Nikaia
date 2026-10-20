@@ -126,9 +126,13 @@ fn a_hole_format(spec: ref String?) -> String {
     return f"{{:{held}}}"
 }
 
-/// `truncating_i32`: the integer type the method names, if it is one the
-/// language truncates to.
+/// `truncating_i32` and `bits_as_i32` (ADR-285 D42): the integer type the
+/// method names, if it is one the language converts to with Rust's `as`.
 pub fn truncating(method: ref String) -> String? {
+    if method.starts_with("bits_as_") {
+        let bits = method.strip_prefix("bits_as_") ?? ""
+        return an_integer_type(bits)
+    }
     let ty = method.strip_prefix("truncating_") ?? return null
     return an_integer_type(ty)
 }
@@ -143,6 +147,7 @@ fn an_integer_type(ty: ref String) -> String? {
     return match ty {
         "i32" => "i32",
         "i64" => "i64",
+        "u8" => "u8",
         "u32" => "u32",
         "u64" => "u64",
         else => null,

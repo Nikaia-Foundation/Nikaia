@@ -1365,6 +1365,42 @@ sync = true
 touches = []
 signature = "(self) -> i64"
 
+# The low 8 bits of an `i32`, as a `u8` (ADR-285 D41).
+[fn."i32::truncating_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8"
+
+# The low 8 bits of an `i64`, as a `u8` (ADR-285 D41).
+[fn."i64::truncating_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8"
+
+# The low 8 bits of a `u32`, as a `u8` (ADR-285 D41).
+[fn."u32::truncating_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8"
+
+# The low 8 bits of a `u64`, as a `u8` (ADR-285 D41).
+[fn."u64::truncating_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8"
+
+# The whole part of an `f64`, as a `u8`: toward zero, and clamped to 0..255
+# (not a number is 0).
+[fn."f64::truncating_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8"
+
 # **`u64` and `u32` have the arithmetic names every integer has**
 # ([ADR-285](../../docs/specification/adr/adr-285.md) D3): wrapping and stopping
 # at the limit, for the two unsigned types a program asked for. No `_neg` and no
@@ -1440,6 +1476,77 @@ pub = true
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
+
+# Addition that **wraps** at the ends of a `u8` instead of aborting (ADR-285 D41).
+[fn."u8::wrapping_add"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8"
+
+# Subtraction that **wraps** at the ends of a `u8` instead of aborting:
+# `c.wrapping_sub(b'0')` is a digit's value, read with no check.
+[fn."u8::wrapping_sub"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8"
+
+# Multiplication that **wraps** at the ends of a `u8` instead of aborting.
+[fn."u8::wrapping_mul"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8"
+
+# Division, which for a `u8` cannot overflow and is the plain division.
+[fn."u8::wrapping_div"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8"
+
+# A shift left that takes the count modulo the width instead of aborting.
+[fn."u8::wrapping_shl"]
+pub = true
+sync = true
+touches = []
+signature = "(self, i64) -> u8"
+
+# A shift right that takes the count modulo the width instead of aborting.
+[fn."u8::wrapping_shr"]
+pub = true
+sync = true
+touches = []
+signature = "(self, i64) -> u8"
+
+# Addition that **stops** at the ends of a `u8` instead of aborting.
+[fn."u8::saturating_add"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8"
+
+# Subtraction that **stops** at zero instead of aborting.
+[fn."u8::saturating_sub"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8"
+
+# Multiplication that **stops** at 255 instead of aborting.
+[fn."u8::saturating_mul"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8"
+
+# Division, which for a `u8` cannot overflow and is the plain division.
+[fn."u8::saturating_div"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8"
 
 # Addition that **wraps** at the ends of a `u64` instead of aborting.
 [fn."u64::wrapping_add"]
@@ -1529,9 +1636,51 @@ sync = true
 touches = []
 signature = "(self) -> u32"
 
+# The low 32 bits of a `u64`, read as an `i32`.
+[fn."u64::truncating_i32"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> i32"
+
+# The whole part of an `f64`, as a `u32`: toward zero, and clamped to the
+# ends of a `u32` (a negative number is 0, not a number is 0).
+[fn."f64::truncating_u32"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u32"
+
+# The whole part of an `f64`, as a `u64`: toward zero, and clamped to the
+# ends of a `u64` (a negative number is 0, not a number is 0).
+[fn."f64::truncating_u64"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u64"
+
+# **The same bits, read with the other sign** (ADR-285 D42): between two
+# types of one width no digit is lost, so this is not `truncating_`. Every bit
+# stays; a number both types hold keeps its value, any other comes out on the
+# other side of zero. None for `u8`, which has no signed partner.
+
+# The 32 bits of a `u32`, read as an `i32`.
+[fn."u32::bits_as_i32"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> i32"
+
+# The 32 bits of an `i32`, read as a `u32`.
+[fn."i32::bits_as_u32"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u32"
+
 # The 64 bits of a `u64`, read as an `i64`: a number above the largest `i64`
 # comes out negative.
-[fn."u64::truncating_i64"]
+[fn."u64::bits_as_i64"]
 pub = true
 sync = true
 touches = []
@@ -1539,7 +1688,7 @@ signature = "(self) -> i64"
 
 # The 64 bits of an `i64`, read as a `u64`: a negative number comes out above
 # the largest `i64`.
-[fn."i64::truncating_u64"]
+[fn."i64::bits_as_u64"]
 pub = true
 sync = true
 touches = []
@@ -1693,6 +1842,41 @@ sync = true
 touches = []
 signature = "(self, u32) -> u32?"
 
+# Addition of a `u8`, or `null` where the answer does not fit.
+[fn."u8::checked_add"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8?"
+
+# Subtraction of a `u8`, or `null` where the answer does not fit.
+[fn."u8::checked_sub"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8?"
+
+# Multiplication of a `u8`, or `null` where the answer does not fit.
+[fn."u8::checked_mul"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8?"
+
+# Division of a `u8`, or `null`, or a divisor of zero.
+[fn."u8::checked_div"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8?"
+
+# The remainder of a `u8`, or `null`, or a divisor of zero.
+[fn."u8::checked_rem"]
+pub = true
+sync = true
+touches = []
+signature = "(self, u8) -> u8?"
+
 # Addition of a `u64`, or `null` where the answer does not fit.
 [fn."u64::checked_add"]
 pub = true
@@ -1795,6 +1979,34 @@ pub = true
 sync = true
 touches = []
 signature = "(self) -> i32?"
+
+# An `i32` as a `u8`, or `null` where a `u8` does not hold it.
+[fn."i32::checked_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8?"
+
+# An `i64` as a `u8`, or `null` where a `u8` does not hold it.
+[fn."i64::checked_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8?"
+
+# A `u32` as a `u8`, or `null` where a `u8` does not hold it.
+[fn."u32::checked_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8?"
+
+# A `u64` as a `u8`, or `null` where a `u8` does not hold it.
+[fn."u64::checked_u8"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> u8?"
 
 # The place in the map this key names, whether or not anything is there yet.
 #

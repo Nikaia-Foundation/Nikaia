@@ -66,7 +66,7 @@ fn width_of_binary(world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref 
 
 fn width_of_method(world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, into: ref String) -> Vec[String] {
     let name = world.words.resolve(method).clone()
-    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") {
+    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") && !name.starts_with("bits_as_") {
         return []
     }
     return [f"`{name}`", f"({written_expression(world.words, receiver)} as {into}).{name}(…)"]

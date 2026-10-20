@@ -267,7 +267,7 @@ fn a_word_is_read_in_the_order_its_name_says() {
          fn words(path: ref String) throws {\n\
          \x20   let b = fs::read(ref path, fs::Root::Anywhere)\n\
          \x20   println(f\"{b.u32_le(0)} {b.u32_be(0)} {b.u64_le(1)} {b.u64_be(1)}\")\n\
-         \x20   println(f\"{b.u64_le(8).truncating_i64()} {b.u32_be(12) as i64} {b.u64_le(8)} {b.u32_le(0) as i64 - 1}\")\n\
+         \x20   println(f\"{b.u64_le(8).bits_as_i64()} {b.u32_be(12) as i64} {b.u64_le(8)} {b.u32_le(0) as i64 - 1}\")\n\
          \x20   let s = \"abcdefgh\"\n\
          \x20   println(f\"{s.bytes.u32_le(4)} {s.bytes.u64_be(0)}\")\n\
          }\n\

@@ -477,10 +477,15 @@ fn bounding_range(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFacts, 
                 if name == "len" {
                     return Range { lo: 0, hi: null }
                 }
-                if !name.starts_with("truncating_") {
+                // `bits_as_` too (ADR-285 D42): a value the destination holds
+                // keeps it, any other is somewhere in the destination's range.
+                let mut dropped = 11
+                if name.starts_with("bits_as_") {
+                    dropped = 8
+                } else if !name.starts_with("truncating_") {
                     return null
                 }
-                let into = Range::of_type(bounding_dropped(name, 11)) ?? return null
+                let into = Range::of_type(bounding_dropped(name, dropped)) ?? return null
                 let got = bounding_range(walk, receiver, facts, context, program, words, ask) ?? return into
                 if into.holds(got) {
                     return got

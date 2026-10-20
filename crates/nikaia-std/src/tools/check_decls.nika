@@ -200,7 +200,13 @@ impl CheckState {
         if !a_number_name(name) {
             return
         }
-        self.findings.push(check_refusal("NK1210", span, f"`{name}` has no method called `{method}`.", [f"A number's methods are the ones `std` describes, and none of them is called `{method}`."], "Write the computation with the operators, or in a function of your own that takes the number.".clone()))
+        let mut help: String = "Write the computation with the operators, or in a function of your own that takes the number.".clone()
+        let bits = check_decls_bits_as(name, method)
+        if bits != null {
+            let named = bits ?? ""
+            help = f"`{method}` cuts digits, and between two types of one width none are lost: to read the same bits with the other sign, write `{named}()`."
+        }
+        self.findings.push(check_refusal("NK1210", span, f"`{name}` has no method called `{method}`.", [f"A number's methods are the ones `std` describes, and none of them is called `{method}`."], help))
     }
 
     /// **`NK1210` for `.collect()` on a list** (#517): a list's `map` and
@@ -460,4 +466,21 @@ pub fn a_type_base(name: ref String) -> String sync {
 /// declaration in any program makes a `struct` or an `enum`.
 pub fn a_part_one_type(name: ref String) -> bool sync {
     return a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str"
+}
+
+/// **A same-width `truncating_` names `bits_as_`** (ADR-285 D42): `u64` and
+/// `truncating_i64` give `bits_as_i64`; nothing for any other pair.
+fn check_decls_bits_as(name: String, method: String) -> String? {
+    let into = method.strip_prefix("truncating_") ?? return null
+    let partner = match name {
+        "u64" => "i64",
+        "i64" => "u64",
+        "u32" => "i32",
+        "i32" => "u32",
+        else => "",
+    }
+    if partner == "" || into != partner {
+        return null
+    }
+    return f"bits_as_{into}"
 }

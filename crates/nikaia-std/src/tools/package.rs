@@ -2684,8 +2684,9 @@ fn bounding_range(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, conte
             if args.is_empty() {
                 let name = words.resolve(method);
                 if name == "len" { return Some(Range { lo: Some(0), hi: None }); }
-                if !name.starts_with("truncating_") { return None; }
-                let into = match Range::of_type(&bounding_dropped(name, 11)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let mut dropped: i64 = 11;
+                if name.starts_with("bits_as_") { dropped = 8; } else if !name.starts_with("truncating_") { return None; }
+                let into = match Range::of_type(&bounding_dropped(name, dropped)) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let got = match bounding_range(walk, receiver, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return Some(into) };
                 if into.holds(&got) { return Some(got); }
                 return Some(into);
@@ -3438,7 +3439,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
-            let __keep_60571 = nikaia_std::tether::Keep::new();
+            let __keep_60861 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 Expr::Field { .. } => {
@@ -3753,8 +3754,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
     for list in filled.iter() { outer.lengths.remove(list); }
     bounding_loop_change(walk, facts, &outer, cands);
     for list in filled.iter() {
-        let __keep_77551 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_77551).put(length_of(list)), count);
+        let __keep_77841 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_77841).put(length_of(list)), count);
     }
 }
 
@@ -20677,7 +20678,13 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn no_number_has_this_method(&mut self, name: &str, method: &str, span: &Span) {
         if !a_number_name(name) { return; }
-        self.findings.push(check_refusal("NK1210", span, format!("`{}` has no method called `{}`.", name, method), vec![format!("A number's methods are the ones `std` describes, and none of them is called `{}`.", method)], Some("Write the computation with the operators, or in a function of your own that takes the number.".to_owned())));
+        let mut help: String = "Write the computation with the operators, or in a function of your own that takes the number.".to_owned();
+        let bits = check_decls_bits_as(name, method);
+        if bits.is_some() {
+            let named = nikaia_std::index::or(bits, || "".into());
+            help = format!("`{}` cuts digits, and between two types of one width none are lost: to read the same bits with the other sign, write `{}()`.", method, named);
+        }
+        self.findings.push(check_refusal("NK1210", span, format!("`{}` has no method called `{}`.", name, method), vec![format!("A number's methods are the ones `std` describes, and none of them is called `{}`.", method)], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -20811,6 +20818,19 @@ pub fn a_type_base(name: &str) -> String {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn a_part_one_type(name: &str) -> bool { a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" }
+
+fn check_decls_bits_as(name: &str, method: &str) -> Option<String> {
+    let into = match method.strip_prefix("truncating_") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let partner = match name {
+        "u64" => "i64",
+        "i64" => "u64",
+        "u32" => "i32",
+        "i32" => "u32",
+        _ => "",
+    };
+    if partner == "" || into != partner { return None; }
+    Some(format!("bits_as_{}", into))
+}
 
 
 // --- check_doors.nika ---
@@ -21178,7 +21198,7 @@ fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp,
 
 fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, into: &str) -> Vec<String> {
     let name = world.words.resolve(method).to_owned();
-    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") { return vec![]; }
+    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") && !name.starts_with("bits_as_") { return vec![]; }
     vec![format!("`{}`", name), format!("({} as {}).{}(…)", written_expression(world.words, receiver), into, name)]
 }
 
@@ -41256,6 +41276,10 @@ fn a_hole_format(spec: Option<&str>) -> String {
 }
 
 pub fn truncating(method: &str) -> Option<String> {
+    if method.starts_with("bits_as_") {
+        let bits = nikaia_std::index::or(method.strip_prefix("bits_as_"), || "");
+        return an_integer_type(bits);
+    }
     let ty = match method.strip_prefix("truncating_") { Some(__nikaia_value) => __nikaia_value, None => return None };
     an_integer_type(ty)
 }
@@ -41269,6 +41293,7 @@ fn an_integer_type(ty: &str) -> Option<String> {
     match ty {
         "i32" => Some(String::from("i32")),
         "i64" => Some(String::from("i64")),
+        "u8" => Some(String::from("u8")),
         "u32" => Some(String::from("u32")),
         "u64" => Some(String::from("u64")),
         _ => None,
