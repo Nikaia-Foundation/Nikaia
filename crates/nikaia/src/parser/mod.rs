@@ -106,8 +106,11 @@ pub struct Trivia {
     /// **Where each parsed expression stands** (#107): its id's number and
     /// the bytes it was read from, the innermost rule that finished the node
     /// first. A losing branch leaves entries for ids no node keeps, which
-    /// nothing asks for.
-    spans: std::collections::BTreeMap<u32, ast::Span>,
+    /// nothing asks for. By the id's number less `spans_from`: the ids are
+    /// counted up from there, so a vector holds them with no search (#727).
+    spans: Vec<Option<ast::Span>>,
+    /// The id `spans` starts at: where the parse began counting.
+    spans_from: u32,
     /// Where the run of trivia that ends at `end` began, so a span that ends
     /// in it is cut back to the last token.
     trivia_start: usize,
@@ -123,10 +126,14 @@ impl Trivia {
         if span.end == self.end && self.trivia_start >= span.start {
             span.end = self.trivia_start;
         }
-        if id < 1 << 31 {
-            self.spans
-                .entry(id)
-                .or_insert_with(|| ast::Span::from(span));
+        if id < 1 << 31 && id >= self.spans_from {
+            let at = (id - self.spans_from) as usize;
+            if self.spans.len() <= at {
+                self.spans.resize(at + 1, None);
+            }
+            if self.spans[at].is_none() {
+                self.spans[at] = Some(ast::Span::from(span));
+            }
         }
         expr
     }
@@ -699,6 +706,7 @@ pub fn parse_expression_from(
         ..Default::default()
     };
     context.user_state.next_id = first;
+    context.user_state.spans_from = first;
 
     let mut stream = ParseInput::<Trivia> {
         state: context,
@@ -877,7 +885,12 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
     }
 
     let after_ids = stream.state.user_state.next_id;
-    let expr_spans = std::mem::take(&mut stream.state.user_state.spans);
+    let spans_from = stream.state.user_state.spans_from;
+    let expr_spans = std::mem::take(&mut stream.state.user_state.spans)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(at, span)| Some((at as u32 + spans_from, span?)))
+        .collect();
     let aliases = nikaia_std::tools::parsed_tree::aliases_of(&program.items, &interner);
     let mut parsed = Parsed {
         program,
