@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1123] — 2026-10-20
+
+**spec: the same bits with the other sign are bits_as_; truncating_ only narrows (ADR-285 D42, #742)**
+- Part I 2.2: `bits_as_i32`, `bits_as_u32`, `bits_as_i64` and `bits_as_u64` read a same-width integer's bits with the other sign. `truncating_T` converts only out of a wider integer of either sign and out of an `f64`; `u64::truncating_i64` and `i64::truncating_u64` are replaced (ADR-285 D42, #742).
+
 ## [0.0.1122] — 2026-10-20
 
 **An element or field read through a borrowed parameter is lent into the result; a local kept in a longer-lived list is handed over**

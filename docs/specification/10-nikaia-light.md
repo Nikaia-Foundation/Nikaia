@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1122 (Draft)
+**Version:** 0.0.1123 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -428,7 +428,7 @@ refused (`NK1215`), and the program writes `(a as i64) << 3` or
 **A value the compiler shows is not negative goes into an unsigned type
 without `as`**: a length, and a value after `if k >= 0` or `assert k >= 0`.
 Where nothing shows it, `k as u64` is refused with `NK1241`, and the program
-writes `k.checked_u64()` or `k.truncating_u64()`.
+writes `k.checked_u64()` or `k.bits_as_u64()`.
 
 **Widening plays no part in deciding a type.** A number without an annotation
 (2.4) and a type parameter (4.6) take the type their uses ask for, and two uses
@@ -461,9 +461,26 @@ let n = text.bytes.len().truncating_i32()         // a count that may not fit
 ```
 
 The names are `truncating_i32`, `truncating_i64`, `truncating_u8`,
-`truncating_u32` and `truncating_u64`. Each converts out of a wider integer and out of an `f64`.
+`truncating_u32` and `truncating_u64`. Each converts out of every integer type
+wider than its own, signed or unsigned, and out of an `f64`: the low bits of
+its width, read as its type. None converts out of a type of the same width.
 `rounding_f32` is the nearest `f32` out of an `f64`, and an infinity beyond
 the `f32` range.
+
+**Where a program means to read the same bits with the other sign, it says
+that by name**:
+
+```nika
+let word = b.u32_le(0).bits_as_i32()              // 0xFFFFFFFF is -1
+let key = offset.bits_as_u64()                    // -1 is 18446744073709551615
+```
+
+`bits_as_i32` converts out of a `u32`, `bits_as_u32` out of an `i32`,
+`bits_as_i64` out of a `u64` and `bits_as_u64` out of an `i64`, and out of
+nothing else. Every bit stays where it is; no value is checked. A number that
+fits both types keeps its value, and one that does not comes out on the other
+side of zero. A same-width `truncating_` name is refused (`NK1210`), naming
+the `bits_as_` one.
 
 **Where a program means to ask whether it fits, it says so by name too**
 ([ADR-315](adr/adr-315.md)), and the answer is optional:
