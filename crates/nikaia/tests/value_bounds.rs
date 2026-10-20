@@ -184,6 +184,30 @@ fn a_value_read_out_of_a_bounded_list_indexes_without_its_check() {
     prints("tally", TALLY, "450\n");
 }
 
+/// **A bound as wide as `i64` is not a fact** (#444): `c` below is bound
+/// only by its type, and stating `c >= -2^63` beside the others made the
+/// solver refuse the whole query, so `xs[b]` after it kept its check.
+#[test]
+fn a_bound_as_wide_as_the_type_leaves_the_other_facts_usable() {
+    let source = "\
+fn pick(xs: ref Vec[i64], k: i64, h: u64) -> i64 {
+    assert(xs.len() == 16)
+    let b = k & 15
+    let c = (h >> 1).bits_as_i64()
+    return xs[b] + c
+}
+
+fn main() {
+    let mut xs: Vec[i64] = []
+    xs.resize(16, 2)
+    println(f\"{pick(xs, 21, 6)}\")
+}
+";
+    let rust = lowered(source, Level::Aggressive);
+    assert!(rust.contains("proven::read(&xs"), "{rust}");
+    prints("wide-bound", source, "5\n");
+}
+
 /// **Every write counts**: one value past the bound, written after the loop,
 /// and the read is not proved - it stops at the index.
 #[test]

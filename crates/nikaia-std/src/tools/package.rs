@@ -2819,12 +2819,12 @@ fn bounding_a_count(expr: &Expr) -> bool {
 
 fn bounding_bounded(walk: &mut BoundsWalk, facts: &mut BoundsFacts, name: &str, range: &Range) {
     let n = walk.arena.var(name);
-    if range.lo.is_some() {
+    if range.lo.is_some() && nikaia_std::index::or(range.lo, || 0) >= 0 - solvable() {
         let lo = walk.arena.int(nikaia_std::index::or(range.lo, || 0));
         let fact = walk.arena.ge(n, lo);
         bounding_push(&walk, facts, fact);
     }
-    if range.hi.is_some() {
+    if range.hi.is_some() && nikaia_std::index::or(range.hi, || 0) <= solvable() {
         let hi = walk.arena.int(nikaia_std::index::or(range.hi, || 0));
         let fact = walk.arena.le(n, hi);
         bounding_push(&walk, facts, fact);
@@ -3440,7 +3440,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
-            let __keep_60861 = nikaia_std::tether::Keep::new();
+            let __keep_61249 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 Expr::Field { .. } => {
@@ -3755,8 +3755,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
     for list in filled.iter() { outer.lengths.remove(list); }
     bounding_loop_change(walk, facts, &outer, cands);
     for list in filled.iter() {
-        let __keep_77841 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_77841).put(length_of(list)), count);
+        let __keep_78229 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_78229).put(length_of(list)), count);
     }
 }
 

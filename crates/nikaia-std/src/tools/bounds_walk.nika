@@ -664,14 +664,19 @@ fn bounding_a_count(expr: ref Expr) -> bool {
 }
 
 /// `name` lies within `range`, where it is a whole number.
+///
+/// **A bound past `±2^62` is not stated** (#444): the solver counts in `i64`
+/// and refuses a query whose sums overflow, so `c >= -2^63` beside the facts
+/// that matter would leave every later index unproved, and a bound that wide
+/// says nothing an `i64` does not. Leaving it out only weakens what is known.
 fn bounding_bounded(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, range: ref Range) {
     let n = walk.arena.var(name)
-    if range.lo != null {
+    if range.lo != null && (range.lo ?? 0) >= 0 - solvable() {
         let lo = walk.arena.int(range.lo ?? 0)
         let fact = walk.arena.ge(n, lo)
         bounding_push(walk, facts, fact)
     }
-    if range.hi != null {
+    if range.hi != null && (range.hi ?? 0) <= solvable() {
         let hi = walk.arena.int(range.hi ?? 0)
         let fact = walk.arena.le(n, hi)
         bounding_push(walk, facts, fact)
