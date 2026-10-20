@@ -340,8 +340,16 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<crate::chec
     // views through `push`, `for`, fields and calls, which the walk that stood
     // here did not, and it refuses only what it cannot lower or what no
     // declaration permits.
-    super::keep::plans(parsed, own, library)
+    refusals_of(super::keep::buffer_plans(parsed, own, library))
+}
+
+/// [`check`]'s refusals, of plans already made.
+pub fn refusals_of(
+    plans: Vec<nikaia_std::tools::buffers::BufferPlan>,
+) -> Vec<crate::check::Finding> {
+    plans
         .into_iter()
+        .map(super::keep::from_nikaia)
         .flat_map(|plan| plan.refusals)
         .collect()
 }

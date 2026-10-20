@@ -1937,6 +1937,9 @@ impl<'p> Emitter<'p> {
         // `let s = io::lines()` followed by `for line in s`. ADR-288 for the
         // method calls: a receiver's type is the type checker's to know, and
         // there is one type checker (ADR-288).
+        // The check's keep plans, where it made them as this does (#727).
+        let mut checked = checked;
+        let checked_plans = checked.as_mut().and_then(|facts| facts.keep_plans.take());
         let propagation = match build.leaves_values {
             false if let Some(facts) = checked => facts,
             true => crate::check::propagation_leaving_values(
@@ -2045,7 +2048,10 @@ impl<'p> Emitter<'p> {
                 .collect(),
             grammars,
             methods,
-            keep_plans: crate::contracts::keep::buffer_plans(parsed, &own_contracts, library)
+            keep_plans: checked_plans
+                .unwrap_or_else(|| {
+                    crate::contracts::keep::buffer_plans(parsed, &own_contracts, library)
+                })
                 .into_iter()
                 .map(|plan| (plan.key.clone(), plan))
                 .collect(),

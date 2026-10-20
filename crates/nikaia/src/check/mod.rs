@@ -513,10 +513,17 @@ fn walked<'a>(
         // its own for the same reason `views` is: it asks where a *value* points
         // rather than what a type is. It reads both ledgers, because which calls
         // make a buffer is what they say.
+        // The plans once, kept for the emitter where they are its own: made
+        // against `std` alone, as it makes them (#727).
+        let plans = crate::contracts::keep::buffer_plans(parsed, own, library);
+        let std = crate::contracts::std_ledger();
+        if std::ptr::eq(library, std) || library == std {
+            checker.s.facts.keep_plans = Some(plans.clone());
+        }
         checker
             .s
             .findings
-            .extend(crate::contracts::tether::check(parsed, own, library));
+            .extend(crate::contracts::tether::refusals_of(plans));
     }
     // Kap 4.7: what an `impl` owes the `trait` it names. Separate for a reason
     // of its own - it reads the ledger's **finished** `sync` column, and the

@@ -368,7 +368,7 @@ fn escape_from(escape: nikaia_std::tools::buffers::Escape) -> Escape {
     }
 }
 
-fn from_nikaia(plan: nikaia_std::tools::buffers::BufferPlan) -> Plan {
+pub(crate) fn from_nikaia(plan: nikaia_std::tools::buffers::BufferPlan) -> Plan {
     Plan {
         key: plan.key,
         first: (plan.first >= 0).then(|| place(plan.first)),
