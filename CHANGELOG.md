@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1169] — 2026-10-20
+
+**find_all over a written set fixed at compile time; a believed assume's arithmetic exact; cuts compared in place; low_bits**
+- `find_all` over a set written as one to three byte literals is fixed when compiling, with no dispatch per 64-byte block. The arithmetic of a believed `assume` is exact: `+ - *` lower to `unchecked_*` (ADR-376 D4); a checked claim keeps its checks. Two cuts compared, `a[i..<j] == b[k..<l]`, compare in place a word at a time. Decided: `x.low_bits(n)` keeps `x`'s `n` lowest bits, for `u8`, `u32`, `u64` (to be built).
+
 ## [0.0.1168] — 2026-10-20
 
 **a field of every element of a list as one summary (decided)**
