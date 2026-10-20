@@ -12,7 +12,7 @@
 //! * SSE2, x86-64's baseline: four 16-byte compares a block;
 //! * any other target: eight 8-byte words a block.
 //!
-//! A set of one to three bytes is compared directly. A larger one is a
+//! A set of one to three bytes is compared directly, one compare a member. A larger one is a
 //! *shufti* lookup ([`Tables`]): a table over the low four bits and one over
 //! the high four, and a byte is in the set where the two rows it picks share a
 //! bit. That takes a byte shuffle (SSSE3, in AVX2 too); where the build has
@@ -93,15 +93,16 @@ impl Tables {
 }
 
 /// **The bytes of `block` equal to one of `few`**: bit `i` where `block[i]`
-/// is. A set of one or two repeats a member into the slots it does not use.
+/// is. One compare a member, so a set of one or two pays for no third; meant
+/// for one to three members (none gives `0`).
 #[inline(always)]
-pub fn any_of_three(block: &[u8; BLOCK], few: [u8; 3]) -> u64 {
+pub fn any_of<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     // SAFETY: the build enables AVX2 for every function (`cfg`).
-    return unsafe { avx2::three(block, few) };
+    return unsafe { avx2::any(block, few) };
     #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
     // SAFETY: SSE2 is x86-64's baseline (`cfg`).
-    return unsafe { sse2::three(block, few) };
+    return unsafe { sse2::any(block, few) };
     #[cfg(not(target_arch = "x86_64"))]
     return by_words(block, few);
 }
@@ -129,9 +130,13 @@ pub fn in_tables(block: &[u8; BLOCK], tables: &Tables) -> u64 {
 /// against.
 #[inline(always)]
 pub fn by_map(block: &[u8; BLOCK], tables: &Tables) -> u64 {
+    // A copy of the map: the loop reads it at a computed index, and a read
+    // into the caller's `Tables` at one would keep the whole struct around
+    // it (a search's iterator) in memory.
+    let map = tables.map;
     let mut mask = 0u64;
     for (i, &b) in block.iter().enumerate() {
-        mask |= u64::from(tables.contains(b)) << i;
+        mask |= (map[usize::from(b >> 6)] >> (b & 63) & 1) << i;
     }
     mask
 }
@@ -139,7 +144,7 @@ pub fn by_map(block: &[u8; BLOCK], tables: &Tables) -> u64 {
 /// The bytes of `block` equal to one of `few`, eight bytes a word: a byte
 /// equal to a member leaves a zero byte behind `^`, which is found exactly.
 #[inline(always)]
-pub fn by_words(block: &[u8; BLOCK], few: [u8; 3]) -> u64 {
+pub fn by_words<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
     const LOW7: u64 = 0x7f7f_7f7f_7f7f_7f7f;
     const ONES: u64 = 0x0101_0101_0101_0101;
     let zero = |v: u64| !(((v & LOW7).wrapping_add(LOW7)) | v | LOW7);
@@ -149,7 +154,7 @@ pub fn by_words(block: &[u8; BLOCK], few: [u8; 3]) -> u64 {
         let mut word = [0u8; 8];
         word.copy_from_slice(chunk);
         let v = u64::from_le_bytes(word);
-        let hits = zero(v ^ splat[0]) | zero(v ^ splat[1]) | zero(v ^ splat[2]);
+        let hits = splat.iter().fold(0, |hits, &s| hits | zero(v ^ s));
         // The high bit of byte `i` to bit `i`: no two partial products
         // meet, so nothing carries.
         let packed = ((hits >> 7).wrapping_mul(0x0102_0408_1020_4080)) >> 56;
@@ -186,14 +191,15 @@ mod avx2 {
 
     #[inline]
     #[target_feature(enable = "avx2")]
-    pub(super) fn three(block: &[u8; BLOCK], few: [u8; 3]) -> u64 {
+    pub(super) fn any<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
         let (a, b) = halves(block);
-        let [x, y, z] = few.map(|m| _mm256_set1_epi8(m as i8));
+        let splat = few.map(|m| _mm256_set1_epi8(m as i8));
         let any = |v: __m256i| {
-            _mm256_or_si256(
-                _mm256_or_si256(_mm256_cmpeq_epi8(v, x), _mm256_cmpeq_epi8(v, y)),
-                _mm256_cmpeq_epi8(v, z),
-            )
+            let mut hits = _mm256_setzero_si256();
+            for s in splat {
+                hits = _mm256_or_si256(hits, _mm256_cmpeq_epi8(v, s));
+            }
+            hits
         };
         bits(any(a), any(b))
     }
@@ -255,13 +261,14 @@ mod sse2 {
 
     #[inline]
     #[target_feature(enable = "sse2")]
-    pub(super) fn three(block: &[u8; BLOCK], few: [u8; 3]) -> u64 {
-        let [x, y, z] = few.map(|m| _mm_set1_epi8(m as i8));
+    pub(super) fn any<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
+        let splat = few.map(|m| _mm_set1_epi8(m as i8));
         bits(quarters(block).map(|v| {
-            _mm_or_si128(
-                _mm_or_si128(_mm_cmpeq_epi8(v, x), _mm_cmpeq_epi8(v, y)),
-                _mm_cmpeq_epi8(v, z),
-            )
+            let mut hits = _mm_setzero_si128();
+            for s in splat {
+                hits = _mm_or_si128(hits, _mm_cmpeq_epi8(v, s));
+            }
+            hits
         }))
     }
 
@@ -293,7 +300,7 @@ mod sse2 {
 
 #[cfg(test)]
 mod tests {
-    use super::{BLOCK, Tables, any_of_three, by_map, by_words, in_tables};
+    use super::{BLOCK, Tables, any_of, by_map, by_words, in_tables};
 
     fn block(seed: &mut u64) -> [u8; BLOCK] {
         let mut out = [0u8; BLOCK];
@@ -348,11 +355,15 @@ mod tests {
                         members[members.len().min(2) - 1],
                         members[members.len() - 1],
                     ];
-                    assert_eq!(
-                        any_of_three(&b, few),
-                        by_map(&b, &Tables::new(map_of(&few)))
-                    );
-                    assert_eq!(by_words(&b, few), any_of_three(&b, few));
+                    let want = by_map(&b, &Tables::new(map_of(&few)));
+                    assert_eq!(any_of(&b, few), want);
+                    assert_eq!(by_words(&b, few), want);
+                    let one = [members[0]];
+                    let two = [members[0], members[members.len() - 1]];
+                    assert_eq!(any_of(&b, one), by_map(&b, &Tables::new(map_of(&one))));
+                    assert_eq!(by_words(&b, one), any_of(&b, one));
+                    assert_eq!(any_of(&b, two), by_map(&b, &Tables::new(map_of(&two))));
+                    assert_eq!(by_words(&b, two), any_of(&b, two));
                 }
             }
         }
@@ -360,7 +371,7 @@ mod tests {
             for _ in 0..rounds {
                 let b = block(&mut seed);
                 let want = by_map(&b, &Tables::new(map_of(&few)));
-                assert_eq!(any_of_three(&b, few), want);
+                assert_eq!(any_of(&b, few), want);
                 assert_eq!(by_words(&b, few), want);
             }
         }

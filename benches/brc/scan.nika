@@ -1,0 +1,23 @@
+// The scan alone, against `src/bin/scan.rs`: every `;` and `\n` of the file
+// by `find_all` over a `bytes::ByteSet`, with no parse and no table. Prints the
+// count of separators and the xor of their positions. See `README.md`.
+
+use std::bytes
+use std::cli
+use std::fs
+
+fn main() throws {
+    let path = cli::args().nth(1) ?? "measurements.txt"
+    let data = fs::map(ref path, fs::Root::Anywhere) catch {
+        eprintln(f"cannot open {path}: {error}")
+        return
+    }
+    let seps = bytes::ByteSet([';', '\n'])
+    let mut n = 0
+    let mut x = 0
+    for p in data.find_all(seps) {
+        n += 1
+        x = x ^ p
+    }
+    println(f"{n} {x}")
+}

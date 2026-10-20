@@ -86,18 +86,44 @@ impl ByteSet {
     }
 
     /// Whether it holds none: then nothing is found.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.way == Way::Empty
     }
 
-    /// **The block's mask**: bit `i` where `block[i]` is in the set.
+    /// **The block's mask**: bit `i` where `block[i]` is in the set. A set
+    /// of one or two compares only its members; an empty one is looked up in
+    /// its empty tables, which find nothing (a search never reads for it).
     #[inline(always)]
     fn mask(&self, block: &[u8; BLOCK]) -> u64 {
         match self.way {
-            Way::Empty => 0,
-            Way::Table => byte_blocks::in_tables(block, &self.tables),
-            _ => byte_blocks::any_of_three(block, self.few),
+            Way::One => byte_blocks::any_of(block, [self.few[0]]),
+            Way::Two => byte_blocks::any_of(block, [self.few[0], self.few[1]]),
+            Way::Three => byte_blocks::any_of(block, self.few),
+            Way::Empty | Way::Table => byte_blocks::in_tables(block, &self.tables),
         }
+    }
+
+    /// The mask of the block at the start of `run`; a run shorter than a
+    /// block is read from a copy with zeros behind it, and its bits past the
+    /// end are cleared.
+    #[inline(always)]
+    fn mask_of(&self, run: &[u8]) -> u64 {
+        match run.first_chunk::<BLOCK>() {
+            Some(block) => self.mask(block),
+            None => self.short_mask(run),
+        }
+    }
+
+    /// The mask of the last, short block: off the hot loop, so that the copy
+    /// takes no registers from it. The set comes by value, so that no
+    /// reference into the caller's iterator escapes into the call.
+    #[cold]
+    #[inline(never)]
+    fn short_mask(self, run: &[u8]) -> u64 {
+        let mut padded = [0u8; BLOCK];
+        padded[..run.len()].copy_from_slice(run);
+        self.mask(&padded) & ((1u64 << run.len()) - 1)
     }
 }
 
@@ -146,62 +172,62 @@ impl Needle for &ByteSet {
 }
 
 /// **Every position of a byte of the set, rising** (ADR-375 D3): what
-/// `find_all` hands back. It keeps the mask of the block it is in, and its own
-/// `count`, `nth` and `last` (D4) read whole blocks: a count adds the bits of
-/// each mask and makes no position.
+/// `find_all` hands back. It keeps the mask of the block it is in and the
+/// bytes no mask has covered yet, so `next` takes the lowest bit of a mask
+/// held in a register and reads the next block only when the mask is spent:
+/// one length test a block, no bounds check. Its own `count`, `nth` and
+/// `last` (D4) read whole blocks: a count adds the bits of each mask and
+/// makes no position.
 #[derive(Clone, Debug)]
 pub struct FindAll<'a> {
-    hay: &'a [u8],
+    /// The bytes no mask has covered yet.
+    rest: &'a [u8],
     set: ByteSet,
     /// Where bit 0 of `mask` stands.
     base: usize,
-    /// The first byte no mask has covered yet.
-    next: usize,
+    /// Where `rest` starts, while it holds a byte.
+    at: usize,
     /// The hits of the current block not handed out yet.
     mask: u64,
 }
 
 impl<'a> FindAll<'a> {
     /// The search of `hay` for `set` from `from`: a position before the start
-    /// searches from the start, one past the end finds nothing.
+    /// searches from the start, one past the end finds nothing. Inlined, so
+    /// that the iterator's fields live in registers at the caller.
+    #[inline]
     pub fn new(hay: &'a [u8], set: ByteSet, from: i64) -> FindAll<'a> {
         let start = usize::try_from(from.max(0))
             .unwrap_or(usize::MAX)
             .min(hay.len());
         let start = if set.is_empty() { hay.len() } else { start };
+        let (_, rest) = hay.split_at(start);
         FindAll {
-            hay,
+            rest,
             set,
             base: start,
-            next: start,
+            at: start,
             mask: 0,
         }
     }
 
-    /// The mask of the block from `at`; the last, short one is read from a
-    /// copy with zeros behind it and its bits past the end are cleared.
-    #[inline(always)]
-    fn block_at(&self, at: usize) -> u64 {
-        let rest = &self.hay[at..];
-        match rest.first_chunk::<BLOCK>() {
-            Some(block) => self.set.mask(block),
-            None => {
-                let mut padded = [0u8; BLOCK];
-                padded[..rest.len()].copy_from_slice(rest);
-                self.set.mask(&padded) & ((1u64 << rest.len()) - 1)
-            }
-        }
-    }
-
-    /// The next block's mask into `mask`; `false` at the end.
+    /// The next block's mask into `mask`; `false` at the end. A whole block
+    /// costs one length test; the last, short one is the cold path.
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        if self.next >= self.hay.len() {
-            return false;
+        match self.rest.split_first_chunk::<BLOCK>() {
+            Some((block, tail)) => {
+                self.mask = self.set.mask(block);
+                self.rest = tail;
+            }
+            None if self.rest.is_empty() => return false,
+            None => {
+                self.mask = self.set.short_mask(self.rest);
+                self.rest = &[];
+            }
         }
-        self.base = self.next;
-        self.mask = self.block_at(self.next);
-        self.next = (self.next + BLOCK).min(self.hay.len());
+        self.base = self.at;
+        self.at += BLOCK;
         true
     }
 }
@@ -225,10 +251,13 @@ impl Iterator for FindAll<'_> {
     /// position is made.
     fn count(self) -> usize {
         let mut n = self.mask.count_ones() as usize;
-        let mut at = self.next;
-        while at < self.hay.len() {
-            n += self.block_at(at).count_ones() as usize;
-            at += BLOCK;
+        let mut rest = self.rest;
+        while let Some((block, tail)) = rest.split_first_chunk::<BLOCK>() {
+            n += self.set.mask(block).count_ones() as usize;
+            rest = tail;
+        }
+        if !rest.is_empty() {
+            n += self.set.short_mask(rest).count_ones() as usize;
         }
         n
     }
@@ -254,17 +283,17 @@ impl Iterator for FindAll<'_> {
 
     /// **The last is looked for from the end**, block by block (ADR-375 D4).
     fn last(self) -> Option<i64> {
-        if self.next < self.hay.len() {
-            let mut at = self.next + (self.hay.len() - 1 - self.next) / BLOCK * BLOCK;
+        if !self.rest.is_empty() {
+            let mut from = (self.rest.len() - 1) / BLOCK * BLOCK;
             loop {
-                let mask = self.block_at(at);
+                let mask = self.set.mask_of(&self.rest[from..]);
                 if mask != 0 {
-                    return Some((at + 63 - mask.leading_zeros() as usize) as i64);
+                    return Some((self.at + from + 63 - mask.leading_zeros() as usize) as i64);
                 }
-                if at == self.next {
+                if from == 0 {
                     break;
                 }
-                at -= BLOCK;
+                from -= BLOCK;
             }
         }
         match self.mask {
@@ -274,7 +303,7 @@ impl Iterator for FindAll<'_> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let left = self.hay.len() - self.next + self.mask.count_ones() as usize;
+        let left = self.rest.len() + self.mask.count_ones() as usize;
         (0, Some(left))
     }
 }

@@ -142,6 +142,34 @@ The same algorithm on both sides; what differs is the default each language
 chose: the hasher, the UTF-8 check, and Nikaia's one-character pattern as a
 `char` (#617).
 
+## The scan alone
+
+`scan.nika` and `src/bin/scan.rs` find the separators of every row and nothing
+else: Nikaia by `find_all` over `bytes::ByteSet([';', '\n'])`, Rust the way
+`ai2.rs` does (the `;` by a vector compare, the `\n` from the temperature's
+shape). Both print the count of separators and the xor of their positions,
+the same bytes. Counted by hand, not by `brc.sh`: `cargo build --release -p
+brc-bench` with `RUSTFLAGS="-C target-cpu=..."`, `scan.nika` as a project's
+`src/main.nika` with `brc.sh`'s `nikaia.toml` at 16 units, `nikaia build
+--cpu=...`, then `valgrind --tool=callgrind --branch-sim=yes` over 1 000 000
+rows.
+
+| per row | instructions | mispredictions |
+|---|---:|---:|
+| Rust, `scan.rs`, `x86-64` | 31.3 | 0.12 |
+| Nikaia, `scan.nika`, `x86-64` | 37.7 | 0.26 |
+| Rust, `scan.rs`, `x86-64-v3` | 29.4 | 0.01 |
+| Nikaia, `scan.nika`, `x86-64-v3` | 29.5 | 0.26 |
+
+Per separator `find_all`'s `next` is a `tzcnt`, an add, the lowest bit cleared
+and the loop's test; per 64-byte block one length test, the set's kind (a
+jump table) and the compares. The rest of Nikaia's row is the program's: `n
++= 1` keeps its overflow check, and `n` and `x` are stored at every
+separator because `println` takes their address. The mispredictions are one
+a block, where the separators of a block run out: their number varies, so
+the loop's exit is not predicted. `scan.rs` does not search for the `\n` at
+all, which a set search cannot know to skip.
+
 ## What is left to build
 
 | what | where | issue |
@@ -177,6 +205,7 @@ grammar that describes the file costs you the loop a specialist writes.
 * `src/bin/naive.rs`, `src/bin/ai1.rs`, `src/bin/ai2.rs` - the three Rust
   programs, each a binary of its own.
 * `naive.nika` - the naive Nikaia program; `examples/1brc.nika` is the other.
+* `scan.nika`, `src/bin/scan.rs` - the scan alone (above).
 * `src/bin/gen.rs` - the input: `gen <rows> <file>`.
 * `brc.sh` - builds everything, checks the outputs agree, counts, prints the
   table.

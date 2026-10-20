@@ -9,7 +9,7 @@ let mut block = [b'x'; 64];
 block[3] = b';';
 block[9] = b'\n';
 assert_eq!(byte_blocks::in_tables(&block, &tables), 1 << 3 | 1 << 9);
-assert_eq!(byte_blocks::any_of_three(&block, [b';', b'\n', b'\n']), 1 << 3 | 1 << 9);
+assert_eq!(byte_blocks::any_of(&block, [b';', b'\n']), 1 << 3 | 1 << 9);
 ```
 
 The caller is `nikaia-std`'s `bytes::ByteSet`
@@ -23,7 +23,7 @@ bytes a word on any other target.
 
 | where | what | why it holds |
 | :--- | :--- | :--- |
-| `any_of_three`, `in_tables` | a call of a `#[target_feature]` function | the `cfg` around the call says the build enables that feature for every function; `core::arch` asks for `unsafe` all the same |
+| `any_of`, `in_tables` | a call of a `#[target_feature]` function | the `cfg` around the call says the build enables that feature for every function; `core::arch` asks for `unsafe` all the same |
 | `avx2::halves`, `sse2::quarters` | `_mm256_loadu_si256`, `_mm_loadu_si128` | each reads 32 or 16 bytes at an offset of `0`, `16`, `32` or `48` inside a `&[u8; 64]`; the loads take any alignment |
 | `avx2::table`, `sse2::tables` | `_mm_loadu_si128` | reads the 16 bytes of a `&[u8; 16]`, any alignment |
 
