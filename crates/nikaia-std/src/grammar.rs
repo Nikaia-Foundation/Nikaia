@@ -147,7 +147,7 @@ pub fn parse_pieces<'a, S, O: Send>(
     options: crate::par::FoldOptions,
     parallel: bool,
     run: impl FnOnce(&'a str, winnow_grammar::rt::Parallelism) -> Result<O, winnow_grammar::ParseError>
-        + Send,
+    + Send,
 ) -> Result<O, ParseError>
 where
     S: Source + ?Sized,
@@ -201,7 +201,7 @@ pub fn parse_bytes_pieces<'a, O: Send>(
     options: crate::par::FoldOptions,
     parallel: bool,
     run: impl FnOnce(&'a [u8], winnow_grammar::rt::Parallelism) -> Result<O, winnow_grammar::ParseError>
-        + Send,
+    + Send,
 ) -> Result<O, ParseError> {
     in_pieces(options, parallel, |how| run(source, how))
         .map_err(|error| ParseError::of(error.render(source)))
