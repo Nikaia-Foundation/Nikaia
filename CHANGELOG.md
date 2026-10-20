@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1173] — 2026-10-20
+
+**x.low_bits(n) is one bzhi where the build has BMI2**
+- At `--cpu=x86-64-v3` (BMI2), `low_bits` on `u64`, `u32` and `u8` lowers to one `bzhi` with the count saturated to a byte, through the crate `crates/unsafe/low-bits` (ADR-371 D2); other builds keep the branch-free mask and select. The values are the same at every CPU level.
+
 ## [0.0.1172] — 2026-10-20
 
 **the grammar runtime's advance always inlined**
