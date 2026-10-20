@@ -303,7 +303,9 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             if array != null {
                 found_here = array ?? found_here.clone()
             } else {
-                found_here = state.text_literal(world, literal_wants, value, kept) ?? found_here.clone()
+                // **A tuple with text literals beside other parts** (#750):
+                // each literal is text of its own, as in an all-literal one.
+                found_here = state.text_literal(world, literal_wants, value, kept) ?? state.tuple_literal(world, found_here, literal_wants, value) ?? found_here.clone()
             }
             // **An integer literal handed where no integer goes** (#471,
             // #703) is the `i64` it would be, and the mismatch says so.

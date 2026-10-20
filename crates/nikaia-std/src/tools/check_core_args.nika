@@ -396,11 +396,37 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
             holds_text = true
         }
     }
+    // **And a tuple's text literal its neighbours' text at that place**
+    // (#750): `[(name, "x"), ("B", "y")]` holds `(String, ref String)`.
+    let mut texts_at: Vec[bool] = []
+    for found in walked {
+        match found {
+            Ty::Tuple(parts) => {
+                let mut p = 0
+                for part in parts {
+                    while texts_at.len() <= p {
+                        texts_at.push(false)
+                    }
+                    if check_core_args_plain_name(part) == "String" {
+                        texts_at[p] = true
+                    }
+                    p += 1
+                }
+            },
+            else => {}
+        }
+    }
     let mut founds: Vec[Ty] = []
     let mut integers: Vec[String] = []
     let mut j = 0
     for item in items {
         let mut found: Ty = walked[j].clone()
+        match item {
+            Expr::Tuple(parts, _) => {
+                found = check_core_args_tuple_texts(state, parts, found, texts_at)
+            },
+            else => {}
+        }
         if holds_text {
             match item {
                 Expr::LitStr { .. } => {
@@ -600,4 +626,28 @@ pub fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref
         else => {}
     }
     return null
+}
+
+/// A tuple of a list literal, its text literals made text of their own where
+/// a neighbour holds text at that place (#750).
+fn check_core_args_tuple_texts(mut state: CheckState, parts: ref Vec[Expr], found: ref Ty, texts_at: ref Vec[bool]) -> Ty sync {
+    let each: Vec[Ty] = match found {
+        Ty::Tuple(each) => each.clone(),
+        else => return found.clone(),
+    }
+    if each.len() != parts.len() {
+        return found.clone()
+    }
+    let mut out: Vec[Ty] = []
+    let mut p = 0
+    while p < parts.len() {
+        let mut ty = each[p].clone()
+        if p < texts_at.len() && texts_at[p] && a_text_literal_expr(parts[p]) {
+            state.facts.owned_texts.insert(id_of(parts[p]) as i64)
+            ty = Ty::Named { name: "String".clone(), args: [], view: false }
+        }
+        out.push(ty)
+        p += 1
+    }
+    return Ty::Tuple(out)
 }

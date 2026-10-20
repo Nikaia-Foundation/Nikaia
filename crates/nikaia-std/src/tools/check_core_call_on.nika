@@ -893,8 +893,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // **A literal where the receiver says text is wanted** (ADR-293 D21).
     i = 0
     for given in args {
-        if i < expected.len() as i64 {
-            state.text_literal(world, expected[i], given, true)
+        // **And a tuple with text literals beside other parts** (#750).
+        if i < expected.len() as i64 && state.text_literal(world, expected[i], given, true) == null && i < found.len() as i64 {
+            state.tuple_literal(world, found[i], expected[i], given)
         }
         i += 1
     }

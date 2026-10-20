@@ -597,6 +597,37 @@ fn a_name_as_the_fallback_of_a_list_read_of_text_runs() {
     );
 }
 
+/// **A tuple with text literals beside other parts, where `(String, ..)` is
+/// wanted** (#750): each literal is text of its own, at a push, a parameter,
+/// a typed `let`, an option and in a list beside a tuple that holds text.
+#[test]
+fn text_literals_beside_names_in_a_tuple_of_text_run() {
+    runs_in(
+        "tuple-mixed-text",
+        "fn take(p: (String, String)) -> i64 {\n\
+         \x20   p.0.len() as i64 + p.1.len() as i64\n\
+         }\n\
+         fn main() {\n\
+         \x20   let name: String = \"A\".clone()\n\
+         \x20   let mut pairs: Vec[(String, String)] = Vec()\n\
+         \x20   pairs.push((name, \"x\"))\n\
+         \x20   let name2: String = \"B\".clone()\n\
+         \x20   pairs.push((\"y\", name2))\n\
+         \x20   println(f\"{pairs.len()}\")\n\
+         \x20   let n3: String = \"CC\".clone()\n\
+         \x20   println(f\"{take((n3, \"y\"))}\")\n\
+         \x20   let n4: String = \"D\".clone()\n\
+         \x20   let t: (String, String) = (n4, \"w\")\n\
+         \x20   println(t.1)\n\
+         \x20   let n5: String = \"E\".clone()\n\
+         \x20   let l: Vec[(String, String)] = [(n5, \"x\"), (\"F\", \"z\")]\n\
+         \x20   println(f\"{l.len()}\")\n\
+         }\n",
+        "2\n3\nw\n2\n",
+        |_| {},
+    );
+}
+
 /// **`p with { .. }` over a by-value parameter that is
 /// only read.** `..p` moves the whole of `p`, so the parameter stays a value
 /// rather than a `&T` that `..p` cannot take - for a `Copy` struct and for one

@@ -218,7 +218,7 @@ use std::io
 fn main() throws {
     let name: String = "A=B"
     let mut pairs: Vec[(String, String)] = []
-    pairs.push((name, "x".clone()))
+    pairs.push((name, "x"))
     pairs.push(("", "y"))
     let h = process::run("touch", ["marker"]; env: pairs) catch {
         match error {

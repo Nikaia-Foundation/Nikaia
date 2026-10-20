@@ -9983,7 +9983,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             let array = state.array_literal(world, &found_here, &want, value, span);
-            if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || found_here.clone().into()); }
+            if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || nikaia_std::index::or(state.tuple_literal(world, &found_here, &literal_wants, value), || found_here.clone().into()).into()); }
             if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(&want) { found_here = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
         }
         let string = Ty::Named { name: "String".to_owned(), args: vec![], view: false };
@@ -13341,11 +13341,29 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     let mut holds_text = false;
     for found in walked.iter() { if check_core_args_plain_name(found) == "String" { holds_text = true; } }
+    let mut texts_at: Vec<bool> = vec![];
+    for found in walked.iter() {
+        match found {
+            Ty::Tuple(parts) => {
+                let mut p: i64 = 0;
+                for part in parts.iter() {
+                    while texts_at.len() <= ((p) as usize) { texts_at.push(false); }
+                    if check_core_args_plain_name(part) == "String" { { let __nikaia_stored = true; nikaia_std::index::set(&mut texts_at, (p) as usize, __nikaia_stored); } }
+                    p += 1;
+                }
+            },
+            _ => { },
+        }
+    }
     let mut founds: Vec<Ty> = vec![];
     let mut integers: Vec<String> = vec![];
     let mut j: i64 = 0;
     for item in items.iter() {
         let mut found: Ty = (*nikaia_std::index::get(&walked, (j) as usize)).clone();
+        match item {
+            Expr::Tuple(parts, _) => { found = check_core_args_tuple_texts(state, parts, &found, &texts_at); },
+            _ => { },
+        }
         if holds_text {
             match item {
                 Expr::LitStr { .. } => {
@@ -13520,6 +13538,28 @@ pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &C
         _ => { },
     }
     None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_args_tuple_texts(state: &mut CheckState, parts: &[Expr], found: &Ty, texts_at: &[bool]) -> Ty {
+    let each: Vec<Ty> = match found {
+        Ty::Tuple(each) => each.to_owned(),
+        _ => return found.clone(),
+    };
+    if (each.len() as i64) != parts.len() as i64 { return found.clone(); }
+    let mut out: Vec<Ty> = vec![];
+    let mut p: i64 = 0;
+    while ((p) as usize) < parts.len() {
+        let mut ty = (*nikaia_std::index::get(&each, (p) as usize)).clone();
+        if ((p) as usize) < texts_at.len() && *nikaia_std::index::get(&texts_at, (p) as usize) && a_text_literal_expr(nikaia_std::index::get(&parts, (p) as usize)) {
+            state.facts.owned_texts.insert(id_of(nikaia_std::index::get(&parts, (p) as usize)) as i64);
+            ty = Ty::Named { name: "String".to_owned(), args: vec![], view: false };
+        }
+        out.push(ty);
+        p += 1;
+    }
+    Ty::Tuple(out)
 }
 
 
@@ -13958,7 +13998,7 @@ fn check_core_call_option_texts(state: &mut CheckState, world: &CheckWorld<'_, '
         let name = nikaia_std::index::get(&out, nikaia_std::index::at(index)).0.to_owned();
         for declared in options.iter() {
             if declared.name == name {
-                let ty = match state.text_literal(world, &declared.ty, &option.value, true) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let ty = match state.text_literal(world, &declared.ty, &option.value, true) { Some(__nikaia_value) => __nikaia_value, None => match state.list_of_tuple_literals(world, &nikaia_std::index::get(&out, nikaia_std::index::at(index)).1, &declared.ty, &option.value) { Some(__nikaia_value) => __nikaia_value, None => continue } };
                 { let __nikaia_stored = (name.to_owned(), ty); nikaia_std::index::set(&mut out, nikaia_std::index::at(index), __nikaia_stored); }
             }
         }
@@ -14856,7 +14896,7 @@ fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.a_set_that_reads_what_it_writes(on, entry, &found, span);
     i = 0;
     for given in args.iter() {
-        if i < expected.len() as i64 { state.text_literal(world, nikaia_std::index::get(&expected, (i) as usize), given, true); }
+        if i < expected.len() as i64 && state.text_literal(world, nikaia_std::index::get(&expected, (i) as usize), given, true).is_none() && i < found.len() as i64 { state.tuple_literal(world, nikaia_std::index::get(&found, (i) as usize), nikaia_std::index::get(&expected, (i) as usize), given); }
         i += 1;
     }
     state.a_sequence_that_cannot_do_this(world, on, method, contract, &found, span);

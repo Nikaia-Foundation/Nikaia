@@ -581,7 +581,8 @@ fn check_core_call_option_texts(mut state: CheckState, world: ref CheckWorld, co
         let name = out[index].0.clone()
         for declared in options {
             if declared.name == name {
-                let ty = state.text_literal(world, declared.ty, option.value, true) ?? continue
+                // **Tuples with text literals beside other parts** (#750).
+                let ty = state.text_literal(world, declared.ty, option.value, true) ?? state.list_of_tuple_literals(world, out[index].1, declared.ty, option.value) ?? continue
                 out[index] = (name.clone(), ty)
             }
         }
