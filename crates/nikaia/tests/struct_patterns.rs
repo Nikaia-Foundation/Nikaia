@@ -139,35 +139,34 @@ fn main() { println(f\"{size(Shape::Circle { r: 1 })}\") }
     assert!(codes.contains(&"NK1155".to_string()), "{codes:?}");
 }
 
-/// A struct pattern that names some of a struct's fields and not `..` is
-/// refused, as it was before the fields took patterns.
+/// **A struct pattern that names some of a struct's fields and not `..` is
+/// `NK1234`** (Part I 3.4, #732), as a literal that leaves a field out is,
+/// and so is one inside another pattern. With `..`, or naming every field, it
+/// is accepted.
 #[test]
 fn a_pattern_that_leaves_fields_out_without_the_rest_is_refused() {
-    let source = "\
-struct Point { x: i64, y: i64 }
-fn f(p: Point) -> i64 {
-    return match p {
-        Point { x: px } => px,
-        else => 0,
+    let refused = [
+        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x: px } => px,\n    }\n}\nfn main() { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
+        "struct Point { x: i64, y: i64 }\nenum Event { Click(Point), Key }\nfn f(e: Event) -> i64 {\n    return match e {\n        Event::Click(Point { y }) => y,\n        else => 0,\n    }\n}\nfn main() { println(f\"{f(Event::Key)}\") }\n",
+        "enum Shape { Rect { w: i64, h: i64 }, Dot }\nfn f(s: Shape) -> i64 {\n    return match s {\n        Shape::Rect { w } => w,\n        else => 0,\n    }\n}\nfn main() { println(f\"{f(Shape::Dot)}\") }\n",
+    ];
+    for source in refused {
+        let found = findings(source);
+        assert!(
+            found.iter().any(|f| f.code == "NK1234"),
+            "{source}\n{:#?}",
+            found.iter().map(|f| &f.message).collect::<Vec<_>>()
+        );
     }
-}
-fn main() { println(f\"{f(Point { x: 1, y: 2 })}\") }
-";
-    let parsed = parse_to_ast(source).expect("the source parses");
-    let refused = !findings(source).is_empty()
-        || emit_program(&parsed, Build::default())
-            .ok()
-            .is_some_and(|lowered| {
-                let dir = common::scratch_dir("struct-patterns-refused");
-                let path = dir.join("program.rs");
-                std::fs::write(&path, &lowered.rust).expect("write the Rust");
-                let binary = dir.join("program");
-                let compiled = common::compile(
-                    &path,
-                    &["--crate-type", "bin", "-o", &binary.to_string_lossy()],
-                );
-                std::fs::remove_dir_all(&dir).ok();
-                !compiled.status.success()
-            });
-    assert!(refused, "a pattern missing fields was accepted");
+    let accepted = [
+        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x: px, .. } => px,\n    }\n}\nfn main() { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
+        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x, y } => x + y,\n    }\n}\nfn main() { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
+    ];
+    for source in accepted {
+        let found = findings(source);
+        assert!(
+            !found.iter().any(|f| f.code == "NK1234"),
+            "{source}\n{found:#?}"
+        );
+    }
 }

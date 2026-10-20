@@ -239,3 +239,103 @@ pub fn pattern_list_element(on: ref Ty) -> Ty? {
     }
     return null
 }
+
+impl CheckState {
+    /// **A struct pattern names every field, or ends with `..`** (Part I 3.4,
+    /// #732): `Point { x: px }` over a `Point` with a `y` is `NK1234`, as a
+    /// literal that leaves a field out is. Nested patterns are asked too.
+    pub fn a_struct_pattern_that_leaves_fields_out(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, on: ref Ty, span: ref Span) sync {
+        match pattern {
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.a_struct_pattern_that_leaves_fields_out(world, alternative, on, span)
+                }
+                return
+            }
+            else => {}
+        }
+        // **Inside a tuple, the part at each place**, from the front up to a
+        // `..`.
+        let mut types: Vec[Ty] = []
+        let mut inside: bool = false
+        match on {
+            Ty::Tuple(parts_of) => {
+                types = parts_of.clone()
+                inside = true
+            }
+            else => {}
+        }
+        let owner = match on {
+            Ty::Named { name, .. } => name.clone(),
+            else => "".clone(),
+        }
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                if path.len() > 0 && owner != "" {
+                    let key = self.pattern_variant(world, path, owner)
+                    types = self.variant_parts[key]?.clone() ?? []
+                    inside = true
+                }
+                if !inside {
+                    return
+                }
+                let mut at = 0
+                for part in parts {
+                    if pattern_is_rest(part) || at >= types.len() {
+                        return
+                    }
+                    self.a_struct_pattern_that_leaves_fields_out(world, part, types[at], span)
+                    at = at + 1
+                }
+                return
+            }
+            else => {}
+        }
+        if owner == "" {
+            return
+        }
+        match pattern {
+            MatchPattern::Named { path, fields, rest } => {
+                let mut written: Vec[String] = []
+                for part in path {
+                    written.push(world.words.resolve(part).clone())
+                }
+                let mut key: String = self.pattern_variant(world, path, owner)
+                if written.len() == 1 && written[0] == owner {
+                    key = owner.clone()
+                }
+                let declared = self.structs[key]?.clone() ?? []
+                let mut named: Vec[String] = []
+                for each in fields {
+                    let name = world.words.resolve(each.name).clone()
+                    named.push(name.clone())
+                    for field in declared {
+                        if field.name == name {
+                            self.a_struct_pattern_that_leaves_fields_out(world, each.pat, field.ty, span)
+                            break
+                        }
+                    }
+                }
+                if rest || declared.len() == 0 {
+                    return
+                }
+                let mut missing: Vec[String] = []
+                for field in declared {
+                    if !named.contains(field.name) {
+                        missing.push(f"`{field.name}`")
+                    }
+                }
+                if missing.len() == 0 {
+                    return
+                }
+                let shown = written.join("::")
+                let mut one: String = "field".clone()
+                if missing.len() > 1 {
+                    one = "fields".clone()
+                }
+                self.findings.push(check_refusal("NK1234", span, f"This `{shown}` pattern leaves out the {one} {missing.join(", ")}.", ["A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4).".clone()], f"Name them, or end the pattern with `..`: `{shown} {{ …, .. }}`."))
+            }
+            else => {}
+        }
+    }
+}

@@ -642,6 +642,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     state.an_or_pattern_that_binds_unevenly(world, arm.pattern, span)
     state.a_pattern_naming_a_member_a_type_does_not_have(world, arm.pattern, span)
     state.a_pattern_inside_a_box(world, arm.pattern, span)
+    state.a_struct_pattern_that_leaves_fields_out(world, arm.pattern, typed, span)
     check_core_flow_guard_box(state, world, host, arm.pattern, arm.body, arm.guard)
     let parts = check_core_flow_parts(state, world, arm.pattern, typed, lendable)
     let a_list = check_core_flow_a_list(arm.pattern)

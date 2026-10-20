@@ -15896,6 +15896,7 @@ fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     state.an_or_pattern_that_binds_unevenly(world, &arm.pattern, span);
     state.a_pattern_naming_a_member_a_type_does_not_have(world, &arm.pattern, span);
     state.a_pattern_inside_a_box(world, &arm.pattern, span);
+    state.a_struct_pattern_that_leaves_fields_out(world, &arm.pattern, typed, span);
     check_core_flow_guard_box(state, world, host, &arm.pattern, &arm.body, (arm.guard).as_ref());
     let parts = check_core_flow_parts(state, world, &arm.pattern, typed, lendable);
     let a_list = check_core_flow_a_list(&arm.pattern);
@@ -27111,6 +27112,91 @@ pub fn pattern_list_element(on: &Ty) -> Option<Ty> {
         _ => { },
     }
     None
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_struct_pattern_that_leaves_fields_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty, span: &Span) {
+        match pattern {
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives.iter() { self.a_struct_pattern_that_leaves_fields_out(world, alternative, on, span); }
+                return;
+            },
+            _ => { },
+        }
+        let mut types: Vec<Ty> = vec![];
+        let mut inside: bool = false;
+        match on {
+            Ty::Tuple(parts_of) => {
+                types = parts_of.to_owned();
+                inside = true;
+            },
+            _ => { },
+        }
+        let owner = match on {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => "".to_owned(),
+        };
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                if !path.is_empty() && owner != "" {
+                    let key = self.pattern_variant(world, path, &owner);
+                    types = nikaia_std::index::or(match *nikaia_std::index::get(&self.variant_parts, &key) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || vec![].into());
+                    inside = true;
+                }
+                if !inside { return; }
+                let mut at: i64 = 0;
+                for part in parts.iter() {
+                    if pattern_is_rest(part) || at >= types.len() as i64 { return; }
+                    self.a_struct_pattern_that_leaves_fields_out(world, part, nikaia_std::index::get(&types, nikaia_std::index::at(at)), span);
+                    at = at + 1;
+                }
+                return;
+            },
+            _ => { },
+        }
+        if owner == "" { return; }
+        match pattern {
+            MatchPattern::Named { path, fields, rest } => {
+                let rest = *rest;
+                let mut written: Vec<String> = vec![];
+                for part in path.iter() {
+                    let part = *part;
+                    written.push(world.words.resolve(part).to_owned());
+                }
+                let mut key: String = self.pattern_variant(world, path, &owner);
+                if written.len() == 1 && *nikaia_std::index::get(&written, 0) == owner { key = owner.to_owned(); }
+                let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, &key) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into());
+                let mut named: Vec<String> = vec![];
+                for each in fields.iter() {
+                    let name = world.words.resolve(each.name).to_owned();
+                    named.push(name.to_owned());
+                    for field in declared.iter() {
+                        if field.name == name {
+                            self.a_struct_pattern_that_leaves_fields_out(world, &each.pat, &field.ty, span);
+                            break;
+                        }
+                    }
+                }
+                if rest || declared.is_empty() { return; }
+                let mut missing: Vec<String> = vec![];
+                for field in declared.iter() { if !named.contains(&field.name) { missing.push(format!("`{}`", field.name)); } }
+                if missing.is_empty() { return; }
+                let shown = written.join("::");
+                let mut one: String = "field".to_owned();
+                if missing.len() > 1 { one = "fields".to_owned(); }
+                self.findings.push(check_refusal("NK1234", span, format!("This `{}` pattern leaves out the {} {}.", shown, one, missing.join(", ")), vec!["A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4).".to_owned()], Some(format!("Name them, or end the pattern with `..`: `{} {{ …, .. }}`.", shown))));
+            },
+            _ => { },
+        }
+    }
 }
 
 

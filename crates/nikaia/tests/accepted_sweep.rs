@@ -50,10 +50,6 @@ const KNOWN: &[(&str, &str)] = &[
         "6d50da730c46510d",
         "undeclared_type: `http::Response` of a package the file does not have",
     ),
-    (
-        "3c72391dcb6b4e69",
-        "#732 item 5, struct_patterns: a pattern that leaves fields out without `..`, refused by the checker or by `rustc`",
-    ),
     // Open issues.
     (
         "a10522b5e28c4937",

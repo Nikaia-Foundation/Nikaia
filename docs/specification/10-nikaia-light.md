@@ -1089,7 +1089,7 @@ enum with more than one variant is refused with `NK1252`.
 | `Event::Click(Point { x, .. })` | a pattern inside a pattern, and `..` for the fields this one does not name |
 | `Held::Precondition(..)`, `Held::Precondition(c, ..)` | that variant, whatever values it carries, binding none (ADR-349); beside other parts, `..` is the values they do not name, as in `(a, ..)`. On a variant without values it is refused with `NK1255` |
 | `[]`, `[x]`, `[first, .., last]`, `[h, ..rest]` | a `Vec[T]`, an `Array[T]` or a view of either, element by element (ADR-355). `..` is the elements not named and binds nothing; `..rest` binds them as a view, `ref Array[T]`. A pattern has at most one `..` (`NK1258`), and a `match` with a list pattern needs `else` |
-| `Point { x: 0, y }`, `Move { x: px, .. }` | a field against a pattern: `x: 0` matches where the field is `0`, `x: px` binds the field to the name `px`, and `x: Op::Times` or `x: (0, y)` reaches inside it |
+| `Point { x: 0, y }`, `Move { x: px, .. }` | a field against a pattern: `x: 0` matches where the field is `0`, `x: px` binds the field to the name `px`, and `x: Op::Times` or `x: (0, y)` reaches inside it. It names every field, or ends with `..`; one that leaves a field out otherwise is refused with `NK1234` |
 
 **`..` means two different things**: in a range pattern it is the range, and
 in a struct pattern it is *the rest of the fields*, in a tuple's, a variant's
