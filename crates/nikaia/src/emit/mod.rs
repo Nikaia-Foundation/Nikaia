@@ -4644,18 +4644,26 @@ impl<'p> Emitter<'p> {
             out.push("#[allow(clippy::too_many_arguments)]\n");
             out.push(&pad);
         }
-        // **What a fold's step calls runs once per item** (#433): LLVM left
-        // 1BRC's `Summary::record` out of line - hashbrown's insert path makes
-        // it too big for its heuristic - at 319 instructions a row, and 300
-        // with the hint. Only a hint, and only here: every function `#[inline]`
-        // would bloat the code and the build.
+        // **What a fold's step calls runs once per item** (#433, #695): LLVM
+        // left 1BRC's `Summary::record` out of line - hashbrown's insert path
+        // makes it too big for its heuristic - at 319 instructions a row, and
+        // 300 with `#[inline]`. Even with that hint, whether it was inlined
+        // depended on how the codegen units were cut (one unit kept it a
+        // call), so it is `#[inline(always)]`: the step's callee has one call
+        // site, the loop's. Only here: every function inlined would bloat the
+        // code and the build.
         //
         // **And what the program wrote wins** ([ADR-370](../../docs/specification/adr/adr-370.md)
         // D1-D2): `@inline`, `@inline(always)` or `@inline(never)` is Rust's
         // attribute of the same name, and a written one replaces the hint
         // above - `@inline(never)` keeps a fold's step's callee out of line.
         let hint = crate::check::attributes::inline_written(self.parsed, &written.attributes)
-            .or_else(|| self.s.fold_callees.contains(&name).then_some("#[inline]"));
+            .or_else(|| {
+                self.s
+                    .fold_callees
+                    .contains(&name)
+                    .then_some("#[inline(always)]")
+            });
         if let Some(hint) = hint {
             out.push(hint);
             out.push("\n");

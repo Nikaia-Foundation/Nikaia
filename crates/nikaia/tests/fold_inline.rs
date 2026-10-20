@@ -1,7 +1,8 @@
-//! **What a fold's step calls directly is written `#[inline]`**
-//! ([ADR-296](../../../docs/specification/adr/adr-296.md) D41, #433): the step
-//! runs once per item, and LLVM left 1BRC's `Summary::record` out of line -
-//! 319.1 instructions a row against 300.1 with the hint.
+//! **What a fold's step calls directly is written `#[inline(always)]`**
+//! ([ADR-296](../../../docs/specification/adr/adr-296.md) D41, #433, #695): the
+//! step runs once per item, and LLVM left 1BRC's `Summary::record` out of line -
+//! 319.1 instructions a row against 300.1 with `#[inline]`, and at one codegen
+//! unit out of line even with that.
 
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
@@ -26,7 +27,7 @@ fn the_method_a_fold_step_calls_is_inline_and_nothing_else_is() {
     let hinted: Vec<&str> = rust
         .lines()
         .zip(rust.lines().skip(1))
-        .filter(|(line, _)| line.trim() == "#[inline]")
+        .filter(|(line, _)| line.trim() == "#[inline(always)]")
         .map(|(_, next)| next.trim())
         .collect();
     assert_eq!(hinted.len(), 1, "{hinted:#?}\n{rust}");
@@ -39,5 +40,5 @@ fn a_program_without_a_fold_has_no_hint() {
     let rust = lowered(
         "fn twice(x: i64) -> i64 {\n    return x * 2\n}\n\nfn main() {\n    println(f\"{twice(2)}\")\n}\n",
     );
-    assert!(!rust.contains("#[inline]"), "{rust}");
+    assert!(!rust.contains("#[inline"), "{rust}");
 }

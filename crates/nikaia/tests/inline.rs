@@ -170,7 +170,7 @@ fn a_written_never_wins_over_the_fold_hint() {
         1,
     );
     let rust = lowered(&never);
-    assert!(hinted(&rust, "#[inline]").is_empty(), "{rust}");
+    assert!(hinted(&rust, "#[inline(always)]").is_empty(), "{rust}");
     let kept = hinted(&rust, "#[inline(never)]");
     assert_eq!(kept.len(), 1, "{rust}");
     assert!(kept[0].starts_with("fn record("), "{rust}");

@@ -163,7 +163,14 @@ fn half(bytes: &[u8]) -> u64 {
 /// class rather than one per piece of the tail. Longer keys are read 16 bytes a
 /// step, and the last 16 overlap the step before. The length is xor-ed in at
 /// the end, so two lengths of one overlapping pattern do not collide.
-#[inline]
+///
+/// **Out of line on purpose** (#695): a map's `entry` with this inlined into
+/// it is too big for LLVM to inline into a fold's loop, and whether it was
+/// inlined depended on how the codegen units were cut - 1BRC ran 274
+/// instructions a row at one unit and 231 at sixteen, where the hash happened
+/// to stay a call. Kept a call, the table's `entry` is inlined at both: 244 and
+/// 223, for the cost of one call a key.
+#[inline(never)]
 fn hash_bytes(bytes: &[u8]) -> u64 {
     let len = bytes.len();
     let mut s0 = SEED1;
