@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1162] — 2026-10-20
+
+**a checked assume is no Rust unsafe**
+- Where the build removes no checks, an `unsafe` block of nothing but `assume`s lowers to a plain block around the asserts' checks, so rustc no longer warns of an unnecessary `unsafe`; with checks removed it stays Rust's `unsafe` around `assert_unchecked` (ADR-376 D2, #772).
+
 ## [0.0.1161] — 2026-10-20
 
 **prove-through-loops; a ref argument keeps its length**
