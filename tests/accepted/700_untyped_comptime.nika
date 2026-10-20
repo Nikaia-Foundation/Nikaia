@@ -1,0 +1,16 @@
+// #700 d03: an untyped `comptime` integer takes its type from its use, and
+// `h & (SLOTS - 1)` with a typed one is an index the bounds prover reads.
+
+comptime SLOTS = 32768
+comptime WIDTH: i64 = 1024
+
+fn main() {
+    let mut at: i64 = 0
+    while at < SLOTS {
+        at += 1
+    }
+    println(at)
+    let xs: Vec[i64] = [3; 1024]
+    let h: i64 = 77777
+    println(xs[h & (WIDTH - 1)])
+}
