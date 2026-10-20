@@ -4107,7 +4107,11 @@ fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbol], ty: Opt
         let range = nikaia_std::index::or(bounding_range(walk, value, &facts, context, program, words, ask), || Range::open());
         if range.is_bounded() { value_range = Some(range); }
     }
-    let whole = nikaia_std::index::or(bounding_declared_whole(ty, words), || (value_lin.is_some() || value_range.is_some()).into());
+    let whole_field = match value {
+        Expr::Field { .. } => context.whole_fields.contains(&node_key(value)),
+        _ => false,
+    };
+    let whole = nikaia_std::index::or(bounding_declared_whole(ty, words), || (value_lin.is_some() || value_range.is_some() || whole_field).into());
     for symbol in names.iter() {
         let symbol = *symbol;
         let name = words.resolve(symbol);
@@ -4289,8 +4293,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
         bounding_push(&walk, facts, fact);
     }
     for list in filled.iter() {
-        let __keep_106522 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_106522).put(length_of(list)), count);
+        let __keep_106818 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_106818).put(length_of(list)), count);
     }
 }
 

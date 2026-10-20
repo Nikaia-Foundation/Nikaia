@@ -2282,7 +2282,13 @@ fn bounding_let(mut walk: BoundsWalk, names: ref Vec[winnow_grammar::Symbol], ty
             value_range = range
         }
     }
-    let whole = bounding_declared_whole(ty, words) ?? (value_lin != null || value_range != null)
+    // A field of a whole-number type read through an index (`xs[i].count`)
+    // is a number too, of which nothing is known yet (#714).
+    let whole_field = match value {
+        Expr::Field { .. } => context.whole_fields.contains(node_key(value)),
+        else => false,
+    }
+    let whole = bounding_declared_whole(ty, words) ?? (value_lin != null || value_range != null || whole_field)
     for symbol in names {
         let name = words.resolve(symbol)
         bounding_forget(walk, facts, name)

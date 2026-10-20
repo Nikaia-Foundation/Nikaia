@@ -290,3 +290,28 @@ fn main() {
         "{report}"
     );
 }
+
+/// A whole-number field read through an index and bound by a `let` is a
+/// number of the walk: what an `assume` says of it proves `c + 1`.
+#[test]
+fn a_field_read_through_an_index_is_a_number_of_the_walk() {
+    let source = "struct S { count: i64 }
+
+fn bump(mut xs: Vec[S], at: i64) {
+    let c = xs[at].count
+    unsafe { assume(c >= 0 && c < 1000000000000) }
+    xs[at].count = c + 1
+}
+
+fn main() {
+    let mut xs = [S { count: 0 }]
+    bump(xs, 0)
+    println(f\"{xs[0].count}\")
+}
+";
+    let report = bounds_report("field-through-index", source);
+    assert!(
+        report_line(&report, "c + 1").ends_with("proved"),
+        "{report}"
+    );
+}
