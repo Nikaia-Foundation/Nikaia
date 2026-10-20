@@ -361,6 +361,33 @@ impl EmitState {
             self.emit_core_index_read(world, walk, out, host, base, index, !lent, depth, flow, scope)
             return
         }
+        // **A position proved inside is a place without its check** (ADR-306
+        // D5), as it is read: `self.slots[at].count += 1` changes the element
+        // through `proven::slot`. A `mut` parameter is already a `&mut`, so it
+        // is lent on rather than borrowed a second time (ADR-094 D3).
+        if self.proven_indices.contains(node_key(base)) && self.map_key(index, true) == null {
+            let mut lent_on = false
+            match base {
+                Expr::Variable(name, _) => {
+                    lent_on = self.changes_in_place(scope.function, emit_text(world, name))
+                },
+                else => {}
+            }
+            if lent_on {
+                out.push("(*unsafe { nikaia_std::proven::slot(&mut *")
+            } else {
+                out.push("(*unsafe { nikaia_std::proven::slot(&mut ")
+            }
+            self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+            out.push(", (")
+            if only_literals(index) {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+            } else {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            }
+            out.push(") as usize) })")
+            return
+        }
         self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
         if only_literals(index) {
             out.push("[")

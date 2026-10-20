@@ -506,3 +506,53 @@ fn main() {
         "{err}"
     );
 }
+
+/// ADR-306 D5: a field of an element is written through the element's place,
+/// and a position proved inside is that place without its check, as it is
+/// read - a local list and a `mut` parameter alike. One nothing proves keeps
+/// its check, and stops at the index.
+#[test]
+fn a_field_of_an_element_proved_inside_is_written_without_its_check() {
+    let source = "\
+struct Cell {
+    n: i64,
+}
+
+fn bump(mut cs: Vec[Cell]) {
+    for i in 0..<cs.len() { cs[i].n = cs[i].n + 1 }
+}
+
+fn put(mut cs: Vec[Cell], i: i64) {
+    cs[i].n = 7
+}
+
+fn main() {
+    let mut cs: Vec[Cell] = [Cell { n: 1 }, Cell { n: 2 }]
+    for i in 0..<cs.len() { cs[i].n += 10 }
+    bump(cs)
+    put(cs, 1)
+    println(f\"{cs[0].n} {cs[1].n}\")
+}
+";
+    let removed = lowered(source, BoundsChecks::Removed);
+    assert_eq!(
+        removed.matches("nikaia_std::proven::slot(").count(),
+        2,
+        "{removed}"
+    );
+    assert!(
+        removed.contains("nikaia_std::proven::slot(&mut *cs"),
+        "{removed}"
+    );
+    assert!(
+        removed.contains("cs[nikaia_std::index::at(i)].n = 7"),
+        "{removed}"
+    );
+    let kept = lowered(source, BoundsChecks::Kept);
+    assert!(!kept.contains("nikaia_std::proven::slot("), "{kept}");
+    prints("element-field-write", source, "12 7\n");
+    stops_at_the_index(
+        "element-field-write-past",
+        &source.replace("put(cs, 1)", "put(cs, 2)"),
+    );
+}

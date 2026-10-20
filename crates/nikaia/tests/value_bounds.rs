@@ -484,7 +484,8 @@ fn main() {
 }
 
 /// **`xs[i] += d` at a proved position reads the slot once and writes it
-/// back** (#387, ADR-306 D5a); a list of text keeps its checked index.
+/// back** (#387, ADR-306 D5a); a list of text is changed through the
+/// proved place, without its check either (ADR-306 D5).
 #[test]
 fn a_compound_assignment_at_a_proved_position_is_read_and_written_unchecked() {
     let source = "\
@@ -516,7 +517,7 @@ fn main() {
         "{rust}"
     );
     assert!(
-        rust.contains("names[nikaia_std::index::at(i)] += "),
+        rust.contains("(*unsafe { nikaia_std::proven::slot(&mut names, (i) as usize) }) += "),
         "{rust}"
     );
     prints("proved-compound-index", source, "33 39 b!\n");

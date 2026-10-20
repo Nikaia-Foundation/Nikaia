@@ -39838,6 +39838,22 @@ impl EmitState {
             self.emit_core_index_read(world, walk, out, host, base, index, !lent, depth, flow, scope)?;
             return Ok(());
         }
+        if self.proven_indices.contains(&node_key(base)) && self.map_key(index, true).is_none() {
+            let mut lent_on = false;
+            match base {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    lent_on = self.changes_in_place(&scope.function, &emit_text(world, name));
+                },
+                _ => { },
+            }
+            if lent_on { out.push("(*unsafe { nikaia_std::proven::slot(&mut *"); } else { out.push("(*unsafe { nikaia_std::proven::slot(&mut "); }
+            self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
+            out.push(", (");
+            if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
+            out.push(") as usize) })");
+            return Ok(());
+        }
         self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
         if only_literals(index) {
             out.push("[");
