@@ -578,6 +578,8 @@ struct TierWalk {
     /// The arms that are a parameter named nowhere else, handed to one that
     /// keeps its text: each is a view of the parameter (#716).
     param_arms: collections::BTreeSet[i64],
+    /// What the unit walked read of the decisions so far.
+    reads: TierReads,
 }
 
 /// A view a call's result may hold of the caller's text (#702): the word of
@@ -638,16 +640,43 @@ fn bind_tier_local(name: String, local: TierLocal, mut walk: TierWalk) {
     }
 }
 
+/// What a unit's walk read of the decisions so far (#727): a later round
+/// walks it again only where one of them changed.
+struct TierReads {
+    tiers: collections::BTreeSet[String],
+    keeping: collections::BTreeSet[String],
+    arms: collections::BTreeSet[i64],
+    adopted: collections::BTreeSet[i64],
+}
+
+fn no_reads() -> TierReads {
+    return TierReads { tiers: collections::BTreeSet(), keeping: collections::BTreeSet(), arms: collections::BTreeSet(), adopted: collections::BTreeSet() }
+}
+
+fn tier_keeping_read(word: String, mut walk: TierWalk) -> bool {
+    let found = walk.keeping.contains(word)
+    walk.reads.keeping.insert(word)
+    return found
+}
+
+fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
+    walk.reads.arms.insert(node)
+    return walk.param_arms.contains(node)
+}
+
 fn plain_local(kinds: Kinds) -> TierLocal {
     return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1 }
 }
 
-fn tier_at(word: ref String, walk: ref TierWalk) -> Tier {
+fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
+    if !walk.reads.tiers.contains(word) {
+        walk.reads.tiers.insert(word.clone())
+    }
     let found = walk.tiers[word] ?? return Tier::Owned
     return found.clone()
 }
 
-fn mixed_at(word: ref String, walk: ref TierWalk) -> bool {
+fn mixed_at(word: ref String, mut walk: TierWalk) -> bool {
     return mixed(tier_at(word, walk))
 }
 
@@ -1273,7 +1302,7 @@ fn handed_parameter(value: ref Expr?, ask: ref TierAsk, walk: ref TierWalk) -> S
     return position_word(declared.owner, empty)
 }
 
-fn comes_whole(value: ref Expr?, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+fn comes_whole(value: ref Expr?, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     let given = value ?? return false
     let collected = match given {
         Expr::MethodCall { method, args, .. } => args.len() == 0 && ask.names.resolve(method) == "collect",
@@ -1376,7 +1405,7 @@ fn mixed_part(going: ref TierGoing, at: i64, ask: ref TierAsk, mut walk: TierWal
 
 /// The declared position a whole value comes from: a name declared with one,
 /// a field, what a function of this program hands back.
-fn source_of(value: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> Declaring? {
+fn source_of(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Declaring? {
     return match value {
         Expr::Variable(_, _) => place_of(value, ask, walk),
         Expr::Field { .. } => place_of(value, ask, walk),
@@ -1458,7 +1487,7 @@ fn hand_value_over(value: ref Expr, hand: Hand, mut walk: TierWalk) {
 
 /// What reading a value of a declared type gives: the tier of each `String`
 /// in it.
-fn kinds_of(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+fn kinds_of(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     if plain_string(ask.names, ty) {
         return match tier_at(position_word(owner, path), walk) {
             Tier::Owned => owned_kinds(),
@@ -1486,13 +1515,13 @@ fn kinds_of(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref Tie
     return owned_kinds()
 }
 
-fn kinds_of_declared(declared: ref Declaring, ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+fn kinds_of_declared(declared: ref Declaring, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     return kinds_of(declared.owner, declared.ty, [], ask, walk)
 }
 
 /// The element a read of a container hands out: a map's value, anything
 /// else's element; `keys` a map's key.
-fn element_kinds(declared: ref Declaring, keys: bool, ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+fn element_kinds(declared: ref Declaring, keys: bool, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let ty = declared.ty.clone()
     if !a_container(ask.names, ty) {
         return kinds_of_declared(declared, ask, walk)
@@ -1509,7 +1538,7 @@ fn element_kinds(declared: ref Declaring, keys: bool, ask: ref TierAsk, walk: re
 
 /// The declared position an expression names as a place: a local declared
 /// with a type, a field of a struct this walk can name.
-fn place_of(expr: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> Declaring? {
+fn place_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Declaring? {
     return match expr {
         Expr::Variable(name, _) => declared_local(ask.names.resolve(name), walk),
         Expr::Field { base, name, .. } => field_place(base, ask.names.resolve(name), ask, walk),
@@ -1522,7 +1551,7 @@ fn declared_local(name: ref String, walk: ref TierWalk) -> Declaring? {
     return local.declared?.clone()
 }
 
-fn field_place(base: ref Expr, field: ref String, ask: ref TierAsk, walk: ref TierWalk) -> Declaring? {
+fn field_place(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: TierWalk) -> Declaring? {
     let owner = tier_struct_of(base, ask, walk) ?? return null
     let key = (owner.clone(), field.clone())
     let found = walk.declared.fields[key] ?? return null
@@ -1683,6 +1712,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         // into it goes there.
         if declared == null && an_empty_container(value, ask) {
             empty = at
+            walk.reads.adopted.insert(at)
             declared = walk.adopted[at]?.clone()
         }
     }
@@ -2120,7 +2150,7 @@ fn tie_bound(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ask: ref T
     }
 }
 
-fn lent_field(value: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+fn lent_field(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     let place = place_of(value, ask, walk) ?? return false
     if !plain_string(ask.names, place.ty) || place.ty.is_nullable {
         return false
@@ -2131,7 +2161,7 @@ fn lent_field(value: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
     }
 }
 
-fn lent_root(base: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+fn lent_root(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     return match base {
         Expr::Variable(name, _) => lent_parameter(ask.names.resolve(name), walk),
         Expr::Field { base: inner, .. } => {
@@ -2179,7 +2209,7 @@ fn kept_literal(value: ref Expr, owner: ref TextOwner, path: ref Vec[i64], ty: r
 
 /// The struct a value is of, where the program says so without types: a
 /// literal of it, a name bound to one, `self` in its `impl`.
-fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
     return match expr {
         Expr::StructLit { name, .. } => ask.names.resolve(name).clone(),
         Expr::Variable(name, _) => struct_of_local(ask.names.resolve(name), walk),
@@ -2193,7 +2223,7 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> Strin
 
 /// A field's type as `field_struct` names it, and a text's `bytes` where it
 /// names none: `s.bytes[a..<b].text()` is `Bytes::text`, a view (#659).
-fn field_struct_or_bytes(base: ref Expr, field: ref String, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+fn field_struct_or_bytes(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: TierWalk) -> String? {
     let found = field_struct(base, field, ask, walk)
     if found != null || field != "bytes" {
         return found
@@ -2202,7 +2232,7 @@ fn field_struct_or_bytes(base: ref Expr, field: ref String, ask: ref TierAsk, wa
 }
 
 /// A cut of a `Bytes` is one too.
-fn cut_bytes(base: ref Expr, index: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+fn cut_bytes(base: ref Expr, index: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
     let a_range = match index {
         Expr::Range { .. } => true,
         else => false,
@@ -2216,7 +2246,7 @@ fn cut_bytes(base: ref Expr, index: ref Expr, ask: ref TierAsk, walk: ref TierWa
 
 /// The type a field holds, by its written name, where that is one name: a
 /// struct of the program's or a type of `std` (`http1::Head`).
-fn field_struct(base: ref Expr, field: ref String, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+fn field_struct(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: TierWalk) -> String? {
     let place = field_place(base, field, ask, walk) ?? return null
     if place.ty.generics.len() > 0 || place.ty.is_nullable || place.ty.is_tuple || place.ty.is_slice || place.ty.code != null {
         return null
@@ -2257,7 +2287,7 @@ fn flow_args(key: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: r
             // read after the call, or in a later turn of a loop, goes in as
             // a view of it, and an arm that is a parameter named nowhere else
             // is one too - the position takes both kinds (`EitherText`).
-            if a_keeping_target(function, at, ask) && walk.keeping.contains(position_word(owner, no_path())) {
+            if a_keeping_target(function, at, ask) && tier_keeping_read(position_word(owner, no_path()), walk) {
                 let only_owned = kinds.owned && !kinds.view && !kinds.either && !kinds.still
                 if only_owned && walk.late_args.contains(node_key(args[at])) && lendable_parameter(args[at], ask, walk) == null {
                     walk.flows.viewed_arms.insert(node_key(args[at]))
@@ -2884,7 +2914,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             let kinds = kinds_of_local(ask.names.resolve(name), walk)
             // **An arm that is a name still read later is a view of it**
             // (ADR-282 D7, D13, #712): moving it would end what is read next.
-            let late = walk.late.contains(node_key(expr)) || walk.param_arms.contains(node_key(expr))
+            let late = walk.late.contains(node_key(expr)) || tier_arm_read(node_key(expr), walk)
             if late && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
                 walk.flows.viewed_arms.insert(node_key(expr))
                 return view_kinds()
@@ -3437,9 +3467,9 @@ fn mapped(params: ref Vec[winnow_grammar::Symbol], body: ref Block, received: re
 }
 
 /// What a function of this program hands back.
-fn result_kinds(key: ref String, ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+fn result_kinds(key: ref String, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let function = walk.declared.fns[key] ?? return owned_kinds()
-    let result = function.result ?? return owned_kinds()
+    let result = function.result?.clone() ?? return owned_kinds()
     return kinds_of(TextOwner::Returned(key.clone()), result, [], ask, walk)
 }
 
@@ -3467,15 +3497,38 @@ fn std_result(callee: ref String, ask: ref TierAsk) -> Kinds {
 }
 
 /// Walk every function of the program once against the tiers found so far.
-fn walk_program(program: ref Program, ask: ref TierAsk, mut walk: TierWalk) {
+/// **The units a round walks** (#727): each function, each method of an
+/// `impl`, and each other item, as (item, method), the method -1 for none.
+fn tier_units(program: ref Program) -> Vec[(i64, i64)] {
+    let mut units: Vec[(i64, i64)] = []
+    let mut at = 0
     for item in program.items {
         match item.node {
+            Item::Impl { methods, .. } => {
+                let mut m = 0
+                while m < methods.len() {
+                    units.push((at, m))
+                    m += 1
+                }
+            }
+            else => units.push((at, -1)),
+        }
+        at += 1
+    }
+    return units
+}
+
+fn walk_unit(program: ref Program, item_at: i64, method_at: i64, ask: ref TierAsk, mut walk: TierWalk) {
+    let item = program.items[item_at]
+    walk.read_here = false
+    walk.tail_back = false
+    walk.handed_back = -1
+    walk.lent_self = false
+    match item.node {
             Item::Fn { .. } => walk_function(item.node, null, ask, walk),
             Item::Impl { target, methods, .. } => {
                 let owner = ask.names.resolve(target.name).clone()
-                for method in methods {
-                    walk_function(method.node, owner.clone(), ask, walk)
-                }
+                walk_function(methods[method_at].node, owner, ask, walk)
             }
             Item::Grammar(def) => walk_grammar(def, ask, walk),
             // A test's and a bench's values flow as a function's do.
@@ -3496,8 +3549,188 @@ fn walk_program(program: ref Program, ask: ref TierAsk, mut walk: TierWalk) {
                 }
             },
             else => {}
+    }
+}
+
+/// **What every unit's walk found, as one walk of the program would have**:
+/// each is added in program order, as the walk would have added it.
+fn merge_flows(mut into: Flows, from: ref Flows) {
+    for (word, kinds) in from.positions {
+        let before = into.positions[word]?.clone() ?? no_kinds()
+        into.positions.insert(word.clone(), kinds_joined(before, kinds))
+    }
+    for (word, position) in from.known {
+        if !into.known.contains_key(word) {
+            into.known.insert(word.clone(), position.clone())
         }
     }
+    for (at, kept) in from.literal_lets {
+        let mut all: collections::BTreeSet[String] = into.literal_lets[at]?.clone() ?? collections::BTreeSet()
+        for word in kept {
+            all.insert(word.clone())
+        }
+        into.literal_lets.insert(at.clone(), all)
+    }
+    for (at, hand) in from.wraps {
+        into.wraps.insert(at.clone(), hand.clone())
+    }
+    for pair in from.param_into {
+        into.param_into.insert(pair.clone())
+    }
+    for (at, wraps) in from.hole_wraps {
+        let mut all: Vec[HoleWrap] = into.hole_wraps[at]?.clone() ?? []
+        for wrap in wraps {
+            all.push(wrap.clone())
+        }
+        into.hole_wraps.insert(at.clone(), all)
+    }
+    for pair in from.links {
+        into.links.insert(pair.clone())
+    }
+    for word in from.unwrappable {
+        into.unwrappable.insert(word.clone())
+    }
+    for word in from.viewed {
+        into.viewed.insert(word.clone())
+    }
+    for pair in from.still_into {
+        into.still_into.insert(pair.clone())
+    }
+    for (at, target) in from.adopted {
+        into.adopted.insert(at.clone(), target.clone())
+    }
+    for word in from.demoted {
+        into.demoted.insert(word.clone())
+    }
+    for word in from.in_maps {
+        into.in_maps.insert(word.clone())
+    }
+    for pair in from.lent_into {
+        into.lent_into.insert(pair.clone())
+    }
+    for (word, kinds) in from.lent_kinds {
+        let before = into.lent_kinds[word]?.clone() ?? no_kinds()
+        into.lent_kinds.insert(word.clone(), kinds_joined(before, kinds))
+    }
+    for (word, count) in from.uses {
+        let before = into.uses[word] ?? 0
+        into.uses.insert(word.clone(), before + count)
+    }
+    for (word, count) in from.lent_uses {
+        let before = into.lent_uses[word] ?? 0
+        into.lent_uses.insert(word.clone(), before + count)
+    }
+    for pair in from.arg_into {
+        into.arg_into.insert(pair.clone())
+    }
+    for (word, count) in from.arg_uses {
+        let before = into.arg_uses[word] ?? 0
+        into.arg_uses.insert(word.clone(), before + count)
+    }
+    for word in from.changed {
+        into.changed.insert(word.clone())
+    }
+    for node in from.viewed_arms {
+        into.viewed_arms.insert(node.clone())
+    }
+    for (node, word) in from.param_arm_into {
+        into.param_arm_into.insert(node.clone(), word.clone())
+    }
+}
+
+/// Whether a unit read a decision that changed between two rounds.
+fn tier_reads_changed(reads: ref TierReads, tiers: ref collections::BTreeSet[String], keeping: ref collections::BTreeSet[String], arms: ref collections::BTreeSet[i64], adopted: ref collections::BTreeSet[i64]) -> bool {
+    for word in tiers {
+        if reads.tiers.contains(word) {
+            return true
+        }
+    }
+    for word in keeping {
+        if reads.keeping.contains(word) {
+            return true
+        }
+    }
+    for node in arms {
+        if reads.arms.contains(node) {
+            return true
+        }
+    }
+    for at in adopted {
+        if reads.adopted.contains(at) {
+            return true
+        }
+    }
+    return false
+}
+
+fn changed_tier_words(a: ref collections::BTreeMap[String, Tier], b: ref collections::BTreeMap[String, Tier]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for (word, tier) in a {
+        if !b.contains_key(word) {
+            out.insert(word.clone())
+            continue
+        }
+        let other = b[word] ?? continue
+        if tier_word(tier) != tier_word(other) {
+            out.insert(word.clone())
+        }
+    }
+    for (word, _) in b {
+        if !a.contains_key(word) {
+            out.insert(word.clone())
+        }
+    }
+    return out
+}
+
+fn changed_words(a: ref collections::BTreeSet[String], b: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for word in a {
+        if !b.contains(word) {
+            out.insert(word.clone())
+        }
+    }
+    for word in b {
+        if !a.contains(word) {
+            out.insert(word.clone())
+        }
+    }
+    return out
+}
+
+fn changed_nodes(a: ref collections::BTreeSet[i64], b: ref collections::BTreeSet[i64]) -> collections::BTreeSet[i64] {
+    let mut out: collections::BTreeSet[i64] = collections::BTreeSet()
+    for node in a {
+        if !b.contains(node) {
+            out.insert(node.clone())
+        }
+    }
+    for node in b {
+        if !a.contains(node) {
+            out.insert(node.clone())
+        }
+    }
+    return out
+}
+
+fn changed_adopted(a: ref collections::BTreeMap[i64, Declaring], b: ref collections::BTreeMap[i64, Declaring]) -> collections::BTreeSet[i64] {
+    let mut out: collections::BTreeSet[i64] = collections::BTreeSet()
+    for (at, target) in a {
+        if !b.contains_key(at) {
+            out.insert(at.clone())
+            continue
+        }
+        let other = b[at] ?? continue
+        if owner_word(target.owner) != owner_word(other.owner) {
+            out.insert(at.clone())
+        }
+    }
+    for (at, _) in b {
+        if !a.contains_key(at) {
+            out.insert(at.clone())
+        }
+    }
+    return out
 }
 
 /// A walk outside any function: no locals, no result.
@@ -3603,7 +3836,7 @@ fn bind_grammar_pattern(gname: ref String, rules: ref collections::BTreeSet[Stri
 /// grammar hands back its result, a repetition or a list its element's kind,
 /// the primitives that capture text a view of the input the parse was given,
 /// and anything else no text.
-fn grammar_pattern_kinds(gname: ref String, rules: ref collections::BTreeSet[String], pattern: ref Pattern, ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+fn grammar_pattern_kinds(gname: ref String, rules: ref collections::BTreeSet[String], pattern: ref Pattern, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     return match pattern {
         Pattern::Repeat { pat, .. } => grammar_repeat_kinds(gname, rules, pat.node, ask, walk),
         Pattern::Group(pat) => grammar_pattern_kinds(gname, rules, pat.node, ask, walk),
@@ -3615,7 +3848,7 @@ fn grammar_pattern_kinds(gname: ref String, rules: ref collections::BTreeSet[Str
 
 // `digit+` is the text the digits stand in; any other repetition a list of
 // what it repeats.
-fn grammar_repeat_kinds(gname: ref String, rules: ref collections::BTreeSet[String], pat: ref Pattern, ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+fn grammar_repeat_kinds(gname: ref String, rules: ref collections::BTreeSet[String], pat: ref Pattern, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     match pat {
         Pattern::Ref { name, generics, args } => {
             let called = ask.names.resolve(name)
@@ -3628,7 +3861,7 @@ fn grammar_repeat_kinds(gname: ref String, rules: ref collections::BTreeSet[Stri
     return grammar_pattern_kinds(gname, rules, pat, ask, walk)
 }
 
-fn grammar_choice_kinds(gname: ref String, rules: ref collections::BTreeSet[String], parts: ref Vec[Spanned[Pattern]], ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+fn grammar_choice_kinds(gname: ref String, rules: ref collections::BTreeSet[String], parts: ref Vec[Spanned[Pattern]], ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let mut out = no_kinds()
     for part in parts {
         out = kinds_joined(out, grammar_pattern_kinds(gname, rules, part.node, ask, walk))
@@ -3636,7 +3869,7 @@ fn grammar_choice_kinds(gname: ref String, rules: ref collections::BTreeSet[Stri
     return out
 }
 
-fn grammar_reference_kinds(gname: ref String, rules: ref collections::BTreeSet[String], called: ref String, generics: i64, args: ref Vec[Spanned[Pattern]], ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+fn grammar_reference_kinds(gname: ref String, rules: ref collections::BTreeSet[String], called: ref String, generics: i64, args: ref Vec[Spanned[Pattern]], ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     if rules.contains(called) {
         return result_kinds(f"{gname}::{called}", ask, walk)
     }
@@ -4168,14 +4401,39 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), param_arms: collections::BTreeSet() }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads() }
     let found = late_arms(program, ask)
     walk.late = found.arms
     walk.late_args = found.args
     walk.late_params = found.params
+    // **A later round walks again only the units that read a decision that
+    // changed** (#727): a unit's walk depends on nothing else that moves.
+    let units = tier_units(program)
+    let mut found_flows: Vec[Flows] = []
+    let mut found_reads: Vec[TierReads] = []
+    let mut dirty: Vec[bool] = []
+    for _ in units {
+        found_flows.push(no_flows())
+        found_reads.push(no_reads())
+        dirty.push(true)
+    }
     for _ in 0..<16 {
+        let mut u = 0
+        while u < units.len() {
+            if dirty[u] {
+                walk.flows = no_flows()
+                walk.reads = no_reads()
+                let (item_at, method_at) = units[u]
+                walk_unit(program, item_at, method_at, ask, walk)
+                found_flows[u] = walk.flows.clone()
+                found_reads[u] = walk.reads.clone()
+            }
+            u += 1
+        }
         walk.flows = no_flows()
-        walk_program(program, ask, walk)
+        for unit_flows in found_flows {
+            merge_flows(walk.flows, unit_flows)
+        }
         let demoted_before = walk.demoted.len()
         let unlent_before = walk.unlent.len()
         let next = decide_tiers(walk.flows, walk.declared, walk.demoted, walk.unlent)
@@ -4185,6 +4443,15 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
         let settled = same_words(keeping, walk.keeping) && arms.len() == walk.param_arms.len()
         if same_tiers(next, walk.tiers) && linked && settled && walk.demoted.len() == demoted_before && walk.unlent.len() == unlent_before {
             break
+        }
+        let tiers_moved = changed_tier_words(next, walk.tiers)
+        let keeping_moved = changed_words(keeping, walk.keeping)
+        let arms_moved = changed_nodes(arms, walk.param_arms)
+        let adopted_moved = changed_adopted(walk.flows.adopted, walk.adopted)
+        let mut v = 0
+        while v < units.len() {
+            dirty[v] = tier_reads_changed(found_reads[v], tiers_moved, keeping_moved, arms_moved, adopted_moved)
+            v += 1
         }
         walk.tiers = next
         walk.adopted = walk.flows.adopted.clone()
