@@ -45,12 +45,18 @@ fn checked(name: &str, source: &str) -> String {
 }
 
 fn lowered(name: &str, source: &str) -> String {
+    lowered_with(name, source, &[])
+}
+
+/// Lowered with `options` after the file: `--optimization` among them.
+fn lowered_with(name: &str, source: &str, options: &[&str]) -> String {
     let dir = common::scratch_dir(name);
     std::fs::write(dir.join("main.nika"), source).expect("the source");
     let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(&dir)
         .arg("lower")
         .arg("main.nika")
+        .args(options)
         .output()
         .expect("the nikaia binary runs");
     assert!(
@@ -181,6 +187,11 @@ fn main() {\n\
                 let first = data.find(set; from: from) ?? -1\n\
                 let count = data.find_all(set; from: from).count()\n\
                 let last = data.find_all(set; from: from).last() ?? -1\n\
+                for s in data.find_all(set; from: from) {\n\
+                    if s < from || s >= data.len() {\n\
+                        wrong += 1\n\
+                    }\n\
+                }\n\
                 let want_first = if want.len() > 0 { want[0] } else { -1 }\n\
                 let want_last = if want.len() > 0 { want[want.len() - 1] } else { -1 }\n\
                 if got != want || first != want_first || count != want.len() || last != want_last {\n\
@@ -210,6 +221,75 @@ fn find_all_and_split_agree_with_a_byte_by_byte_reference() {
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// D5: each position `find_all(set; from: f)` yields is `f <= s < b.len()`
+/// for the bounds walk - from the call, and from a `let` the sequence is held
+/// under - so `b[s]` and `b[s - f]` (with `f >= 0`) are written without their
+/// check under `remove-bounds-checks:on`; after a `filter` the facts are gone
+/// and the check stays.
+const POSITIONS: &str = "use std::bytes\n\
+\n\
+fn total(b: ref Bytes) -> i64 {\n\
+    let mut n = 0\n\
+    for s in b.find_all(bytes::ByteSet([';'])) {\n\
+        n += b[s] as i64\n\
+    }\n\
+    return n\n\
+}\n\
+\n\
+fn from_f(b: ref Bytes, f: i64) -> i64 {\n\
+    if f < 0 {\n\
+        return 0\n\
+    }\n\
+    let mut n = 0\n\
+    for s in b.find_all(bytes::ByteSet([';']); from: f) {\n\
+        n += b[s - f] as i64\n\
+    }\n\
+    return n\n\
+}\n\
+\n\
+fn kept(b: ref Bytes) -> i64 {\n\
+    let mut n = 0\n\
+    let ps = b.find_all(bytes::ByteSet([';']))\n\
+    for s in ps {\n\
+        n += b[s] as i64\n\
+    }\n\
+    return n\n\
+}\n\
+\n\
+fn filtered(b: ref Bytes) -> i64 {\n\
+    let mut n = 0\n\
+    for s in b.find_all(bytes::ByteSet([';'])).filter(fn(s) { s > 2 }) {\n\
+        n += b[s] as i64\n\
+    }\n\
+    return n\n\
+}\n\
+\n\
+fn main() {\n\
+    let b = Bytes([';', 'a', ';', 'b', ';'])\n\
+    println(f\"{total(b)} {from_f(b, 1)} {kept(b)} {filtered(b)}\")\n\
+}\n";
+
+#[test]
+fn a_position_find_all_yields_indexes_its_bytes_without_a_check() {
+    let on = lowered_with(
+        "byte-sets-positions",
+        POSITIONS,
+        &["--optimization", "remove-bounds-checks:on"],
+    );
+    let unchecked = on.matches("nikaia_std::proven::read(").count();
+    assert_eq!(unchecked, 3, "{on}");
+    assert!(on.contains(".filter("), "{on}");
+    let filtered = &on[on.find("fn filtered").expect("filtered")..];
+    let filtered = &filtered[..filtered.find("\n}").expect("its end")];
+    assert!(filtered.contains("nikaia_std::index::get(&b"), "{filtered}");
+    let off = lowered("byte-sets-positions-off", POSITIONS);
+    assert_eq!(off.matches("nikaia_std::proven::read(").count(), 0, "{off}");
+    assert_eq!(
+        run("byte-sets-positions-run", POSITIONS),
+        "177 195 177 59\n"
+    );
 }
 
 /// ADR-002 D6: the same program at x86-64's baseline (SSE2) and at

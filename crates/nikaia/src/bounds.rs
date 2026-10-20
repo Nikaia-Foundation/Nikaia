@@ -126,6 +126,16 @@ fn ensured(ledgers: &[&crate::contracts::Ledger]) -> BTreeMap<String, Ensured> {
     })
 }
 
+/// **What each sequence the ledgers describe holds of each element**
+/// ([ADR-375](../../docs/specification/adr/adr-375.md) D5), by the ledger's
+/// key: `Bytes::find_all`'s positions lie at or after `from` and inside the
+/// bytes.
+fn each(ledgers: &[&crate::contracts::Ledger]) -> BTreeMap<String, Ensured> {
+    nikaia_std::tools::bounds_matched::bm_each(ledgers, &|text, names| {
+        crate::prove::condition_nodes(text, names)
+    })
+}
+
 /// **Every index and every operation the walk proves**, whatever a build does
 /// with them (ADR-306 D14): the shape D3 reads without a solver and every
 /// linear fact D4 decides with one. What is written without its check is the
@@ -153,6 +163,10 @@ pub struct Sites<'a> {
     pub whole_fields: &'a BTreeSet<i64>,
     /// [`crate::check::CheckFacts::array_lengths`] (#711).
     pub array_lengths: &'a BTreeMap<i64, i64>,
+    /// [`crate::check::CheckFacts::shifts`] (ADR-306 D18).
+    pub shifts: &'a BTreeMap<i64, String>,
+    /// [`crate::check::CheckFacts::std_receivers`] (ADR-314 D3, ADR-375 D5).
+    pub std_receivers: &'a BTreeMap<i64, String>,
 }
 
 impl<'a> Sites<'a> {
@@ -166,6 +180,8 @@ impl<'a> Sites<'a> {
             negations: &facts.negations,
             whole_fields: &facts.whole_fields,
             array_lengths: &facts.array_lengths,
+            shifts: &facts.shifts,
+            std_receivers: &facts.std_receivers,
         }
     }
 }
@@ -187,6 +203,8 @@ pub fn proven(
         negations,
         whole_fields,
         array_lengths,
+        shifts,
+        std_receivers,
     } = *sites;
     let mut out = Proven::default();
     let mut functions: BTreeMap<String, Vec<bool>> = BTreeMap::new();
@@ -240,6 +258,9 @@ pub fn proven(
         sized: sized.iter().copied().collect(),
         char_codes: char_codes.iter().copied().collect(),
         ensured: ensured(ledgers),
+        each: each(ledgers),
+        std_receivers: std_receivers.clone(),
+        shifts: shifts.clone(),
         arithmetic: arithmetic
             .iter()
             .map(|(at, ty)| ((*at), ty.clone()))

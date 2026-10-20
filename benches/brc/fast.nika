@@ -98,6 +98,7 @@ impl Table {
             // says how long it is, and the sign becomes a mask.
             let w = buf.u64_le(sep + 1)
             let dot = (!w & 0x10101000).trailing_zeros()
+            if dot > 28 { panic("a row without a temperature") }
             let signed = ((!w) << 59).bits_as_i64() >> 63
             let keep = !(signed.bits_as_u64() & 0xFF)
             let digits = ((w & keep) << (28 - dot)) & 0x0F000F0F00

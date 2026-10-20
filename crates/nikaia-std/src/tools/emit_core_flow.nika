@@ -416,6 +416,18 @@ impl EmitState {
         // check, naming the type the proof was about (ADR-306 D10).
         if self.proven_arithmetic.contains_key(site) && !wide.widen && !wide.inferred {
             let ty = (self.proven_arithmetic.get(site) ?? "").clone()
+            // **A shift proved to count inside its type's width** (ADR-306
+            // D18) is the one Rust's release build writes: the count masked,
+            // which for a count in `0..<w` is the count itself.
+            if op == BinaryOp::Shl || op == BinaryOp::Shr {
+                let shift = if op == BinaryOp::Shl { "wrapping_shl" } else { "wrapping_shr" }
+                out.push(f"<{ty}>::{shift}(")
+                host.expr(walk, out, lhs, depth, wide, scope)
+                out.push(", (")
+                host.expr(walk, out, rhs, depth, wide, scope)
+                out.push(") as u32)")
+                return
+            }
             let name = emit_flow_wrapping(op)
             out.push(f"<{ty}>::{name}(")
             host.expr(walk, out, lhs, depth, wide, scope)

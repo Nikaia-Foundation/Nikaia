@@ -1966,6 +1966,8 @@ impl<'p> Emitter<'p> {
                 negations: &propagation.negations,
                 whole_fields: &propagation.whole_fields,
                 array_lengths: &propagation.array_lengths,
+                shifts: &propagation.shifts,
+                std_receivers: &propagation.std_receivers,
             },
             &[&own_contracts, std_ledger()],
             &std::collections::BTreeSet::new(),
@@ -2106,9 +2108,12 @@ impl<'p> Emitter<'p> {
                         && proven.indices.contains(node)
                 })
                 .collect(),
+            // **A shift proved to count inside its width** (ADR-306 D18) is
+            // written as an operation proved inside its type is.
             proven_arithmetic: propagation
                 .arithmetic
                 .iter()
+                .chain(propagation.shifts.iter())
                 .filter(|(at, _)| {
                     build.overflow == crate::bounds::OverflowChecks::Removed
                         && proven.arithmetic.contains(at)

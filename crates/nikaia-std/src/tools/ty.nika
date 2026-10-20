@@ -1121,6 +1121,10 @@ pub struct FnContract {
     /// **What a caller may rely on afterwards**: its postconditions, over the
     /// parameters and `result` (ADR-269 D17, D18).
     pub ensures: Vec[String],
+    /// **What holds of each element of the sequence it hands back**
+    /// ([ADR-375](../../../../docs/specification/adr/adr-375.md) D5): as
+    /// `ensures`, over the parameters, `self.len()` and `item`, the element.
+    pub ensures_each: Vec[String],
     /// **What the body was observed to return** (ADR-359 D3): each exit of
     /// the function's result summary, `!path || result == value`, over the
     /// parameters - for the package's own prover; a consumer in another
@@ -1158,6 +1162,7 @@ impl FnContract {
             consumers: [],
             requires: [],
             ensures: [],
+            ensures_each: [],
             inferred: [],
             from: [],
         }

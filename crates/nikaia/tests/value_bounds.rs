@@ -156,6 +156,50 @@ fn main() {
     prints("guarded", source, "42\n");
 }
 
+/// ADR-306 D18: a shift's count the walk proves inside `0..<64` - here from
+/// `trailing_zeros`'s `0..=64` and the guard - is written as Rust's release
+/// build writes it, `wrapping_shl`, and so is the `28 - k` it is made of;
+/// at `off` both keep their checks.
+#[test]
+fn a_shift_proved_inside_its_width_is_written_without_its_check() {
+    let source = "\
+fn scaled(x: u64, y: u64) -> u64 {
+    let k = x.trailing_zeros()
+    if k > 28 {
+        return 0
+    }
+    return y << (28 - k)
+}
+
+fn main() {
+    println(f\"{scaled(16, 1)} {scaled(0, 1)} {scaled(1 << 20, 3)}\")
+}
+";
+    assert_eq!(unchecked_arithmetic(&lowered(source, Level::Off)), 0);
+    let rust = lowered(source, Level::Aggressive);
+    assert!(rust.contains("<u64>::wrapping_shl("), "{rust}");
+    assert!(rust.contains("<u32>::wrapping_sub("), "{rust}");
+    prints("proved-shift", source, "16777216 0 768\n");
+}
+
+/// ADR-306 D18: a count nothing bounds keeps its check at every level, and a
+/// shift by 64 stops the program.
+#[test]
+fn a_shift_by_an_unbounded_count_keeps_its_check() {
+    let source = "\
+fn down(y: u64, k: i64) -> u64 {
+    return y >> k
+}
+
+fn main() {
+    println(f\"{down(256, 4)}\")
+    println(f\"{down(1, 64)}\")
+}
+";
+    assert_eq!(unchecked_arithmetic(&lowered(source, Level::Aggressive)), 0);
+    stops("unbounded-shift", source, "shift right with overflow");
+}
+
 const TALLY: &str = "\
 fn main() {
     let mut seen: Vec[i64] = []

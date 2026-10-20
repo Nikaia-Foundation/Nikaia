@@ -357,6 +357,14 @@ fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckW
         let l = value_of_a_copy(left.unseen())
         let r = value_of_a_copy(right.unseen())
         if check_core_ops_shift(op) {
+            // **A count that is not a literal is a goal of the walk**
+            // (ADR-306 D18), with the width of the shifted value's type.
+            if !check_core_ops_lit_int(rhs) {
+                let shifted = check_core_ops_whole_name(lhs, left)
+                if shifted != "" && is_whole_number(shifted) {
+                    state.facts.shifts.insert(at.start as i64, shifted)
+                }
+            }
             return l
         }
         if l.is_unknown() {

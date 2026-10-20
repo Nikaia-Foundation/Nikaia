@@ -13,6 +13,7 @@
 // A node is named by its id (`id_of`, ADR-340), which the emitter reads again.
 // A term is a place in the walk's arena (`prover_arena.nika`).
 
+use std::text
 use std::collections
 
 /// **What the program around every body says**, read once per program.
@@ -34,6 +35,15 @@ pub struct BoundsContext {
     /// What a callee's ledger entry ensures, by the name a call writes
     /// (ADR-314 D3).
     pub ensured: collections::BTreeMap[String, Ensured],
+    /// What each element of a sequence a ledger entry hands back holds, by
+    /// the entry's key (ADR-375 D5).
+    pub each: collections::BTreeMap[String, Ensured],
+    /// The method calls on a type `std`'s ledger describes, by node, with the
+    /// type's name as the ledger keys it (ADR-314 D3, ADR-375 D5).
+    pub std_receivers: collections::BTreeMap[i64, String],
+    /// Every shift whose count is not a literal, by the byte its operator
+    /// starts at, with the shifted value's type (ADR-306 D18).
+    pub shifts: collections::BTreeMap[i64, String],
     /// **What a grammar binding matched** (ADR-314 D1), for the action it
     /// stands in: a whole number's range by name (`dec[i32](digit{1,2})` is
     /// `0..=99`), and a `char`'s code by name (`digit` is `48..=57`). Empty
@@ -63,6 +73,9 @@ pub struct Ensured {
     /// Of `params`, those that are `char`s: each is handed the argument's
     /// code (D2).
     pub chars: Vec[bool],
+    /// The options it takes by name, each with its default as the ledger
+    /// writes it (`ensures_each`, ADR-375 D5).
+    pub options: Vec[(String, String)],
     pub conditions: Vec[Vec[SolverTerm]],
 }
 
@@ -636,6 +649,36 @@ fn bounding_fits(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref
     return bounds.holds(range)
 }
 
+/// **A shift's count lies in `0..<w`** (ADR-306 D18), `w` the width of the
+/// shifted value's type `ty`.
+fn bounding_count_fits(mut walk: BoundsWalk, count: ref Expr, ty: ref String, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    let width = bounding_bits(ty) ?? return false
+    let term = bounding_lin(walk, count, facts, context, program, words)
+    if term != null {
+        let k = term ?? 0
+        let zero = walk.arena.int(0)
+        let most = walk.arena.int(width - 1)
+        let above = walk.arena.ge(k, zero)
+        let below = walk.arena.le(k, most)
+        let goal = walk.arena.and([above, below])
+        return bounding_proves(walk, facts, goal, ask)
+    }
+    let range = bounding_range(walk, count, facts, context, program, words, ask) ?? return false
+    let lo = range.lo ?? return false
+    let hi = range.hi ?? return false
+    return lo >= 0 && hi < width
+}
+
+/// How many bits a whole-number type has.
+fn bounding_bits(ty: ref String) -> i64? {
+    return match ty {
+        "i8" => 8, "u8" => 8, "i16" => 16, "u16" => 16, "i32" => 32, "u32" => 32,
+        "i64" => 64, "u64" => 64, "int" => 64, "isize" => 64, "usize" => 64,
+        "i128" => 128, "u128" => 128,
+        else => null,
+    }
+}
+
 /// Which way an operation with a constant that is not negative moves the
 /// other side: `1` up (`x + k`, `k + x`), `-1` down (`x - k`), `0` either.
 fn bounding_one_way(op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr) -> i64 {
@@ -815,6 +858,11 @@ fn bounding_lin(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFacts, co
                 let path = path_of(receiver, words) ?? return null
                 return bounding_length(walk, receiver, path, context)
             }
+            // **What `std`'s ledger ensures of a method's result** (ADR-314
+            // D3): `x.trailing_zeros()` of a `u64` is in `0..=64`.
+            let ty = context.std_receivers[node_key(expr)] ?? return null
+            let ensured = context.ensured[f"{ty}::{words.resolve(method)}"] ?? return null
+            return bounding_ensured(walk, ensured, args, facts, context, program, words)
         },
         // **A path of fields from a name** (ADR-306 D17), of a whole-number
         // type: a number of its own, `p.end`.
@@ -1009,6 +1057,77 @@ fn bounding_ensured(mut walk: BoundsWalk, ensured: ref Ensured, args: ref Vec[Ex
     return result
 }
 
+/// **What `std`'s ledger states of each element a sequence yields**
+/// (ADR-375 D5): `b.find_all(set; from: f)` yields positions with
+/// `f <= s < b.len()`. The facts of `item` for the call `iter`; none where
+/// `iter` is no call whose entry states any, or its receiver is no path.
+fn bounding_each(mut walk: BoundsWalk, iter: ref Expr, item: i64, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    match iter {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let ty = context.std_receivers[node_key(iter)] ?? return out
+            let each = context.each[f"{ty}::{words.resolve(method)}"] ?? return out
+            let path = path_of(receiver, words) ?? return out
+            if args.len() != each.params.len() {
+                return out
+            }
+            let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+            for k in 0..<args.len() {
+                given.insert(each.params[k].clone(), bounding_given(walk, args[k], facts, context, program, words))
+            }
+            for (name, default) in each.options {
+                let mut term: i64? = null
+                for option in config {
+                    if words.resolve(option.name) == name {
+                        term = bounding_given(walk, option.value, facts, context, program, words)
+                    }
+                }
+                if term == null {
+                    let written = text::parse_i64(default)
+                    if written != null {
+                        term = walk.arena.int(written ?? 0)
+                    } else {
+                        term = bounding_fresh(walk)
+                    }
+                }
+                given.insert(name.clone(), term ?? 0)
+            }
+            given.insert("item", item)
+            given.insert(length_of("self"), bounding_length_named(walk, path, true))
+            for nodes in each.conditions {
+                let read = walk.arena.adopt(nodes)
+                out.push(walk.arena.substitute(read, given))
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+/// An argument as a term of the walk, or a number of its own where the walk
+/// has none for it: a fact over that one says nothing of any other.
+fn bounding_given(mut walk: BoundsWalk, arg: ref Expr, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext) -> i64 {
+    let term = bounding_lin(walk, arg, facts, context, program, words)
+    if term != null {
+        return term ?? 0
+    }
+    return bounding_fresh(walk)
+}
+
+/// A number of its own, that no other term reads.
+fn bounding_fresh(mut walk: BoundsWalk) -> i64 {
+    let name = f"given#{walk.codes}"
+    walk.codes += 1
+    return walk.arena.var(name)
+}
+
+/// The name a sequence's element is known by while the sequence is held
+/// under `name` (ADR-375 D5): a path within it, so that what is known goes
+/// when `name` changes.
+fn bounding_element_of(name: ref String) -> String {
+    return f"{name}.each()"
+}
+
 /// The name `expr` is, where it is a bare one.
 fn bounding_variable(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     return match expr {
@@ -1026,9 +1145,15 @@ fn bounding_length(mut walk: BoundsWalk, receiver: ref Expr, name: ref String, c
     if !context.lengths.contains(node_key(receiver)) {
         return null
     }
+    return bounding_length_named(walk, name, context.sized.contains(node_key(receiver)))
+}
+
+/// `name.len()` as a number of the walk: not negative, and below 2^60 where
+/// the elements take space (`sized`).
+fn bounding_length_named(mut walk: BoundsWalk, name: ref String, sized: bool) -> i64 {
     let length = length_of(name)
     let n = walk.arena.var(length)
-    if context.sized.contains(node_key(receiver)) {
+    if sized {
         if !walk.axioms.contains_key(length) {
             let zero = walk.arena.int(0)
             let most = walk.arena.int(length_below())
@@ -1675,6 +1800,12 @@ fn bounding_let(mut walk: BoundsWalk, names: ref Vec[winnow_grammar::Symbol], ty
         return
     }
     let name = words.resolve(names[0]).clone()
+    // **A sequence held under a name keeps what `std`'s ledger states of
+    // each element** (ADR-375 D5), as facts of a name within it.
+    let held = walk.arena.var(bounding_element_of(name))
+    for fact in bounding_each(walk, value, held, facts, context, program, words) {
+        bounding_push(walk, facts, fact)
+    }
     if whole {
         facts.ints.insert(name.clone())
         if value_lin != null {
@@ -1796,6 +1927,32 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
             }
         }
     }
+    // **A position a search hands back lies in the buffer** (ADR-375 D5):
+    // what `std`'s ledger states of each element holds of the name bound,
+    // from the call itself or from the name the sequence was held under, while
+    // nothing it reads changes in the body.
+    if bindings.len() == 1 && !counted {
+        let only = words.resolve(bindings[0]).clone()
+        let item = walk.arena.var(only)
+        let mut stated = bounding_each(walk, iter, item, facts, context, program, words)
+        let held = bounding_variable(iter, words)
+        if held != null {
+            let element = bounding_element_of(held ?? "")
+            let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+            given.insert(element.clone(), item)
+            for fact in facts.facts {
+                if walk.arena.mentions(fact, element) {
+                    stated.push(walk.arena.substitute(fact, given))
+                }
+            }
+        }
+        for fact in stated {
+            if bounding_unchanged(walk, fact, changed) {
+                inner.ints.insert(only.clone())
+                bounding_push(walk, inner, fact)
+            }
+        }
+    }
     if counted {
         inner.ints.insert(name.clone())
         let n = walk.arena.var(name)
@@ -1875,6 +2032,11 @@ fn bounding_below(mut walk: BoundsWalk, n: i64, h: i64, closed: bool) -> i64 {
 /// Whether `t` holds while the loop's body runs: it reads nothing the body
 /// changes, nor the binding.
 fn bounding_stable(walk: ref BoundsWalk, t: i64, changed: ref BoundsChanged, name: ref String) -> bool {
+    return bounding_unchanged(walk, t, changed) && !walk.arena.mentions(t, name)
+}
+
+/// Whether `t` reads nothing a loop's body changes.
+fn bounding_unchanged(walk: ref BoundsWalk, t: i64, changed: ref BoundsChanged) -> bool {
     for c in changed.values {
         if bounding_touches(walk, t, c) {
             return false
@@ -1890,7 +2052,7 @@ fn bounding_stable(walk: ref BoundsWalk, t: i64, changed: ref BoundsChanged, nam
             return false
         }
     }
-    return !walk.arena.mentions(t, name)
+    return true
 }
 
 /// Whether either end reads `c` or its length.
@@ -2195,6 +2357,15 @@ fn bounding_binary(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: r
     }
     bounding_expr(walk, lhs, facts, context, program, words, ask)
     bounding_expr(walk, rhs, facts, context, program, words, ask)
+    // **A shift's count is a goal, as an index is** (ADR-306 D18): `0 <= k`
+    // and `k` below the width of the shifted value's type.
+    let shifted = context.shifts[at]
+    if shifted != null {
+        if !walk.collecting && bounding_count_fits(walk, rhs, shifted ?? "", facts, context, program, words, ask) {
+            walk.proven.arithmetic.insert(at)
+        }
+        return
+    }
     // **An operation that stays inside its type** (ADR-306 D6): its
     // operands first, in the order they run.
     let arithmetic = match op {

@@ -795,6 +795,7 @@ signature = "(self) -> u32"
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result <= 32"]
 signature = "(self) -> u32"
 
 # How many bits are clear below the lowest one set.
@@ -802,6 +803,7 @@ signature = "(self) -> u32"
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result <= 32"]
 signature = "(self) -> u32"
 
 # Division rounded so that the remainder is never negative; a divisor of zero aborts, as `/` does.
@@ -844,6 +846,7 @@ signature = "(self) -> u32"
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result <= 64"]
 signature = "(self) -> u32"
 
 # How many bits are clear below the lowest one set.
@@ -851,6 +854,7 @@ signature = "(self) -> u32"
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result <= 64"]
 signature = "(self) -> u32"
 
 # The remainder that is never negative; a divisor of zero aborts, as `%` does.
@@ -908,6 +912,7 @@ signature = "(self) -> u32"
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result <= 32"]
 signature = "(self) -> u32"
 
 # How many bits are clear below the lowest one set.
@@ -915,6 +920,7 @@ signature = "(self) -> u32"
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result <= 32"]
 signature = "(self) -> u32"
 
 # Division rounded so that the remainder is never negative; a divisor of zero aborts, as `/` does.
@@ -979,6 +985,7 @@ signature = "(self) -> u32"
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result <= 64"]
 signature = "(self) -> u32"
 
 # How many bits are clear below the lowest one set.
@@ -986,6 +993,7 @@ signature = "(self) -> u32"
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result <= 64"]
 signature = "(self) -> u32"
 
 # Division rounded so that the remainder is never negative; a divisor of zero aborts, as `/` does.
@@ -5294,11 +5302,14 @@ signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
 # each block's mask and makes no position, `nth` skips whole blocks by their
 # count, `last` searches from the end. A consumer written right after
 # `find_all` is the one named here; a step between them is another sequence.
+# **Each position lies at or after `from` and inside the bytes** (ADR-375 D5):
+# a fact for the bounds walk on the name a `for` binds.
 [fn."Bytes::find_all"]
 pub = true
 sync = true
 touches = []
 consumers = ["count", "nth", "last"]
+ensures_each = ["from <= item", "item < self.len()"]
 signature = "(ref self, set: bytes::ByteSet; from: i64 = 0) -> Seq[i64] sync"
 
 # The pieces between the bytes of `set`, each a view into the bytes, by text's

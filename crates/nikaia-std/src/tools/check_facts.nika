@@ -116,6 +116,15 @@ pub struct CheckFacts {
     pub char_codes: collections::BTreeSet[i64],
     pub arithmetic: collections::BTreeMap[i64, String],
     pub negations: collections::BTreeMap[i64, String],
+    /// **Every `x << k` and `x >> k` whose count is not a literal**, by the
+    /// byte its operator starts at, with `x`'s whole-number type: its count is
+    /// a goal of the bounds walk (ADR-306 D18).
+    pub shifts: collections::BTreeMap[i64, String],
+    /// **A method call on a type `std`'s ledger describes**, by the call's
+    /// node, with that type's name as the ledger keys it (`Bytes`, `u64`):
+    /// the bounds walk reads the entry's `ensures` and `ensures_each`
+    /// (ADR-314 D3, ADR-375 D5).
+    pub std_receivers: collections::BTreeMap[i64, String],
     pub copied_slots: collections::BTreeSet[i64],
     pub owned_copies: collections::BTreeSet[i64],
     /// The copies among them that copy text, by the receiver's id: reached
@@ -366,6 +375,8 @@ impl CheckFacts {
             array_lengths: collections::BTreeMap(),
             char_codes: collections::BTreeSet(),
             arithmetic: collections::BTreeMap(),
+            shifts: collections::BTreeMap(),
+            std_receivers: collections::BTreeMap(),
             negations: collections::BTreeMap(),
             copied_slots: collections::BTreeSet(),
             owned_copies: collections::BTreeSet(),

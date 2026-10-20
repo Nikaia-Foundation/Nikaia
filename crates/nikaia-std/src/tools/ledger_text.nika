@@ -259,6 +259,7 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
     // from.
     out.push_str(claims_text("requires", contract.requires))
     out.push_str(claims_text("ensures", contract.ensures))
+    out.push_str(claims_text("ensures_each", contract.ensures_each))
     out.push_str(claims_text("inferred", contract.inferred))
     out.push_str(claims_text("from", contract.from))
     out.push_str(signature_line)
