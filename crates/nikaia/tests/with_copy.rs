@@ -216,6 +216,9 @@ fn a_with_that_names_every_field_reads_its_base_as_underscore() {
          \x20   println(f\"{{q.x}}\")\n\
          }}"
     ));
-    assert!(rust.contains("{ let _ = p; Point { x: 4, y: 5, z: 6, } }"), "{rust}");
+    assert!(
+        rust.contains("{ let _ = p; Point { x: 4, y: 5, z: 6, } }"),
+        "{rust}"
+    );
     assert!(!rust.contains("..p"), "{rust}");
 }
