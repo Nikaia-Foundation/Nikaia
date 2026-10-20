@@ -69,21 +69,21 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1148, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.1152, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
 per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
-| Rust, `naive` | 841.2 | 9.26 | 859.7 | 8.66 | 556 |
-| **Nikaia**, `naive.nika` | **570.2** | **8.24** | **569.1** | **8.44** | **375** |
+| Rust, `naive` | 840.5 | 9.23 | 859.4 | 8.64 | 556 |
+| **Nikaia**, `naive.nika` | **570.2** | **8.25** | **569.1** | **8.44** | **375** |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
-| **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.2** | **1.12** | **642** |
-| Nikaia, overflow checks off | 274.9 | 1.12 | 231.2 | 1.12 | |
-| **Nikaia**, `fast.nika` | **174.1** | **1.02** | **173.3** | **1.10** | **1288** |
-| Nikaia, `fast.nika`, overflow checks off | 152.8 | 0.95 | 151.0 | 0.95 | |
+| **Nikaia**, `examples/1brc.nika` | **274.0** | **1.12** | **231.3** | **1.12** | **642** |
+| Nikaia, overflow checks off | 275.0 | 1.12 | 231.3 | 1.12 | |
+| **Nikaia**, `fast.nika` | **166.4** | **1.02** | **166.6** | **1.02** | **1343** |
+| Nikaia, `fast.nika`, overflow checks off | 144.6 | 0.95 | 144.9 | 0.95 | |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 | |
-| Nikaia, `fast.nika`, `x86-64-v3` | 167.8 | 1.02 | 167.1 | 1.01 | |
+| Nikaia, `fast.nika`, `x86-64-v3` | 158.8 | 1.01 | 159.0 | 1.01 | |
 
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
@@ -108,9 +108,9 @@ AI variant 2 runs 36 % fewer instructions than `1brc.nika` at 16 units and
 46 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
-`fast.nika` runs 18 % more instructions than AI variant 2 at both unit
-counts, 2 to 4 % more without its overflow checks, and 26 % more at `x86-64-v3`;
-it has about three times AI variant 2's mispredictions. It is 27 % fewer
+`fast.nika` runs 13 % more instructions than AI variant 2 at both unit
+counts, 2 % fewer without its overflow checks, and 20 % more at `x86-64-v3`;
+it has about three times AI variant 2's mispredictions. It is 24 % fewer
 tokens, with no `unsafe` and every index and overflow checked. Where the
 difference lies is below.
 
@@ -138,6 +138,16 @@ The AI variants are one function after inlining, so callgrind cannot split
 them the same way.
 
 ## Where `fast.nika` differs from AI variant 2
+
+**A station's first row is `@inline(never)`** (ADR-370): `claim`, which
+copies the name into the table once per station, stands out of the loop that
+runs once per row. Left inline, its allocation and copy keep values alive
+across the probe, and the loop stores and reloads them on the stack: 160
+stack accesses in `run` against 121 without it, 7.7 instructions a row at 1
+unit and 6.7 at 16. The same split without the attribute counts exactly what
+the code before it did, since LLVM inlines it back; `@inline(always)` on
+`slot_of`, inlined already, changes nothing. The two tables below were
+counted before `claim` moved out, at 173.3 instructions a row.
 
 Callgrind's attribution per row at 16 units, `x86-64`, by the instructions of
 each building block in the hot loop (both loops are one function after
