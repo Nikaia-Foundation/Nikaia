@@ -204,3 +204,213 @@ fn a_cloned_get_with_a_fallback_runs() {
     );
     assert_eq!(String::from_utf8_lossy(&run.stdout), "x ? 1 y y\n");
 }
+
+/// Runs `source` as `main.nika` and returns what it printed and the lowering.
+fn run_735(name: &str, source: &str) -> (String, String) {
+    let dir = common::scratch_dir(name);
+    std::fs::write(dir.join("main.nika"), source).expect("the source");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .arg("run")
+        .arg("main.nika")
+        .output()
+        .expect("the nikaia binary runs");
+    let lower = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .arg("lower")
+        .arg("main.nika")
+        .output()
+        .expect("the nikaia binary lowers");
+    assert!(
+        lower.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lower.stderr)
+    );
+    let lowered = std::fs::read_to_string(dir.join("main.rs")).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    (String::from_utf8_lossy(&run.stdout).into_owned(), lowered)
+}
+
+/// #735 (1): a parameter only used as a map's key is no source of the result,
+/// so `resolve` keeps nothing for its owned `k`.
+#[test]
+fn a_key_parameter_is_no_source_of_the_result() {
+    let (out, lowered) = run_735(
+        "key-no-source",
+        r#"use std::collections
+
+struct C {
+    pub sig: String?,
+}
+
+struct R {
+    pub key: String,
+    pub c: ref C,
+}
+
+fn find(m: ref collections::HashMap[String, C], key: String) -> ref C? sync {
+    return m[key]
+}
+
+fn resolve(m: ref collections::HashMap[String, C], name: String) -> R? sync {
+    let k = f"{name}::new"
+    let c: ref C = find(m, k) ?? return null
+    return R { key: k.clone(), c: c }
+}
+
+fn main() {
+    let mut m: collections::HashMap[String, C] = collections::HashMap()
+    m.insert("a::new", C { sig: "s" })
+    let r = resolve(m, "a") ?? return
+    let s = r.c.sig ?? ""
+    print(f"{r.key} {s}")
+}
+"#,
+    );
+    assert_eq!(out, "a::new s");
+    let resolve = lowered
+        .lines()
+        .find(|l| l.starts_with("fn resolve"))
+        .unwrap_or_default();
+    assert!(!resolve.contains("__keep"), "{resolve}");
+}
+
+/// #735 (2): a field read through a `ref` field is borrowed, not moved, kept
+/// or not, past a jump or with a fallback.
+#[test]
+fn a_field_through_a_ref_field_is_borrowed() {
+    let (out, _) = run_735(
+        "through-ref-field",
+        r#"struct S {
+    pub name: String,
+}
+
+struct C {
+    pub sig: S?,
+    pub text: String?,
+}
+
+struct R {
+    pub c: ref C,
+}
+
+fn wrap(c: ref C) -> R sync {
+    return R { c: c }
+}
+
+fn name_of(r: ref R) -> String? sync {
+    let s = r.c.sig ?? return null
+    return s.name.clone()
+}
+
+fn text_of(r: ref R) -> String sync {
+    return (r.c.text ?? "").clone()
+}
+
+fn text_or_null(r: ref R) -> String? sync {
+    let t = r.c.text ?? return null
+    return f"<{t}>"
+}
+
+fn local_name(c: ref C) -> String? sync {
+    let found = wrap(c)
+    let s = found.c.sig ?? return null
+    return s.name.clone()
+}
+
+fn find(c: ref C) -> R? sync {
+    return wrap(c)
+}
+
+fn opt_name(c: ref C) -> String? sync {
+    let found = find(c) ?? return null
+    let s = found.c.sig ?? return null
+    let t = found.c.text ?? ""
+    return f"{s.name}{t}"
+}
+
+fn main() {
+    let c = C { sig: S { name: "n" }, text: f"t{1}" }
+    let r = wrap(c)
+    let a = name_of(r) ?? "-"
+    let b = text_of(r)
+    let d = text_or_null(r) ?? "-"
+    let e = local_name(c) ?? "-"
+    let g = opt_name(c) ?? "-"
+    print(f"{a} {b} {d} {e} {g}")
+}
+"#,
+    );
+    assert_eq!(out, "n t1 <t1> n nt1");
+}
+
+/// #735: a chain of map reads past a jump binds a view, and a set of numbers
+/// pins the type of a name it is asked for.
+#[test]
+fn a_chained_map_read_and_a_numbered_key_run() {
+    let (out, _) = run_735(
+        "chained-read",
+        r#"use std::collections
+
+struct S {
+    pub name: String,
+}
+
+struct C {
+    pub sig: S?,
+}
+
+fn one(m: ref collections::HashMap[String, C], k: String) -> String? sync {
+    let c = m[k] ?? return null
+    let s = c.sig ?? return null
+    return s.name.clone()
+}
+
+fn two(m: ref collections::HashMap[String, C], n: ref collections::HashMap[String, C], k: String) -> String? sync {
+    let c = m[k] ?? n[k] ?? return null
+    let s = c.sig ?? return null
+    return s.name.clone()
+}
+
+fn main() {
+    let mut m: collections::HashMap[String, C] = collections::HashMap()
+    m.insert("a", C { sig: S { name: "n" } })
+    let n: collections::HashMap[String, C] = collections::HashMap()
+    let a = one(m, "a") ?? "-"
+    let b = two(n, m, "a") ?? "-"
+    print(f"{a} {b}")
+}
+"#,
+    );
+    assert_eq!(out, "n n");
+    let (out, _) = run_735(
+        "numbered-key",
+        r#"use std::collections
+
+fn count(s: ref collections::BTreeSet[i64], n: i64) -> i64 sync {
+    let mut hits = 0
+    let mut position = 0
+    for _ in 0..<n {
+        if s.contains(position) {
+            hits += 1
+        }
+        position += 1
+    }
+    return hits
+}
+
+fn main() {
+    let mut s: collections::BTreeSet[i64] = collections::BTreeSet()
+    s.insert(1)
+    s.insert(3)
+    print(f"{count(s, 5)}")
+}
+"#,
+    );
+    assert_eq!(out, "2");
+}

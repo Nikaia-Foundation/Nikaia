@@ -5247,9 +5247,13 @@ fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, 
     let variant = callee.is_some() && a_variant(&named, ask);
     let mut out: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     let mut by_args: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
+    let borrowed = borrowed_positions(&named, ask);
+    let mut position = 0;
     for arg in args.iter() {
         let of = origins_of(arg, ask, holes_of, unaliased, walk);
-        if !(variant && is_the_buffer(arg, ask, &walk)) { add_all(&of, &mut by_args); }
+        let lent = borrowed.is_empty() || borrowed.contains(&position);
+        if lent && !(variant && is_the_buffer(arg, ask, &walk)) { add_all(&of, &mut by_args); }
+        position += 1;
     }
     if callee.is_some() {
         let mut owned = false;
@@ -5266,6 +5270,21 @@ fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, 
         if owned { return out; }
     }
     add_all(&by_args, &mut out);
+    out
+}
+
+fn borrowed_positions(named: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<i64> {
+    let mut out: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let contract = match *nikaia_std::index::get(&ask.own.functions, named) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, named) { Some(__nikaia_value) => __nikaia_value, None => return out } };
+    if contract.borrows.is_empty() { return out; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let mut position = 0;
+    for (name, _) in signature.params.iter() {
+        let dotted = format!("{}.", name);
+        for b in contract.borrows.iter() { if b == name || b.starts_with(&dotted) { out.insert(position); } }
+        position += 1;
+    }
+    if out.is_empty() { out.insert(-1); }
     out
 }
 
@@ -17514,6 +17533,45 @@ fn check_core_ops_lent_root(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_ops_behind_a_view(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Field { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            if state.a_lent_let(world, base) { return true; }
+            let on = match check_core_ops_place_type(state, world, base) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            on.is_a_view() || check_core_ops_behind_a_view(state, world, base)
+        },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_place_type(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &Expr) -> Option<Ty> {
+    match place {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local: CheckLocal = match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(local.ty.clone())
+        },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let on = match check_core_ops_place_type(state, world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let owner = match on {
+                Ty::Named { ref name, .. } => name.to_owned(),
+                _ => return None,
+            };
+            let fields = match state.fields_of(world, &owner) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let member = world.words.resolve(name);
+            for field in fields.iter() { if field.name == member { return Some(field.ty.clone()); } }
+            None
+        },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_ops_plain_text(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == TEXT },
@@ -17623,9 +17681,14 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     let nullable = check_core_ops_nullable(&left);
     let inner = check_core_ops_inside(&left);
     let place = check_core_ops_place(value);
-    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, &inner.unseen()) && check_core_ops_lent_root(&state, world, value) {
+    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, &inner.unseen()) && (check_core_ops_lent_root(&state, world, value) || check_core_ops_behind_a_view(&state, world, value)) {
         if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned()); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".to_owned()); }
         return view_of_type(&inner);
+    }
+    if place && nullable && check_core_ops_plain_text(&inner) && check_core_ops_lit_str(fallback) && check_core_ops_behind_a_view(&state, world, value) {
+        state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned());
+        state.facts.view_fallbacks.insert(id_of(fallback) as i64);
+        return check_core_ops_view("str");
     }
     if place {
         let opened: Option<String> = state.a_coalesce_that_may_lend(world, &left, fallback, &other);
@@ -18863,7 +18926,7 @@ fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_
 // this was written - see `contracts::sync`.
 fn check_core_stmt_read_through_a_jump(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
-        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_an_index(read) && state.jumps(world, fallback) },
+        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_an_index(read) && (state.jumps(world, fallback) || check_core_stmt_read_through_a_jump(state, world, fallback)) },
         _ => false,
     }
 }
@@ -27661,7 +27724,7 @@ impl CheckState {
             _ => { },
         }
         let node = id_of(&given) as i64;
-        if ty.is_unknown() && !a_number {
+        if ty.is_unknown() && !a_number && !check_reads_keyed_by_numbers(on) {
             let added = self.facts.lookup_keys.insert(node);
             return;
         }
@@ -27741,6 +27804,19 @@ fn check_reads_keyed_by_views(on: &Ty) -> bool {
             let base = type_last_segment(name);
             let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set";
             keyed && !args.is_empty() && (*nikaia_std::index::get(&args, 0)).is_a_view() && names_text(nikaia_std::index::get(&args, 0))
+        },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_reads_keyed_by_numbers(on: &Ty) -> bool {
+    match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name);
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set";
+            keyed && !args.is_empty() && check_copied(nikaia_std::index::get(&args, 0))
         },
         _ => false,
     }
@@ -31836,7 +31912,7 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
         }
         let mut line: i64 = low;
         if generated >= end { line = line + moved; }
-        if !placed.contains_key(nikaia_std::index::AsKey::as_key(&line)) { placed.insert(line, CrRow { line, unit, byte: at }); }
+        if !placed.contains_key(&line) { placed.insert(line, CrRow { line, unit, byte: at }); }
     }
     let mut table: String = String::from("const __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[\n");
     for (line, row) in placed.iter() {
@@ -34733,8 +34809,8 @@ fn emit_call_pausing_entry(facts: &CheckFacts, args: &[Expr]) -> (i64, String) {
         Expr::Closure { .. } => node_key(&last),
         _ => -1,
     };
-    if key < 0 || !facts.pausing_lambdas.contains_key(nikaia_std::index::AsKey::as_key(&key)) { return (0, "".to_owned()); }
-    let entry = match facts.pausing_lambdas.get(nikaia_std::index::AsKey::as_key(&key)) { Some(__nikaia_value) => __nikaia_value, None => return (0, "".to_owned()) };
+    if key < 0 || !facts.pausing_lambdas.contains_key(&key) { return (0, "".to_owned()); }
+    let entry = match facts.pausing_lambdas.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return (0, "".to_owned()) };
     match entry.clone() {
         FactPausing::Function(name) => (1, name),
         FactPausing::Lent(name) => (2, name),
@@ -47230,7 +47306,7 @@ fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget, work: &mu
         let found = lg_search(indexed, &branch, budget, work);
         match found {
             LgSearched::Done { ref certificate, ref relies } => {
-                if !relies.contains(nikaia_std::index::AsKey::as_key(&disjunction)) { return LgSearched::Done { certificate: certificate.clone(), relies: relies.to_owned() }; }
+                if !relies.contains(&disjunction) { return LgSearched::Done { certificate: certificate.clone(), relies: relies.to_owned() }; }
                 for one in relies.iter() {
                     let one = nikaia_std::num::value(one);
                     if one != disjunction { reliance.insert(one); }

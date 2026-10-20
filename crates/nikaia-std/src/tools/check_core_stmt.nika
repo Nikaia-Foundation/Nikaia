@@ -75,9 +75,10 @@ fn check_core_stmt_got(state: ref CheckState, world: ref CheckWorld, value: ref 
 }
 
 /// A read through the brackets whose fallback jumps.
+// A chain `a[k] ?? b[k] ?? return` is one too (#735).
 fn check_core_stmt_read_through_a_jump(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
-        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_an_index(read) && state.jumps(world, fallback),
+        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_an_index(read) && (state.jumps(world, fallback) || check_core_stmt_read_through_a_jump(state, world, fallback)),
         else => false,
     }
 }

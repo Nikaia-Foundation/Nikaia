@@ -247,6 +247,7 @@ pub mod runtime {
     clippy::only_used_in_recursion,
     clippy::too_many_arguments,
     clippy::useless_format,
+    clippy::map_entry,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):

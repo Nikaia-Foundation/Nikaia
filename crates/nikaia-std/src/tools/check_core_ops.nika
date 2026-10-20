@@ -451,6 +451,47 @@ fn check_core_ops_lent_root(state: ref CheckState, world: ref CheckWorld, value:
     return state.lent_here(root) || state.got_past_a_jump.contains(root)
 }
 
+/// **A place reached through a field that is a view** (#735):
+/// `found.c.sig` where `c` is a `ref C` is lent, however `found` is held.
+fn check_core_ops_behind_a_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Field { base, .. } => {
+            if state.a_lent_let(world, base) {
+                return true
+            }
+            let on = check_core_ops_place_type(state, world, base) ?? return false
+            on.is_a_view() || check_core_ops_behind_a_view(state, world, base)
+        },
+        else => false,
+    }
+}
+
+/// The type of a name or a chain of fields, where the declarations know it.
+fn check_core_ops_place_type(state: ref CheckState, world: ref CheckWorld, place: ref Expr) -> Ty? sync {
+    return match place {
+        Expr::Variable(name, _) => {
+            let local: CheckLocal = state.binding(world.words.resolve(name)) ?? return null
+            local.ty.clone()
+        },
+        Expr::Field { base, name, .. } => {
+            let on = check_core_ops_place_type(state, world, base) ?? return null
+            let owner = match on {
+                Ty::Named { name, .. } => name.clone(),
+                else => return null,
+            }
+            let fields = state.fields_of(world, owner) ?? return null
+            let member = world.words.resolve(name)
+            for field in fields {
+                if field.name == member {
+                    return field.ty.clone()
+                }
+            }
+            null
+        },
+        else => null,
+    }
+}
+
 /// Owned text, plainly: `String` with nothing around it.
 fn check_core_ops_plain_text(ty: ref Ty) -> bool sync {
     return match ty {
@@ -582,13 +623,20 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     let inner = check_core_ops_inside(left)
     let place = check_core_ops_place(value)
     // **A loan on the left and a jump on the right is a view** (ADR-279 D10).
-    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && check_core_ops_lent_root(state, world, value) {
+    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && (check_core_ops_lent_root(state, world, value) || check_core_ops_behind_a_view(state, world, value)) {
         if check_core_ops_plain_text(inner) {
             state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".clone())
         } else {
             state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".clone())
         }
         return view_of_type(inner)
+    }
+    // **Text behind a field that is a view is read, never taken** (#735):
+    // `r.c.text ?? ""` is a view of it, kept or not.
+    if place && nullable && check_core_ops_plain_text(inner) && check_core_ops_lit_str(fallback) && check_core_ops_behind_a_view(state, world, value) {
+        state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".clone())
+        state.facts.view_fallbacks.insert(id_of(fallback) as i64)
+        return check_core_ops_view("str")
     }
     // **A name on the left of `??` is taken where the answer is kept and lent
     // where it is only read** (ADR-279 D5).

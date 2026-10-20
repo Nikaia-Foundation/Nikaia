@@ -1134,11 +1134,17 @@ fn call_origins(func: ref Expr, args: ref Vec[Expr], ask: ref BufferAsk, holes_o
     let variant = callee != null && a_variant(named, ask)
     let mut out: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     let mut by_args: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
+    let borrowed = borrowed_positions(named, ask)
+    let mut position = 0
     for arg in args {
         let of = origins_of(arg, ask, holes_of, unaliased, walk)
-        if !(variant && is_the_buffer(arg, ask, walk)) {
+        // **Only what the result borrows from is a source** (#735): a
+        // parameter used as a map key or only compared hands nothing back.
+        let lent = borrowed.is_empty() || borrowed.contains(position)
+        if lent && !(variant && is_the_buffer(arg, ask, walk)) {
             add_all(of, by_args)
         }
+        position += 1
     }
     if callee != null {
         let mut owned = false
@@ -1161,6 +1167,31 @@ fn call_origins(func: ref Expr, args: ref Vec[Expr], ask: ref BufferAsk, holes_o
         }
     }
     add_all(by_args, out)
+    return out
+}
+
+// The positions of the parameters a callee's result borrows from, where its
+// contract names them; empty where it is not known.
+fn borrowed_positions(named: ref String, ask: ref BufferAsk) -> collections::BTreeSet[i64] {
+    let mut out: collections::BTreeSet[i64] = collections::BTreeSet()
+    let contract = ask.own.functions[named] ?? ask.library.functions[named] ?? return out
+    if contract.borrows.is_empty() {
+        return out
+    }
+    let signature = contract.signature ?? return out
+    let mut position = 0
+    for (name, _) in signature.params {
+        let dotted = f"{name}."
+        for b in contract.borrows {
+            if b == name || b.starts_with(dotted) {
+                out.insert(position)
+            }
+        }
+        position += 1
+    }
+    if out.is_empty() {
+        out.insert(-1)
+    }
     return out
 }
 

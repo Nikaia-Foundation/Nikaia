@@ -288,7 +288,10 @@ impl CheckState {
         // it - is written through `AsKey`, which lends a number and passes a
         // view through, since the `&` alone would be wrong for the second.
         let node = id_of(given) as i64
-        if ty.is_unknown() && !a_number {
+        // **Unless the map's own key is a number** (#735): the plain `&`
+        // pins the name to it, where `AsKey` would leave it to the language
+        // below's default.
+        if ty.is_unknown() && !a_number && !check_reads_keyed_by_numbers(on) {
             let added = self.facts.lookup_keys.insert(node)
             return
         }
@@ -399,6 +402,18 @@ fn check_reads_keyed_by_views(on: ref Ty) -> bool sync {
             let base = type_last_segment(name)
             let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set"
             keyed && args.len() > 0 && args[0].is_a_view() && names_text(args[0])
+        },
+        else => false,
+    }
+}
+
+/// Whether a map's or a set's key is a number or another copied scalar.
+fn check_reads_keyed_by_numbers(on: ref Ty) -> bool sync {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name)
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set"
+            keyed && args.len() > 0 && check_copied(args[0])
         },
         else => false,
     }
