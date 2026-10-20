@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1145] — 2026-10-20
+
+**bytes::ByteSet: a buffer searched for a set of bytes at the build's width (ADR-375, built)**
+- `bytes::ByteSet(list)` holds any bytes; `b.find(set; from:)`, `b.find_all(set; from:) -> Seq[i64]` (its own `count`/`nth`/`last`, no position made for a count), `b.split(set)` by text's rules; a set written empty is NK1287; a list of `'…'` handed to a `Vec[u8]` is bytes. The vector code is the new crate `crates/unsafe/byte-blocks` (AVX2 at v3, SSE2 at baseline, words elsewhere).
+
 ## [0.0.1144] — 2026-10-20
 
 **Par::fold, par_fold and a grammar's fold take an in-place step or merge (ADR-372 D9, built)**
