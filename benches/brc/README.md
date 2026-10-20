@@ -89,7 +89,7 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1164 with #695 (the `fast-unsafe.nika` rows 0.0.1162, the `fast.nika` rows 0.0.1166 with #776), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1164 with #695 (the `fast.nika` and `fast-unsafe.nika` rows 0.0.1167 with #776, a set written at `find_all` fixed when compiling and two cuts compared in place), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
@@ -100,13 +100,13 @@ Nikaia 0.0.1164 with #695 (the `fast-unsafe.nika` rows 0.0.1162, the `fast.nika`
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
 | **Nikaia**, `examples/1brc.nika` | **244.0** | **1.12** | **222.9** | **1.12** | **642** |
 | Nikaia, overflow checks off | 243.0 | 1.12 | 222.9 | 1.13 |  |
-| **Nikaia**, `fast.nika` | **123.8** | **0.94** | **124.1** | **0.93** | **1414** |
-| Nikaia, `fast.nika`, overflow checks off | 117.4 | 0.94 | 122.3 | 0.94 |  |
-| **Nikaia**, `fast-unsafe.nika`, assumes believed | **113.3** | **0.94** | **113.5** | **0.94** | **1569** |
-| Nikaia, `fast-unsafe.nika`, assumes checked | 187.7 | 1.51 | 187.9 | 1.51 |  |
+| **Nikaia**, `fast.nika` | **115.7** | **0.93** | **124.4** | **0.93** | **1414** |
+| Nikaia, `fast.nika`, overflow checks off | 108.5 | 0.93 | 109.6 | 0.92 |  |
+| **Nikaia**, `fast-unsafe.nika`, assumes believed | **103.9** | **0.93** | **104.0** | **0.93** | **1569** |
+| Nikaia, `fast-unsafe.nika`, assumes checked | 178.4 | 1.00 | 182.9 | 1.09 |  |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 |  |
-| Nikaia, `fast.nika`, `x86-64-v3` | 116.4 | 0.94 | 116.6 | 1.03 |  |
-| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 99.1 | 0.94 | 99.4 | 0.94 |  |
+| Nikaia, `fast.nika`, `x86-64-v3` | 112.6 | 0.93 | 116.5 | 0.93 |  |
+| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 98.1 | 0.93 | 98.2 | 0.93 |  |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 4 threads | 133.7 | 0.47 | 131.3 | 0.47 | 12907 |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 1 thread | 133.1 | 0.47 | 130.8 | 0.48 | |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), `x86-64-v3`, 4 threads | 93.3 | 0.69 | 91.5 | 0.30 | |
@@ -151,14 +151,16 @@ counts, as many within 0.3 % without its overflow checks, and 14 % more at
 the program. Where the difference lies is below.
 
 `fast-unsafe.nika`, its assumes believed, runs 10 % fewer instructions than
-`fast.nika` and 23 % fewer than AI variant 2 at both unit counts: its assumes
-drop the checks `fast.nika` still makes (the table below), the `.` guard as
-well, and the ranges they state let LLVM simplify the temperature's
-arithmetic. `fast.nika` itself runs 15 % fewer than AI variant 2, keeping only
-the checks the table below lists. Against beowolx at one thread
-`fast-unsafe.nika` runs 15 % fewer at 1 unit and 13 % fewer at 16, with twice its mispredictions, in an eighth of its tokens; at
-`x86-64-v3` beowolx's SIMD runs 6 % fewer (93.3 on four threads against 99.1, 1 unit). Checked, the
-same file costs 187.7: every assume tested and no check removed.
+`fast.nika` at 1 unit and 16 % fewer at 16, and 30 % fewer than AI variant 2
+at both: its assumes drop the checks `fast.nika` still makes (the table
+below), the `.` guard as well, and the ranges they state let LLVM simplify the
+temperature's arithmetic. `fast.nika` itself runs 22 % fewer than AI variant 2
+at 1 unit and 16 % fewer at 16, keeping only the checks the table below lists.
+Against beowolx at one thread `fast-unsafe.nika` runs 22 % fewer at 1 unit and
+20 % fewer at 16, with twice its mispredictions, in an eighth of its tokens;
+at `x86-64-v3` beowolx's SIMD runs 5 % fewer (93.3 on four threads against
+98.1, 1 unit) and 7 % fewer at 16 units (91.5 against 98.2). Checked, the
+same file costs 178.4: every assume tested and no check removed.
 
 ## Where Nikaia's instructions go
 
