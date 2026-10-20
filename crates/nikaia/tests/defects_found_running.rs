@@ -650,7 +650,9 @@ fn a_lambda_split_over_a_tuple_is_refused() {
 }
 
 /// **A `mut` view parameter handed back** is refused
-/// (`NK1131`): it would be a view of the caller's view. A local walks instead.
+/// (`NK1131`): since 0.0.1125 `mut e: ref E` is `mut e: E` (Part I 6.5), passed
+/// `ref mut`, and handing it back would give away the caller's value. A local
+/// walks instead.
 #[test]
 fn a_mut_view_parameter_handed_back_is_refused() {
     let found = codes(
@@ -666,8 +668,9 @@ fn a_mut_view_parameter_handed_back_is_refused() {
          }\n\
          fn main() {}\n",
     );
-    assert!(
-        !found.is_empty() && found.iter().all(|c| c == "NK1131"),
+    assert_eq!(
+        found.first().map(String::as_str),
+        Some("NK1131"),
         "{found:?}"
     );
 }
