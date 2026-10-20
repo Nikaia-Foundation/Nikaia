@@ -723,7 +723,7 @@ fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: re
     if code_field {
         state.stored_frames.push(CheckStoredCode::empty())
     }
-    let given = check_core_places_given(state, world, host, init.value, field, span)
+    let mut given: Ty = check_core_places_given(state, world, host, init.value, field, span)
     if code_field {
         check_core_places_stored(state, world, host, init.value, f"{name}.{field}")
     }
@@ -745,9 +745,13 @@ fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: re
     state.field_is_reachable(name, held, span)
     let want: Ty = held.ty.clone()
     let mut said: Span = span.clone()
+    // **A field a `with` names is a use, as a literal's is** (ADR-152 D4,
+    // #732): a function of this program put into a field of code is the
+    // closure that calls it, kept.
     if init.value != null {
         let v: ref Expr = init.value ?? return
         said = check_span_at(world, v, span)
+        given = check_core_literal_by_use(state, world, host, given, want, v, span) ?? given
     }
     let pushed = state.findings.len() as i64
     let waiting = state.slots_waiting(span)

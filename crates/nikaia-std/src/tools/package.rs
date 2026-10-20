@@ -18423,7 +18423,7 @@ fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckState, world: &
     if seen.contains(&field) { state.a_field_written_twice(name, &field, span); } else { seen.insert(field.to_owned()); }
     let code_field = state.a_field_holds_code(world, name, &field);
     if code_field { state.stored_frames.push(CheckStoredCode::empty()); }
-    let given = check_core_places_given(state, world, host, (init.value).as_ref(), &field, span);
+    let mut given: Ty = check_core_places_given(state, world, host, (init.value).as_ref(), &field, span);
     if code_field { check_core_places_stored(state, world, host, (init.value).as_ref(), &format!("{}.{}", name, field)); }
     let mut at: i64 = -1;
     let mut i: i64 = 0;
@@ -18445,6 +18445,7 @@ fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckState, world: &
     if init.value.is_some() {
         let v: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         said = check_span_at(world, v, span);
+        given = nikaia_std::index::or(check_core_literal_by_use(state, world, host, &given, &want, v, span), || given.into());
     }
     let pushed = state.findings.len() as i64;
     let waiting = state.slots_waiting(span);

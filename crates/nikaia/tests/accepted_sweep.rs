@@ -61,10 +61,6 @@ const KNOWN: &[(&str, &str)] = &[
     ),
     // Found by this sweep: #732.
     (
-        "895410c570324e0b",
-        "#732 item 2, function_value_errors: `job with { run: worse }` stores a `fn() throws` unwrapped (E0308)",
-    ),
-    (
         "d4e9a97dbeb5f651",
         "#732 item 3, function_value_errors: a `catch` on a `fn() throws` parameter matches the boxed error by variant (E0308)",
     ),

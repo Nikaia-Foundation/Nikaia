@@ -1,0 +1,33 @@
+// #732 item 2: a function put into a field of code by `with` is kept, as a
+// struct literal keeps it.
+enum Bad { Oops }
+impl Error for Bad {
+    fn message(ref self) -> String { "oops" }
+}
+enum Boom { Bang }
+impl Error for Boom {
+    fn message(ref self) -> String { "boom" }
+}
+struct Job { run: fn() throws, name: String }
+fn fail() throws {
+    throw Bad::Oops
+}
+fn worse() throws {
+    throw Boom::Bang
+}
+fn quiet() {
+    println("quiet")
+}
+fn main() {
+    let job = Job { run: fail, name: "first" }
+    let other = job with { run: worse }
+    other.run() catch {
+        match error {
+            Bad::Oops => println("oops")
+            Boom::Bang => println("boom")
+        }
+    }
+    let calm = other with { run: quiet }
+    calm.run() catch { println("never") }
+    println(calm.name)
+}
