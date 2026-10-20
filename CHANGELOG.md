@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1171] — 2026-10-20
+
+**x.low_bits(n)**
+- `u8`, `u32` and `u64` gain `low_bits(n)`: `x` with only its `n` lowest bits kept, none where `n <= 0`, all where `n` is at least the width; the count may be of any integer type, so no count aborts. Lowered branch-free, a mask below the count and a select.
+
 ## [0.0.1170] — 2026-10-20
 
 **a method's precondition is proved at its call**
