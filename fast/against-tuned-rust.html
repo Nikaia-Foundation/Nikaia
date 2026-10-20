@@ -32,17 +32,17 @@ description: >-
         </details>
 
         <details class="limit-details home-code markdown-body" open>
-          <summary>Where we stand: a preliminary comparison (version 0.0.1162)</summary>
+          <summary>Where we stand: a preliminary comparison (version 0.0.1163)</summary>
           <div style="overflow-x:auto">
           <table>
             <thead>
               <tr><th>Program</th><th>Written by</th><th>Instructions per row, <code>x86-64</code></th><th>Instructions per row, <code>x86-64-v3</code></th><th>Mispredicted branches per row</th><th>Tokens</th></tr>
             </thead>
             <tbody>
-              <tr><td><strong>Nikaia, <code>fast-unsafe.nika</code></strong>: <code>fast.nika</code> with <code>unsafe { assume(…) }</code>, the claims believed</td><td>this project</td><td><strong>116.7</strong></td><td><strong>111.0</strong></td><td><strong>0.94</strong></td><td><strong>1576</strong></td></tr>
+              <tr><td><strong>Nikaia, <code>fast-unsafe.nika</code></strong>: <code>fast.nika</code> with <code>unsafe { assume(…) }</code>, the claims believed</td><td>this project</td><td><strong>113.5</strong></td><td><strong>99.4</strong></td><td><strong>0.94</strong></td><td><strong>1569</strong></td></tr>
+              <tr><td><strong>Nikaia, <code>fast.nika</code></strong>: safe, every check proved or kept</td><td>this project</td><td><strong>125.7</strong></td><td><strong>117.2</strong></td><td><strong>0.94</strong></td><td><strong>1394</strong></td></tr>
               <tr><td><a href="https://github.com/beowolx/fast_1brc">beowolx/fast_1brc</a></td><td>a person, all cores</td><td>131.3</td><td>91.5</td><td>0.47</td><td>12907</td></tr>
               <tr><td>AI variant 2</td><td>an AI assistant, several measured rounds</td><td>147.4</td><td>132.7</td><td>0.38</td><td>1775</td></tr>
-              <tr><td><strong>Nikaia, <code>fast.nika</code></strong></td><td>this project</td><td><strong>163.6</strong></td><td><strong>152.0</strong></td><td><strong>0.95</strong></td><td><strong>1353</strong></td></tr>
               <tr><td><a href="https://github.com/automataIA/1brc-rs">automataIA/1brc-rs</a> <code>v16</code>, derived and corrected</td><td>a person, all cores</td><td>207.9</td><td>197.7</td><td>0.57</td><td>at most 3963</td></tr>
               <tr><td><a href="https://github.com/automataIA/1brc-rs">automataIA/1brc-rs</a> <code>v20_safe</code></td><td>a person, all cores</td><td>216.1</td><td>195.3</td><td>1.60</td><td>at most 5961</td></tr>
               <tr><td><strong>Nikaia, <code>examples/1brc.nika</code></strong> (the plain program above)</td><td>this project</td><td><strong>231.2</strong></td><td></td><td><strong>1.12</strong></td><td><strong>642</strong></td></tr>
@@ -63,19 +63,19 @@ description: >-
               <tr><th>Open item</th><th>Issue</th><th><code>fast.nika</code>, instructions per row</th><th><code>1brc.nika</code>, instructions per row</th><th>State</th></tr>
             </thead>
             <tbody>
-              <tr><td>Checks proved across the turns of a loop: the name's word reads, the long-name slice, the separator's distance</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/767">#767</a></td><td>built: the switch <code>prove-through-loops:on</code>; on its own it removes one check per piece, none per row. The rows wait for #714 and a bound on the read position across turns</td><td>–</td><td>built</td></tr>
-              <tr><td>A type's rule as a fact: the table's index</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/714">#714</a></td><td>about −16; with it #767 can carry the index through the probe</td><td>–</td><td>built in part</td></tr>
+              <tr><td>Checks proved across the turns of a loop: the name's word reads, the long-name slice, the separator's distance</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/767">#767</a></td><td>built, together with #714: with the bounds below, it proves the name's word reads, the separator's distance and the probe's index</td><td>–</td><td>built</td></tr>
+              <tr><td>A type's rule as a fact: the table's index</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/714">#714</a></td><td>built in part: <code>fast.nika</code> 163.6 → 125.7 with #767. Still checked a row: the table index after <code>slot_of</code> (needs its postcondition read) and the long-name slice (needs a precondition on <code>slot_of</code>)</td><td>–</td><td>built in part</td></tr>
               <tr><td>Counters in a table proved without a check</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/770">#770</a></td><td>about −1 to −2</td><td>–</td><td>to be decided</td></tr>
               <tr><td>No UTF-8 check of the whole file</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/664">#664</a></td><td>–</td><td>about −10</td><td>open</td></tr>
               <tr><td>The hot loop's inlining independent of the codegen-unit partition</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/695">#695</a></td><td>–</td><td>about −40 at 1 unit, 0 at 16</td><td>open</td></tr>
               <tr><td>The rest of the vector API, <code>crc32c</code> among it</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a></td><td>not estimated yet</td><td>–</td><td>left open on purpose</td></tr>
-              <tr><td><code>unsafe { assume(…) }</code>: an unsafe <code>fast.nika</code> beside the safe one</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/772">#772</a></td><td>a row of its own: 116.7, the bound for what the safe program can reach by proving</td><td>–</td><td>built</td></tr>
+              <tr><td><code>unsafe { assume(…) }</code>: an unsafe <code>fast.nika</code> beside the safe one</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/772">#772</a></td><td>a row of its own: 113.5, the bound for what the safe program can reach by proving</td><td>–</td><td>built</td></tr>
               <tr><td>The authors' AVX-512 builds, counted on another machine</td><td></td><td colspan="2">rows of their own</td><td>waits for the machine</td></tr>
-              <tr><td><strong>Expected result</strong></td><td></td><td><strong>about 125 to 130</strong> (today 163.6; unsafe 116.7)</td><td><strong>about 221</strong> at 16 units (today 231.2)</td><td>estimate</td></tr>
+              <tr><td><strong>Expected result</strong></td><td></td><td><strong>reached: 125.7</strong> (unsafe 113.5)</td><td><strong>about 221</strong> at 16 units (today 231.2)</td><td>estimate</td></tr>
             </tbody>
           </table>
           </div>
-          <p>The savings are estimates, not measurements: each check was removed by hand from the generated Rust at version 0.0.1150 and the program counted again. They overlap, so they do not simply add up; removing all of them at once gave 132.0 for <code>fast.nika</code> then, before <code>@inline</code> saved another seven. Each row is counted again when it is built. Without checks, <code>fast-unsafe.nika</code> does 11 % less work than the fastest human-written program at <code>x86-64</code>. At <code>x86-64-v3</code> that program is at 91.5, 16 % below <code>fast-unsafe.nika</code>: closing that gap needs more than removing checks, and where it lies is still to be analysed.</p>
+          <p>The savings are estimates, not measurements: each check was removed by hand from the generated Rust at version 0.0.1150 and the program counted again. They overlap, so they do not simply add up; removing all of them at once gave 132.0 for <code>fast.nika</code> then, before <code>@inline</code> saved another seven. Each row is counted again when it is built. At <code>x86-64</code> the safe <code>fast.nika</code> now does 4 % less work than the fastest human-written program and 15 % less than AI variant 2; the unsafe one 14 % less than the human program. At <code>x86-64-v3</code> the human program is at 91.5, 8 % below <code>fast-unsafe.nika</code>: about 16 of its gain from <code>x86-64</code> to <code>x86-64-v3</code> is a hash that collides less once crc32 is there, about 22 code it compiles only for that level, above all a temperature parse that reads two rows in one AVX2 vector. Nikaia has no vector types yet; that is a decision still to take.</p>
           </dd>
         </dl>
       </div>
