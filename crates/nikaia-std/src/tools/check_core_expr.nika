@@ -368,6 +368,16 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
         state.stored_code.insert(AS_VALUE.clone(), entry)
         return as_value ?? Ty::Unknown
     }
+    // **`NK1230`: a type where a value belongs** (Part II 10.3, #704): a
+    // struct or an enum of the program with no constructor names no value.
+    if state.structs.contains_key(name) || state.enums.contains_key(name) {
+        let mut help: String = f"Build one with `{name} {{ … }}`, or give `{name}` a constructor, `pub fn() -> {name}`, in its `impl`."
+        if state.enums.contains_key(name) {
+            help = f"Name one of its variants: `{name}::…`."
+        }
+        state.findings.push(check_refusal("NK1230", span, f"`{name}` is a type, not a value.", ["A type stands for a value only through its constructor, and this one has none.".clone()], help))
+        return Ty::Unknown
+    }
     // **The specific message wins** (ADR-277).
     if !state.withdrawn_automatic_name(name, span) {
         state.nothing_declares_it(world, expr, span)

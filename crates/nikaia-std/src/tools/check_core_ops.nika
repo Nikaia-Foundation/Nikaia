@@ -495,6 +495,30 @@ fn check_core_ops_own_type(inner: ref Ty) -> bool sync {
     }
 }
 
+/// **Which of a number, text, a `bool` and a `char` a type is**, or `""` for
+/// any other type: two of these are never one another (#704).
+fn check_core_ops_kind(ty: ref Ty) -> String {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if args.len() > 0 {
+                return ""
+            }
+            if a_number_name(name) {
+                return "number"
+            }
+            let base = check_core_ops_base(name)
+            if base == "String" || base == "str" {
+                return "text"
+            }
+            if base == "bool" || base == "char" {
+                return base
+            }
+        },
+        else => {},
+    }
+    return ""
+}
+
 /// `bool`, `char`, `scalar`, `String` or `str`.
 fn check_core_ops_plain_base(base: ref String) -> bool {
     return base == "bool" || base == "char" || base == "scalar" || base == "String" || base == "str"
@@ -629,6 +653,24 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
             state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is a number, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.".clone()], f"Write a `{held}` as the fallback."))
         } else if !other.is_unknown() && !check_core_ops_nullable(other) {
             state.expect_type(world, other, inner, span, "let", fn(found, wanted) { f"The fallback of this `??` is `{found}`, but the left side holds `{wanted}`." })
+        }
+    }
+    // **And beside a number, text, a `bool` or a `char`** (Part I 3.5, #704):
+    // a fallback of another of these is not made into the one the left side
+    // holds, `s ?? 5` on a `String?`.
+    if nullable && !from_a_map && !state.jumps(world, fallback) {
+        let held_kind = check_core_ops_kind(inner)
+        let mut given_kind = check_core_ops_kind(other)
+        if check_core_ops_a_number_written(fallback) {
+            given_kind = "number".clone()
+        }
+        if held_kind != "" && given_kind != "" && held_kind != given_kind {
+            let held = inner.text()
+            let mut given: String = f"`{other.text()}`"
+            if check_core_ops_a_number_written(fallback) {
+                given = "a number".clone()
+            }
+            state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is {given}, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5).".clone()], f"Write a `{held}` as the fallback."))
         }
     }
     // **`a ?? b` where `b` may be `null` too is a `T?`** (Part I 3.5).

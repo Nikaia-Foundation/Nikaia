@@ -1713,6 +1713,30 @@ impl<'a> Checker<'a> {
                 labels: Vec::new(),
             });
         }
+        // **An `if` without `else` as the last statement hands nothing back
+        // where it is not taken** (#704): `fn f(x: i64) -> i64 { if x > 0 {
+        // return 1 } }` falls off its end on the other path.
+        if let (Some(expected), Some(at)) = (&expected, tail_span.filter(|_| ends))
+            && let Some(Stmt::Expr(value)) = body.stmts.last().map(|s| &s.node)
+            && an_end_that_hands_nothing(value)
+        {
+            let want = expected.text();
+            self.s.findings.push(Finding {
+                severity: Severity::Error,
+                code: "NK1104".to_string(),
+                span: at,
+                message: format!(
+                    "This function returns `()` where this `if` is not taken, but it's declared to return `{want}`."
+                ),
+                notes: vec![
+                    "An `if` without `else` hands nothing back when its condition is false, and nothing comes after it.".to_string(),
+                ],
+                help: Some(format!(
+                    "Add an `else` that hands back a `{want}`, or a `return` after the `if`."
+                )),
+                labels: Vec::new(),
+            });
+        }
         if let (Some(expected), Some(span)) = (&expected, tail_span.filter(|_| ends)) {
             // **A tail is a `return` written without the word**, so it owes the
             // same `&`: `fn text(ref self) -> ref String { self.text }` and the
@@ -2837,6 +2861,26 @@ pub fn byte_literal(written: &str) -> String {
 /// **What a table about an expression is keyed on**: the id the parser gave the
 /// node ([ADR-340](../../docs/specification/adr/adr-340.md) D4), which a clone
 /// keeps and an address does not.
+/// Whether an `if` at the end of a body has a path that hands nothing back: an
+/// `if` without `else`, at the end of the chain or of one of its branches.
+fn an_end_that_hands_nothing(expr: &Expr) -> bool {
+    fn tail_hands_nothing(block: &crate::ast::Block) -> bool {
+        matches!(block.stmts.last().map(|s| &s.node), Some(Stmt::Expr(value)) if an_end_that_hands_nothing(value))
+    }
+    match expr {
+        Expr::If {
+            then_branch,
+            else_branch,
+            ..
+        } => match else_branch {
+            None => true,
+            Some(other) => tail_hands_nothing(then_branch) || tail_hands_nothing(other),
+        },
+        Expr::Block(block, _) => tail_hands_nothing(block),
+        _ => false,
+    }
+}
+
 /// Whether every end of an `if`, a `match` or a block is a value, so that it
 /// can be put into `Some`: an end that jumps away (`return`, `break`,
 /// `continue`, `throw`) or a block that ends in a statement is none.

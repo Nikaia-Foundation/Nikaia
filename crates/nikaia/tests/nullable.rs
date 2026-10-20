@@ -2027,3 +2027,37 @@ fn main() {
         "-1 10 3 10\n0 5\n-1 7 9\n"
     );
 }
+
+/// **A fallback of another kind than the left side holds is `NK1103`** (Part I
+/// 3.5, #704): a number beside text, text beside a number, a `bool` beside
+/// either. A fallback of the same kind, a `null` and a jump are not refused.
+#[test]
+fn a_fallback_of_another_kind_is_refused() {
+    for source in [
+        "fn main() {\n    let s: String? = null\n    let t = s ?? 5\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let n: i64? = null\n    let t = n ?? \"none\"\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let b: bool? = null\n    let t = b ?? 0\n    println(f\"{t}\")\n}",
+    ] {
+        let found = findings(source);
+        assert!(
+            found.iter().any(
+                |f| f.code == "NK1103" && f.message.starts_with("The fallback of this `??` is")
+            ),
+            "{source}\n{:#?}",
+            found.iter().map(|f| &f.message).collect::<Vec<_>>()
+        );
+    }
+    for source in [
+        "fn main() {\n    let s: String? = null\n    let t = s ?? \"none\"\n    println(t)\n}",
+        "fn main() {\n    let n: i64? = null\n    let t = n ?? 5\n    println(f\"{t}\")\n}",
+        "fn main() {\n    let x: f64? = null\n    let t = x ?? 1\n    println(f\"{t}\")\n}",
+        "fn f(s: String?) -> i64 {\n    let t = s ?? return 0\n    return t.len()\n}\nfn main() { println(f\"{f(null)}\") }",
+    ] {
+        let found = findings(source);
+        assert!(
+            !found.iter().any(|f| f.code == "NK1103"),
+            "{source}\n{:#?}",
+            found.iter().map(|f| &f.message).collect::<Vec<_>>()
+        );
+    }
+}

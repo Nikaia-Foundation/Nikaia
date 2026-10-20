@@ -10902,9 +10902,13 @@ impl CheckState {
     pub fn tuple_let(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
         if written { self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.".to_owned(), vec!["The names are taken apart by position, and one type can't say which name it belongs to.".to_owned()], Some("Remove the type, or bind one name and read the parts from it.".to_owned()))); }
         let mut parts = binds_tuple_parts(found, names.len() as i64);
+        if shape.is_empty() { let refused = self.a_tuple_pattern_that_does_not_fit(found, names.len() as i64, "A `let`", span); }
         if !shape.is_empty() {
             let mut width: i64 = 1;
-            if *nikaia_std::index::get(&shape, 0) > 0 { width = *nikaia_std::index::get(&shape, 0); }
+            if *nikaia_std::index::get(&shape, 0) > 0 {
+                width = *nikaia_std::index::get(&shape, 0);
+                let refused = self.a_tuple_pattern_that_does_not_fit(found, width, "A `let`", span);
+            }
             parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len() as i64, "A `let`", span);
         }
         let at = span.start as i64;
@@ -10918,6 +10922,23 @@ impl CheckState {
             self.bind_with(bound, (*nikaia_std::index::get(&parts, (index) as usize)).clone(), None);
         }
         Ty::Tuple(vec![])
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_tuple_pattern_that_does_not_fit(&mut self, found: &Ty, width: i64, site: &str, span: &Span) -> bool {
+        let what: String = match self.binds_no_tuple_of(found, width) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.findings.push(check_refusal("NK1283", span, format!("{} takes {} parts apart, but the value is {}.", site, width, what), vec!["A tuple pattern names one part of a tuple each, so the value has to be a tuple of exactly that many.".to_owned()], Some("Bind one name and read the value from it, or write as many names as the tuple has parts.".to_owned())));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn binds_no_tuple_of(&self, found: &Ty, width: i64) -> Option<String> {
+        match found {
+            Ty::Tuple(parts) => { if !parts.is_empty() && (parts.len() as i64) != width { return Some(format!("a tuple of {}", parts.len() as i64)); } },
+            Ty::Named { name, .. } => { if self.structs.contains_key(name) || self.enums.contains_key(name) || binds_a_scalar(name) { return Some(format!("a `{}`", name)); } },
+            _ => { },
+        }
+        None
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -10940,6 +10961,7 @@ impl CheckState {
             at += 1;
             let part: Ty = nikaia_std::index::or(pending.pop(), || Ty::Unknown);
             if width == 0 { out.push(part); } else {
+                let refused = self.a_tuple_pattern_that_does_not_fit(&part, width, site, span);
                 let inner = binds_tuple_parts(&part, width);
                 let mut back = width;
                 while back > 0 {
@@ -11031,6 +11053,8 @@ impl CheckState {
         };
     }
 }
+
+fn binds_a_scalar(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "String" }
 
 fn binds_tuple_parts(found: &Ty, count: i64) -> Vec<Ty> {
     match found {
@@ -15212,6 +15236,12 @@ fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckW
         state.stored_code.insert(AS_VALUE.to_owned(), entry);
         return nikaia_std::index::or(as_value, || Ty::Unknown);
     }
+    if state.structs.contains_key(&name) || state.enums.contains_key(&name) {
+        let mut help: String = format!("Build one with `{} {{ … }}`, or give `{}` a constructor, `pub fn() -> {}`, in its `impl`.", name, name, name);
+        if state.enums.contains_key(&name) { help = format!("Name one of its variants: `{}::…`.", name); }
+        state.findings.push(check_refusal("NK1230", span, format!("`{}` is a type, not a value.", name), vec!["A type stands for a value only through its constructor, and this one has none.".to_owned()], Some(help)));
+        return Ty::Unknown;
+    }
     if !state.withdrawn_automatic_name(&name, span) { state.nothing_declares_it(world, expr, span); }
     Ty::Unknown
 }
@@ -17464,6 +17494,20 @@ fn check_core_ops_own_type(inner: &Ty) -> bool {
     }
 }
 
+fn check_core_ops_kind(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if !args.is_empty() { return String::from(""); }
+            if a_number_name(name) { return String::from("number"); }
+            let base = check_core_ops_base(name);
+            if base == "String" || base == "str" { return String::from("text"); }
+            if base == "bool" || base == "char" { return base; }
+        },
+        _ => { },
+    }
+    String::from("")
+}
+
 fn check_core_ops_plain_base(base: &str) -> bool { base == "bool" || base == "char" || base == "scalar" || base == "String" || base == "str" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -17550,6 +17594,17 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
             let held = inner.text();
             state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is a number, but the left side holds `{}`.", held), vec!["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.".to_owned()], Some(format!("Write a `{}` as the fallback.", held))));
         } else if !other.is_unknown() && !check_core_ops_nullable(&other) { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
+    }
+    if nullable && !from_a_map && !state.jumps(world, fallback) {
+        let held_kind = check_core_ops_kind(&inner);
+        let mut given_kind = check_core_ops_kind(&other);
+        if check_core_ops_a_number_written(fallback) { given_kind = "number".to_owned(); }
+        if held_kind != "" && given_kind != "" && held_kind != given_kind {
+            let held = inner.text();
+            let mut given: String = format!("`{}`", other.text());
+            if check_core_ops_a_number_written(fallback) { given = "a number".to_owned(); }
+            state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec!["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5).".to_owned()], Some(format!("Write a `{}` as the fallback.", held))));
+        }
     }
     if nullable && check_core_ops_nullable(&other) {
         state.facts.optional_fallbacks.insert(id_of(expr) as i64);
@@ -19376,10 +19431,13 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     state.a_loop_over_a_nullable(world, &over, iter, span);
     let mut width = bindings.len() as i64;
     if !shape.is_empty() && *nikaia_std::index::get(&shape, 0) > 0 { width = *nikaia_std::index::get(&shape, 0); }
+    let before = state.findings.len() as i64;
     state.fallible_step(world, &over, width, span);
+    let stepped_fallibly = (state.findings.len() as i64) > before;
     state.pausing_step(&over, span);
     state.a_sequence_is_walked(iter, &over, span, world);
     let mut elements = elements_walked(&over, width);
+    if width > 1 && !stepped_fallibly { let refused = state.a_tuple_pattern_that_does_not_fit(&element_walked(&over, 1), width, "A `for`", span); }
     if !shape.is_empty() { elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span); }
     if bindings.len() == 1 && state.current.is_some() && check_core_stmt_holds_code(&over) {
         let current: String = nikaia_std::index::or(match state.current.as_ref() {

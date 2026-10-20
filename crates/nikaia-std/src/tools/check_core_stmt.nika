@@ -952,11 +952,17 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     if shape.len() > 0 && shape[0] > 0 {
         width = shape[0]
     }
+    let before = state.findings.len()
     state.fallible_step(world, over, width, span)
+    // A fallible walk bound to several names is `NK2701` already.
+    let stepped_fallibly = state.findings.len() > before
     state.pausing_step(over, span)
     // **A `for` walks a produced sequence, and that consumes it** (ADR-105 D2).
     state.a_sequence_is_walked(iter, over, span, world)
     let mut elements = elements_walked(over, width)
+    if width > 1 && !stepped_fallibly {
+        let refused = state.a_tuple_pattern_that_does_not_fit(element_walked(over, 1), width, "A `for`", span)
+    }
     if shape.len() > 0 {
         elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span)
     }

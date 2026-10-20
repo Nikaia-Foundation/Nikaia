@@ -662,19 +662,42 @@ fn a_field_of_an_unknown_type_is_refused() {
     assert_eq!(message, "The compiler can't tell what type `r.nmae` is.");
 }
 
-/// `for (k, v) in map` takes apart a pair whose shape Stage 0 has no signature
-/// for, so it binds nothing rather than guessing.
+/// `for (a, b) in rows` over a list of structs takes apart what is no tuple:
+/// `NK1283` (#704), and the names bind nothing rather than a guess.
 #[test]
 fn a_loop_over_pairs_binds_nothing() {
-    assert!(
-        findings(
-            "struct Row { id: i32 }\n\
+    let (code, _) = one("struct Row { id: i32 }\n\
          fn count(rows: Vec[Row]) {\n\
          \x20   for (a, b) in rows { let n: i32 = a.idd }\n\
-         }"
-        )
-        .is_empty()
-    );
+         }");
+    assert_eq!(code, "NK1283");
+}
+
+/// A tuple pattern whose shape is not the value's is `NK1283` (#704): a
+/// struct, a tuple of another width, a nested part that is no tuple. A pair
+/// taken apart as a pair, and a value of unknown type, are not.
+#[test]
+fn a_tuple_pattern_of_another_shape_is_refused() {
+    for source in [
+        "struct Row { id: i32 }\nfn main() {\n    let (a, b) = Row { id: 1 }\n}",
+        "fn main() {\n    let (a, b) = (1, 2, 3)\n}",
+        "fn main() {\n    let x: i64 = 2\n    let (a, (b, c)) = (1, x)\n}",
+        "struct Row { id: i32 }\nfn main() {\n    let rows = [Row { id: 1 }]\n    for (a, b) in rows { println(\"x\") }\n}",
+        "fn main() {\n    let rows = [(1, 2, 3)]\n    for (a, b) in rows { println(f\"{a}{b}\") }\n}",
+    ] {
+        let (code, _) = one(source);
+        assert_eq!(code, "NK1283", "{source}");
+    }
+    for source in [
+        "fn main() {\n    let (a, b) = (1, 2)\n    println(f\"{a}{b}\")\n}",
+        "fn main() {\n    let (a, (b, c)) = (1, (2, 3))\n    println(f\"{a}{b}{c}\")\n}",
+        "fn main() {\n    let rows = [(1, 2)]\n    for (a, b) in rows { println(f\"{a}{b}\") }\n}",
+    ] {
+        assert!(
+            !findings(source).iter().any(|f| f.code == "NK1283"),
+            "{source}"
+        );
+    }
 }
 
 /// A parameter whose Rust type is a *bound* rather than a type is `?` in the
@@ -1723,8 +1746,6 @@ fn a_name_something_declares_is_not_refused() {
         "fn f(n: i64) -> i64 {\n    n\n}",
         // a function of this program, named rather than called
         "fn helper() -> i64 {\n    return 1\n}\n\nfn f() {\n    helper\n}",
-        // a struct declared here
-        "struct Conn { id: i64 }\n\nfn f() {\n    Conn\n}",
         // `error`, which a `catch` block binds
         "use std::fs\n\nfn f(p: ref String) {\n    fs::read_to_string(p, fs::Root::Anywhere) catch { println(f\"{error}\") }\n}",
     ] {
@@ -1734,6 +1755,29 @@ fn a_name_something_declares_is_not_refused() {
             findings(source)
         );
     }
+}
+
+/// **A struct or an enum named as a value is `NK1230`** (Part II 10.3, #704):
+/// the name is declared, so it is not `NK1117`, but without a constructor it
+/// stands for no value. One with a constructor is that constructor (`NK1149`).
+#[test]
+fn a_type_named_as_a_value_is_refused() {
+    for source in [
+        "struct Conn { id: i64 }\n\nfn f() {\n    Conn\n}",
+        "struct Conn { id: i64 }\n\nfn main() {\n    let c = Conn\n}",
+        "struct Conn { id: i64 }\nfn take(c: Conn) -> i64 { return c.id }\nfn main() {\n    let r = take(Conn)\n    println(f\"{r}\")\n}",
+        "enum Color { Red, Blue }\n\nfn main() {\n    let c = Color\n}",
+    ] {
+        let (code, message) = one(source);
+        assert_eq!(code, "NK1230", "{source}");
+        assert!(message.ends_with("is a type, not a value."), "{message}");
+    }
+    let made = "struct Tally { sum: i64 }\nimpl Tally {\n    pub fn() -> Tally { return Tally { sum: 0 } }\n}\nfn main() {\n    let make = Tally\n}";
+    assert!(
+        !findings(made).iter().any(|f| f.code == "NK1230"),
+        "{:#?}",
+        findings(made)
+    );
 }
 
 /// **The three withdrawn names are ordinary names again once something declares

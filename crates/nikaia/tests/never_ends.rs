@@ -172,3 +172,34 @@ fn main() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **An `if` without `else` as a body's last statement is `NK1104`** (#704):
+/// on the path where it is not taken the function falls off its end. So is a
+/// chain whose last link has no `else`; one that answers on every path is not.
+#[test]
+fn an_if_without_else_at_the_end_hands_nothing_back() {
+    for source in [
+        "fn f(x: i64) -> i64 {\n    if x > 0 { return 1 }\n}\nfn main() { println(f\"{f(2)}\") }",
+        "fn f(x: i64) -> i64 {\n    if x > 0 { return 1 } else if x < 0 { return 2 }\n}\nfn main() { println(f\"{f(2)}\") }",
+        "fn f(x: i64) -> i64 {\n    if x > 0 {\n        if x > 5 { return 1 }\n    } else {\n        return 2\n    }\n}\nfn main() { println(f\"{f(2)}\") }",
+    ] {
+        assert!(
+            hands_back(source)
+                .iter()
+                .any(|m| m.contains("where this `if` is not taken")),
+            "{source}\n{:#?}",
+            findings(source)
+        );
+    }
+    for source in [
+        "fn f(x: i64) -> i64 {\n    if x > 0 { return 1 }\n    return 0\n}\nfn main() { println(f\"{f(2)}\") }",
+        "fn f(x: i64) -> i64 {\n    if x > 0 { 1 } else { 0 }\n}\nfn main() { println(f\"{f(2)}\") }",
+        "fn f(x: i64) {\n    if x > 0 { println(\"x\") }\n}\nfn main() { f(2) }",
+    ] {
+        assert!(
+            hands_back(source).is_empty(),
+            "{source}\n{:#?}",
+            findings(source)
+        );
+    }
+}

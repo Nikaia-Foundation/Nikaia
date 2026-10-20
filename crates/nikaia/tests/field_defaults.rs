@@ -49,10 +49,11 @@ fn a_field_without_a_default_may_not_be_left_out() {
 fn a_default_of_the_wrong_type_is_refused() {
     let source = "struct Page {\n\
          \x20   size: i64 = \"x\",\n\
+         \x20   label: String,\n\
          }\n\
          \n\
          fn main() {\n\
-         \x20   let p = Page {}\n\
+         \x20   let p = Page { label: \"a\" }\n\
          \x20   println(f\"{p.size}\")\n\
          }\n";
     assert_eq!(codes(source), vec!["NK1166".to_string()]);
