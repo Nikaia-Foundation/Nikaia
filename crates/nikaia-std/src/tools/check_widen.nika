@@ -217,6 +217,23 @@ pub fn text_as_a_path(found: ref Ty, want: ref Ty) -> i64 sync {
     return -1
 }
 
+/// **A mapping where a `Bytes` is taken by value** (ADR-373 D3): a body, a
+/// field, an element, an argument kept. It is the mapping, at a count; a
+/// `ref Bytes` takes it through its `deref` as it always did.
+pub fn mapped_as_bytes(found: ref Ty, want: ref Ty) -> bool sync {
+    let asked = match want {
+        Ty::Named { name, args, view } => name == "Bytes" && args.len() == 0 && !view,
+        else => false,
+    }
+    if !asked {
+        return false
+    }
+    return match found {
+        Ty::Named { name, args, .. } => (name == "Mapped" || name == "fs::Mapped") && args.len() == 0,
+        else => false,
+    }
+}
+
 /// A view of text, present or absent, going into a `String?` (ADR-282 D12).
 pub fn views_into_nullable_text(found: ref Ty, want: ref Ty) -> bool sync {
     let present: ref Ty = match found {

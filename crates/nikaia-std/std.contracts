@@ -5282,6 +5282,15 @@ sync = true
 touches = []
 signature = "(ref self) -> Bytes"
 
+# A `Bytes` made from a `Vec[u8]`, which is handed over (ADR-373 D2): the
+# vector's memory becomes the buffer and nothing is copied.
+[fn."Bytes"]
+pub = true
+sync = true
+touches = []
+keeps = ["bytes"]
+signature = "(bytes: Vec[u8]) -> Bytes"
+
 # **`std::supervisor`'s policy** (`src/supervisor.nika`, ADR-328 D5): what a
 # program implements to say when a child is restarted, and the types it speaks
 # in.

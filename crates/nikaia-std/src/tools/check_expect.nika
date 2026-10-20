@@ -123,6 +123,10 @@ impl CheckState {
         if text_as_a_path(found, want) >= 0 {
             return
         }
+        // A mapping where a `Bytes` is taken (ADR-373 D3).
+        if mapped_as_bytes(found, want) {
+            return
+        }
         // An integer widened where no value can be lost (ADR-285 D32).
         if widened_into(found, want) != null {
             return

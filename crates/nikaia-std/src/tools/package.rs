@@ -21221,6 +21221,7 @@ impl CheckState {
         if found.is_unknown() { self.literal_receivers_take(want); }
         if self.fits_through_deref(world, found, want) { return; }
         if text_as_a_path(found, want) >= 0 { return; }
+        if mapped_as_bytes(found, want) { return; }
         if widened_into(found, want).is_some() { return; }
         let key = span.start as i64;
         let mut waiting: i64 = -1;
@@ -21820,6 +21821,7 @@ pub enum FactWrap {
     PathView,
     Widen(String),
     Unsigned(String),
+    MappedBytes,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27717,6 +27719,7 @@ impl CheckState {
 pub fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> {
     let into = nikaia_std::index::or(widened_into(found, want), || "".into());
     if !into.is_empty() { return Some(FactWrap::Widen(into.to_owned())); }
+    if mapped_as_bytes(found, want) { return Some(FactWrap::MappedBytes); }
     let path = text_as_a_path(found, want);
     if path == 1 { return Some(FactWrap::PathView); }
     if path == 0 { return Some(FactWrap::Path); }
@@ -32147,6 +32150,20 @@ pub fn text_as_a_path(found: &Ty, want: &Ty) -> i64 {
     let given = nikaia_std::index::or(a_plain_name(found), || "".into());
     if given == "String" || given == "str" { return asked; }
     -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn mapped_as_bytes(found: &Ty, want: &Ty) -> bool {
+    let asked = match want {
+        Ty::Named { name, args, view } => { let view = *view; name == "Bytes" && args.is_empty() && !view },
+        _ => false,
+    };
+    if !asked { return false; }
+    match found {
+        Ty::Named { name, args, .. } => (name == "Mapped" || name == "fs::Mapped") && args.is_empty(),
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -39654,6 +39671,7 @@ pub fn emit_around_held(held: &FactWrap) -> (String, String) {
         FactWrap::Conversion => emit_two("", ".into()"),
         FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
         FactWrap::PathView => emit_two("std::path::Path::new(&(", "))"),
+        FactWrap::MappedBytes => emit_two("(", ").bytes()"),
         FactWrap::Widen(into) => emit_two(&emit_widen(into), ")"),
         FactWrap::Unsigned(into) => emit_two(&emit_unsigned(into), ")"),
     }
@@ -69169,7 +69187,7 @@ pub mod check_walks {
 }
 pub mod check_widen {
     #[allow(unused_imports)]
-    pub use super::{common_integer, widened_into, an_integer_that_does_not_widen, unsigned_from_signed, number_where_no_number_is, names_a_path, text_as_a_path, views_into_nullable_text, views_into_text, binary_op_text, a_number_asked_for_two_types, a_map_number_asked_for_two_types, a_list_the_wrong_length_for_its_array, a_repeat_count_unknown_for_its_array, a_repeated_value_that_does_not_copy, two_integer_types_for_one_variable};
+    pub use super::{common_integer, widened_into, an_integer_that_does_not_widen, unsigned_from_signed, number_where_no_number_is, names_a_path, text_as_a_path, mapped_as_bytes, views_into_nullable_text, views_into_text, binary_op_text, a_number_asked_for_two_types, a_map_number_asked_for_two_types, a_list_the_wrong_length_for_its_array, a_repeat_count_unknown_for_its_array, a_repeated_value_that_does_not_copy, two_integer_types_for_one_variable};
 }
 pub mod check_with {
     #[allow(unused_imports)]

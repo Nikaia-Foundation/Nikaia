@@ -97,6 +97,8 @@ pub fn emit_around_held(held: ref FactWrap) -> (String, String) {
         FactWrap::Conversion => emit_two("", ".into()"),
         FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
         FactWrap::PathView => emit_two("std::path::Path::new(&(", "))"),
+        // The mapping at a count, whether it is held or lent (ADR-373 D3).
+        FactWrap::MappedBytes => emit_two("(", ").bytes()"),
         FactWrap::Widen(into) => emit_two(emit_widen(into), ")"),
         FactWrap::Unsigned(into) => emit_two(emit_unsigned(into), ")"),
     }

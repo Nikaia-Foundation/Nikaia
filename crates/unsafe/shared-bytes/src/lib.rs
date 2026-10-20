@@ -64,11 +64,14 @@ impl Shared {
     /// The bytes an owner already counted lends, at one more count: what a
     /// value that holds its owner in an `Arc` (a mapped file) hands over.
     pub fn from_arc<O: AsRef<[u8]> + Send + Sync + 'static>(owner: Arc<O>) -> Shared {
-        let owner: Owner = owner;
+        // Asked of the owner's own type, before it becomes a trait object:
+        // a direct call, not one through the table.
         let bytes: &[u8] = (*owner).as_ref();
+        let (ptr, len) = (NonNull::from(bytes).cast(), bytes.len());
+        let owner: Owner = owner;
         Shared {
-            ptr: NonNull::from(bytes).cast(),
-            len: bytes.len(),
+            ptr,
+            len,
             owner: Some(owner),
         }
     }

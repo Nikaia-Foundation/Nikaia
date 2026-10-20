@@ -250,6 +250,16 @@ impl AsRef<[u8]> for Bytes {
     }
 }
 
+/// **`Bytes(v)`** (ADR-373 D2): the call a program writes, the type's name
+/// with a `Vec[u8]` it hands over. A function in the value namespace beside
+/// the struct in the type namespace, so the generated Rust writes the call as
+/// the program does; it is the `From` below, which copies nothing.
+#[allow(non_snake_case)]
+#[inline]
+pub fn Bytes(bytes: Vec<u8>) -> Bytes {
+    Bytes::from(bytes)
+}
+
 /// **`Bytes(v)`: the vector is handed over and nothing is copied**
 /// (ADR-373 D2): its memory becomes the buffer.
 impl From<Vec<u8>> for Bytes {

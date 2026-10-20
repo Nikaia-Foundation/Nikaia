@@ -169,6 +169,9 @@ pub fn check_wrap_for(found: ref Ty, want: ref Ty, literal: bool) -> FactWrap? s
     if !into.is_empty() {
         return FactWrap::Widen(into.clone())
     }
+    if mapped_as_bytes(found, want) {
+        return FactWrap::MappedBytes
+    }
     let path = text_as_a_path(found, want)
     if path == 1 {
         return FactWrap::PathView

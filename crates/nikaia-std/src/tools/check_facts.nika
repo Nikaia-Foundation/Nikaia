@@ -24,6 +24,8 @@ pub enum FactWrap {
     Widen(String),
     /// A signed value proved not negative, in the unsigned type the slot states.
     Unsigned(String),
+    /// A mapping where a `Bytes` is kept (ADR-373 D3): the mapping at a count.
+    MappedBytes,
 }
 
 /// How a map's key is handed over.
