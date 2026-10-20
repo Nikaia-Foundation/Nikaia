@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1124] — 2026-10-20
+
+**A view read through ?? is watched; a ref Bytes is a run of bytes**
+- `let f = m[k] ?? return` and `f.result ?? return` are views into the map's owner: handing it on as `mut`, or changing the part they read, while they are still used is NK2305 (#739); a change to another field stays allowed. `ref Bytes` lowers to `&[u8]`, so `f(s.bytes)` and `HashMap[ref Bytes, V]` build (#700).
+
 ## [0.0.1123] — 2026-10-20
 
 **spec: the same bits with the other sign are bits_as_; truncating_ only narrows (ADR-285 D42, #742)**
