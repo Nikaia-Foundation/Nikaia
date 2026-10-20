@@ -107,7 +107,7 @@ impl CheckComparable {
         if how == CompareStrength::Orders && COMPARE_UNORDERED.contains(name) {
             return false
         }
-        if name == "f64" {
+        if name == "f32" || name == "f64" {
             return how == CompareStrength::Compares
         }
         if COMPARE_PLAIN.contains(name) {

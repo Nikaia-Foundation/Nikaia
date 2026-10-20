@@ -12138,7 +12138,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     }
     fn named(&self, name: &'a str, args: &'a Vec<Ty>, how: CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
         if how == CompareStrength::Orders && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
-        if name == "f64" { return how == CompareStrength::Compares; }
+        if name == "f32" || name == "f64" { return how == CompareStrength::Compares; }
         if nikaia_std::list::contains(&COMPARE_PLAIN, &name) { return true; }
         if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, how, seen); }
         let mut key = name.to_owned();
@@ -17496,6 +17496,7 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
     if op.is_comparison() {
         state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at);
         state.two_integer_types_compared(lhs, &left, rhs, &right, at);
+        if check_core_ops_two_floats(&left, &right) { let refused = state.two_number_types(op, lhs, &left, rhs, &right, at); }
     }
     if !check_core_ops_logical(op) && !check_core_ops_shift(op) { state.an_integer_beside_a_float(world, lhs, &left, rhs, &right, at); }
     let mut common: Option<String> = None;
@@ -17914,6 +17915,21 @@ pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckW
     }
     check_core_expr(state, world, host, spawned, span);
     Ty::Unknown
+}
+
+fn check_core_ops_two_floats(left: &Ty, right: &Ty) -> bool {
+    let l = check_core_ops_number_name(&value_of_a_copy(&left.unseen()));
+    let r = check_core_ops_number_name(&value_of_a_copy(&right.unseen()));
+    let float_l = l == "f32" || l == "f64";
+    let float_r = r == "f32" || r == "f64";
+    !l.is_empty() && !r.is_empty() && l != r && (float_l || float_r)
+}
+
+fn check_core_ops_number_name(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, args, .. } => if args.is_empty() && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64") { name.to_owned() } else { String::from("") },
+        _ => String::from(""),
+    }
 }
 
 
@@ -25577,7 +25593,7 @@ fn bare_name(ty: &Ty) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn an_offered_number(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" }
+fn an_offered_number(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -25617,10 +25633,11 @@ impl CheckState {
         }
         let l = bare_name(&value_of_a_copy(&left.unseen()));
         let r = bare_name(&value_of_a_copy(&right.unseen()));
+        if l == "f32" && check_floats_written(rhs) || r == "f32" && check_floats_written(lhs) { return Some(String::from("f32")); }
         if l.is_empty() || r.is_empty() || l == r || !an_offered_number(&l) || !an_offered_number(&r) { return None; }
         let message = format!("You're mixing {} `{}` and {} `{}` in one operation.", number_article(&l), l, number_article(&r), r);
         let mut note: String = String::from("An integer and a floating-point number never mix on their own: the conversion can change the value.");
-        if common_integer(&l, &r).is_none() && l != "f64" && r != "f64" { note = format!("Two integer types mix where one holds every value of both, and no type holds every `{}` and every `{}`.", l, r); }
+        if common_integer(&l, &r).is_none() && l != "f32" && l != "f64" && r != "f32" && r != "f64" { note = format!("Two integer types mix where one holds every value of both, and no type holds every `{}` and every `{}`.", l, r); }
         let help = format!("Convert one side with `as`: `… as {}` or `… as {}`, whichever the result should be.", l, r);
         self.findings.push(check_refusal("NK1199", at, message, vec![note], Some(help)));
         None

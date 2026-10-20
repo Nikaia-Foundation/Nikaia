@@ -1,0 +1,27 @@
+// #736: an `f32` compares, orders, computes and prints as an `f64` does
+// (Part I 2.2); a float written out beside one is an `f32`.
+
+struct Point {
+    x: f32,
+    y: f32,
+}
+
+fn half(v: f32) -> f32 {
+    return v / 2.0
+}
+
+fn main() {
+    let a: f32 = 0.5
+    let b: f32 = 0.5
+    let c: f32 = 1.25
+    println(f"{a == b} {a != c} {a < c} {a <= b} {c > a} {c >= a} {a == 0.5} {1.0 < c}")
+    println(f"{a + c} {c - a} {a * c} {c / a} {-a} {half(c)} {a + 1.0} {2.0 * c}")
+    let p = Point { x: 1.0, y: 2.0 }
+    let q = Point { x: 1.0, y: 2.0 }
+    println(f"{p == q} {p.x < p.y}")
+    let mut sum: f32 = 0.0
+    for v in [a, b, c] {
+        sum += v
+    }
+    println(f"{sum}")
+}

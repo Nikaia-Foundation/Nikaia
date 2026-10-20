@@ -30,7 +30,7 @@ fn bare_name(ty: ref Ty) -> String sync {
 }
 
 fn an_offered_number(name: ref String) -> bool sync {
-    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64"
+    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64"
 }
 
 /// `an i32`, `a u64`: only an `i` is said with a vowel.
@@ -78,12 +78,17 @@ impl CheckState {
         }
         let l = bare_name(value_of_a_copy(left.unseen()))
         let r = bare_name(value_of_a_copy(right.unseen()))
+        // **A float written out beside an `f32` is an `f32`** (Part I 2.2): the
+        // operation is the use that asks for one.
+        if (l == "f32" && check_floats_written(rhs)) || (r == "f32" && check_floats_written(lhs)) {
+            return "f32"
+        }
         if l.is_empty() || r.is_empty() || l == r || !an_offered_number(l) || !an_offered_number(r) {
             return null
         }
         let message = f"You're mixing {number_article(l)} `{l}` and {number_article(r)} `{r}` in one operation."
         let mut note: String = "An integer and a floating-point number never mix on their own: the conversion can change the value."
-        if common_integer(l, r) == null && l != "f64" && r != "f64" {
+        if common_integer(l, r) == null && l != "f32" && l != "f64" && r != "f32" && r != "f64" {
             note = f"Two integer types mix where one holds every value of both, and no type holds every `{l}` and every `{r}`."
         }
         let help = f"Convert one side with `as`: `… as {l}` or `… as {r}`, whichever the result should be."

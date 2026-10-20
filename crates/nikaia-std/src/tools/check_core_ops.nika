@@ -385,6 +385,11 @@ pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref Che
     if op.is_comparison() {
         state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at)
         state.two_integer_types_compared(lhs, left, rhs, right, at)
+        // **Two number types do not mix without `as`** (Part I 2.2, 2.4), in
+        // a comparison either, where one is a float.
+        if check_core_ops_two_floats(left, right) {
+            let refused = state.two_number_types(op, lhs, left, rhs, right, at)
+        }
     }
     // **An integer beside a float** (#703).
     if !check_core_ops_logical(op) && !check_core_ops_shift(op) {
@@ -931,4 +936,21 @@ pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     check_core_expr(state, world, host, spawned, span)
     return Ty::Unknown
+}
+
+/// Whether a float meets another number type: an `f32` and an `f64`, or a
+/// float and an integer.
+fn check_core_ops_two_floats(left: ref Ty, right: ref Ty) -> bool {
+    let l = check_core_ops_number_name(value_of_a_copy(left.unseen()))
+    let r = check_core_ops_number_name(value_of_a_copy(right.unseen()))
+    let float_l = l == "f32" || l == "f64"
+    let float_r = r == "f32" || r == "f64"
+    return !l.is_empty() && !r.is_empty() && l != r && (float_l || float_r)
+}
+
+fn check_core_ops_number_name(ty: ref Ty) -> String {
+    return match ty {
+        Ty::Named { name, args, .. } => if args.len() == 0 && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64") { name.clone() } else { "" },
+        else => "",
+    }
 }

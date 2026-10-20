@@ -185,3 +185,43 @@ fn a_mixed_list_is_only_nk1154() {
         assert_eq!(codes, ["NK1154"], "{source}");
     }
 }
+
+/// **An `f32` mixes with no other number without `as`** (#736, Part I 2.2),
+/// in a comparison as in arithmetic; a float written out beside one is one,
+/// and a float written out beyond the `f32` range is `NK1116` in `as f32`.
+#[test]
+fn an_f32_mixes_only_through_as() {
+    for (code, body) in [
+        (
+            "NK1199",
+            "let a: f32 = 0.5\n    let k: f64 = 2.5\n    println(f\"{a < k}\")",
+        ),
+        (
+            "NK1199",
+            "let a: f32 = 0.5\n    let k: f64 = 2.5\n    println(f\"{a == k}\")",
+        ),
+        (
+            "NK1199",
+            "let a: f32 = 0.5\n    let k: f64 = 2.5\n    println(f\"{a + k}\")",
+        ),
+        (
+            "NK1199",
+            "let a: f32 = 0.5\n    let i: i64 = 2\n    println(f\"{a * i}\")",
+        ),
+        (
+            "NK1199",
+            "let k: f64 = 0.5\n    let i: i64 = 2\n    println(f\"{k < i}\")",
+        ),
+        ("NK1116", "let w = 1e40 as f32\n    println(f\"{w}\")"),
+        ("NK1116", "let w = -1e40 as f32\n    println(f\"{w}\")"),
+    ] {
+        let source = format!("fn main() {{\n    {body}\n}}\n");
+        let found = findings(&source);
+        assert!(
+            found.iter().any(|f| f.code == code),
+            "{code} for\n{source}\n{found:#?}"
+        );
+    }
+    let fine = "fn main() {\n    let a: f32 = 0.5\n    let k: f64 = 2.5\n    let i: i64 = 2\n    println(f\"{a == 0.5} {a < k as f32} {a as f64 < k} {a + 1.0} {i as f32 * a} {k as f32} {3.4e38 as f32}\")\n}\n";
+    assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
+}
