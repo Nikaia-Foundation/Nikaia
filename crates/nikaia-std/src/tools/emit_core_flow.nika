@@ -610,6 +610,14 @@ impl EmitState {
             out.push(".map(|__nikaia_found| __nikaia_found.to_string())")
         }
         out.push(", || ")
+        // **A name that is a view of text beside a view of text** (#719): read
+        // as `str`, whether it is `&String` or `&str` below.
+        if self.facts.text_view_fallbacks.contains(node_key(node)) {
+            out.push("std::convert::AsRef::<str>::as_ref(")
+            host.expr(walk, out, fallback, depth, flow, scope)
+            out.push("))")
+            return
+        }
         // **A name lent beside what a map holds**: the answer is a view, and so is
         // the fallback.
         if self.facts.lent_map_fallbacks.contains(node_key(node)) {

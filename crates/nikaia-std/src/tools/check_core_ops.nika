@@ -274,6 +274,53 @@ fn check_core_ops_lent_text_item(state: ref CheckState, world: ref CheckWorld, s
     return state.flow.lent_text_params.contains(local.id)
 }
 
+/// A number whose type is not settled yet: a literal, a negated one, or a
+/// name its uses decide (ADR-285 D23).
+fn check_core_ops_unsettled_number(state: ref CheckState, world: ref CheckWorld, side: ref Expr, ty: ref Ty) -> bool sync {
+    if a_known_value(ty) {
+        return false
+    }
+    let literal: bool = match side {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_core_ops_lit_number(expr),
+        else => false,
+    }
+    return literal || state.open_numbers_in(world, side).len() > 0
+}
+
+/// A number literal.
+fn check_core_ops_lit_number(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        else => false,
+    }
+}
+
+/// The type a number beside a `T?` is named by: the `T` where it is a
+/// number, `i64` otherwise.
+fn check_core_ops_number_beside(maybe: ref Ty) -> Ty sync {
+    let inside = check_core_ops_inside(maybe)
+    if integer_named(inside) != null || inside.text() == "f64" || inside.text() == "f32" {
+        return inside
+    }
+    return check_core_ops_named("i64")
+}
+
+/// **A `T?` compared with a number whose type is not settled** (#748): the
+/// number is a plain value all the same, and a `T?` is compared with nothing
+/// but `null` or another `T?` (Part I 2.3).
+fn check_core_ops_maybe_beside_a_number(mut state: CheckState, world: ref CheckWorld, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, span: ref Span) sync {
+    if a_known_maybe(left) && check_core_ops_unsettled_number(state, world, rhs, right) {
+        state.a_maybe_compared_with_a_value(left, check_core_ops_number_beside(left), span)
+        return
+    }
+    if a_known_maybe(right) && check_core_ops_unsettled_number(state, world, lhs, left) {
+        state.a_maybe_compared_with_a_value(check_core_ops_number_beside(right), right, span)
+    }
+}
+
 /// **`==` and `!=`** (ADR-279 D5): a comparison only reads its sides.
 fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span, span: ref Span) -> Ty sync {
     state.a_pending_coalesce_of_text_is_lent(lhs)
@@ -286,6 +333,7 @@ fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWor
     }
     if !asks_for_null {
         state.a_maybe_compared_with_a_value(left, right, span)
+        check_core_ops_maybe_beside_a_number(state, world, lhs, left, rhs, right, span)
     }
     state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at)
     // **A lambda's item compared with text** (#688): the item is a view of
@@ -700,6 +748,11 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     if nullable && inner == check_core_ops_named("String") && from_a_map && other.is_a_view() && check_core_ops_place(fallback) && check_core_ops_text_base(other) {
         state.facts.view_coalesces.insert(id_of(expr) as i64)
         return check_core_ops_view("str")
+    }
+    // **A name that is a view of text beside a view of text** (#719): a
+    // `ref String` loop variable is `&String` below, and the answer `&str`.
+    if nullable && inner == check_core_ops_view("str") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(other) {
+        state.facts.text_view_fallbacks.insert(id_of(expr) as i64)
     }
     // **And a name of the type the map holds** (ADR-279 D7).
     if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(inner, other) && moves(other) {

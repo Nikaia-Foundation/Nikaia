@@ -125,6 +125,9 @@ pub struct CheckFacts {
     pub plain_reaches: collections::BTreeSet[i64],
     pub copied_jump_reads: collections::BTreeSet[i64],
     pub view_coalesces: collections::BTreeSet[i64],
+    /// The `??`s whose left side holds a view of text and whose fallback is
+    /// a name that is a view of text (#719): the fallback is read as `str`.
+    pub text_view_fallbacks: collections::BTreeSet[i64],
     pub lent_map_fallbacks: collections::BTreeSet[i64],
     pub optional_fallbacks: collections::BTreeSet[i64],
     pub flat_reads: collections::BTreeSet[i64],
@@ -354,6 +357,7 @@ impl CheckFacts {
             plain_reaches: collections::BTreeSet(),
             copied_jump_reads: collections::BTreeSet(),
             view_coalesces: collections::BTreeSet(),
+            text_view_fallbacks: collections::BTreeSet(),
             lent_map_fallbacks: collections::BTreeSet(),
             optional_fallbacks: collections::BTreeSet(),
             flat_reads: collections::BTreeSet(),

@@ -488,6 +488,75 @@ fn a_maybe_compared_with_a_value_is_refused() {
     assert!(found.is_empty(), "{found:#?}");
 }
 
+/// **A `T?` compared with a number whose type is not settled is refused as
+/// well** (`NK1102`, #748): a literal, a negated one or a name its uses decide
+/// slipped past the check and reached the language below as *expected
+/// `Option<i32>`, found integer*. Part I 2.3: a `T?` is compared with nothing
+/// but `null` or another `T?`.
+#[test]
+fn a_maybe_compared_with_a_number_literal_is_refused() {
+    let found = findings(
+        "fn main() {\n\
+         \x20   let n: i64 = 5\n\
+         \x20   println(f\"{n.checked_i32() == 5}\")\n\
+         \x20   let m: i32? = 5\n\
+         \x20   println(f\"{m == 5}\")\n\
+         \x20   println(f\"{5 != m}\")\n\
+         \x20   println(f\"{m == -5}\")\n\
+         \x20   let k = 5\n\
+         \x20   println(f\"{m == k}\")\n\
+         \x20   let s: String? = null\n\
+         \x20   println(f\"{s == 3}\")\n\
+         }\n",
+    );
+    let codes: Vec<&str> = found.iter().map(|f| f.code_str()).collect();
+    assert_eq!(codes, ["NK1102"; 6], "{found:#?}");
+    assert!(found[0].message.contains("`i32?` with `i32`"), "{found:#?}");
+    assert!(found[5].message.contains("`i64`"), "{found:#?}");
+    // A literal still compares with what is inside, once `??` has opened it.
+    let found = findings(
+        "fn main() {\n\
+         \x20   let m: i32? = 5\n\
+         \x20   println(f\"{(m ?? 0) == 5} {m == null}\")\n\
+         }\n",
+    );
+    assert!(found.is_empty(), "{found:#?}");
+}
+
+/// **A `ref String` loop variable as the fallback of a view of text** (#719):
+/// `n.strip_suffix(..) ?? n` holds a `&str` on the left and a `&String` on the
+/// right below, and `n.into()` has no `From<&String>` for `&str`; the name is
+/// read as `str`.
+#[test]
+fn a_loop_variable_as_the_fallback_of_a_view_of_text_runs() {
+    runs_in(
+        "text-view-fallback",
+        "fn f(names: ref Vec[String]) -> Vec[String] {\n\
+         \x20   let mut out: Vec[String] = Vec()\n\
+         \x20   for n in names {\n\
+         \x20       out.push((n.strip_suffix(\".len()\") ?? n).clone())\n\
+         \x20       let t = n.strip_prefix(\"a\") ?? n\n\
+         \x20       out.push(t.clone())\n\
+         \x20   }\n\
+         \x20   out\n\
+         }\n\
+         fn g(n: String) -> String {\n\
+         \x20   (n.strip_prefix(\"x\") ?? n).clone()\n\
+         }\n\
+         fn main() {\n\
+         \x20   let mut v: Vec[String] = Vec()\n\
+         \x20   v.push(\"a.len()\")\n\
+         \x20   v.push(\"b\")\n\
+         \x20   for s in f(v) {\n\
+         \x20       println(s)\n\
+         \x20   }\n\
+         \x20   println(g(\"xy\"))\n\
+         }\n",
+        "a\n.len()\nb\nb\ny\n",
+        |_| {},
+    );
+}
+
 /// **`p with { .. }` over a by-value parameter that is
 /// only read.** `..p` moves the whole of `p`, so the parameter stays a value
 /// rather than a `&T` that `..p` cannot take - for a `Copy` struct and for one

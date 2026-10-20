@@ -102,10 +102,8 @@ impl ProverScope {
         let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
         let own = length_of(name)
         for n in self.ints {
-            if n.starts_with(under) && n != own && n.ends_with(".len()") {
-                parts.insert((n.strip_suffix(".len()") ?? "").clone())
-            } else if n.starts_with(under) && n != own {
-                parts.insert(n.clone())
+            if n.starts_with(under) && n != own {
+                parts.insert((n.strip_suffix(".len()") ?? n).clone())
             }
         }
         for part in parts {
