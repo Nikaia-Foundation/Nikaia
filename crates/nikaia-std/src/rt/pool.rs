@@ -571,17 +571,30 @@ mod tests {
     ///
     /// The other tests of this binary run alongside and move the runtime's
     /// count, which is a real wake for this pool too: those are subtracted.
+    /// Their I/O can still ring the pool more often than it moves the count
+    /// (on arm64 CI: 49 rings for 24 moves), so the pool is watched for up to
+    /// five windows and must stay quiet in one of them; a pool that wakes
+    /// itself rings in every window.
     #[test]
     fn an_idle_pool_does_not_wake_itself() {
         let pool = Pool::start(2);
-        let before = crate::rt::io::generation();
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        let rang = pool.rang.load(Ordering::Acquire) as u64;
-        let others = (crate::rt::io::generation() - before).saturating_sub(rang);
+        let mut seen = Vec::new();
+        for _ in 0..5 {
+            let before_rang = pool.rang.load(Ordering::Acquire) as u64;
+            let before = crate::rt::io::generation();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            let rang = pool.rang.load(Ordering::Acquire) as u64 - before_rang;
+            let others = (crate::rt::io::generation() - before).saturating_sub(rang);
+            seen.push((rang, others));
+            if rang <= others + 3 {
+                break;
+            }
+        }
         pool.close();
+        let (rang, others) = *seen.last().expect("one window");
         assert!(
             rang <= others + 3,
-            "an idle pool rang {rang} times in 300 ms, for {others} wakes from elsewhere"
+            "an idle pool rang in every window (rings, wakes from elsewhere): {seen:?}, last {rang} for {others}"
         );
     }
 
