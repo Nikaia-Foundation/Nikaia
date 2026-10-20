@@ -132,10 +132,10 @@ syntax](guide/syntax.md) shows the language on one page.
 
 ## Performance
 
-On the One Billion Row Challenge, Nikaia's plain program runs 231 instructions a row at 16
-codegen units, against 312 for an AI-written Rust program from one request (AI variant 1) and
-147 for the same assistant's after several measured rounds (AI variant 2), counted with
-callgrind ([benches/brc](benches/brc/README.md)).
+A preliminary comparison on the One Billion Row Challenge, counted with callgrind
+([benches/brc](benches/brc/README.md)), instructions a row at 16 codegen units: the fastest
+Rust program written by a person runs 131, an AI-written one after several measured rounds
+(AI variant 2) 147, Nikaia's `fast.nika` 164 and its plain `examples/1brc.nika` 231.
 
 ---
 

@@ -2,7 +2,7 @@
 layout: home
 title: Against optimised Rust
 description: >-
-  A plain Nikaia program for the One Billion Row Challenge, counted against two AI-written Rust programs.
+  Nikaia's programs for the One Billion Row Challenge, counted against Rust written by people and by an AI assistant.
 ---
 <!--
   Level 3: the topic in full. It links on to the specification, the decisions and
@@ -32,26 +32,37 @@ description: >-
         </details>
 
         <details class="limit-details home-code markdown-body" open>
-          <summary>Today's state (version 0.0.1139)</summary>
-          <div class="stats">
-            <div class="stat"><p class="stat-value">231&nbsp;/&nbsp;312&nbsp;/&nbsp;147</p><p class="stat-label">instructions per row at 16 codegen units</p><p class="stat-detail">Nikaia / AI variant 1 / AI variant 2</p></div>
-            <div class="stat"><p class="stat-value">274&nbsp;/&nbsp;271&nbsp;/&nbsp;147</p><p class="stat-label">instructions per row at 1 codegen unit</p><p class="stat-detail">Nikaia / AI variant 1 / AI variant 2</p></div>
-            <div class="stat"><p class="stat-value">1.12&nbsp;/&nbsp;3.61&nbsp;/&nbsp;0.38</p><p class="stat-label">mispredicted branches per row at 16 units</p><p class="stat-detail">at 1 unit: 1.12 / 3.70 / 0.38</p></div>
-            <div class="stat"><p class="stat-value">642&nbsp;/&nbsp;879&nbsp;/&nbsp;1775</p><p class="stat-label">tokens of source</p><p class="stat-detail">Nikaia / AI variant 1 / AI variant 2</p></div>
+          <summary>Where we stand: a preliminary comparison (version 0.0.1158)</summary>
+          <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr><th>Program</th><th>Written by</th><th>Instructions per row, <code>x86-64</code></th><th>Instructions per row, <code>x86-64-v3</code></th><th>Mispredicted branches per row</th><th>Tokens</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><a href="https://github.com/beowolx/fast_1brc">beowolx/fast_1brc</a></td><td>a person, all cores</td><td>131.3</td><td>91.5</td><td>0.47</td><td>12907</td></tr>
+              <tr><td>AI variant 2</td><td>an AI assistant, several measured rounds</td><td>147.4</td><td>132.7</td><td>0.38</td><td>1775</td></tr>
+              <tr><td><strong>Nikaia, <code>fast.nika</code></strong></td><td>this project</td><td><strong>163.6</strong></td><td><strong>152.0</strong></td><td><strong>0.95</strong></td><td><strong>1353</strong></td></tr>
+              <tr><td><a href="https://github.com/automataIA/1brc-rs">automataIA/1brc-rs</a> <code>v16</code>, derived and corrected</td><td>a person, all cores</td><td>207.9</td><td>197.7</td><td>0.57</td><td>at most 3963</td></tr>
+              <tr><td><a href="https://github.com/automataIA/1brc-rs">automataIA/1brc-rs</a> <code>v20_safe</code></td><td>a person, all cores</td><td>216.1</td><td>195.3</td><td>1.60</td><td>at most 5961</td></tr>
+              <tr><td><strong>Nikaia, <code>examples/1brc.nika</code></strong> (the plain program above)</td><td>this project</td><td><strong>231.2</strong></td><td></td><td><strong>1.12</strong></td><td><strong>642</strong></td></tr>
+              <tr><td>AI variant 1</td><td>an AI assistant, one request</td><td>312.4</td><td></td><td>3.61</td><td>879</td></tr>
+            </tbody>
+          </table>
           </div>
-          <p>AI variant 1 is an AI assistant's program from one request; AI variant 2 is the same assistant's after several rounds, each measured and improved (<a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/README.md#why-two-ai-variants">why two AI variants</a>). Nikaia's plain program is ahead of AI variant 1 at 16 units, level with it at 1 unit, and behind AI variant 2. The aim is to play at the level of the best hand-optimised programs, so that nobody depends on having the one programmer who optimises every task to the end.</p>
-          <p>Counted with callgrind, release builds on both sides, the same output byte for byte; Nikaia keeps UTF-8 and overflow checked.</p>
+          <p>This is a preliminary comparison and work in progress: it shows where Nikaia stands today, not where it ends. <code>fast.nika</code> is a Nikaia program written for speed with what the standard library offers today. Every row prints the same output, byte for byte; Nikaia keeps UTF-8 and every index and overflow checked or proved.</p>
+          <p>Counted with callgrind over a million rows, release builds at 16 codegen units, with the same settings on every side (mispredicted branches at <code>x86-64</code>). A count is the work a program does, not time on a clock, and for a program that uses all cores it is the work of all of them. The authors' own builds for this machine use AVX-512, which callgrind cannot run; they are left out until they can be counted on another machine. The <code>automataIA</code> programs are MIT-licensed and copied into the repository; <code>beowolx/fast_1brc</code> has no licence and is fetched at a fixed commit when the benchmark runs. AI variant 1 is an AI assistant's program from one request, AI variant 2 the same assistant's after several rounds, each measured and improved (<a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/README.md#why-two-ai-variants">why two AI variants</a>).</p>
         </details>
 
         <dl class="limit-steps">
           <dt>What is still open</dt>
           <dd>
             <ul>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/754">#754</a>: searching bytes for a set at the build's vector width</li>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/717">#717</a>: parallel folding without a grammar</li>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/751">#751</a>: the padded end of the input</li>
-              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a>: the rest of the vector API, crc32c among it</li>
-              <li>the program rewritten with these, and measured again</li>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/767">#767</a>: checks proved across the turns of a loop</li>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/714">#714</a>: a type's rule as a fact</li>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/772">#772</a>: <code>unsafe { assume(…) }</code>, and an unsafe <code>fast.nika</code> beside the safe one</li>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/770">#770</a>: counters in a table proved without a check</li>
+              <li><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a>: the rest of the vector API</li>
+              <li>the authors' AVX-512 builds, counted on another machine</li>
             </ul>
           </dd>
         </dl>
