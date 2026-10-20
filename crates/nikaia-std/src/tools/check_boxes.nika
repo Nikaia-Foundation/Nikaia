@@ -298,6 +298,13 @@ impl CheckState {
             return
         }
         if !self.enums.contains_key(name) {
+            // **A struct pattern that only binds covers every value** (#730,
+            // Part I 3.4): `Point { x, .. }` over a `Point`.
+            for arm in arms {
+                if arm.guard == null && check_boxes_a_whole_struct(world, arm.pattern, name) {
+                    return
+                }
+            }
             self.a_case_is_missing("else", span)
             return
         }
@@ -378,5 +385,24 @@ fn check_boxes_path(world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol]
         out.insert(world.words.resolve(path[0]).clone())
     } else if n >= 2 {
         out.insert(f"{world.words.resolve(path[n - 2])}::{world.words.resolve(path[n - 1])}")
+    }
+}
+
+/// Whether `pattern` is a struct pattern over `name` whose every field is a
+/// binding, `_`, or such a pattern again: it matches every value of the struct.
+fn check_boxes_a_whole_struct(world: ref CheckWorld, pattern: ref MatchPattern, name: ref String) -> bool sync {
+    return match pattern {
+        MatchPattern::Named { path, fields, .. } => {
+            if path.len() != 1 || f"{world.words.resolve(path[0])}" != name {
+                return false
+            }
+            for field in fields {
+                if !catches_everything(field.pat) {
+                    return false
+                }
+            }
+            true
+        },
+        else => false,
     }
 }

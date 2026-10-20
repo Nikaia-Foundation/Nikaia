@@ -207,3 +207,21 @@ fn a_match_over_a_caught_error_is_checked_against_the_type_that_arrived() {
         found[0].message
     );
 }
+
+/// #730: a struct pattern whose every field is a binding, `_` or left to `..`
+/// covers every value of the struct, and needs no `else`; one that compares a
+/// field does not.
+#[test]
+fn a_struct_pattern_that_only_binds_covers_every_value() {
+    let found = refusals(
+        "struct Point { x: i64, y: i64 }\n\
+         fn f(p: Point) -> i64 { return match p { Point { x, .. } => x } }\n\
+         fn g(p: Point) -> i64 { return match p { Point { x: a, y: _ } => a } }\n",
+    );
+    assert!(found.is_empty(), "{found:#?}");
+    let found = refusals(
+        "struct Point { x: i64, y: i64 }\n\
+         fn f(p: Point) -> i64 { return match p { Point { x: 0, .. } => 0 } }\n",
+    );
+    assert_eq!(found.len(), 1, "{found:#?}");
+}

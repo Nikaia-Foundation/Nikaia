@@ -11496,6 +11496,7 @@ impl CheckState {
             return;
         }
         if !self.enums.contains_key(&name) {
+            for arm in arms.iter() { if arm.guard.is_none() && check_boxes_a_whole_struct(world, &arm.pattern, &name) { return; } }
             self.a_case_is_missing("else", span);
             return;
         }
@@ -11558,6 +11559,19 @@ fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern
 fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
     let n = path.len() as i64;
     if n == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned()); } else if n >= 2 { out.insert(format!("{}::{}", world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 2))), world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 1))))); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_boxes_a_whole_struct(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, name: &str) -> bool {
+    match pattern {
+        MatchPattern::Named { path, fields, .. } => {
+            if path.len() != 1 || format!("{}", world.words.resolve(*nikaia_std::index::get(&path, 0))) != name { return false; }
+            for field in fields.iter() { if !catches_everything(&field.pat) { return false; } }
+            true
+        },
+        _ => false,
+    }
 }
 
 

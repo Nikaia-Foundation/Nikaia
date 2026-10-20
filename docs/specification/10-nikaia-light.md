@@ -1104,7 +1104,9 @@ any hand-over. A number, a `bool` and a `scalar` are copied either way.
 
 **Every case is covered.** A `match` over an **enum** is complete when every
 variant is named (an or-pattern names each variant in it), and needs no `else`. A `match` over anything else needs an
-`else`, or a bare name, which catches everything. `bool` is the exception: `true` and `false` are two arms and a complete
+`else`, or a bare name, which catches everything; over a **struct**, a pattern of
+that struct whose every field is a binding, `_` or left to `..`, `Point { x, .. }`,
+catches everything too. `bool` is the exception: `true` and `false` are two arms and a complete
 `match`. An incomplete `match` is refused with `NK1151`, which names what is
 missing: the variants, or `else`. A guarded arm covers nothing, so a `match`
 whose only catch-all carries an `if` is refused with `NK1151`. A `match` over a `T?` with a `null` arm is complete
