@@ -10046,7 +10046,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         if state.a_name_in_text(world, &want, given_here, span) { continue; }
         if given_here.is_some() {
             let floats = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if check_float_literal_fits(floats, &want) { continue; }
+            if check_float_literal_fits(floats, &want) {
+                state.floats_beyond_f32(floats, &want, span);
+                continue;
+            }
         }
         let named = check_arguments_named(world, given_here);
         let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
@@ -18091,13 +18094,14 @@ fn check_core_places_unrolled_default(unrolling: Option<&CheckUnrolling>) -> Ty 
 
 fn check_core_places_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" }
 
-fn check_core_places_beyond_f32(value: &Expr) -> bool {
+pub fn check_core_places_beyond_f32(value: &Expr) -> bool {
     match check_peeled(value) {
         Expr::LitFloat(written, _) => {
             let number = nikaia_std::index::or(text::parse_f64(written), || 0.0);
             number > 340282346638528859811704183484516925440.0
         },
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && check_core_places_beyond_f32(expr) },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); check_core_places_beyond_f32(lhs) || check_core_places_beyond_f32(rhs) },
         _ => false,
     }
 }
@@ -18910,7 +18914,7 @@ pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         _ => false,
     };
     if into_f32 && check_floats_written(inner) {
-        if check_core_places_beyond_f32(inner) { state.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec!["An `f32` holds finite values up to about 3.4e38 either side of zero.".to_owned()], Some("Keep it an `f64`, or write a number within the `f32` range.".to_owned()))); }
+        state.floats_beyond_f32(inner, &into, span);
         let added = state.flow.widening_casts.insert(id_of(inner) as i64);
     } else if !(from.is_unknown() && state.open_number_cast(world, inner, &into)) { state.record_cast(&from, &into, id_of(inner) as i64); }
     let from_a_char = match from {
@@ -19582,7 +19586,10 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         let at = check_span_at(world, value, span);
         let pushed = state.findings.len() as i64;
         let waiting = state.slots_waiting(span);
-        if check_float_literal_fits(value, &into) { return check_core_stmt_unit(); }
+        if check_float_literal_fits(value, &into) {
+            state.floats_beyond_f32(value, &into, span);
+            return check_core_stmt_unit();
+        }
         let mut assigned: Ty = found.clone();
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(&into) { assigned = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
         state.expect_type(world, &assigned, &into, span, "assign", &|was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
@@ -20570,6 +20577,28 @@ pub fn check_floats_written(value: &Expr) -> bool {
     }
 }
 
+fn check_floats_beyond_f32(value: &Expr, want: &Ty) -> bool {
+    match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_floats_beyond_f32(value, inner) },
+        Ty::Named { name, args, .. } => {
+            if name == "f32" && args.is_empty() { return check_core_places_beyond_f32(value); }
+            if (name == "Vec" || name == "Array") && !args.is_empty() {
+                return match check_peeled(value) {
+                    Expr::ListLit { items, .. } => {
+                        let mut any = false;
+                        for item in items.iter() { if check_floats_beyond_f32(item, nikaia_std::index::get(&args, 0)) { any = true; } }
+                        any
+                    },
+                    Expr::ListRepeat { value: repeated, .. } => { let repeated = nikaia_std::boxed::open(repeated); check_floats_beyond_f32(repeated, nikaia_std::index::get(&args, 0)) },
+                    _ => false,
+                };
+            }
+            false
+        },
+        _ => false,
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn expect_code(what: &str) -> String {
@@ -20585,6 +20614,9 @@ fn expect_code(what: &str) -> String {
 }
 
 impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn floats_beyond_f32(&mut self, value: &Expr, want: &Ty, span: &Span) { if check_floats_beyond_f32(value, want) { self.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec!["An `f32` holds finite values up to about 3.4e38 either side of zero.".to_owned()], Some("Keep it an `f64`, or write a number within the `f32` range.".to_owned()))); } }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
@@ -20647,7 +20679,10 @@ impl CheckState {
     pub fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-            if check_float_literal_fits(given, want) { return; }
+            if check_float_literal_fits(given, want) {
+                self.floats_beyond_f32(given, want, span);
+                return;
+            }
             self.number_asked(world, given, want, span, true);
             let asked = integer_named(&value_of_a_copy(&want.unseen()));
             if asked.is_some() && shifts_literals(given) { self.a_shift_asked_as(world, given, &match asked { Some(__nikaia_value) => __nikaia_value, None => return }, span); }
@@ -25633,7 +25668,11 @@ impl CheckState {
         }
         let l = bare_name(&value_of_a_copy(&left.unseen()));
         let r = bare_name(&value_of_a_copy(&right.unseen()));
-        if l == "f32" && check_floats_written(rhs) || r == "f32" && check_floats_written(lhs) { return Some(String::from("f32")); }
+        if l == "f32" && check_floats_written(rhs) || r == "f32" && check_floats_written(lhs) {
+            let f32_ty = Ty::Named { name: String::from("f32"), args: vec![], view: false };
+            if l == "f32" && check_floats_written(rhs) { self.floats_beyond_f32(rhs, &f32_ty, at); } else { self.floats_beyond_f32(lhs, &f32_ty, at); }
+            return Some(String::from("f32"));
+        }
         if l.is_empty() || r.is_empty() || l == r || !an_offered_number(&l) || !an_offered_number(&r) { return None; }
         let message = format!("You're mixing {} `{}` and {} `{}` in one operation.", number_article(&l), l, number_article(&r), r);
         let mut note: String = String::from("An integer and a floating-point number never mix on their own: the conversion can change the value.");
@@ -67642,7 +67681,7 @@ pub mod check_core_pilot {
 }
 pub mod check_core_places {
     #[allow(unused_imports)]
-    pub use super::{check_core_field, check_core_places_array_length, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_struct_literal, check_core_with, check_core_places_text_key, check_core_places_text_position, check_core_index, check_core_cast, check_core_range};
+    pub use super::{check_core_places_beyond_f32, check_core_field, check_core_places_array_length, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_struct_literal, check_core_with, check_core_places_text_key, check_core_places_text_position, check_core_index, check_core_cast, check_core_range};
 }
 pub mod check_core_stmt {
     #[allow(unused_imports)]

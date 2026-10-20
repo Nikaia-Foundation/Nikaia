@@ -225,3 +225,40 @@ fn an_f32_mixes_only_through_as() {
     let fine = "fn main() {\n    let a: f32 = 0.5\n    let k: f64 = 2.5\n    let i: i64 = 2\n    println(f\"{a == 0.5} {a < k as f32} {a as f64 < k} {a + 1.0} {i as f32 * a} {k as f32} {3.4e38 as f32}\")\n}\n";
     assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
 }
+
+/// **A float written out beyond the `f32` range is `NK1116` in every `f32`
+/// place** (#737, Part I 2.2), as it is in `as f32`: a `let`, an argument, a
+/// `return`, a field, a list, an assignment and an operation beside an `f32`.
+#[test]
+fn a_float_beyond_f32_is_nk1116_in_every_f32_place() {
+    for body in [
+        "let w: f32 = 1e40\n    println(f\"{w}\")",
+        "let w: f32 = -1e40\n    println(f\"{w}\")",
+        "let w: f32 = 1e40 * 0.5\n    println(f\"{w}\")",
+        "println(f\"{half(1e40)}\")",
+        "let s = S { a: 1e40 }\n    println(f\"{s.a}\")",
+        "let v: Vec[f32] = [1.0, 1e40]\n    println(f\"{v[0]}\")",
+        "let o: f32? = 1e40\n    println(f\"{o ?? 0.0}\")",
+        "let mut m: f32 = 1.0\n    m = 1e40\n    println(f\"{m}\")",
+        "let a: f32 = 0.5\n    println(f\"{a + 1e40}\")",
+    ] {
+        let source = format!(
+            "struct S {{ a: f32 }}\n\
+             fn half(x: f32) -> f32 {{ return x * 0.5 }}\n\
+             fn main() {{\n    {body}\n}}\n"
+        );
+        let found = findings(&source);
+        assert!(
+            found.iter().any(|f| f.code == "NK1116"),
+            "NK1116 for\n{source}\n{found:#?}"
+        );
+    }
+    let returned = "fn one() -> f32 { return 1e40 }\nfn main() {\n    println(f\"{one()}\")\n}\n";
+    assert!(
+        findings(returned).iter().any(|f| f.code == "NK1116"),
+        "{:#?}",
+        findings(returned)
+    );
+    let fine = "fn main() {\n    let w: f32 = 3.4e38\n    let v: Vec[f32] = [-3.4e38, 1e-50]\n    println(f\"{w} {v[0]} {w + 1.0}\")\n}\n";
+    assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
+}

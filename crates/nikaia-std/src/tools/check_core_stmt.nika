@@ -892,6 +892,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         // **A number assigned where no integer goes** (#703) is the `i64` it
         // would be, and the mismatch says so.
         if check_float_literal_fits(value, into) {
+            state.floats_beyond_f32(value, into, span)
             return check_core_stmt_unit()
         }
         let mut assigned: Ty = found.clone()

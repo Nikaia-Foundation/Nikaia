@@ -84,15 +84,16 @@ fn check_core_places_offered(name: ref String) -> bool {
     return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str"
 }
 
-/// Whether a float literal, negated or not, is a finite value beyond the
-/// `f32` range.
-fn check_core_places_beyond_f32(value: ref Expr) -> bool {
+/// Whether a float literal, negated or not, or one an operation on floats
+/// written out holds, is a finite value beyond the `f32` range.
+pub fn check_core_places_beyond_f32(value: ref Expr) -> bool {
     return match check_peeled(value) {
         Expr::LitFloat(written, _) => {
             let number = text::parse_f64(written) ?? 0.0
             number > 340282346638528859811704183484516925440.0
         },
         Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_core_places_beyond_f32(expr),
+        Expr::Binary { lhs, rhs, .. } => check_core_places_beyond_f32(lhs) || check_core_places_beyond_f32(rhs),
         else => false,
     }
 }
@@ -1144,9 +1145,7 @@ pub fn check_core_cast[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         else => false,
     }
     if into_f32 && check_floats_written(inner) {
-        if check_core_places_beyond_f32(inner) {
-            state.findings.push(check_refusal("NK1116", span, "This number is beyond the range of an `f32`.", ["An `f32` holds finite values up to about 3.4e38 either side of zero.".clone()], "Keep it an `f64`, or write a number within the `f32` range.".clone()))
-        }
+        state.floats_beyond_f32(inner, into, span)
         let added = state.flow.widening_casts.insert(id_of(inner) as i64)
     } else if !(from.is_unknown() && state.open_number_cast(world, inner, into)) {
         // A cast out of an open number is recorded once the number has its type.

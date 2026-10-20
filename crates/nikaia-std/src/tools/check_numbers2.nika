@@ -81,6 +81,12 @@ impl CheckState {
         // **A float written out beside an `f32` is an `f32`** (Part I 2.2): the
         // operation is the use that asks for one.
         if (l == "f32" && check_floats_written(rhs)) || (r == "f32" && check_floats_written(lhs)) {
+            let f32_ty = Ty::Named { name: "f32", args: [], view: false }
+            if l == "f32" && check_floats_written(rhs) {
+                self.floats_beyond_f32(rhs, f32_ty, at)
+            } else {
+                self.floats_beyond_f32(lhs, f32_ty, at)
+            }
             return "f32"
         }
         if l.is_empty() || r.is_empty() || l == r || !an_offered_number(l) || !an_offered_number(r) {

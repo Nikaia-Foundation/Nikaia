@@ -416,6 +416,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if given_here != null {
             let floats = given_here ?? continue
             if check_float_literal_fits(floats, want) {
+                state.floats_beyond_f32(floats, want, span)
                 continue
             }
         }
