@@ -226,3 +226,17 @@ fn an_assume_over_standard_input_is_accepted() {
     assert!(ok, "{err}");
     assert_eq!(out.trim(), "65");
 }
+
+/// D2: where the build removes no checks, a block of nothing but `assume`s
+/// holds nothing Rust calls unsafe, so it is not written as Rust's `unsafe`,
+/// which `rustc` would call unnecessary.
+#[test]
+fn a_checked_assume_is_no_rust_unsafe() {
+    let parsed = parse_to_ast(&PICK.replace("AT", "1")).expect("the source parses");
+    let rust = emit_program(&parsed, Build::default())
+        .expect("it lowers")
+        .rust;
+    let pick = body(&rust, "pick");
+    assert!(pick.contains("assumption_failed"), "{pick}");
+    assert!(!pick.contains("unsafe"), "{pick}");
+}

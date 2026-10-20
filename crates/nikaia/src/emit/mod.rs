@@ -7732,8 +7732,21 @@ impl<'p> Emitter<'p> {
             // ([ADR-302](../../docs/specification/adr/adr-302.md) D3), which is
             // the whole of the lowering: the word means the same thing on both
             // sides and the block inside it is an ordinary one.
+            //
+            // **A block of nothing but `assume`s, checked**
+            // ([ADR-376](../../docs/specification/adr/adr-376.md) D2), holds
+            // nothing Rust calls unsafe, so it is written as a plain block:
+            // `rustc` would call the word unnecessary.
             Expr::Unsafe(block, _) => {
-                out.push("unsafe ");
+                let only_checked_assumes = !self.s.unchecked_assumes
+                    && !nikaia_std::tools::prover_walk::prover_assumed_in_unsafe(
+                        block,
+                        &self.parsed.interner,
+                    )
+                    .is_empty();
+                if !only_checked_assumes {
+                    out.push("unsafe ");
+                }
                 self.block(out, block, depth, flow, Tail::Value)?;
             }
 
