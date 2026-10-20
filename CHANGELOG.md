@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1146] — 2026-10-20
+
+**bytes::find_all: the next hit costs a tzcnt and a cleared bit, one length test a block**
+- A set of one or two bytes compares only its members, the last short block is a cold path, and the iterator stays in registers. Measured at 37.7 / 29.5 instructions a row (x86-64 / x86-64-v3, from 40.7 / 32.5) with `benches/brc/scan.nika`; Rust's hand-written split, `benches/brc/src/bin/scan.rs`, is 31.3 / 29.4.
+
 ## [0.0.1145] — 2026-10-20
 
 **bytes::ByteSet: a buffer searched for a set of bytes at the build's width (ADR-375, built)**
