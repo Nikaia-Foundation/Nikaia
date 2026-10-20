@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1157] — 2026-10-20
+
+**A search's positions and a shift's count in the bounds walk (ADR-375 D5, ADR-306 D18, built)**
+- `std.contracts` gets an `ensures_each` key; `find_all`'s positions satisfy `from <= s < b.len()` in a `for`, also through a `let`, not after `filter` or `map`. A std method's `ensures` on its result is read too (`trailing_zeros`/`leading_zeros` are `0..=w`). A shift whose count is not a literal asks `0 <= k < width`; a proved one is written as `wrapping_shl`/`wrapping_shr` under `remove-overflow-checks:on`. Refusing a count shown outside waits for D15's refutation.
+
 ## [0.0.1156] — 2026-10-20
 
 **A type's rule is a fact only where nothing can break it unchecked (ADR-369 D2, D3)**
