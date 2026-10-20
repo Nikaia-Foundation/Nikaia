@@ -58499,6 +58499,7 @@ struct TierLocal {
     declared: Option<Declaring>,
     from: Option<String>,
     empty: i64,
+    through: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58521,13 +58522,15 @@ struct Flows {
     uses: collections::BTreeMap<String, i64>,
     lent_uses: collections::BTreeMap<String, i64>,
     arg_into: collections::BTreeSet<(String, String)>,
+    read_into: collections::BTreeSet<(String, String)>,
+    unlinked: collections::BTreeSet<String>,
     arg_uses: collections::BTreeMap<String, i64>,
     changed: collections::BTreeSet<String>,
     viewed_arms: collections::BTreeSet<i64>,
     param_arm_into: collections::BTreeMap<i64, String>,
 }
 
-fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new() } }
+fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 struct TierWalk {
@@ -58629,7 +58632,7 @@ fn tier_arm_read(node: i64, walk: &mut TierWalk) -> bool {
     walk.param_arms.contains(&node)
 }
 
-fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1 } }
+fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1, through: vec![] } }
 
 fn tier_at(word: &str, walk: &mut TierWalk) -> Tier {
     if !walk.reads.tiers.contains(word) { walk.reads.tiers.insert(word.to_owned()); }
@@ -58690,6 +58693,13 @@ fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds, ask: &Tier
             let to = seen(&owner, &path, walk);
             walk.flows.param_into.insert((from_word, to));
         }
+    }
+    if plain && value.is_some() {
+        let read = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut sources: Vec<String> = vec![];
+        read_through(read, ask, walk, &mut sources);
+        let to = seen(&owner, &path, walk);
+        for from_word in sources.iter() { if *from_word != to { walk.flows.read_into.insert((from_word.to_owned(), to.to_owned())); } }
     }
     let mut linked = a_container(ask.names, &ty) && comes_whole(value, ask, walk);
     if plain && tier_a_name(value) {
@@ -58790,6 +58800,33 @@ fn text_source_word(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_, '_>, walk: &
         },
         _ => None,
     }
+}
+
+fn read_through(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            read_through(first, ask, walk, out);
+            read_through(fallback, ask, walk, out);
+            return;
+        },
+        Expr::Try(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            read_through(inner, ask, walk, out);
+            return;
+        },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = tier_local(ask.names.resolve(name), &walk);
+            if local.is_some() {
+                let found = match local { Some(__nikaia_value) => __nikaia_value, None => return };
+                for word in found.through.iter() { out.push(word.to_owned()); }
+            }
+        },
+        _ => { },
+    }
+    let source = match source_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if plain_string(ask.names, &source.ty) { out.push(seen(&source.owner, &no_path(), walk)); }
 }
 
 fn element_word(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
@@ -59025,6 +59062,22 @@ fn demote_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAs
     }
 }
 
+fn unlinked_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) {
+    if plain_string(ask.names, ty) {
+        let word = seen(owner, &path, walk);
+        walk.flows.unlinked.insert(word);
+        return;
+    }
+    if !a_container(ask.names, ty) { return; }
+    let mut at = 0;
+    for arg in ty.generics.iter() {
+        path.push(at);
+        unlinked_inside(owner, arg, &mut path.to_owned(), ask, walk);
+        path.pop();
+        at += 1;
+    }
+}
+
 fn still_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
     match value {
         Expr::Block(block, _) => { still_tail(block, ask, walk, out); },
@@ -59137,7 +59190,13 @@ fn flow_whole(going: &TierGoing, value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, wa
 }
 
 fn link_from(going: &TierGoing, value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) {
-    let from = match source_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let source = source_of(value, ask, walk);
+    if source.is_none() {
+        let parameter = matches!(going.owner, TextOwner::Param(_, _));
+        if parameter { unlinked_inside(&going.owner, &going.ty, &mut going.path.to_owned(), ask, walk); }
+        return;
+    }
+    let from = match source { Some(__nikaia_value) => __nikaia_value, None => return };
     let to = Declaring { owner: going.owner.clone(), ty: going.ty.clone() };
     link(&from, &mut vec![], &to, &mut going.path.to_owned(), ask, walk);
 }
@@ -59407,6 +59466,8 @@ fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, a
     let mut declared: Option<Declaring> = None;
     let written = ty.is_some();
     let from = text_source_word(Some(value), ask, walk);
+    let mut through: Vec<String> = vec![];
+    read_through(value, ask, walk, &mut through);
     if written {
         let declared_ty = match match ty {
             Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
@@ -59439,7 +59500,7 @@ fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, a
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of, literal, declared, from, empty };
+        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, through };
         bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned(), local, walk);
         return;
     }
@@ -59545,24 +59606,41 @@ fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk:
     let result = match function.result { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut handed = kinds.clone();
     if same_kinds(&handed, &owned_kinds()) && lent_field(value, ask, walk) { handed = view_kinds(); }
-    if plain_string(ask.names, &result) && !result.is_nullable && !function.of_a_trait {
-        let lent = lendable_parameter(value, ask, walk);
-        if lent.is_some() {
+    if plain_string(ask.names, &result) && !function.of_a_trait {
+        let mut sides: Vec<String> = vec![];
+        if lendable_sides(value, ask, walk, &mut sides) && !sides.is_empty() {
             let empty: Vec<i64> = vec![];
             let to = seen(&TextOwner::Returned(key.to_owned()), &empty, walk);
-            let word: String = nikaia_std::index::or(lent, || "".into());
-            let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.lent_kinds, &word) {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                None => None,
-            }, || no_kinds().into());
-            walk.flows.lent_kinds.insert(word.to_owned(), kinds_joined(&before, &handed));
-            let lent_before = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.lent_uses, &word), || 0);
-            walk.flows.lent_uses.insert(word.to_owned(), lent_before + 1);
-            walk.flows.lent_into.insert((word, to));
+            for word in sides.iter() {
+                let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.lent_kinds, word) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || no_kinds().into());
+                walk.flows.lent_kinds.insert(word.to_owned(), kinds_joined(&before, &handed));
+                let lent_before = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.lent_uses, word), || 0);
+                walk.flows.lent_uses.insert(word.to_owned(), lent_before + 1);
+                walk.flows.lent_into.insert((word.to_owned(), to.to_owned()));
+            }
             handed = no_kinds();
         }
     }
     flow_value(&going_into(&TextOwner::Returned(key.to_owned()), &result, vec![], false), Some(value), &handed, ask, walk);
+}
+
+fn lendable_sides(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) -> bool {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            return lendable_sides(first, ask, walk, out) && lendable_sides(fallback, ask, walk, out);
+        },
+        Expr::Return(_, _) => { return true; },
+        Expr::Throw(_, _) => { return true; },
+        _ => { },
+    }
+    if a_null(value) { return true; }
+    let word = match lendable_parameter(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    out.push(word);
+    true
 }
 
 fn count_use(name: &str, walk: &mut TierWalk) {
@@ -59618,7 +59696,7 @@ fn lendable_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut Ti
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     if function.of_a_trait || at >= function.params.len() as i64 || *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { return None; }
     let ty = (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at))).clone();
-    if !plain_string(ask.names, &ty) || ty.is_nullable || ty.is_view { return None; }
+    if !plain_string(ask.names, &ty) || ty.is_view { return None; }
     Some(seen(&parameter, &no_path(), walk))
 }
 
@@ -61138,7 +61216,7 @@ fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_, 
         let owner = TextOwner::Param(key.to_owned(), at);
         let kinds = kinds_of(&owner, &arg.ty, &mut vec![], ask, walk);
         let of: String = ask.names.resolve(arg.ty.name).to_owned();
-        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty: arg.ty.clone() }), from: None, empty: -1 };
+        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty: arg.ty.clone() }), from: None, empty: -1, through: vec![] };
         bind_tier_local(ask.names.resolve(arg.name).to_owned(), local, walk);
         at += 1;
     }
@@ -61149,7 +61227,7 @@ fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_, 
         let local = TierLocal { kinds: owned_kinds(), of: match target.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, literal: -1, declared: None, from: None, empty: -1 };
+        }, literal: -1, declared: None, from: None, empty: -1, through: vec![] };
         bind_tier_local(String::from("self"), local, walk);
     }
     walk.handed_back = -1;
@@ -61183,6 +61261,7 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut collection
     let mut lent = lent_parameters(flows, declared, &unlent, &mut positions);
     let mut fixed: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut never: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut unmixed = flows.unlinked.to_owned();
     for (word, _) in flows.known.iter() { if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) { fixed.insert(word.to_owned()); } }
     let mut changed = true;
     while changed {
@@ -61245,6 +61324,20 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut collection
                 never.insert(b.to_owned());
                 changed = true;
             }
+            if unmixed.contains(a) != unmixed.contains(b) {
+                unmixed.insert(a.to_owned());
+                unmixed.insert(b.to_owned());
+                changed = true;
+            }
+        }
+        for (from, to) in flows.read_into.iter() {
+            if fixed.contains(to) && !fixed.contains(from) && mixed(tier_of_kinds(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, from) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || no_kinds().into()))) {
+                fixed.insert(from.to_owned());
+                changed = true;
+            }
         }
         for (from, to) in flows.param_into.iter() {
             if fixed.contains(to) && !fixed.contains(from) {
@@ -61257,7 +61350,7 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut collection
     for (word, kinds) in positions.iter() {
         let kinds = *kinds;
         let mut tier = tier_of_kinds(&kinds);
-        if mixed(tier) && fixed.contains(word) { tier = Tier::Owned; }
+        if mixed(tier) && (fixed.contains(word) || unmixed.contains(word)) { tier = Tier::Owned; }
         if lasting_tier(tier) && (fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared)) { tier = Tier::Owned; }
         if !owned_tier(tier) { out.insert(word.to_owned(), tier); }
     }
