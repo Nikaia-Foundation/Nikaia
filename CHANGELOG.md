@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1159] — 2026-10-20
+
+**A grammar's par_fold names winnow_grammar's ParseContext in full**
+- A program whose only grammar driver is a `par_fold` with options lowered `&ParseContext::<()>::default()` without the `use` that names it, and rustc refused it (CI's accepted-sweep, a checker test's program); the call now names `winnow_grammar::ParseContext` in full.
+
 ## [0.0.1158] — 2026-10-20
 
 **unsafe { assume(claim) } (ADR-376, decided); a type's rule another package can break is no fact (ADR-369, built)**

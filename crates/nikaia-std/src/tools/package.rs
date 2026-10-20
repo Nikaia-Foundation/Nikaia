@@ -37942,7 +37942,7 @@ impl EmitState {
             host.expr(walk, out, input, depth, flow, scope)?;
             let options = emit_fold_options(&name, &rule_name);
             let claimed = parallelism != "Parallelism::Off";
-            out.push(&format!(", {}(), {}, |source, how| {}::parse_{}_pieces(source, &ParseContext::<()>::default(), how)){}", options, claimed, lowered, rule_name, question));
+            out.push(&format!(", {}(), {}, |source, how| {}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", options, claimed, lowered, rule_name, question));
             return Ok(());
         }
         out.push(&format!("nikaia_std::grammar::parse{}(&*", over));

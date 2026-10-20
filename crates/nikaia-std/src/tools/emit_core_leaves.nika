@@ -459,7 +459,7 @@ impl EmitState {
             host.expr(walk, out, input, depth, flow, scope)
             let options = emit_fold_options(name, rule_name)
             let claimed = parallelism != "Parallelism::Off"
-            out.push(f", {options}(), {claimed}, |source, how| {lowered}::parse_{rule_name}_pieces(source, &ParseContext::<()>::default(), how)){question}")
+            out.push(f", {options}(), {claimed}, |source, how| {lowered}::parse_{rule_name}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){question}")
             return
         }
         // A sequential entry rule: the parser is driven over the whole input once.

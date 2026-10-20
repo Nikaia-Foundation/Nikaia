@@ -200,13 +200,13 @@ fn user_parallelism_chooses_the_parallelism_and_nothing_else() {
 
     assert!(
         parallel.contains(
-            "nikaia_std::grammar::parse_pieces(&*data, __nk_fold_Measurements_file(), true, |source, how| Measurements::parse_file_pieces(source, &ParseContext::<()>::default(), how))"
+            "nikaia_std::grammar::parse_pieces(&*data, __nk_fold_Measurements_file(), true, |source, how| Measurements::parse_file_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how))"
         ),
         "{parallel}"
     );
     assert!(
         sequential.contains(
-            "nikaia_std::grammar::parse_pieces(&*data, __nk_fold_Measurements_file(), false, |source, how| Measurements::parse_file_pieces(source, &ParseContext::<()>::default(), how))"
+            "nikaia_std::grammar::parse_pieces(&*data, __nk_fold_Measurements_file(), false, |source, how| Measurements::parse_file_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how))"
         ),
         "{sequential}"
     );
