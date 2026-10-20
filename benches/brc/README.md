@@ -245,14 +245,16 @@ MARGIN` once per `run`, and `0 <= len <= 100` once per row; with
 `prove-through-loops` the probe's index, the word reads at `pos` and `pos +
 8`, `sep - pos`, `sep + 1`'s word read, `8 * len` and its shift and `sep + 4 +
 (dot >> 3)` are proved, and the table has one multiply for its hash: 125.7 a
-row. What is still checked, and what proving it needs:
+row. Since, `slot_of`'s postcondition proves the table's index in `run`'s
+update, its precondition the long name's cut of `buf`, and the walk proves the
+temperature's `- signed`; each row's index is written through the proved place
+(the write already had no check left in the binary: LLVM had taken it from the
+inlined postcondition). What a row still checks, and what proving it needs:
 
 | check | what proving it needs |
 |---|---|
-| the table's index in `run`'s update, `self.slots[at]` | `slot_of`'s result below `SLOTS` as its postcondition: the prover reads no `&` or `>>`, so it cannot state it, and the walk reads no method's postcondition |
-| the long name's slice `buf[pos..<pos + len]` in `slot_of` | a precondition `0 <= pos <= pos + len <= buf.len()` on `slot_of`, proved at the call |
-| `sum += v`, `count += 1` | not provable: the table is scanned again and merged into, so no step count bounds them |
-| the temperature's `- signed` | `signed` in `-1..=0`: the walk keeps no range for `>> 63` of a signed value |
+| `sum += v`, `count += 1` in `run`, the only overflow tests left in the loop (with them off, 104.1 a row instead of 107.5) | ADR-361 D11's summary of a slot's field, carried across the `Par::fold` (ADR-367). Not enough as decided: a turn here is a piece, not a row, and `count` grows inside `run`'s loop; and `|sum|` at most 1023 times the rows of an input below 2^60 does not fit an `i64` without ADR-367 D4's length test before the fold |
+| the long name's cut of the slot's `name`, `self.slots[at].name[0..<len]` in `slot_of` (a long name only) | a fact of a field of an indexed element (#384): `name.len() == len` for every slot, D11's summary |
 
 ## Where `naive.nika` differs from `naive.rs`
 
