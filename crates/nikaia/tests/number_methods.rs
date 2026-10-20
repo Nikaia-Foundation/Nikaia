@@ -200,3 +200,32 @@ fn bits_as_and_u8_names_are_width_dependent() {
         );
     }
 }
+
+/// **`rotate_left` and `rotate_right` on every unsigned type** (#776): the
+/// count may be any integer type, handed to Rust's through an `i64` as a
+/// `u32`, which keeps it modulo `2^32` and so modulo the width; and they
+/// depend on the width, as `wrapping_` does.
+#[test]
+fn rotations_are_described_and_lowered_with_any_count() {
+    let source = "fn f(a: u64, b: u32, c: u8, n: i64) -> String {\n    \
+         let x = a.rotate_left(n)\n    \
+         let y = b.rotate_right(3)\n    \
+         let z = c.rotate_left(-1)\n    \
+         return f\"{x} {y} {z}\"\n\
+         }\n\nfn main() {}\n";
+    assert_eq!(codes(source), Vec::<String>::new());
+    let rust = lowered(source);
+    for expected in [
+        "a.rotate_left((n) as i64 as u32)",
+        "b.rotate_right((3) as i64 as u32)",
+        "c.rotate_left((-1) as i64 as u32)",
+    ] {
+        assert!(rust.contains(expected), "{expected}:\n{rust}");
+    }
+    let narrow = "fn f(a: u8) {\n    let t: u32 = a.rotate_left(1)\n    println(f\"{t}\")\n}\n\nfn main() {}\n";
+    assert!(
+        codes(narrow).contains(&"NK1215".to_string()),
+        "{:?}",
+        codes(narrow)
+    );
+}

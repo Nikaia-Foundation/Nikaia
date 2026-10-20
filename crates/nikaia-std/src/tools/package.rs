@@ -2869,6 +2869,12 @@ fn bounding_range_of(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rhs: &Exp
                 let most = (1 << (width - k).min(62)) - 1;
                 widest = Some(Range { lo: Some(0), hi: most.into() });
             }
+            if ty.starts_with('i') && width > 0 && k >= 1 && k < width {
+                let by = width - 1 - k;
+                let half: i64 = 1 << by;
+                let below = half - 1;
+                widest = Some(Range { lo: Some(-half), hi: Some(below) });
+            }
             let known = bounding_range(walk, lhs, facts, context, program, words, ask);
             let x = match known { Some(__nikaia_value) => __nikaia_value, None => return widest };
             let lo = match x.lo { Some(__nikaia_value) => __nikaia_value, None => return widest };
@@ -2876,6 +2882,13 @@ fn bounding_range_of(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rhs: &Exp
             let mut shifted = Range { lo: Some(lo >> k), hi: nikaia_std::index::or(widest, || Range { lo: Some(0), hi: None }).hi };
             if x.hi.is_some() { shifted.hi = Some(nikaia_std::index::or(x.hi, || 0) >> k); }
             return Some(shifted);
+        },
+        BinaryOp::BitXor => {
+            let a = match bounding_range(walk, lhs, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let b = match bounding_range(walk, rhs, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let m = match bounding_sign_bits(&a) { Some(__nikaia_value) => __nikaia_value, None => return None }.max(match bounding_sign_bits(&b) { Some(__nikaia_value) => __nikaia_value, None => return None });
+            let half = 1 << m;
+            return Some(Range { lo: (-half).into(), hi: (half - 1).into() });
         },
         BinaryOp::BitAnd => {
             let mut mask: Option<i64> = None;
@@ -2887,6 +2900,16 @@ fn bounding_range_of(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rhs: &Exp
             return Some(Range { lo: Some(0), hi: Some(most) });
         },
         _ => { },
+    }
+    None
+}
+
+fn bounding_sign_bits(range: &Range) -> Option<i64> {
+    let lo = match range.lo { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let hi = match range.hi { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for m in 0..63 {
+        let half: i64 = 1 << m;
+        if lo >= -half && hi < half { return m.into(); }
     }
     None
 }
@@ -3172,9 +3195,28 @@ fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, context
             }
         },
         Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); return bounding_lin_of(walk, op, lhs, rhs, facts, context, program, words); },
+        Expr::Block(block, _) => {
+            let last = block.stmts.len() as i64 - 1;
+            if last < 0 { return None; }
+            for k in 0..last { if !bounding_an_assert(&nikaia_std::index::get(&block.stmts, (k) as usize).node, words) { return None; } }
+            return match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(last)).node {
+                Stmt::Expr(inner) => bounding_lin(walk, inner, facts, context, program, words),
+                _ => None,
+            };
+        },
         _ => { },
     }
     None
+}
+
+fn bounding_an_assert(stmt: &Stmt, words: &winnow_grammar::InternerContext) -> bool {
+    match stmt {
+        Stmt::Expr(inner) => match inner {
+            Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); args.len() == 1 && nikaia_std::index::or(bounding_variable(func, words), || "".into()) == "assert" },
+            _ => false,
+        },
+        _ => false,
+    }
 }
 
 fn bounding_code(walk: &mut BoundsWalk) -> i64 {
@@ -3265,7 +3307,7 @@ fn bounding_ensured(walk: &mut BoundsWalk, ensured: &Ensured, args: &[Expr], fac
     let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for k in 0..args.len() as i64 {
         if *nikaia_std::index::get(&ensured.chars, (k) as usize) { given.insert((*nikaia_std::index::get(&ensured.params, (k) as usize)).to_owned(), bounding_code_of(walk, nikaia_std::index::get(&args, (k) as usize), context, words)); } else {
-            let term = match bounding_lin(walk, nikaia_std::index::get(&args, (k) as usize), facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let term = nikaia_std::index::or(bounding_lin(walk, nikaia_std::index::get(&args, (k) as usize), facts, context, program, words), || bounding_fresh(walk).into());
             given.insert((*nikaia_std::index::get(&ensured.params, (k) as usize)).to_owned(), term);
         }
     }
@@ -3690,7 +3732,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
-            let __keep_73231 = nikaia_std::tether::Keep::new();
+            let __keep_75900 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 Expr::Field { .. } => {
@@ -4294,8 +4336,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
         bounding_push(&walk, facts, fact);
     }
     for list in filled.iter() {
-        let __keep_107016 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_107016).put(length_of(list)), count);
+        let __keep_109685 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_109685).put(length_of(list)), count);
     }
 }
 
@@ -17986,6 +18028,15 @@ fn check_core_method_ledger_type(on: &Ty, bytes: bool) -> String {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_own_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, written: &str) -> String {
+    match on {
+        Ty::Named { name, args, .. } => { if args.is_empty() && resolve_method(world, &format!("{}::{}", name, written)).is_some() { name.to_owned() } else { "".to_owned() } },
+        _ => "".to_owned(),
+    }
+}
+
 fn check_core_method_a_map(on: &Ty) -> bool {
     match on {
         Ty::Named { name, .. } => {
@@ -18177,7 +18228,10 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
     };
     if bytes && name == "split" && args.len() == 1 { state.facts.bytes_splits.insert(id_of(receiver) as i64); }
     let std_type = check_core_method_ledger_type(&on, bytes);
-    if std_type != "" { state.facts.std_receivers.insert(id_of(expr) as i64, std_type); }
+    if std_type != "" { state.facts.std_receivers.insert(id_of(expr) as i64, std_type); } else {
+        let own_type = check_core_method_own_type(world, &on, written);
+        if own_type != "" { state.facts.std_receivers.insert(id_of(expr) as i64, own_type); }
+    }
     let pattern_at = check_core_method_pattern_at(&name);
     if text && pattern_at >= 0 && pattern_at < args.len() as i64 {
         match nikaia_std::index::get(&args, nikaia_std::index::at(pattern_at)) {
@@ -22177,7 +22231,7 @@ fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp,
 
 fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, into: &str) -> Vec<String> {
     let name = world.words.resolve(method).to_owned();
-    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") && !name.starts_with("bits_as_") { return vec![]; }
+    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") && !name.starts_with("bits_as_") && !name.starts_with("rotate_") { return vec![]; }
     vec![format!("`{}`", name), format!("({} as {}).{}(…)", written_expression(world.words, receiver), into, name)]
 }
 
@@ -37538,6 +37592,17 @@ impl EmitState {
             out.push("__nikaia_site.full_of(&error)");
             return Ok(());
         }
+        let rotation = world.words.resolve(method);
+        if (rotation == "rotate_left" || rotation == "rotate_right") && args.len() == 1 {
+            let on_type = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.std_receivers, &(node_key(node))), || "");
+            if on_type == "u8" || on_type == "u32" || on_type == "u64" {
+                self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?;
+                out.push(&format!(".{}((", rotation));
+                self.emit_core_nested(world, walk, out, host, nikaia_std::index::get(&args, 0), 0, depth, flow, scope)?;
+                out.push(") as i64 as u32)");
+                return Ok(());
+            }
+        }
         self.emit_core_method_call(world, walk, out, host, Some(receiver), node_key(receiver), method, args, config, depth, flow, scope)?;
         if self.facts.copied_walks.contains(&node_key(node)) { out.push(".copied()"); }
         Ok(())
@@ -52378,7 +52443,7 @@ pub fn lowered_first(text: &str) -> String {
     out
 }
 
-pub fn has_a_length(ty: &str) -> bool { matches!(ty, "Vec" | "String" | "str" | "Array") }
+pub fn has_a_length(ty: &str) -> bool { matches!(ty, "Vec" | "String" | "str" | "Array" | "Bytes") }
 
 
 // --- prover_arena.nika ---
@@ -54011,10 +54076,17 @@ pub struct ProverScope {
     pub mutables: collections::BTreeSet<String>,
     pub loops: Vec<LoopRecord>,
     pub history: Vec<i64>,
+    pub bits: collections::BTreeMap<String, ProverBits>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProverBits {
+    pub lo: i64,
+    pub hi: i64,
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], history: vec![] } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], history: vec![], bits: collections::BTreeMap::new() } }
     pub fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
@@ -54039,6 +54111,7 @@ impl ProverScope {
         self.calls_of.remove(name);
         self.summed.remove(name);
         self.leaned.remove(name);
+        self.bits.remove(name);
         if !self.loops.is_empty() {
             let mut standing: Vec<LoopRecord> = vec![];
             for record in self.loops.iter() { if !nikaia_std::list::contains(&record.problem.state, &name) { standing.push(record.clone()); } }
@@ -54071,6 +54144,7 @@ impl ProverScope {
         }
     }
     pub fn renamed(&mut self, arena: &mut TermArena, name: &str, earlier: &str) {
+        self.bits.remove(name);
         let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         given.insert(name.to_owned(), arena.var(earlier));
         let mut history: Vec<i64> = vec![];
@@ -54211,6 +54285,18 @@ impl ProverScope {
         }
         for n in names.iter() { if self.loose.contains(n) || !self.ints.contains(n) { return None; } }
         Some(names)
+    }
+    pub fn bounded_bits(&mut self, arena: &mut TermArena, name: &str, bits: &ProverBits) {
+        self.ints.insert(name.to_owned());
+        self.loose.insert(name.to_owned());
+        let named = arena.var(name);
+        let lo = arena.int(bits.lo);
+        let above = arena.le(lo, named);
+        self.facts.push(above);
+        let hi = arena.int(bits.hi);
+        let below = arena.le(named, hi);
+        self.facts.push(below);
+        self.bits.insert(name.to_owned(), ProverBits { lo: bits.lo, hi: bits.hi });
     }
     pub fn blind(&self) -> ProverScope {
         let mut scope = ProverScope::unknown();
@@ -54435,7 +54521,7 @@ impl ProverState {
         if self.in_test { return outcome; }
         let claim = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, &scope, name) }, &mut arena.nodes);
         let at_byte = span.start as i64;
-        if self.collecting && at.free && !at.lambda && claim.is_some() {
+        if self.collecting && at.posts && !at.lambda && claim.is_some() {
             let function = carrying_function((at.function).as_deref());
             let returned = returned_before(&self.before_return, at_byte);
             if function.is_some() && returned.is_some() {
@@ -54443,7 +54529,9 @@ impl ProverState {
                 if term.is_some() {
                     let owner = nikaia_std::index::or(function, || "".into());
                     let mut posts = nikaia_std::index::or(self.candidates.remove(&owner), || vec![].into());
-                    posts.push(PostClaim { term: nikaia_std::index::or(term, || 0), written: written.to_owned() });
+                    let mut again = false;
+                    for post in posts.iter() { if post.written == written { again = true; } }
+                    if !again { posts.push(PostClaim { term: nikaia_std::index::or(term, || 0), written: written.to_owned() }); }
                     self.candidates.insert(owner, posts);
                 }
             }
@@ -54877,6 +54965,7 @@ pub struct ProverWhere {
     pub no_precondition: Option<String>,
     pub top: bool,
     pub free: bool,
+    pub posts: bool,
     pub lambda: bool,
     pub throws_out: bool,
 }
@@ -54964,7 +55053,7 @@ pub fn prover_bodies(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
 #[allow(clippy::too_many_arguments)]
 fn prover_test(walk: &mut ProverWalk, body: &Block, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     walk.state.in_test = true;
-    let at = ProverWhere { function: None, params: collections::BTreeSet::new(), no_precondition: Some(String::from("a test has no callers")), top: true, free: false, lambda: false, throws_out: true };
+    let at = ProverWhere { function: None, params: collections::BTreeSet::new(), no_precondition: Some(String::from("a test has no callers")), top: true, free: false, posts: false, lambda: false, throws_out: true };
     let mut scope = ProverScope::unknown();
     prover_block(walk, body, &mut scope, &at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     walk.state.in_test = false;
@@ -55030,7 +55119,7 @@ fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner: Option<St
             let mut no_precondition: Option<String> = None;
             if of_a_trait { no_precondition = Some(String::from("A method of a trait's implementation can't have a precondition: a call through the trait doesn't know it, and there is no second entry to check it.")); }
             let free = !has_owner && !was_a_test;
-            let at = ProverWhere { function: claim_text_of((key).as_deref()), params, no_precondition, top: true, free, lambda: false, throws_out: can_throw };
+            let at = ProverWhere { function: claim_text_of((key).as_deref()), params, no_precondition, top: true, free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw };
             walk.state.in_test = was_a_test;
             walk.state.summing = vec![];
             walk.state.unsummed = !free || key.is_none() || !prover_summable(body);
@@ -55058,7 +55147,9 @@ fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut ProverScope, a
     for index in 0..block.stmts.len() as i64 {
         let stmt = nikaia_std::index::get(&block.stmts, (index) as usize);
         if walk.state.collecting && ((index + 1) as usize) < block.stmts.len() {
-            let returned = prover_returned_name(&nikaia_std::index::get(&block.stmts, (index + 1) as usize).node, words);
+            let mut next = index + 1;
+            while next + 1 < block.stmts.len() as i64 && prover_a_claim_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(next)).node, words) { next += 1; }
+            let returned = prover_returned_name(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(next)).node, words);
             if returned.is_some() { walk.state.before_return.insert(stmt.span.start as i64, nikaia_std::index::or(returned, || "".into())); }
         }
         if prover_stmt(walk, &stmt, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition) { return true; }
@@ -55102,7 +55193,13 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
                     let name = *name;
                     let n = words.resolve(name).to_owned();
                     let tainted = from_outside(value, &scope.tainted, words, library, holes_of) || op.is_some() && scope.tainted.contains(&n);
-                    if !prover_assigned(walk, &n, (op).as_ref(), value, &span, scope, words) { scope.rebind(&walk.arena, &n); }
+                    if !prover_assigned(walk, &n, (op).as_ref(), value, &span, scope, words) {
+                        scope.rebind(&walk.arena, &n);
+                        if op.is_none() && !tainted {
+                            let bits = prover_bit_range(walk, value, &scope, words);
+                            if bits.is_some() { scope.bounded_bits(&mut walk.arena, &n, &match bits { Some(__nikaia_value) => __nikaia_value, None => return false }); }
+                        }
+                    }
                     if tainted { scope.tainted.insert(n); }
                 },
                 _ => { },
@@ -55124,6 +55221,7 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
                 let record = loop_record(&mut walk.arena, span.start as i64, &state, &at_loop, &scope.ints, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, cond, body, words, &walk.claims, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of);
                 if record.is_some() { records.push(match record { Some(__nikaia_value) => __nikaia_value, None => return false }); }
             }
+            let kept_bits = prover_loop_bits(walk, &scope, &changed, body, words);
             let mut inner = scope.clone();
             for n in changed.iter() {
                 inner.rebind(&walk.arena, n);
@@ -55134,6 +55232,11 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
                 inner.loose.insert(n.to_owned());
                 scope.ints.insert(n.to_owned());
                 scope.loose.insert(n.to_owned());
+            }
+            for (n, bits) in kept_bits.iter() {
+                let bits = *bits;
+                inner.bounded_bits(&mut walk.arena, n, &bits);
+                scope.bounded_bits(&mut walk.arena, n, &bits);
             }
             if !changed.is_empty() { scope.exact = false; }
             scope.loops.extend(records);
@@ -55272,6 +55375,13 @@ fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: 
         if tainted {
             scope.tainted.insert(n.to_owned());
             scope.loose.insert(n.to_owned());
+        }
+    }
+    if names.len() == 1 && value_lin.is_none() && !tainted {
+        let bits = prover_bit_range(walk, value, &scope, words);
+        if bits.is_some() {
+            let bound = words.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
+            scope.bounded_bits(&mut walk.arena, &bound, &match bits { Some(__nikaia_value) => __nikaia_value, None => return });
         }
     }
     if names.len() != 1 || mutable { return; }
@@ -55600,6 +55710,7 @@ fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: 
             _ => { },
         }
     }
+    let kept_bits = prover_loop_bits(walk, &scope, &changed, body, words);
     let mut inner = scope.clone();
     for n in changed.iter() {
         inner.rebind(&walk.arena, n);
@@ -55610,6 +55721,11 @@ fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: 
         inner.loose.insert(n.to_owned());
         scope.ints.insert(n.to_owned());
         scope.loose.insert(n.to_owned());
+    }
+    for (n, bits) in kept_bits.iter() {
+        let bits = *bits;
+        inner.bounded_bits(&mut walk.arena, n, &bits);
+        scope.bounded_bits(&mut walk.arena, n, &bits);
     }
     scope.loops.extend(records);
     if !changed.is_empty() { scope.exact = false; }
@@ -55666,7 +55782,7 @@ fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: 
 fn prover_return(walk: &mut ProverWalk, value: Option<&Expr>, span: Span, scope: &ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return };
     prover_expr(walk, returned, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-    walk.state.exit(&mut walk.arena, returned, words, scope, (at.function).as_deref(), !at.lambda && at.free, &at.params, ask);
+    walk.state.exit(&mut walk.arena, returned, words, scope, (at.function).as_deref(), !at.lambda && at.posts, &at.params, ask);
     if !at.lambda && at.free { prover_sum_exit(walk, returned, scope, at, program, words, own, unaliased, condition, written_of); }
 }
 
@@ -55719,6 +55835,14 @@ fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &mut 
                 walk.held.insert((span.start as i64, node_key(&cond)), held);
                 for found in findings.iter() { walk.findings.push(found.clone()); }
                 return false;
+            }
+            let panics = match func {
+                Expr::Variable(name, _) => { let name = *name; words.resolve(name) == "panic" && !scope.locals.contains("panic") },
+                _ => false,
+            };
+            if panics {
+                prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+                return true;
             }
         },
         Expr::If { cond, then_branch, else_branch, .. } => {
@@ -55911,7 +56035,7 @@ fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &Prove
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, unaliased);
             if callee.is_some() {
-                let __keep_72612 = nikaia_std::tether::Keep::new();
+                let __keep_74655 = nikaia_std::tether::Keep::new();
                 prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition);
             }
         },
@@ -56229,6 +56353,16 @@ fn prover_message(config: &[ConfigArg], words: &winnow_grammar::InternerContext)
     None
 }
 
+fn prover_a_claim_stmt(stmt: &Stmt, words: &winnow_grammar::InternerContext) -> bool {
+    match stmt {
+        Stmt::Expr(inner) => match inner {
+            Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); args.len() == 1 && nikaia_std::index::or(prover_variable_named(Some(func), words), || "".into()) == "assert" },
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 fn prover_returned_name(stmt: &Stmt, words: &winnow_grammar::InternerContext) -> Option<String> {
     match stmt {
         Stmt::Return(value) => prover_variable_named((value).as_ref(), words),
@@ -56473,6 +56607,77 @@ fn prover_open_reason(held: &ClaimHeld) -> Option<String> {
         ClaimHeld::AtRunTime(why) => Some(why.to_owned()),
         _ => None,
     }
+}
+
+fn prover_bit_range(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> Option<ProverBits> {
+    match expr {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op != BinaryOp::BitAnd { return None; }
+            let mut mask = nikaia_std::index::or(prover_constant_of(walk, rhs, scope, words), || -1);
+            if mask < 0 { mask = nikaia_std::index::or(prover_constant_of(walk, lhs, scope, words), || -1); }
+            if mask < 0 { return None; }
+            return Some(ProverBits { lo: 0, hi: mask });
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !args.is_empty() || words.resolve(method) != "bits_as_i64" { return None; }
+            match receiver {
+                Expr::Binary { op, rhs, .. } => {
+                    let rhs = nikaia_std::boxed::open(rhs);
+                    if *op != BinaryOp::Shr { return None; }
+                    let k = match prover_constant_of(walk, rhs, scope, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    if k < 2 || k > 63 { return None; }
+                    let by = 64 - k;
+                    let top: i64 = 1 << by;
+                    return Some(ProverBits { lo: 0, hi: top - 1 });
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    None
+}
+
+fn prover_constant_of(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    let term = match lin_term(expr, words, &|name| { false }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    walk.arena.constant(term)
+}
+
+fn prover_loop_bits(walk: &mut ProverWalk, scope: &ProverScope, changed: &collections::BTreeSet<String>, body: &Block, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, ProverBits> {
+    let mut out: collections::BTreeMap<String, ProverBits> = collections::BTreeMap::new();
+    for n in changed.iter() {
+        if !scope.bits.contains_key(n) { continue; }
+        let before = match (*nikaia_std::index::get(&scope.bits, n)).copied() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if prover_assigns_inside(walk, body, n, &before, scope, words) { out.insert(n.to_owned(), ProverBits { lo: before.lo, hi: before.hi }); }
+    }
+    out
+}
+
+fn prover_assigns_inside(walk: &mut ProverWalk, block: &Block, name: &str, bounds: &ProverBits, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Assign { target, op, value } => {
+                match target {
+                    Expr::Variable(assigned, _) => {
+                        let assigned = *assigned;
+                        if words.resolve(assigned) == name {
+                            if op.is_some() { return false; }
+                            let bits = match prover_bit_range(walk, value, scope, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                            if bits.lo < bounds.lo || bits.hi > bounds.hi { return false; }
+                        }
+                    },
+                    _ => { },
+                }
+            },
+            Stmt::While { cond, .. } => { for inner in blocks_of_expr(cond) { if !prover_assigns_inside(walk, inner, name, bounds, scope, words) { return false; } } },
+            Stmt::For { iter, .. } => { for inner in blocks_of_expr(iter) { if !prover_assigns_inside(walk, inner, name, bounds, scope, words) { return false; } } },
+            _ => { },
+        }
+        for inner in blocks_of_stmt(&stmt.node) { if !prover_assigns_inside(walk, inner, name, bounds, scope, words) { return false; } }
+    }
+    true
 }
 
 
@@ -70775,7 +70980,7 @@ pub mod prover_results {
 }
 pub mod prover_scope {
     #[allow(unused_imports)]
-    pub use super::{ProverScope, length_of, result_name, precondition_terms, copied_path};
+    pub use super::{ProverScope, ProverBits, length_of, result_name, precondition_terms, copied_path};
 }
 pub mod prover_solver {
     #[allow(unused_imports)]

@@ -1119,6 +1119,20 @@ impl EmitState {
             out.push("__nikaia_site.full_of(&error)")
             return
         }
+        // **`x.rotate_left(n)` turns by `n` modulo the width** (#776): any
+        // integer `n`, handed to Rust's as a `u32`, which Rust takes modulo the
+        // width - a divisor of `2^32`, so the count comes to the same.
+        let rotation = world.words.resolve(method)
+        if (rotation == "rotate_left" || rotation == "rotate_right") && args.len() == 1 {
+            let on_type = self.facts.std_receivers[node_key(node)] ?? ""
+            if on_type == "u8" || on_type == "u32" || on_type == "u64" {
+                self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
+                out.push(f".{rotation}((")
+                self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+                out.push(") as i64 as u32)")
+                return
+            }
+        }
         self.emit_core_method_call(world, walk, out, host, receiver, node_key(receiver), method, args, config, depth, flow, scope)
         // **Views of values that copy are the values** (ADR-231 D1).
         if self.facts.copied_walks.contains(node_key(node)) {

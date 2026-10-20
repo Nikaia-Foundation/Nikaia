@@ -1713,6 +1713,55 @@ sync = true
 touches = []
 signature = "(self) -> u64"
 
+# ## Rotations (#776)
+#
+# **The bits moved out at one end come back in at the other**: `rotate_left(n)`
+# and `rotate_right(n)` on every unsigned integer type, `n` any integer type,
+# taken modulo the width, so no count aborts. Lowered to Rust's own, with the
+# count as a `u32`: Rust takes that modulo the width, which divides `2^32`.
+
+# The bits of a `u8` turned left by `n` places, modulo its width.
+[fn."u8::rotate_left"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u8"
+
+# The bits of a `u8` turned right by `n` places, modulo its width.
+[fn."u8::rotate_right"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u8"
+
+# The bits of a `u32` turned left by `n` places, modulo its width.
+[fn."u32::rotate_left"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u32"
+
+# The bits of a `u32` turned right by `n` places, modulo its width.
+[fn."u32::rotate_right"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u32"
+
+# The bits of a `u64` turned left by `n` places, modulo its width.
+[fn."u64::rotate_left"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u64"
+
+# The bits of a `u64` turned right by `n` places, modulo its width.
+[fn."u64::rotate_right"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u64"
+
 # ## Arithmetic and conversions that may not fit (ADR-315)
 #
 # An overflow aborts (ADR-285 D1), and a conversion that may not fit aborts
