@@ -221,3 +221,64 @@ fn a_rule_is_an_assert_over_the_fields() {
         assert!(refused.contains(said), "{refused}");
     }
 }
+     assert!(refused.contains(said), "{refused}");
+    }
+}
+
+/// D3 holds only where every exit is checked: a method that changes `self`
+/// and fails through a call it does not catch leaves the value to a caller
+/// that may catch the failure, its rule broken, so the rule is no fact.
+#[test]
+fn a_failure_passed_on_leaves_the_rule_no_fact() {
+    let source = r#"
+comptime CAP: i64 = 4
+
+enum Bad {
+    Odd,
+}
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return "odd"
+    }
+}
+
+struct Ring {
+    slots: Vec[i64],
+    assert(slots.len() == CAP; message: "a ring has CAP slots")
+}
+
+fn checked(n: i64) -> i64 throws {
+    if n % 2 == 1 {
+        throw Bad::Odd
+    }
+    return n
+}
+
+impl Ring {
+    fn at(ref self, x: i64) -> i64 {
+        return self.slots[x & (CAP - 1)]
+    }
+    fn swap_last(ref mut self, n: i64) throws {
+        let was = self.slots.pop() ?? 0
+        let m = checked(n)
+        self.slots.push(m + was)
+    }
+}
+
+fn main() {
+    let mut slots: Vec[i64] = []
+    slots.resize(CAP, 7)
+    let mut r = Ring { slots: slots }
+    r.swap_last(3) catch {
+        print("caught")
+    }
+    print(f"{r.at(3)}")
+}
+"#;
+    let rust = lowered(source);
+    assert!(!body(&rust, "at").contains("proven::read"), "{rust}");
+    let (ok, out, err) = run("fails", source);
+    assert!(!ok, "the slot read past the end:\n{out}");
+    assert!(err.contains("out of bounds"), "{err}");
+}

@@ -110,7 +110,8 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
     }
     let spans = parsed.expr_spans.clone();
     let mut items = std::mem::take(&mut parsed.program.items);
-    let changed = changed_outside(&interner, &ruled, &mut items);
+    let mut changed = changed_outside(&interner, &ruled, &mut items);
+    changed.extend(fails_changed(&interner, &ruled, &items));
     for item in &mut items {
         match &mut item.node {
             Item::Impl {
@@ -147,6 +148,47 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
     }
     parsed.program.items = items;
     Ok(())
+}
+
+/// **The types a method can leave broken through a failure it passes on**:
+/// a method that changes its receiver and `throws` leaves at every call that
+/// fails, and a caller that catches the failure still holds the value, its
+/// rule maybe broken for a while. The rule is checked before each `return`
+/// and `throw` written, not before each call that may fail, so the rule of
+/// such a type is not a fact at an entry (D3): what is lost is a proof, never
+/// a check.
+fn fails_changed(
+    interner: &InternerContext,
+    ruled: &BTreeMap<String, Ruled>,
+    items: &[Spanned<Item>],
+) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for item in items {
+        let Item::Impl {
+            target, methods, ..
+        } = &item.node
+        else {
+            continue;
+        };
+        let owner = interner.resolve(target.name).to_string();
+        if !ruled.contains_key(&owner) {
+            continue;
+        }
+        let fails = methods.iter().any(|m| {
+            matches!(
+                &m.node,
+                Item::Fn {
+                    receiver: Some(how),
+                    can_throw: true,
+                    ..
+                } if how.is_mut
+            )
+        });
+        if fails {
+            out.insert(owner);
+        }
+    }
+    out
 }
 
 /// The claim and the `message:` of `assert(claim; message: …)`.
