@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1107] — 2026-10-20
+
+**Lowering: the solver, proofs and diagnostics stop repeating work (#727)**
+- The bounds solver sorts and dedups positions instead of cloned bounds, a proof's line comes from a binary search over line breaks, diagnostics find line and column from line lengths, the emitter reuses the check's facts when the check asked the same, never-negative locals walk each block once, the parser keeps expression spans in a vector, and std method lookups go through the method index. Output unchanged; a cold single-file lower costs another 35 % fewer instructions.
+
 ## [0.0.1106] — 2026-10-20
 
 **Four more checker gaps from the rustc sweep are refusals**
