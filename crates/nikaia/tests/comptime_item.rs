@@ -177,3 +177,38 @@ fn a_function_called_only_at_build_time_is_not_warned_unused() {
     }
     assert!(said.contains("function `unused` is never used"), "{said}");
 }
+
+/// **An open `comptime` whose uses are written out is not *never used***
+/// (ADR-287 D21, #700): each use takes the literal with the type it asked
+/// for, so the constant itself is read nowhere below. One nothing reads keeps
+/// the warning.
+#[test]
+fn an_open_constant_written_out_at_its_uses_is_used() {
+    let source = "comptime SLOTS = 32768\n\
+         comptime IDLE = 7\n\
+         \n\
+         fn main() {\n\
+         \x20   comptime STEP = 2\n\
+         \x20   let mut at: i64 = 0\n\
+         \x20   while at < SLOTS {\n\
+         \x20       at += STEP\n\
+         \x20   }\n\
+         \x20   println(at)\n\
+         }\n";
+    let rust = lowered(source);
+    let dir = common::scratch_dir("comptime-item-open");
+    let file = dir.join("main.rs");
+    std::fs::write(&file, &rust).expect("write the Rust");
+    let binary = dir.join("program");
+    let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
+    let _ = std::fs::remove_dir_all(&dir);
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{said}\n{rust}");
+    for used in ["SLOTS", "STEP"] {
+        assert!(
+            !said.contains(&format!("constant `{used}` is never used")),
+            "`{used}` is read at its uses:\n{said}\n{rust}"
+        );
+    }
+    assert!(said.contains("constant `IDLE` is never used"), "{said}");
+}

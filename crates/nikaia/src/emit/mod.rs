@@ -2233,6 +2233,18 @@ impl<'p> Emitter<'p> {
     /// `fallible_methods`, `nullable_fields` are all keyed by the name the
     /// *source* wrote — so escaping there would make every one of those lookups
     /// miss, silently, on exactly the programs this is for.
+    /// **A `comptime` whose uses were written out as literals**
+    /// ([ADR-287](../../docs/specification/adr/adr-287.md) D21, #700): an open
+    /// number takes the type each use asks for, so the constant may be read
+    /// nowhere below, and the language below is told so. One no use reads
+    /// keeps its warning.
+    fn folded(&self, sym: Symbol) -> &'static str {
+        match self.s.facts.folded_comptimes.contains(self.text(sym)) {
+            true => "#[allow(dead_code)]\n",
+            false => "",
+        }
+    }
+
     fn name(&self, sym: Symbol) -> std::borrow::Cow<'_, str> {
         escaped(self.text(sym))
     }
@@ -3168,6 +3180,7 @@ impl<'p> Emitter<'p> {
                     true => "pub ",
                     false => "",
                 };
+                out.push(self.folded(*name));
                 out.push(&format!("{vis}const {bound}: {below} = {written};\n"));
                 Ok(())
             }
@@ -6289,6 +6302,7 @@ impl<'p> Emitter<'p> {
                          bug: the check should have reported it first."
                     ));
                 };
+                out.push(self.folded(*name));
                 out.push(&format!("const {bound}: {below} = {written};"));
             }
 

@@ -288,6 +288,7 @@ impl CheckState {
                     written = f"({digits}{ty})"
                 }
                 self.facts.comptime_uses.insert(fact_key(expr), written)
+                self.facts.folded_comptimes.insert(world.words.resolve(name).clone())
             },
             Expr::Binary { op, lhs, rhs, .. } => {
                 if an_operation_in_one_type(op) {

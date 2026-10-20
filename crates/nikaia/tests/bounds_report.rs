@@ -106,3 +106,24 @@ fn main() {
     assert!(line("b.u64_le(i)").ends_with("proved"), "{out}");
     assert!(line("b.u32_le(i)").contains("checked"), "{out}");
 }
+
+/// **A mask by a `comptime` is a mask by its value** (#700 d03): `h & (WIDTH -
+/// 1)` is proved inside an array of `WIDTH` as `h & 1023` is, typed or open.
+#[test]
+fn a_mask_by_a_constant_is_proved_as_the_literal_is() {
+    let source = "comptime WIDTH: i64 = 1024\n\
+         comptime OPEN = 1024\n\
+         fn main() {\n\
+         \x20   let a: Array[i64, 1024] = [0; 1024]\n\
+         \x20   let h: i64 = 77 * 31\n\
+         \x20   println(f\"{a[h & (WIDTH - 1)]} {a[h & 1023]} {a[h & (OPEN - 1)]}\")\n\
+         }\n";
+    let out = report(source, BoundsChecks::Removed, OverflowChecks::Removed);
+    for site in ["a[h & WIDTH - 1]", "a[h & 1023]", "a[h & OPEN - 1]"] {
+        let line = out
+            .lines()
+            .find(|l| l.contains(site))
+            .unwrap_or_else(|| panic!("no line for `{site}`:\n{out}"));
+        assert!(line.trim_end().ends_with("proved"), "{out}");
+    }
+}

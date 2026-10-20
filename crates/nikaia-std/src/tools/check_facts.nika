@@ -140,6 +140,10 @@ pub struct CheckFacts {
     /// of them shadows the constant, which the language below refuses, so
     /// the emitter writes the binding under a name of its own.
     pub comptime_names: collections::BTreeSet[String],
+    /// **The `comptime`s an open number's use was written out for** (ADR-287
+    /// D21, #700): a use takes the literal with the type it asked for, so
+    /// the constant itself may be read nowhere below.
+    pub folded_comptimes: collections::BTreeSet[String],
     /// The reads of a name that a binding shadowing a `comptime` holds, by
     /// node: each is written under the binding's own name.
     pub shadowing_reads: collections::BTreeSet[i64],
@@ -361,6 +365,7 @@ impl CheckFacts {
             views_handed_on: collections::BTreeSet(),
             comptime_uses: collections::BTreeMap(),
             comptime_names: collections::BTreeSet(),
+            folded_comptimes: collections::BTreeSet(),
             shadowing_reads: collections::BTreeSet(),
             lent_scrutinees: collections::BTreeSet(),
             text_scrutinees: collections::BTreeSet(),
