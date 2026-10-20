@@ -210,7 +210,9 @@ pub fn proven(
     let mut functions: BTreeMap<String, Vec<bool>> = BTreeMap::new();
     // A method of this program that takes a parameter `mut` changes what it
     // is handed, whichever type it is called on.
-    let mut changing_methods: BTreeSet<String> = BTreeSet::new();
+    // So does one `std` or a dependency describes with a `mut` parameter.
+    let mut changing_methods: BTreeSet<String> =
+        nikaia_std::tools::bounds_matched::bm_changing_methods(ledgers);
     // One that takes its receiver `mut` may change any field of it
     // (ADR-306 D17).
     let mut changing_receivers: BTreeSet<String> = BTreeSet::new();

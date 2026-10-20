@@ -322,7 +322,8 @@ fn lose_by_method(receiver: ref Expr, method: ref String, args: ref Vec[Expr], a
     if !writes && !only_removes(method) && !keeps_length(method) {
         lose(receiver, words, seen)
     }
-    if !writes && (around.changing_methods.contains(method) || !keeps_length(method)) {
+    // Only a `mut` parameter changes what it is handed (ADR-094 D3).
+    if !writes && around.changing_methods.contains(method) {
         for arg in args {
             lose(arg, words, seen)
         }

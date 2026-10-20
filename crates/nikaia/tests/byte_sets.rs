@@ -292,6 +292,73 @@ fn a_position_find_all_yields_indexes_its_bytes_without_a_check() {
     );
 }
 
+/// #771: a `Bytes` handed to a function or a method as `ref` keeps its
+/// length across the call, so a position `find_all` yields still indexes it
+/// without a check; a `Vec[u8]` handed to a `mut` parameter loses what the
+/// walk knew of its length, and its index keeps the check.
+const HANDED_ON: &str = "use std::bytes\n\
+\n\
+struct Holder {\n\
+    base: i64,\n\
+}\n\
+\n\
+impl Holder {\n\
+    fn look(self, b: ref Bytes) -> i64 {\n\
+        return self.base + b.len()\n\
+    }\n\
+\n\
+    fn grow(self, mut v: Vec[u8]) {\n\
+        v.push(self.base as u8)\n\
+    }\n\
+}\n\
+\n\
+fn f(b: ref Bytes) -> i64 {\n\
+    return b.len()\n\
+}\n\
+\n\
+fn handed(h: Holder, b: ref Bytes) -> i64 {\n\
+    let mut n = 0\n\
+    for s in b.find_all(bytes::ByteSet([';'])) {\n\
+        n += f(b) + h.look(b)\n\
+        n += b[s] as i64\n\
+    }\n\
+    return n\n\
+}\n\
+\n\
+fn changed(h: Holder, mut v: Vec[u8]) -> i64 {\n\
+    let mut n = 0\n\
+    let end = v.len()\n\
+    for i in 0..<end {\n\
+        h.grow(v)\n\
+        n += v[i] as i64\n\
+    }\n\
+    return n\n\
+}\n\
+\n\
+fn main() {\n\
+    let h = Holder { base: 1 }\n\
+    let b = Bytes([';', 'a', ';'])\n\
+    let mut v: Vec[u8] = [1, 2, 3]\n\
+    println(f\"{handed(h, b)} {changed(h, v)}\")\n\
+}\n\
+";
+
+#[test]
+fn a_ref_argument_keeps_its_length_and_a_mut_one_does_not() {
+    let on = lowered_with(
+        "byte-sets-handed-on",
+        HANDED_ON,
+        &["--optimization", "remove-bounds-checks:on"],
+    );
+    let handed = &on[on.find("fn handed").expect("handed")..];
+    let handed = &handed[..handed.find("\n}").expect("its end")];
+    assert!(handed.contains("nikaia_std::proven::read(&b"), "{handed}");
+    let changed = &on[on.find("fn changed").expect("changed")..];
+    let changed = &changed[..changed.find("\n}").expect("its end")];
+    assert!(changed.contains("nikaia_std::index::get(&v"), "{changed}");
+    assert_eq!(run("byte-sets-handed-on-run", HANDED_ON), "132 6\n");
+}
+
 /// ADR-002 D6: the same program at x86-64's baseline (SSE2) and at
 /// `x86-64-v3` (AVX2) prints the same.
 #[test]

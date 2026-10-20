@@ -1901,6 +1901,21 @@ pub fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<
     out
 }
 
+pub fn bm_changing_methods(ledgers: &[&Ledger]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for ledger in ledgers.iter() {
+        let ledger = *ledger;
+        for (key, contract) in ledger.functions.iter() {
+            let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut method = false;
+            for (name, _) in signature.params.iter() { if name == "self" { method = true; } }
+            if !method { continue; }
+            for name in signature.mutable.iter() { if name != "self" { out.insert(nikaia_std::index::or(key.rsplit("::").next(), || "").to_owned()); } }
+        }
+    }
+    out
+}
+
 fn bm_char(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => name == "char" || name == "scalar",
@@ -2195,7 +2210,7 @@ fn lose(expr: &Expr, words: &winnow_grammar::InternerContext, seen: &mut ShapeSe
 fn lose_by_method(receiver: &Expr, method: &str, args: &[Expr], around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     let writes = writes_a_value(method, args.len() as i64).is_some();
     if !writes && !only_removes(method) && !keeps_length(method) { lose(receiver, words, seen); }
-    if !writes && (around.changing_methods.contains(method) || !keeps_length(method)) { for arg in args.iter() { lose(arg, words, seen); } }
+    if !writes && around.changing_methods.contains(method) { for arg in args.iter() { lose(arg, words, seen); } }
 }
 
 fn lose_by_call(func: &Expr, args: &[Expr], around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
@@ -4219,10 +4234,11 @@ fn bounding_method_call(walk: &mut BoundsWalk, receiver: &Expr, method: &str, ar
         if context.around.changing_receivers.contains(method) || !keeps_length(method) { bounding_forget_parts(&walk, facts, &name); }
         bounding_method(walk, facts, &name, method, args, context, program, words, ask);
     }
-    let changes_its_arguments = context.around.changing_methods.contains(method);
-    for arg in args.iter() {
-        let text = match path_of(arg, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if changes_its_arguments { bounding_forget(&walk, facts, &text); } else if !facts.ints.contains(&text) { bounding_forget_length(&walk, facts, &text); }
+    if context.around.changing_methods.contains(method) {
+        for arg in args.iter() {
+            let text = match path_of(arg, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            bounding_forget(&walk, facts, &text);
+        }
     }
 }
 
@@ -4536,14 +4552,13 @@ fn changed_by_method(receiver: &Expr, method: &str, args: &[Expr], context: &Bou
         if !keeps_length(method) { out.lengths.insert(name.to_owned()); }
         if context.around.changing_receivers.contains(method) || !keeps_length(method) { out.parts.insert(name); }
     }
-    let changes_its_arguments = context.around.changing_methods.contains(method);
-    for arg in args.iter() {
-        let text = match path_of(arg, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if changes_its_arguments {
+    if context.around.changing_methods.contains(method) {
+        for arg in args.iter() {
+            let text = match path_of(arg, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
             out.values.insert(text.to_owned());
             out.jumps.insert(text.to_owned());
+            out.lengths.insert(text);
         }
-        out.lengths.insert(text);
     }
 }
 
@@ -69332,7 +69347,7 @@ pub mod bounds_interval {
 }
 pub mod bounds_matched {
     #[allow(unused_imports)]
-    pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_each};
+    pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_each, bm_changing_methods};
 }
 pub mod bounds_reasons {
     #[allow(unused_imports)]

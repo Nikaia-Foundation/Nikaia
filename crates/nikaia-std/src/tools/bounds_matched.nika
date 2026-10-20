@@ -250,6 +250,34 @@ pub fn bm_each(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collection
     return out
 }
 
+/// **The methods the ledgers describe that change what they are handed**: one
+/// that takes a parameter other than its receiver `mut` (ADR-094 D3), by its
+/// last name (`fs::File::read`). Every other argument a method is handed is
+/// `ref` and keeps its length across the call.
+pub fn bm_changing_methods(ledgers: ref Vec[ref Ledger]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for ledger in ledgers {
+        for (key, contract) in ledger.functions {
+            let signature = contract.signature ?? continue
+            let mut method = false
+            for (name, _) in signature.params {
+                if name == "self" {
+                    method = true
+                }
+            }
+            if !method {
+                continue
+            }
+            for name in signature.mutable {
+                if name != "self" {
+                    out.insert((key.rsplit("::").next() ?? "").clone())
+                }
+            }
+        }
+    }
+    return out
+}
+
 /// Whether a parameter's type is a `char`.
 fn bm_char(ty: ref Ty) -> bool {
     return match ty {

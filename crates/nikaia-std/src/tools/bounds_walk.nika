@@ -2412,13 +2412,13 @@ fn bounding_method_call(mut walk: BoundsWalk, receiver: ref Expr, method: ref St
         }
         bounding_method(walk, facts, name, method, args, context, program, words, ask)
     }
-    let changes_its_arguments = context.around.changing_methods.contains(method)
-    for arg in args {
-        let text = path_of(arg, words) ?? continue
-        if changes_its_arguments {
+    // **Only a `mut` parameter changes what it is handed** (ADR-094 D3):
+    // every other argument is `ref`, or a `Bytes` or a text view that no
+    // method changes (ADR-320), and keeps its length and its values.
+    if context.around.changing_methods.contains(method) {
+        for arg in args {
+            let text = path_of(arg, words) ?? continue
             bounding_forget(walk, facts, text)
-        } else if !facts.ints.contains(text) {
-            bounding_forget_length(walk, facts, text)
         }
     }
 }
@@ -2780,13 +2780,13 @@ fn changed_by_method(receiver: ref Expr, method: ref String, args: ref Vec[Expr]
             out.parts.insert(name)
         }
     }
-    let changes_its_arguments = context.around.changing_methods.contains(method)
-    for arg in args {
-        let text = path_of(arg, words) ?? continue
-        if changes_its_arguments {
+    // Only a `mut` parameter changes what it is handed (ADR-094 D3).
+    if context.around.changing_methods.contains(method) {
+        for arg in args {
+            let text = path_of(arg, words) ?? continue
             out.values.insert(text.clone())
             out.jumps.insert(text.clone())
+            out.lengths.insert(text)
         }
-        out.lengths.insert(text)
     }
 }
