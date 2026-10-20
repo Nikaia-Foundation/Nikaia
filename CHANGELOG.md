@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1109] — 2026-10-20
+
+**Lowering: the solver copies less and the ledger pass skips report-only walks (#727)**
+- The proof solver no longer copies the whole term arena per question and sorts and eliminates bounds by rank and place, the ledger's check pass skips prove, views, view_changes and the tether check whose findings it never reads, writing result sources stops after a round that changed nothing, and the emitter reuses the check's keep plans when the check's library is std's. Output unchanged; a cold single-file lower costs another 21 % fewer instructions.
+
 ## [0.0.1108] — 2026-10-20
 
 **A pattern of another type is a refusal; a fold's value start and a text match compile**
