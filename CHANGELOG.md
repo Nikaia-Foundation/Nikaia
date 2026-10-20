@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1147] — 2026-10-20
+
+**Bytes::par_pieces and par_fold options (ADR-372 D3-D8, built in part)**
+- `b.par_pieces(sep; piece:)` is a `Par[Bytes]` of pieces that each end just after `sep`, claimed while the work runs (1 MiB by default, below 1 panics); at `no` the same pieces in order. A grammar's `par_fold` takes `; order:, workers:, piece:` (NK1102 for a wrong type, NK1109 for an unknown name) and runs on a pool of `task::cores()`; a failure is reported at its smallest position under either order. Pieces claimed while a `par_fold` runs follow with the winnow-grammar pin.
+
 ## [0.0.1146] — 2026-10-20
 
 **bytes::find_all: the next hit costs a tzcnt and a cleared bit, one length test a block**
