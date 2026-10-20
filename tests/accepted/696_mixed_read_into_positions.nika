@@ -1,0 +1,35 @@
+// A function's mixed `String?` result unwrapped by `??` and read into a
+// list, a field or a set makes that position mixed too (#696 step 3, ADR-282
+// D13): nothing is copied.
+use std::collections
+struct Box { name: String }
+fn ns(name: ref String) -> ref String? {
+    if name == "self" { return null }
+    return name
+}
+fn part(n: ref String, c: bool) -> String? {
+    if c { return ns(n) }
+    if n == "" { return null }
+    return f"{n}!"
+}
+fn gather(n: ref String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let a = part(n, true) ?? return out
+    out.push(a)
+    let b = part(n, false) ?? return out
+    out.push(b)
+    return out
+}
+fn boxed(n: ref String) -> Box? {
+    let a = part(n, true) ?? return null
+    return Box { name: a }
+}
+fn main() {
+    let x = f"x{1}"
+    for s in gather(x) { println(s) }
+    println(boxed(x)?.name ?? "-")
+    let mut set: collections::BTreeSet[String] = collections::BTreeSet()
+    let c = part(x, true) ?? return
+    set.insert(c)
+    println(set.len())
+}

@@ -1990,3 +1990,65 @@ fn a_mixed_nullable_text_result_lowers() {
         "x1!\nx1\nx1 x1!\nx1 x1!\nx1 - x1!\n- x1 x1!",
     );
 }
+
+/// **A `String?` parameter handed back, or a side of `??`, is lent** (#696
+/// step 5, #678 shape 1): `pick` lowers byte for byte as its `ref String?`
+/// twin, and the callers read what they lent afterwards.
+#[test]
+fn a_nullable_parameter_handed_back_is_lent() {
+    let plain = "fn pick(a: String?, b: String?) -> String? { return a ?? b }\n\
+                 fn main() {\n    let x: String? = f\"x{1}\"\n    println(pick(null, x) ?? \"-\")\n    println(x ?? \"\")\n}\n";
+    let twin = plain.replace(
+        "fn pick(a: String?, b: String?) -> String?",
+        "fn pick(a: ref String?, b: ref String?) -> ref String?",
+    );
+    assert_eq!(
+        lowered(plain, Build::default()),
+        lowered(&twin, Build::default())
+    );
+    let source = include_str!("../../../tests/accepted/696_lent_nullable_parameter.nika");
+    let rust = lowered(source, Build::default());
+    assert!(
+        rust.contains("fn same(a: Option<&str>) -> Option<&str>"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("fn not_self(name: &str) -> Option<&str>"),
+        "{rust}"
+    );
+    runs(
+        "lent-nullable-parameter",
+        source,
+        "x1\nx1\nx1\nz2\nz2\nx1\nz2",
+    );
+}
+
+/// **A mixed `String?` unwrapped by `??` makes where it goes mixed** (#696
+/// step 3, ADR-282 D13): a list, a field and a set, nothing copied.
+#[test]
+fn a_mixed_value_unwrapped_makes_its_position_mixed() {
+    let source = include_str!("../../../tests/accepted/696_mixed_read_into_positions.nika");
+    let rust = lowered(source, Build::default());
+    assert!(!rust.contains("into_owned"), "{rust}");
+    assert!(
+        rust.contains("fn gather(n: &str) -> Vec<nikaia_std::either_text::EitherText<'_>>"),
+        "{rust}"
+    );
+    runs("mixed-read-into-positions", source, "x1\nx1!\nx1\n1");
+}
+
+/// **And where that position is published it stays text of its own** (#696
+/// step 3, ADR-282 D22, D25): the view that made the value mixed is refused
+/// where it goes in, naming `.clone()`.
+#[test]
+fn a_mixed_value_unwrapped_into_a_published_position_is_refused() {
+    let source = include_str!("../../../tests/accepted/696_mixed_read_into_positions.nika")
+        .replace("fn gather", "pub fn gather");
+    let found = findings(&source);
+    assert!(
+        found
+            .iter()
+            .any(|f| f.code == "NK1104" && f.help.iter().any(|h| h.contains(".clone()"))),
+        "{found:#?}"
+    );
+}

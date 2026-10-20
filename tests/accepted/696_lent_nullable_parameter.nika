@@ -1,0 +1,34 @@
+// A `String?` parameter handed back as it is, or as a side of `??`, is lent
+// (#696 step 5, #678 shape 1): `pick` lowers as its `ref String?` twin, and
+// the caller still reads what it lent afterwards.
+fn pick(a: String?, b: String?) -> String? {
+    return a ?? b
+}
+
+fn same(a: String?) -> String? {
+    return a
+}
+
+fn not_self(name: String) -> String? {
+    if name == "self" {
+        return null
+    }
+    return name
+}
+
+fn first(a: String?, b: String) -> String {
+    return a ?? b
+}
+
+fn main() {
+    let x: String? = f"x{1}"
+    let y: String? = null
+    let z = f"z{2}"
+    println(pick(y, x) ?? "-")
+    println(pick(x, y) ?? "-")
+    println(same(x) ?? "-")
+    println(not_self(z) ?? "-")
+    println(first(y, z))
+    println(x ?? "")
+    println(z)
+}
