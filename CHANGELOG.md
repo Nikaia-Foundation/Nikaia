@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1168] — 2026-10-20
+
+**a field of every element of a list as one summary (decided)**
+- Decided: under `prove-through-loops:on`, a whole-number field of the elements of a list a loop writes through an index is one summary for all elements (weak updates), related to the loop's counters by `f <= c + n` and `|f| <= K * g` (ADR-361 D11, #770; to be built).
+
 ## [0.0.1167] — 2026-10-20
 
 **facts at a call; signed shifts bounded; rotate_left and rotate_right**
