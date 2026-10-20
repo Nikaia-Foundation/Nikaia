@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1138] — 2026-10-20
+
+**spec: a ByteSet holds any byte; a set proved empty is refused, one empty at run time finds nothing (ADR-375 D2)**
+- `bytes::AsciiSet` becomes `bytes::ByteSet`, of any bytes `0x00` to `0xFF`; `NK1287` now refuses a set the build proves empty, and an empty set at run time finds nothing; `split` of an empty `Bytes` is one empty piece (ADR-375 D2, D3).
+
 ## [0.0.1137] — 2026-10-20
 
 **spec: a Bytes searches for a set of ASCII bytes: AsciiSet, find, find_all, split; a sequence never loses its producer (ADR-375)**

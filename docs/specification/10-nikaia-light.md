@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1137 (Draft)
+**Version:** 0.0.1138 (Draft)
 **Date:** 2026-10-20
 
 ---
@@ -831,14 +831,14 @@ while true {
 **A `Bytes` is read as a run of bytes:** `b[i] -> u8`, `b[a..<b]`, `b.len()`,
 `b.find(byte; from: i64) -> i64?`, and `b.text()`, which checks UTF-8 and is
 `NotText` where it fails. An index outside stops the program, as a list's does.
-**A `Bytes` searches for a set of ASCII bytes** ([ADR-375](adr/adr-375.md)):
-`bytes::AsciiSet([';', '\n'])` is such a set, built once; a byte at `0x80` or
-above is refused as a literal (`NK1287`) and stops the program at run time.
+**A `Bytes` searches for a set of bytes** ([ADR-375](adr/adr-375.md)):
+`bytes::ByteSet([';', '\n'])` is such a set, of any bytes, built once. A set
+written empty is refused (`NK1287`); one empty at run time finds nothing.
 `b.find(set; from: i64) -> i64?` is the first byte of the set at or after
 `from`, `b.find_all(set; from: i64) -> Seq[i64]` every one, rising, and
 `b.split(set) -> Seq[ref Bytes]` the pieces between them by text's `split`
 rules: neighbouring bytes of the set give an empty piece, one at the end an
-empty last piece. `b.find_all(set).count()` counts without making a position.
+empty last piece, an empty `b` one empty piece. `b.find_all(set).count()` counts without making a position.
 **A word is read at a position, in the order its name says:** `b.u32_le(i)`
 and `b.u64_le(i)` read 4 or 8 bytes from `i`, least significant first, as a
 `u32` or a `u64`; `b.u32_be(i)` and `b.u64_be(i)` read them most significant
