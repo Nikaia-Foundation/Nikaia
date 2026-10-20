@@ -80,11 +80,16 @@ pub fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[
     }
     let mut ends = true
     let mut sized = true
+    let mut on_every_core = parallel
     if contract.signature != null {
         let signature = contract.signature?.clone() ?? Signature::empty()
         if signature.params.len() > 0 && signature.params[0].0 == "self" && a_sequence_type(signature.params[0].1) {
             ends = ends && shape_ends(receiver)
             sized = sized && shape_sized(receiver)
+            // **A walk made from a `Par` is a `Par`** (ADR-235 D1): `map`,
+            // `filter` and the rest are `Seq`'s entries, and what they hand
+            // back still runs on every core, so it has `Par`'s `fold`.
+            on_every_core = on_every_core || shape_parallel(receiver)
         }
         let arguments = call_arguments(signature)
         let mut at = 0
@@ -97,7 +102,14 @@ pub fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[
         }
     }
     ends = ends && (!contract.ends_by_length || sized)
-    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays } }
+    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays } }
+}
+
+fn shape_parallel(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Seq { parallel, .. } => parallel,
+        else => false,
+    }
 }
 
 fn shape_ends(ty: ref Ty) -> bool {

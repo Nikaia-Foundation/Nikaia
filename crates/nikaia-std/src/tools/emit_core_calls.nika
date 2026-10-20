@@ -708,6 +708,14 @@ impl EmitState {
         } else if limit.len() > 0 {
             written = "join_within"
         }
+        // **A `Par`'s fold of three is `fold_merged`** (ADR-372 D2), at both
+        // settings: the language below's `fold` takes two.
+        if name == "fold" && receiver != null {
+            let folded = receiver ?? return
+            if self.facts.par_folds.contains(node_key(folded)) {
+                written = "fold_merged"
+            }
+        }
         let mut length = is_length(name, args)
         if !length && receiver != null {
             let on = receiver ?? return
@@ -723,14 +731,30 @@ impl EmitState {
         }
         // **`par_iter()` walks the list on every core at `yes`, and is the list's
         // `iter()` at `no`** (ADR-235 D1).
+        // **`piece:` bounds a piece** (ADR-372 D6): read at both settings, and
+        // a value below 1 panics at both.
         if name == "par_iter" && args.len() == 0 && emit_candidates(self.own_contracts, "par_iter").len() == 0 {
+            let piece = emit_call_option_named(world, config, "piece")
             if host.user_parallelism() {
-                out.push("nikaia_std::par::iter(&")
+                if piece.len() > 0 {
+                    out.push("nikaia_std::par::iter_in_pieces(&")
+                } else {
+                    out.push("nikaia_std::par::iter(&")
+                }
                 self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
-                out.push(")")
             } else {
+                if piece.len() > 0 {
+                    out.push("nikaia_std::par::pieced(")
+                }
                 self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
                 out.push(".iter()")
+            }
+            if piece.len() > 0 {
+                out.push(", ")
+                host.expr(walk, out, piece[0], depth, flow, scope)
+            }
+            if host.user_parallelism() || piece.len() > 0 {
+                out.push(")")
             }
             if boxed {
                 out.push(")")

@@ -2959,11 +2959,34 @@ signature = "[T](self: Seq[T], step: i64) -> Seq[T] ends sized"
 # What `map`, `filter` and `for_each` are handed runs in parallel, so it may not
 # pause and may not change a name outside it. The order of a `collect` is the
 # list's.
+#
+# `piece:` bounds how many elements a piece holds (ADR-372 D6); a value below
+# 1 panics. Where it is left out the runtime decides, and the `0` written here
+# is never read: the call is lowered without it.
 [fn."Vec::par_iter"]
 pub = true
 sync = true
 touches = []
-signature = "[T](self: ref Vec[T]) -> Par[ref(self) T] sync ends sized"
+signature = "[T](self: ref Vec[T]; piece: i64 = 0) -> Par[ref(self) T] sync ends sized"
+
+# **A fold with nothing shared** ([ADR-372](../../docs/specification/adr/adr-372.md)
+# D2, D5, D6): `init` is called once per accumulator, never copied; the three
+# functions are a `par_iter` walk's lambdas, asked `NK2209` and `NK2107`.
+# `workers:` and `order:` change no answer of a fold that keeps its order's
+# promise; `workers:` below 1 panics. At `user_parallelism = no` it is one
+# sequential fold and `merge` is never called (D7).
+# Every element folded into accumulators made by `init`, merged into one.
+#
+# `step` takes an accumulator and an element and returns the accumulator;
+# `merge` takes two and returns one. Over no elements the result is one `init`
+# made. Under `order: par::Order::Kept` the result is the sequential fold's
+# wherever `merge` is associative and `init` is its identity; under `Any` the
+# program says the order does not matter.
+[fn."Par::fold"]
+pub = true
+sync = true
+touches = []
+signature = "[T, A](self: Par[T], init: fn() -> A, step: fn(A, T) -> A, merge: fn(A, A) -> A; order: par::Order = par::Order::Kept, workers: i64 = task::cores()) -> A"
 
 # The elements, one at a time, **lent**: the list stays where it is.
 #
@@ -4311,6 +4334,30 @@ pub = true
 crosses = true
 compares = true
 fields = ["pub message: String", "pub site: String"]
+
+# **What a program sizes parallel work by** ([ADR-372](../../docs/specification/adr/adr-372.md)
+# D1): the threads that run user code, not the machine's total, which a
+# container or an affinity mask makes larger than what runs at once.
+# Whether a parallel fold keeps the input's order: `Kept` merges runs that lie
+# together in input order, `Any` one accumulator per worker in whatever order
+# the workers end ([ADR-372](../../docs/specification/adr/adr-372.md) D5).
+[type."par::Order"]
+pub = true
+crosses = true
+compares = true
+copies = true
+variants = ["Kept", "Any"]
+
+# How many workers parallel work uses.
+#
+# At `user_parallelism = yes` the size of the pool that runs user code
+# (`user-pool`; `0` there is the threads the process may run on); at `no`, 1.
+# Always at least 1.
+[fn."task::cores"]
+pub = true
+sync = true
+touches = []
+signature = "() -> i64"
 
 # **A scope's tasks borrow** (Part II 12.7): the scope waits for every task
 # started in it, so a task reads the function's values without taking them.

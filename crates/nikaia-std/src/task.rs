@@ -227,6 +227,15 @@ thread_local! {
     static IN_A_TASK: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
+/// **How many workers parallel work uses** (`task::cores()`,
+/// [ADR-372](../../../docs/specification/adr/adr-372.md) D1): at
+/// `user_parallelism = yes` the size of the pool that runs user code
+/// (`user-pool`, `0` the threads the process may run on), at `no` one. At
+/// least one, and asked without starting the runtime.
+pub fn cores() -> i64 {
+    i64::try_from(crate::rt::user_cores()).unwrap_or(i64::MAX)
+}
+
 /// **Whether the code running on this thread is a task's** rather than
 /// `main`'s ([ADR-326](../../../docs/specification/adr/adr-326.md) D4): a panic
 /// there ends the task, and the program goes on.

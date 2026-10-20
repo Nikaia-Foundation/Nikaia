@@ -245,6 +245,26 @@ pub fn on_demand(user_code: UserCode) -> Started {
     Started { _private: () }
 }
 
+/// **How many threads run user code** (ADR-372 D1): the pool's, where the
+/// runtime has started; otherwise what it would start with - one at
+/// `user_parallelism = no`, `user-pool` at `yes`, `0` there being the threads
+/// the process may run on (`available_parallelism` counts its CPU affinity and
+/// quota). Asking does not start the runtime: a `main` that cannot pause
+/// starts nothing it does not need (ADR-270 D8). At least one.
+pub fn user_cores() -> usize {
+    static ASKED: OnceLock<usize> = OnceLock::new();
+    if let Some(runtime) = RUNTIME.get() {
+        return runtime.user_pool().map_or(1, |pool| pool.threads().max(1));
+    }
+    *ASKED.get_or_init(|| match ON_DEMAND.get().copied().unwrap_or_default() {
+        UserCode::Sequential => 1,
+        UserCode::Concurrent => match Config::load().unwrap_or_else(report).user_pool {
+            0 => std::thread::available_parallelism().map_or(1, |n| n.get()),
+            n => n,
+        },
+    })
+}
+
 /// A configuration file that does not parse is the operator's to fix, and a
 /// program that silently ran on the defaults instead would hide it. The
 /// program still starts - refusing to start over a tuning file would be worse

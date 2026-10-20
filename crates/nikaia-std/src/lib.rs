@@ -635,6 +635,11 @@ pub mod prelude {
     // a program reaches through its prefix has to be in scope in the generated
     // file, and nothing a program writes says where it comes from.
     pub use crate::net;
+    // **`par::Order` and a fold's default `order:`**
+    // ([ADR-372](../../../docs/specification/adr/adr-372.md) D5), and the fold
+    // of three a list's own walk has at `user_parallelism = no` (D7).
+    pub use crate::par;
+    pub use crate::par::SeqFold as _;
     // **Another program, started and waited for** (ADR-243). Here for `net`'s
     // reason: a module reached through its prefix has to be in scope in the
     // generated file.

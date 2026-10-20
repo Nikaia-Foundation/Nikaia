@@ -188,6 +188,36 @@ pub fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: re
     return out
 }
 
+/// **Arguments walked in order, each binding what the next ones are handed**
+/// (ADR-372 D2): the accumulator of `fold(init, step, merge)` is what `init`
+/// makes, and `step` and `merge` are handed that. A variable of the signature
+/// the receiver left unbound is bound by the first argument that shows it, and
+/// the arguments after it are expected with it.
+pub fn check_core_arguments_bound[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], patterns: ref Vec[Ty], mut bound: collections::BTreeMap[String, Ty], mut expected: Vec[Ty], declared_here: bool, callee: ref FnContract?, span: ref Span) -> Vec[Ty] sync {
+    let mut out: Vec[Ty] = []
+    let mut at = 0
+    for arg in args {
+        if check_core_args_is_lambda(arg, expected, at) {
+            out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, span))
+        } else {
+            out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span))
+        }
+        if at < patterns.len() {
+            let before = bound.len()
+            bind(patterns[at], out[at], bound)
+            if bound.len() > before {
+                let mut later = at + 1
+                while later < expected.len() && later < patterns.len() {
+                    expected[later] = substitute(patterns[later], bound)
+                    later += 1
+                }
+            }
+        }
+        at += 1
+    }
+    return out
+}
+
 /// The name a door over several locks is written with.
 fn check_core_args_door(writing: bool) -> String {
     if writing {
