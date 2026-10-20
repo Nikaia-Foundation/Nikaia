@@ -299,7 +299,30 @@ impl CheckState {
             },
             else => {},
         }
-        return !names_text(found) && self.a_lent_parameter(world, index)
+        return (!names_text(found) && self.a_lent_parameter(world, index)) || self.an_either_parameter(world, index)
+    }
+
+    /// **A parameter that takes text of either kind** (ADR-282 D14) is a view
+    /// of it below, so a key read with it goes in as it is (#735).
+    fn an_either_parameter(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+        let name = match given {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        let key = self.current ?? return false
+        let contract = world.own.functions.get(key) ?? return false
+        let signature = contract.signature ?? return false
+        let mut at = 0
+        for (param, _) in signature.params {
+            if param == "self" {
+                continue
+            }
+            if param == name {
+                return either_param(world.here, key, at)
+            }
+            at += 1
+        }
+        return false
     }
 }
 

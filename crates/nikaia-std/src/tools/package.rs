@@ -10582,7 +10582,25 @@ impl CheckState {
             },
             _ => { },
         }
-        !names_text(found) && self.a_lent_parameter(world, index)
+        !names_text(found) && self.a_lent_parameter(world, index) || self.an_either_parameter(world, index)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn an_either_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+        let name = match given {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            _ => return false,
+        };
+        let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let mut at: i64 = 0;
+        for (param, _) in signature.params.iter() {
+            if param == "self" { continue; }
+            if *param == name { return either_param(&world.here, key, at); }
+            at += 1;
+        }
+        false
     }
 }
 
@@ -13849,10 +13867,10 @@ fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     let mut callee: Option<FnContract> = None;
     let mut expected: Vec<Ty> = vec![];
     if !(variant.is_some() || is_hull(name) || shadowed) {
-        let resolved: Option<CheckResolved> = resolve_call(world, name);
+        let resolved: Option<CheckResolved<'_>> = resolve_call(world, name);
         if resolved.is_some() {
             let found_one = match resolved { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-            expected = expected_arguments(&found_one.contract);
+            expected = expected_arguments(found_one.contract);
             key = found_one.key.to_owned();
             callee = Some(found_one.contract.clone());
         }
@@ -14120,7 +14138,7 @@ fn check_core_call_on_owned(on: &Ty) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_on_fallback(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, entry: &str) -> Option<CheckResolved> {
+fn check_core_call_on_fallback<'r>(state: &CheckState, world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, on: &Ty, entry: &str) -> Option<CheckResolved<'r>> {
     match on {
         Ty::Seq { parallel, .. } => {
             let parallel = *parallel;
@@ -14564,12 +14582,12 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         state.method_pauses(id_of(receiver) as i64, false);
         return Ty::Unknown;
     }
-    let mut found: Option<CheckResolved> = resolve_method(world, &format!("{}::{}", type_name, entry));
+    let mut found: Option<CheckResolved<'_>> = resolve_method(world, &format!("{}::{}", type_name, entry));
     if found.is_none() { found = check_core_call_on_fallback(&state, world, &on, entry); }
     if found.is_none() && entry == "clone" && args.is_empty() && (state.structs.contains_key(&type_name) || state.enums.contains_key(&type_name) || world.own.types.contains_key(&type_name)) { return check_core_call_on_owned(&on); }
     if found.is_none() { return check_core_call_on_undescribed(state, world, host, &on, receiver, method, args, entry, &type_name, span); }
-    let resolved: CheckResolved = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-    check_core_call_on_described(state, world, host, &on, receiver, method, args, entry, &resolved.key, &resolved.contract, span)
+    let resolved: CheckResolved<'_> = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    check_core_call_on_described(state, world, host, &on, receiver, method, args, entry, &resolved.key, resolved.contract, span)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -16592,7 +16610,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
         let resolved = resolve_method(world, key);
         if resolved.is_some() {
             let method = match resolved { Some(__nikaia_value) => __nikaia_value, None => return unit };
-            let why = check_not_pure_because(&method.contract);
+            let why = check_not_pure_because(method.contract);
             if why.is_some() {
                 let because = nikaia_std::index::or(why, || "".into());
                 not_pure.push(format!("`{}` {}", key, because));
@@ -16881,9 +16899,9 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
     if state.inside_a_door {
         match on {
             Ty::Named { ref name, .. } => {
-                let found: Option<CheckResolved> = resolve_method(world, &format!("{}::{}", name, written));
+                let found: Option<CheckResolved<'_>> = resolve_method(world, &format!("{}::{}", name, written));
                 if found.is_some() {
-                    let resolved: CheckResolved = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+                    let resolved: CheckResolved<'_> = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
                     state.a_lock_inside_a_lock(&resolved.key, &resolved.contract.touches_a_lock, span);
                 }
             },
@@ -21549,10 +21567,10 @@ impl CheckState {
         };
         let key = format!("{}::deref", name);
         let found = match resolve_method(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let bound = receiver_bindings(&found.contract, ty);
-        let signature = match found.contract.signature { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let result = match signature.result { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(substitute(&result, &bound))
+        let bound = receiver_bindings(found.contract, ty);
+        let signature = match found.contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(substitute(result, &bound))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -27042,8 +27060,8 @@ impl CheckState {
             _ => { return None; },
         }
         let found = match resolve_call(world, &name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        self.a_pausing_call_in_an_action(&found.key, &found.contract, span);
-        let signature = match found.contract.signature { Some(__nikaia_value) => __nikaia_value, None => return None };
+        self.a_pausing_call_in_an_action(&found.key, found.contract, span);
+        let signature = match found.contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         let result = signature.result_or_unit();
         if result.is_unknown() { return None; }
         Some(result)
@@ -28509,9 +28527,9 @@ impl CheckState {
 // --- check_scope.nika ---
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CheckResolved {
+pub struct CheckResolved<'a> {
     pub key: String,
-    pub contract: FnContract,
+    pub contract: &'a FnContract,
 }
 
 impl CheckState {
@@ -28591,43 +28609,33 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn resolve_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<CheckResolved> {
+pub fn resolve_call<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, name: &str) -> Option<CheckResolved<'r>> {
     if world.own.functions.contains_key(name) {
-        return Some(CheckResolved { key: name.to_owned(), contract: match match *nikaia_std::index::get(&world.own.functions, name) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return None } });
+        let contract = match check_scope_found(&world.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(CheckResolved { key: name.to_owned(), contract });
     }
     let constructed = format!("{}::new", name);
     if world.own.functions.contains_key(&constructed) {
-        return Some(CheckResolved { key: constructed.to_owned(), contract: match match *nikaia_std::index::get(&world.own.functions, &constructed) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return None } });
+        let contract = match check_scope_found(&world.own.functions, &constructed) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(CheckResolved { key: constructed.to_owned(), contract });
     }
     if world.library.functions.contains_key(name) {
-        return Some(CheckResolved { key: name.to_owned(), contract: match match *nikaia_std::index::get(&world.library.functions, name) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return None } });
+        let contract = match check_scope_found(&world.library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(CheckResolved { key: name.to_owned(), contract });
     }
     if world.library.functions.contains_key(&constructed) {
-        return Some(CheckResolved { key: constructed.to_owned(), contract: match match *nikaia_std::index::get(&world.library.functions, &constructed) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return None } });
+        let contract = match check_scope_found(&world.library.functions, &constructed) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(CheckResolved { key: constructed.to_owned(), contract });
     }
     None
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn resolve_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<CheckResolved> {
+pub fn resolve_method<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: &str) -> Option<CheckResolved<'r>> {
     if world.own.functions.contains_key(key) {
-        return Some(CheckResolved { key: key.to_owned(), contract: match match *nikaia_std::index::get(&world.own.functions, key) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return None } });
+        let contract = match check_scope_found(&world.own.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(CheckResolved { key: key.to_owned(), contract });
     }
     let mut best: String = String::from("");
     let mut have = false;
@@ -28641,28 +28649,26 @@ pub fn resolve_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str)
         have = true;
     }
     if have {
-        return Some(CheckResolved { key: best.to_owned(), contract: match match *nikaia_std::index::get(&world.library.functions, &best) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return None } });
+        let contract = match check_scope_found(&world.library.functions, &best) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(CheckResolved { key: best.to_owned(), contract });
     }
     let at = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let without_the_module = nikaia_std::index::get(&key, nikaia_std::index::at(at + 2..)).to_owned();
     if !without_the_module.contains("::") { return None; }
     if world.own.functions.contains_key(&without_the_module) {
-        return Some(CheckResolved { key: without_the_module.to_owned(), contract: match match *nikaia_std::index::get(&world.own.functions, &without_the_module) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return None } });
+        let contract = match check_scope_found(&world.own.functions, &without_the_module) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(CheckResolved { key: without_the_module.to_owned(), contract });
     }
     if world.library.functions.contains_key(&without_the_module) {
-        return Some(CheckResolved { key: without_the_module.to_owned(), contract: match match *nikaia_std::index::get(&world.library.functions, &without_the_module) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return None } });
+        let contract = match check_scope_found(&world.library.functions, &without_the_module) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(CheckResolved { key: without_the_module.to_owned(), contract });
     }
     None
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_scope_found<'r>(functions: &'r collections::BTreeMap<String, FnContract>, key: &str) -> Option<&'r FnContract> { *nikaia_std::index::get(&functions, key) }
 
 
 // --- check_send.nika ---
@@ -31099,7 +31105,7 @@ impl CheckState {
             return;
         }
         let call = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
-        let why = check_not_pure_because(&call.contract);
+        let why = check_not_pure_because(call.contract);
         if why.is_some() {
             let because = nikaia_std::index::or(why, || "".to_owned().into());
             found.push(format!("`{}` {}", name, because));
@@ -66299,7 +66305,7 @@ fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &c
         Expr::Tuple(parts, _) => rsrc_all(unit, asked, here, known, own_buffer, parts, flow),
         Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); rsrc_nothing_of(unit, asked, here, known, own_buffer, value, count, flow) },
         Expr::ListLit { items, .. } => rsrc_all(unit, asked, here, known, own_buffer, items, flow),
-        Expr::StructLit { fields, .. } => rsrc_fields(unit, asked, here, known, own_buffer, fields, flow),
+        Expr::StructLit { name, fields, .. } => { let name = *name; rsrc_struct_fields(unit, asked, here, known, own_buffer, asked.names.resolve(name), fields, flow) },
         Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); rsrc_with(unit, asked, here, known, own_buffer, base, fields, flow) },
         Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; rsrc_method(unit, asked, here, known, own_buffer, receiver, method, args, config, flow) },
         Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; rsrc_method(unit, asked, here, known, own_buffer, receiver, method, args, config, flow) },
@@ -66386,6 +66392,21 @@ fn rsrc_index(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &colle
     let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow);
     let read = rsrc_eval(unit, asked, here, known, own_buffer, index, flow);
     inner
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_struct_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, owner: &str, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let declared = match *nikaia_std::index::get(&unit.fields, owner) { Some(__nikaia_value) => __nikaia_value, None => return rsrc_fields(unit, asked, here, known, own_buffer, fields, flow) };
+    let mut out = rsrc_none();
+    for field in fields.iter() {
+        let named = asked.names.resolve(field.name);
+        let mut more = rsrc_none();
+        if field.value.is_none() { more = rsrc_of_name(&flow, named); } else { more = rsrc_maybe(unit, asked, here, known, own_buffer, (field.value).as_ref(), flow); }
+        let mut owning = false;
+        for (written, ty) in declared.iter() { if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) { owning = true; } }
+        if !owning { rsrc_join(&mut out, &rsrc_under(named, &more)); }
+    }
+    out
 }
 
 fn rsrc_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {

@@ -1701,7 +1701,7 @@ fn rsrc_eval_node(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref c
         Expr::Tuple(parts, _) => rsrc_all(unit, asked, here, known, own_buffer, parts, flow),
         Expr::ListRepeat { value, count, .. } => rsrc_nothing_of(unit, asked, here, known, own_buffer, value, count, flow),
         Expr::ListLit { items, .. } => rsrc_all(unit, asked, here, known, own_buffer, items, flow),
-        Expr::StructLit { fields, .. } => rsrc_fields(unit, asked, here, known, own_buffer, fields, flow),
+        Expr::StructLit { name, fields, .. } => rsrc_struct_fields(unit, asked, here, known, own_buffer, asked.names.resolve(name), fields, flow),
         Expr::With { base, fields, .. } => rsrc_with(unit, asked, here, known, own_buffer, base, fields, flow),
         Expr::MethodCall { receiver, method, args, config, .. } => rsrc_method(unit, asked, here, known, own_buffer, receiver, method, args, config, flow),
         Expr::SafeMethod { receiver, method, args, config, .. } => rsrc_method(unit, asked, here, known, own_buffer, receiver, method, args, config, flow),
@@ -1791,6 +1791,32 @@ fn rsrc_index(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
     let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow)
     let read = rsrc_eval(unit, asked, here, known, own_buffer, index, flow)
     return inner
+}
+
+// **A field that owns what it holds keeps no view** (#735): text of its own
+// or a number, whatever the value it is given was cut from.
+fn rsrc_struct_fields(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, owner: ref String, fields: ref Vec[FieldInit], mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {
+    let declared = unit.fields[owner] ?? return rsrc_fields(unit, asked, here, known, own_buffer, fields, flow)
+    let mut out = rsrc_none()
+    for field in fields {
+        let named = asked.names.resolve(field.name)
+        let mut more = rsrc_none()
+        if field.value == null {
+            more = rsrc_of_name(flow, named)
+        } else {
+            more = rsrc_maybe(unit, asked, here, known, own_buffer, field.value, flow)
+        }
+        let mut owning = false
+        for (written, ty) in declared {
+            if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) {
+                owning = true
+            }
+        }
+        if !owning {
+            rsrc_join(out, rsrc_under(named, more))
+        }
+    }
+    return out
 }
 
 fn rsrc_fields(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, fields: ref Vec[FieldInit], mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {

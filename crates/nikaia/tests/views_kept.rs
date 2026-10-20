@@ -414,3 +414,95 @@ fn main() {
     );
     assert_eq!(out, "2");
 }
+
+/// #735: an owned field given a copy of a cut of a parameter holds no view of
+/// it, and a parameter taking text of either kind is a map's key as it is.
+#[test]
+fn an_owned_field_and_an_either_key_run() {
+    let (out, _) = run_735(
+        "owned-field",
+        r#"use std::collections
+
+struct C {
+    pub sig: String?,
+}
+
+struct W {
+    pub fns: collections::BTreeMap[String, C],
+}
+
+struct R {
+    pub key: String,
+    pub c: ref C,
+}
+
+fn found(m: ref collections::BTreeMap[String, C], key: String) -> ref C? sync {
+    return m[key]
+}
+
+fn resolve(w: ref W, key: String) -> R? sync {
+    if w.fns.contains_key(key) {
+        let c = found(w.fns, key) ?? return null
+        return R { key: key.clone(), c: c }
+    }
+    let at = key.find("::") ?? return null
+    let rest = key[at + 2..<key.len()].clone()
+    let c = found(w.fns, rest) ?? return null
+    return R { key: rest.clone(), c: c }
+}
+
+fn main() {
+    let mut w = W { fns: collections::BTreeMap() }
+    w.fns.insert("a::new", C { sig: "s" })
+    let r = resolve(w, "a::new") ?? return
+    let s = r.c.sig ?? ""
+    print(f"{r.key} {s}")
+}
+"#,
+    );
+    assert_eq!(out, "a::new s");
+    let (out, lowered) = run_735(
+        "either-key",
+        r#"use std::collections
+
+struct C {
+    pub sig: String?,
+}
+
+struct W {
+    pub fns: collections::HashMap[String, C],
+}
+
+struct R {
+    pub key: String,
+    pub c: ref C,
+}
+
+fn lookup(m: ref collections::HashMap[String, C], key: String) -> ref C? sync {
+    return m[key]
+}
+
+fn resolve(w: ref W, key: String) -> R? sync {
+    let a = lookup(w.fns, key) ?? return null
+    print(f"{a.sig ?? ""} ")
+    let rest = f"{key}"
+    let c = lookup(w.fns, rest) ?? return null
+    return R { key: "".clone(), c: c }
+}
+
+fn main() {
+    let mut w = W { fns: collections::HashMap() }
+    w.fns.insert("a::new", C { sig: "s" })
+    let r = resolve(w, "a::new") ?? return
+    let s = r.c.sig ?? ""
+    print(f"{r.key} {s}")
+}
+"#,
+    );
+    assert!(out.ends_with(" s"), "{out}");
+    let lookup = lowered
+        .lines()
+        .find(|l| l.starts_with("fn lookup"))
+        .unwrap_or_default();
+    assert!(!lookup.contains("&key"), "{lookup}");
+}

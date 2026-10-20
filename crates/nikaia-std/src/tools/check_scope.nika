@@ -10,7 +10,7 @@
 /// and its contract.
 pub struct CheckResolved {
     pub key: String,
-    pub contract: FnContract,
+    pub contract: ref FnContract,
 }
 
 impl CheckState {
@@ -107,14 +107,17 @@ impl CheckState {
 /// library's - the same order the `sync` check resolves in.
 pub fn resolve_call(world: ref CheckWorld, name: ref String) -> CheckResolved? sync {
     if world.own.functions.contains_key(name) {
-        return CheckResolved { key: name.clone(), contract: world.own.functions[name]?.clone() ?? return null }
+        let contract = check_scope_found(world.own.functions, name) ?? return null
+        return CheckResolved { key: name.clone(), contract: contract }
     }
     let constructed = f"{name}::new"
     if world.own.functions.contains_key(constructed) {
-        return CheckResolved { key: constructed.clone(), contract: world.own.functions[constructed]?.clone() ?? return null }
+        let contract = check_scope_found(world.own.functions, constructed) ?? return null
+        return CheckResolved { key: constructed.clone(), contract: contract }
     }
     if world.library.functions.contains_key(name) {
-        return CheckResolved { key: name.clone(), contract: world.library.functions[name]?.clone() ?? return null }
+        let contract = check_scope_found(world.library.functions, name) ?? return null
+        return CheckResolved { key: name.clone(), contract: contract }
     }
     // **`std`'s own types are constructed the same way** (ADR-140 D2): `Vec()`
     // is the anonymous constructor, exactly as `Stats(first)` is for a type a
@@ -122,7 +125,8 @@ pub fn resolve_call(world: ref CheckWorld, name: ref String) -> CheckResolved? s
     // the name the **lowering** writes and the lowering is name for name
     // (ADR-296 D17).
     if world.library.functions.contains_key(constructed) {
-        return CheckResolved { key: constructed.clone(), contract: world.library.functions[constructed]?.clone() ?? return null }
+        let contract = check_scope_found(world.library.functions, constructed) ?? return null
+        return CheckResolved { key: constructed.clone(), contract: contract }
     }
     return null
 }
@@ -137,7 +141,8 @@ pub fn resolve_call(world: ref CheckWorld, name: ref String) -> CheckResolved? s
 /// belongs to the type.
 pub fn resolve_method(world: ref CheckWorld, key: ref String) -> CheckResolved? sync {
     if world.own.functions.contains_key(key) {
-        return CheckResolved { key: key.clone(), contract: world.own.functions[key]?.clone() ?? return null }
+        let contract = check_scope_found(world.own.functions, key) ?? return null
+        return CheckResolved { key: key.clone(), contract: contract }
     }
     // The first key, in key order, that is `key` or ends in `::{key}`: the
     // index's bucket holds every key that ends so, in key order.
@@ -153,7 +158,8 @@ pub fn resolve_method(world: ref CheckWorld, key: ref String) -> CheckResolved? 
         have = true
     }
     if have {
-        return CheckResolved { key: best.clone(), contract: world.library.functions[best]?.clone() ?? return null }
+        let contract = check_scope_found(world.library.functions, best) ?? return null
+        return CheckResolved { key: best.clone(), contract: contract }
     }
     // `collections::HashMap::len` was asked for; `HashMap::len` is the key.
     let at = key.find("::") ?? return null
@@ -162,10 +168,17 @@ pub fn resolve_method(world: ref CheckWorld, key: ref String) -> CheckResolved? 
         return null
     }
     if world.own.functions.contains_key(without_the_module) {
-        return CheckResolved { key: without_the_module.clone(), contract: world.own.functions[without_the_module]?.clone() ?? return null }
+        let contract = check_scope_found(world.own.functions, without_the_module) ?? return null
+        return CheckResolved { key: without_the_module.clone(), contract: contract }
     }
     if world.library.functions.contains_key(without_the_module) {
-        return CheckResolved { key: without_the_module.clone(), contract: world.library.functions[without_the_module]?.clone() ?? return null }
+        let contract = check_scope_found(world.library.functions, without_the_module) ?? return null
+        return CheckResolved { key: without_the_module.clone(), contract: contract }
     }
     return null
+}
+
+/// A function's contract by its key, as a view of the ledger's.
+fn check_scope_found(functions: ref collections::BTreeMap[String, FnContract], key: String) -> ref FnContract? sync {
+    return functions[key]
 }
