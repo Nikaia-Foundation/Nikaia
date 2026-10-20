@@ -1,9 +1,9 @@
 # The One Billion Row Challenge: Nikaia against Rust
 
 [`examples/1brc.nika`](../../examples/1brc.nika) describes the whole input file
-as a grammar and aggregates it with a fold. This bench measures it, and the
-program a Nikaia programmer writes first, against the same aggregation written
-in Rust:
+as a grammar and aggregates it with a fold. This bench measures it, the
+program a Nikaia programmer writes first, and one written for speed, against
+the same aggregation written in Rust:
 
 | program | what it is |
 |---|---|
@@ -12,9 +12,11 @@ in Rust:
 | [`ai1.rs`](src/bin/ai1.rs), AI variant 1 | written by an AI assistant at medium effort, in one request, as an optimised solution; what a 1BRC entry looks like before it is parallelised: `mmap` (`unsafe`), raw bytes with **no UTF-8 validation**, one `memchr` searcher over the whole file, the separator found by walking back from the line's end, integer temperatures, a word-at-a-time hash |
 | [`ai2.rs`](src/bin/ai2.rs), AI variant 2 | written by the same AI assistant over several rounds, each measured with callgrind and improved: a SIMD compare finds the `;` (SSE2; AVX2 where the CPU level has it), a word hash of the name (crc32c where the CPU level has it), a branch-free temperature parse, an own open-addressing table, the end of the input run from a padded copy so that nothing reads past the end; `mmap` and `unsafe` throughout, **no UTF-8 validation** |
 | [`examples/1brc.nika`](../../examples/1brc.nika) | a grammar over the whole file, a `par_fold`, names that are slices of a mapped file, `std`'s `HashMap` |
+| [`fast.nika`](fast.nika) | the building blocks of AI variant 2 as far as today's `std` has them: the mapped file read as `Bytes`, `find_all` over a `bytes::ByteSet` of `;` alone (the line's end follows from the temperature's shape), the name's first sixteen bytes read as two words with `u64_le` as its hash and key, the temperature from one word without a branch, an own open-addressing table in a `Vec`, the last rows read from a copy with zeros behind them; no `unsafe`, each station's name checked as UTF-8 once, where it is printed. On more than one core it cuts the file with `par_pieces` and folds the pieces with `Par::fold` |
 
 Each pair is compared like for like: `naive.nika` with `naive.rs`, `1brc.nika`
-with the two AI variants. They are the comparison that counts for speed.
+with the two AI variants, `fast.nika` with AI variant 2. They are the
+comparison that counts for speed.
 
 ## How it is measured
 
@@ -50,6 +52,14 @@ benches/brc/brc.sh 200000     # quicker
   binary of its own, for the same reason.
 * **Nikaia without overflow checks** is the same project built with
   `RUSTFLAGS="-C overflow-checks=off"`, to say what the checks cost.
+* **One core.** AI variant 2 runs on one, so `fast.nika` is counted at
+  `user-parallelism = "no"`, where `task::cores()` is 1 and it scans the file
+  in one loop. Its build at `"yes"`, which folds `par_pieces`, is checked for
+  its output and not counted.
+* **The CPU level** is `x86-64` (SSE2), the default on both sides. The rows
+  marked `x86-64-v3` (AVX2, BMI2, SSE 4.2) build AI variant 2 with
+  `RUSTFLAGS="-C target-cpu=x86-64-v3"` and `fast.nika` with `nikaia build
+  --cpu=x86-64-v3`, at the same unit counts.
 * **Length in tokens**, by [`scripts/tokens.nika`](../../scripts/tokens.nika), the
   same rule for both languages: identifiers, keywords, numbers, literals and
   operators count, comments and whitespace do not, `use` lines do. Each file is
@@ -59,21 +69,21 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1064, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
-per row. The AI variant 2 row is measured later, at commit `4a6ee77` with
-rustc 1.97.0 (2d8144b78 2026-07-07), the same machine type and input, at the
-default CPU level (`x86-64`: SSE2, the Fx-style mixer instead of crc32c). The
-Nikaia `1brc.nika` and AI variant 1 rows were counted again at 0.0.1130 and
-0.0.1139 with the same results to within 0.1 instructions a row:
+Nikaia 0.0.1148, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
+per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
-| Rust, `naive` | 840.9 | 9.25 | 859.8 | 8.65 | 556 |
-| **Nikaia**, `naive.nika` | **570.2** | **8.75** | **569.1** | **8.51** | **375** |
+| Rust, `naive` | 841.2 | 9.26 | 859.7 | 8.66 | 556 |
+| **Nikaia**, `naive.nika` | **570.2** | **8.24** | **569.1** | **8.44** | **375** |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
-| **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.3** | **1.12** | **642** |
-| Nikaia, overflow checks off | 274.9 | 1.12 | 231.2 | 1.09 | |
+| **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.2** | **1.12** | **642** |
+| Nikaia, overflow checks off | 274.9 | 1.12 | 231.2 | 1.12 | |
+| **Nikaia**, `fast.nika` | **174.1** | **1.02** | **173.3** | **1.10** | **1288** |
+| Nikaia, `fast.nika`, overflow checks off | 152.8 | 0.95 | 151.0 | 0.95 | |
+| Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 | |
+| Nikaia, `fast.nika`, `x86-64-v3` | 167.8 | 1.02 | 167.1 | 1.01 | |
 
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
@@ -98,6 +108,12 @@ AI variant 2 runs 36 % fewer instructions than `1brc.nika` at 16 units and
 46 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
+`fast.nika` runs 18 % more instructions than AI variant 2 at both unit
+counts, 2 to 4 % more without its overflow checks, and 26 % more at `x86-64-v3`;
+it has about three times AI variant 2's mispredictions. It is 27 % fewer
+tokens, with no `unsafe` and every index and overflow checked. Where the
+difference lies is below.
+
 ## Where Nikaia's instructions go
 
 Callgrind's attribution per row for the table's Nikaia row **at 16 units**,
@@ -120,6 +136,34 @@ what `core` inlines into the generated rule is its own row.
 
 The AI variants are one function after inlining, so callgrind cannot split
 them the same way.
+
+## Where `fast.nika` differs from AI variant 2
+
+Callgrind's attribution per row at 16 units, `x86-64`, by the instructions of
+each building block in the hot loop (both loops are one function after
+inlining, so the blocks are address ranges of it, read off the disassembly).
+
+| | `fast.nika` | `ai2.rs` |
+|---|---:|---:|
+| finding the `;` and stepping to the next row | 24.0 | 19.8 |
+| the name's two words, cut to its length | 27.1 | 28.0 |
+| the temperature, values kept on the stack among them | 50.0 | 26.0 |
+| the hash | 9.0 | 13.0 |
+| the table's probe, the name compared (`memcmp` included) | 39.4 | 43.2 |
+| the stats' update | 20.0 | 14.0 |
+| the rest: start-up, the output | 3.8 | 3.4 |
+
+`fast.nika` compares a name of up to sixteen bytes as its two words and calls
+`memcmp` only for a longer one; AI variant 2 calls it for every row (19.7 a
+row). What `fast.nika` runs more is checks and what they cost around them:
+each word read tests its position (three a row, two or three branches each),
+the temperature's `28 - dot` and the shift by it are tested, the slice of a
+long name is computed and tested every row though only a long name uses it,
+the table's index is tested, and six additions test for overflow. The
+values the checks keep alive are stored on the stack and read back. The mispredictions are where `find_all` runs out of
+separators in a 64-byte block (0.25 a row), the name's length (`<= 8` or
+not, 0.5 a row, where AI variant 2 has a `cmov`), and where the predictor
+indexes by address (see the note on `1brc.nika` above).
 
 ## Where `naive.nika` differs from `naive.rs`
 
@@ -197,14 +241,19 @@ Nothing about the 1BRC leaderboard. The entries there are SWAR over raw bytes,
 hash tables sized to the key count with the keys stored inline, no UTF-8
 anywhere, and every core. AI variant 1 is a single-threaded, readable version
 of that idea and stops short of it; AI variant 2 goes most of the way, still on
-one core. The question this bench answers is whether a
-grammar that describes the file costs you the loop a specialist writes.
+one core, and `fast.nika` takes its building blocks as far as `std` has them,
+counted on one core too. The questions this bench answers are whether a
+grammar that describes the file costs you the loop a specialist writes, and
+what that loop costs when it is written in Nikaia. Nothing here is a time:
+the counts say how much work each program does, not how fast it runs on a
+given machine, and `fast.nika` on every core is checked for its output only.
 
 ## The files
 
 * `src/bin/naive.rs`, `src/bin/ai1.rs`, `src/bin/ai2.rs` - the three Rust
   programs, each a binary of its own.
 * `naive.nika` - the naive Nikaia program; `examples/1brc.nika` is the other.
+* `fast.nika` - the Nikaia program written for speed, against `ai2.rs`.
 * `scan.nika`, `src/bin/scan.rs` - the scan alone (above).
 * `src/bin/gen.rs` - the input: `gen <rows> <file>`.
 * `brc.sh` - builds everything, checks the outputs agree, counts, prints the

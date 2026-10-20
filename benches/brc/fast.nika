@@ -1,0 +1,182 @@
+// The 1BRC aggregation written for speed against today's `std`, the
+// counterpart of `src/bin/ai2.rs`. See `README.md`.
+//
+// * the file is mapped and read as `Bytes`: nothing checks it as UTF-8 as a
+//   whole; a station's name is checked once, where it is printed;
+// * `find_all` over a `ByteSet` of `;` alone finds the separators; where a
+//   line ends follows from the temperature's shape, so the `\n` is never
+//   searched for;
+// * a name's first sixteen bytes, read as two words with `u64_le`, are its
+//   hash and its key; its bytes are compared only where it is longer;
+// * the temperature is read from one word, without a branch;
+// * an open-addressing table of our own in a `Vec`;
+// * the last rows are read from a copy with zeros behind them, so that no
+//   word read goes past the end;
+// * on more than one core, `par_pieces` cuts the file at line ends and
+//   `Par::fold` scans the pieces into a table each and merges them.
+use std::bytes
+use std::cli
+use std::collections
+use std::fs
+use std::task
+
+struct Slot {
+    w0: u64,
+    w1: u64,
+    len: i64,
+    name: Bytes,
+    min: i64,
+    max: i64,
+    sum: i64,
+    count: i64,
+}
+
+struct Table {
+    slots: Vec[Slot],
+    used: i64,
+}
+
+comptime BITS: i64 = 14
+comptime SLOTS: i64 = 16384
+// How far behind the last row start a word read may reach: a name of 100
+// bytes, its temperature and a word beyond.
+comptime MARGIN: i64 = 256
+comptime ONES: u64 = 0xFFFFFFFFFFFFFFFF
+
+fn table() -> Table {
+    let mut slots: Vec[Slot] = []
+    slots.resize(SLOTS, Slot { w0: 0, w1: 0, len: 0, name: Bytes([]), min: 0, max: 0, sum: 0, count: 0 })
+    return Table { slots: slots, used: 0 }
+}
+
+impl Table {
+    // The slot of the name `buf[pos..<pos + len]`, whose first sixteen bytes
+    // are `w0` and `w1` (zeros past its end), taken where the name is new.
+    fn slot_of(ref mut self, w0: u64, w1: u64, len: i64, buf: ref Bytes, pos: i64) -> i64 {
+        let h = (w0 ^ w1.wrapping_mul(0x517CC1B727220A95) ^ len.bits_as_u64()).wrapping_mul(0x9E3779B97F4A7C15)
+        let mut at = (h >> (64 - BITS)).bits_as_i64()
+        while true {
+            if self.slots[at].count == 0 {
+                self.used += 1
+                if self.used > 10000 { panic("more than 10 000 stations") }
+                self.slots[at] = Slot { w0: w0, w1: w1, len: len, name: buf[pos..<pos + len].clone(), min: 999, max: -999, sum: 0, count: 0 }
+                return at
+            }
+            if self.slots[at].w0 == w0 && self.slots[at].w1 == w1 && self.slots[at].len == len
+                && (len <= 16 || self.slots[at].name[0..<len] == buf[pos..<pos + len]) {
+                return at
+            }
+            at = (at + 1) & (SLOTS - 1)
+        }
+        panic("unreachable")
+    }
+
+    // Every row of `buf` that starts before `stop`.
+    fn run(ref mut self, buf: ref Bytes, stop: i64) {
+        if stop == 0 { return }
+        let mut pos = 0
+        for sep in buf.find_all(bytes::ByteSet([';'])) {
+            // The name's first two words, zeros past its end.
+            let len = sep - pos
+            let mut w0 = buf.u64_le(pos)
+            let mut w1 = buf.u64_le(pos + 8)
+            if len <= 8 {
+                w0 = w0 & (ONES >> (64 - 8 * len))
+                w1 = 0
+            } else if len < 16 {
+                w1 = w1 & (ONES >> (128 - 8 * len))
+            }
+
+            // The temperature, `-?d?d.d`, from one word: where the `.` is
+            // says how long it is, and the sign becomes a mask.
+            let w = buf.u64_le(sep + 1)
+            let dot = (!w & 0x10101000).trailing_zeros()
+            let signed = ((!w) << 59).bits_as_i64() >> 63
+            let keep = !(signed.bits_as_u64() & 0xFF)
+            let digits = ((w & keep) << (28 - dot)) & 0x0F000F0F00
+            let abs = (digits.wrapping_mul(0x640A0001) >> 32) & 0x3FF
+            let v = (abs.bits_as_i64() ^ signed) - signed
+
+            let at = self.slot_of(w0, w1, len, buf, pos)
+            if v < self.slots[at].min { self.slots[at].min = v }
+            if v > self.slots[at].max { self.slots[at].max = v }
+            self.slots[at].sum += v
+            self.slots[at].count += 1
+
+            pos = sep + 4 + ((dot >> 3) as i64)
+            if pos >= stop { break }
+        }
+    }
+
+    // Every row of `b`: those up to the last `MARGIN` bytes in place, the
+    // rest from a copy with zeros behind it.
+    fn scan(ref mut self, b: ref Bytes) {
+        let n = b.len()
+        let mut cut = 0
+        if n > MARGIN {
+            cut = n - MARGIN
+            while cut > 0 && b[cut - 1] != '\n' { cut -= 1 }
+        }
+        self.run(b, cut)
+        let mut tail: Vec[u8] = []
+        for c in b[cut..<n] { tail.push(c) }
+        for _ in 0..<MARGIN { tail.push(0) }
+        self.run(Bytes(tail), n - cut)
+    }
+
+    fn merge(ref mut self, other: Table) {
+        for s in other.slots {
+            if s.count > 0 {
+                let at = self.slot_of(s.w0, s.w1, s.len, s.name, 0)
+                if s.min < self.slots[at].min { self.slots[at].min = s.min }
+                if s.max > self.slots[at].max { self.slots[at].max = s.max }
+                self.slots[at].sum += s.sum
+                self.slots[at].count += s.count
+            }
+        }
+    }
+}
+
+fn main() throws {
+    let path = cli::args().nth(1) ?? "measurements.txt"
+    let b = fs::map(ref path, fs::Root::Anywhere) catch {
+        eprintln(f"cannot open {path}: {error}")
+        return
+    }
+    let mut all = table()
+    if task::cores() == 1 {
+        all.scan(b)
+    } else {
+        all = b.par_pieces('\n').fold(table, fn(t, piece) { t.scan(piece) }, Table::merge; order: par::Order::Any)
+    }
+
+    // Each station's name is checked as UTF-8 here, once.
+    let mut index: collections::HashMap[ref String, i64] = collections::HashMap()
+    let mut at = 0
+    while at < SLOTS {
+        if all.slots[at].count > 0 { index.insert(all.slots[at].name.text(), at) }
+        at += 1
+    }
+    let mut names = index.keys().collect()
+    names.sort()
+    let body = names
+        .map fn(name) {
+            let s = all.slots[index[name] ?? panic("a key")]
+            f"{name}={tenths(s.min)}/{tenths(mean(s.sum, s.count))}/{tenths(s.max)}"
+        }
+        .join(", ")
+    println(f"{{{body}}}")
+}
+
+// The official rounding: a tie goes toward +infinity (`naive.nika`).
+fn mean(sum: i64, count: i64) -> i64 {
+    return (2 * sum + count).div_euclid(2 * count)
+}
+
+fn tenths(t: i64) -> String {
+    if t < 0 {
+        let a = -t
+        return f"-{a / 10}.{a % 10}"
+    }
+    return f"{t / 10}.{t % 10}"
+}
