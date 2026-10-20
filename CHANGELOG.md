@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1163] — 2026-10-20
+
+**a type's rule a method cannot break is proved; the bounds walk bounds shifts, bounded sums and break guards**
+- A method that cannot break its type's rule (every use of `self` reads a field the rule does not read, counts or indexes a field whose length it reads, or calls the type's own methods) does not check it; after a changing own call the rule is a fact again (ADR-369 D2, D3, #714). The bounds walk bounds an unsigned `x >> k` below `2^(w-k)`, proves `l + x` from `l` where `x` lies between two constants, takes `!c` of `if c { break }` as a candidate loop invariant, keeps the length of what `find_all` searches, and reads a whole-number field bound by `let` through an index as a number (ADR-361 D4). Lowering: a compound value put into a nullable field is converted as a whole.
+
 ## [0.0.1162] — 2026-10-20
 
 **a checked assume is no Rust unsafe**
