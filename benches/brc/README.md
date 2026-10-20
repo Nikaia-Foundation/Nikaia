@@ -89,7 +89,7 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1164 with #695 (the `fast*.nika` rows 0.0.1162), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1164 with #695 (the `fast-unsafe.nika` rows 0.0.1162, the `fast.nika` rows 0.0.1166 with #776), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
@@ -100,12 +100,12 @@ Nikaia 0.0.1164 with #695 (the `fast*.nika` rows 0.0.1162), rustc 1.97.0, Intel 
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
 | **Nikaia**, `examples/1brc.nika` | **244.0** | **1.12** | **222.9** | **1.12** | **642** |
 | Nikaia, overflow checks off | 243.0 | 1.12 | 222.9 | 1.13 |  |
-| **Nikaia**, `fast.nika` | **125.5** | **0.94** | **125.7** | **0.94** | **1394** |
-| Nikaia, `fast.nika`, overflow checks off | 123.1 | 0.94 | 123.3 | 0.94 |  |
+| **Nikaia**, `fast.nika` | **123.8** | **0.94** | **124.1** | **0.93** | **1414** |
+| Nikaia, `fast.nika`, overflow checks off | 117.4 | 0.94 | 122.3 | 0.94 |  |
 | **Nikaia**, `fast-unsafe.nika`, assumes believed | **113.3** | **0.94** | **113.5** | **0.94** | **1569** |
 | Nikaia, `fast-unsafe.nika`, assumes checked | 187.7 | 1.51 | 187.9 | 1.51 |  |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 |  |
-| Nikaia, `fast.nika`, `x86-64-v3` | 116.9 | 0.94 | 117.2 | 0.94 |  |
+| Nikaia, `fast.nika`, `x86-64-v3` | 116.4 | 0.94 | 116.6 | 1.03 |  |
 | Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 99.1 | 0.94 | 99.4 | 0.94 |  |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 4 threads | 133.7 | 0.47 | 131.3 | 0.47 | 12907 |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 1 thread | 133.1 | 0.47 | 130.8 | 0.48 | |
