@@ -118,7 +118,7 @@ fn any_moves_away(types: ref Array[Ty]) -> bool {
 /// 2.2's numbers, `bool`, `char` and any view - `moves_away`'s other half.
 pub fn copies_plainly(ty: ref Ty) -> bool {
     return match ty {
-        Ty::Named { name, args, view } => if name == ARRAY { all_copy(args) } else { view || name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar" },
+        Ty::Named { name, args, view } => if name == ARRAY { all_copy(args) } else { view || name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" },
         else => false,
     }
 }
@@ -403,7 +403,7 @@ pub fn a_copied_part(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> b
 
 fn a_copied_scalar(name: ref String) -> bool {
     return match name {
-        "i32" | "i64" | "u8" | "u32" | "u64" | "f64" | "bool" | "char" | "scalar" => true,
+        "i32" | "i64" | "u8" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "scalar" => true,
         else => false,
     }
 }

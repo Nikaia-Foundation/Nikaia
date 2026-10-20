@@ -10,7 +10,7 @@ use std::collections
 /// The names this language offers as types of its own (`OFFERED`, widened by the
 /// containers a program may write).
 fn mem_offered(head: ref String) -> bool {
-    return head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par"
+    return head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f32" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par"
 }
 
 /// What a key of the ledger has after `prefix`, where that is one name; empty

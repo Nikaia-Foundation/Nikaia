@@ -28,7 +28,7 @@ fn check_core_call_joined(world: ref CheckWorld, segments: ref Vec[winnow_gramma
 /// The names this language offers as types of its own, which a path may
 /// start with (`OFFERED`).
 fn check_core_call_offered(head: ref String) -> bool {
-    return head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str"
+    return head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f32" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str"
 }
 
 /// Whether a found type says nothing a view could be lent for.

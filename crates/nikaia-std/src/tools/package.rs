@@ -13401,7 +13401,7 @@ fn check_core_call_joined(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segmen
     parts.join("::")
 }
 
-fn check_core_call_offered(head: &str) -> bool { head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" }
+fn check_core_call_offered(head: &str) -> bool { head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f32" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" }
 
 fn check_core_call_opaque(ty: &Ty) -> bool { matches!(ty, Ty::Unknown | Ty::Fn { .. }) }
 
@@ -19074,7 +19074,7 @@ fn check_core_stmt_a_number_read_through_a_lent_binding(state: &mut CheckState, 
         Ty::Named { name, args, view } => {
             let view = *view;
             if view { return; }
-            if args.is_empty() && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar") {
+            if args.is_empty() && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar") {
                 state.a_cast_over_a_lent_binding(world, value, span);
                 return;
             }
@@ -22151,7 +22151,7 @@ fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" }
+fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -24592,7 +24592,7 @@ impl CheckState {
 
 // --- check_members.nika ---
 
-fn mem_offered(head: &str) -> bool { head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par" }
+fn mem_offered(head: &str) -> bool { head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f32" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par" }
 
 fn mem_member_under(key: &str, prefix: &str) -> String {
     if !key.starts_with(prefix) { return "".to_owned(); }
@@ -25241,7 +25241,7 @@ pub fn check_narrow_reads_of_the_maybe(state: &mut CheckState, expr: &Expr) {
 
 fn check_narrow_copied(inner: &Ty) -> bool {
     match inner {
-        Ty::Named { name, .. } => name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "isize" || name == "f64" || name == "bool" || name == "char" || name == "scalar",
+        Ty::Named { name, .. } => name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "isize" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar",
         _ => false,
     }
 }
@@ -30362,7 +30362,7 @@ fn any_moves_away(types: &[Ty]) -> bool {
 
 pub fn copies_plainly(ty: &Ty) -> bool {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if name == ARRAY { all_copy(args) } else { view || name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar" } },
+        Ty::Named { name, args, view } => { let view = *view; if name == ARRAY { all_copy(args) } else { view || name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" } },
         _ => false,
     }
 }
@@ -30559,7 +30559,7 @@ pub fn a_copied_part(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool {
     }
 }
 
-fn a_copied_scalar(name: &str) -> bool { matches!(name, "i32" | "i64" | "u8" | "u32" | "u64" | "f64" | "bool" | "char" | "scalar") }
+fn a_copied_scalar(name: &str) -> bool { matches!(name, "i32" | "i64" | "u8" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "scalar") }
 
 pub fn tail_value_of(block: &Block) -> Option<&Expr> {
     if block.stmts.is_empty() { return None; }

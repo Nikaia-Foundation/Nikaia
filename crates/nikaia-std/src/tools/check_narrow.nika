@@ -265,7 +265,7 @@ pub fn check_narrow_reads_of_the_maybe(mut state: CheckState, expr: ref Expr) sy
 /// Whether a proved `T` is a word copied out of the option.
 fn check_narrow_copied(inner: ref Ty) -> bool {
     return match inner {
-        Ty::Named { name, .. } => name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "isize" || name == "f64" || name == "bool" || name == "char" || name == "scalar",
+        Ty::Named { name, .. } => name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "isize" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar",
         else => false,
     }
 }

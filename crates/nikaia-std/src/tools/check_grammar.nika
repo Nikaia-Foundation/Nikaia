@@ -40,7 +40,7 @@ fn bare_reference(pattern: ref Pattern, world: ref CheckWorld) -> String sync {
 }
 
 fn an_offered_number_name(name: ref String) -> bool sync {
-    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64"
+    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64"
 }
 
 impl CheckState {

@@ -187,7 +187,7 @@ fn check_core_stmt_a_number_read_through_a_lent_binding(mut state: CheckState, w
             if view {
                 return
             }
-            if args.len() == 0 && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar") {
+            if args.len() == 0 && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar") {
                 state.a_cast_over_a_lent_binding(world, value, span)
                 return
             }
