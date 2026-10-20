@@ -2338,7 +2338,7 @@ impl<'p> Emitter<'p> {
                         })
                     });
                     let st = out.mark();
-                    let written = self.item(&mut out, &item.node, &item.span);
+                    let written = self.item(&mut out, item);
                     self.walking(|w| w.specialising = None);
                     written?;
                     out.record(&item.span, st);
@@ -2372,7 +2372,7 @@ impl<'p> Emitter<'p> {
                         })
                     });
                     let st = out.mark();
-                    let written = self.item(&mut out, &item.node, &item.span);
+                    let written = self.item(&mut out, item);
                     self.walking(|w| w.specialising = None);
                     written?;
                     out.record(&item.span, st);
@@ -2382,7 +2382,7 @@ impl<'p> Emitter<'p> {
             }
             {
                 let st = out.mark();
-                self.item(&mut out, &item.node, &item.span)?;
+                self.item(&mut out, item)?;
                 out.record(&item.span, st);
             }
             out.push("\n");
@@ -2458,7 +2458,7 @@ impl<'p> Emitter<'p> {
                         })
                     });
                     let st = out.mark();
-                    let written = self.item(&mut out, &item.node, &item.span);
+                    let written = self.item(&mut out, item);
                     self.walking(|w| w.specialising = None);
                     written?;
                     out.record(&item.span, st);
@@ -2492,7 +2492,7 @@ impl<'p> Emitter<'p> {
                         })
                     });
                     let st = out.mark();
-                    let written = self.item(&mut out, &item.node, &item.span);
+                    let written = self.item(&mut out, item);
                     self.walking(|w| w.specialising = None);
                     written?;
                     out.record(&item.span, st);
@@ -2502,7 +2502,7 @@ impl<'p> Emitter<'p> {
             }
             {
                 let st = out.mark();
-                self.item(&mut out, &item.node, &item.span)?;
+                self.item(&mut out, item)?;
                 out.record(&item.span, st);
             }
             out.push("\n");
@@ -2637,7 +2637,8 @@ impl<'p> Emitter<'p> {
         self.s.derives(&self.world, name)
     }
 
-    fn item(&self, out: &mut Out, item: &Item, span: &Span) -> Result<()> {
+    fn item(&self, out: &mut Out, written: &Spanned<Item>) -> Result<()> {
+        let (item, span) = (&written.node, &written.span);
         match item {
             Item::Grammar(def) => self.grammar(out, def),
             Item::Enum {
@@ -2816,7 +2817,7 @@ impl<'p> Emitter<'p> {
                 }
                 self.function(
                     out,
-                    item,
+                    written,
                     0,
                     Lifetimes::Elided,
                     self.s.carries_input.get(&(span.at() as i64)),
@@ -2907,7 +2908,7 @@ impl<'p> Emitter<'p> {
                             out.push("    ");
                             self.function(
                                 out,
-                                &method.node,
+                                method,
                                 1,
                                 lifetimes,
                                 carries,
@@ -2956,7 +2957,7 @@ impl<'p> Emitter<'p> {
                         out.push("    ");
                         self.function(
                             out,
-                            &method.node,
+                            method,
                             1,
                             lifetimes,
                             carries,
@@ -3035,7 +3036,7 @@ impl<'p> Emitter<'p> {
                         out.push("    ");
                         self.function(
                             out,
-                            &method.node,
+                            method,
                             1,
                             lifetimes,
                             carries,
@@ -3069,7 +3070,7 @@ impl<'p> Emitter<'p> {
                         out.push("    ");
                         self.function(
                             out,
-                            &method.node,
+                            method,
                             1,
                             lifetimes,
                             carries,
@@ -3643,7 +3644,7 @@ impl<'p> Emitter<'p> {
                 out.push("    ");
                 self.function(
                     out,
-                    &method.node,
+                    method,
                     1,
                     lifetimes,
                     carries,
@@ -3674,7 +3675,9 @@ impl<'p> Emitter<'p> {
     fn function(
         &self,
         out: &mut Out,
-        item: &Item,
+        // The function with what stands before it: `@inline` (ADR-370) is
+        // read off its attributes.
+        written: &Spanned<Item>,
         depth: usize,
         lifetimes: Lifetimes,
         // The parameters written as views of the input buffer rather than of
@@ -3699,7 +3702,7 @@ impl<'p> Emitter<'p> {
             is_public,
             can_throw: throws,
             ..
-        } = item
+        } = &written.node
         else {
             return Err(anyhow!("not a function"));
         };
@@ -4631,8 +4634,16 @@ impl<'p> Emitter<'p> {
         // it too big for its heuristic - at 319 instructions a row, and 300
         // with the hint. Only a hint, and only here: every function `#[inline]`
         // would bloat the code and the build.
-        if self.s.fold_callees.contains(&name) {
-            out.push("#[inline]\n");
+        //
+        // **And what the program wrote wins** ([ADR-370](../../docs/specification/adr/adr-370.md)
+        // D1-D2): `@inline`, `@inline(always)` or `@inline(never)` is Rust's
+        // attribute of the same name, and a written one replaces the hint
+        // above - `@inline(never)` keeps a fold's step's callee out of line.
+        let hint = crate::check::attributes::inline_written(self.parsed, &written.attributes)
+            .or_else(|| self.s.fold_callees.contains(&name).then_some("#[inline]"));
+        if let Some(hint) = hint {
+            out.push(hint);
+            out.push("\n");
             out.push(&pad);
         }
         // **A function with a precondition has two entries**
@@ -4659,8 +4670,14 @@ impl<'p> Emitter<'p> {
                 out.push(&pad);
                 out.push(&signature(&format!("{emitted}{UNCHECKED}")));
                 // The checked entry is written after the body, below.
+                // The checked entry carries the written hint too: a call
+                // from elsewhere reaches it first.
+                let written_hint =
+                    crate::check::attributes::inline_written(self.parsed, &written.attributes)
+                        .map(|h| format!("{pad}{h}\n"))
+                        .unwrap_or_default();
                 Some(format!(
-                    "{pad}#[allow(dead_code)]\n{pad}{}{{ {}{}{UNCHECKED}({}){} }}\n",
+                    "{pad}#[allow(dead_code)]\n{written_hint}{pad}{}{{ {}{}{UNCHECKED}({}){} }}\n",
                     signature(&emitted),
                     check_lines(checks),
                     match (receiver.is_some(), owner.is_some()) {

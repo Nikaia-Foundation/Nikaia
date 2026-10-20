@@ -12,6 +12,30 @@ use super::*;
 /// The mark itself, which `std` declares and nothing else may be.
 pub(crate) const MARK: &str = "meta::Attribute";
 
+/// **`@inline`, the language's own** ([ADR-370](../../../docs/specification/adr/adr-370.md)
+/// D1): no struct declares it, and it stands before a function or a method
+/// that has a body.
+pub(crate) const INLINE: &str = "inline";
+
+/// What `@inline` asks, as Rust's attribute writes it: `@inline`,
+/// `@inline(always)`, `@inline(never)`. `None` where none is written, or where
+/// the one written is refused (its words are the checker's to say).
+pub(crate) fn inline_written(unit: &Parsed, attributes: &[ast::Attribute]) -> Option<&'static str> {
+    let attribute = attributes.iter().find(|a| unit.text(a.name) == INLINE)?;
+    match (&attribute.args[..], attribute.config.is_empty()) {
+        ([], true) => Some("#[inline]"),
+        ([Expr::Variable(word, _)], true) => match unit.text(*word) {
+            "always" => Some("#[inline(always)]"),
+            "never" => Some("#[inline(never)]"),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// A trait's method, which `@inline` may not stand before: it has no body.
+const TRAIT_FN: &str = "trait fn";
+
 /// Where an attribute may stand, as the mark's arguments spell them (D2).
 pub(super) const PLACES: [&str; 8] = [
     "field",
@@ -98,7 +122,7 @@ impl Checker<'_> {
                 }
                 Item::Trait { methods, .. } => {
                     for method in methods {
-                        self.attributes_at(&method.attributes, "fn", &marks);
+                        self.attributes_at(&method.attributes, TRAIT_FN, &marks);
                         self.parameter_attributes(&method.node.args, &marks);
                     }
                 }
@@ -152,8 +176,19 @@ impl Checker<'_> {
         marks: &BTreeMap<String, Mark>,
     ) {
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+        let mut inlines = 0;
         for attribute in attributes {
             let name = self.parsed.unaliased(self.parsed.text(attribute.name));
+            if name == INLINE {
+                inlines += 1;
+                self.the_inline(attribute, place, inlines);
+                continue;
+            }
+            // A trait's method is a `fn` to every attribute but `@inline`.
+            let place = match place {
+                TRAIT_FN => "fn",
+                place => place,
+            };
             if name == MARK {
                 self.the_mark(attribute, place);
                 continue;
@@ -174,6 +209,90 @@ impl Checker<'_> {
                 self.an_attribute_written_twice(&name, &attribute.span);
             }
             self.attribute_arguments(&name, &fields, attribute);
+        }
+    }
+
+    /// **`@inline`, `@inline(always)`, `@inline(never)`** (ADR-370 D1): before
+    /// a function or a method with a body, once, with no word but `always` or
+    /// `never`.
+    fn the_inline(&mut self, attribute: &ast::Attribute, place: &str, count: usize) {
+        if place != "fn" {
+            let (message, note, help) = match place {
+                TRAIT_FN => (
+                    "`@inline` stands before a function with a body, and a trait's method \
+                     declares none."
+                        .to_string(),
+                    "What is inlined is a body: the one each `impl` writes.".to_string(),
+                    "Write `@inline` before the method in the `impl`.".to_string(),
+                ),
+                "" => (
+                    "`@inline` stands before a function or a method, and this is neither."
+                        .to_string(),
+                    "It asks that a function's body be copied to where it is called.".to_string(),
+                    "Move it before a `fn`, or remove it.".to_string(),
+                ),
+                place => (
+                    format!(
+                        "`@inline` stands before a function or a method, and this is a `{place}`."
+                    ),
+                    "It asks that a function's body be copied to where it is called.".to_string(),
+                    "Move it before a `fn`, or remove it.".to_string(),
+                ),
+            };
+            self.s.findings.push(Finding {
+                code: "NK1235".to_string(),
+                severity: Severity::Error,
+                span: attribute.span,
+                message,
+                notes: vec![note],
+                help: Some(help),
+                labels: Vec::new(),
+            });
+            return;
+        }
+        if count == 2 {
+            self.s.findings.push(Finding {
+                code: "NK1236".to_string(),
+                severity: Severity::Error,
+                span: attribute.span,
+                message: "`@inline` stands twice before one function.".to_string(),
+                notes: vec![
+                    "A function is inlined, always inlined or never: one of them.".to_string(),
+                ],
+                help: Some("Remove one.".to_string()),
+                labels: Vec::new(),
+            });
+        }
+        let word = |arg: &Expr| match arg {
+            Expr::Variable(word, _) => Some(self.parsed.text(*word).to_string()),
+            _ => None,
+        };
+        let refused = match (&attribute.args[..], attribute.config.is_empty()) {
+            ([], true) => None,
+            ([arg], true) => match word(arg) {
+                Some(w) if w == "always" || w == "never" => None,
+                Some(w) => Some(format!(
+                    "`@inline` takes `always` or `never`, and `{w}` is neither."
+                )),
+                None => {
+                    Some("`@inline` takes `always` or `never`, and this is neither.".to_string())
+                }
+            },
+            _ => Some("`@inline` takes one word at most: `always` or `never`.".to_string()),
+        };
+        if let Some(message) = refused {
+            self.s.findings.push(Finding {
+                code: "NK1293".to_string(),
+                severity: Severity::Error,
+                span: attribute.span,
+                message,
+                notes: vec![
+                    "`@inline` asks, `@inline(always)` insists, `@inline(never)` forbids."
+                        .to_string(),
+                ],
+                help: Some("Write `@inline`, `@inline(always)` or `@inline(never)`.".to_string()),
+                labels: Vec::new(),
+            });
         }
     }
 

@@ -68,7 +68,7 @@
 10-nikaia-light.md #68 lowered (a body) [about-a-refusal]  let prefix = "Log: "
 10-nikaia-light.md #69 lowered (as written)  struct Button { label: String, on_click: fn(i64) -> i64…
 10-nikaia-light.md #70 lowered (as written)  /// Multiplies a positive number.
-10-nikaia-light.md #71 refused (as written) [NK1135]  @inline
+10-nikaia-light.md #71 lowered (as written)  @inline
 10-nikaia-light.md #72 fragment (as written) [sketch]  fn serve(db: ref Connection) { … }
 10-nikaia-light.md #73 refused (a body) [sketch NK1117,NK1181]  let db = SharedMut(postgres::connect("…"))
 10-nikaia-light.md #74 refused (a body) [sketch NK1181]  let db = Shared(postgres::connect("…"))

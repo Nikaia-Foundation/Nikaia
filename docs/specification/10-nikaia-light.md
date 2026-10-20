@@ -2149,7 +2149,7 @@ fn main(a: int; times: int = 4, verbose: bool = false) {
 ([ADR-370](adr/adr-370.md)). It stands before a function or a method:
 `@inline` is a hint, and lets another package inline a `pub fn`;
 `@inline(always)` asks it of every call, and `@inline(never)` of none, for a
-cold path. None of them changes what a program means. A function that calls
+cold path; it stands once, and not before a trait's method, which has no body. None of them changes what a program means. A function that calls
 itself is never inlined into itself. Where the compiler sees a hot call the
 backend would leave out of line - what a `fold`'s or `par_fold`'s step calls
 (Part II 10.7) - it adds the hint itself; a written `@inline(never)` wins.
