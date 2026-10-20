@@ -165,6 +165,28 @@ separators in a 64-byte block (0.25 a row), the name's length (`<= 8` or
 not, 0.5 a row, where AI variant 2 has a `cmov`), and where the predictor
 indexes by address (see the note on `1brc.nika` above).
 
+What each check costs, at 16 units, `x86-64`: the lowered Rust of `fast.nika`
+edited by hand to drop exactly that check (an unchecked read, `wrapping_*`,
+`get_unchecked`), built the same way, its output compared with `naive`'s and
+counted. None of them is proved today; the last column says what a proof
+needs.
+
+| check | instructions a row it costs | what proving it needs |
+|---|---:|---|
+| the table's index `self.slots[at]`, in the probe and in the update | 16.1 | `slots.len() == SLOTS` as `Table`'s invariant (ADR-369, not built), `at`'s range carried through the probe's turns, `slot_of`'s result below the length |
+| the name's two word reads, `u64_le(pos)` and `u64_le(pos + 8)` | 15.6 | `0 <= pos < stop` at the read, from the `break` that ends the previous turn (the walk forgets it at the loop's head), and `stop + MARGIN <= buf.len()` stated at `run`'s top |
+| the long name's slice `buf[pos..<pos + len]`, hoisted onto every row | 13.7 | the same facts as the word reads, a separator inside `buf`, and `len >= 0` |
+| the separator's arithmetic, `sep - pos`, `sep + 1`, `sep + 4 + …` | 9.1 | `0 <= sep < buf.len()` for each position `find_all` yields: no record makes it a fact |
+| the shift by `28 - dot` | 4.0 | a shift's count as a goal of the walk: no record has it |
+| `sum += v`, `count += 1` | 2.0 | not provable: the table is scanned again and merged into, so no step count bounds them |
+| `8 * len`, `64 - 8 * len` and the shift by it | 0.6 | `len >= 0`, which a malformed file breaks: only a guard the program writes gives it |
+
+With every check above dropped at once, the last row's by one guard
+`0 <= len <= 100` in their place, `fast.nika` runs 132.0 instructions a row,
+below AI variant 2's 147.4. What stays then guards a malformed file: the
+`.` not where the shape says (`28 - dot`), and the temperature's word read
+past the end after a name longer than `MARGIN`.
+
 ## Where `naive.nika` differs from `naive.rs`
 
 Callgrind's attribution per row at 16 units, by function. `naive.nika`'s loop
