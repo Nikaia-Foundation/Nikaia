@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1121] — 2026-10-20
+
+**A String? parameter handed back is lent; mixed text into a published position is refused; an unlinked list keeps one type**
+- A `String?` parameter returned as it is, or as a side of `??`, is a view like its `ref String?` twin (#696, #678). A mixed `String?` unwrapped by `??` makes the list, field or set it goes into mixed; into a published position, the view behind it is NK1104 (#696). A `std`-built or untyped list handed to a container parameter keeps `Vec<String>`; a view kept there is NK1102 (#738).
+
 ## [0.0.1120] — 2026-10-20
 
 **Lowering: text tiers, the solver and result sources redo only what changed (#727)**
