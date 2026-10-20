@@ -64,9 +64,9 @@ pub fn grown_items(items: ref Vec[Spanned[Item]], vec: winnow_grammar::Symbol) -
     let mut out: Vec[Spanned[Item]] = []
     for item in items {
         match item.node {
-            Item::Struct { name, generics, fields, is_public, is_extern } => {
+            Item::Struct { name, generics, fields, is_public, is_extern, rules } => {
                 let copy = item.clone()
-                out.push(copy with { node: Item::Struct { name: name, generics: generics.clone(), fields: grown_fields(fields, vec), is_public: is_public, is_extern: is_extern } })
+                out.push(copy with { node: Item::Struct { name: name, generics: generics.clone(), fields: grown_fields(fields, vec), is_public: is_public, is_extern: is_extern, rules: rules.clone() } })
             },
             Item::Enum { name, variants, is_public, is_extern } => {
                 let mut grown_variants: Vec[EnumVariant] = []

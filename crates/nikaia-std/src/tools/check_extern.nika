@@ -80,7 +80,7 @@ impl CheckState {
     /// `pub`, it is not generic, and every field is a C value.
     pub fn an_extern_struct(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span) sync {
         match item {
-            Item::Struct { name, generics, fields, is_public, is_extern } => {
+            Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 if is_extern {
                     self.an_extern_struct_of(world, name, generics, fields, is_public, span)
                 }

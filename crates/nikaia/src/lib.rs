@@ -40,6 +40,7 @@ pub mod specbook;
 pub mod sysroot;
 pub mod text_tiers;
 pub mod traits;
+pub mod type_rules;
 pub mod types;
 pub mod view_changes;
 pub mod views;

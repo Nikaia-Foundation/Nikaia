@@ -2718,6 +2718,7 @@ impl<'p> Emitter<'p> {
                 fields,
                 is_public,
                 is_extern,
+                ..
             } => {
                 // **A `pub` struct's map positions are its hidden type
                 // parameters** (ADR-010 D9), numbered by the fields in order.

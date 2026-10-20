@@ -1,0 +1,211 @@
+//! **A type's rule, an `assert` after a struct's fields**
+//! ([ADR-369](../../../docs/specification/adr/adr-369.md)): checked or proved
+//! at every literal and at the end of every method that changes the value
+//! (D2), and a fact wherever a value of the type is read (D3).
+
+mod common;
+
+use std::process::Command;
+
+use nikaia::bounds::BoundsChecks;
+use nikaia::emit::{Build, emit_program};
+use nikaia::parser::parse_to_ast;
+
+const RING: &str = r#"
+comptime CAP: i64 = 1024
+
+struct Piece {
+    start: i64,
+    end: i64,
+    assert(0 <= start && start <= end; message: "a piece ends after it starts")
+}
+
+struct Ring {
+    slots: Vec[i64],
+    used: i64,
+    assert(slots.len() == CAP)
+}
+
+impl Piece {
+    fn widen(ref mut self, n: i64) {
+        self.end += n
+    }
+    fn length(ref self) -> i64 {
+        return self.end - self.start
+    }
+}
+
+impl Ring {
+    fn at(ref self, x: i64) -> i64 {
+        return self.slots[x & (CAP - 1)]
+    }
+    fn bump(ref mut self, x: i64) {
+        self.used += 1
+        self.slots[x & (CAP - 1)] += 1
+    }
+}
+
+fn get(r: ref Ring, x: i64) -> i64 {
+    return r.slots[x & (CAP - 1)]
+}
+
+fn ring() -> Ring {
+    let mut slots: Vec[i64] = []
+    slots.resize(CAP, 0)
+    return Ring { slots: slots, used: 0 }
+}
+
+fn main() {
+    let p = Piece { start: 1, end: 3 }
+    let mut q = Piece { start: p.start, end: p.end + 2 }
+    q.widen(WIDEN)
+    let mut r = ring()
+    r.bump(5)
+    print(f"{p.length()} {q.length()} {r.at(5)} {get(r, 1029)}")
+}
+"#;
+
+fn lowered(source: &str) -> String {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let how = Build {
+        bounds: BoundsChecks::Removed,
+        ..Build::default()
+    };
+    emit_program(&parsed, how).expect("it lowers").rust
+}
+
+/// The lowered body of the function or method `name`, up to the next `fn`.
+fn body<'a>(rust: &'a str, name: &str) -> &'a str {
+    let from = rust
+        .find(&format!("fn {name}("))
+        .unwrap_or_else(|| panic!("no `{name}` in:\n{rust}"));
+    let rest = &rust[from + 3..];
+    let to = rest.find("fn ").unwrap_or(rest.len());
+    &rest[..to]
+}
+
+/// The program lowered with its index checks removed where proved, compiled
+/// and run: whether it ran to the end, and what it printed to each stream.
+fn run(purpose: &str, source: &str) -> (bool, String, String) {
+    let dir = common::scratch_dir(&format!("type-rules-{purpose}"));
+    std::fs::write(dir.join("rules.nika"), source).expect("write the source");
+    let lowered = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["lower", "rules.nika", "--output", "rules.rs"])
+        .args(["--optimization", "remove-bounds-checks:on"])
+        .output()
+        .expect("the nikaia binary runs");
+    assert!(
+        lowered.status.success(),
+        "{purpose} did not lower:\n{}",
+        String::from_utf8_lossy(&lowered.stderr)
+    );
+    let binary = dir.join("rules");
+    let compiled = common::compile(
+        &dir.join("rules.rs"),
+        &["--crate-type", "bin", "-o", &binary.to_string_lossy()],
+    );
+    assert!(
+        compiled.status.success(),
+        "{purpose} did not compile:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let out = Command::new(&binary)
+        .env_remove("RUST_BACKTRACE")
+        .output()
+        .expect("run it");
+    std::fs::remove_dir_all(&dir).ok();
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).to_string(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+    )
+}
+
+/// D2: a literal the rule is proved of carries no check; one it is not
+/// proved of is checked where it is built.
+#[test]
+fn a_literal_is_proved_or_checked() {
+    let rust = lowered(&RING.replace("WIDEN", "2"));
+    let main = body(&rust, "__nikaia_main");
+    assert_eq!(
+        main.matches("assertion_failed").count(),
+        1,
+        "only `q`'s literal is checked, with the rule's message:\n{main}"
+    );
+    assert!(
+        main.contains("assert(0 <= piece.start && piece.start <= piece.end"),
+        "{main}"
+    );
+    let ring = body(&rust, "ring");
+    assert!(ring.contains("assert(ring.slots.len() == CAP)"), "{ring}");
+}
+
+/// D2: a method that changes the value checks the rule when it ends, and
+/// one that only reads it does not.
+#[test]
+fn a_method_that_changes_the_value_keeps_the_rule() {
+    let rust = lowered(&RING.replace("WIDEN", "2"));
+    assert!(body(&rust, "widen").contains("assertion_failed"), "{rust}");
+    assert!(
+        !body(&rust, "length").contains("assertion_failed"),
+        "{rust}"
+    );
+    assert!(!body(&rust, "at").contains("assertion_failed"), "{rust}");
+    let (ok, out, _) = run("keeps", &RING.replace("WIDEN", "2"));
+    assert!(ok);
+    assert_eq!(out.trim(), "2 6 1 1");
+    let (ok, _, err) = run("breaks", &RING.replace("WIDEN", "-9"));
+    assert!(!ok, "a widen by -9 leaves the end before the start");
+    assert!(err.contains("a piece ends after it starts"), "{err}");
+}
+
+/// D3: `self` in the type's methods and a parameter of the type hold the
+/// rule at the entry, so a masked index into the field is proved inside.
+#[test]
+fn the_rule_proves_an_index() {
+    let rust = lowered(&RING.replace("WIDEN", "2"));
+    for name in ["at", "bump", "get"] {
+        let lowered = body(&rust, name);
+        assert!(
+            lowered.contains("nikaia_std::proven::read(&"),
+            "`{name}` reads its slot without a check:\n{lowered}"
+        );
+        assert!(!lowered.contains("index::at("), "{lowered}");
+    }
+}
+
+/// D3 holds only where every change is checked: a `with` that sets a field
+/// of the type outside its methods leaves the index checked.
+#[test]
+fn a_with_leaves_the_rule_no_fact() {
+    let source = RING.replace("WIDEN", "2").replace(
+        "    r.bump(5)\n",
+        "    r.bump(5)\n    let s = r with { used: 7 }\n    print(f\"{s.used}\")\n",
+    );
+    let rust = lowered(&source);
+    assert!(!body(&rust, "at").contains("proven::read"), "{rust}");
+}
+
+/// D1: a rule is an `assert` over the fields, `NK1288` otherwise.
+#[test]
+fn a_rule_is_an_assert_over_the_fields() {
+    for (rule, said) in [
+        ("a >= 0", "has to be an `assert`"),
+        ("assert(a[0] >= 0)", "may read only its fields"),
+        (
+            "assert(a.len() > 0; reason: \"x\")",
+            "has to be an `assert`",
+        ),
+    ] {
+        let source = format!(
+            "struct P {{\n    a: Vec[i64],\n    {rule}\n}}\nfn main() {{\n    let p = P {{ a: [1] }}\n    print(f\"{{p.a.len()}}\")\n}}\n"
+        );
+        let refused = match parse_to_ast(&source) {
+            Ok(_) => panic!("`{rule}` is not a rule"),
+            Err(e) => format!("{e:#}"),
+        };
+        assert!(refused.contains("NK1288"), "{refused}");
+        assert!(refused.contains(said), "{refused}");
+    }
+}

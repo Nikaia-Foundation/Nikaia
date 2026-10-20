@@ -997,6 +997,16 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
         Expr::Call { func, args, config, .. } => {
             if prover_an_assert_call(func, args, span, walk.claims) {
                 let cond = args[0]
+                // **A type's rule holds where a value of it is read** (ADR-369
+                // D3): a fact, never a claim to prove or check.
+                if prover_a_given_rule(config, words) {
+                    let given = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                    if given != null {
+                        scope.facts.push(given ?? 0)
+                    }
+                    walk.held.insert((span.start as i64, node_key(cond)), ClaimHeld::Proved)
+                    return false
+                }
                 prover_expr(walk, cond, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
                 // The `message:` a failure says, where it is text as written:
                 // a precondition checked elsewhere says it too.
@@ -1655,6 +1665,17 @@ pub fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, cl
         return false
     }
     return claims.contains((span.start as i64, node_key(args[0])))
+}
+
+/// Whether an `assert` is a type's rule the compiler gives at an entry
+/// (ADR-369 D3): marked by an option no program can write.
+fn prover_a_given_rule(config: ref Vec[ConfigArg], words: ref winnow_grammar::InternerContext) -> bool {
+    for option in config {
+        if words.resolve(option.name) == "rule of the type" {
+            return true
+        }
+    }
+    return false
 }
 
 /// The `message:` an `assert` gives, where it is text as written.

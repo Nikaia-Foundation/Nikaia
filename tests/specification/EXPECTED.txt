@@ -36,7 +36,7 @@
 10-nikaia-light.md #36 refused (a body) [NK1117]  // If find_user returns null, 'name' becomes null.
 10-nikaia-light.md #37 lowered (as written)  // file: users.nika
 10-nikaia-light.md #38 lowered (as written)  pub struct Page {
-10-nikaia-light.md #39 fragment (as written)  pub struct Piece {
+10-nikaia-light.md #39 lowered (as written)  pub struct Piece {
 10-nikaia-light.md #40 refused (as written) [NK1135]  // file: users.nika
 10-nikaia-light.md #41 refused (a body) [NK1117,NK1173]  let moved = p with { x: p.x + 1 }
 10-nikaia-light.md #42 lowered (as written) [about-a-refusal]  // file: main.nika

@@ -525,6 +525,7 @@ impl LedgerOps for Ledger {
                         fields,
                         is_public,
                         is_extern,
+                        ..
                     } => {
                         let tethered = nikaia_std::tools::declared::tethered_fields(
                             &parsed.interner,

@@ -153,6 +153,10 @@ pub enum Item {
         /// ([ADR-284](../../../../docs/specification/adr/adr-284.md) D14,
         /// ADR-324 D6).
         is_extern: bool,
+        /// **The type's rules** ([ADR-369](../../../docs/specification/adr/adr-369.md)
+        /// D1): each `assert(claim; message: …)` written after the fields, as
+        /// the call it is written as.
+        rules: Vec[Spanned[Expr]],
     },
 
     // Kap 4.2: impl User { ... }

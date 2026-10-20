@@ -756,7 +756,7 @@ pub fn cx_handled_structs(words: ref winnow_grammar::InternerContext, items: ref
     let mut out: Vec[CxHandled] = []
     for item in items {
         match item.node {
-            Item::Struct { name, generics, fields, is_public, is_extern } => {
+            Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 if is_public && !is_extern && generics.len() == 0 {
                     let mut shown: Vec[(String, Type)] = []
                     for field in fields {

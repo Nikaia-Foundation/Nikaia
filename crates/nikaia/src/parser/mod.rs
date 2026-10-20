@@ -917,6 +917,10 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
     // ADR-347: a one-variant enum written by its type's name becomes the long
     // form here, before any reader sees the tree.
     crate::one_variant::expand(&mut parsed)?;
+    // ADR-369: a struct's rules, written out as the `assert`s they mean at
+    // each construction, each exit of a method that changes the value, and
+    // each entry that reads one.
+    crate::type_rules::expand(&mut parsed)?;
     // **What a `String` field or result is below is decided here, once**
     // ([ADR-282](../../../../docs/specification/adr/adr-282.md)): by what flows
     // into it, and written into its type so every later reader agrees.
@@ -1640,6 +1644,7 @@ grammar! {
             generics:generic_list?
             "{"
             fields:field_defs?
+            rules:struct_rule*
             "}"
             -> {
                 Item::Struct {
@@ -1648,8 +1653,17 @@ grammar! {
                     fields: fields.unwrap_or_default(),
                     is_public: vis.is_some(),
                     is_extern: laid_out.is_some(),
+                    rules,
                 }
             }
+
+        // **The type's rule: an `assert` after the fields**
+        // ([ADR-369](../../docs/specification/adr/adr-369.md) D1). Any
+        // expression parses here; the checker refuses one that is not an
+        // `assert(claim)` (`NK1288`), as it says why rather than where the
+        // parse stopped.
+        rule struct_rule -> Spanned<Expr> @=
+            e:expr ","? -> { Spanned::new(e, Span::from(_span)) }
 
         // Kap 4.4. The three shapes the specification shows and no others: a
         // name, a name with positional types, a name with named fields.

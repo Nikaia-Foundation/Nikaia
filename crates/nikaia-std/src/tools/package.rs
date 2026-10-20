@@ -110,7 +110,7 @@ pub struct Program {
 pub enum Item {
     Fn { name: Option<winnow_grammar::Symbol>, generics: Vec<GenericParam>, receiver: Option<Receiver>, args: Vec<FnArg>, config: Vec<ConfigParam>, spread: Option<winnow_grammar::Symbol>, ret_type: Option<Type>, body: Block, is_sync: bool, sync_by: Vec<winnow_grammar::Symbol>, is_public: bool, can_throw: bool, is_extern: bool },
     Enum { name: winnow_grammar::Symbol, variants: Vec<EnumVariant>, is_public: bool, is_extern: bool },
-    Struct { name: winnow_grammar::Symbol, generics: Vec<GenericParam>, fields: Vec<FieldDef>, is_public: bool, is_extern: bool },
+    Struct { name: winnow_grammar::Symbol, generics: Vec<GenericParam>, fields: Vec<FieldDef>, is_public: bool, is_extern: bool, rules: Vec<Spanned<Expr>> },
     Impl { trait_name: Option<winnow_grammar::Symbol>, target: Type, methods: Vec<Spanned<Item>> },
     Trait { name: winnow_grammar::Symbol, methods: Vec<Spanned<TraitMethod>>, is_public: bool },
     Extern { abi: Option<String>, library: Option<String>, declarations: Vec<Spanned<TraitMethod>>, opaque: Vec<Spanned<OpaqueType>> },
@@ -7742,7 +7742,7 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
     let mut out: Vec<CxHandled> = vec![];
     for item in items.iter() {
         match &item.node {
-            Item::Struct { name, generics, fields, is_public, is_extern } => {
+            Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                 if is_public && !is_extern && generics.is_empty() {
                     let mut shown: Vec<(String, Type)> = vec![];
@@ -17188,6 +17188,10 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
     for option in config.iter() {
         let name = world.words.resolve(option.name).to_owned();
         let given = check_core_expr(state, world, host, &option.value, span);
+        if name == "rule of the type" {
+            index += 1;
+            continue;
+        }
         if name != "message" {
             state.an_assert_of_another_shape(format!("`assert` has no option called `{}`. Its only option is `message:`.", name), span);
             index += 1;
@@ -21878,7 +21882,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn an_extern_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
         match item {
-            Item::Struct { name, generics, fields, is_public, is_extern } => {
+            Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                 if is_extern { self.an_extern_struct_of(world, name, generics, fields, is_public, span); }
             },
@@ -50800,10 +50804,10 @@ pub fn grown_items(items: &[Spanned<Item>], vec: winnow_grammar::Symbol) -> Vec<
     let mut out: Vec<Spanned<Item>> = vec![];
     for item in items.iter() {
         match &item.node {
-            Item::Struct { name, generics, fields, is_public, is_extern } => {
+            Item::Struct { name, generics, fields, is_public, is_extern, rules } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                 let copy = item.clone();
-                out.push(Spanned { node: Item::Struct { name, generics: generics.to_owned(), fields: grown_fields(fields, vec), is_public, is_extern }, ..copy });
+                out.push(Spanned { node: Item::Struct { name, generics: generics.to_owned(), fields: grown_fields(fields, vec), is_public, is_extern, rules: rules.to_owned() }, ..copy });
             },
             Item::Enum { name, variants, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -54715,6 +54719,12 @@ fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &mut 
             let func = nikaia_std::boxed::open(func);
             if prover_an_assert_call(func, args, &span, &walk.claims) {
                 let cond = nikaia_std::index::get(&args, 0);
+                if prover_a_given_rule(config, words) {
+                    let given = claim_term(&cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                    if given.is_some() { scope.facts.push(nikaia_std::index::or(given, || 0)); }
+                    walk.held.insert((span.start as i64, node_key(&cond)), ClaimHeld::Proved);
+                    return false;
+                }
                 prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
                 let message = prover_message(config, words);
                 let names = claim_names_in(&cond, words, holes_of);
@@ -54927,7 +54937,7 @@ fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &Prove
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, unaliased);
             if callee.is_some() {
-                let __keep_70425 = nikaia_std::tether::Keep::new();
+                let __keep_71058 = nikaia_std::tether::Keep::new();
                 prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition);
             }
         },
@@ -55199,6 +55209,11 @@ pub fn prover_an_assert_call(func: &Expr, args: &[Expr], span: &Span, claims: &c
     let named = matches!(func, Expr::Variable(_, _));
     if !named || args.len() != 1 { return false; }
     claims.contains(&(span.start as i64, node_key(nikaia_std::index::get(&args, 0))))
+}
+
+fn prover_a_given_rule(config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> bool {
+    for option in config.iter() { if words.resolve(option.name) == "rule of the type" { return true; } }
+    false
 }
 
 fn prover_message(config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Option<String> {

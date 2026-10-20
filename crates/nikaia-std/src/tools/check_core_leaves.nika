@@ -454,6 +454,12 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
     for option in config {
         let name = world.words.resolve(option.name).clone()
         let given = check_core_expr(state, world, host, option.value, span)
+        // **A type's rule, given at an entry** (ADR-369 D3): an option no
+        // program can write, which the compiler adds.
+        if name == "rule of the type" {
+            index += 1
+            continue
+        }
         if name != "message" {
             state.an_assert_of_another_shape(f"`assert` has no option called `{name}`. Its only option is `message:`.", span)
             index += 1
