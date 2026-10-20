@@ -1,0 +1,29 @@
+// #739: a view a `??` reads off a place stays beside a change to another part
+// of it, and ends before the whole is handed on as `mut`.
+
+use std::collections
+
+struct Fun { result: String? }
+struct Walk { fns: collections::HashMap[String, Fun], seen: Vec[String], n: i64 }
+
+fn bump(mut walk: Walk) -> i64 {
+    walk.n += 1
+    return walk.n
+}
+
+fn kinds(key: String, mut walk: Walk) -> String {
+    let function = walk.fns[key] ?? return ""
+    let result = function.result ?? return ""
+    walk.seen.push(f"{key}!")
+    let line = f"{result} {walk.seen.len()}"
+    let n = bump(walk)
+    return f"{line} {n}"
+}
+
+fn main() {
+    let mut fns: collections::HashMap[String, Fun] = collections::HashMap()
+    fns.insert(f"k{1}", Fun { result: f"r{2}" })
+    let mut walk = Walk { fns: fns, seen: [], n: 0 }
+    println(kinds("k1", walk))
+    println(kinds("k9", walk))
+}

@@ -296,6 +296,10 @@ pub struct CheckFacts {
     /// **An arm that reads an element or a field off a place, lent** (#613).
     pub lent_reads: collections::BTreeSet[i64],
     pub view_fallbacks: collections::BTreeSet[i64],
+    /// **A map read that jumps where it finds nothing** (`m[k] ?? return`),
+    /// by the `??`: of a value that moves, the answer is a view of the map
+    /// (ADR-293 D28), which `view_changes` watches (#739).
+    pub map_read_views: collections::BTreeSet[i64],
     /// **The keep plans the check made against `std` alone** (#727): the
     /// emitter's own, where it reads this check's facts.
     pub keep_plans: Vec[BufferPlan]?,
@@ -451,6 +455,7 @@ impl CheckFacts {
             lent_list_reads: collections::BTreeSet(),
             lent_reads: collections::BTreeSet(),
             view_fallbacks: collections::BTreeSet(),
+            map_read_views: collections::BTreeSet(),
             keep_plans: null,
         }
     }

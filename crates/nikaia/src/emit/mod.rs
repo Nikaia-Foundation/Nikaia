@@ -2162,6 +2162,7 @@ impl<'p> Emitter<'p> {
             &state.own_contracts,
             library,
             &state.facts.lent_lets,
+            &crate::view_changes::coalesced(&state.facts),
         )
         .1;
         let mut made = Self {

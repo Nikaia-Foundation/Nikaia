@@ -47,6 +47,11 @@ pub struct GiveUps {
 struct View {
     name: String,
     roots: BTreeSet<String>,
+    /// The parts of its roots it reads, as written (`walk.state.summaries`),
+    /// where it is known: a root none of them starts with is read whole. A
+    /// change to a part that neither holds nor lies inside one of them leaves
+    /// the view alone, as it does below (#739).
+    parts: BTreeSet<String>,
     /// The statement that made it, and the call or the place it came from.
     made: Span,
     from: String,
@@ -65,6 +70,9 @@ struct Walk<'a> {
     own: &'a Ledger,
     library: &'a Ledger,
     lent: &'a BTreeSet<i64>,
+    /// The `??`s that lend their left side, by the id of the `??` or of its
+    /// fallback (`coalesced`).
+    coalesced: &'a BTreeSet<i64>,
     findings: Vec<Finding>,
     give_ups: GiveUps,
     /// Each variable's `let`, by name, as the walk last met it.
@@ -81,6 +89,7 @@ pub fn analyse(
     own: &Ledger,
     library: &Ledger,
     lent: &BTreeSet<i64>,
+    coalesced: &BTreeSet<i64>,
 ) -> (Vec<Finding>, GiveUps) {
     let mut methods: HashMap<&str, Vec<&FnContract>> = HashMap::new();
     for ledger in [own, library] {
@@ -95,6 +104,7 @@ pub fn analyse(
         own,
         library,
         lent,
+        coalesced,
         findings: Vec::new(),
         give_ups: GiveUps::default(),
         lets: HashMap::new(),
@@ -114,6 +124,25 @@ pub fn analyse(
         }
     }
     (walk.findings, walk.give_ups)
+}
+
+/// **The `??`s whose answer is a view of their left side** (#739): the
+/// checker's facts, by the id of the `??` (`lent_coalesces`,
+/// `view_coalesces`, `lent_list_reads`, `lent_map_fallbacks`,
+/// `map_read_views`) or of its
+/// fallback (`view_fallbacks`). A `let` bound to one lends the place it reads.
+pub fn coalesced(facts: &crate::check::CheckFacts) -> BTreeSet<i64> {
+    let mut ids: BTreeSet<i64> = facts.lent_coalesces.keys().copied().collect();
+    for set in [
+        &facts.view_coalesces,
+        &facts.lent_list_reads,
+        &facts.lent_map_fallbacks,
+        &facts.view_fallbacks,
+        &facts.map_read_views,
+    ] {
+        ids.extend(set.iter().copied());
+    }
+    ids
 }
 
 /// Whether a callee takes its parameter `index` as its own: the body keeps it
@@ -140,6 +169,53 @@ fn root_of(parsed: &Parsed, expr: &Expr) -> Option<String> {
         Expr::Unary { expr, .. } => root_of(parsed, expr),
         _ => None,
     }
+}
+
+/// What a place under `root` may point into, and the parts of it read: `root`
+/// itself, and where `root` is a view still in scope, what that view points
+/// into (#739).
+fn through(root: &str, part: String, outer: &[View]) -> (BTreeSet<String>, BTreeSet<String>) {
+    let mut roots = BTreeSet::from([root.to_string()]);
+    let mut parts = BTreeSet::from([part]);
+    if let Some(held) = outer.iter().rev().find(|v| v.name == root) {
+        roots.extend(held.roots.iter().cloned());
+        parts.extend(held.parts.iter().cloned());
+    }
+    (roots, parts)
+}
+
+/// The place a read names, down its fields (`walk.state.summaries` for
+/// `walk.state.summaries[k]`): an element is read as part of its container.
+fn path_of(parsed: &Parsed, expr: &Expr) -> String {
+    match expr {
+        Expr::Variable(name, _) => parsed.text(*name).to_string(),
+        Expr::Field { base, name, .. } => {
+            format!("{}.{}", path_of(parsed, base), parsed.text(*name))
+        }
+        Expr::Index { base, .. }
+        | Expr::SafeField { base, .. }
+        | Expr::Unary { expr: base, .. } => path_of(parsed, base),
+        _ => String::new(),
+    }
+}
+
+/// Whether a view still to be used may read the place `path` under `root`
+/// changes: it points into `root`, and it reads all of it or a part that
+/// holds `path` or lies inside it.
+fn watches(view: &View, root: &str, path: &str) -> bool {
+    if view.used.is_none() || !view.roots.contains(root) {
+        return false;
+    }
+    let under = |part: &String| part == root || part.starts_with(&format!("{root}."));
+    let mut read = view.parts.iter().filter(|p| under(p)).peekable();
+    if read.peek().is_none() {
+        return true;
+    }
+    read.any(|part| {
+        part == path
+            || part.starts_with(&format!("{path}."))
+            || path.starts_with(&format!("{part}."))
+    })
 }
 
 fn mentions_stmt(parsed: &Parsed, stmt: &Stmt, name: &str) -> bool {
@@ -217,9 +293,36 @@ impl Walk<'_> {
             }
             Expr::Index { .. } | Expr::Field { .. } if self.lent.contains(&(at.start as i64)) => {
                 let root = root_of(parsed, value)?;
+                let (roots, parts) = through(&root, path_of(parsed, value), outer);
                 Some(View {
                     name: name.to_string(),
-                    roots: BTreeSet::from([root.clone()]),
+                    roots,
+                    parts,
+                    made: *at,
+                    from: format!("`{name}` is a view into `{root}`"),
+                    way_out: HashMap::new(),
+                    used: None,
+                    call: None,
+                    help: None,
+                })
+            }
+            // **A `??` that lends its left side** (#739): `walk.fns[key] ??
+            // return` is a view into `walk`, and `f.result ?? ""` into
+            // whatever `f` views.
+            Expr::Coalesce {
+                value: left,
+                fallback,
+                ..
+            } if [value, fallback]
+                .iter()
+                .any(|e| self.coalesced.contains(&i64::from(crate::ast::id_of(e)))) =>
+            {
+                let root = root_of(parsed, left)?;
+                let (roots, parts) = through(&root, path_of(parsed, left), outer);
+                Some(View {
+                    name: name.to_string(),
+                    roots,
+                    parts,
                     made: *at,
                     from: format!("`{name}` is a view into `{root}`"),
                     way_out: HashMap::new(),
@@ -254,6 +357,7 @@ impl Walk<'_> {
                 Some(View {
                     name: name.to_string(),
                     roots,
+                    parts: BTreeSet::new(),
                     made: *at,
                     from: format!("`{name}` is made here by `{callee}`"),
                     way_out,
@@ -305,6 +409,7 @@ impl Walk<'_> {
             out.push(View {
                 name: holder.clone(),
                 roots: BTreeSet::from([root.clone()]),
+                parts: BTreeSet::new(),
                 made: *at,
                 from: format!("`{callee}` keeps a view of `{root}` in `{holder}` here"),
                 way_out: HashMap::from([(
@@ -380,7 +485,8 @@ impl Walk<'_> {
                         let viewed = views
                             .iter()
                             .any(|v| v.used.is_some() && v.roots.contains(&root));
-                        if !whole && viewed {
+                        let path = path_of(parsed, target);
+                        if !whole && views.iter().any(|v| watches(v, &root, &path)) {
                             self.refuse(&root, &at, &views);
                         } else if whole && viewed && declared.contains_key(&root) {
                             // Given up (D3): the old data lives on under the
@@ -553,7 +659,7 @@ impl Walk<'_> {
     /// The changes in place among a statement's own expressions.
     fn changes_in(&mut self, stmt: &Stmt, at: &Span, views: &[View]) {
         let parsed = self.parsed;
-        let mut changed: Vec<String> = Vec::new();
+        let mut changed: Vec<(String, String)> = Vec::new();
         visit_stmt(parsed, stmt, &mut |e| {
             if let Expr::MethodCall {
                 receiver, method, ..
@@ -561,14 +667,11 @@ impl Walk<'_> {
                 && let Some(root) = root_of(parsed, receiver)
                 && self.changing_method(parsed.text(*method))
             {
-                changed.push(root);
+                changed.push((root, path_of(parsed, receiver)));
             }
         });
-        for root in changed {
-            if views
-                .iter()
-                .any(|v| v.used.is_some() && v.roots.contains(&root))
-            {
+        for (root, path) in changed {
+            if views.iter().any(|v| watches(v, &root, &path)) {
                 self.refuse(&root, at, views);
             }
         }

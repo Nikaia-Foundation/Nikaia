@@ -290,12 +290,17 @@ pub(crate) fn buffer_plans(
     let context = Context::of(&parsed.interner, &parsed.program.items);
     // The buffers given a new value in a nested block while a view of them is
     // used afterwards (ADR-353 D3): they live in the frame's keep.
-    let given_up: std::collections::BTreeMap<i64, String> =
-        crate::view_changes::analyse(parsed, ledger, library, &Default::default())
-            .1
-            .kept
-            .into_iter()
-            .collect();
+    let given_up: std::collections::BTreeMap<i64, String> = crate::view_changes::analyse(
+        parsed,
+        ledger,
+        library,
+        &Default::default(),
+        &Default::default(),
+    )
+    .1
+    .kept
+    .into_iter()
+    .collect();
     let own_methods = nikaia_std::tools::ty::method_index(ledger);
     let ask = BufferAsk {
         names: &parsed.interner,

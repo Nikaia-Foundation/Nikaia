@@ -652,3 +652,71 @@ fn main() {
         found[0].message
     );
 }
+
+fn changes(source: &str) -> Vec<String> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code == "NK2305")
+        .map(|f| f.message)
+        .collect()
+}
+
+/// #739: a view a `??` reads off a place - a map's entry, an optional field
+/// of an element - is a view into the place's root, and handing the root on
+/// as `mut` while the view is used afterwards is `NK2305`. Used before the
+/// call, or beside a change to another field, it is accepted.
+#[test]
+fn a_view_read_through_a_coalesce_is_watched_across_a_mut_call() {
+    let shape = |body: &str| {
+        format!(
+            r#"
+use std::collections
+
+struct Fun {{ result: String? }}
+struct Walk {{ fns: collections::HashMap[String, Fun], list: Vec[Fun], seen: Vec[String], n: i64 }}
+
+fn bump(mut walk: Walk) -> i64 {{
+    walk.n += 1
+    return walk.n
+}}
+
+fn kinds(key: String, mut walk: Walk) -> String {{
+{body}
+}}
+
+fn main() {{
+    let mut walk = Walk {{ fns: collections::HashMap(), list: [], seen: [], n: 0 }}
+    println(kinds("k", walk))
+}}
+"#
+        )
+    };
+    let refused = [
+        // The issue's shape: a map's entry, then its optional field.
+        "    let function = walk.fns[key] ?? return \"\"\n    let result = function.result ?? return \"\"\n    let n = bump(walk)\n    return f\"{result}{n}\"",
+        // A map's entry alone.
+        "    let function = walk.fns[key] ?? return \"\"\n    let n = bump(walk)\n    return f\"{function.result ?? \"\"}{n}\"",
+        // An optional field of an element.
+        "    let function = walk.list[0]\n    let result = function.result ?? return \"\"\n    let n = bump(walk)\n    return f\"{result}{n}\"",
+        // A change in place of the part the view reads.
+        "    let function = walk.fns[key] ?? return \"\"\n    let result = function.result ?? return \"\"\n    walk.fns.clear()\n    return result",
+    ];
+    for body in refused {
+        let found = changes(&shape(body));
+        assert_eq!(found.len(), 1, "{body}\n{found:#?}");
+    }
+    let accepted = [
+        // The view ends before the call.
+        "    let function = walk.fns[key] ?? return \"\"\n    let result = function.result ?? return \"\"\n    let line = f\"{result}\"\n    let n = bump(walk)\n    return f\"{line}{n}\"",
+        // A change to another field beside the view.
+        "    let function = walk.fns[key] ?? return \"\"\n    let result = function.result ?? return \"\"\n    walk.seen.push(\"x\")\n    return result",
+    ];
+    for body in accepted {
+        let found = changes(&shape(body));
+        assert!(found.is_empty(), "{body}\n{found:#?}");
+    }
+}

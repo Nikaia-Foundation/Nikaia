@@ -556,8 +556,13 @@ fn walked<'a>(
         // A change in place of data a view still to be used may point into
         // (`NK2305`, ADR-353 D4). A walk of its own, like `views`: it asks where a
         // view points and when it is used, not what a type is.
-        let (changed, _) =
-            crate::view_changes::analyse(parsed, own, library, &checker.s.facts.lent_lets);
+        let (changed, _) = crate::view_changes::analyse(
+            parsed,
+            own,
+            library,
+            &checker.s.facts.lent_lets,
+            &crate::view_changes::coalesced(&checker.s.facts),
+        );
         checker.s.findings.extend(changed);
         // A view handed back that points into a buffer the body owns (`NK2303`).
         // The tether's own refusal

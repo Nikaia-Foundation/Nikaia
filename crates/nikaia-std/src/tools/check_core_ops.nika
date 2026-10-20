@@ -627,6 +627,10 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     let nullable = check_core_ops_nullable(left)
     let inner = check_core_ops_inside(left)
     let place = check_core_ops_place(value)
+    // **A map read past a jump is a view of the map** (ADR-293 D28, #739).
+    if from_a_map && nullable && moves(inner) && state.jumps(world, fallback) {
+        state.facts.map_read_views.insert(id_of(expr) as i64)
+    }
     // **A loan on the left and a jump on the right is a view** (ADR-279 D10).
     if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && (check_core_ops_lent_root(state, world, value) || check_core_ops_behind_a_view(state, world, value)) {
         if check_core_ops_plain_text(inner) {
