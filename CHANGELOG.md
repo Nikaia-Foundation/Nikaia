@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1164] — 2026-10-20
+
+**vectors: simd::Lanes and simd::Fixed (provisional)**
+- Vectors a program holds are `std::simd`'s (ADR-377, provisional): `Lanes[T]` at the build's widest register, `Fixed[T, N]` at a fixed lane count; lane arithmetic is `wrapping_*` or `saturating_*` (`+ - *` is NK1296); `Fixed` alone offers `lane`, `shuffle`, `dot_pairs`, `widen`, `narrow_saturating`; a `Mask` is read as positions. Decided; built by #775.
+
 ## [0.0.1163] — 2026-10-20
 
 **a type's rule a method cannot break is proved; the bounds walk bounds shifts, bounded sums and break guards**
