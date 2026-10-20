@@ -29,7 +29,7 @@ nikaia-std = { path = "crates/nikaia-std" }
 # whatever is in the deps directory, and it has to be the same one. Pinned to a
 # commit rather than following `main`, so that a build is the build that was
 # measured and a parser change arrives as a reviewed bump.
-winnow-grammar = { git = "https://github.com/keywan-ghadami/winnow-grammar", rev = "0fb343fd961dcae73f64303a7d00532fb5170722", version = "0.1.0", features = ["rayon"] }
+winnow-grammar = { git = "https://github.com/keywan-ghadami/winnow-grammar", rev = "64adce96addcc8f42fe6a8a4779d58a0f94ae410", version = "0.1.0", features = ["rayon"] }
 winnow = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

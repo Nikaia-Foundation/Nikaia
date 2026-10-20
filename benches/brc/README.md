@@ -48,8 +48,9 @@ benches/brc/brc.sh 200000     # quicker
   Nikaia's also the grammar runtime's `advance`. AI variant 1 inlines the
   entry at 1 unit and not at 16, 42 instructions a row apart. `1brc.nika`
   inlines the entry at both since #695 (what a fold's step calls is
-  `#[inline(always)]`, `std`'s text hash a call of its own); the runtime's
-  `advance` stays a call at 1 unit. One setting alone would pick the winner,
+  `#[inline(always)]`, `std`'s text hash a call of its own), and the
+  runtime's `advance` at both since it is `#[inline(always)]` too (9.0 a row
+  at 1 unit). One setting alone would pick the winner,
   so the table shows both. `brc.sh` sets the count per run:
   `CARGO_PROFILE_RELEASE_CODEGEN_UNITS` for the Rust programs, each setting in
   a target directory of its own, and `CARGO_PROFILE_DEV_CODEGEN_UNITS` for the
@@ -89,17 +90,17 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1164 with #695 (the `fast.nika` and `fast-unsafe.nika` rows 0.0.1169 with #776, a set written at `find_all` fixed when compiling, two cuts compared in place, the name's words cut with `low_bits`, and `fast.nika`'s preconditions proved at the call), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1164 with #695 (`examples/1brc.nika` and `naive.nika` 0.0.1171, the grammar runtime's `advance` always inlined; the `fast.nika` and `fast-unsafe.nika` rows 0.0.1169 with #776, a set written at `find_all` fixed when compiling, two cuts compared in place, the name's words cut with `low_bits`, and `fast.nika`'s preconditions proved at the call), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
 | Rust, `naive` | 841.5 | 9.28 | 858.9 | 8.61 | 556 |
-| **Nikaia**, `naive.nika` | **573.9** | **8.28** | **564.9** | **8.44** | **375** |
+| **Nikaia**, `naive.nika` | **573.9** | **8.40** | **564.9** | **8.46** | **375** |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
-| **Nikaia**, `examples/1brc.nika` | **244.0** | **1.12** | **222.9** | **1.12** | **642** |
-| Nikaia, overflow checks off | 243.0 | 1.12 | 222.9 | 1.13 |  |
+| **Nikaia**, `examples/1brc.nika` | **235.0** | **1.12** | **222.9** | **1.12** | **642** |
+| Nikaia, overflow checks off | 235.1 | 1.13 | 222.9 | 1.12 |  |
 | **Nikaia**, `fast.nika` | **116.2** | **0.40** | **116.4** | **0.39** | **1416** |
 | Nikaia, `fast.nika`, overflow checks off | 114.2 | 0.40 | 115.4 | 0.39 |  |
 | **Nikaia**, `fast-unsafe.nika`, assumes believed | **115.5** | **0.40** | **115.6** | **0.40** | **1531** |
@@ -124,7 +125,7 @@ Nikaia 0.0.1164 with #695 (the `fast.nika` and `fast-unsafe.nika` rows 0.0.1169 
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
 
-Against AI variant 1, Nikaia runs 10 % fewer instructions at 1 unit and 29 %
+Against AI variant 1, Nikaia runs 13 % fewer instructions at 1 unit and 29 %
 fewer at 16 units, where AI variant 1 leaves its table's entry out of line.
 The mispredictions are a third of AI variant 1's at both settings. Nikaia's program is a
 quarter fewer tokens, with UTF-8 and every overflow checked
@@ -141,7 +142,7 @@ callgrind's simulated predictor is indexed by address. Every build of
 to 3.7.
 
 AI variant 2 runs 34 % fewer instructions than `1brc.nika` at 16 units and
-40 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
+37 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
 `fast.nika` runs 21 % fewer instructions than AI variant 2 at both unit
@@ -306,8 +307,7 @@ all, which a set search cannot know to skip.
 | what | where | issue |
 |---|---|---|
 | the sum's check, proved below a length checked once before the fold (ADR-367 D4; the count's is proved); one branch a row, no instruction in today's layout | the prover, the lowering | [#432](https://github.com/Nikaia-Foundation/Nikaia/issues/432) |
-| the grammar runtime's `advance` inlined at 1 unit as at 16: `#[inline(always)]` there takes `1brc.nika` from 244.0 to 235.0 a row at 1 unit (measured with a patched copy), 16 units unchanged | `winnow-grammar` | [#695](https://github.com/Nikaia-Foundation/Nikaia/issues/695) |
-| no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422) | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
+| no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422; a name used only as a key, checked on a miss, is its D5, not built). Today the same program over `data[0..<data.len()]` (a `Bytes`) counts 350.2 and 338.1: the per-name `from_utf8` is 115.6 a row, and the bytes loop 10 more than the text one, so D5 alone would win at most the 10.3 back | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
 
 ## Why two AI variants
 
