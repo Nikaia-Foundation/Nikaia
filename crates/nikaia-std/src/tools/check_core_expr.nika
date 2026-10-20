@@ -509,6 +509,9 @@ fn check_core_expr_unary[H: CheckHost](mut state: CheckState, world: ref CheckWo
             let value = value_of_a_copy(found.unseen())
             if integer_named(value) != null {
                 value
+            } else if check_simd_kind(value).len() > 0 {
+                // **`!` on a vector or a mask flips each lane** (ADR-377 D3).
+                value
             } else if found.fits(boolean) {
                 boolean
             } else {

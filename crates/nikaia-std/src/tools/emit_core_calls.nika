@@ -166,6 +166,23 @@ impl EmitState {
             },
             else => {},
         }
+        // **A vector's load proved inside is read without its check** (ADR-377
+        // D3, ADR-306 D5), as a word read is: `proven::array` hands over the
+        // bytes, as many as the type reads (`simd::WIDTH` for a `Lanes`).
+        let loaded = self.facts.simd_loads[node_key(func)] ?? 0
+        if loaded != 0 && args.len() == 2 && self.proven_indices.contains(node_key(func)) {
+            let width: String = if loaded < 0 { "{ simd::WIDTH }" } else { f"{loaded}" }
+            out.push(f"simd::load_proven(unsafe {{ nikaia_std::proven::array::<u8, {width}>(&")
+            self.emit_core_nested(world, walk, out, host, args[0], 255, depth, flow, scope)
+            out.push(", (")
+            if only_literals(args[1]) {
+                host.expr(walk, out, args[1], depth, flow.inferred(), scope)
+            } else {
+                host.expr(walk, out, args[1], depth, flow, scope)
+            }
+            out.push(") as usize) })")
+            return
+        }
         // **A call to a function with a precondition** reaches its checked entry
         // unless the prover saw this call prove it, or check it here with the
         // call's arguments in place of the parameters, so that a failure names

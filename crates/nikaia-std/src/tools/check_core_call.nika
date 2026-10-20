@@ -628,6 +628,14 @@ fn check_core_call_names(mut state: CheckState, world: ref CheckWorld, func: ref
 /// variant's constructor.
 fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, name: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     check_core_call_names(state, world, func, name, args, span)
+    // **A vector is made in the type it is written down as** (ADR-377 D3):
+    // `let v: simd::Fixed[u8, 16] = simd::load(b, at)`.
+    let lanes = name.starts_with("simd::")
+    let mut wanted: Ty? = null
+    if lanes {
+        wanted = state.flow.lambda_expected?.clone()
+        state.flow.lambda_expected = null
+    }
     // **A grammar is entered by an ordinary call** (ADR-296 D24).
     let entered: String? = state.grammar_path(name)
     if entered != null {
@@ -729,7 +737,27 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         return check_core_call_unresolved(state, world, host, func, name, args, found, config, passed, shadowed, span)
     }
     let contract: FnContract = callee ?? return Ty::Unknown
-    return check_core_call_described(state, world, host, name, key, contract, args, found, config, passed, span)
+    let described = check_core_call_described(state, world, host, name, key, contract, args, found, config, passed, span)
+    // **`simd::Fixed::from([…])` takes the lanes as an array** (ADR-377 D3).
+    if lanes && name == "simd::Fixed::from" && args.len() == 1 {
+        state.facts.array_literals.insert(id_of(args[0]) as i64)
+        let lanes_wanted = check_simd_count_of(wanted?.clone() ?? Ty::Unknown)
+        let lanes_written = check_simd_count_of(check_simd_made(null, name, args))
+        if lanes_wanted > 0 && lanes_written > 0 && lanes_wanted != lanes_written {
+            state.findings.push(a_list_the_wrong_length_for_its_array(lanes_written, lanes_wanted, span, false))
+        }
+    }
+    let made = if lanes && described.is_unknown() { check_simd_made(wanted, name, args) } else { described }
+    // **A load is read as the cut it reads** (ADR-377 D3): a candidate for a
+    // proof, as a word read is (ADR-320 D12).
+    if lanes && name == "simd::load" && args.len() == 2 {
+        let read = check_simd_bytes(made)
+        if read != 0 {
+            state.facts.simd_loads.insert(id_of(func) as i64, read)
+            state.facts.list_indices.insert(id_of(func) as i64)
+        }
+    }
+    return made
 }
 
 /// **`f(a, b)`, `Stats(first)`, `io::read_to_string()`**: a free call.

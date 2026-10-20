@@ -302,6 +302,13 @@ impl EmitState {
             out.push_str(f"{shared}<{locked}<{held}>>")
             return out
         }
+        // **`simd::Mask[T]`** compares two `Lanes[T]`, whose count is the
+        // build's (ADR-377 D1, D5).
+        if name == "simd::Mask" && ty.generics.len() == 1 {
+            let lane = self.emit_core_ty_counted(world, walk, crossings, overlaps, ty.generics[0], lifetimes, count)
+            out.push_str(f"simd::LanesMask<{lane}>")
+            return out
+        }
         // `Array[T, N]` is `[T; N]` (ADR-152 D1, D2).
         if name == "Array" && ty.generics.len() == 2 && ty.generics[1].count != null {
             let n = ty.generics[1].count ?? 0

@@ -443,6 +443,13 @@ pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref Che
     if value_of_a_copy(left.unseen()) == byte && state.text_literal(world, byte, rhs, false) != null {
         right = byte.clone()
     }
+    // **An operator on a vector or a mask** (ADR-377 D3, D4).
+    if check_simd_kind(value_of_a_copy(left.unseen())).len() > 0 || check_simd_kind(value_of_a_copy(right.unseen())).len() > 0 {
+        let lanes = state.a_lane_operation(op, value_of_a_copy(left.unseen()), rhs, value_of_a_copy(right.unseen()), at)
+        if lanes != null {
+            return lanes ?? Ty::Unknown
+        }
+    }
     state.divisor_is_not_zero(world, op, rhs, span)
     state.shift_count_fits(world, op, lhs, value_of_a_copy(left.unseen()), rhs, span)
     state.an_operation_that_overflows(world, op, lhs, rhs, reach, span)

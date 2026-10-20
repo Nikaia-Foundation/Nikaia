@@ -2479,6 +2479,7 @@ pub struct BoundsContext {
     pub ensured: collections::BTreeMap<String, Ensured>,
     pub each: collections::BTreeMap<String, Ensured>,
     pub std_receivers: collections::BTreeMap<i64, String>,
+    pub simd_loads: collections::BTreeMap<i64, i64>,
     pub shifts: collections::BTreeMap<i64, String>,
     pub given: collections::BTreeMap<String, Range>,
     pub negations: collections::BTreeMap<i64, String>,
@@ -2634,8 +2635,8 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
             if ty.starts_with('u') { bounding_at_least_zero(walk, &mut facts, &name); }
         }
         if ty == "Vec" || ty == "List" || ty == "Array" {
-            let __keep_16191 = nikaia_std::tether::Keep::new();
-            bounding_at_least_zero(walk, &mut facts, (&__keep_16191).put(length_of(&name)));
+            let __keep_16389 = nikaia_std::tether::Keep::new();
+            bounding_at_least_zero(walk, &mut facts, (&__keep_16389).put(length_of(&name)));
         }
     }
     for (name, range) in context.given.iter() {
@@ -2648,8 +2649,8 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
     for (name, range) in context.text_lengths.iter() {
         let range = *range;
         if !walk.shape.bound.contains(name) {
-            let __keep_16746 = nikaia_std::tether::Keep::new();
-            bounding_bounded(walk, &mut facts, (&__keep_16746).put(length_of(name)), &range);
+            let __keep_16944 = nikaia_std::tether::Keep::new();
+            bounding_bounded(walk, &mut facts, (&__keep_16944).put(length_of(name)), &range);
         }
     }
     bounding_block(walk, body, &mut facts, context, program, words, ask);
@@ -3689,7 +3690,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
-            let __keep_73033 = nikaia_std::tether::Keep::new();
+            let __keep_73231 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 Expr::Field { .. } => {
@@ -4293,8 +4294,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
         bounding_push(&walk, facts, fact);
     }
     for list in filled.iter() {
-        let __keep_106818 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_106818).put(length_of(list)), count);
+        let __keep_107016 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_107016).put(length_of(list)), count);
     }
 }
 
@@ -4510,12 +4511,18 @@ fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut BoundsFacts, co
             bounding_expr(walk, func, facts, context, program, words, ask);
             for arg in args.iter() { bounding_expr(walk, arg, facts, context, program, words, ask); }
             for c in config.iter() { bounding_expr(walk, &c.value, facts, context, program, words, ask); }
+            let loaded = nikaia_std::index::or(*nikaia_std::index::get(&context.simd_loads, &(node_key(func))), || 0);
+            if loaded != 0 && args.len() == 2 {
+                let list = path_of(nikaia_std::index::get(&args, 0), words);
+                let read = if loaded < 0 { -loaded } else { loaded };
+                if list.is_some() && bounding_word_inside(walk, nikaia_std::index::or(list.as_deref(), || ""), node_key(nikaia_std::index::get(&args, 0)), nikaia_std::index::get(&args, 1), read, &facts, context, program, words, ask) { walk.proven.indices.insert(node_key(func)); } else { walk.open += 1; }
+            }
             let claimed = nikaia_std::index::or(bounding_variable(func, words), || "".into());
             if args.len() == 1 && (claimed == "assert" || claimed == "assume") { bounding_assume(walk, facts, nikaia_std::index::get(&args, 0), context, program, words); }
             let callee = callee_params(func, &context.around, words);
             for at in 0..args.len() as i64 {
                 let handed = match path_of(nikaia_std::index::get(&args, nikaia_std::index::at(at)), words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if hands_on((callee).as_ref(), at) { bounding_forget(&walk, facts, &handed); }
+                if hands_on((callee).as_ref(), at) && loaded == 0 { bounding_forget(&walk, facts, &handed); }
             }
         },
         _ => { bounding_children(walk, expr, facts, context, program, words, ask); },
@@ -4906,7 +4913,7 @@ fn changed_by(expr: &Expr, context: &BoundsContext, words: &winnow_grammar::Inte
             let callee = callee_params(func, &context.around, words);
             for at in 0..args.len() as i64 {
                 let handed = match path_of(nikaia_std::index::get(&args, nikaia_std::index::at(at)), words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if hands_on((callee).as_ref(), at) {
+                if hands_on((callee).as_ref(), at) && !context.simd_loads.contains_key(&node_key(func)) {
                     out.lengths.insert(handed.to_owned());
                     out.jumps.insert(handed.to_owned());
                     out.values.insert(handed);
@@ -14750,6 +14757,15 @@ fn check_core_call_names(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, 
 #[allow(clippy::too_many_arguments)]
 fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     check_core_call_names(state, world, func, name, args, span);
+    let lanes = name.starts_with("simd::");
+    let mut wanted: Option<Ty> = None;
+    if lanes {
+        wanted = match state.flow.lambda_expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        state.flow.lambda_expected = None;
+    }
     let entered: Option<String> = state.grammar_path(name);
     if entered.is_some() {
         let entered_path: String = nikaia_std::index::or(entered, || "".into());
@@ -14823,7 +14839,25 @@ fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     if is_hull(name) { return state.hull(name, args.len() as i64, &found, span); }
     if !have { return check_core_call_unresolved(state, world, host, func, name, args, &found, config, &passed, shadowed, span); }
     let contract: FnContract = match callee { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-    check_core_call_described(state, world, host, name, &key, &contract, args, &found, config, &passed, span)
+    let described = check_core_call_described(state, world, host, name, &key, &contract, args, &found, config, &passed, span);
+    if lanes && name == "simd::Fixed::from" && args.len() == 1 {
+        state.facts.array_literals.insert(id_of(nikaia_std::index::get(&args, 0)) as i64);
+        let lanes_wanted = check_simd_count_of(&nikaia_std::index::or(match wanted.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown));
+        let lanes_written = check_simd_count_of(&check_simd_made(None, name, args));
+        if lanes_wanted > 0 && lanes_written > 0 && lanes_wanted != lanes_written { state.findings.push(a_list_the_wrong_length_for_its_array(lanes_written, lanes_wanted, span, false)); }
+    }
+    let made = if lanes && described.is_unknown() { check_simd_made((wanted).as_ref(), name, args) } else { described };
+    if lanes && name == "simd::load" && args.len() == 2 {
+        let read = check_simd_bytes(&made);
+        if read != 0 {
+            state.facts.simd_loads.insert(id_of(func) as i64, read);
+            state.facts.list_indices.insert(id_of(func) as i64);
+        }
+    }
+    made
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -16527,7 +16561,7 @@ fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
         UnaryOp::Not => {
             let boolean = check_core_expr_named("bool");
             let value = value_of_a_copy(&found.unseen());
-            if integer_named(&value).is_some() { value } else if found.fits(&boolean) { boolean } else { Ty::Unknown }
+            if integer_named(&value).is_some() { value } else if !check_simd_kind(&value).is_empty() { value } else if found.fits(&boolean) { boolean } else { Ty::Unknown }
         },
         UnaryOp::Ref => view_of_type(&found),
     }
@@ -17945,6 +17979,7 @@ fn check_core_method_counted(on: &Ty) -> bool {
 
 fn check_core_method_ledger_type(on: &Ty, bytes: bool) -> String {
     if bytes { return String::from("Bytes"); }
+    if check_simd_kind(on) == "Mask" { return String::from("simd::Mask"); }
     match on {
         Ty::Named { name, args, .. } => { if args.is_empty() && is_whole_number(name) { name.to_owned() } else { "".to_owned() } },
         _ => "".to_owned(),
@@ -18274,6 +18309,10 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
         _ => { },
     }
     if name == "access" && locked_content_of(&on).is_some() { return Ty::Named { name: SEEN.to_owned(), args: vec![walked.unseen()], view: false }; }
+    let lanes = value_of_a_copy(&on.unseen());
+    state.a_shuffle_out_of_lanes(world, &lanes, &name, args, span);
+    let changed: Option<Ty> = check_simd_method_result(&lanes, &name);
+    if changed.is_some() { return nikaia_std::index::or(changed, || Ty::Unknown); }
     walked
 }
 
@@ -18770,6 +18809,10 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
     if value_of_a_copy(&walked_right.unseen()) == byte && state.text_literal(world, &byte, lhs, false).is_some() { left = byte.clone(); }
     let mut right: Ty = walked_right;
     if value_of_a_copy(&left.unseen()) == byte && state.text_literal(world, &byte, rhs, false).is_some() { right = byte.clone(); }
+    if !check_simd_kind(&value_of_a_copy(&left.unseen())).is_empty() || !check_simd_kind(&value_of_a_copy(&right.unseen())).is_empty() {
+        let lanes = state.a_lane_operation(op, &value_of_a_copy(&left.unseen()), rhs, &value_of_a_copy(&right.unseen()), at);
+        if lanes.is_some() { return nikaia_std::index::or(lanes, || Ty::Unknown); }
+    }
     state.divisor_is_not_zero(world, op, rhs, span);
     state.shift_count_fits(world, op, lhs, &value_of_a_copy(&left.unseen()), rhs, span);
     state.an_operation_that_overflows(world, op, lhs, rhs, (reach).as_deref(), span);
@@ -20486,7 +20529,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let outer_read = state.flow.read_a_map;
     state.flow.read_a_map = false;
     state.flow.reaching = check_core_stmt_reaching(world, ty);
-    if ty.is_some() && check_core_stmt_expects_a_lambda(value) {
+    if ty.is_some() && (check_core_stmt_expects_a_lambda(value) || check_simd_a_call(world, value)) {
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         state.flow.lambda_expected = Some(written_ty(world.words, world.here.aliases, t));
     }
@@ -22657,6 +22700,7 @@ pub struct CheckFacts {
     pub negations: collections::BTreeMap<i64, String>,
     pub shifts: collections::BTreeMap<i64, String>,
     pub std_receivers: collections::BTreeMap<i64, String>,
+    pub simd_loads: collections::BTreeMap<i64, i64>,
     pub copied_slots: collections::BTreeSet<i64>,
     pub owned_copies: collections::BTreeSet<i64>,
     pub text_copies: collections::BTreeSet<i64>,
@@ -22782,7 +22826,7 @@ pub struct CheckFacts {
 }
 
 impl CheckFacts {
-    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), bytes_splits: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), shifts: collections::BTreeMap::new(), std_receivers: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_copies: collections::BTreeSet::new(), static_field_reads: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), text_view_fallbacks: collections::BTreeSet::new(), text_owned_fallbacks: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), comptime_names: collections::BTreeSet::new(), folded_comptimes: collections::BTreeSet::new(), shadowing_reads: collections::BTreeSet::new(), lent_scrutinees: collections::BTreeSet::new(), text_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), copied_entry_lambdas: collections::BTreeSet::new(), owned_entry_keys: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), boxed_fn_values: collections::BTreeMap::new(), infallible_fn_values: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), bytes_entries: collections::BTreeSet::new(), bytes_grammars: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), changed_copies: collections::BTreeSet::new(), changed_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), ordered_texts: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), mut_arg_bindings: collections::BTreeMap::new(), reborrowed_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), text_scalars: collections::BTreeSet::new(), text_graphemes: collections::BTreeSet::new(), kept_text_bytes: collections::BTreeSet::new(), byte_copies: collections::BTreeSet::new(), map_drains: collections::BTreeSet::new(), par_folds: collections::BTreeSet::new(), in_place_folds: collections::BTreeMap::new(), kept_drains: collections::BTreeSet::new(), kept_byte_fields: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new(), map_read_views: collections::BTreeSet::new(), keep_plans: None } }
+    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), bytes_splits: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), shifts: collections::BTreeMap::new(), std_receivers: collections::BTreeMap::new(), simd_loads: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_copies: collections::BTreeSet::new(), static_field_reads: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), text_view_fallbacks: collections::BTreeSet::new(), text_owned_fallbacks: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), comptime_names: collections::BTreeSet::new(), folded_comptimes: collections::BTreeSet::new(), shadowing_reads: collections::BTreeSet::new(), lent_scrutinees: collections::BTreeSet::new(), text_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), copied_entry_lambdas: collections::BTreeSet::new(), owned_entry_keys: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), boxed_fn_values: collections::BTreeMap::new(), infallible_fn_values: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), bytes_entries: collections::BTreeSet::new(), bytes_grammars: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), changed_copies: collections::BTreeSet::new(), changed_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), ordered_texts: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), mut_arg_bindings: collections::BTreeMap::new(), reborrowed_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), text_scalars: collections::BTreeSet::new(), text_graphemes: collections::BTreeSet::new(), kept_text_bytes: collections::BTreeSet::new(), byte_copies: collections::BTreeSet::new(), map_drains: collections::BTreeSet::new(), par_folds: collections::BTreeSet::new(), in_place_folds: collections::BTreeMap::new(), kept_drains: collections::BTreeSet::new(), kept_byte_fields: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new(), map_read_views: collections::BTreeSet::new(), keep_plans: None } }
 }
 
 fn check_claim_held(held: Option<&ClaimHeld>) -> String {
@@ -30550,6 +30594,288 @@ impl CheckState {
 }
 
 
+// --- check_simd.nika ---
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_kind(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else if name == "simd::Lanes" { String::from("Lanes") } else if name == "simd::Fixed" { String::from("Fixed") } else if name == "simd::Mask" { String::from("Mask") } else { String::from("") } },
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_bits_of(name: &str) -> i64 {
+    match name {
+        "u8" => 8,
+        "i8" => 8,
+        "u16" => 16,
+        "i16" => 16,
+        "u32" => 32,
+        "i32" => 32,
+        "u64" => 64,
+        "i64" => 64,
+        _ => 0,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_simd_lane_of(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { args, .. } => if !args.is_empty() {
+            match nikaia_std::index::get(&args, 0) {
+                Ty::Named { name, .. } => name.to_owned(),
+                _ => String::from(""),
+            }
+        } else { String::from("") },
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_count_of(ty: &Ty) -> i64 {
+    match ty {
+        Ty::Named { args, .. } => if args.len() == 2 {
+            match nikaia_std::index::get(&args, 1) {
+                Ty::Count(n) => { let n = *n; n },
+                _ => 0,
+            }
+        } else { 0 },
+        _ => 0,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_bytes(ty: &Ty) -> i64 {
+    let bits = check_simd_bits_of(&check_simd_lane_of(ty));
+    let kind = check_simd_kind(ty);
+    if bits == 0 { return 0; }
+    if kind == "Lanes" { return -32; }
+    if kind == "Fixed" { return check_simd_count_of(ty) * bits / 8; }
+    0
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_simd_fixed(lane: &str, count: i64) -> Ty { Ty::Named { name: "simd::Fixed".to_owned(), args: vec![Ty::Named { name: lane.to_owned(), args: vec![], view: false }, Ty::Count(count)], view: false } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_simd_wider(lane: &str) -> String {
+    match lane {
+        "u8" => String::from("u16"),
+        "i8" => String::from("i16"),
+        "u16" => String::from("u32"),
+        "i16" => String::from("i32"),
+        "u32" => String::from("u64"),
+        "i32" => String::from("i64"),
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_simd_narrower(lane: &str) -> String {
+    match lane {
+        "u16" => String::from("u8"),
+        "i16" => String::from("i8"),
+        "u32" => String::from("u16"),
+        "i32" => String::from("i16"),
+        "u64" => String::from("u32"),
+        "i64" => String::from("i32"),
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_method_result(on: &Ty, method: &str) -> Option<Ty> {
+    if check_simd_kind(on) != "Fixed" { return None; }
+    let lane = check_simd_lane_of(on);
+    let count = check_simd_count_of(on);
+    if count == 0 { return None; }
+    if method == "dot_pairs" {
+        if lane == "u8" { return Some(check_simd_fixed("i16", count / 2)); }
+        if lane == "i16" { return Some(check_simd_fixed("i32", count / 2)); }
+        return None;
+    }
+    if method == "widen" {
+        let wide = check_simd_wider(&lane);
+        return if !wide.is_empty() { Some(check_simd_fixed(&wide, count)) } else { None };
+    }
+    if method == "narrow_saturating" {
+        let narrow = check_simd_narrower(&lane);
+        return if !narrow.is_empty() { Some(check_simd_fixed(&narrow, count)) } else { None };
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_simd_literal(value: &Expr) -> i64 {
+    match value {
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if negative { -1 } else if value > 64u64 { 64 } else { i64::try_from(value).unwrap_or_else(|_| panic!("the value does not fit in an `i64`")) } },
+        _ => -1,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, of: &Expr) -> Option<Vec<i64>> {
+    let (func, args) = match of {
+        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); (func, args) },
+        _ => return None,
+    };
+    let parts = match func {
+        Expr::Path(parts, _) => parts,
+        _ => return None,
+    };
+    let mut written: Vec<String> = vec![];
+    for part in parts.iter() {
+        let part = *part;
+        written.push(world.words.resolve(part).to_owned());
+    }
+    let path = written.join("::");
+    if path != "simd::Fixed::from" || args.len() != 1 { return None; }
+    let items = match nikaia_std::index::get(&args, 0) {
+        Expr::ListLit { items, .. } => items,
+        _ => return None,
+    };
+    let mut out: Vec<i64> = vec![];
+    for item in items.iter() {
+        let n = check_simd_literal(item);
+        if n < 0 { return None; }
+        out.push(n);
+    }
+    Some(out)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    let func = match value {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
+        _ => return false,
+    };
+    match func {
+        Expr::Path(parts, _) => parts.len() > 1 && world.words.resolve(*nikaia_std::index::get(&parts, 0)) == "simd",
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
+    let given: Ty = nikaia_std::index::or(match wanted {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    }, || Ty::Unknown);
+    if !check_simd_kind(&given).is_empty() { return given; }
+    if name == "simd::Fixed::from" && args.len() == 1 {
+        return match nikaia_std::index::get(&args, 0) {
+            Expr::ListLit { items, .. } => Ty::Named { name: "simd::Fixed".to_owned(), args: vec![Ty::Unknown, Ty::Count(items.len() as i64)], view: false },
+            _ => Ty::Unknown,
+        };
+    }
+    Ty::Unknown
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lane_operation(&mut self, op: BinaryOp, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<Ty> {
+        let kind = check_simd_kind(left);
+        let other = check_simd_kind(right);
+        let vector = if !kind.is_empty() { left.clone() } else { right.clone() };
+        let shown = vector.text();
+        let arithmetic = matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem);
+        if arithmetic {
+            let (written, wrapping, saturating) = match op {
+                BinaryOp::Add => ("+", "wrapping_add", "saturating_add"),
+                BinaryOp::Sub => ("-", "wrapping_sub", "saturating_sub"),
+                BinaryOp::Mul => ("*", "wrapping_mul", "wrapping_mul"),
+                BinaryOp::Div => ("/", "", ""),
+                _ => ("%", "", ""),
+            };
+            let mut help: String = format!("Name what a lane does where the result does not fit: `a.{}(b)` wraps, `a.{}(b)` stops at the nearest value a lane holds.", wrapping, saturating);
+            if op == BinaryOp::Mul { help = "Name what a lane does where the result does not fit: `a.wrapping_mul(b)` keeps the low bits.".to_owned(); }
+            if wrapping.is_empty() { help = "A vector has no lane by lane division; divide the lanes one by one with `lane(i)`.".to_owned(); }
+            self.findings.push(check_refusal("NK1296", at, format!("`{}` is not a lane operation, and this is a `{}`.", written, shown), vec!["A lane's `+` would either check every lane, which costs the compare and branch the vector exists to avoid, or wrap, which `+` never does elsewhere in Nikaia (ADR-377 D4).".to_owned()], Some(help)));
+            return Some(vector);
+        }
+        let bits = matches!(op, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor);
+        if bits && !kind.is_empty() && left.text() == right.text() { return Some(left.clone()); }
+        if bits && !kind.is_empty() && right.is_unknown() { return Some(left.clone()); }
+        let shift = matches!(op, BinaryOp::Shl | BinaryOp::Shr);
+        if shift && !kind.is_empty() && kind != "Mask" && other.is_empty() {
+            let width = check_simd_bits_of(&check_simd_lane_of(left));
+            let count = check_simd_literal(rhs);
+            if count < 0 || width > 0 && count >= width {
+                let written = if op == BinaryOp::Shl { "<<" } else { ">>" };
+                self.findings.push(check_refusal("NK1299", at, format!("A lane shift `{}` takes a constant count below the lane's {} bits.", written, width), vec![format!("Every lane of a `{}` is shifted by the same count, and a vector shifts by an immediate (ADR-377 D3).", shown).to_owned()], Some(format!("Write the count as a literal from 0 to {}, or choose between shifted values with `simd::select`.", width - 1).to_owned())));
+            }
+            return Some(left.clone());
+        }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_shuffle_out_of_lanes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: &str, args: &[Expr], span: &Span) {
+        if method != "shuffle" || args.len() != 1 || check_simd_kind(on) != "Fixed" { return; }
+        let count = check_simd_count_of(on);
+        let indices = check_simd_constant_indices(world, nikaia_std::index::get(&args, 0));
+        if indices.is_none() {
+            self.findings.push(check_refusal("NK1298", span, "A shuffle's indices are written as constants.".to_owned(), vec!["The indices of a shuffle become part of the instruction: a `pshufb` takes them as a constant table, and the checker proves each within the lanes.".to_owned()], Some("Write them as `simd::Fixed::from([…])` of literals, each below the lane count.".to_owned())));
+            return;
+        }
+        for index in nikaia_std::index::or(indices, || vec![].into()) {
+            if count > 0 && index >= count {
+                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.text()), vec![format!("Each index names a lane, from 0 to {}.", count - 1).to_owned()], Some(format!("Write an index below {}.", count).to_owned())));
+                return;
+            }
+        }
+    }
+}
+
+pub fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Type, span: &Span, out: &mut Vec<Finding>) {
+    if name != "simd::Fixed" && name != "simd::Lanes" && name != "simd::Mask" { return; }
+    let help: String = String::from("Write a lane type of `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64` or `i64`, and a `Fixed`'s count as a literal power of two from 2 to 64: `simd::Fixed[u8, 16]`.");
+    if ty.generics.is_empty() {
+        out.push(refusal("NK1297", span.clone(), format!("`{}` needs its lane type.", name), vec![String::from("A vector holds lanes of one integer type (ADR-377 D1, D2).")], help));
+        return;
+    }
+    let lane = names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_owned();
+    if nikaia_std::index::get(&ty.generics, 0).count.is_some() || check_simd_bits_of(&lane) == 0 {
+        out.push(refusal("NK1297", span.clone(), format!("`{}` can't hold lanes of `{}`.", name, lane), vec![String::from("A lane is an integer of 8, 16, 32 or 64 bits (ADR-377 D1).")], help));
+        return;
+    }
+    let fixed = name == "simd::Fixed";
+    let mask = name == "simd::Mask";
+    if fixed && ty.generics.len() != 2 || !fixed && !mask && ty.generics.len() != 1 || ty.generics.len() > 2 {
+        out.push(refusal("NK1297", span.clone(), format!("`{}` is written with the wrong number of arguments.", name), vec![String::from("`simd::Lanes[T]` takes the lane type, `simd::Fixed[T, N]` the lane type and the count, `simd::Mask[T]` or `simd::Mask[T, N]` what the vector it compares takes.")], help));
+        return;
+    }
+    if ty.generics.len() == 2 {
+        let n = nikaia_std::index::or(nikaia_std::index::get(&ty.generics, 1).count, || -1);
+        let mut power = n >= 2 && n <= 64;
+        let mut k = n;
+        while power && k > 1 {
+            if k % 2 != 0 { power = false; }
+            k = k / 2;
+        }
+        if !power {
+            let written = if n < 0 { names.resolve(nikaia_std::index::get(&ty.generics, 1).name).to_owned() } else { format!("{}", n) };
+            out.push(refusal("NK1297", span.clone(), format!("`{}` can't hold {} lanes.", name, written), vec![String::from("A fixed vector's count is a literal power of two from 2 to 64, which a target narrower than it runs in several registers (ADR-377 D2).")], help));
+        }
+    }
+}
+
+
 // --- check_state.nika ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36621,6 +36947,16 @@ impl EmitState {
             },
             _ => { },
         }
+        let loaded = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.simd_loads, &(node_key(func))), || 0);
+        if loaded != 0 && args.len() == 2 && self.proven_indices.contains(&node_key(func)) {
+            let width: String = if loaded < 0 { String::from("{ simd::WIDTH }") } else { format!("{}", loaded) };
+            out.push(&format!("simd::load_proven(unsafe {{ nikaia_std::proven::array::<u8, {}>(&", width));
+            self.emit_core_nested(world, walk, out, host, nikaia_std::index::get(&args, 0), 255, depth, flow, scope)?;
+            out.push(", (");
+            if only_literals(nikaia_std::index::get(&args, 1)) { host.expr(walk, out, nikaia_std::index::get(&args, 1), depth, flow.inferred(), scope)?; } else { host.expr(walk, out, nikaia_std::index::get(&args, 1), depth, flow, scope)?; }
+            out.push(") as usize) })");
+            return Ok(());
+        }
         let callee = self.emit_call_checked_callee(world, func);
         if callee.is_some() {
             let mut written: Vec<String> = vec![];
@@ -40188,6 +40524,11 @@ impl EmitState {
             let locked = self.written_name(world, crossings, walk.trusting, "Locked", count);
             let held = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), lifetimes, count);
             out.push_str(&format!("{}<{}<{}>>", shared, locked, held));
+            return out;
+        }
+        if name == "simd::Mask" && ty.generics.len() == 1 {
+            let lane = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), lifetimes, count);
+            out.push_str(&format!("simd::LanesMask<{}>", lane));
             return out;
         }
         if name == "Array" && ty.generics.len() == 2 && nikaia_std::index::get(&ty.generics, 1).count.is_some() {
@@ -67268,7 +67609,12 @@ fn widths_written(names: &winnow_grammar::InternerContext, ty: &Type, at_c: bool
         out.push(refusal("NK1135", span.clone(), format!("There's no type called `{}`.", name), vec![String::from("Nikaia's integers are `int` and the fixed widths `i64`, `i32`, `u8`, `u32` and `u64` (Part I 2.2); Rust's other widths are written only in an `extern \"C\"` declaration.")], String::from("Write `int` for an ordinary number, or the fixed width that holds the values.")));
         return;
     }
-    for argument in ty.generics.iter() { widths_written(names, argument, at_c, span, out); }
+    let lanes = name == "simd::Fixed" || name == "simd::Lanes" || name == "simd::Mask";
+    let mut first = true;
+    for argument in ty.generics.iter() {
+        if !(lanes && first) { widths_written(names, argument, at_c, span, out); }
+        first = false;
+    }
     widths_written_maybe(names, (*ty.code).as_ref().and_then(|__nikaia_it| (*__nikaia_it.result).as_ref()), at_c, span, out);
 }
 
@@ -67364,6 +67710,7 @@ fn written_at_the_boundary(names: &winnow_grammar::InternerContext, ty: &Type, k
         out.push(refusal("NK1135", span.clone(), String::from("There's no type called `char`."), vec![String::from("One Unicode character is a `scalar`, and one byte of text is a `u8`: which of the two a character is depends on how the text is read (Part I 2.6).")], String::from("Write `scalar` for a character, or `u8` for a byte.")));
         return;
     }
+    simd_written(names, &name, ty, span, out);
     if !a_parameter && !ty.is_view && !ty.is_slice && ty.count.is_none() && ty.generics.len() == 1 && name == "Array" {
         let element = names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_owned();
         out.push(refusal("NK1182", span.clone(), format!("`Array[{}]` needs a length here.", element), vec![format!("`Array[{}]` without a length only works for a parameter, where each call supplies the length. A field or a result has no call to take it from.", element)], format!("Use `Vec[{}]` for a list that can grow, `ref Array[{}]` to look at elements something else keeps, or `Array[{}, N]` to write the length down.", element, element, element)));
@@ -70084,6 +70431,10 @@ pub mod check_send {
 pub mod check_shapes {
     #[allow(unused_imports)]
     pub use super::{roots_in_a_binding, shapes_is_null, shapes_has_a_null_arm, shapes_is_otherwise, catches_everything, plainly_a_value, an_element_beneath, rust_constant_type, element_below, slice_element, is_fixed, is_growable, constructed};
+}
+pub mod check_simd {
+    #[allow(unused_imports)]
+    pub use super::{check_simd_kind, check_simd_bits_of, check_simd_count_of, check_simd_bytes, check_simd_method_result, check_simd_a_call, check_simd_made, simd_written};
 }
 pub mod check_state {
     #[allow(unused_imports)]

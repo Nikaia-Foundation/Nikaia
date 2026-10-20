@@ -41,6 +41,9 @@ pub struct BoundsContext {
     /// The method calls on a type `std`'s ledger describes, by node, with the
     /// type's name as the ledger keys it (ADR-314 D3, ADR-375 D5).
     pub std_receivers: collections::BTreeMap[i64, String],
+    /// [`CheckFacts::simd_loads`]: a vector's load, by the called path's
+    /// node, with the bytes it reads (minus the most, for a `Lanes`).
+    pub simd_loads: collections::BTreeMap[i64, i64],
     /// Every shift whose count is not a literal, by the byte its operator
     /// starts at, with the shifted value's type (ADR-306 D18).
     pub shifts: collections::BTreeMap[i64, String],
@@ -2796,6 +2799,18 @@ fn bounding_expr(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFacts, c
             // **What an `assert` claims holds after it** (ADR-269 D4): the
             // program stops where it does not. An `assume` is vouched for
             // (ADR-376 D1).
+            // **A vector's load lies inside where its cut does** (ADR-377 D3):
+            // `0 <= at` and `at + n <= len`, `n` the most a `Lanes` reads.
+            let loaded = context.simd_loads[node_key(func)] ?? 0
+            if loaded != 0 && args.len() == 2 {
+                let list = path_of(args[0], words)
+                let read = if loaded < 0 { -loaded } else { loaded }
+                if list != null && bounding_word_inside(walk, list ?? "", node_key(args[0]), args[1], read, facts, context, program, words, ask) {
+                    walk.proven.indices.insert(node_key(func))
+                } else {
+                    walk.open += 1
+                }
+            }
             let claimed = bounding_variable(func, words) ?? ""
             if args.len() == 1 && (claimed == "assert" || claimed == "assume") {
                 bounding_assume(walk, facts, args[0], context, program, words)
@@ -2803,7 +2818,8 @@ fn bounding_expr(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFacts, c
             let callee = callee_params(func, context.around, words)
             for at in 0..<args.len() {
                 let handed = path_of(args[at], words) ?? continue
-                if hands_on(callee, at) {
+                // A load reads its bytes and changes nothing.
+                if hands_on(callee, at) && loaded == 0 {
                     bounding_forget(walk, facts, handed)
                 }
             }
@@ -3288,7 +3304,8 @@ fn changed_by(expr: ref Expr, context: ref BoundsContext, words: ref winnow_gram
             let callee = callee_params(func, context.around, words)
             for at in 0..<args.len() {
                 let handed = path_of(args[at], words) ?? continue
-                if hands_on(callee, at) {
+                // A vector's load reads its bytes and changes nothing.
+                if hands_on(callee, at) && !context.simd_loads.contains_key(node_key(func)) {
                     out.lengths.insert(handed.clone())
                     out.jumps.insert(handed.clone())
                     out.values.insert(handed)

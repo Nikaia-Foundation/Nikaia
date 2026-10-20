@@ -64,6 +64,7 @@ pub mod range;
 pub mod rt;
 pub mod search;
 pub mod seq;
+pub mod simd;
 /// `std::supervisor`: the runtime in Rust, `supervision.rs`, which includes
 /// `src/supervisor.nika` lowered to `src/supervisor.rs` - the policy's trait
 /// and the types it speaks in (ADR-328 D5).
@@ -613,6 +614,8 @@ pub mod prelude {
     pub use crate::bytes;
     // The reads of a `Bytes` on a `&[u8]` (ADR-320 D11).
     pub use crate::bytes::ByteReads as _;
+    // `simd::Lanes`, `simd::Fixed`, `simd::Mask` and their operations (ADR-377).
+    pub use crate::simd;
     // A copy of bytes, from a `Bytes` or a `&[u8]` (ADR-320 D11).
     pub use crate::bytes::ByteCopy as _;
     // A text's graphemes, `s.graphemes` (ADR-320 D9).

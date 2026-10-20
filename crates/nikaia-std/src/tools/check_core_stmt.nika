@@ -317,7 +317,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let outer_read = state.flow.read_a_map
     state.flow.read_a_map = false
     state.flow.reaching = check_core_stmt_reaching(world, ty)
-    if ty != null && check_core_stmt_expects_a_lambda(value) {
+    if ty != null && (check_core_stmt_expects_a_lambda(value) || check_simd_a_call(world, value)) {
         let t: ref Type = ty ?? return check_core_stmt_unit()
         state.flow.lambda_expected = written_ty(world.words, world.here.aliases, t)
     }

@@ -5444,3 +5444,374 @@ pub = true
 sync = true
 keeps = ["history"]
 signature = "(ref self, history: supervisor::Failures) -> supervisor::Next"
+
+# --- `simd`: vectors a program holds (ADR-377, provisional) ------------------
+#
+# **`simd::Lanes[T]` holds as many lanes as the build's widest integer
+# register** (D1): 16 bytes at x86-64's baseline and on aarch64, 32 at
+# `--cpu=x86-64-v3`. `T` is `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64` or
+# `i64`; another is `NK1297`.
+[type."simd::Lanes"]
+pub = true
+crosses = true
+copies = true
+
+# **`simd::Fixed[T, N]` holds `N` lanes on every target** (D2), `N` a literal
+# power of two from 2 to 64 (`NK1297`).
+[type."simd::Fixed"]
+pub = true
+crosses = true
+copies = true
+
+# **What a comparison answers** (D5): `simd::Mask[T]` of two `Lanes[T]`,
+# `simd::Mask[T, N]` of two `Fixed[T, N]`, read as positions, never as a
+# number.
+[type."simd::Mask"]
+pub = true
+crosses = true
+copies = true
+
+# The lanes in `bytes[at..<at + n]`, `n` the bytes of the type the result is
+# written as, least significant byte first (D3): checked as that cut is, and
+# proved as it is.
+[fn."simd::load"]
+pub = true
+sync = true
+touches = []
+signature = "(bytes: ref Bytes, at: i64) -> ?"
+
+# Every lane `x`, in the type the result is written as.
+[fn."simd::splat"]
+pub = true
+sync = true
+touches = []
+signature = "(x: ?) -> ?"
+
+# `a`'s lane where `mask` holds, `b`'s where it does not.
+[fn."simd::select"]
+pub = true
+sync = true
+touches = []
+signature = "[V](mask: ?, a: V, b: V) -> V"
+
+# The lanes in the order written, `simd::Fixed::from([…])`: as many as the type
+# the result is written as holds (D3).
+[fn."simd::Fixed::from"]
+pub = true
+sync = true
+touches = []
+signature = "(lanes: ?) -> ?"
+
+# Lane by lane `+`, wrapping (D4).
+[fn."simd::Lanes::wrapping_add"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
+
+# Lane by lane `-`, wrapping.
+[fn."simd::Lanes::wrapping_sub"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
+
+# Lane by lane `*`, wrapping.
+[fn."simd::Lanes::wrapping_mul"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
+
+# Lane by lane `+`, the nearest value a lane holds where it does not fit.
+[fn."simd::Lanes::saturating_add"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
+
+# Lane by lane `-`, the nearest value a lane holds where it does not fit.
+[fn."simd::Lanes::saturating_sub"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
+
+# The smaller of each pair of lanes.
+[fn."simd::Lanes::min"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
+
+# The larger of each pair of lanes.
+[fn."simd::Lanes::max"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
+
+# Lane by lane `eq`, as a mask (D3).
+[fn."simd::Lanes::eq"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
+
+# Lane by lane `ne`, as a mask (D3).
+[fn."simd::Lanes::ne"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
+
+# Lane by lane `lt`, as a mask (D3).
+[fn."simd::Lanes::lt"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
+
+# Lane by lane `le`, as a mask (D3).
+[fn."simd::Lanes::le"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
+
+# Lane by lane `gt`, as a mask (D3).
+[fn."simd::Lanes::gt"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
+
+# Lane by lane `ge`, as a mask (D3).
+[fn."simd::Lanes::ge"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
+
+# The lanes added, wrapping.
+[fn."simd::Lanes::wrapping_sum"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T]) -> T"
+
+# The smallest lane.
+[fn."simd::Lanes::min_lane"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T]) -> T"
+
+# The largest lane.
+[fn."simd::Lanes::max_lane"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T]) -> T"
+
+# How many lanes it holds: a constant of the build.
+[fn."simd::Lanes::count"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T]) -> i64"
+
+# Lane by lane `+`, wrapping (D4).
+[fn."simd::Fixed::wrapping_add"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# Lane by lane `-`, wrapping.
+[fn."simd::Fixed::wrapping_sub"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# Lane by lane `*`, wrapping.
+[fn."simd::Fixed::wrapping_mul"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# Lane by lane `+`, the nearest value a lane holds where it does not fit.
+[fn."simd::Fixed::saturating_add"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# Lane by lane `-`, the nearest value a lane holds where it does not fit.
+[fn."simd::Fixed::saturating_sub"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# The smaller of each pair of lanes.
+[fn."simd::Fixed::min"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# The larger of each pair of lanes.
+[fn."simd::Fixed::max"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# Lane by lane `eq`, as a mask (D3).
+[fn."simd::Fixed::eq"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
+
+# Lane by lane `ne`, as a mask (D3).
+[fn."simd::Fixed::ne"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
+
+# Lane by lane `lt`, as a mask (D3).
+[fn."simd::Fixed::lt"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
+
+# Lane by lane `le`, as a mask (D3).
+[fn."simd::Fixed::le"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
+
+# Lane by lane `gt`, as a mask (D3).
+[fn."simd::Fixed::gt"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
+
+# Lane by lane `ge`, as a mask (D3).
+[fn."simd::Fixed::ge"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
+
+# The lanes added, wrapping.
+[fn."simd::Fixed::wrapping_sum"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N]) -> T"
+
+# The smallest lane.
+[fn."simd::Fixed::min_lane"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N]) -> T"
+
+# The largest lane.
+[fn."simd::Fixed::max_lane"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N]) -> T"
+
+# How many lanes it holds: a constant of the build.
+[fn."simd::Fixed::count"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N]) -> i64"
+
+# Lane `i`, checked as an index is.
+[fn."simd::Fixed::lane"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], i: i64) -> T"
+
+# The lanes in the order `of` names them; `of` is a `simd::Fixed::from([…])` of
+# literals below `N` (`NK1298`).
+[fn."simd::Fixed::shuffle"]
+pub = true
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N], of: simd::Fixed[u8, N]) -> simd::Fixed[T, N]"
+
+# Lane by lane `*`, each neighbouring pair added into one lane of twice the
+# width: `Fixed[u8, N]` by `Fixed[i8, N]` into `Fixed[i16, N / 2]`, saturating,
+# `Fixed[i16, N]` by `Fixed[i16, N]` into `Fixed[i32, N / 2]`, wrapping.
+[fn."simd::Fixed::dot_pairs"]
+pub = true
+sync = true
+touches = []
+signature = "(self, w: ?) -> ?"
+
+# Each lane in a lane of twice the width, signed where it was.
+[fn."simd::Fixed::widen"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> ?"
+
+# Each lane in a lane of half the width, the nearest value it holds where it
+# does not fit.
+[fn."simd::Fixed::narrow_saturating"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> ?"
+
+# The first lane that holds, or nothing (D5); at least 0 and below the count.
+[fn."simd::Mask::first"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> i64?"
+
+# The lanes that hold, rising (D5); each at least 0 and below the count, which
+# is at most 64 lanes: a fact for the bounds walk on the name a `for` binds.
+[fn."simd::Mask::positions"]
+pub = true
+sync = true
+touches = []
+ensures_each = ["0 <= item", "item < 64"]
+signature = "(self) -> Seq[i64] sync"
+
+# How many lanes hold.
+[fn."simd::Mask::count"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> i64"
+
+# Whether any lane holds.
+[fn."simd::Mask::any"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> bool"
+
+# Whether every lane holds.
+[fn."simd::Mask::all"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> bool"

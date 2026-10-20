@@ -1,0 +1,335 @@
+// crates/nikaia-std/src/tools/check_simd.nika
+//
+// **Vectors a program holds** ([ADR-377](../../../../docs/specification/adr/adr-377.md)):
+// what the checker knows of `std::simd`'s `Lanes[T]`, `Fixed[T, N]` and
+// `Mask[T]` beyond their ledger entries - the lane types and counts a type
+// may be written with (`NK1297`), the operators they have (`NK1296` for
+// `+ - *`, `NK1299` for a shift by a count that is not a constant within the
+// lane), a shuffle's constant indices (`NK1298`), and the types of the
+// operations that change the lane's width.
+
+use std::collections
+
+/// **`std::simd`'s kinds**: `"Lanes"`, `"Fixed"` or `"Mask"` for one of its
+/// vectors or masks, `""` for any other type.
+pub fn check_simd_kind(ty: ref Ty) -> String sync {
+    return match ty {
+        Ty::Named { name, view, .. } => if view {
+            ""
+        } else if name == "simd::Lanes" {
+            "Lanes"
+        } else if name == "simd::Fixed" {
+            "Fixed"
+        } else if name == "simd::Mask" {
+            "Mask"
+        } else {
+            ""
+        },
+        else => "",
+    }
+}
+
+/// The bits of a lane of type `name`: 8 to 64, 0 for a type that is no lane.
+pub fn check_simd_bits_of(name: ref String) -> i64 sync {
+    return match name {
+        "u8" => 8, "i8" => 8, "u16" => 16, "i16" => 16, "u32" => 32, "i32" => 32,
+        "u64" => 64, "i64" => 64,
+        else => 0,
+    }
+}
+
+/// The lane type of a vector or mask, `""` where it is not written.
+fn check_simd_lane_of(ty: ref Ty) -> String sync {
+    return match ty {
+        Ty::Named { args, .. } => if args.len() > 0 {
+            match args[0] {
+                Ty::Named { name, .. } => name.clone(),
+                else => "",
+            }
+        } else {
+            ""
+        },
+        else => "",
+    }
+}
+
+/// The lane count of a `Fixed[T, N]` or a `Mask[T, N]`, 0 where it is not
+/// written.
+pub fn check_simd_count_of(ty: ref Ty) -> i64 sync {
+    return match ty {
+        Ty::Named { args, .. } => if args.len() == 2 {
+            match args[1] {
+                Ty::Count(n) => n,
+                else => 0,
+            }
+        } else {
+            0
+        },
+        else => 0,
+    }
+}
+
+/// **The bytes a load of `ty` reads**: a `Fixed`'s lanes times their size;
+/// for a `Lanes`, whose count is the build's, minus the most it reads on any
+/// CPU level (32 bytes, AVX2's register); 0 for any other type.
+pub fn check_simd_bytes(ty: ref Ty) -> i64 sync {
+    let bits = check_simd_bits_of(check_simd_lane_of(ty))
+    let kind = check_simd_kind(ty)
+    if bits == 0 {
+        return 0
+    }
+    if kind == "Lanes" {
+        return -32
+    }
+    if kind == "Fixed" {
+        return check_simd_count_of(ty) * bits / 8
+    }
+    return 0
+}
+
+/// `simd::Fixed[lane, count]`.
+fn check_simd_fixed(lane: ref String, count: i64) -> Ty sync {
+    return Ty::Named { name: "simd::Fixed".clone(), args: [Ty::Named { name: lane.clone(), args: [], view: false }, Ty::Count(count)], view: false }
+}
+
+/// **The lane twice as wide**, signed where it was; `""` past 64 bits.
+fn check_simd_wider(lane: ref String) -> String sync {
+    return match lane {
+        "u8" => "u16", "i8" => "i16", "u16" => "u32", "i16" => "i32", "u32" => "u64", "i32" => "i64",
+        else => "",
+    }
+}
+
+/// **The lane half as wide**, signed where it was; `""` below 8 bits.
+fn check_simd_narrower(lane: ref String) -> String sync {
+    return match lane {
+        "u16" => "u8", "i16" => "i8", "u32" => "u16", "i32" => "i16", "u64" => "u32", "i64" => "i32",
+        else => "",
+    }
+}
+
+/// **The type of an operation that changes the lane's width** (D3), from
+/// the receiver's: `dot_pairs` (`u8` by `i8` into `i16`, `i16` by `i16`
+/// into `i32`, half the lanes), `widen` and `narrow_saturating`. Nothing for
+/// any other method.
+pub fn check_simd_method_result(on: ref Ty, method: ref String) -> Ty? sync {
+    if check_simd_kind(on) != "Fixed" {
+        return null
+    }
+    let lane = check_simd_lane_of(on)
+    let count = check_simd_count_of(on)
+    if count == 0 {
+        return null
+    }
+    if method == "dot_pairs" {
+        if lane == "u8" {
+            return check_simd_fixed("i16", count / 2)
+        }
+        if lane == "i16" {
+            return check_simd_fixed("i32", count / 2)
+        }
+        return null
+    }
+    if method == "widen" {
+        let wide = check_simd_wider(lane)
+        return if wide.len() > 0 { check_simd_fixed(wide, count) } else { null }
+    }
+    if method == "narrow_saturating" {
+        let narrow = check_simd_narrower(lane)
+        return if narrow.len() > 0 { check_simd_fixed(narrow, count) } else { null }
+    }
+    return null
+}
+
+/// **A constant shift count**: the literal written, or -1.
+fn check_simd_literal(value: ref Expr) -> i64 sync {
+    return match value {
+        Expr::LitInt { value, negative, .. } => if negative { -1 } else if value > 64 { 64 } else { value as i64 },
+        else => -1,
+    }
+}
+
+/// **`simd::Fixed::from([…])` of literals**: the indices written, or
+/// nothing where `of` is anything else.
+fn check_simd_constant_indices(world: ref CheckWorld, of: ref Expr) -> Vec[i64]? sync {
+    let (func, args) = match of {
+        Expr::Call { func, args, .. } => (func, args),
+        else => return null,
+    }
+    let parts = match func {
+        Expr::Path(parts, _) => parts,
+        else => return null,
+    }
+    let mut written: Vec[String] = []
+    for part in parts {
+        written.push(world.words.resolve(part).clone())
+    }
+    let path = written.join("::")
+    if path != "simd::Fixed::from" || args.len() != 1 {
+        return null
+    }
+    let items = match args[0] {
+        Expr::ListLit { items, .. } => items,
+        else => return null,
+    }
+    let mut out: Vec[i64] = []
+    for item in items {
+        let n = check_simd_literal(item)
+        if n < 0 {
+            return null
+        }
+        out.push(n)
+    }
+    return out
+}
+
+/// **A call of `std::simd`'s**: `simd::load(…)`, `simd::splat(…)`,
+/// `simd::Fixed::from(…)`, which take their type from where they stand.
+pub fn check_simd_a_call(world: ref CheckWorld, value: ref Expr) -> bool sync {
+    let func = match value {
+        Expr::Call { func, .. } => func,
+        else => return false,
+    }
+    return match func {
+        Expr::Path(parts, _) => parts.len() > 1 && world.words.resolve(parts[0]) == "simd",
+        else => false,
+    }
+}
+
+/// **The vector a constructor makes** (D3): the type it is written down as,
+/// or for `simd::Fixed::from([…])` a `Fixed` of as many lanes as the list
+/// holds, whose lane type the use decides.
+pub fn check_simd_made(wanted: ref Ty?, name: ref String, args: ref Vec[Expr]) -> Ty sync {
+    let given: Ty = wanted?.clone() ?? Ty::Unknown
+    if check_simd_kind(given).len() > 0 {
+        return given
+    }
+    if name == "simd::Fixed::from" && args.len() == 1 {
+        return match args[0] {
+            Expr::ListLit { items, .. } => Ty::Named { name: "simd::Fixed".clone(), args: [Ty::Unknown, Ty::Count(items.len() as i64)], view: false },
+            else => Ty::Unknown,
+        }
+    }
+    return Ty::Unknown
+}
+
+impl CheckState {
+    /// **An operator with a vector or a mask on one side** (D3, D4): `& | ^`
+    /// between two of one type, `<<` and `>>` by a constant below the lane's
+    /// width (`NK1299`), and no `+ - * / %` (`NK1296`). The type it answers,
+    /// or nothing where the operator is not one of these and the usual rules
+    /// go on.
+    pub fn a_lane_operation(ref mut self, op: BinaryOp, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) -> Ty? sync {
+        let kind = check_simd_kind(left)
+        let other = check_simd_kind(right)
+        let vector = if kind.len() > 0 { left.clone() } else { right.clone() }
+        let shown = vector.text()
+        let arithmetic = match op {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => true,
+            else => false,
+        }
+        if arithmetic {
+            let (written, wrapping, saturating) = match op {
+                BinaryOp::Add => ("+", "wrapping_add", "saturating_add"),
+                BinaryOp::Sub => ("-", "wrapping_sub", "saturating_sub"),
+                BinaryOp::Mul => ("*", "wrapping_mul", "wrapping_mul"),
+                BinaryOp::Div => ("/", "", ""),
+                else => ("%", "", ""),
+            }
+            let mut help: String = f"Name what a lane does where the result does not fit: `a.{wrapping}(b)` wraps, `a.{saturating}(b)` stops at the nearest value a lane holds."
+            if op == BinaryOp::Mul {
+                help = "Name what a lane does where the result does not fit: `a.wrapping_mul(b)` keeps the low bits.".clone()
+            }
+            if wrapping.len() == 0 {
+                help = "A vector has no lane by lane division; divide the lanes one by one with `lane(i)`.".clone()
+            }
+            self.findings.push(check_refusal("NK1296", at, f"`{written}` is not a lane operation, and this is a `{shown}`.", ["A lane's `+` would either check every lane, which costs the compare and branch the vector exists to avoid, or wrap, which `+` never does elsewhere in Nikaia (ADR-377 D4).".clone()], help))
+            return vector
+        }
+        let bits = match op {
+            BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor => true,
+            else => false,
+        }
+        if bits && kind.len() > 0 && left.text() == right.text() {
+            return left.clone()
+        }
+        if bits && kind.len() > 0 && right.is_unknown() {
+            return left.clone()
+        }
+        let shift = match op {
+            BinaryOp::Shl | BinaryOp::Shr => true,
+            else => false,
+        }
+        if shift && kind.len() > 0 && kind != "Mask" && other.len() == 0 {
+            let width = check_simd_bits_of(check_simd_lane_of(left))
+            let count = check_simd_literal(rhs)
+            if count < 0 || (width > 0 && count >= width) {
+                let written = if op == BinaryOp::Shl { "<<" } else { ">>" }
+                self.findings.push(check_refusal("NK1299", at, f"A lane shift `{written}` takes a constant count below the lane's {width} bits.", [f"Every lane of a `{shown}` is shifted by the same count, and a vector shifts by an immediate (ADR-377 D3).".clone()], f"Write the count as a literal from 0 to {width - 1}, or choose between shifted values with `simd::select`.".clone()))
+            }
+            return left.clone()
+        }
+        return null
+    }
+
+    /// **`NK1298`: a shuffle whose indices are not constant, or not within
+    /// the lanes** (D3): `of` is a `simd::Fixed::from([…])` of literals each
+    /// below `N`.
+    pub fn a_shuffle_out_of_lanes(ref mut self, world: ref CheckWorld, on: ref Ty, method: ref String, args: ref Vec[Expr], span: ref Span) sync {
+        if method != "shuffle" || args.len() != 1 || check_simd_kind(on) != "Fixed" {
+            return
+        }
+        let count = check_simd_count_of(on)
+        let indices = check_simd_constant_indices(world, args[0])
+        if indices == null {
+            self.findings.push(check_refusal("NK1298", span, "A shuffle's indices are written as constants.".clone(), ["The indices of a shuffle become part of the instruction: a `pshufb` takes them as a constant table, and the checker proves each within the lanes.".clone()], "Write them as `simd::Fixed::from([…])` of literals, each below the lane count.".clone()))
+            return
+        }
+        for index in indices ?? [] {
+            if count > 0 && index >= count {
+                self.findings.push(check_refusal("NK1298", span, f"The shuffle index {index} is outside the {count} lanes of a `{on.text()}`.", [f"Each index names a lane, from 0 to {count - 1}.".clone()], f"Write an index below {count}.".clone()))
+                return
+            }
+        }
+    }
+}
+
+/// **`NK1297`: a vector written with a lane type or a count it cannot
+/// have** (D1, D2): the lane `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64` or
+/// `i64`, and a `Fixed`'s count a literal power of two from 2 to 64.
+pub fn simd_written(names: ref winnow_grammar::InternerContext, name: ref String, ty: ref Type, span: ref Span, mut out: Vec[Finding]) {
+    if name != "simd::Fixed" && name != "simd::Lanes" && name != "simd::Mask" {
+        return
+    }
+    let help: String = "Write a lane type of `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64` or `i64`, and a `Fixed`'s count as a literal power of two from 2 to 64: `simd::Fixed[u8, 16]`."
+    if ty.generics.len() == 0 {
+        out.push(refusal("NK1297", span.clone(), f"`{name}` needs its lane type.", ["A vector holds lanes of one integer type (ADR-377 D1, D2)."], help))
+        return
+    }
+    let lane = names.resolve(ty.generics[0].name).clone()
+    if ty.generics[0].count != null || check_simd_bits_of(lane) == 0 {
+        out.push(refusal("NK1297", span.clone(), f"`{name}` can't hold lanes of `{lane}`.", ["A lane is an integer of 8, 16, 32 or 64 bits (ADR-377 D1)."], help))
+        return
+    }
+    let fixed = name == "simd::Fixed"
+    let mask = name == "simd::Mask"
+    if (fixed && ty.generics.len() != 2) || (!fixed && !mask && ty.generics.len() != 1) || ty.generics.len() > 2 {
+        out.push(refusal("NK1297", span.clone(), f"`{name}` is written with the wrong number of arguments.", ["`simd::Lanes[T]` takes the lane type, `simd::Fixed[T, N]` the lane type and the count, `simd::Mask[T]` or `simd::Mask[T, N]` what the vector it compares takes."], help))
+        return
+    }
+    if ty.generics.len() == 2 {
+        let n = ty.generics[1].count ?? -1
+        let mut power = n >= 2 && n <= 64
+        let mut k = n
+        while power && k > 1 {
+            if k % 2 != 0 {
+                power = false
+            }
+            k = k / 2
+        }
+        if !power {
+            let written = if n < 0 { names.resolve(ty.generics[1].name).clone() } else { f"{n}" }
+            out.push(refusal("NK1297", span.clone(), f"`{name}` can't hold {written} lanes.", ["A fixed vector's count is a literal power of two from 2 to 64, which a target narrower than it runs in several registers (ADR-377 D2)."], help))
+        }
+    }
+}

@@ -167,6 +167,8 @@ pub struct Sites<'a> {
     pub shifts: &'a BTreeMap<i64, String>,
     /// [`crate::check::CheckFacts::std_receivers`] (ADR-314 D3, ADR-375 D5).
     pub std_receivers: &'a BTreeMap<i64, String>,
+    /// [`crate::check::CheckFacts::simd_loads`] (ADR-377 D3).
+    pub simd_loads: &'a BTreeMap<i64, i64>,
 }
 
 impl<'a> Sites<'a> {
@@ -182,6 +184,7 @@ impl<'a> Sites<'a> {
             array_lengths: &facts.array_lengths,
             shifts: &facts.shifts,
             std_receivers: &facts.std_receivers,
+            simd_loads: &facts.simd_loads,
         }
     }
 }
@@ -206,6 +209,7 @@ pub fn proven(
         array_lengths,
         shifts,
         std_receivers,
+        simd_loads,
     } = *sites;
     let mut out = Proven::default();
     let mut functions: BTreeMap<String, Vec<bool>> = BTreeMap::new();
@@ -263,6 +267,7 @@ pub fn proven(
         ensured: ensured(ledgers),
         each: each(ledgers),
         std_receivers: std_receivers.clone(),
+        simd_loads: simd_loads.clone(),
         shifts: shifts.clone(),
         arithmetic: arithmetic
             .iter()

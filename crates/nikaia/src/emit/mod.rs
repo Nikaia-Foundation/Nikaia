@@ -1974,6 +1974,7 @@ impl<'p> Emitter<'p> {
                 array_lengths: &propagation.array_lengths,
                 shifts: &propagation.shifts,
                 std_receivers: &propagation.std_receivers,
+                simd_loads: &propagation.simd_loads,
             },
             &[&own_contracts, std_ledger()],
             &std::collections::BTreeSet::new(),

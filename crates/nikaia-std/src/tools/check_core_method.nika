@@ -202,6 +202,10 @@ fn check_core_method_ledger_type(on: ref Ty, bytes: bool) -> String {
     if bytes {
         return "Bytes"
     }
+    // **A mask's positions are facts** (ADR-377 D5).
+    if check_simd_kind(on) == "Mask" {
+        return "simd::Mask"
+    }
     return match on {
         Ty::Named { name, args, .. } => {
             if args.len() == 0 && is_whole_number(name) {
@@ -620,6 +624,14 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     // **And what `access` hands back came out of a lock** (D1).
     if name == "access" && locked_content_of(on) != null {
         return Ty::Named { name: SEEN.clone(), args: [walked.unseen()], view: false }
+    }
+    // **A vector's shuffle and the operations that change its lanes' width**
+    // (ADR-377 D3).
+    let lanes = value_of_a_copy(on.unseen())
+    state.a_shuffle_out_of_lanes(world, lanes, name, args, span)
+    let changed: Ty? = check_simd_method_result(lanes, name)
+    if changed != null {
+        return changed ?? Ty::Unknown
     }
     return walked
 }

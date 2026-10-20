@@ -454,8 +454,15 @@ fn widths_written(names: ref winnow_grammar::InternerContext, ty: ref Type, at_c
         out.push(refusal("NK1135", span.clone(), f"There's no type called `{name}`.", ["Nikaia's integers are `int` and the fixed widths `i64`, `i32`, `u8`, `u32` and `u64` (Part I 2.2); Rust's other widths are written only in an `extern \"C\"` declaration."], "Write `int` for an ordinary number, or the fixed width that holds the values."))
         return
     }
+    // **A vector's lanes may be 8 and 16 bits wide** (ADR-377 D1): `i8`,
+    // `u16` and `i16` are lane types there, and only there.
+    let lanes = name == "simd::Fixed" || name == "simd::Lanes" || name == "simd::Mask"
+    let mut first = true
     for argument in ty.generics {
-        widths_written(names, argument, at_c, span, out)
+        if !(lanes && first) {
+            widths_written(names, argument, at_c, span, out)
+        }
+        first = false
     }
     widths_written_maybe(names, ty.code?.result, at_c, span, out)
 }
@@ -591,6 +598,8 @@ fn written_at_the_boundary(names: ref winnow_grammar::InternerContext, ty: ref T
         out.push(refusal("NK1135", span.clone(), "There's no type called `char`.", ["One Unicode character is a `scalar`, and one byte of text is a `u8`: which of the two a character is depends on how the text is read (Part I 2.6)."], "Write `scalar` for a character, or `u8` for a byte."))
         return
     }
+    // **A vector's lane type and count** (ADR-377 D1, D2, `NK1297`).
+    simd_written(names, name, ty, span, out)
     if !a_parameter && !ty.is_view && !ty.is_slice && ty.count == null && ty.generics.len() == 1 && name == "Array" {
         let element = names.resolve(ty.generics[0].name).clone()
         out.push(refusal("NK1182", span.clone(), f"`Array[{element}]` needs a length here.", [f"`Array[{element}]` without a length only works for a parameter, where each call supplies the length. A field or a result has no call to take it from."], f"Use `Vec[{element}]` for a list that can grow, `ref Array[{element}]` to look at elements something else keeps, or `Array[{element}, N]` to write the length down."))
