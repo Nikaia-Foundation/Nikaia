@@ -3735,6 +3735,12 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
     for pair in from.arg_into {
         into.arg_into.insert(pair.clone())
     }
+    for pair in from.read_into {
+        into.read_into.insert(pair.clone())
+    }
+    for word in from.unlinked {
+        into.unlinked.insert(word.clone())
+    }
     for (word, count) in from.arg_uses {
         let before = into.arg_uses[word] ?? 0
         into.arg_uses.insert(word.clone(), before + count)

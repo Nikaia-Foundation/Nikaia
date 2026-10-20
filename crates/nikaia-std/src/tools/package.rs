@@ -60999,6 +60999,8 @@ fn merge_flows(into: &mut Flows, from: &Flows) {
         into.lent_uses.insert(word.to_owned(), before + count);
     }
     for pair in from.arg_into.iter() { into.arg_into.insert(pair.clone()); }
+    for pair in from.read_into.iter() { into.read_into.insert(pair.clone()); }
+    for word in from.unlinked.iter() { into.unlinked.insert(word.to_owned()); }
     for (word, count) in from.arg_uses.iter() {
         let count = nikaia_std::num::value(count);
         let before = nikaia_std::index::or(*nikaia_std::index::get(&into.arg_uses, word), || 0);
