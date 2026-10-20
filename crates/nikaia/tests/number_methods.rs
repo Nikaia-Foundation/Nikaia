@@ -7,6 +7,8 @@
 //!
 //! What the methods compute is `tests/language/src/number_methods.nika`.
 
+mod common;
+
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
@@ -228,4 +230,70 @@ fn rotations_are_described_and_lowered_with_any_count() {
         "{:?}",
         codes(narrow)
     );
+}
+
+/// **`x.low_bits(n)` keeps the `n` lowest bits** (Part I): on `u8`, `u32` and
+/// `u64`, a count of any integer type (a view of one in a loop), none at `n <=
+/// 0`, all at the width and past it. Lowered as the program wrote it, the trait
+/// in the prelude; and its value does not depend on the width, so no `NK1215`.
+const LOW_BITS: &str = "fn main() {\n    \
+     let a: u64 = 0x0123456789abcdef\n    \
+     let b: u32 = 0x89abcdef\n    \
+     let c: u8 = 0xa5\n    \
+     for n in [-5, 0, 4, 8, 12, 32, 40, 64, 70] {\n        \
+     println(f\"{n} {a.low_bits(n)} {b.low_bits(n)} {c.low_bits(n)}\")\n    \
+     }\n    \
+     let m: u64 = 3\n    \
+     let k: u8 = 200\n    \
+     let s: i32 = -1\n    \
+     let wide: u64 = c.low_bits(4)\n    \
+     println(f\"{a.low_bits(m)} {a.low_bits(k)} {b.low_bits(s)} {wide}\")\n\
+     }\n";
+
+#[test]
+fn low_bits_are_described_and_lowered() {
+    assert_eq!(codes(LOW_BITS), Vec::<String>::new());
+    let rust = lowered(LOW_BITS);
+    assert!(rust.contains("a.low_bits(m)"), "{rust}");
+}
+
+/// The same values at x86-64's baseline (a shift and a select) and at
+/// `x86-64-v3` (one `bzhi`).
+#[test]
+fn low_bits_at_every_cpu_level() {
+    if !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
+        return;
+    }
+    let expected = "-5 0 0 0\n0 0 0 0\n4 15 15 5\n8 239 239 165\n12 3567 3567 165\n\
+         32 2309737967 2309737967 165\n40 444691369455 2309737967 165\n\
+         64 81985529216486895 2309737967 165\n70 81985529216486895 2309737967 165\n\
+         7 81985529216486895 0 5\n";
+    for cpu in ["--cpu=x86-64", "--cpu=x86-64-v3"] {
+        let dir = common::scratch_dir(&format!("low-bits{cpu}"));
+        std::fs::create_dir_all(dir.join("src")).expect("src");
+        std::fs::write(
+            dir.join("nikaia.toml"),
+            "[package]\nname = \"bits\"\nversion = \"0.1.0\"\n",
+        )
+        .expect("manifest");
+        std::fs::write(dir.join("src/main.nika"), LOW_BITS).expect("entry");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+            .args(["run", cpu, "--project"])
+            .arg(&dir)
+            .env(
+                "NIKAIA_CACHE_DIR",
+                root.join("target").join("nikaia-project-tests"),
+            )
+            .env_remove("CARGO_TARGET_DIR")
+            .output()
+            .expect("the nikaia binary runs");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            out.status.success(),
+            "{cpu}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout), expected, "{cpu}");
+    }
 }

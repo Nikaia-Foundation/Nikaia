@@ -236,6 +236,108 @@ pub fn signed_with_unsigned(signed: i64, unsigned: u64) -> std::cmp::Ordering {
     unsigned_with_signed(unsigned, signed).reverse()
 }
 
+/// **A count of bits, cut to `0..=width`**
+/// ([Part I](../../../docs/specification/10-nikaia-light.md), `low_bits`): a
+/// count of any integer type, a negative one as `0`, one past the width as the
+/// width, so no count aborts. A view of one is its value, as for [`Value`].
+pub trait BitCount {
+    /// The count in `0..=width`.
+    fn clamped(self, width: u32) -> u32;
+}
+
+macro_rules! signed_count {
+    ($($t:ty => $wide:ty),*) => {
+        $(
+            impl BitCount for $t {
+                #[inline(always)]
+                fn clamped(self, width: u32) -> u32 {
+                    (self as $wide).clamp(0, width as $wide) as u32
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! unsigned_count {
+    ($($t:ty => $wide:ty),*) => {
+        $(
+            impl BitCount for $t {
+                #[inline(always)]
+                fn clamped(self, width: u32) -> u32 {
+                    (self as $wide).min(width as $wide) as u32
+                }
+            }
+        )*
+    };
+}
+
+signed_count!(i8 => i64, i16 => i64, i32 => i64, i64 => i64, isize => i64, i128 => i128);
+unsigned_count!(u8 => u64, u16 => u64, u32 => u64, u64 => u64, usize => u64, u128 => u128);
+
+impl<T: BitCount + Copy> BitCount for &T {
+    #[inline(always)]
+    fn clamped(self, width: u32) -> u32 {
+        (*self).clamped(width)
+    }
+}
+
+/// **`x.low_bits(n)`, `x` with only its `n` lowest bits kept**
+/// ([Part I](../../../docs/specification/10-nikaia-light.md)): none where `n <=
+/// 0`, all where `n` is at least the width. On `u8`, `u32` and `u64`, a method
+/// because the program writes one; in the prelude so the call resolves.
+///
+/// Branch-free: the count clamped with selects, then one `bzhi` where the
+/// build has BMI2 (`x86-64-v3`), two shifts elsewhere.
+pub trait LowBits: Sized {
+    /// `self` with only its `n` lowest bits kept.
+    fn low_bits<C: BitCount>(self, n: C) -> Self;
+}
+
+impl LowBits for u64 {
+    #[inline(always)]
+    fn low_bits<C: BitCount>(self, n: C) -> u64 {
+        low_bits_u64(self, n.clamped(64))
+    }
+}
+
+impl LowBits for u32 {
+    #[inline(always)]
+    fn low_bits<C: BitCount>(self, n: C) -> u32 {
+        low_bits_u32(self, n.clamped(32))
+    }
+}
+
+impl LowBits for u8 {
+    #[inline(always)]
+    fn low_bits<C: BitCount>(self, n: C) -> u8 {
+        low_bits_u32(u32::from(self), n.clamped(8)) as u8
+    }
+}
+
+/// `x` with its `k` lowest bits kept, `k` in `0..=64`. Written as a shift
+/// down of all ones, which LLVM selects as one `bzhi` where the build has BMI2
+/// (`x86-64-v3`) and as two shifts elsewhere; the `k == 0` select goes where
+/// the count is known not to be `0`. No `unsafe` (`std::arch`'s `_bzhi_u64`
+/// would need one, and this crate forbids it).
+#[inline(always)]
+fn low_bits_u64(x: u64, k: u32) -> u64 {
+    if k == 0 {
+        0
+    } else {
+        x & (u64::MAX >> (64 - k))
+    }
+}
+
+/// `x` with its `k` lowest bits kept, `k` in `0..=32`.
+#[inline(always)]
+fn low_bits_u32(x: u32, k: u32) -> u32 {
+    if k == 0 {
+        0
+    } else {
+        x & (u32::MAX >> (32 - k))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

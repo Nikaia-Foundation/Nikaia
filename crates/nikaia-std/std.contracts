@@ -1762,6 +1762,34 @@ sync = true
 touches = []
 signature = "(self, n: ?) -> u64"
 
+# ## The lowest bits (Part I)
+#
+# **`x.low_bits(n)` keeps the `n` lowest bits of `x`** on `u8`, `u32` and `u64`:
+# none where `n <= 0`, all where `n` is at least the width, `n` any integer
+# type, so no count aborts. Lowered to `nikaia_std::num::LowBits`, one `bzhi`
+# where the build has BMI2.
+
+# A `u8` with only its `n` lowest bits kept.
+[fn."u8::low_bits"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u8"
+
+# A `u32` with only its `n` lowest bits kept.
+[fn."u32::low_bits"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u32"
+
+# A `u64` with only its `n` lowest bits kept.
+[fn."u64::low_bits"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> u64"
+
 # ## Arithmetic and conversions that may not fit (ADR-315)
 #
 # An overflow aborts (ADR-285 D1), and a conversion that may not fit aborts

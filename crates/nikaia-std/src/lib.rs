@@ -670,6 +670,9 @@ pub mod prelude {
     pub use crate::http1;
     pub use crate::io;
     pub use crate::list::ListExt;
+    // `x.low_bits(n)` on `u8`, `u32` and `u64` (Part I): a method needs its
+    // trait in scope.
+    pub use crate::num::LowBits as _;
     pub use crate::supervisor;
     pub use crate::task;
     // **A duration and the call that waits one out**
