@@ -572,14 +572,15 @@ mod tests {
     /// The other tests of this binary run alongside and move the runtime's
     /// count, which is a real wake for this pool too: those are subtracted.
     /// Their I/O can still ring the pool more often than it moves the count
-    /// (on arm64 CI: 49 rings for 24 moves), so the pool is watched for up to
-    /// five windows and must stay quiet in one of them; a pool that wakes
-    /// itself rings in every window.
+    /// (on CI: 49 rings for 24 moves, and 1145 for 886), so the pool is watched
+    /// for up to ten windows, longer than the rest of the binary runs, and must
+    /// stay quiet in one of them; a pool that wakes itself rings in every
+    /// window.
     #[test]
     fn an_idle_pool_does_not_wake_itself() {
         let pool = Pool::start(2);
         let mut seen = Vec::new();
-        for _ in 0..5 {
+        for _ in 0..10 {
             let before_rang = pool.rang.load(Ordering::Acquire) as u64;
             let before = crate::rt::io::generation();
             std::thread::sleep(std::time::Duration::from_millis(300));
