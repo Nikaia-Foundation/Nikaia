@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1115] — 2026-10-20
+
+**A mut argument says mut, and a float literal is an f32 where one is asked**
+- A name handed to a `mut` parameter is changed: a `let` without `mut` is NK1139, a parameter NK1138. A `for` binding cannot be changed (NK1139). A `match` arm may change what it binds. A float literal takes `f32` from its place: `let`, argument, `return`, field, list, assignment. A list mixing a float and an integer is NK1154 alone (#734, #728).
+
 ## [0.0.1114] — 2026-10-20
 
 **Text orders against text; the prover answers repeats without normalising (#733, #727)**
