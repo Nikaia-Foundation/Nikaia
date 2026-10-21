@@ -92,24 +92,24 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1164 with #695 (`examples/1brc.nika` and `naive.nika` 0.0.1174 with ADR-296 D42, a map of `std`'s own whose text keys are compared and hashed by words, and the grammar runtime's `advance` always inlined; the `fast.nika` and `fast-unsafe.nika` rows 0.0.1171 with #776, a set written at `find_all` fixed when compiling, two cuts compared in place, the name's words cut by length with two branches, and `fast.nika`'s preconditions proved at the call), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1178 (the `fast.nika` and `fast-unsafe.nika` rows with a proved shift written as one that may assume its count, `find_all`'s offset kept inside the run, and the station found before the temperature is read), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
-| Rust, `naive` | 841.5 | 9.28 | 858.9 | 8.61 | 556 |
-| **Nikaia**, `naive.nika` | **557.4** | **8.08** | **544.9** | **8.27** | **375** |
+| Rust, `naive` | 841.3 | 9.25 | 859.7 | 8.65 | 556 |
+| Nikaia, `naive.nika` | 557.4 | 8.08 | 544.8 | 8.27 | 375 |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
-| **Nikaia**, `examples/1brc.nika` | **209.2** | **0.92** | **208.8** | **1.04** | **642** |
+| **Nikaia**, `examples/1brc.nika` | 209.2 | 0.92 | 208.8 | 1.04 | 642 |
 | Nikaia, overflow checks off | 210.2 | 0.92 | 208.8 | 1.04 |  |
-| **Nikaia**, `fast.nika` | **107.4** | **0.93** | **107.5** | **0.92** | **1454** |
-| Nikaia, `fast.nika`, overflow checks off | 105.0 | 0.93 | 104.1 | 0.92 |  |
-| **Nikaia**, `fast-unsafe.nika`, assumes believed | **103.9** | **0.93** | **104.0** | **0.93** | **1569** |
-| Nikaia, `fast-unsafe.nika`, assumes checked | 178.4 | 1.00 | 182.9 | 1.09 |  |
+| **Nikaia**, `fast.nika` | 102.6 | 0.93 | 102.7 | 0.92 | 1454 |
+| Nikaia, `fast.nika`, overflow checks off | 100.1 | 0.93 | 100.3 | 0.92 |  |
+| **Nikaia**, `fast-unsafe.nika`, assumes believed | 98.6 | 0.93 | 98.8 | 0.93 | 1629 |
+| Nikaia, `fast-unsafe.nika`, assumes checked | 194.5 | 0.94 | 198.0 | 1.11 |  |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 |  |
-| Nikaia, `fast.nika`, `x86-64-v3` | 103.4 | 0.93 | 103.6 | 0.92 |  |
-| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 98.1 | 0.93 | 98.2 | 0.93 |  |
+| Nikaia, `fast.nika`, `x86-64-v3` | 97.6 | 0.93 | 97.7 | 0.92 |  |
+| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 91.4 | 0.93 | 91.6 | 0.93 |  |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 4 threads | 133.7 | 0.47 | 131.3 | 0.47 | 12907 |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 1 thread | 133.1 | 0.47 | 130.8 | 0.48 | |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), `x86-64-v3`, 4 threads | 93.3 | 0.69 | 91.5 | 0.30 | |
@@ -118,7 +118,7 @@ Nikaia 0.0.1164 with #695 (`examples/1brc.nika` and `naive.nika` 0.0.1174 with A
 | Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), 4 threads | 210.4 | 1.60 | 216.1 | 1.60 | 5961 |
 | Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), `x86-64-v3`, 4 threads | 185.2 | 1.60 | 190.9 | 1.60 | |
 | Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), as its authors build it (`native`, fat LTO, 1 unit, `panic = "abort"`) | not countable with callgrind (AVX-512) | | | | |
-| Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), its authors' profile at `x86-64-v3` | 187.6 | 1.60 | | | |
+| Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), its authors' profile at `x86-64-v3` | 187.7 | 1.60 | | | |
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, 4 threads | 207.9 | 0.57 | 207.9 | 0.57 | 3963 |
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, `x86-64-v3`, 4 threads | 197.7 | 0.57 | 197.7 | 0.57 | |
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, as its authors build it (`native`, fat LTO, 1 unit, `panic = "abort"`) | not countable with callgrind (AVX-512) | | | | |
@@ -147,8 +147,8 @@ AI variant 2 runs 29 % fewer instructions than `1brc.nika` at 16 units and
 30 % fewer at 1 unit, and 0.38 mispredictions against 0.92 to 1.04, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
-`fast.nika` runs 27 % fewer instructions than AI variant 2 at both unit
-counts, 29 % fewer without its overflow checks, and 22 % fewer at
+`fast.nika` runs 30 % fewer instructions than AI variant 2 at both unit
+counts, 32 % fewer without its overflow checks, and 26 % fewer at
 `x86-64-v3`; it mispredicts 2.4 times as often (0.93 against 0.38 a row). It
 is 18 % fewer tokens, with every index and overflow checked or proved, and a
 row without a `.` where the temperature's shape puts one stops the program.
@@ -156,21 +156,28 @@ Where the difference lies is below.
 
 Its name's two words are cut to the name by its length, with two branches
 (`len <= 8`, `len < 16`), which mispredict 0.53 times a row on names of
-varying length. Cut with `low_bits` and no branch instead, the program runs
+varying length. Cut with `low_bits` and no branch instead, the program ran
+(at 0.0.1171)
 8.9 instructions a row more at 16 units (116.4), and 1.8 more at `x86-64-v3`
 (105.4), where `low_bits` is one `bzhi` but its count is first saturated to
 `0..=127` (five instructions a word); its mispredictions drop to 0.39. The
 table counts instructions, so the branches stay.
 
-`fast-unsafe.nika`, its assumes believed, runs 3 % fewer instructions than
-`fast.nika` at both unit counts and 5 % fewer at `x86-64-v3`, and 29 % to 30 %
+`fast-unsafe.nika`, its assumes believed, runs 4 % fewer instructions than
+`fast.nika` at both unit counts and 6 % fewer at `x86-64-v3`, and 33 %
 fewer than AI variant 2: its assumes drop the checks `fast.nika` still makes (the
 table below), the `.` guard as well, and the ranges they state let LLVM
-simplify the temperature's arithmetic. Against beowolx at one thread `fast-unsafe.nika`
-runs 22 % fewer at 1 unit and 20 % fewer at 16, with twice its
-mispredictions (0.93 against 0.47), in an eighth of its tokens; at `x86-64-v3`
-beowolx's SIMD runs 5 % fewer (93.3 on four threads against 98.1, 1 unit) and
-7 % fewer at 16 units (91.5 against 98.2). Checked, the same file costs 178.4: every
+simplify the temperature's arithmetic; there it cuts a name of 9 to 15
+bytes with `low_bits`, one `bzhi` where the assumed length needs no
+saturation. Against beowolx at one thread `fast-unsafe.nika`
+runs 26 % fewer at 1 unit and 24 % fewer at 16, with twice its
+mispredictions (0.93 against 0.47), in an eighth of its tokens. At `x86-64-v3`
+they are even: 91.4 against beowolx's 93.3 on four threads at 1 unit, 91.6
+against 91.5 at 16 units (counted by hand on one thread: 92.9 and 91.0).
+beowolx parses two rows' temperatures in one AVX2 vector and hashes with
+`crc32`, about 76 instructions a row on its fast path, and pays 12.3 a row for
+names of 16 bytes and more, where `fast-unsafe.nika` pays about 3; it
+mispredicts a third as often (0.30 against 0.93 at 16 units). Checked, the same file costs 194.5: every
 assume tested and no check removed.
 
 ## Where Nikaia's instructions go
@@ -253,7 +260,7 @@ inlined postcondition). What a row still checks, and what proving it needs:
 
 | check | what proving it needs |
 |---|---|
-| `sum += v`, `count += 1` in `run`, the only overflow tests left in the loop (with them off, 104.1 a row instead of 107.5) | ADR-361 D11's summary of a slot's field, carried across the `Par::fold` (ADR-367). Not enough as decided: a turn here is a piece, not a row, and `count` grows inside `run`'s loop; and `|sum|` at most 1023 times the rows of an input below 2^60 does not fit an `i64` without ADR-367 D4's length test before the fold |
+| `sum += v`, `count += 1` in `run`, the only overflow tests left in the loop (with them off, 100.3 a row instead of 102.7) | ADR-361 D11's summary of a slot's field, carried across the `Par::fold` (ADR-367). Not enough as decided: a turn here is a piece, not a row, and `count` grows inside `run`'s loop; and `|sum|` at most 1023 times the rows of an input below 2^60 does not fit an `i64` without ADR-367 D4's length test before the fold |
 | the long name's cut of the slot's `name`, `self.slots[at].name[0..<len]` in `slot_of` (a long name only) | a fact of a field of an indexed element (#384): `name.len() == len` for every slot, D11's summary |
 
 ## Where `naive.nika` differs from `naive.rs`
