@@ -28,7 +28,6 @@ description: >-
       <p><strong>In many languages, code that waits has to be marked everywhere it touches: <code>async</code> here, <code>await</code> there.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> A call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. To run things at the same time, put them in an <code>overlap</code> block: it runs its lines together and waits for all of them.</p>
       <p><span class="lead-in">The limit.</span> Every function may pause unless it says otherwise. A function marked <code>sync</code> never pauses and may call only other <code>sync</code> functions, which is how you say that a piece of code must not wait.</p>
-      <p><a class="safe-in-depth" href="{{ "/easy/no-async-await.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-nika">let (a, b) = overlap {
@@ -36,6 +35,7 @@ description: >-
     size_of(&quot;b.txt&quot;)
 }</code></pre></div>
     </div>
+    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/easy/no-async-await.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 
@@ -47,12 +47,12 @@ description: >-
       <p><strong>A compiler message that talks about lifetimes and borrowing sends you away from your own code.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> The compiler points at every place the explanation needs: <code>^</code> under the line with the mistake, <code>-</code> under the line that explains it. Then it says what to write instead. Errors point at your <code>.nika</code> line and do not talk about lifetimes or borrowing.</p>
       <p><span class="lead-in">The limit.</span> When no line of yours explains an error, the message says so. Where a check passes a problem on to the Rust compiler underneath, the error it raises is reported against your <code>.nika</code> line.</p>
-      <p><a class="safe-in-depth" href="{{ "/easy/readable-errors.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error[NK1139]</span><b>: You're changing `count`, but it wasn't declared as mutable.</b>
 <span class="d-help">help:</span> Add `mut` where it's declared: `let mut count`.</code></pre></div>
     </div>
+    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/easy/readable-errors.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 
@@ -64,7 +64,6 @@ description: >-
       <p><strong>Reading a log, a protocol or a small language usually means a parsing library, or a parser written by hand.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> You describe the format as a <code>grammar</code>, and the compiler builds the parser. Precedence and recursion are rules: the order of the rules is the order of binding. The whole calculator is about 100 lines.</p>
       <p><span class="lead-in">The limit.</span> A grammar is a large topic, and this page shows only the idea. The full rules are in Part II, chapter 10.</p>
-      <p><a class="safe-in-depth" href="{{ "/easy/formats-as-grammar.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-nika">grammar Calc {
@@ -76,6 +75,7 @@ description: >-
         | "-" t:term { -t }
 }</code></pre></div>
     </div>
+    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/easy/formats-as-grammar.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 

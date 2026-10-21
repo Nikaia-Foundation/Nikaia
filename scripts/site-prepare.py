@@ -153,6 +153,21 @@ def example_includes(root):
               "{% raw %}" + text.rstrip("\n") + "{% endraw %}")
 
 
+def bench_includes(root):
+    """The 1BRC study's own programs, as includes in the same form.
+
+    `fast/against-tuned-rust.html` shows each program this project wrote for
+    the study, Nikaia's and the AI assistant's Rust, on the page that counts
+    it."""
+    brc = root / "benches" / "brc"
+    if not brc.is_dir():
+        return
+    for program in sorted([*brc.glob("*.nika"), *(brc / "src" / "bin").glob("ai*.rs")]):
+        text = html.escape(program.read_text(encoding="utf-8"), quote=False)
+        write(root / "_includes" / "benches" / "brc" / (program.name + ".html"),
+              "{% raw %}" + text.rstrip("\n") + "{% endraw %}")
+
+
 def relink_examples_index(root, written):
     """The examples index links at the files; point it at the pages."""
     index = root / "examples" / "README.md"
@@ -301,6 +316,7 @@ def main():
 
     written = example_pages(root)
     example_includes(root)
+    bench_includes(root)
     relink_examples_index(root, written)
     docs_index_permalink(root)
 

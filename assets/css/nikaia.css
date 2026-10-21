@@ -1007,6 +1007,42 @@ body {
   font-weight: 600;
 }
 
+/* The "In depth" link is the split's last child: in one column it follows the
+   side (a figure, a code panel) instead of standing above it; in two it sits
+   right under the text, the side beside both. */
+.home-split-more {
+  margin: -24px 0 0;
+  font-size: 16px;
+}
+
+.home-split-more a {
+  color: var(--nk-link);
+}
+
+@media (min-width: 900px) {
+  .home-split:has(> .home-split-more) {
+    row-gap: 0;
+  }
+
+  .home-split:has(> .home-split-more) > .home-split-text {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: end;
+  }
+
+  .home-split:has(> .home-split-more) > .home-code-side {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .home-split > .home-split-more {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    margin: 0;
+  }
+}
+
 /* The code panel is dark in every theme, like the hero it follows. */
 .home-code.markdown-body {
   max-width: none;

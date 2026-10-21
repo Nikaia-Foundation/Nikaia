@@ -27,11 +27,12 @@ description: >-
       <h2>1BRC study: the Nikaia compiler vs. human vs. AI</h2>
       <p><strong>The study sets Nikaia's programs for the One Billion Row Challenge against Rust written by people and by an AI assistant.</strong></p>
       <p>It shows how well the compiler optimises a plain program on its own, what hand-tuned Nikaia reaches today, safe and unsafe, and where the journey goes. Along the way it shows what Rust can do, who is ahead, and which tricks the fastest programs use: searching sixteen bytes at once, a name read as two words, a temperature without a branch, checks proved instead of made. And how Nikaia lets a program use each of them, most without <code>unsafe</code>.</p>
-      <p><a class="safe-in-depth" href="{{ "/fast/against-tuned-rust.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
-<div class="safe-stat"><p class="stat-value">108&nbsp;/&nbsp;131</p><p class="stat-label">instructions per row: safe Nikaia / the fastest Rust written by a person</p></div>
+<div class="safe-stat"><p class="stat-value">116&nbsp;/&nbsp;131</p><p class="stat-label">instructions per row at <code>x86-64</code>: safe Nikaia / the fastest Rust written by a person</p></div>
+<div class="safe-stat"><p class="stat-value">0.14&nbsp;/&nbsp;0.47</p><p class="stat-label">mispredicted branches per row: safe Nikaia / the same Rust program</p></div>
     </div>
+    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/fast/against-tuned-rust.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 
@@ -43,12 +44,12 @@ description: >-
       <p><strong>Code written for one core usually has to be rewritten, or at least re-checked, to use several.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> The choice is one line in <code>nikaia.toml</code>: <code>user-parallelism = "no"</code> (the default) or <code>"yes"</code>. At <code>no</code>, two pieces of your code are never running at the same moment. At <code>yes</code>, a multi-threaded runtime spreads the work over the cores, and thread safety is checked at compile time. A library built at <code>no</code> is still checked against the rules parallel code needs, so it also works when a program built at <code>yes</code> uses it.</p>
       <p><span class="lead-in">The limit.</span> The setting allows parallelism; it does not set a thread count. How many threads serve <code>yes</code> is the runtime&rsquo;s choice, because it depends on the machine. At <code>no</code>, only your own code is limited to one thread: waiting for I/O happens on the runtime&rsquo;s own threads, and the standard library may still use every core.</p>
-      <p><a class="safe-in-depth" href="{{ "/fast/one-core-or-all.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-toml">[build]
 user-parallelism = "no"    # or "yes"</code></pre></div>
     </div>
+    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/fast/one-core-or-all.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 
@@ -60,11 +61,11 @@ user-parallelism = "no"    # or "yes"</code></pre></div>
       <p><strong>A garbage collector pauses your program at moments you do not choose. Freeing memory by hand hands you the bugs.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> Nikaia has no garbage collector and no <code>free</code>. Memory is released at a point you can see in the code, so there are no collector pauses. The compiler works out which data needs protecting and when memory can be freed.</p>
       <p><span class="lead-in">The limit.</span> Nikaia turns your program into a Rust crate, and Rust&rsquo;s compiler checks memory safety again. So release follows Rust&rsquo;s rules underneath, and an error from that last step is reported against your <code>.nika</code> line.</p>
-      <p><a class="safe-in-depth" href="{{ "/fast/no-garbage-collector.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
 <p class="safe-note">You write no <code>free</code> and no lifetimes. The compiler works out when memory can be released, and the release is a point you can see.</p>
     </div>
+    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/fast/no-garbage-collector.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 
@@ -76,12 +77,12 @@ user-parallelism = "no"    # or "yes"</code></pre></div>
       <p><strong>Safety checks cost time: an index check on every access, an overflow check on every <code>+</code>.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> Nikaia keeps the checks, and drops one only where it has proved it cannot fail. <code>remove-bounds-checks:on</code> writes an index without its check where the compiler has proved <code>0 &lt;= i &lt; xs.len()</code>. <code>remove-overflow-checks:on</code> does the same for a <code>+</code>, <code>-</code> or <code>*</code> whose result stays inside its type. A check that is not proved is not dropped.</p>
       <p><span class="lead-in">The limit.</span> Both are off by default: you ask for them in <code>nikaia.toml</code>. What is proved does not depend on them; they only choose what is written.</p>
-      <p><a class="safe-in-depth" href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">In depth →</a></p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-toml">[build]
 optimization = "remove-bounds-checks:on,remove-overflow-checks:on"</code></pre></div>
     </div>
+    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 
