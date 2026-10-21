@@ -24,7 +24,7 @@ bytes a word on any other target.
 | where | what | why it holds |
 | :--- | :--- | :--- |
 | `any_of`, `in_tables` | a call of a `#[target_feature]` function | the `cfg` around the call says the build enables that feature for every function; `core::arch` asks for `unsafe` all the same |
-| `avx2::bits`, `sse2::bits` | `_mm256_loadu_si256`, `_mm_loadu_si128` | each reads one part from `chunks_exact(32)` or `chunks_exact(16)` of the block, so exactly that part's 32 or 16 bytes; the loads take any alignment |
+| `avx2::bits`, `sse2::bits` | `_mm256_loadu_si256`, `_mm_loadu_si128` | each reads one part from `as_chunks::<32>()` or `as_chunks::<16>()` of the block, so exactly that part's 32 or 16 bytes; the loads take any alignment |
 | `avx2::table`, `sse2::tables` | `_mm_loadu_si128` | reads the 16 bytes of a `&[u8; 16]`, any alignment |
 
 ## How it is checked
