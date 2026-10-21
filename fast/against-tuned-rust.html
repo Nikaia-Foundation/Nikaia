@@ -14,10 +14,9 @@ description: >-
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/fast/#tuned" | relative_url }}">Very fast</a></p>
     <h1 class="home-heading">1BRC study: the Nikaia compiler vs. human vs. AI</h1>
-    <div class="limit-class">
-        <dl class="limit-steps">
-          <dt>1. What the study asks</dt>
-          <dd>
+
+        <div class="study-card markdown-body">
+          <h2>1. What the study asks</h2>
           <p>The <a href="https://github.com/gunnarmorling/1brc">One Billion Row Challenge</a> reads a file of weather readings, one <code>station;temperature</code> a line, and prints each station's minimum, mean and maximum. It is small enough to read in one sitting and hard enough that people have spent months on the fastest answer: the input has to be searched, hashed, parsed and counted with almost nothing wasted.</p>
           <p>The study asks three questions of Nikaia, which is pre-alpha:</p>
           <ul>
@@ -26,15 +25,14 @@ description: >-
             <li><strong>Where does the journey go?</strong> The gap between the safe and the unsafe program is what the prover still has to learn. Every step it learns moves the safe program, and every other Nikaia program, without a line of them changed.</li>
           </ul>
           <p>Along the way the study shows what Rust can do in the hands of a person and of an AI assistant, who leads, and which tricks put each program where it is.</p>
-          </dd>
+        </div>
 
-          <dt>2. Method</dt>
-          <dd>
+        <div class="study-card markdown-body">
+          <h2>2. Method</h2>
           <p>Every program prints the same output, byte for byte, for the same million rows. Counted with callgrind (<code>valgrind --tool=callgrind --branch-sim=yes</code>), never timed: a count is the work a program does, and it does not move from one day to the next. For a program that uses all cores it is the work of all of them. Release builds on every side with the same settings, 16 codegen units, at the baseline <code>x86-64</code> and at <code>x86-64-v3</code> (AVX2, BMI2). Length in tokens, the same rule for both languages. The full method and every row are in <a href="https://github.com/Nikaia-Language/Nikaia/tree/main/benches/brc">benches/brc</a>.</p>
-          </dd>
-        </dl>
+        </div>
 
-        <div class="limit-details home-code markdown-body">
+        <div class="study-card markdown-body">
           <p><strong>Table 1.</strong> Instructions and mispredicted branches per row, version 0.0.1175. Preliminary: the numbers move as the compiler learns.</p>
           <div style="overflow-x:auto">
           <table>
@@ -56,62 +54,97 @@ description: >-
           <p>The human programs use every core; the count is the work of all of them. <code>automataIA</code>'s programs are MIT-licensed and copied into the repository; <code>beowolx/fast_1brc</code> has no licence and is fetched at a fixed commit when the benchmark runs. The authors' own builds use AVX-512, which callgrind cannot run; they wait for another machine. AI variant 1 is an AI assistant's program from one request, AI variant 2 the same assistant's after several rounds, each measured and improved (<a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/README.md#why-two-ai-variants">why two</a>).</p>
         </div>
 
-        <dl class="limit-steps">
-          <dt>3. Results</dt>
-          <dd>
+        <div class="study-card markdown-body">
+          <h2>3. Results</h2>
           <ul>
             <li><strong>Safe Nikaia leads at the baseline.</strong> At <code>x86-64</code>, <code>fast.nika</code> does 18 % less work a row than the fastest Rust a person wrote, and 27 % less than the AI assistant's best, with no <code>unsafe</code>, in a ninth of the human program's tokens.</li>
             <li><strong>Unsafe Nikaia shows what is left to prove.</strong> <code>fast-unsafe.nika</code> does 21 % less than the human program. The 3.5 instructions between it and the safe program are checks the prover cannot yet remove.</li>
             <li><strong>At <code>x86-64-v3</code> the human program leads</strong>, 7 % below unsafe Nikaia and 12 % below safe Nikaia. Section 4 shows why.</li>
             <li><strong>The plain program is in the field of the human programs</strong>: 209 against 208 and 216, in 642 tokens against several thousand, with the whole file checked as UTF-8 and every index and overflow proved or checked.</li>
           </ul>
-          </dd>
+        </div>
 
-          <dt>4. The techniques, and who uses them</dt>
-          <dd>
-          <p><strong>Searching the separator a block at a time.</strong> All fast programs find the <code>;</code> by comparing 16 to 64 bytes at once and reading the hits from a bit mask. In Rust that is intrinsics inside <code>unsafe</code>. In Nikaia it is <code>bytes::find_all</code> over a <code>ByteSet</code>: the standard library does the block compare, and each next hit costs one <code>tzcnt</code> and one cleared bit. <em>Used by:</em> <code>fast.nika</code>, <code>fast-unsafe.nika</code>, beowolx, AI variant 2.</p>
-          <p><strong>A name as two words.</strong> The first sixteen bytes of a station's name, read as two 64-bit words, are both its hash and its key; the bytes are compared only for longer names. Nikaia reads them with <code>u64_le</code> from a padded copy of the input's end, so no read can run past it, and the bounds are proved, not trusted. <em>Used by:</em> the three fast programs and AI variant 2.</p>
-          <p><strong>A temperature from one word, without a branch.</strong> The position of the <code>.</code> is found from the word's bits, and the value follows by shifts and one multiply. <em>Used by:</em> all fast programs. beowolx goes further at <code>x86-64-v3</code>: it parses the temperatures of two rows in one AVX2 vector, about 12 instructions a row fewer than ours.</p>
-          <p><strong>Checks proved instead of made.</strong> Nikaia keeps every index and overflow check unless it proves the check cannot fail. The prover carries facts through loops (<code>prove-through-loops</code>, <a href="https://github.com/Nikaia-Language/Nikaia/issues/767">#767</a>), keeps a type's rule as a fact where no method can break it (<a href="https://github.com/Nikaia-Language/Nikaia/issues/714">#714</a>), and bounds an unsigned shift, a sum with a bounded side and a loop through its <code>break</code>. That took <code>fast.nika</code> from 163.6 to 107.5 instructions a row; the program only states, in a few <code>assert</code>s checked once, what it relies on. <em>Used by:</em> every Nikaia program; in the plain one the temperature's and the counter's checks are proved.</p>
-          <p><strong>Claims the programmer vouches for.</strong> <code>unsafe { assume(claim) }</code> states what the input's format guarantees: a name of at most 100 bytes, fewer than 10 000 stations. Built with checks removed, each claim is believed and the checks it implies are gone; built with checks on, each is checked. <code>nikaia check --asserts</code> lists every claim. <em>Used by:</em> <code>fast-unsafe.nika</code>.</p>
-          <p><strong>The rare path out of the loop.</strong> A station's first row copies its name into the table, once a station. Marked <code>@inline(never)</code>, that code stays out of the loop that runs once a row, and the loop keeps its values in registers: 6.7 instructions a row. <em>Used by:</em> <code>fast.nika</code>, <code>fast-unsafe.nika</code>.</p>
-          <p><strong>UTF-8 checked once a name, not once a byte.</strong> The fast Nikaia programs read the file as bytes and check a station's name as UTF-8 once, where it is printed. The Rust programs check nothing. The plain Nikaia program checks the whole file, about 10 instructions a row.</p>
-          <p><strong>Text keys compared by words.</strong> Every Nikaia map is the standard library's own type over hashbrown's table. Where its key is text, it hashes the first sixteen bytes inline and compares a key a word at a time, the trick the fast programs write by hand; Rust's <code>&amp;str ==</code> calls <code>memcmp</code> every time. <em>Used by:</em> every Nikaia program with a map of text, the plain <code>1brc.nika</code> among them (222.9 → 208.8 a row).</p>
-          <p><strong>All cores in one line.</strong> The plain program is a grammar and a fold; <code>par_fold</code> cuts the file and merges the pieces, and whether it runs on one core or all of them is one line in <code>nikaia.toml</code>. The human programs write their threads by hand.</p>
-          <p><strong>What Rust does only at <code>x86-64-v3</code>.</strong> beowolx gains 40 instructions a row from <code>x86-64</code> to <code>x86-64-v3</code>, unsafe Nikaia 6. About 16 of beowolx's 40 come from a hash that collides less once <code>crc32</code> is there: its baseline build is weak, and the gain recovers from that. About 22 come from code it compiles only for that level (<code>cfg(target_feature)</code>): the two-row AVX2 temperature parse, <code>bzhi</code> to mask the name, an SSE update of the stats. The Nikaia programs have no target-specific code; LLVM alone brings their 6. A two-row parse with Nikaia's own vector types (<code>simd::Fixed[u64, 2]</code>) was measured and costs more than the scalar parse in Nikaia; it waits for a lowering that keeps the lanes in one register.</p>
-          </dd>
+        <div class="study-card markdown-body">
+          <h2>4. The techniques, and who uses them</h2>
+          <div class="study-tiles">
+          <div class="study-tile">
+            <h3>Finding the separator 64 bytes at a time</h3>
+            <p>All fast programs find the <code>;</code> by comparing 16 to 64 bytes at once and reading the hits from a bit mask. In Rust that is intrinsics inside <code>unsafe</code>. In Nikaia it is <code>bytes::find_all</code> over a <code>ByteSet</code>: the standard library does the block compare, and each next hit costs one <code>tzcnt</code> and one cleared bit. A set written in the program is fixed when compiling, so no block pays for a choice.</p>
+            <div class="study-used"><strong>Used by</strong><code>fast.nika</code> · <code>fast-unsafe.nika</code> · beowolx · AI variant 2</div>
+          </div>
+          <div class="study-tile">
+            <h3>Reading a station's name as two words</h3>
+            <p>The first sixteen bytes of a name, read as two 64-bit words, are both its hash and its key; the bytes are compared only for longer names. Nikaia reads them with <code>u64_le</code> from a padded copy of the input's end, so no read can run past it, and the bounds are proved, not trusted.</p>
+            <div class="study-used"><strong>Used by</strong><code>fast.nika</code> · <code>fast-unsafe.nika</code> · beowolx · AI variant 2</div>
+          </div>
+          <div class="study-tile">
+            <h3>Parsing a temperature without a branch</h3>
+            <p>The position of the <code>.</code> follows from the word's bits, and the value from shifts and one multiply. beowolx goes further at <code>x86-64-v3</code>: it parses the temperatures of two rows in one AVX2 vector.</p>
+            <div class="study-used"><strong>Used by</strong><code>fast.nika</code> · <code>fast-unsafe.nika</code> · beowolx · AI variant 2</div>
+          </div>
+          <div class="study-tile">
+            <h3>Comparing text keys a word at a time</h3>
+            <p>Every Nikaia map is the standard library's own type over hashbrown's table. Where its key is text, it hashes the first sixteen bytes inline and compares a key a word at a time, the trick the fast programs write by hand; Rust's <code>&amp;str ==</code> calls <code>memcmp</code> every time. It took the plain program from 222.9 to 208.8 instructions a row without a line of it changed.</p>
+            <div class="study-used"><strong>Used by</strong><code>1brc.nika</code> · every Nikaia program with a map of text</div>
+          </div>
+          <div class="study-tile">
+            <h3>Proving checks instead of making them</h3>
+            <p>Nikaia keeps every index and overflow check unless it proves the check cannot fail. The prover carries facts through loops, keeps a type's rule as a fact where no method can break it, proves a function's and a method's conditions where they are called, and bounds shifts and sums. That took <code>fast.nika</code> from 163.6 to 107.5 instructions a row; the program only states, in a few <code>assert</code>s, what it relies on.</p>
+            <div class="study-used"><strong>Used by</strong><code>fast.nika</code> · <code>fast-unsafe.nika</code> · <code>1brc.nika</code> (its temperature and counter checks)</div>
+          </div>
+          <div class="study-tile">
+            <h3>Letting the programmer vouch for the input</h3>
+            <p><code>unsafe { assume(claim) }</code> states what the input's format guarantees: a name of at most 100 bytes, fewer than 10 000 stations. Built with checks removed, each claim is believed and the checks it implies are gone; built with checks on, each is checked. <code>nikaia check --asserts</code> lists every claim.</p>
+            <div class="study-used"><strong>Used by</strong><code>fast-unsafe.nika</code></div>
+          </div>
+          <div class="study-tile">
+            <h3>Keeping the rare path out of the loop</h3>
+            <p>A station's first row copies its name into the table, once a station. Marked <code>@inline(never)</code>, that code stays out of the loop that runs once a row, and the loop keeps its values in registers: 6.7 instructions a row.</p>
+            <div class="study-used"><strong>Used by</strong><code>fast.nika</code> · <code>fast-unsafe.nika</code></div>
+          </div>
+          <div class="study-tile">
+            <h3>Checking UTF-8 once a name, not once a byte</h3>
+            <p>The fast Nikaia programs read the file as bytes and check a station's name as UTF-8 once, where it is printed. The Rust programs check nothing. The plain Nikaia program checks the whole file, about 10 instructions a row.</p>
+            <div class="study-used"><strong>Used by</strong><code>fast.nika</code> · <code>fast-unsafe.nika</code></div>
+          </div>
+          <div class="study-tile">
+            <h3>Using every core with one line</h3>
+            <p>The plain program is a grammar and a fold; <code>par_fold</code> cuts the file and merges the pieces, and whether it runs on one core or all of them is one line in <code>nikaia.toml</code>. The human programs write their threads by hand.</p>
+            <div class="study-used"><strong>Used by</strong><code>1brc.nika</code> · <code>fast.nika</code> · <code>fast-unsafe.nika</code></div>
+          </div>
+          <div class="study-tile study-wide">
+            <h3>Why the human program pulls ahead at <code>x86-64-v3</code></h3>
+            <p>beowolx gains 40 instructions a row from <code>x86-64</code> to <code>x86-64-v3</code>, the Nikaia programs about 4 to 6. About 16 of beowolx's 40 come from a hash that collides less once <code>crc32</code> is there: its baseline build is weak, and the gain recovers from that. About 22 come from code it compiles only for that level: the two-row AVX2 temperature parse, <code>bzhi</code> to mask the name, an SSE update of the stats.</p>
+            <p>Nikaia's own vector types (<code>simd::Fixed[u64, 2]</code>) can write the two-row parse, but measured it costs more than the scalar parse: the lowering does not yet keep the two lanes in one register. Masking the name with <code>bzhi</code> (<code>low_bits</code>) removes half the mispredicted branches but costs more instructions than the two branches it replaces.</p>
+            <div class="study-used"><strong>Used by</strong>beowolx; measured and not yet worth it in <code>fast.nika</code> and <code>fast-unsafe.nika</code></div>
+          </div>
+          </div>
+        </div>
 
-          <dt>5. Where the journey goes</dt>
-          <dd>
-          <div class="markdown-body" style="overflow-x:auto">
+        <div class="study-card markdown-body">
+          <h2>5. Where the journey goes</h2>
+          <div style="overflow-x:auto">
           <table>
             <thead>
-              <tr><th>Open item</th><th>Issue</th><th>Expected effect</th><th>State</th></tr>
+              <tr><th>Open item</th><th>Which program it helps</th><th>Expected effect</th><th>Issue</th><th>State</th></tr>
             </thead>
             <tbody>
-              <tr><td>The sums and counts of every slot proved over the whole fold, one summary for all slots</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/770">#770</a></td><td><code>fast.nika</code> toward <code>fast-unsafe.nika</code>'s 104.0</td><td>being built</td></tr>
-              <tr><td>The grammar's search for the next <code>;</code> a block at a time, as <code>find_all</code> does</td><td></td><td>the plain <code>1brc.nika</code>: <code>memchr</code> costs 27 a row</td><td>open</td></tr>
-                            <tr><td>The rest of the vector API, <code>crc32c</code> among it</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a></td><td>not estimated yet</td><td>left open on purpose</td></tr>
-              <tr><td>The plain program: no UTF-8 check of the whole file where the grammar checks what it keeps</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/664">#664</a></td><td>about −10 for <code>1brc.nika</code>, once its byte loop is as tight as its text loop</td><td>decided, waits</td></tr>
-                            <tr><td>The authors' AVX-512 builds, counted on another machine</td><td></td><td>rows of their own</td><td>waits for the machine</td></tr>
+              <tr><td>The sums and counts of every slot proved over the whole fold</td><td><code>fast.nika</code></td><td>the last 3.5 a row to <code>fast-unsafe.nika</code>'s 104.0</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/770">#770</a></td><td>decided; three questions open</td></tr>
+              <tr><td>The grammar's search for the next <code>;</code> a block at a time, as <code>find_all</code> does</td><td><code>1brc.nika</code></td><td><code>memchr</code> costs 27 a row today</td><td></td><td>open</td></tr>
+              <tr><td>No UTF-8 check of the whole file where the grammar checks what it keeps</td><td><code>1brc.nika</code></td><td>about −10, once its byte loop is as tight as its text loop</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/664">#664</a></td><td>decided, waits</td></tr>
+              <tr><td>Vector lanes kept in one register by the lowering, for the two-row temperature parse</td><td><code>fast.nika</code>, <code>fast-unsafe.nika</code> at <code>x86-64-v3</code></td><td>beowolx's parse is about 12 a row cheaper</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/775">#775</a></td><td>open</td></tr>
+              <tr><td>The rest of the vector API, <code>crc32c</code> among it</td><td><code>fast.nika</code>, <code>fast-unsafe.nika</code> at <code>x86-64-v3</code></td><td>not estimated yet</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a></td><td>left open on purpose</td></tr>
+              <tr><td>The authors' AVX-512 builds, counted on another machine</td><td>none: rows of their own for the human programs</td><td>–</td><td></td><td>waits for the machine</td></tr>
             </tbody>
           </table>
           </div>
-          <p>The effects are estimates from removing each check by hand in the generated Rust; they overlap and do not simply add up. Each row is counted again when it is built.</p>
-          </dd>
-        </dl>
+          <p>The effects are estimates from removing a check by hand in the generated Rust or from a measured prototype; they overlap and do not simply add up. Each row is counted again when it is built.</p>
+        </div>
 
-        <details class="limit-details home-code markdown-body">
+        <details class="study-card home-code markdown-body">
           <summary>The plain program: examples/1brc.nika</summary>
-          <pre><code class="language-nika" id="brc-program"><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/examples/1brc.nika">examples/1brc.nika on GitHub</a></code></pre>
-          <script>
-            fetch("https://raw.githubusercontent.com/Nikaia-Language/Nikaia/main/examples/1brc.nika")
-              .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
-              .then(function (text) { document.getElementById("brc-program").textContent = text; })
-              .catch(function () {});
-          </script>
+          <pre><code class="language-nika">{% include examples/1brc.nika.html %}</code></pre>
         </details>
-      </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>
       <ul><li><a href="https://github.com/Nikaia-Language/Nikaia/tree/main/benches/brc">Method and full tables (benches/brc)</a></li><li><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/examples/1brc.nika">The plain program: examples/1brc.nika</a></li><li><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/fast.nika">The safe hand-tuned program: fast.nika</a></li><li><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/fast-unsafe.nika">The unsafe one: fast-unsafe.nika</a></li></ul>

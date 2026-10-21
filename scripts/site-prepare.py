@@ -46,6 +46,7 @@ Usage:
     scripts/site-prepare.py [checkout-root]
 """
 
+import html
 import json
 import re
 import sys
@@ -133,6 +134,23 @@ def example_pages(root):
         )
 
     return written
+
+
+def example_includes(root):
+    """Each example program as an include a page can embed as code.
+
+    The text is escaped and wrapped in `raw`, so neither the HTML nor Liquid
+    reads it (an f-string's `{{` would be Liquid's); Shiki colours the
+    `<pre><code class="language-nika">` around it after Jekyll
+    (`scripts/site-highlight`)."""
+    examples = root / "examples"
+    if not examples.is_dir():
+        return
+    for program in sorted(examples.rglob("*.nika")):
+        text = html.escape(program.read_text(encoding="utf-8"), quote=False)
+        name = program.relative_to(examples).as_posix()
+        write(root / "_includes" / "examples" / (name + ".html"),
+              "{% raw %}" + text.rstrip("\n") + "{% endraw %}")
 
 
 def relink_examples_index(root, written):
@@ -282,6 +300,7 @@ def main():
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 
     written = example_pages(root)
+    example_includes(root)
     relink_examples_index(root, written)
     docs_index_permalink(root)
 
