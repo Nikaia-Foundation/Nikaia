@@ -163,6 +163,16 @@ varying length. Cut with `low_bits` and no branch instead, the program ran
 `0..=127` (five instructions a word); its mispredictions drop to 0.39. The
 table counts instructions, so the branches stay.
 
+**Why `fast-unsafe.nika` exists.** It is not there to show that Nikaia is
+cleverer than the people who wrote the fastest Rust programs; it uses their
+tricks. It is there to show that the language reaches as far: that every
+optimisation close to the hardware a tuned Rust program makes - a search a
+block at a time, a name read as words, a branch-free parse, an instruction
+chosen by the CPU level, claims about the input the compiler may believe -
+can be written in Nikaia, and where a claim is needed, with one `assume` the
+reader sees, not with `unsafe` spread through the program. `fast.nika` beside
+it shows how much of that the prover already makes safe.
+
 `fast-unsafe.nika`, its assumes believed, runs 4 % fewer instructions than
 `fast.nika` at both unit counts and 6 % fewer at `x86-64-v3`, and 33 %
 fewer than AI variant 2: its assumes drop the checks `fast.nika` still makes (the

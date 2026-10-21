@@ -5,6 +5,13 @@
 // removes checks they are believed, and the checks they imply are gone; in
 // one that removes none, each is checked. See `README.md`.
 //
+// Why it exists: to show that Nikaia reaches the hardware as far as the
+// fastest hand-tuned Rust does - the same instructions, the same tricks, the
+// same claims about the input - not that it is cleverer than the people who
+// wrote those programs. It is the proof that the language can express such
+// optimisations; `fast.nika` beside it shows how much of them the prover
+// already makes safe.
+//
 // What follows is `fast.nika`'s own description.
 //
 // The 1BRC aggregation written for speed against today's `std`, the
