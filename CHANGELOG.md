@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1176] — 2026-10-21
+
+**find_all cuts what it has not covered from the front**
+- `std`'s `find_all` keeps the bytes no block has covered as a slice it cuts with `split_first_chunk`, instead of finding them again from an offset at every block: one length test a block and no conditional moves. 1BRC's `fast-unsafe.nika` at `x86-64-v3`, 16 units: 0.9 instructions a row fewer.
+
 ## [0.0.1175] — 2026-10-21
 
 **a map compares text keys by words**
