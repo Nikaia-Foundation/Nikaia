@@ -58,7 +58,6 @@ comptime SLOTS: i64 = 16384
 // How far behind the last row start a word read may reach: a name of 100
 // bytes, its temperature and a word beyond.
 comptime MARGIN: i64 = 256
-comptime ONES: u64 = 0xFFFFFFFFFFFFFFFF
 
 fn table() -> Table {
     let mut slots: Vec[Slot] = []
@@ -72,11 +71,10 @@ impl Table {
     // The slot of the name `buf[pos..<pos + len]`, whose first sixteen bytes
     // are `w0` and `w1` (zeros past its end), taken where the name is new.
     fn slot_of(ref mut self, w0: u64, w1: u64, len: i64, buf: ref Bytes, pos: i64) -> i64 {
-        let mut at = 0
-        if CRC_IN_ONE {
-            at = (hash::crc32c(w0.truncating_u32(), w1) as i64) & (SLOTS - 1)
+        let mut at = if CRC_IN_ONE {
+            (hash::crc32c(w0.truncating_u32(), w1) as i64) & (SLOTS - 1)
         } else {
-            at = ((w0 ^ (w1 << 5)).wrapping_mul(0x9E3779B97F4A7C15) >> (64 - BITS)).bits_as_i64()
+            ((w0 ^ (w1 << 5)).wrapping_mul(0x9E3779B97F4A7C15) >> (64 - BITS)).bits_as_i64()
         }
         while true {
             // The table holds `SLOTS` slots and `at` is masked into them; a
@@ -127,14 +125,12 @@ impl Table {
             }
             // The name's first two words, zeros past its end.
             let len = sep - pos
-            let mut w0 = buf.u64_le(pos)
-            let mut w1 = buf.u64_le(pos + 8)
-            if len <= 8 {
-                w0 = w0 & (ONES >> (64 - 8 * len))
-                w1 = 0
-            } else if len < 16 {
-                w1 = w1.low_bits(8 * len - 64)
-            }
+            // A name has 1 to 100 bytes: with that, each word is cut to the
+            // name by one `bzhi` and a clamp, without a branch on the length,
+            // which names of varying length would mispredict.
+            unsafe { assume(len >= 1 && len <= 100) }
+            let w0 = buf.u64_le(pos).low_bits(8 * len)
+            let w1 = buf.u64_le(pos + 8).low_bits(8 * len - 64)
 
             let at = self.slot_of(w0, w1, len, buf, pos)
             unsafe {
