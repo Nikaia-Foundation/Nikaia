@@ -107,7 +107,7 @@ impl Table {
             // bytes behind it: its name of at most 100 bytes, the `;` and the
             // words read after it lie inside the input.
             unsafe {
-                assume(pos >= 0 && pos <= sep && sep - pos <= 100)
+                assume(pos >= 0 && pos < sep && sep - pos <= 100)
                 assume(sep + 16 <= buf.len())
             }
             // The name's first two words, zeros past its end.
@@ -134,9 +134,14 @@ impl Table {
             let abs = (digits.wrapping_mul(0x640A0001) >> 32) & 0x3FF
             unsafe { assume(abs <= 999 && (signed == 0 || signed == -1)) }
             let v = (abs.bits_as_i64() ^ signed) - signed
+            unsafe { assume(v >= -999 && v <= 999) }
 
             let at = self.slot_of(w0, w1, len, buf, pos)
-            unsafe { assume(at >= 0 && at < self.slots.len()) }
+            unsafe {
+                assume(at >= 0 && at < self.slots.len())
+                assume(self.slots[at].sum >= -1000000000000000 && self.slots[at].sum <= 1000000000000000)
+                assume(self.slots[at].count >= 0 && self.slots[at].count < 1000000000000)
+            }
             if v < self.slots[at].min { self.slots[at].min = v }
             if v > self.slots[at].max { self.slots[at].max = v }
             self.slots[at].sum += v
