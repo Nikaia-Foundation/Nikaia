@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1185] — 2026-10-21
+
+**find_all takes how it goes from one hit to the next**
+- `b.find_all(set; scan: bytes::Scan::AfterHit)` looks for each hit in the half block right after the one before; `Scan::ByBlock`, the default, is again the search before 0.0.1184 (ADR-375 D6).
+
 ## [0.0.1184] — 2026-10-21
 
 **find_all looks for the next hit right after the last one**
