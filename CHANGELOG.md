@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1180] — 2026-10-21
+
+**cpu::has: a program asks its CPU level (decided)**
+- ADR-371 D6, Part III chapter 16: `cpu::has(cpu::Instruction::Crc32c)` answers whether the CPU level the program is built for (`--cpu`) has an instruction, in a `comptime` for that level and not for the machine that builds; `Crc32c`, `Bmi2`, `Avx2` first. Not built yet.
+
 ## [0.0.1179] — 2026-10-21
 
 **hash::crc32c(crc, word)**
