@@ -13,7 +13,7 @@
 
 use std::cell::RefCell;
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// **How deep a build-time call may go.** The run's own thread has a stack
 /// that holds this many frames of any body the lowering writes, many times
@@ -32,12 +32,23 @@ pub const SAID: &str = "nikaia-build-time:";
 static LEFT: AtomicU64 = AtomicU64::new(u64::MAX);
 static BUDGET: AtomicU64 = AtomicU64::new(u64::MAX);
 
+/// Whether this process is a build-time run: [`start`] was called.
+static RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// **Whether this process is a build-time run**, which answers questions
+/// about the build (`target::has`) from what the compiler passed in rather than
+/// from how this process was compiled.
+pub fn running() -> bool {
+    RUNNING.load(Ordering::Relaxed)
+}
+
 thread_local! {
     static PATH: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
 }
 
 /// The budget this run may spend, set once before the value is computed.
 pub fn start(budget: u64) {
+    RUNNING.store(true, Ordering::Relaxed);
     BUDGET.store(budget, Ordering::Relaxed);
     LEFT.store(budget, Ordering::Relaxed);
 }

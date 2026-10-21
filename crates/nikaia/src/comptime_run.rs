@@ -1360,12 +1360,40 @@ fn bundle_of(flavour: Flavour) -> Result<Bundle, String> {
     })
 }
 
+/// **The CPU level this process builds for** (ADR-371 D6), as
+/// `Settings::cpu_key` resolves it: empty for the baseline, `native=...` for
+/// this machine. Set by the lowering before it checks a program.
+static CPU_LEVEL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// The lowering that follows builds for the CPU level `key`.
+pub(crate) fn build_for_cpu(key: String) {
+    if let Ok(mut held) = CPU_LEVEL.lock() {
+        *held = key;
+    }
+}
+
 /// **Compile and run one build-time program**, or hand back what it said when
 /// it ran before: its standard output, or `Wall::Refused` with what it wrote
 /// where it stopped. Keyed on the program, the toolchain and the bundle (D4).
 pub(crate) fn run(at: &Path, bundle: &Bundle, program: &str, name: &str) -> Result<String, Wall> {
-    let key =
-        crate::assets::digest(format!("{program}\n{}\n{}", toolchain(), bundle.stamp).as_bytes());
+    // **A program that asks `target::has` answers for the build's level**
+    // (ADR-371 D6): the level is in its key and handed to it; one that does
+    // not keeps one answer for every level.
+    let level = match program.contains("target::has") {
+        true => CPU_LEVEL
+            .lock()
+            .map(|held| held.clone())
+            .unwrap_or_default(),
+        false => String::new(),
+    };
+    let key = crate::assets::digest(
+        format!("{program}\n{}\n{}\n{level}", toolchain(), bundle.stamp).as_bytes(),
+    );
+    // What the run reads: the level's name, `native` for this machine's.
+    let named = match level.starts_with("native=") {
+        true => "native".to_string(),
+        false => level,
+    };
     let dir = at.join("comptime").join(&key);
     let answered = dir.join("answer");
     let stopped = dir.join("stopped");
@@ -1445,6 +1473,7 @@ pub(crate) fn run(at: &Path, bundle: &Bundle, program: &str, name: &str) -> Resu
     }
     let child = Command::new(&binary)
         .env("RUST_BACKTRACE", "0")
+        .env(nikaia_std::target::LEVEL_VAR, &named)
         .env(
             LIBRARY_PATH,
             std::env::join_paths(libraries).map_err(|e| did_not(e.to_string()))?,

@@ -1805,6 +1805,28 @@ sync = true
 touches = []
 signature = "(crc: u32, word: u64) -> u32"
 
+# ## The CPU level a program is built for (ADR-371 D6)
+#
+# **`target::has(i)` answers whether the level `--cpu` named has the instruction
+# `i`**, in a `comptime` as at run time: for the level, not for the machine
+# that builds or runs.
+
+# An instruction a CPU level may have: `Crc32c` (x86-64 from `x86-64-v2`,
+# AArch64 with `crc`), `Bmi2` and `Avx2` (x86-64 from `x86-64-v3`).
+[type."target::Instruction"]
+pub = true
+crosses = true
+compares = true
+copies = true
+variants = ["Crc32c", "Bmi2", "Avx2"]
+
+# Whether the CPU level the program is built for has `i`.
+[fn."target::has"]
+pub = true
+sync = true
+touches = []
+signature = "(i: target::Instruction) -> bool"
+
 # ## Arithmetic and conversions that may not fit (ADR-315)
 #
 # An overflow aborts (ADR-285 D1), and a conversion that may not fit aborts

@@ -71,6 +71,7 @@ pub mod simd;
 /// and the types it speaks in (ADR-328 D5).
 #[path = "supervision.rs"]
 pub mod supervisor;
+pub mod target;
 pub mod task;
 pub mod tether;
 /// **What a library's entry point reads from C and writes back to it**
@@ -670,9 +671,11 @@ pub mod prelude {
     // would make `http::Response` mean two things.
     // `hash::crc32c` (ADR-371 D5).
     pub use crate::hash;
+    // `target::has(target::Instruction::Crc32c)` (ADR-371 D6).
     pub use crate::http1;
     pub use crate::io;
     pub use crate::list::ListExt;
+    pub use crate::target;
     // `x.low_bits(n)` on `u8`, `u32` and `u64` (Part I): a method needs its
     // trait in scope.
     pub use crate::num::LowBits as _;

@@ -67,6 +67,9 @@ const PREFIX_VAR: &str = "NIKAIA_SYMBOL_PREFIX";
 /// Set where the build is `nikaia test`'s
 /// ([ADR-269](../../docs/specification/adr/adr-269.md) D1).
 const TESTS_VAR: &str = "NIKAIA_TESTS";
+/// The CPU level `--cpu` named, down the same channel, so that the wrapper's
+/// lowering answers `target::has` in a `comptime` for it (ADR-371 D6).
+const CPU_VAR: &str = "NIKAIA_CPU";
 const GEN_DIR_VAR: &str = "NIKAIA_GEN_DIR";
 /// What the program's crate name carries beyond its package's in the shared
 /// target directory (#495), for the wrapper to take off again.
@@ -455,6 +458,11 @@ impl Settings {
             self.tests
                 .then(|| (TESTS_VAR.to_string(), OsString::from("1"))),
         )
+        .chain(
+            self.cpu
+                .as_ref()
+                .map(|level| (CPU_VAR.to_string(), OsString::from(level))),
+        )
         .collect()
     }
 
@@ -486,7 +494,9 @@ impl Settings {
             symbol_prefix,
             tests: std::env::var_os(TESTS_VAR).is_some(),
             bind: None,
-            cpu: None,
+            cpu: std::env::var(CPU_VAR)
+                .ok()
+                .filter(|level| !level.is_empty()),
         })
     }
 
@@ -503,7 +513,7 @@ impl Settings {
     pub fn choices(&self) -> Choices {
         Choices::new(
             format!(
-                "{}/{}/{}{}{}{}{}{}{}{}",
+                "{}/{}/{}{}{}{}{}{}{}{}{}",
                 self.target,
                 self.user_parallelism,
                 self.reentrancy_check,
@@ -536,6 +546,12 @@ impl Settings {
                 match self.library() {
                     true => format!("/c-library:{}", self.symbol_prefix),
                     false => String::new(),
+                },
+                // A `comptime` that reads `target::has` answers for the level
+                // (ADR-371 D6), so the lowering is kept per level.
+                match self.cpu {
+                    Some(_) => format!("/cpu:{}", self.cpu_key().unwrap_or_default()),
+                    None => String::new(),
                 }
             ),
             "rust",
@@ -1147,6 +1163,8 @@ pub fn lower_reading(
     // **What this build may read, resolved before anything is read**
     // ([ADR-310](../../docs/specification/adr/adr-310.md) D4, D5).
     let reads = reads_for(&layout, allowlist)?;
+    // **The level `target::has` answers for in a `comptime`** (ADR-371 D6).
+    crate::comptime_run::build_for_cpu(settings.cpu_key().unwrap_or_default());
     let choices = match reads.list_digest() {
         Some(digest) => settings.choices().reading(digest),
         None => settings.choices(),

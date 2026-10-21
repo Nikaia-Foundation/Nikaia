@@ -243,6 +243,12 @@ pub fn cpu_levels(triple: &str) -> Result<Vec<String>> {
 /// never the word, so a cache directory moved to another machine is not
 /// taken for that machine's.
 pub fn native_cpu(triple: &str) -> Result<String> {
+    // Asked once a process: the key is read for each lowering and each cache.
+    static ASKED: std::sync::Mutex<BTreeMap<String, String>> =
+        std::sync::Mutex::new(BTreeMap::new());
+    if let Some(known) = ASKED.lock().ok().and_then(|held| held.get(triple).cloned()) {
+        return Ok(known);
+    }
     let said = rustc_cpus(triple, &["--print", "cfg", "-C", "target-cpu=native"])?;
     let cpu = said
         .lines()
@@ -254,7 +260,11 @@ pub fn native_cpu(triple: &str) -> Result<String> {
         .lines()
         .filter(|line| line.starts_with("target_feature="))
         .collect();
-    Ok(format!("native={cpu};{}", features.join(",")))
+    let key = format!("native={cpu};{}", features.join(","));
+    if let Ok(mut held) = ASKED.lock() {
+        held.insert(triple.to_string(), key.clone());
+    }
+    Ok(key)
 }
 
 /// `rustc --print target-cpus` for `triple`, with `more` arguments, started
