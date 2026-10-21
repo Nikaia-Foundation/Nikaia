@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1182] — 2026-10-21
+
+**target::has, built**
+- `std::target::has(target::Instruction::Crc32c | Bmi2 | Avx2)` (ADR-371 D6) answers for the `--cpu` level the program is built for, the same in a `comptime` and at run time; without `--cpu` the baseline's answer, only `--cpu=native` asks the building machine. A `comptime` that reads it, and the lowering, are kept per level (#778).
+
 ## [0.0.1181] — 2026-10-21
 
 **target::has, not cpu::has**
