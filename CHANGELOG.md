@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1178] — 2026-10-21
+
+**find_all's offset never passes the end of the run**
+- `std`'s `find_all` keeps the run and an offset again (0.0.1176 had made it a slice cut from the front), now one that never passes the run's end: the last, short block's bits are moved to the top of a block that ends where the run does. The bytes left are the run's length less the offset, without a conditional move, and a position stays offset arithmetic the caller can fold. 1BRC, 1 M rows, 1 unit, against 0.0.1175's `find_all`: `fast.nika` 107.4 -> 104.7 at `x86-64` and 103.4 -> 103.7 at `x86-64-v3`, `fast-unsafe.nika` 99.6 -> 97.9 and 96.6 -> 94.8.
+
 ## [0.0.1177] — 2026-10-21
 
 **a proved shift is written as the shift that may assume its count**

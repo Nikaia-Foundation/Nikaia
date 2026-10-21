@@ -254,17 +254,18 @@ impl Needle for &ByteSet {
 /// `find_all` hands back. It keeps the mask of the block it is in and the
 /// bytes no mask has covered yet, so `next` takes the lowest bit of a mask
 /// held in a register and reads the next block only when the mask is spent:
-/// one length test a block, no bounds check, and the uncovered bytes cut
-/// from the front rather than found again from an offset. Its own `count`, `nth` and
-/// `last` (D4) read whole blocks: a count adds the bits of each mask and
+/// one length test a block, and an offset that never passes the end, so
+/// that the bytes left are the run's length less it, without a conditional
+/// move. Its own `count`, `nth` and `last` (D4) read whole blocks: a count adds the bits of each mask and
 /// makes no position.
 #[derive(Clone, Debug)]
 pub struct FindAll<'a, S: Blocks = ByteSet> {
-    /// The bytes no mask has covered yet.
-    rest: &'a [u8],
+    /// The whole run searched: it does not change, so only `at` and `mask`
+    /// change from one position to the next.
+    hay: &'a [u8],
     set: S,
-    /// Where `rest` starts in the run searched; bit 0 of `mask` stands a
-    /// block before it.
+    /// Where the bytes no mask has covered yet start, never past the end;
+    /// bit 0 of `mask` stands a block before it.
     at: usize,
     /// The hits of the current block not handed out yet.
     mask: u64,
@@ -281,29 +282,37 @@ impl<'a, S: Blocks> FindAll<'a, S> {
             .min(hay.len());
         let start = if set.holds_none() { hay.len() } else { start };
         FindAll {
-            rest: &hay[start..],
+            hay,
             set,
             at: start,
             mask: 0,
         }
     }
 
+    /// The bytes no mask has covered yet.
+    #[inline(always)]
+    fn rest(&self) -> &'a [u8] {
+        &self.hay[self.at..]
+    }
+
     /// The next block's mask into `mask`; `false` at the end. A whole block
     /// costs one length test; the last, short one is the cold path.
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        match self.rest.split_first_chunk::<BLOCK>() {
-            Some((block, tail)) => {
+        let rest = self.rest();
+        match rest.first_chunk::<BLOCK>() {
+            Some(block) => {
                 self.mask = self.set.mask(block);
-                self.rest = tail;
+                self.at += BLOCK;
             }
-            None if self.rest.is_empty() => return false,
+            None if rest.is_empty() => return false,
+            // The short block's bits are moved to the top of a block that
+            // ends where the run does, so that `at` stays inside the run.
             None => {
-                self.mask = self.set.short_mask(self.rest);
-                self.rest = &[];
+                self.mask = self.set.short_mask(rest) << (BLOCK - rest.len());
+                self.at = self.hay.len();
             }
         }
-        self.at += BLOCK;
         true
     }
 }
@@ -320,14 +329,14 @@ impl<S: Blocks> Iterator for FindAll<'_, S> {
         }
         let bit = self.mask.trailing_zeros() as usize;
         self.mask &= self.mask - 1;
-        Some((self.at.wrapping_sub(BLOCK) + bit) as i64)
+        Some(self.at.wrapping_sub(BLOCK).wrapping_add(bit) as i64)
     }
 
     /// **A count adds the bits of each block's mask** (ADR-375 D4): no
     /// position is made.
     fn count(self) -> usize {
         let mut n = self.mask.count_ones() as usize;
-        let mut rest = self.rest;
+        let mut rest = self.rest();
         while let Some((block, tail)) = rest.split_first_chunk::<BLOCK>() {
             n += self.set.mask(block).count_ones() as usize;
             rest = tail;
@@ -359,7 +368,7 @@ impl<S: Blocks> Iterator for FindAll<'_, S> {
 
     /// **The last is looked for from the end**, block by block (ADR-375 D4).
     fn last(self) -> Option<i64> {
-        let rest = self.rest;
+        let rest = self.rest();
         if !rest.is_empty() {
             let mut from = (rest.len() - 1) / BLOCK * BLOCK;
             loop {
@@ -379,12 +388,16 @@ impl<S: Blocks> Iterator for FindAll<'_, S> {
         }
         match self.mask {
             0 => None,
-            mask => Some((self.at.wrapping_sub(BLOCK) + 63 - mask.leading_zeros() as usize) as i64),
+            mask => Some(
+                self.at
+                    .wrapping_sub(BLOCK)
+                    .wrapping_add(63 - mask.leading_zeros() as usize) as i64,
+            ),
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let left = self.rest.len() + self.mask.count_ones() as usize;
+        let left = self.rest().len() + self.mask.count_ones() as usize;
         (0, Some(left))
     }
 }
