@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1183] — 2026-10-21
+
+**The prover reads if expressions and comptime conditions**
+- A value bound from an `if` expression lies in the join of its arms' ranges, each arm under its condition; an `if` on a module `comptime` of type `bool` has only the facts of the arm the build takes.
+
 ## [0.0.1182] — 2026-10-21
 
 **target::has, built**
