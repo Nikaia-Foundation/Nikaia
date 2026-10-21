@@ -135,7 +135,7 @@ syntax](guide/syntax.md) shows the language on one page.
 A preliminary comparison on the One Billion Row Challenge, counted with callgrind
 ([benches/brc](benches/brc/README.md)), instructions a row at 16 codegen units: the fastest
 Rust program written by a person runs 131, an AI-written one after several measured rounds
-(AI variant 2) 147, Nikaia's safe `fast.nika` 108 and its plain `examples/1brc.nika` 223;
+(AI variant 2) 147, Nikaia's safe `fast.nika` 108 and its plain `examples/1brc.nika` 209;
 `fast-unsafe.nika`, the same program with its claims written `unsafe { assume(…) }`, runs 104.
 
 ---

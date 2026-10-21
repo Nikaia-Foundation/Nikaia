@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1175] — 2026-10-21
+
+**a map compares text keys by words**
+- Every map is `std`'s own type over hashbrown's table (ADR-296 D42). A text key is compared a word at a time with no `memcmp`, hashed inline up to 16 bytes, and found with the probe inlined into a fold; the hash values and the iteration order are unchanged. 1BRC: 235.0 -> 209.2 instructions a row at 1 unit, 222.9 -> 208.8 at 16.
+
 ## [0.0.1174] — 2026-10-20
 
 **a proved index is a place without its check**
