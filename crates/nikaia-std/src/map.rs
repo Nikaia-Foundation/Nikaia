@@ -1038,3 +1038,20 @@ mod tests {
         assert_eq!(a, b);
     }
 }
+
+/// A map of views is rebased as `std`'s and hashbrown's are (`tether`), key by
+/// key and value by value.
+impl<'a, K, V, S> crate::tether::Rebase<'a> for HashMap<K, V, S>
+where
+    K: crate::tether::Rebase<'a>,
+    K::At: Eq + Hash,
+    V: crate::tether::Rebase<'a>,
+    S: BuildHasher + Default,
+{
+    type At = HashMap<K::At, V::At, S>;
+    fn rebase<const N: usize>(self, keeps: &crate::tether::Keeps<'a, N>) -> Self::At {
+        self.into_iter()
+            .map(|(key, value)| (key.rebase(keeps), value.rebase(keeps)))
+            .collect()
+    }
+}
