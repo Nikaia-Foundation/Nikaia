@@ -1767,13 +1767,11 @@ body {
 
 .home-split-text h2 code { font-size: 0.8em; }
 
-/* The 1BRC study: each part its own card, the techniques as tiles. */
+/* The 1BRC study. Running text stands on the page, not in a box, so that a
+   phone gives it the whole width; a box is kept for small things with little
+   or no text: the "Used by" line of a technique, the program's source. */
 .study-card {
-  margin: 24px 0 0;
-  padding: 22px 24px;
-  border: 1px solid var(--nk-border);
-  border-radius: 12px;
-  background-color: var(--nk-bg);
+  margin: 36px 0 0;
 }
 .study-card > h2 {
   margin: 0 0 12px;
@@ -1784,33 +1782,31 @@ body {
 .study-tiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 8px 32px;
 }
 .study-tile {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--nk-border);
-  border-radius: 12px;
-  background-color: var(--nk-bg);
-  overflow: hidden;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--nk-border);
 }
 .study-tile h3 {
   margin: 0;
-  padding: 18px 20px 0;
   font-size: 17px;
 }
 .study-tile p {
-  margin: 10px 0 0;
-  padding: 0 20px;
+  margin: 8px 0 0;
   color: var(--nk-fg-muted);
   font-size: 15px;
   line-height: 1.55;
 }
-.study-tile p:last-of-type { margin-bottom: 18px; }
+.study-tile p:last-of-type { margin-bottom: 12px; }
 .study-used {
   margin-top: auto;
-  padding: 10px 20px;
-  border-top: 1px solid var(--nk-border);
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
   background-color: var(--nk-surface);
   font-size: 13px;
   color: var(--nk-fg-muted);
@@ -1823,7 +1819,12 @@ body {
 .study-wide { grid-column: 1 / -1; }
 .study-card pre { max-width: 100%; overflow-x: auto; }
 .study-card table { font-size: 14px; }
+/* The program's source is a box: a disclosure with code and no prose. */
+details.study-card {
+  padding: 14px 16px;
+  border: 1px solid var(--nk-border);
+  border-radius: 12px;
+}
 @media (max-width: 760px) {
   .study-tiles { grid-template-columns: minmax(0, 1fr); }
-  .study-card { padding: 18px 16px; }
 }
