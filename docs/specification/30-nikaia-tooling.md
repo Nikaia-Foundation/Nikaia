@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1180 (Draft)
+**Version:** 0.0.1181 (Draft)
 **Date:** 2026-10-21
 
 ---
@@ -856,8 +856,8 @@ time. No `unsafe` is written for any of it; the assembly below is for what neith
 of `word`'s eight bytes, lowest first, continued from `crc`, with no inversion before or after
 ([ADR-371](adr/adr-371.md) D5). Its value is the same on every target.
 
-`cpu::has(i: cpu::Instruction) -> bool` answers whether the CPU level the program is built for
-(`--cpu`, 13.3) has the instruction `i`: `Crc32c` (x86-64 from `x86-64-v2`, AArch64 with `crc`),
+`target::has(i: target::Instruction) -> bool` answers whether the CPU level the program is built for
+(`--cpu`, 13.3; without it the target's baseline, never the machine that builds) has the instruction `i`: `Crc32c` (x86-64 from `x86-64-v2`, AArch64 with `crc`),
 `Bmi2` and `Avx2` (x86-64 from `x86-64-v3`). In a `comptime` (Part II 10.2) it answers for that
 level, not for the machine that builds; at run time it answers the same. A `comptime` result that
 reads it is kept per CPU level ([ADR-371](adr/adr-371.md) D6).

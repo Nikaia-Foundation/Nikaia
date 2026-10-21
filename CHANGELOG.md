@@ -8,10 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1181] — 2026-10-21
+
+**target::has, not cpu::has**
+- ADR-371 D6, Part III chapter 16: the query of the CPU level a program is built for is `target::has(target::Instruction::X)`, a question to the build's target, not to the CPU the program runs on; without `--cpu` it answers for the target's baseline, never for the machine that builds. Owner's direction.
+
 ## [0.0.1180] — 2026-10-21
 
-**cpu::has: a program asks its CPU level (decided)**
-- ADR-371 D6, Part III chapter 16: `cpu::has(cpu::Instruction::Crc32c)` answers whether the CPU level the program is built for (`--cpu`) has an instruction, in a `comptime` for that level and not for the machine that builds; `Crc32c`, `Bmi2`, `Avx2` first. Not built yet.
+**target::has: a program asks its CPU level (decided)**
+- ADR-371 D6, Part III chapter 16: `target::has(target::Instruction::Crc32c)` answers whether the CPU level the program is built for (`--cpu`) has an instruction, in a `comptime` for that level and not for the machine that builds; `Crc32c`, `Bmi2`, `Avx2` first. Not built yet.
 
 ## [0.0.1179] — 2026-10-21
 
