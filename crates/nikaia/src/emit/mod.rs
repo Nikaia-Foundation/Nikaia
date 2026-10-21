@@ -1977,6 +1977,7 @@ impl<'p> Emitter<'p> {
                 shifts: &propagation.shifts,
                 std_receivers: &propagation.std_receivers,
                 simd_loads: &propagation.simd_loads,
+                comptime_values: &propagation.comptime_values,
             },
             &[&published_contracts, std_ledger()],
             &std::collections::BTreeSet::new(),

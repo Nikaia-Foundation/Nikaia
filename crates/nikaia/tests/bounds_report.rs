@@ -129,3 +129,58 @@ fn a_mask_by_a_constant_is_proved_as_the_literal_is() {
         assert!(line.trim_end().ends_with("proved"), "{out}");
     }
 }
+
+/// The line `--bounds` writes for `site`.
+fn site_line<'a>(out: &'a str, site: &str) -> &'a str {
+    out.lines()
+        .find(|l| l.contains(site))
+        .unwrap_or_else(|| panic!("no line for `{site}`:\n{out}"))
+        .trim_end()
+}
+
+/// **An `if` expression lies where both its arms do**: a value bound from
+/// one is in the join of its arms' ranges, each arm under its condition.
+#[test]
+fn an_index_bound_from_an_if_expression_is_proved_by_the_join_of_its_arms() {
+    let source = "fn main() {\n\
+         \x20   let a: Array[i64, 16] = [0; 16]\n\
+         \x20   let h: i64 = 77 * 31\n\
+         \x20   let i = if h > 3 { h & 7 } else { 15 }\n\
+         \x20   let j = if h > 3 { h & 7 } else { 16 }\n\
+         \x20   let k = if h < 16 && h >= 0 { h } else { 0 }\n\
+         \x20   println(f\"{a[i]} {a[j]} {a[k]}\")\n\
+         }\n";
+    let out = report(source, BoundsChecks::Removed, OverflowChecks::Removed);
+    assert!(site_line(&out, "a[i]").ends_with("proved"), "{out}");
+    assert!(site_line(&out, "a[j]").contains("checked"), "{out}");
+    assert!(site_line(&out, "a[k]").ends_with("proved"), "{out}");
+}
+
+/// **A `comptime` condition takes one arm**: an `if` on a `bool` the build
+/// computed has the facts of the arm it takes, as a value and as a
+/// statement; the other arm is not in the program.
+#[test]
+fn an_if_on_a_comptime_bool_has_the_facts_of_the_arm_it_takes() {
+    let source = "comptime WIDE: bool = 64 > 32\n\
+         comptime NARROW: bool = 1 > 2\n\
+         fn main() {\n\
+         \x20   let a: Array[i64, 16] = [0; 16]\n\
+         \x20   let h: i64 = 77 * 31\n\
+         \x20   let i = if WIDE { h & 15 } else { 99 }\n\
+         \x20   let j = if NARROW { 99 } else { h & 15 }\n\
+         \x20   let k = if !NARROW { h & 15 } else { 99 }\n\
+         \x20   let m = if WIDE { 99 } else { h & 15 }\n\
+         \x20   let mut n = 0\n\
+         \x20   if WIDE {\n\
+         \x20       n = h & 15\n\
+         \x20   } else {\n\
+         \x20       n = 99\n\
+         \x20   }\n\
+         \x20   println(f\"{a[i]} {a[j]} {a[k]} {a[m]} {a[n]}\")\n\
+         }\n";
+    let out = report(source, BoundsChecks::Removed, OverflowChecks::Removed);
+    for site in ["a[i]", "a[j]", "a[k]", "a[n]"] {
+        assert!(site_line(&out, site).ends_with("proved"), "{site}: {out}");
+    }
+    assert!(site_line(&out, "a[m]").contains("checked"), "{out}");
+}

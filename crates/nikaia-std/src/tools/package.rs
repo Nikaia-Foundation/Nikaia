@@ -2526,6 +2526,7 @@ pub struct BoundsContext {
     pub whole_fields: collections::BTreeSet<i64>,
     pub array_lengths: collections::BTreeMap<i64, i64>,
     pub through_loops: bool,
+    pub decided: collections::BTreeMap<String, bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2672,8 +2673,8 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
             if ty.starts_with('u') { bounding_at_least_zero(walk, &mut facts, &name); }
         }
         if ty == "Vec" || ty == "List" || ty == "Array" {
-            let __keep_16893 = nikaia_std::tether::Keep::new();
-            bounding_at_least_zero(walk, &mut facts, (&__keep_16893).put(length_of(&name)));
+            let __keep_17090 = nikaia_std::tether::Keep::new();
+            bounding_at_least_zero(walk, &mut facts, (&__keep_17090).put(length_of(&name)));
         }
     }
     for (name, range) in context.given.iter() {
@@ -2686,8 +2687,8 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
     for (name, range) in context.text_lengths.iter() {
         let range = *range;
         if !walk.shape.bound.contains(name) {
-            let __keep_17448 = nikaia_std::tether::Keep::new();
-            bounding_bounded(walk, &mut facts, (&__keep_17448).put(length_of(name)), &range);
+            let __keep_17645 = nikaia_std::tether::Keep::new();
+            bounding_bounded(walk, &mut facts, (&__keep_17645).put(length_of(name)), &range);
         }
     }
     bounding_block(walk, body, &mut facts, context, program, words, ask);
@@ -2855,6 +2856,59 @@ fn bounding_range(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, conte
             let base = nikaia_std::boxed::open(base);
             let key = match elements_key(&walk.shape, base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return bounding_assumed(&walk, &key);
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); return bounding_if_range(walk, cond, then_branch, (else_branch).as_ref(), facts, context, program, words, ask); },
+        _ => { },
+    }
+    None
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bounding_if_range(walk: &mut BoundsWalk, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> Option<Range> {
+    let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let decided = bounding_decided(&walk, cond, context, words);
+    let mut then_range: Option<Range> = None;
+    if nikaia_std::index::or(decided, || true) {
+        let mut then_facts = facts.clone();
+        bounding_assume(walk, &mut then_facts, cond, context, program, words);
+        then_range = bounding_arm_range(walk, then_branch, &then_facts, context, program, words, ask);
+        if decided.is_some() { return then_range; }
+    }
+    let mut else_facts = facts.clone();
+    bounding_assume_not(walk, &mut else_facts, cond, context, program, words);
+    let else_range = match bounding_arm_range(walk, otherwise, &else_facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if decided.is_some() { return Some(else_range); }
+    let first = match then_range { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let joined = first.join(&else_range);
+    if joined.is_bounded() { return Some(joined); }
+    None
+}
+
+fn bounding_arm_range(walk: &mut BoundsWalk, arm: &Block, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> Option<Range> {
+    if arm.stmts.len() != 1 { return None; }
+    match &nikaia_std::index::get(&arm.stmts, 0).node {
+        Stmt::Expr(value) => bounding_range(walk, value, facts, context, program, words, ask),
+        _ => None,
+    }
+}
+
+fn bounding_decided(walk: &BoundsWalk, cond: &Expr, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> Option<bool> {
+    match cond {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let text = words.resolve(name);
+            if walk.shape.bound.contains(text) { return None; }
+            return (*nikaia_std::index::get(&context.decided, text)).copied();
+        },
+        Expr::Unary { op, expr, .. } => {
+            let expr = nikaia_std::boxed::open(expr);
+            match op {
+                UnaryOp::Not => {
+                    let inner = match bounding_decided(walk, expr, context, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    return Some(!inner);
+                },
+                _ => { },
+            }
         },
         _ => { },
     }
@@ -3808,7 +3862,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
-            let __keep_78872 = nikaia_std::tether::Keep::new();
+            let __keep_82071 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 Expr::Field { .. } => {
@@ -4412,8 +4466,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
         bounding_push(&walk, facts, fact);
     }
     for list in filled.iter() {
-        let __keep_112657 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_112657).put(length_of(list)), count);
+        let __keep_115856 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_115856).put(length_of(list)), count);
     }
 }
 
@@ -4561,10 +4615,12 @@ fn bounding_if_leaves(walk: &mut BoundsWalk, cond: &Expr, then_branch: &Block, e
     bounding_expr(walk, cond, facts, context, program, words, ask);
     let mut then_facts = facts.clone();
     bounding_assume(walk, &mut then_facts, cond, context, program, words);
-    let then_leaves = bounding_block(walk, then_branch, &mut then_facts, context, program, words, ask);
+    let mut then_leaves = bounding_block(walk, then_branch, &mut then_facts, context, program, words, ask);
     let mut else_facts = facts.clone();
     bounding_assume_not(walk, &mut else_facts, cond, context, program, words);
-    let else_leaves = bounding_maybe_block(walk, else_branch, &mut else_facts, context, program, words, ask);
+    let mut else_leaves = bounding_maybe_block(walk, else_branch, &mut else_facts, context, program, words, ask);
+    let decided = bounding_decided(&walk, cond, context, words);
+    if decided.is_some() { if nikaia_std::index::or(decided, || false) { else_leaves = true; } else { then_leaves = true; } }
     if then_leaves && else_leaves { return true; }
     if then_leaves {
         facts.ints = else_facts.ints;

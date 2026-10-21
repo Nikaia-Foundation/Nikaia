@@ -182,6 +182,9 @@ pub struct Sites<'a> {
     pub std_receivers: &'a BTreeMap<i64, String>,
     /// [`crate::check::CheckFacts::simd_loads`] (ADR-377 D3).
     pub simd_loads: &'a BTreeMap<i64, i64>,
+    /// [`crate::check::CheckFacts::comptime_values`]: a module's `comptime`
+    /// of type `bool` decides an `if` on it.
+    pub comptime_values: &'a BTreeMap<i64, (String, String)>,
 }
 
 impl<'a> Sites<'a> {
@@ -198,8 +201,30 @@ impl<'a> Sites<'a> {
             shifts: &facts.shifts,
             std_receivers: &facts.std_receivers,
             simd_loads: &facts.simd_loads,
+            comptime_values: &facts.comptime_values,
         }
     }
+}
+
+/// **The module's `comptime`s of type `bool`**, by name, with what the build
+/// computed for each.
+fn decided(parsed: &Parsed, values: &BTreeMap<i64, (String, String)>) -> BTreeMap<String, bool> {
+    let mut out = BTreeMap::new();
+    for item in &parsed.program.items {
+        let Item::Comptime { name, .. } = &item.node else {
+            continue;
+        };
+        let Some((below, written)) = values.get(&(item.span.start as i64)) else {
+            continue;
+        };
+        let value = match (below.as_str(), written.trim()) {
+            ("bool", "true") => true,
+            ("bool", "false") => false,
+            _ => continue,
+        };
+        out.insert(parsed.text(*name).to_string(), value);
+    }
+    out
 }
 
 /// `sites` are what may be read and proved; `ledgers` answer what a callee
@@ -223,6 +248,7 @@ pub fn proven(
         shifts,
         std_receivers,
         simd_loads,
+        comptime_values,
     } = *sites;
     let mut out = Proven::default();
     let mut functions: BTreeMap<String, Vec<bool>> = BTreeMap::new();
@@ -300,6 +326,7 @@ pub fn proven(
         whole_fields: whole_fields.iter().copied().collect(),
         array_lengths: array_lengths.iter().map(|(k, v)| (*k, *v)).collect(),
         through_loops,
+        decided: decided(parsed, comptime_values),
     };
     let mut bodies: Vec<&Spanned<Item>> = Vec::new();
     for item in &parsed.program.items {

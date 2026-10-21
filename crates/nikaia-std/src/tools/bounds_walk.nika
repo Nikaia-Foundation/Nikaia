@@ -73,6 +73,9 @@ pub struct BoundsContext {
     /// **`prove-through-loops:on`** (ADR-361 D10): a check a loop leaves
     /// open is asked once more through the loop's invariant.
     pub through_loops: bool,
+    /// **A `comptime` of the module of type `bool`, by name, with what the
+    /// build computed for it**: an `if` on it takes one arm only.
+    pub decided: collections::BTreeMap[String, bool],
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -589,6 +592,73 @@ fn bounding_range(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFacts, 
         Expr::Index { base, .. } => {
             let key = elements_key(walk.shape, base, words) ?? return null
             return bounding_assumed(walk, key)
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => return bounding_if_range(walk, cond, then_branch, else_branch, facts, context, program, words, ask),
+        else => {},
+    }
+    return null
+}
+
+/// **An `if` expression lies where both its arms do**: the join of each
+/// arm's range, each under its condition. Where the condition is a `comptime`
+/// the build decided, the arm it takes.
+fn bounding_if_range(mut walk: BoundsWalk, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Range? {
+    let otherwise = else_branch ?? return null
+    let decided = bounding_decided(walk, cond, context, words)
+    let mut then_range: Range? = null
+    if decided ?? true {
+        let mut then_facts = facts.clone()
+        bounding_assume(walk, then_facts, cond, context, program, words)
+        then_range = bounding_arm_range(walk, then_branch, then_facts, context, program, words, ask)
+        if decided != null {
+            return then_range
+        }
+    }
+    let mut else_facts = facts.clone()
+    bounding_assume_not(walk, else_facts, cond, context, program, words)
+    let else_range = bounding_arm_range(walk, otherwise, else_facts, context, program, words, ask) ?? return null
+    if decided != null {
+        return else_range
+    }
+    let first = then_range ?? return null
+    let joined = first.join(else_range)
+    if joined.is_bounded() {
+        return joined
+    }
+    return null
+}
+
+/// The range of an arm that is only its value: an arm that binds a name
+/// first may bind one the facts speak of.
+fn bounding_arm_range(mut walk: BoundsWalk, arm: ref Block, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Range? {
+    if arm.stmts.len() != 1 {
+        return null
+    }
+    return match arm.stmts[0].node {
+        Stmt::Expr(value) => bounding_range(walk, value, facts, context, program, words, ask),
+        else => null,
+    }
+}
+
+/// **The value the build computed for a condition**: a `comptime` of the
+/// module of type `bool` the body does not bind again, or `!` of one.
+fn bounding_decided(walk: ref BoundsWalk, cond: ref Expr, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> bool? {
+    match cond {
+        Expr::Variable(name, _) => {
+            let text = words.resolve(name)
+            if walk.shape.bound.contains(text) {
+                return null
+            }
+            return context.decided[text]
+        },
+        Expr::Unary { op, expr, .. } => {
+            match op {
+                UnaryOp::Not => {
+                    let inner = bounding_decided(walk, expr, context, words) ?? return null
+                    return !inner
+                },
+                else => {},
+            }
         },
         else => {},
     }
@@ -2846,10 +2916,20 @@ fn bounding_if_leaves(mut walk: BoundsWalk, cond: ref Expr, then_branch: ref Blo
     bounding_expr(walk, cond, facts, context, program, words, ask)
     let mut then_facts = facts.clone()
     bounding_assume(walk, then_facts, cond, context, program, words)
-    let then_leaves = bounding_block(walk, then_branch, then_facts, context, program, words, ask)
+    let mut then_leaves = bounding_block(walk, then_branch, then_facts, context, program, words, ask)
     let mut else_facts = facts.clone()
     bounding_assume_not(walk, else_facts, cond, context, program, words)
-    let else_leaves = bounding_maybe_block(walk, else_branch, else_facts, context, program, words, ask)
+    let mut else_leaves = bounding_maybe_block(walk, else_branch, else_facts, context, program, words, ask)
+    // **The arm a `comptime` condition does not take is not in the
+    // program**: what holds after the `if` is what the other arm leaves.
+    let decided = bounding_decided(walk, cond, context, words)
+    if decided != null {
+        if decided ?? false {
+            else_leaves = true
+        } else {
+            then_leaves = true
+        }
+    }
     if then_leaves && else_leaves {
         return true
     }
