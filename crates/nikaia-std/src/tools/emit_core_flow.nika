@@ -454,15 +454,17 @@ impl EmitState {
         if self.proven_arithmetic.contains_key(site) && !wide.widen && !wide.inferred {
             let ty = (self.proven_arithmetic.get(site) ?? "").clone()
             // **A shift proved to count inside its type's width** (ADR-306
-            // D18) is the one Rust's release build writes: the count masked,
-            // which for a count in `0..<w` is the count itself.
+            // D18) is written as the shift that may assume it, as a proved
+            // index is read without its test: a masked count would hide the
+            // count's range from the optimiser below, which then cannot tell
+            // `x & (ONES >> (64 - 8 * n))` is `x`'s low `8 * n` bits.
             if op == BinaryOp::Shl || op == BinaryOp::Shr {
-                let shift = if op == BinaryOp::Shl { "wrapping_shl" } else { "wrapping_shr" }
-                out.push(f"<{ty}>::{shift}(")
+                let shift = if op == BinaryOp::Shl { "unchecked_shl" } else { "unchecked_shr" }
+                out.push(f"unsafe {{ <{ty}>::{shift}(")
                 host.expr(walk, out, lhs, depth, wide, scope)
                 out.push(", (")
                 host.expr(walk, out, rhs, depth, wide, scope)
-                out.push(") as u32)")
+                out.push(") as u32) }")
                 return
             }
             let name = emit_flow_wrapping(op)

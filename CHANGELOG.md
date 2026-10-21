@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1177] — 2026-10-21
+
+**a proved shift is written as the shift that may assume its count**
+- A shift whose count the walk proves inside its type's width (ADR-306 D18) is lowered as `unchecked_shl`/`unchecked_shr`, as a proved index is read without its test, instead of `wrapping_shl`/`wrapping_shr`: the masked count hid the count's range from LLVM, so `x & (ONES >> (64 - 8 * n))` did not become one `bzhi`. 1BRC's `fast-unsafe.nika` at `x86-64-v3`, 16 units: 95.9 -> 93.7 instructions a row.
+
 ## [0.0.1176] — 2026-10-21
 
 **find_all cuts what it has not covered from the front**

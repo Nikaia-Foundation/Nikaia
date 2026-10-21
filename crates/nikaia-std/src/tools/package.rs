@@ -38052,12 +38052,12 @@ impl EmitState {
         if self.proven_arithmetic.contains_key(&site) && !wide.widen && !wide.inferred {
             let ty = nikaia_std::index::or(self.proven_arithmetic.get(&site), || "").to_owned();
             if op == BinaryOp::Shl || op == BinaryOp::Shr {
-                let shift = if op == BinaryOp::Shl { "wrapping_shl" } else { "wrapping_shr" };
-                out.push(&format!("<{}>::{}(", ty, shift));
+                let shift = if op == BinaryOp::Shl { "unchecked_shl" } else { "unchecked_shr" };
+                out.push(&format!("unsafe {{ <{}>::{}(", ty, shift));
                 host.expr(walk, out, lhs, depth, wide, scope)?;
                 out.push(", (");
                 host.expr(walk, out, rhs, depth, wide, scope)?;
-                out.push(") as u32)");
+                out.push(") as u32) }");
                 return Ok(());
             }
             let name = emit_flow_wrapping(op);

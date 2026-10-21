@@ -44,7 +44,7 @@ fn unchecked_indexes(rust: &str) -> usize {
 
 /// Operations written without their overflow check.
 fn unchecked_arithmetic(rust: &str) -> usize {
-    rust.matches(">::wrapping_").count()
+    rust.matches(">::wrapping_").count() + rust.matches(">::unchecked_sh").count()
 }
 
 fn run(purpose: &str, source: &str, level: Level) -> (bool, String, String) {
@@ -158,8 +158,8 @@ fn main() {
 
 /// ADR-306 D18: a shift's count the walk proves inside `0..<64` - here from
 /// `trailing_zeros`'s `0..=64` and the guard - is written as Rust's release
-/// build writes it, `wrapping_shl`, and so is the `28 - k` it is made of;
-/// at `off` both keep their checks.
+/// without its check as the shift that may assume it, `unchecked_shl`, and
+/// so is the `28 - k` it is made of; at `off` both keep their checks.
 #[test]
 fn a_shift_proved_inside_its_width_is_written_without_its_check() {
     let source = "\
@@ -177,7 +177,7 @@ fn main() {
 ";
     assert_eq!(unchecked_arithmetic(&lowered(source, Level::Off)), 0);
     let rust = lowered(source, Level::Aggressive);
-    assert!(rust.contains("<u64>::wrapping_shl("), "{rust}");
+    assert!(rust.contains("<u64>::unchecked_shl("), "{rust}");
     assert!(rust.contains("<u32>::wrapping_sub("), "{rust}");
     prints("proved-shift", source, "16777216 0 768\n");
 }
