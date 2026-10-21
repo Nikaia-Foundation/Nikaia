@@ -37600,6 +37600,9 @@ impl EmitState {
                 out.push("]), ");
                 let from = emit_call_option_named(world, config, "from");
                 if !from.is_empty() { host.expr(walk, out, nikaia_std::index::get(&from, 0), depth, flow, scope)?; } else { out.push("0"); }
+                out.push(", ");
+                let scan = emit_call_option_named(world, config, "scan");
+                if !scan.is_empty() { host.expr(walk, out, nikaia_std::index::get(&scan, 0), depth, flow, scope)?; } else { out.push("nikaia_std::bytes::Scan::ByBlock"); }
                 out.push(")");
                 return Ok(());
             }

@@ -912,6 +912,13 @@ impl EmitState {
                 } else {
                     out.push("0")
                 }
+                out.push(", ")
+                let scan = emit_call_option_named(world, config, "scan")
+                if scan.len() > 0 {
+                    host.expr(walk, out, scan[0], depth, flow, scope)
+                } else {
+                    out.push("nikaia_std::bytes::Scan::ByBlock")
+                }
                 out.push(")")
                 return
             }

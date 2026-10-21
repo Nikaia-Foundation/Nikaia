@@ -5429,13 +5429,25 @@ signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
 # `find_all` is the one named here; a step between them is another sequence.
 # **Each position lies at or after `from` and inside the bytes** (ADR-375 D5):
 # a fact for the bounds walk on the name a `for` binds.
+# **How it goes from one hit to the next is the program's** (ADR-375 D6):
+# `ByBlock` reads the next block when the last one's hits are spent,
+# `AfterHit` looks for each hit in the half block right after the one before.
 [fn."Bytes::find_all"]
 pub = true
 sync = true
 touches = []
 consumers = ["count", "nth", "last"]
 ensures_each = ["from <= item", "item < self.len()"]
-signature = "(ref self, set: bytes::ByteSet; from: i64 = 0) -> Seq[i64] sync"
+signature = "(ref self, set: bytes::ByteSet; from: i64 = 0, scan: bytes::Scan = bytes::Scan::ByBlock) -> Seq[i64] sync"
+
+# How `find_all` goes from one hit to the next (ADR-375 D6): by block, or
+# after each hit; both yield the same positions.
+[type."bytes::Scan"]
+pub = true
+crosses = true
+compares = true
+copies = true
+variants = ["ByBlock", "AfterHit"]
 
 # The pieces between the bytes of `set`, each a view into the bytes, by text's
 # `split` rules (ADR-375 D3): neighbouring bytes of the set give an empty

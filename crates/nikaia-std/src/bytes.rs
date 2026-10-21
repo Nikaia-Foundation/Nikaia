@@ -19,7 +19,7 @@
 
 use shared_bytes::Shared;
 
-pub use crate::byteset::{Blocks, ByteSet, Few, FindAll, Needle, Searched, Split, split};
+pub use crate::byteset::{Blocks, ByteSet, Few, FindAll, Needle, Scan, Searched, Split, split};
 
 /// A run of bytes that several holders may share
 /// ([ADR-283](../../../docs/specification/adr/adr-283.md) D20, ADR-373 D1):
@@ -104,10 +104,10 @@ impl Bytes {
     }
 
     /// Every position at or after `from` that holds a byte of `set`, rising
-    /// (ADR-375 D3).
+    /// (ADR-375 D3), going from one hit to the next as `scan` says (D6).
     #[inline]
-    pub fn find_all<S: Searched>(&self, set: S, from: i64) -> FindAll<'_, S::Blocks> {
-        FindAll::new(self.as_slice(), set.blocks(), from)
+    pub fn find_all<S: Searched>(&self, set: S, from: i64, scan: Scan) -> FindAll<'_, S::Blocks> {
+        FindAll::new(self.as_slice(), set.blocks(), from).scan(scan)
     }
 
     /// The pieces between the bytes of `set`, by text's `split` rules
@@ -169,7 +169,7 @@ pub trait ByteReads {
     fn find<N: Needle>(&self, byte: N, from: i64) -> Option<i64>;
     /// Every position of a byte of `set` from `from`: [`Bytes::find_all`].
     /// (`split` is [`split`]: a slice's own `split` would be the one called.)
-    fn find_all<S: Searched>(&self, set: S, from: i64) -> FindAll<'_, S::Blocks>;
+    fn find_all<S: Searched>(&self, set: S, from: i64, scan: Scan) -> FindAll<'_, S::Blocks>;
     /// The 4 bytes from `at`, least significant first: [`Bytes::u32_le`].
     fn u32_le(&self, at: i64) -> u32;
     /// The 4 bytes from `at`, most significant first: [`Bytes::u32_be`].
@@ -196,8 +196,8 @@ impl ByteReads for [u8] {
     }
 
     #[inline]
-    fn find_all<S: Searched>(&self, set: S, from: i64) -> FindAll<'_, S::Blocks> {
-        FindAll::new(self, set.blocks(), from)
+    fn find_all<S: Searched>(&self, set: S, from: i64, scan: Scan) -> FindAll<'_, S::Blocks> {
+        FindAll::new(self, set.blocks(), from).scan(scan)
     }
 
     #[inline]

@@ -264,27 +264,45 @@ impl Needle for &ByteSet {
     }
 }
 
+/// **How `find_all` goes from one hit to the next** (ADR-375 D6): both
+/// yield the same positions; which costs less depends on how far apart the
+/// hits lie.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum Scan {
+    /// The mask of a block is kept, and the next block read once its hits
+    /// are spent: a hit costs a lowest bit and a cleared one, and the test
+    /// whether the mask is spent is mispredicted about once a block.
+    #[default]
+    ByBlock,
+    /// The half block right after each hit is compared and its first hit
+    /// taken; whole blocks are read only where that half holds none. A hit
+    /// costs a compare, and where the next hit is mostly within half a block
+    /// the test whether one was found is predicted.
+    AfterHit,
+}
+
 /// **Every position of a byte of the set, rising** (ADR-375 D3): what
-/// `find_all` hands back. `next` compares the half block that starts right
-/// after the last hit and takes its lowest bit, and reads whole blocks only
-/// where that half holds none: where hits are near one another, as the
-/// separators of rows are, the test whether one was found goes the same way
-/// almost every time and is predicted, which a mask kept from block to
-/// block, spent after a varying number of hits, is not. Its own `count`,
-/// `nth` and `last` (D4) read whole blocks and keep the mask between them: a
-/// count adds the bits of each mask and makes no position, and `next` hands
-/// out what `nth` left in the mask before it reads again.
+/// `find_all` hands back, by block or after each hit ([`Scan`]). By block it
+/// keeps the mask of the block it is in and the bytes no mask has covered
+/// yet, so `next` takes the lowest bit of a mask held in a register and reads
+/// the next block only when the mask is spent: one length test a block, and
+/// an offset that never passes the end. Its own `count`, `nth` and `last`
+/// (D4) read whole blocks under either: a count adds the bits of each mask
+/// and makes no position, and `next` hands out what `nth` left in the mask
+/// before it reads again.
 #[derive(Clone, Debug)]
 pub struct FindAll<'a, S: Blocks = ByteSet> {
     /// The whole run searched: it does not change, so only `at` and `mask`
     /// change from one position to the next.
     hay: &'a [u8],
     set: S,
-    /// Where the bytes not searched yet start, never past the end; while
-    /// `mask` holds hits, its bit 0 stands a block before it.
+    /// Where the bytes no mask has covered yet start, never past the end;
+    /// while `mask` holds hits, its bit 0 stands a block before it. After a
+    /// hit ([`Scan::AfterHit`]) it is right after the hit.
     at: usize,
     /// The hits of the current block not handed out yet.
     mask: u64,
+    scan: Scan,
 }
 
 impl<'a, S: Blocks> FindAll<'a, S> {
@@ -302,7 +320,14 @@ impl<'a, S: Blocks> FindAll<'a, S> {
             set,
             at: start,
             mask: 0,
+            scan: Scan::ByBlock,
         }
+    }
+
+    /// The same search, going from one hit to the next as `scan` says.
+    #[inline]
+    pub fn scan(self, scan: Scan) -> FindAll<'a, S> {
+        FindAll { scan, ..self }
     }
 
     /// The bytes no mask has covered yet.
@@ -347,7 +372,12 @@ impl<S: Blocks> Iterator for FindAll<'_, S> {
 
     #[inline]
     fn next(&mut self) -> Option<i64> {
-        if self.mask != 0 {
+        if self.scan == Scan::ByBlock || self.mask != 0 {
+            while self.mask == 0 {
+                if !self.advance() {
+                    return None;
+                }
+            }
             let bit = self.mask.trailing_zeros() as usize;
             self.mask &= self.mask - 1;
             return Some(self.at.wrapping_sub(BLOCK).wrapping_add(bit) as i64);
@@ -501,7 +531,7 @@ pub fn split<'a, R: AsRef<[u8]> + ?Sized>(run: &'a R, set: impl Into<ByteSet>) -
 
 #[cfg(test)]
 mod tests {
-    use super::{Blocks, ByteSet, Few, FindAll, Needle, Split};
+    use super::{Blocks, ByteSet, Few, FindAll, Needle, Scan, Split};
 
     /// What a [`Few`] finds, counts and finds last against the [`ByteSet`] of
     /// the same bytes.
@@ -515,6 +545,8 @@ mod tests {
                 let want: Vec<i64> = FindAll::new(&hay, set, from).collect();
                 let got: Vec<i64> = FindAll::new(&hay, few, from).collect();
                 assert_eq!(got, want, "{members:?} {n} {from}");
+                let after: Vec<i64> = FindAll::new(&hay, few, from).scan(Scan::AfterHit).collect();
+                assert_eq!(after, want, "{members:?} {n} {from}");
                 assert_eq!(FindAll::new(&hay, few, from).count(), want.len());
                 assert_eq!(FindAll::new(&hay, few, from).last(), want.last().copied());
                 assert_eq!(FindAll::new(&hay, few, from).nth(2), want.get(2).copied());
@@ -579,6 +611,15 @@ mod tests {
                         .collect();
                     let got: Vec<i64> = FindAll::new(&hay, set, from).collect();
                     assert_eq!(got, want, "{members:?} {n} {from}");
+                    for scan in [Scan::ByBlock, Scan::AfterHit] {
+                        let mut walk = FindAll::new(&hay, set, from).scan(scan);
+                        let got: Vec<i64> = walk.clone().collect();
+                        assert_eq!(got, want, "{members:?} {n} {from} {scan:?}");
+                        walk.next();
+                        assert_eq!(walk.clone().count(), want.len().saturating_sub(1));
+                        assert_eq!(walk.nth(1), want.get(2).copied());
+                        assert_eq!(walk.next(), want.get(3).copied());
+                    }
                     assert_eq!(FindAll::new(&hay, set, from).count(), want.len());
                     assert_eq!(FindAll::new(&hay, set, from).last(), want.last().copied());
                     assert_eq!(set.first_in(&hay, from), want.first().copied());
@@ -622,9 +663,9 @@ mod tests {
                 ] {
                     let got: Vec<i64> = FindAll::new(&hay, set, 0).collect();
                     assert_eq!(got, want, "{gap} {n}");
-                    let got: Vec<i64> = FindAll::new(&hay, Few(*b";"), 0).collect();
-                    assert_eq!(got, want, "{gap} {n}");
-                    let mut walk = FindAll::new(&hay, set, 0);
+                    let few = FindAll::new(&hay, Few(*b";"), 0).scan(Scan::AfterHit);
+                    assert_eq!(few.collect::<Vec<i64>>(), want, "{gap} {n}");
+                    let mut walk = FindAll::new(&hay, set, 0).scan(Scan::AfterHit);
                     assert_eq!(walk.next(), want.first().copied());
                     assert_eq!(walk.clone().nth(1), want.get(2).copied());
                     assert_eq!(walk.clone().count(), want.len().saturating_sub(1));

@@ -144,14 +144,21 @@ fn a_count_right_after_find_all_is_its_own() {
         "byte-sets-count",
         "use std::bytes\n\nfn main() {\n    let seps = bytes::ByteSet([';'])\n    let data = Bytes(['a', ';'])\n    let n = data.find_all(seps).count()\n    let m = data.find_all(seps).filter(fn(p) { p > 0 }).count()\n    println(f\"{n} {m}\")\n}\n",
     );
-    assert!(rust.contains("data.find_all(seps, 0).count()"), "{rust}");
-    assert!(rust.contains("data.find_all(seps, 0).filter("), "{rust}");
+    assert!(
+        rust.contains("data.find_all(seps, 0, bytes::Scan::ByBlock).count()"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("data.find_all(seps, 0, bytes::Scan::ByBlock).filter("),
+        "{rust}"
+    );
 }
 
 /// `find_all` and `split` against a byte-by-byte reference written in Nikaia,
 /// on pseudo-random buffers of every length from 0 to 199 (every block
 /// border), from positions inside a block, with bytes above `0x7F` and sets
-/// of one, two, three and more bytes.
+/// of one, two, three and more bytes; by block and after each hit
+/// (ADR-375 D6).
 const AGAINST_A_REFERENCE: &str = "use std::bytes\n\
 \n\
 fn reference(data: ref Vec[u8], members: ref Vec[u8], from: i64) -> Vec[i64] {\n\
@@ -191,6 +198,16 @@ fn main() {\n\
                     if s < from || s >= data.len() {\n\
                         wrong += 1\n\
                     }\n\
+                }\n\
+                let after: Vec[i64] = data.find_all(set; from: from, scan: bytes::Scan::AfterHit).collect()\n\
+                let after_count = data.find_all(set; from: from, scan: bytes::Scan::AfterHit).count()\n\
+                let after_one: Vec[i64] = data.find_all(bytes::ByteSet([';']); from: from, scan: bytes::Scan::AfterHit).collect()\n\
+                if after != want || after_count != want.len() {\n\
+                    wrong += 1\n\
+                }\n\
+                let semis: Vec[u8] = [';']\n\
+                if after_one != reference(raw, semis, from) {\n\
+                    wrong += 1\n\
                 }\n\
                 let want_first = if want.len() > 0 { want[0] } else { -1 }\n\
                 let want_last = if want.len() > 0 { want[want.len() - 1] } else { -1 }\n\
@@ -429,14 +446,19 @@ fn main() {\n\
 fn a_set_written_at_find_all_is_fixed_when_compiling() {
     let rust = lowered("byte-sets-few", WRITTEN_AT_FIND_ALL);
     assert!(
-        rust.contains("b.find_all(nikaia_std::bytes::Few([b';', b'\\x0a']), 0)"),
+        rust.contains("b.find_all(nikaia_std::bytes::Few([b';', b'\\x0a']), 0, nikaia_std::bytes::Scan::ByBlock)"),
         "{rust}"
     );
     assert!(
-        rust.contains("b.find_all(nikaia_std::bytes::Few([b';']), 1)"),
+        rust.contains(
+            "b.find_all(nikaia_std::bytes::Few([b';']), 1, nikaia_std::bytes::Scan::ByBlock)"
+        ),
         "{rust}"
     );
-    assert!(rust.contains("b.find_all(seps, 1)"), "{rust}");
+    assert!(
+        rust.contains("b.find_all(seps, 1, bytes::Scan::ByBlock)"),
+        "{rust}"
+    );
     assert_eq!(run("byte-sets-few-run", WRITTEN_AT_FIND_ALL), "23 23 3 2\n");
 }
 
