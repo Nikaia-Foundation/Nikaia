@@ -27,11 +27,12 @@ trace = ["winnow-grammar/trace"]
 compiler = []
 
 [dependencies]
-# **A map is `hashbrown`'s table, directly** (#420, #434): `std`'s `HashMap`
-# wraps the same table, but its `entry` reserves one slot on every call, which
-# cost 1BRC 27 of its 300 instructions a row. Both kinds of map, keyed and
-# trusted, are this one type with their hasher (`hash.rs`); no default hasher,
-# because the compiler always names one.
+# **A map is `std`'s own type over `hashbrown`'s table** (#420, #434, ADR-296
+# D42; `src/map.rs`): `std`'s `HashMap` wraps the same table, but its `entry`
+# reserves one slot on every call, which cost 1BRC 27 of its 300 instructions
+# a row, and `hashbrown`'s map compares a text key with `memcmp`. Both kinds
+# of map, keyed and trusted, are this one type with their hasher (`hash.rs`);
+# no default hasher, because the compiler always names one.
 hashbrown = { version = "0.17", default-features = false }
 # **`Bytes::find` is `memchr`** (ADR-320 D6, #701): a word-wide search for one
 # byte, never a loop over them. Already in every build through `winnow`.
@@ -58,6 +59,10 @@ proven-index = { path = "../unsafe/proven-index" }
 byte-blocks = { path = "../unsafe/byte-blocks" }
 # `x.low_bits(n)` as one `bzhi` where the build has BMI2 (ADR-371 D2).
 low-bits = { path = "../unsafe/low-bits" }
+# Whether a map's key type is text, decided per type when compiling, and its
+# bytes where it is: a text key is hashed and compared a word at a time
+# (ADR-296 D42).
+text-key = { path = "../unsafe/text-key" }
 # A child waited for with `wait4`, so `process::run` reports what that one
 # program used (ADR-368 D3).
 child-usage = { path = "../unsafe/child-usage" }

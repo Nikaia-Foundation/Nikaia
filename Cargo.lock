@@ -507,6 +507,7 @@ dependencies = [
  "rustc-hash",
  "shared-bytes",
  "tether",
+ "text-key",
  "unicode-normalization",
  "unicode-segmentation",
  "winnow 0.7.15",
@@ -820,6 +821,10 @@ version = "0.1.0"
 dependencies = [
  "hashbrown 0.17.1",
 ]
+
+[[package]]
+name = "text-key"
+version = "0.1.0"
 
 [[package]]
 name = "tinyvec"

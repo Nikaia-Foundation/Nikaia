@@ -1,5 +1,6 @@
-//! **A map is `hashbrown`'s table, keyed or trusted** (#420, #434): both kinds
-//! of `HashMap` lower to `hashbrown::HashMap` with the hasher each had before,
+//! **A map is `std`'s own type over `hashbrown`'s table, keyed or trusted**
+//! (#420, #434, ADR-296 D42): both kinds of `HashMap` lower to it with the
+//! hasher each had before,
 //! and a program using the whole of what the language offers on a map compiles
 //! and prints the same under either.
 
@@ -114,15 +115,16 @@ fn a_keyed_map_is_hashbrowns_table_with_the_keyed_hash() {
 }
 
 /// The types are the ones the program wrote: `nikaia_std`'s `HashMap` is
-/// `hashbrown`'s, with the keyed hasher by default and the fast one in
-/// `TrustedMap`.
+/// `std`'s own type over `hashbrown`'s table (ADR-296 D42), with the keyed
+/// hasher by default and the fast one in `TrustedMap`.
 #[test]
-fn the_maps_are_hashbrowns() {
+fn the_maps_are_stds_own() {
     let keyed = std::any::type_name::<nikaia_std::collections::HashMap<String, i64>>();
-    assert!(keyed.starts_with("hashbrown::"), "{keyed}");
-    assert!(keyed.ends_with("RandomState>"), "{keyed}");
+    assert!(keyed.starts_with("nikaia_std::map::HashMap<"), "{keyed}");
+    // The keyed hasher is the type's default, which `type_name` leaves out.
+    assert!(!keyed.contains("FxHasher"), "{keyed}");
     let fast = std::any::type_name::<nikaia_std::collections::TrustedMap<String, i64>>();
-    assert!(fast.starts_with("hashbrown::"), "{fast}");
+    assert!(fast.starts_with("nikaia_std::map::HashMap<"), "{fast}");
     assert!(fast.contains("FxHasher"), "{fast}");
 }
 
@@ -140,6 +142,12 @@ fn rustcs_words_for_the_table_are_the_programs() {
     assert_eq!(
         in_this_language("`hashbrown::hash_map::Entry<'_, String, i64, std::hash::RandomState>`"),
         "`Entry<'_, String, i64>`"
+    );
+    assert_eq!(
+        in_this_language(
+            "expected `nikaia_std::map::HashMap<&str, i64, BuildHasherDefault<FxHasher>>`, found `nikaia_std::map::Entry<'_, &str, i64, RandomState>`"
+        ),
+        "expected `HashMap<&str, i64>`, found `Entry<'_, &str, i64>`"
     );
     // A map whose types nothing pins: the hasher is the keyed one's default,
     // and the message names the two the program left open.

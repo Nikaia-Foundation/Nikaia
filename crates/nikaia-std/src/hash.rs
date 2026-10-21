@@ -28,17 +28,15 @@
 
 use std::hash::{BuildHasherDefault, Hasher};
 
-/// **A map**: `hashbrown`'s table, with the keyed hasher unless the type names
-/// another (#420). `std`'s `HashMap` is the same table behind a wrapper whose
-/// `entry` reserves a slot on every call, found or not; this one does not.
+/// **A map**: `std`'s own type over `hashbrown`'s table (`map.rs`,
+/// ADR-296 D42), with the keyed hasher unless the type names another (#420).
+/// `std`'s `HashMap` is the same table behind a wrapper whose `entry` reserves
+/// a slot on every call, found or not; this one does not, and it compares and
+/// hashes a text key a word at a time.
 ///
-/// It has no `new`, because `hashbrown` writes `new` only for a default hasher
-/// of its own: a map is made with `default()`, and the alias's default fills
-/// the hasher in where the type is not written.
-pub type HashMap<K, V, S = Keyed> = hashbrown::HashMap<K, V, S>;
-
-/// The place in a [`HashMap`] a key names, filled or not.
-pub use hashbrown::hash_map::Entry;
+/// A map is made with `default()`: the type's default fills the hasher in
+/// where the type is not written.
+pub use crate::map::{Entry, HashMap};
 
 /// A `HashMap` for keys the operator chose.
 pub type TrustedMap<K, V> = HashMap<K, V, Fast>;
@@ -172,21 +170,56 @@ fn half(bytes: &[u8]) -> u64 {
 /// 223, for the cost of one call a key.
 #[inline(never)]
 fn hash_bytes(bytes: &[u8]) -> u64 {
+    if bytes.len() <= 16 {
+        hash_short(bytes)
+    } else {
+        hash_long(bytes)
+    }
+}
+
+/// [`hash_bytes`] of up to 16 bytes, inline: the first and the last word.
+#[inline(always)]
+fn hash_short(bytes: &[u8]) -> u64 {
     let len = bytes.len();
     let mut s0 = SEED1;
     let mut s1 = SEED2;
-    if len <= 16 {
-        if len >= 8 {
-            s0 ^= word(bytes);
-            s1 ^= word(&bytes[len - 8..]);
-        } else if len >= 4 {
-            s0 ^= half(bytes);
-            s1 ^= half(&bytes[len - 4..]);
-        } else if len > 0 {
-            s0 ^= bytes[0] as u64;
-            s1 ^= ((bytes[len - 1] as u64) << 8) | bytes[len / 2] as u64;
-        }
+    if len >= 8 {
+        s0 ^= word(bytes);
+        s1 ^= word(&bytes[len - 8..]);
+    } else if len >= 4 {
+        s0 ^= half(bytes);
+        s1 ^= half(&bytes[len - 4..]);
+    } else if len > 0 {
+        s0 ^= bytes[0] as u64;
+        s1 ^= ((bytes[len - 1] as u64) << 8) | bytes[len / 2] as u64;
+    }
+    multiply_mix(s0, s1) ^ len as u64
+}
+
+/// **What [`FxHasher`] gives a text** (`str`'s `Hash`: the bytes, then the
+/// byte `0xff`), worked out without a hasher: the map's hash of a text key
+/// under the fast hasher (`map.rs`). A key of up to 16 bytes is hashed inline,
+/// a longer one by the call.
+#[inline(always)]
+pub(crate) fn fx_text(bytes: &[u8]) -> u64 {
+    let word = if bytes.len() <= 16 {
+        hash_short(bytes)
     } else {
+        hash_long(bytes)
+    };
+    let mut h = FxHasher::default();
+    h.add(word);
+    h.add(0xff);
+    h.finish()
+}
+
+/// [`hash_bytes`] of more than 16 bytes.
+#[inline(never)]
+fn hash_long(bytes: &[u8]) -> u64 {
+    let len = bytes.len();
+    let mut s0 = SEED1;
+    let mut s1 = SEED2;
+    {
         let mut off = 0;
         while off < len - 16 {
             let x = word(&bytes[off..]);

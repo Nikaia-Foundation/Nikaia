@@ -55,6 +55,7 @@ pub mod index;
 pub mod io;
 pub mod list;
 pub mod lock;
+pub mod map;
 pub mod net;
 pub mod node_id;
 pub mod num;

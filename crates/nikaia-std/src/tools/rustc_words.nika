@@ -22,9 +22,12 @@ pub fn in_this_language(message: ref String) -> String {
     out = replaced(out, "lock::Local", "Locked")
     out = replaced(out, "Crossing<", "Locked<")
     out = replaced(out, "Local<", "Locked<")
-    // **A map is `hashbrown`'s table** (#420), with the keyed hasher named
-    // where the program wrote none: the crate and the hasher go, the map
-    // stays.
+    // **A map is `std`'s own type over `hashbrown`'s table** (#420, ADR-296
+    // D42), with the keyed hasher named where the program wrote none: the
+    // crate and the hasher go, the map stays.
+    out = replaced(out, "nikaia_std::map::Entry", "Entry")
+    out = replaced(out, "nikaia_std::map::HashMap", "HashMap")
+    out = replaced(out, "nikaia_std::hash::HashMap", "HashMap")
     out = replaced(out, "hashbrown::hash_map::Entry", "Entry")
     out = replaced(out, "hashbrown::map::Entry", "Entry")
     out = replaced(out, "hashbrown::map::HashMap", "HashMap")

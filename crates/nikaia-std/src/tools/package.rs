@@ -57867,6 +57867,9 @@ pub fn in_this_language(message: &str) -> String {
     out = replaced(&out, "lock::Local", "Locked");
     out = replaced(&out, "Crossing<", "Locked<");
     out = replaced(&out, "Local<", "Locked<");
+    out = replaced(&out, "nikaia_std::map::Entry", "Entry");
+    out = replaced(&out, "nikaia_std::map::HashMap", "HashMap");
+    out = replaced(&out, "nikaia_std::hash::HashMap", "HashMap");
     out = replaced(&out, "hashbrown::hash_map::Entry", "Entry");
     out = replaced(&out, "hashbrown::map::Entry", "Entry");
     out = replaced(&out, "hashbrown::map::HashMap", "HashMap");
