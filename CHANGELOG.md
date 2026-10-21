@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1186] — 2026-10-21
+
+**`low_bits` cuts by a count up to 255 with one bzhi**
+- A signed count of `low_bits` is held to `0..=255` for `bzhi`, as `BitCount::index` documents, not to `0..=127`: a count the program already knows to be at most 255 needs no clamp above, so a name cut to its 16 bytes costs one `bzhi` a word.
+
 ## [0.0.1185] — 2026-10-21
 
 **find_all takes how it goes from one hit to the next**

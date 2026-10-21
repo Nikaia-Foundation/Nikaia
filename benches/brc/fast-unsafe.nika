@@ -62,6 +62,8 @@ comptime BITS: i64 = 14
 // in the binary.
 comptime CRC_IN_ONE: bool = target::has(target::Instruction::Crc32c)
 comptime SLOTS: i64 = 16384
+// Whether the CPU level cuts a word to its low bits in one instruction.
+comptime CUT_IN_ONE: bool = target::has(target::Instruction::Bmi2)
 // How far behind the last row start a word read may reach: a name of 100
 // bytes, its temperature and a word beyond.
 comptime MARGIN: i64 = 256
@@ -139,11 +141,15 @@ impl Table {
             // The name's first two words, zeros past its end.
             let len = sep - pos
             // A name has 1 to 100 bytes: with that, each word is cut to the
-            // name by one `bzhi` and a clamp, without a branch on the length,
-            // which names of varying length would mispredict.
+            // name without a branch on the length, which names of varying
+            // length would mispredict. Where `bzhi` cuts, the length is first
+            // held to the 16 bytes the words cover, so `bzhi` needs no clamp
+            // of its own above; elsewhere the cut's compare already does it.
             unsafe { assume(len >= 1 && len <= 100) }
-            let w0 = buf.u64_le(pos).low_bits(8 * len)
-            let w1 = buf.u64_le(pos + 8).low_bits(8 * len - 64)
+            let cut = if CUT_IN_ONE { len.min(16) } else { len }
+            unsafe { assume(cut >= 1 && cut <= 100) }
+            let w0 = buf.u64_le(pos).low_bits(8 * cut)
+            let w1 = buf.u64_le(pos + 8).low_bits(8 * cut - 64)
 
             let at = self.slot_of(w0, w1, len, buf, pos)
             unsafe {

@@ -18,6 +18,7 @@ use std::bytes
 use std::cli
 use std::collections
 use std::fs
+use std::target
 use std::task
 
 struct Slot {
@@ -39,6 +40,8 @@ struct Table {
 
 comptime BITS: i64 = 14
 comptime SLOTS: i64 = 16384
+// Whether the CPU level cuts a word to its low bits in one instruction.
+comptime CUT_IN_ONE: bool = target::has(target::Instruction::Bmi2)
 // How far behind the last row start a word read may reach: a name of 100
 // bytes, its temperature and a word beyond.
 comptime MARGIN: i64 = 256
@@ -99,11 +102,14 @@ impl Table {
         for sep in buf.find_all(bytes::ByteSet([';']); scan: bytes::Scan::AfterHit) {
             // The name's first two words, zeros past its end: each cut to
             // the name without a branch on the length, which names of
-            // varying length would mispredict.
+            // varying length would mispredict. Where `bzhi` cuts, the length
+            // is first held to the 16 bytes the words cover, so `bzhi` needs
+            // no clamp of its own above.
             let len = sep - pos
             assert(len >= 0 && len <= 100; message: "a station's name has at most 100 bytes")
-            let w0 = buf.u64_le(pos).low_bits(8 * len)
-            let w1 = buf.u64_le(pos + 8).low_bits(8 * len - 64)
+            let cut = if CUT_IN_ONE { len.min(16) } else { len }
+            let w0 = buf.u64_le(pos).low_bits(8 * cut)
+            let w1 = buf.u64_le(pos + 8).low_bits(8 * cut - 64)
 
             let at = self.slot_of(w0, w1, len, buf, pos)
             // The temperature, `-?d?d.d`, from one word: where the `.` is

@@ -258,7 +258,7 @@ macro_rules! signed_count {
                 }
                 #[inline(always)]
                 fn index(self) -> u8 {
-                    self.clamp(0, 127) as u8
+                    (self.max(0) as u128).min(255) as u8
                 }
             }
         )*
