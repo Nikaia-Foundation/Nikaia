@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1184] — 2026-10-21
+
+**find_all looks for the next hit right after the last one**
+- `FindAll::next` compares the half block right after the last hit and reads whole blocks only where it holds none, so that the test whether a hit was found is predicted where hits are near one another; `byte-blocks` masks a block or half of one.
+
 ## [0.0.1183] — 2026-10-21
 
 **The prover reads if expressions and comptime conditions**
