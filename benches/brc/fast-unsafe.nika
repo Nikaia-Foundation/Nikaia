@@ -124,7 +124,11 @@ impl Table {
     fn run(ref mut self, buf: ref Bytes, stop: i64) {
         if stop == 0 { return }
         let mut pos = 0
-        for sep in buf.find_all(bytes::ByteSet([';'])) {
+        // A row is about 14 bytes, so the next `;` lies mostly within half a
+        // block of the last: looked for right after each one, the test
+        // whether it was found is predicted, where a block's mask runs out
+        // after a varying number of rows.
+        for sep in buf.find_all(bytes::ByteSet([';']); scan: bytes::Scan::AfterHit) {
             // A row starts at `pos`, before `stop`, which leaves `MARGIN`
             // bytes behind it: its name of at most 100 bytes, the `;` and the
             // words read after it lie inside the input.
