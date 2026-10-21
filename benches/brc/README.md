@@ -8,7 +8,7 @@ the same aggregation written in Rust:
 | program | what it is |
 |---|---|
 | [`naive.rs`](src/bin/naive.rs) | what a competent Rust programmer writes first: `read_to_string`, `str::lines`, `split_once`, a `HashMap` with the default hasher |
-| [`naive.nika`](naive.nika) | the same in Nikaia: `fs::read_to_string`, `lines`, `find` and `split_at` at the `;`, the temperature read digit by digit as `naive.rs` reads it, `std`'s `HashMap` (`hashbrown`'s table, with Fx hashing) |
+| [`naive.nika`](naive.nika) | the same in Nikaia: `fs::read_to_string`, `lines`, `find` and `split_at` at the `;`, the temperature read digit by digit as `naive.rs` reads it, `std`'s `HashMap` (its own type over `hashbrown`'s table, with Fx hashing and text keys compared by words) |
 | [`ai1.rs`](src/bin/ai1.rs), AI variant 1 | written by an AI assistant at medium effort, in one request, as an optimised solution; what a 1BRC entry looks like before it is parallelised: `mmap` (`unsafe`), raw bytes with **no UTF-8 validation**, one `memchr` searcher over the whole file, the separator found by walking back from the line's end, integer temperatures, a word-at-a-time hash |
 | [`ai2.rs`](src/bin/ai2.rs), AI variant 2 | written by the same AI assistant over several rounds, each measured with callgrind and improved: a SIMD compare finds the `;` (SSE2; AVX2 where the CPU level has it), a word hash of the name (crc32c where the CPU level has it), a branch-free temperature parse, an own open-addressing table, the end of the input run from a padded copy so that nothing reads past the end; `mmap` and `unsafe` throughout, **no UTF-8 validation** |
 | [`examples/1brc.nika`](../../examples/1brc.nika) | a grammar over the whole file, a `par_fold`, names that are slices of a mapped file, `std`'s `HashMap` |
@@ -48,7 +48,9 @@ benches/brc/brc.sh 200000     # quicker
   Nikaia's also the grammar runtime's `advance`. AI variant 1 inlines the
   entry at 1 unit and not at 16, 42 instructions a row apart. `1brc.nika`
   inlines the entry at both since #695 (what a fold's step calls is
-  `#[inline(always)]`, `std`'s text hash a call of its own), and the
+  `#[inline(always)]`), and with `hashbrown`'s probe in it since `std`'s map
+  is its own type (ADR-296 D42: `entry` always inlined, a text key compared
+  and hashed by words, a search per length class), and the
   runtime's `advance` at both since it is `#[inline(always)]` too (9.0 a row
   at 1 unit). One setting alone would pick the winner,
   so the table shows both. `brc.sh` sets the count per run:
@@ -90,17 +92,17 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1164 with #695 (`examples/1brc.nika` and `naive.nika` 0.0.1171, the grammar runtime's `advance` always inlined; the `fast.nika` and `fast-unsafe.nika` rows 0.0.1171 with #776, a set written at `find_all` fixed when compiling, two cuts compared in place, the name's words cut by length with two branches, and `fast.nika`'s preconditions proved at the call), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1164 with #695 (`examples/1brc.nika` and `naive.nika` 0.0.1174 with ADR-296 D42, a map of `std`'s own whose text keys are compared and hashed by words, and the grammar runtime's `advance` always inlined; the `fast.nika` and `fast-unsafe.nika` rows 0.0.1171 with #776, a set written at `find_all` fixed when compiling, two cuts compared in place, the name's words cut by length with two branches, and `fast.nika`'s preconditions proved at the call), rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
 | Rust, `naive` | 841.5 | 9.28 | 858.9 | 8.61 | 556 |
-| **Nikaia**, `naive.nika` | **573.9** | **8.40** | **564.9** | **8.46** | **375** |
+| **Nikaia**, `naive.nika` | **557.4** | **8.08** | **544.9** | **8.27** | **375** |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
-| **Nikaia**, `examples/1brc.nika` | **235.0** | **1.12** | **222.9** | **1.12** | **642** |
-| Nikaia, overflow checks off | 235.1 | 1.13 | 222.9 | 1.12 |  |
+| **Nikaia**, `examples/1brc.nika` | **209.2** | **0.92** | **208.8** | **1.04** | **642** |
+| Nikaia, overflow checks off | 210.2 | 0.92 | 208.8 | 1.04 |  |
 | **Nikaia**, `fast.nika` | **107.4** | **0.93** | **107.5** | **0.92** | **1454** |
 | Nikaia, `fast.nika`, overflow checks off | 105.0 | 0.93 | 104.1 | 0.92 |  |
 | **Nikaia**, `fast-unsafe.nika`, assumes believed | **103.9** | **0.93** | **104.0** | **0.93** | **1569** |
@@ -125,9 +127,9 @@ Nikaia 0.0.1164 with #695 (`examples/1brc.nika` and `naive.nika` 0.0.1171, the g
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
 
-Against AI variant 1, Nikaia runs 13 % fewer instructions at 1 unit and 29 %
+Against AI variant 1, Nikaia runs 23 % fewer instructions at 1 unit and 33 %
 fewer at 16 units, where AI variant 1 leaves its table's entry out of line.
-The mispredictions are a third of AI variant 1's at both settings. Nikaia's program is a
+The mispredictions are a quarter of AI variant 1's at 1 unit and under a third at 16. Nikaia's program is a
 quarter fewer tokens, with UTF-8 and every overflow checked
 or proved; the same file also runs on every core. The temperature's checks are
 proved (ADR-314), and so are the counter's, `count += 1` and the merge's
@@ -138,11 +140,11 @@ instructions within one, laid out differently.
 
 The mispredictions depend on where the code lies, the instructions do not:
 callgrind's simulated predictor is indexed by address. Every build of
-`1brc.nika` in the table stays at 1.09 to 1.13, a third of AI variant 1's 3.6
-to 3.7.
+`1brc.nika` in the table stays at 0.92 to 1.04, a quarter to under a third of
+AI variant 1's 3.6 to 3.7.
 
-AI variant 2 runs 34 % fewer instructions than `1brc.nika` at 16 units and
-37 % fewer at 1 unit, and a third of its mispredictions, in 2.8 times its
+AI variant 2 runs 29 % fewer instructions than `1brc.nika` at 16 units and
+30 % fewer at 1 unit, and 0.38 mispredictions against 0.92 to 1.04, in 2.8 times its
 tokens, with `unsafe`, target-specific intrinsics and no UTF-8 check.
 
 `fast.nika` runs 27 % fewer instructions than AI variant 2 at both unit
@@ -174,24 +176,22 @@ assume tested and no check removed.
 ## Where Nikaia's instructions go
 
 Callgrind's attribution per row for the table's Nikaia row **at 16 units**,
-built again with `debug = 1` (line tables) to have one: its instructions are
-the table's; its mispredictions are 1.80 against 1.12, all of the difference in
-`memcmp` (0.71 against 0.18), whose branches the debug build's layout puts on
-other predictor slots. Each instruction goes to the innermost crate it
+built again with `debug = 1` (line tables) to have one: its instructions and
+its mispredictions are the table's. Each instruction goes to the innermost crate it
 was inlined from that is not `core`, `alloc` or `std` (by `addr2line -i`);
 what `core` inlines into the generated rule is its own row.
 
 | | instructions | mispredictions |
 |---|---:|---:|
 | the byte reads, cuts, digit tests and arithmetic `core` inlines into the generated rules | 42.4 | 0.26 |
-| comparing a name with the one in the table (`memcmp`, and the slice and `&str` comparisons `core` inlines into the probe) | 31.5 | 0.71 |
-| the hash table (`hashbrown`; `std`'s `HashMap` is its table, directly) | 31.2 | 0.05 |
-| hashing a name (`nikaia-std`'s byte hash, a call of its own) | 27.1 | 0.49 |
-| the grammar's runtime (`winnow-grammar`, `winnow`) | 28.0 | 0.18 |
+| the grammar's runtime (`winnow-grammar` 21.0, `winnow` 9.0) | 30.0 | 0.00 |
+| the hash table's probe (`hashbrown`, inlined into the fold through `std`'s map) | 27.6 | 0.05 |
 | finding the `;` and the line's end (`memchr`, with its SIMD intrinsics) | 27.0 | 0.00 |
-| the generated rules and actions, the stats' update among them | 23.6 | 0.01 |
+| hashing a name (`nikaia-std`'s byte hash, inline up to 16 bytes) | 25.9 | 0.49 |
+| the generated rules and actions, the stats' update among them | 25.6 | 0.01 |
+| comparing a name with the one in the table (`std`'s map: by words, the query's read once, a search per length class; no `memcmp`) | 16.3 | 0.11 |
 | the UTF-8 check (`simdutf8`) | 10.3 | 0.09 |
-| the rest: start-up, the output | 1.8 | 0.02 |
+| the rest: start-up, the output | 3.7 | 0.03 |
 
 The AI variants are one function after inlining, so callgrind cannot split
 them the same way.
@@ -267,10 +267,11 @@ same count as the table's).
 |---|---:|---:|
 | finding the line's end (`memchr`) | 147.7 | 147.7 |
 | finding the `;` (`CharSearcher`); `naive.rs` also finds the `.` | 163.7 | 247.6 |
-| hashing a name: Fx in Nikaia's `std`, SipHash in Rust's default | 24.4 | 185.3 |
-| the hash table's entry | 44.1 | 74.8 |
-| comparing a name with the one in the table (`memcmp`) | 39.7 | 49.8 |
-| the loop: cutting, the digits, the stats | 136.5 | 116.3 |
+| `CharSearcher`'s `memcmp` of the one-byte pattern it found | 20.1 | 30.0 |
+| hashing a name: Fx in Nikaia's `std`, SipHash in Rust's default | 24.1 | 185.3 |
+| the hash table's entry | 28.4 | 74.8 |
+| comparing a name with the one in the table: by words in Nikaia's `std`, `memcmp` in Rust | 13.4 | 19.6 |
+| the loop: cutting, the digits, the stats | 137.2 | 116.3 |
 | the UTF-8 check: `simdutf8`, `str::from_utf8` | 10.3 | 35.5 |
 
 The same algorithm on both sides; what differs is the default each language
