@@ -138,7 +138,7 @@ Rust program written by a person runs 131, an AI-written one after several measu
 (AI variant 2) 147, Nikaia's safe `fast.nika` 116 and its plain `examples/1brc.nika` 209;
 `fast-unsafe.nika`, the same program with its claims written `unsafe { assume(…) }`, runs 111.
 Both Nikaia programs mispredict 0.14 branches a row, the person's program 0.47. At
-`x86-64-v3` the person's program runs 92 instructions a row, `fast-unsafe.nika` 96.
+`x86-64-v3` the person's program runs 92 instructions a row, `fast-unsafe.nika` 94.
 
 ---
 

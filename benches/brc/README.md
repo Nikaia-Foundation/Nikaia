@@ -92,7 +92,7 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1185, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1186, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
@@ -103,13 +103,13 @@ Nikaia 0.0.1185, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
 | **Nikaia**, `examples/1brc.nika` | 209.2 | 0.92 | 208.8 | 1.05 | 642 |
 | Nikaia, overflow checks off | 210.2 | 0.92 | 208.8 | 0.95 |  |
-| **Nikaia**, `fast.nika` | 115.8 | 0.15 | 116.0 | 0.14 | 1424 |
+| **Nikaia**, `fast.nika` | 115.8 | 0.15 | 116.0 | 0.14 | 1460 |
 | Nikaia, `fast.nika`, overflow checks off | 113.8 | 0.15 | 116.0 | 0.14 |  |
-| **Nikaia**, `fast-unsafe.nika`, assumes believed | 109.2 | 0.14 | 111.3 | 0.15 | 1740 |
+| **Nikaia**, `fast-unsafe.nika`, assumes believed | 109.2 | 0.14 | 111.3 | 0.15 | 1785 |
 | Nikaia, `fast-unsafe.nika`, assumes checked | 214.2 | 0.23 | 221.0 | 0.15 |  |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 |  |
-| Nikaia, `fast.nika`, `x86-64-v3` | 102.8 | 0.15 | 102.9 | 0.14 |  |
-| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 94.1 | 0.14 | 96.3 | 0.14 |  |
+| Nikaia, `fast.nika`, `x86-64-v3` | 100.8 | 0.15 | 100.9 | 0.14 |  |
+| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 92.1 | 0.14 | 94.3 | 0.14 |  |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 4 threads | 133.7 | 0.47 | 131.3 | 0.47 | 12907 |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 1 thread | 133.1 | 0.47 | 130.8 | 0.48 | |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), `x86-64-v3`, 4 threads | 93.4 | 0.69 | 91.5 | 0.30 | |
@@ -163,9 +163,10 @@ the branch's outcome varies with the input:
   branch. Cut by its length with two branches (`len <= 8`, `len < 16`) the
   program runs 110.0 instructions a row at 16 units and 101.0 at
   `x86-64-v3`, 6.0 and 1.9 fewer, but mispredicts 0.68 times a row instead of
-  0.14: the length of the names varies. At `x86-64` `low_bits` saturates its
-  count to `0..=127` first (five instructions a word); at `x86-64-v3` it is
-  one `bzhi`.
+  0.14: the length of the names varies. At `x86-64` `low_bits` is a shift, a
+  mask and a select on the count a word; at `x86-64-v3` it is one `bzhi`,
+  with the length first held to the 16 bytes the words cover, so the count
+  needs no clamp (`CUT_IN_ONE`).
 * It looks for each `;` in the 32 bytes right after the last
   (`scan: bytes::Scan::AfterHit`, ADR-375 D6) rather than taking the next
   bit of a 64-byte block's mask (`Scan::ByBlock`, the default). A block's
@@ -185,7 +186,7 @@ reader sees, not with `unsafe` spread through the program. `fast.nika` beside
 it shows how much of that the prover already makes safe.
 
 `fast-unsafe.nika`, its assumes believed, runs 4 % fewer instructions than
-`fast.nika` at 16 units, 6 % fewer at 1 unit and at `x86-64-v3`, and 24 %
+`fast.nika` at 16 units, 6 % fewer at 1 unit, 7 % fewer at `x86-64-v3`, and 24 %
 fewer than AI variant 2, with the same 0.14 mispredictions: its assumes drop
 the checks `fast.nika` still makes (the table below), the `.` guard as
 well, and the ranges they state let LLVM simplify the temperature's
@@ -193,9 +194,9 @@ arithmetic and drop `low_bits`' saturation. At `x86-64-v3` it hashes the
 name's two words with two `crc32` instructions instead of a multiply.
 Against beowolx at one thread it runs 18 % fewer instructions at 1 unit and
 15 % fewer at 16, with under a third of its mispredictions (0.14 against
-0.47), in a seventh of its tokens. At `x86-64-v3` it runs 94.1 against
-beowolx's 93.4 on four threads at 1 unit, and 96.3 against 91.5 at 16 units,
-5 % more (counted by hand on one thread: 91.0); it mispredicts less than
+0.47), in a seventh of its tokens. At `x86-64-v3` it runs 92.1 against
+beowolx's 93.4 on four threads at 1 unit, and 94.3 against 91.5 at 16 units,
+3 % more (counted by hand on one thread: 91.0); it mispredicts less than
 half as often there (0.14 against 0.30 at 16 units, 0.69 at 1 unit).
 beowolx parses two rows' temperatures in one AVX2 vector; written so in
 `fast-unsafe.nika` with `core::arch` intrinsics, that saved 1.6
