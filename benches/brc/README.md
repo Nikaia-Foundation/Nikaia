@@ -197,8 +197,9 @@ Against beowolx at one thread it runs 18 % fewer instructions at 1 unit and
 beowolx's 93.4 on four threads at 1 unit, and 96.3 against 91.5 at 16 units,
 5 % more (counted by hand on one thread: 91.0); it mispredicts less than
 half as often there (0.14 against 0.30 at 16 units, 0.69 at 1 unit).
-beowolx parses two rows' temperatures in one AVX2 vector, about 12
-instructions a row cheaper than one row at a time. Checked, the same file
+beowolx parses two rows' temperatures in one AVX2 vector; written so in
+`fast-unsafe.nika` with `core::arch` intrinsics, that saved 1.6
+instructions a row (ADR-377 D8, at 0.0.1166). Checked, the same file
 costs 221.0 at 16 units: every assume tested and no check removed.
 
 ## Where Nikaia's instructions go
