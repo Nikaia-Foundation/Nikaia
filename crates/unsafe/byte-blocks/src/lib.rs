@@ -159,10 +159,8 @@ pub fn by_words<const L: usize, const N: usize>(block: &[u8; L], few: [u8; N]) -
     let zero = |v: u64| !(((v & LOW7).wrapping_add(LOW7)) | v | LOW7);
     let splat = few.map(|b| ONES.wrapping_mul(u64::from(b)));
     let mut mask = 0u64;
-    for (w, chunk) in block.chunks_exact(8).enumerate() {
-        let mut word = [0u8; 8];
-        word.copy_from_slice(chunk);
-        let v = u64::from_le_bytes(word);
+    for (w, chunk) in block.as_chunks::<8>().0.iter().enumerate() {
+        let v = u64::from_le_bytes(*chunk);
         let hits = splat.iter().fold(0, |hits, &s| hits | zero(v ^ s));
         // The high bit of byte `i` to bit `i`: no two partial products
         // meet, so nothing carries.
@@ -183,7 +181,7 @@ mod avx2 {
     #[target_feature(enable = "avx2")]
     fn bits<const L: usize>(block: &[u8; L], each: impl Fn(__m256i) -> __m256i) -> u64 {
         let mut mask = 0u64;
-        for (i, part) in block.chunks_exact(32).enumerate() {
+        for (i, part) in block.as_chunks::<32>().0.iter().enumerate() {
             // SAFETY: the load reads the 32 bytes of `part`, unaligned.
             let v = unsafe { _mm256_loadu_si256(part.as_ptr().cast::<__m256i>()) };
             mask |= u64::from(_mm256_movemask_epi8(each(v)) as u32) << (32 * i);
@@ -246,7 +244,7 @@ mod sse2 {
     #[target_feature(enable = "sse2")]
     fn bits<const L: usize>(block: &[u8; L], each: impl Fn(__m128i) -> __m128i) -> u64 {
         let mut mask = 0u64;
-        for (i, part) in block.chunks_exact(16).enumerate() {
+        for (i, part) in block.as_chunks::<16>().0.iter().enumerate() {
             // SAFETY: the load reads the 16 bytes of `part`, unaligned.
             let v = unsafe { _mm_loadu_si128(part.as_ptr().cast::<__m128i>()) };
             mask |= u64::from(_mm_movemask_epi8(each(v)) as u16) << (16 * i);
