@@ -121,6 +121,12 @@ impl Table {
                 w1 = w1.low_bits(8 * len - 64)
             }
 
+            let at = self.slot_of(w0, w1, len, buf, pos)
+            unsafe {
+                assume(at >= 0 && at < self.slots.len())
+                assume(self.slots[at].sum >= -1000000000000000 && self.slots[at].sum <= 1000000000000000)
+                assume(self.slots[at].count >= 0 && self.slots[at].count < 1000000000000)
+            }
             // The temperature, `-?d?d.d`, from one word: where the `.` is
             // says how long it is, and the sign becomes a mask.
             let w = buf.u64_le(sep + 1)
@@ -136,12 +142,6 @@ impl Table {
             let v = (abs.bits_as_i64() ^ signed) - signed
             unsafe { assume(v >= -999 && v <= 999) }
 
-            let at = self.slot_of(w0, w1, len, buf, pos)
-            unsafe {
-                assume(at >= 0 && at < self.slots.len())
-                assume(self.slots[at].sum >= -1000000000000000 && self.slots[at].sum <= 1000000000000000)
-                assume(self.slots[at].count >= 0 && self.slots[at].count < 1000000000000)
-            }
             if v < self.slots[at].min { self.slots[at].min = v }
             if v > self.slots[at].max { self.slots[at].max = v }
             self.slots[at].sum += v

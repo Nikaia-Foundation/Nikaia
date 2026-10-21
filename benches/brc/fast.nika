@@ -106,6 +106,7 @@ impl Table {
                 w1 = w1 & (ONES >> (128 - 8 * len))
             }
 
+            let at = self.slot_of(w0, w1, len, buf, pos)
             // The temperature, `-?d?d.d`, from one word: where the `.` is
             // says how long it is, and the sign becomes a mask.
             let w = buf.u64_le(sep + 1)
@@ -117,7 +118,6 @@ impl Table {
             let abs = (digits.wrapping_mul(0x640A0001) >> 32) & 0x3FF
             let v = (abs.bits_as_i64() ^ signed) - signed
 
-            let at = self.slot_of(w0, w1, len, buf, pos)
             if v < self.slots[at].min { self.slots[at].min = v }
             if v > self.slots[at].max { self.slots[at].max = v }
             self.slots[at].sum += v
