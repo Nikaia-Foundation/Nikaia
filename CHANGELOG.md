@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1179] — 2026-10-21
+
+**hash::crc32c(crc, word)**
+- `hash::crc32c(crc: u32, word: u64) -> u32` is one CRC-32C step over a word (ADR-371 D5, Part III chapter 16): one `crc32` where the build has SSE 4.2 (`--cpu=x86-64-v3`, through the new `crates/unsafe/crc32c`), a table at the baseline, the same value on every target.
+
 ## [0.0.1178] — 2026-10-21
 
 **find_all's offset never passes the end of the run**

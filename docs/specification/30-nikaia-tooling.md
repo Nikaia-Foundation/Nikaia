@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1178 (Draft)
+**Version:** 0.0.1179 (Draft)
 **Date:** 2026-10-21
 
 ---
@@ -851,6 +851,10 @@ prefetch hint beside it; each has a meaning on every target, an instruction wher
 An instruction of one architecture is a safe function of its module, `std::backend::x86::pext(x,
 mask)`, callable only in a build for a CPU level that has it and refused elsewhere at compile
 time. No `unsafe` is written for any of it; the assembly below is for what neither offers.
+
+`hash::crc32c(crc: u32, word: u64) -> u32` is the CRC-32C (polynomial `0x1EDC6F41`, reflected)
+of `word`'s eight bytes, lowest first, continued from `crc`, with no inversion before or after
+([ADR-371](adr/adr-371.md) D5). Its value is the same on every target.
 
 ### 16.1. Why not a core construct
 

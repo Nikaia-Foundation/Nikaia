@@ -668,6 +668,8 @@ pub mod prelude {
     // D5), which the `http` package calls. **Not named `http`**: a program
     // reaches a *package* by that word, and a `std` module of the same name
     // would make `http::Response` mean two things.
+    // `hash::crc32c` (ADR-371 D5).
+    pub use crate::hash;
     pub use crate::http1;
     pub use crate::io;
     pub use crate::list::ListExt;

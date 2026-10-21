@@ -59,6 +59,9 @@ proven-index = { path = "../unsafe/proven-index" }
 byte-blocks = { path = "../unsafe/byte-blocks" }
 # `x.low_bits(n)` as one `bzhi` where the build has BMI2 (ADR-371 D2).
 low-bits = { path = "../unsafe/low-bits" }
+# `hash::crc32c(crc, word)` as one `crc32` where the build has SSE 4.2
+# (ADR-371 D2, D5).
+crc32c = { path = "../unsafe/crc32c" }
 # Whether a map's key type is text, decided per type when compiling, and its
 # bytes where it is: a text key is hashed and compared a word at a time
 # (ADR-296 D42).

@@ -238,8 +238,105 @@ fn hash_long(bytes: &[u8]) -> u64 {
     multiply_mix(s0, s1) ^ len as u64
 }
 
+/// **One CRC-32C step over a word** (ADR-371 D5): the CRC-32C of `word`'s
+/// eight bytes, lowest first, continued from `crc`, without the inversions a
+/// checksum adds before and after - the step SSE 4.2's `crc32` and ARMv8's
+/// `crc32cx` take. One instruction where the build has SSE 4.2; a table
+/// eight bytes at a time everywhere else, with the same value.
+#[inline(always)]
+pub fn crc32c(crc: u32, word: u64) -> u32 {
+    #[cfg(all(target_arch = "x86_64", target_feature = "sse4.2"))]
+    {
+        crc32c::u64(crc, word)
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "sse4.2")))]
+    {
+        crc32c_by_table(crc, word)
+    }
+}
+
+/// The reflected Castagnoli polynomial.
+const CASTAGNOLI: u32 = 0x82F6_3B78;
+
+/// `CRC32C_TABLES[k][b]`: the CRC of byte `b` followed by `k` zero bytes, so
+/// that eight bytes are eight lookups (slicing by eight).
+const CRC32C_TABLES: [[u32; 256]; 8] = {
+    let mut tables = [[0u32; 256]; 8];
+    let mut b = 0;
+    while b < 256 {
+        let mut crc = b as u32;
+        let mut bit = 0;
+        while bit < 8 {
+            crc = (crc >> 1) ^ (CASTAGNOLI & (crc & 1).wrapping_neg());
+            bit += 1;
+        }
+        tables[0][b] = crc;
+        b += 1;
+    }
+    let mut k = 1;
+    while k < 8 {
+        let mut b = 0;
+        while b < 256 {
+            let before = tables[k - 1][b];
+            tables[k][b] = (before >> 8) ^ tables[0][(before & 0xFF) as usize];
+            b += 1;
+        }
+        k += 1;
+    }
+    tables
+};
+
+/// [`crc32c`] without the instruction.
+#[cfg_attr(
+    all(target_arch = "x86_64", target_feature = "sse4.2"),
+    allow(dead_code)
+)]
+#[inline(always)]
+fn crc32c_by_table(crc: u32, word: u64) -> u32 {
+    let x = word ^ u64::from(crc);
+    let t = &CRC32C_TABLES;
+    let byte = |i: u32| ((x >> (8 * i)) & 0xFF) as usize;
+    t[7][byte(0)]
+        ^ t[6][byte(1)]
+        ^ t[5][byte(2)]
+        ^ t[4][byte(3)]
+        ^ t[3][byte(4)]
+        ^ t[2][byte(5)]
+        ^ t[1][byte(6)]
+        ^ t[0][byte(7)]
+}
+
 #[cfg(test)]
 mod tests {
+    /// The definition, a bit at a time.
+    fn crc32c_slow(mut crc: u32, word: u64) -> u32 {
+        for byte in word.to_le_bytes() {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                crc = (crc >> 1) ^ (super::CASTAGNOLI & (crc & 1).wrapping_neg());
+            }
+        }
+        crc
+    }
+
+    /// The table and the build's own path against the definition, and
+    /// CRC-32C's check value: "123456789" is 0xE3069283.
+    #[test]
+    fn crc32c_is_the_castagnoli_crc() {
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        for _ in 0..10_000 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let (crc, word) = (seed as u32, seed.rotate_left(29));
+            assert_eq!(super::crc32c_by_table(crc, word), crc32c_slow(crc, word));
+            assert_eq!(super::crc32c(crc, word), crc32c_slow(crc, word));
+        }
+        let crc = super::crc32c(!0, u64::from_le_bytes(*b"12345678"));
+        let crc = (crc >> 8) ^ super::CRC32C_TABLES[0][((crc ^ u32::from(b'9')) & 0xFF) as usize];
+        assert_eq!(!crc, 0xE306_9283);
+    }
+
     use super::*;
     use std::collections::HashMap;
 

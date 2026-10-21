@@ -199,6 +199,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc32c"
+version = "0.1.0"
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -496,6 +500,7 @@ dependencies = [
  "c-text",
  "checked-text",
  "child-usage",
+ "crc32c",
  "file-ring",
  "hashbrown 0.17.1",
  "low-bits",

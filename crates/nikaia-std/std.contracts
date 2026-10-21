@@ -1790,6 +1790,21 @@ sync = true
 touches = []
 signature = "(self, n: ?) -> u64"
 
+# ## One CRC-32C step (ADR-371 D1, D5)
+#
+# **`hash::crc32c(crc, word)` is the CRC-32C of `word`'s eight bytes, lowest
+# first, continued from `crc`**, without the inversions a checksum adds before
+# and after: the step SSE 4.2's `crc32` and ARMv8's `crc32cx` take. The same
+# value on every target; one instruction where the build has SSE 4.2
+# (`--cpu=x86-64-v3`), a table elsewhere.
+
+# The CRC-32C of `word`'s eight bytes, continued from `crc`.
+[fn."hash::crc32c"]
+pub = true
+sync = true
+touches = []
+signature = "(crc: u32, word: u64) -> u32"
+
 # ## Arithmetic and conversions that may not fit (ADR-315)
 #
 # An overflow aborts (ADR-285 D1), and a conversion that may not fit aborts
