@@ -118,7 +118,7 @@ impl Table {
                 w0 = w0 & (ONES >> (64 - 8 * len))
                 w1 = 0
             } else if len < 16 {
-                w1 = w1 & (ONES >> (128 - 8 * len))
+                w1 = w1.low_bits(8 * len - 64)
             }
 
             // The temperature, `-?d?d.d`, from one word: where the `.` is
