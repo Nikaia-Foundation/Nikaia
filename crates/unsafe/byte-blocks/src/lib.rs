@@ -1,5 +1,5 @@
-//! **Which bytes of a 64-byte block belong to a set**, one bit a byte, at the
-//! vector width the build's CPU level allows
+//! **Which bytes of a 64-byte block, or of half of one, belong to a set**,
+//! one bit a byte, at the vector width the build's CPU level allows
 //! ([ADR-375](../../../docs/specification/adr/adr-375.md) D1,
 //! [ADR-002](../../../docs/specification/adr/adr-002.md) D6).
 //!
@@ -28,6 +28,10 @@
 
 /// How many bytes one mask covers: one bit a byte of a `u64`.
 pub const BLOCK: usize = 64;
+
+/// Half a block: a search that expects its next hit soon compares these
+/// first, at half the cost of a block.
+pub const HALF: usize = BLOCK / 2;
 
 /// **A set of bytes as the lookup of a larger set reads it.**
 ///
@@ -94,9 +98,11 @@ impl Tables {
 
 /// **The bytes of `block` equal to one of `few`**: bit `i` where `block[i]`
 /// is. One compare a member, so a set of one or two pays for no third; meant
-/// for one to three members (none gives `0`).
+/// for one to three members (none gives `0`). `block` is a whole block or
+/// half of one ([`HALF`]).
 #[inline(always)]
-pub fn any_of<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
+pub fn any_of<const L: usize, const N: usize>(block: &[u8; L], few: [u8; N]) -> u64 {
+    const { assert!(L == BLOCK || L == HALF) };
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     // SAFETY: the build enables AVX2 for every function (`cfg`).
     return unsafe { avx2::any(block, few) };
@@ -108,9 +114,10 @@ pub fn any_of<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
 }
 
 /// **The bytes of `block` in the set `tables` holds**: bit `i` where
-/// `block[i]` is.
+/// `block[i]` is. `block` is a whole block or half of one ([`HALF`]).
 #[inline(always)]
-pub fn in_tables(block: &[u8; BLOCK], tables: &Tables) -> u64 {
+pub fn in_tables<const L: usize>(block: &[u8; L], tables: &Tables) -> u64 {
+    const { assert!(L == BLOCK || L == HALF) };
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     // SAFETY: the build enables AVX2 for every function (`cfg`).
     return unsafe { avx2::tables(block, tables) };
@@ -129,7 +136,8 @@ pub fn in_tables(block: &[u8; BLOCK], tables: &Tables) -> u64 {
 /// way without a byte shuffle, and the reference the others are tested
 /// against.
 #[inline(always)]
-pub fn by_map(block: &[u8; BLOCK], tables: &Tables) -> u64 {
+pub fn by_map<const L: usize>(block: &[u8; L], tables: &Tables) -> u64 {
+    const { assert!(L <= BLOCK) };
     // A copy of the map: the loop reads it at a computed index, and a read
     // into the caller's `Tables` at one would keep the whole struct around
     // it (a search's iterator) in memory.
@@ -144,7 +152,8 @@ pub fn by_map(block: &[u8; BLOCK], tables: &Tables) -> u64 {
 /// The bytes of `block` equal to one of `few`, eight bytes a word: a byte
 /// equal to a member leaves a zero byte behind `^`, which is found exactly.
 #[inline(always)]
-pub fn by_words<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
+pub fn by_words<const L: usize, const N: usize>(block: &[u8; L], few: [u8; N]) -> u64 {
+    const { assert!(L == BLOCK || L == HALF) };
     const LOW7: u64 = 0x7f7f_7f7f_7f7f_7f7f;
     const ONES: u64 = 0x0101_0101_0101_0101;
     let zero = |v: u64| !(((v & LOW7).wrapping_add(LOW7)) | v | LOW7);
@@ -165,43 +174,34 @@ pub fn by_words<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 mod avx2 {
-    use super::{BLOCK, Tables};
+    use super::Tables;
     use core::arch::x86_64::*;
 
-    /// The two 32-byte halves of the block.
+    /// The block's bits, 32 bytes a compare: `each` makes the compare of one
+    /// 32-byte part, a byte of all ones where it is in the set.
     #[inline]
     #[target_feature(enable = "avx2")]
-    fn halves(block: &[u8; BLOCK]) -> (__m256i, __m256i) {
-        let p = block.as_ptr();
-        // SAFETY: each load reads 32 of the block's 64 bytes, unaligned.
-        unsafe {
-            (
-                _mm256_loadu_si256(p.cast::<__m256i>()),
-                _mm256_loadu_si256(p.add(32).cast::<__m256i>()),
-            )
+    fn bits<const L: usize>(block: &[u8; L], each: impl Fn(__m256i) -> __m256i) -> u64 {
+        let mut mask = 0u64;
+        for (i, part) in block.chunks_exact(32).enumerate() {
+            // SAFETY: the load reads the 32 bytes of `part`, unaligned.
+            let v = unsafe { _mm256_loadu_si256(part.as_ptr().cast::<__m256i>()) };
+            mask |= u64::from(_mm256_movemask_epi8(each(v)) as u32) << (32 * i);
         }
+        mask
     }
 
     #[inline]
     #[target_feature(enable = "avx2")]
-    fn bits(a: __m256i, b: __m256i) -> u64 {
-        u64::from(_mm256_movemask_epi8(a) as u32)
-            | (u64::from(_mm256_movemask_epi8(b) as u32) << 32)
-    }
-
-    #[inline]
-    #[target_feature(enable = "avx2")]
-    pub(super) fn any<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
-        let (a, b) = halves(block);
+    pub(super) fn any<const L: usize, const N: usize>(block: &[u8; L], few: [u8; N]) -> u64 {
         let splat = few.map(|m| _mm256_set1_epi8(m as i8));
-        let any = |v: __m256i| {
+        bits(block, |v| {
             let mut hits = _mm256_setzero_si256();
             for s in splat {
                 hits = _mm256_or_si256(hits, _mm256_cmpeq_epi8(v, s));
             }
             hits
-        };
-        bits(any(a), any(b))
+        })
     }
 
     #[inline]
@@ -213,8 +213,7 @@ mod avx2 {
 
     #[inline]
     #[target_feature(enable = "avx2")]
-    pub(super) fn tables(block: &[u8; BLOCK], tables: &Tables) -> u64 {
-        let (a, b) = halves(block);
+    pub(super) fn tables<const L: usize>(block: &[u8; L], tables: &Tables) -> u64 {
         let nibble = _mm256_set1_epi8(0x0f);
         let lookup = |v: __m256i| {
             let lo = _mm256_and_si256(v, nibble);
@@ -231,51 +230,47 @@ mod avx2 {
             }
             _mm256_cmpeq_epi8(hits, _mm256_setzero_si256())
         };
-        !bits(lookup(a), lookup(b))
+        // The compare finds the bytes outside the set; the bits past `L`
+        // stay clear.
+        !bits(block, lookup) & (u64::MAX >> (64 - L))
     }
 }
 
 #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
 mod sse2 {
-    use super::BLOCK;
     use core::arch::x86_64::*;
 
-    /// The four 16-byte quarters of the block.
+    /// The block's bits, 16 bytes a compare: `each` makes the compare of one
+    /// 16-byte part, a byte of all ones where it is in the set.
     #[inline]
     #[target_feature(enable = "sse2")]
-    fn quarters(block: &[u8; BLOCK]) -> [__m128i; 4] {
-        let p = block.as_ptr();
-        // SAFETY: each load reads 16 of the block's 64 bytes, unaligned.
-        [0, 16, 32, 48].map(|at| unsafe { _mm_loadu_si128(p.add(at).cast::<__m128i>()) })
-    }
-
-    #[inline]
-    #[target_feature(enable = "sse2")]
-    fn bits(parts: [__m128i; 4]) -> u64 {
+    fn bits<const L: usize>(block: &[u8; L], each: impl Fn(__m128i) -> __m128i) -> u64 {
         let mut mask = 0u64;
-        for (i, part) in parts.into_iter().enumerate() {
-            mask |= u64::from(_mm_movemask_epi8(part) as u16) << (16 * i);
+        for (i, part) in block.chunks_exact(16).enumerate() {
+            // SAFETY: the load reads the 16 bytes of `part`, unaligned.
+            let v = unsafe { _mm_loadu_si128(part.as_ptr().cast::<__m128i>()) };
+            mask |= u64::from(_mm_movemask_epi8(each(v)) as u16) << (16 * i);
         }
         mask
     }
 
     #[inline]
     #[target_feature(enable = "sse2")]
-    pub(super) fn any<const N: usize>(block: &[u8; BLOCK], few: [u8; N]) -> u64 {
+    pub(super) fn any<const L: usize, const N: usize>(block: &[u8; L], few: [u8; N]) -> u64 {
         let splat = few.map(|m| _mm_set1_epi8(m as i8));
-        bits(quarters(block).map(|v| {
+        bits(block, |v| {
             let mut hits = _mm_setzero_si128();
             for s in splat {
                 hits = _mm_or_si128(hits, _mm_cmpeq_epi8(v, s));
             }
             hits
-        }))
+        })
     }
 
     #[cfg(target_feature = "ssse3")]
     #[inline]
     #[target_feature(enable = "ssse3")]
-    pub(super) fn tables(block: &[u8; BLOCK], tables: &super::Tables) -> u64 {
+    pub(super) fn tables<const L: usize>(block: &[u8; L], tables: &super::Tables) -> u64 {
         // SAFETY: the load reads the 16 bytes of `t`, unaligned.
         let table = |t: &[u8; 16]| unsafe { _mm_loadu_si128(t.as_ptr().cast::<__m128i>()) };
         let nibble = _mm_set1_epi8(0x0f);
@@ -294,13 +289,13 @@ mod sse2 {
             }
             _mm_cmpeq_epi8(hits, _mm_setzero_si128())
         };
-        !bits(quarters(block).map(lookup))
+        !bits(block, lookup) & (u64::MAX >> (64 - L))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{BLOCK, Tables, any_of, by_map, by_words, in_tables};
+    use super::{BLOCK, HALF, Tables, any_of, by_map, by_words, in_tables};
 
     fn block(seed: &mut u64) -> [u8; BLOCK] {
         let mut out = [0u8; BLOCK];
@@ -349,6 +344,10 @@ mod tests {
                 let b = block(&mut seed);
                 let want = by_map(&b, &tables);
                 assert_eq!(in_tables(&b, &tables), want, "{members:?}");
+                // Half a block finds what the block's first half does.
+                let half = b.first_chunk::<HALF>().unwrap();
+                assert_eq!(in_tables(half, &tables), want & 0xFFFF_FFFF, "{members:?}");
+                assert_eq!(by_map(half, &tables), want & 0xFFFF_FFFF, "{members:?}");
                 if (1..=3).contains(&members.len()) || members == [0x05; 4] {
                     let few = [
                         members[0],
@@ -365,6 +364,16 @@ mod tests {
                     assert_eq!(any_of(&b, two), by_map(&b, &Tables::new(map_of(&two))));
                     assert_eq!(by_words(&b, two), any_of(&b, two));
                 }
+            }
+        }
+        for few in [[0u8, 0x80, 0xFF], *b";\n\n", [7, 7, 7]] {
+            for _ in 0..rounds {
+                let b = block(&mut seed);
+                let half = b.first_chunk::<HALF>().unwrap();
+                let want = by_map(&b, &Tables::new(map_of(&few))) & 0xFFFF_FFFF;
+                assert_eq!(any_of(half, few), want);
+                assert_eq!(by_words(half, few), want);
+                assert_eq!(in_tables(half, &Tables::new(map_of(&few))), want);
             }
         }
         for few in [[0u8, 0x80, 0xFF], *b";\n\n", [7, 7, 7]] {

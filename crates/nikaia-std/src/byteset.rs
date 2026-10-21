@@ -20,8 +20,8 @@
 //! **No read goes past the end** (ADR-320 D13): the last, short block is
 //! copied into a block of zeros and the bits past the end are cleared.
 
-pub use byte_blocks::BLOCK;
 use byte_blocks::Tables;
+pub use byte_blocks::{BLOCK, HALF};
 
 /// The search a set was prepared for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -91,11 +91,12 @@ impl ByteSet {
         self.way == Way::Empty
     }
 
-    /// **The block's mask**: bit `i` where `block[i]` is in the set. A set
-    /// of one or two compares only its members; an empty one is looked up in
-    /// its empty tables, which find nothing (a search never reads for it).
+    /// **The block's mask**: bit `i` where `block[i]` is in the set, for a
+    /// whole block or half of one. A set of one or two compares only its
+    /// members; an empty one is looked up in its empty tables, which find
+    /// nothing (a search never reads for it).
     #[inline(always)]
-    fn mask(&self, block: &[u8; BLOCK]) -> u64 {
+    fn mask<const L: usize>(&self, block: &[u8; L]) -> u64 {
         match self.way {
             Way::One => byte_blocks::any_of(block, [self.few[0]]),
             Way::Two => byte_blocks::any_of(block, [self.few[0], self.few[1]]),
@@ -132,6 +133,9 @@ pub trait Blocks: Copy {
     fn mask(&self, block: &[u8; BLOCK]) -> u64;
     /// The mask of the last, short block, its bits past the end cleared.
     fn short_mask(self, run: &[u8]) -> u64;
+    /// The mask of half a block: where the next hit is near, it is found
+    /// at half the cost of a block.
+    fn half_mask(&self, half: &[u8; HALF]) -> u64;
 }
 
 impl Blocks for ByteSet {
@@ -148,6 +152,11 @@ impl Blocks for ByteSet {
     #[inline(always)]
     fn short_mask(self, run: &[u8]) -> u64 {
         ByteSet::short_mask(self, run)
+    }
+
+    #[inline(always)]
+    fn half_mask(&self, half: &[u8; HALF]) -> u64 {
+        ByteSet::mask(self, half)
     }
 }
 
@@ -168,6 +177,11 @@ impl<const N: usize> Blocks for Few<N> {
     #[inline(always)]
     fn mask(&self, block: &[u8; BLOCK]) -> u64 {
         byte_blocks::any_of(block, self.0)
+    }
+
+    #[inline(always)]
+    fn half_mask(&self, half: &[u8; HALF]) -> u64 {
+        byte_blocks::any_of(half, self.0)
     }
 
     /// Off the hot loop, as [`ByteSet`]'s is.
@@ -251,21 +265,23 @@ impl Needle for &ByteSet {
 }
 
 /// **Every position of a byte of the set, rising** (ADR-375 D3): what
-/// `find_all` hands back. It keeps the mask of the block it is in and the
-/// bytes no mask has covered yet, so `next` takes the lowest bit of a mask
-/// held in a register and reads the next block only when the mask is spent:
-/// one length test a block, and an offset that never passes the end, so
-/// that the bytes left are the run's length less it, without a conditional
-/// move. Its own `count`, `nth` and `last` (D4) read whole blocks: a count adds the bits of each mask and
-/// makes no position.
+/// `find_all` hands back. `next` compares the half block that starts right
+/// after the last hit and takes its lowest bit, and reads whole blocks only
+/// where that half holds none: where hits are near one another, as the
+/// separators of rows are, the test whether one was found goes the same way
+/// almost every time and is predicted, which a mask kept from block to
+/// block, spent after a varying number of hits, is not. Its own `count`,
+/// `nth` and `last` (D4) read whole blocks and keep the mask between them: a
+/// count adds the bits of each mask and makes no position, and `next` hands
+/// out what `nth` left in the mask before it reads again.
 #[derive(Clone, Debug)]
 pub struct FindAll<'a, S: Blocks = ByteSet> {
     /// The whole run searched: it does not change, so only `at` and `mask`
     /// change from one position to the next.
     hay: &'a [u8],
     set: S,
-    /// Where the bytes no mask has covered yet start, never past the end;
-    /// bit 0 of `mask` stands a block before it.
+    /// Where the bytes not searched yet start, never past the end; while
+    /// `mask` holds hits, its bit 0 stands a block before it.
     at: usize,
     /// The hits of the current block not handed out yet.
     mask: u64,
@@ -295,6 +311,15 @@ impl<'a, S: Blocks> FindAll<'a, S> {
         &self.hay[self.at..]
     }
 
+    /// The lowest bit of `mask`, a mask of the bytes from `at`, as a position;
+    /// the search goes on right after it.
+    #[inline(always)]
+    fn hit(&mut self, mask: u64) -> i64 {
+        let hit = self.at + mask.trailing_zeros() as usize;
+        self.at = hit + 1;
+        hit as i64
+    }
+
     /// The next block's mask into `mask`; `false` at the end. A whole block
     /// costs one length test; the last, short one is the cold path.
     #[inline(always)]
@@ -322,14 +347,29 @@ impl<S: Blocks> Iterator for FindAll<'_, S> {
 
     #[inline]
     fn next(&mut self) -> Option<i64> {
-        while self.mask == 0 {
-            if !self.advance() {
-                return None;
+        if self.mask != 0 {
+            let bit = self.mask.trailing_zeros() as usize;
+            self.mask &= self.mask - 1;
+            return Some(self.at.wrapping_sub(BLOCK).wrapping_add(bit) as i64);
+        }
+        if let Some(half) = self.rest().first_chunk::<HALF>() {
+            let mask = self.set.half_mask(half);
+            if mask != 0 {
+                return Some(self.hit(mask));
             }
         }
-        let bit = self.mask.trailing_zeros() as usize;
-        self.mask &= self.mask - 1;
-        Some(self.at.wrapping_sub(BLOCK).wrapping_add(bit) as i64)
+        loop {
+            let rest = self.rest();
+            let mask = match rest.first_chunk::<BLOCK>() {
+                Some(block) => self.set.mask(block),
+                None if rest.is_empty() => return None,
+                None => self.set.short_mask(rest),
+            };
+            if mask != 0 {
+                return Some(self.hit(mask));
+            }
+            self.at += rest.len().min(BLOCK);
+        }
     }
 
     /// **A count adds the bits of each block's mask** (ADR-375 D4): no
@@ -562,6 +602,34 @@ mod tests {
                 let pieces: Vec<&[u8]> = Split::new(&hay, set).collect();
                 let want: Vec<&[u8]> = hay.split(|b| members.contains(b)).collect();
                 assert_eq!(pieces, want);
+            }
+        }
+    }
+
+    /// Hits further apart than a half block or a block: `next` goes on
+    /// over whole blocks, and `nth`, `count` and `last` after it agree.
+    #[test]
+    fn hits_far_apart_are_found_as_near_ones() {
+        for gap in [31usize, 32, 33, 63, 64, 65, 97, 200] {
+            for n in [0usize, 1, 31, 32, 64, 65, 129, 300, 700] {
+                let hay: Vec<u8> = (0..n)
+                    .map(|i| if i % gap == gap - 1 { b';' } else { b'x' })
+                    .collect();
+                let want: Vec<i64> = (0..n as i64).filter(|&i| hay[i as usize] == b';').collect();
+                for set in [
+                    ByteSet(b";"),
+                    ByteSet((0..=255u8).filter(|&b| b != b'x').collect::<Vec<u8>>()),
+                ] {
+                    let got: Vec<i64> = FindAll::new(&hay, set, 0).collect();
+                    assert_eq!(got, want, "{gap} {n}");
+                    let got: Vec<i64> = FindAll::new(&hay, Few(*b";"), 0).collect();
+                    assert_eq!(got, want, "{gap} {n}");
+                    let mut walk = FindAll::new(&hay, set, 0);
+                    assert_eq!(walk.next(), want.first().copied());
+                    assert_eq!(walk.clone().nth(1), want.get(2).copied());
+                    assert_eq!(walk.clone().count(), want.len().saturating_sub(1));
+                    assert_eq!(walk.last(), want.get(1..).and_then(|w| w.last()).copied());
+                }
             }
         }
     }
