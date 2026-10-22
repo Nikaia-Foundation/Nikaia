@@ -15028,6 +15028,13 @@ fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &Chec
         if lanes_wanted > 0 && lanes_written > 0 && lanes_wanted != lanes_written { state.findings.push(a_list_the_wrong_length_for_its_array(lanes_written, lanes_wanted, span, false)); }
     }
     let made = if lanes && described.is_unknown() { check_simd_made((wanted).as_ref(), name, args) } else { described };
+    if lanes && name == "simd::splat" && args.len() == 1 && !check_simd_kind(&made).is_empty() {
+        let lane = match made {
+            Ty::Named { args: ref lane_args, .. } => if !lane_args.is_empty() { (*nikaia_std::index::get(&lane_args, 0)).clone() } else { Ty::Unknown },
+            _ => Ty::Unknown,
+        };
+        state.text_literal(world, &lane, nikaia_std::index::get(&args, 0), true);
+    }
     if lanes && name == "simd::load" && args.len() == 2 {
         let read = check_simd_bytes(&made);
         if read != 0 {

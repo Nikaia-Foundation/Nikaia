@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1188] — 2026-10-22
+
+**`simd::splat(';')` into byte lanes is a byte**
+- A character literal handed to `simd::splat` for `u8` lanes is typed and lowered as a byte (`b';'`), as everywhere a `u8` is wanted; it was lowered as a `char`, which rustc refused (#773).
+
 ## [0.0.1187] — 2026-10-22
 
 **`Mask.first()` of byte lanes is one `pmovmskb`**

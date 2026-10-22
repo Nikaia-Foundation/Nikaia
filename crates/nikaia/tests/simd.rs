@@ -241,3 +241,36 @@ fn a_proved_load_has_no_check() {
     );
     assert_eq!(rust.matches("simd::load(b, at)").count(), 1, "{rust}");
 }
+
+/// A `'…'` splat into byte lanes is a byte (#773), and a byte mask's first
+/// lane is found at every width (`pmovmskb` at both CPU levels).
+const SPLAT_A_BYTE: &str = r#"use std::simd
+
+fn main() {
+    let mut v: Vec[u8] = []
+    for i in 0..<48 {
+        if i == 4 || i == 37 { v.push(';') } else { v.push('a') }
+    }
+    let b = Bytes(v)
+    let semis: simd::Fixed[u8, 32] = simd::splat(';')
+    let narrow: simd::Fixed[u8, 16] = simd::splat(';')
+    let wide: simd::Fixed[u8, 32] = simd::load(b, 0)
+    let short: simd::Fixed[u8, 16] = simd::load(b, 5)
+    let late: simd::Fixed[u8, 32] = simd::load(b, 10)
+    println(f"{wide.eq(semis).first() ?? -1} {short.eq(narrow).first() ?? -1} {late.eq(semis).first() ?? -1}")
+}
+"#;
+
+#[test]
+fn a_character_splats_into_byte_lanes() {
+    let (said, rust) = tool("simd-splat", "lower", SPLAT_A_BYTE, &[]);
+    assert_eq!(rust.matches("simd::splat(b';')").count(), 2, "{said}{rust}");
+    if !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
+        return;
+    }
+    for cpu in ["--cpu=x86-64", "--cpu=x86-64-v3"] {
+        let (ok, out, err) = run_at("splat", cpu, SPLAT_A_BYTE);
+        assert!(ok, "{cpu}: {err}");
+        assert_eq!(out, "4 -1 27\n", "{cpu}");
+    }
+}
