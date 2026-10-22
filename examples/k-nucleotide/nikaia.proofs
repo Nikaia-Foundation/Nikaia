@@ -4,6 +4,8 @@
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
 33f7966bd34af5df709f94b975b322d96e4554dc23ce926c27ff283845898cfb refuted v0=0,v1=-4611686018427387904
+3bfe99a8f83d09b899676920927e39209f2d873692f30e7025a5c2de7255992e unknown fourier-motzkin-1
+45a9431cff1f8dd015dc0889f4a6886284f07abf3d5a4701d86e0df7fdd1aa6d refuted v0=0,v1=0,v2=-4611686018427387905
 5354dee4b4598e34ab552d2331960afbecd21085320bb79968c29f8eebfd2568 refuted v0=0,v1=0,v2=-1,v3=0
 7cc08a0b9d9e2f53de26a6a6511a1b7fe037f796f69f4109602c370cb652baac refuted v0=4611686018427387904
 c8e765f55ebbcceecdf9609b6d8d7ad79f2807518c7dec0b905f7636b734cf8a refuted v0=0,v1=0,v2=-4611686018427387905

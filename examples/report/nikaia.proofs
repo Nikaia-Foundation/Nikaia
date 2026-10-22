@@ -3,4 +3,6 @@
 # question in normal form, and `proved` with its certificate,
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
+3bfe99a8f83d09b899676920927e39209f2d873692f30e7025a5c2de7255992e unknown fourier-motzkin-1
+45a9431cff1f8dd015dc0889f4a6886284f07abf3d5a4701d86e0df7fdd1aa6d refuted v0=0,v1=0,v2=-4611686018427387905
 d1a7340d30dcf269530d56aa880e9a56db8c84cd534408667254bbffcb46d5b5 refuted v0=0,v1=0,v2=-1
