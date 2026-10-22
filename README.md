@@ -137,7 +137,7 @@ A preliminary comparison on the One Billion Row Challenge, counted with callgrin
 Rust program written by a person runs 131, an AI-written one after several measured rounds
 (AI variant 2) 147, Nikaia's safe `fast.nika` 106 and its plain `examples/1brc.nika` 209;
 `fast-unsafe.nika`, the same program with its claims written `unsafe { assume(…) }`, runs 102.
-The Nikaia programs mispredict 0.15 and 0.14 branches a row, the person's program 0.47. At
+Both Nikaia programs mispredict 0.14 branches a row, the person's program 0.47. At
 `x86-64-v3` the person's program runs 92 instructions a row, `fast-unsafe.nika` 88.
 
 ---

@@ -34,7 +34,7 @@ description: >-
         </div>
 
         <div class="study-card markdown-body">
-          <p><strong>Table 1.</strong> Instructions and mispredicted branches per row at 16 codegen units, version 0.0.1189. Preliminary: the numbers move as the compiler learns.</p>
+          <p><strong>Table 1.</strong> Instructions and mispredicted branches per row at 16 codegen units, version 0.0.1190. Preliminary: the numbers move as the compiler learns.</p>
           <div style="overflow-x:auto">
           <table>
             <thead>
@@ -42,7 +42,7 @@ description: >-
             </thead>
             <tbody>
               <tr><td><strong>Nikaia, unsafe</strong> (assumes only): <code>fast-unsafe.nika</code><br>by this project, by hand · <a href="#code-fast-unsafe">code</a></td><td>names, once</td><td><strong>102.2</strong></td><td><strong>0.14</strong></td><td><strong>88.1</strong></td><td><strong>0.14</strong></td><td>1927</td></tr>
-              <tr><td><strong>Nikaia, safe</strong>: <code>fast.nika</code><br>by this project, by hand · <a href="#code-fast">code</a></td><td>names, once</td><td><strong>106.0</strong></td><td><strong>0.15</strong></td><td><strong>94.9</strong></td><td><strong>0.14</strong></td><td>1530</td></tr>
+              <tr><td><strong>Nikaia, safe</strong>: <code>fast.nika</code><br>by this project, by hand · <a href="#code-fast">code</a></td><td>names, once</td><td><strong>106.0</strong></td><td><strong>0.14</strong></td><td><strong>93.9</strong></td><td><strong>0.14</strong></td><td>1530</td></tr>
               <tr><td><strong>Rust, unsafe</strong>: <code>fast_1brc</code><br>by beowolx, a person · <a href="https://github.com/beowolx/fast_1brc">code</a></td><td>no</td><td>131.3</td><td>0.47</td><td>91.5</td><td>0.30</td><td>12907</td></tr>
               <tr><td><strong>Rust, unsafe</strong>: AI variant 2<br>by an AI assistant, several measured rounds · <a href="#code-ai2">code</a></td><td>no</td><td>147.4</td><td>0.38</td><td>132.7</td><td>0.27</td><td>1775</td></tr>
               <tr><td><strong>Rust, unsafe</strong>: <code>v16_flat_table</code>, derived and corrected<br>by automataIA, a person · <a href="https://github.com/automataIA/1brc-rs">code</a></td><td>no</td><td>207.9</td><td>0.57</td><td>197.7</td><td>0.57</td><td>at most 3963</td></tr>
@@ -58,9 +58,9 @@ description: >-
         <div class="study-card markdown-body">
           <h2>3. Results</h2>
           <ul>
-            <li><strong>Safe Nikaia leads at the baseline.</strong> At <code>x86-64</code>, <code>fast.nika</code> does 19 % less work a row than the fastest Rust a person wrote and mispredicts under a third as often (0.15 against 0.47). Against the AI assistant's best it does 28 % less work and mispredicts well under half as often. It has no <code>unsafe</code> and an eighth of the human program's tokens.</li>
+            <li><strong>Safe Nikaia leads at the baseline.</strong> At <code>x86-64</code>, <code>fast.nika</code> does 19 % less work a row than the fastest Rust a person wrote and mispredicts under a third as often (0.14 against 0.47). Against the AI assistant's best it does 28 % less work and mispredicts well under half as often. It has no <code>unsafe</code> and an eighth of the human program's tokens.</li>
             <li><strong>Unsafe Nikaia shows what is left to prove.</strong> <code>fast-unsafe.nika</code> does 22 % less work than the human program. The 3.8 instructions between it and the safe program are checks the prover cannot yet remove.</li>
-            <li><strong>At <code>x86-64-v3</code> unsafe Nikaia runs the fewest instructions</strong>: 88.1 a row against 91.5 for the human program and 94.9 for safe Nikaia. The human program mispredicts twice as often as either (0.30 against 0.14), and a mispredicted branch costs a current core about as long as 50 instructions take. It parses two rows' temperatures in one AVX2 vector; section 4 shows what that is worth.</li>
+            <li><strong>At <code>x86-64-v3</code> unsafe Nikaia runs the fewest instructions</strong>: 88.1 a row against 91.5 for the human program and 93.9 for safe Nikaia. The human program mispredicts twice as often as either (0.30 against 0.14), and a mispredicted branch costs a current core about as long as 50 instructions take. It parses two rows' temperatures in one AVX2 vector; section 4 shows what that is worth.</li>
             <li><strong>The plain program is in the field of the human programs</strong>: 209 against 208 and 216, in 642 tokens against several thousand, with the whole file checked as UTF-8 and every index and overflow proved or checked.</li>
           </ul>
         </div>

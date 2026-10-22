@@ -92,31 +92,31 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1189, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
+Nikaia 0.0.1190, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
 |---|---:|---:|---:|---:|---:|
-| Rust, `naive` | 841.0 | 9.25 | 859.4 | 8.64 | 556 |
+| Rust, `naive` | 841.1 | 9.25 | 859.4 | 8.64 | 556 |
 | Nikaia, `naive.nika` | 557.4 | 8.07 | 544.8 | 8.31 | 375 |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
 | **Nikaia**, `examples/1brc.nika` | 209.2 | 0.92 | 208.8 | 0.95 | 642 |
 | Nikaia, overflow checks off | 210.2 | 0.92 | 208.8 | 1.04 |  |
-| **Nikaia**, `fast.nika` | 105.8 | 0.14 | 106.0 | 0.15 | 1530 |
-| Nikaia, `fast.nika`, overflow checks off | 102.8 | 0.14 | 102.0 | 0.14 |  |
+| **Nikaia**, `fast.nika` | 105.8 | 0.15 | 106.0 | 0.14 | 1530 |
+| Nikaia, `fast.nika`, overflow checks off | 101.8 | 0.14 | 102.0 | 0.14 |  |
 | **Nikaia**, `fast-unsafe.nika`, assumes believed | 102.0 | 0.14 | 102.2 | 0.14 | 1927 |
 | Nikaia, `fast-unsafe.nika`, assumes checked | 200.9 | 0.23 | 203.6 | 0.23 |  |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 |  |
-| Nikaia, `fast.nika`, `x86-64-v3` | 94.8 | 0.14 | 94.9 | 0.14 |  |
+| Nikaia, `fast.nika`, `x86-64-v3` | 93.8 | 0.15 | 93.9 | 0.14 |  |
 | Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 88.0 | 0.14 | 88.1 | 0.14 |  |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 4 threads | 133.7 | 0.47 | 131.3 | 0.47 | 12907 |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 1 thread | 133.1 | 0.47 | 130.8 | 0.48 | |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), `x86-64-v3`, 4 threads | 93.4 | 0.69 | 91.5 | 0.30 | |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), as its authors build it (`native`, fat LTO, 1 unit, `panic = "abort"`) | not countable with callgrind (AVX-512) | | | | |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), its authors' profile at `x86-64-v3` | 92.2 | 0.69 | | | |
-| Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), 4 threads | 210.4 | 1.60 | 216.1 | 1.60 | 5961 |
-| Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), `x86-64-v3`, 4 threads | 185.3 | 1.58 | 195.4 | 1.60 | |
+| Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), 4 threads | 210.4 | 1.60 | 220.7 | 1.59 | 5961 |
+| Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), `x86-64-v3`, 4 threads | 185.2 | 1.60 | 191.0 | 1.60 | |
 | Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), as its authors build it (`native`, fat LTO, 1 unit, `panic = "abort"`) | not countable with callgrind (AVX-512) | | | | |
 | Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), its authors' profile at `x86-64-v3` | 187.7 | 1.60 | | | |
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, 4 threads | 208.0 | 0.57 | 208.0 | 0.57 | 3963 |
@@ -191,7 +191,7 @@ reader sees, not with `unsafe` spread through the program. `fast.nika` beside
 it shows how much of that the prover already makes safe.
 
 `fast-unsafe.nika`, its assumes believed, runs 4 % fewer instructions than
-`fast.nika` at 1 and at 16 units, 7 % fewer at `x86-64-v3`, and 31 %
+`fast.nika` at 1 and at 16 units, 6 % fewer at `x86-64-v3`, and 31 %
 fewer than AI variant 2, with the same 0.14 mispredictions: its assumes drop
 the checks `fast.nika` still makes (the table below), the `.` guard as
 well, and the ranges they state let LLVM simplify the temperature's
