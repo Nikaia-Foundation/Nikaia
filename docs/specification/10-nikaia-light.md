@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1193 (Draft)
+**Version:** 0.0.1194 (Draft)
 **Date:** 2026-10-22
 
 ---
@@ -3220,7 +3220,8 @@ The compiler may write a statement that assigns to a place before the `if`s
 directly in front of it where no program can tell: none of those `if`s reads
 or writes that place, the statement reads nothing they write, neither side
 calls a function that is not pure, does input or output, pauses, locks or
-spawns, and neither side can stop the program. It does so in every build
+spawns, neither side can stop the program, and the `if`s hold only such
+assignments and `if`s, nothing that leaves. It does so in every build
 ([ADR-379](adr/adr-379.md)).
 
 ### 8.1.2. Asking for Overlap: `overlap { … }`

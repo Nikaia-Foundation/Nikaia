@@ -4400,6 +4400,8 @@ fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbol], ty: Opt
     }
     let whole_field = match value {
         Expr::Field { .. } => context.whole_fields.contains(&node_key(value)),
+        Expr::Call { .. } => context.whole_fields.contains(&node_key(value)),
+        Expr::MethodCall { .. } => context.whole_fields.contains(&node_key(value)),
         _ => false,
     };
     let whole = nikaia_std::index::or(bounding_declared_whole(ty, words), || (value_lin.is_some() || value_range.is_some() || whole_field).into());
@@ -4588,8 +4590,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
         bounding_push(&walk, facts, fact);
     }
     for list in filled.iter() {
-        let __keep_123598 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_123598).put(length_of(list)), count);
+        let __keep_123810 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_123810).put(length_of(list)), count);
     }
 }
 
@@ -20691,6 +20693,10 @@ fn check_core_stmt_a_name_or_field(value: &Expr) -> bool { matches!(value, Expr:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_stmt_a_call(value: &Expr) -> bool { matches!(value, Expr::Call { .. } | Expr::MethodCall { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_stmt_a_place(value: &Expr) -> bool { matches!(value, Expr::Field { .. } | Expr::Index { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -20866,6 +20872,12 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let findings_before = state.findings.len() as i64;
     let found = check_core_expr(state, world, host, value, span);
     state.flow.lambda_expected = None;
+    if names.len() == 1 && check_core_stmt_a_call(value) {
+        match found {
+            Ty::Named { ref name, ref args, .. } => { if args.is_empty() && is_whole_number(name) { state.facts.whole_fields.insert(id_of(value) as i64); } },
+            _ => { },
+        }
+    }
     if ty.is_some() && names.len() == 1 && shape.is_empty() {
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let declared = written_ty(world.words, world.here.aliases, t);
@@ -42693,6 +42705,196 @@ pub fn binds_a_part(part: &MatchPattern) -> bool {
 }
 
 
+// --- emit_order.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitOrderProofs {
+    pub indices: collections::BTreeSet<i64>,
+    pub proved_indices: collections::BTreeSet<i64>,
+    pub operations: collections::BTreeSet<i64>,
+    pub proved_operations: collections::BTreeSet<i64>,
+    pub negations: collections::BTreeSet<i64>,
+    pub proved_negations: collections::BTreeSet<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EmitOrderTouch {
+    reads: Vec<String>,
+    writes: Vec<String>,
+}
+
+pub fn emit_order(block: &Block, proofs: &EmitOrderProofs, words: &winnow_grammar::InternerContext) -> Vec<i64> {
+    let mut order: Vec<i64> = vec![];
+    let count = block.stmts.len() as i64;
+    let mut movable: collections::BTreeMap<i64, EmitOrderTouch> = collections::BTreeMap::new();
+    let mut passable: collections::BTreeMap<i64, EmitOrderTouch> = collections::BTreeMap::new();
+    let mut i = 0;
+    for stmt in block.stmts.iter() {
+        let mut touch = EmitOrderTouch { reads: vec![], writes: vec![] };
+        if emit_order_assignment(&stmt.node, stmt.span.start as i64, proofs, words, &mut touch) { movable.insert(i, touch); } else {
+            let mut other = EmitOrderTouch { reads: vec![], writes: vec![] };
+            if emit_order_branch(&stmt.node, proofs, words, &mut other) { passable.insert(i, other); }
+        }
+        i += 1;
+    }
+    for i in 0..count {
+        let mut at = order.len() as i64;
+        if i + 1 < count && movable.contains_key(&i) {
+            let moved = match *nikaia_std::index::get(&movable, &i) { Some(__nikaia_value) => __nikaia_value, None => return emit_order_written(count) };
+            while at > 0 {
+                let before = *nikaia_std::index::get(&order, nikaia_std::index::at(at - 1));
+                let passed = match *nikaia_std::index::get(&passable, &before) { Some(__nikaia_value) => __nikaia_value, None => break };
+                if !emit_order_independent(moved, passed) { break; }
+                at -= 1;
+            }
+        }
+        order.insert(nikaia_std::count::of(at), i);
+    }
+    order
+}
+
+fn emit_order_written(count: i64) -> Vec<i64> {
+    let mut order: Vec<i64> = vec![];
+    for i in 0..count { order.push(i); }
+    order
+}
+
+fn emit_order_independent(moved: &EmitOrderTouch, passed: &EmitOrderTouch) -> bool {
+    for w in moved.writes.iter() {
+        for r in passed.reads.iter() { if emit_order_overlap(w, r) { return false; } }
+        for o in passed.writes.iter() { if emit_order_overlap(w, o) { return false; } }
+    }
+    for r in moved.reads.iter() { for o in passed.writes.iter() { if emit_order_overlap(r, o) { return false; } } }
+    true
+}
+
+fn emit_order_overlap(a: &str, b: &str) -> bool {
+    let xs: Vec<&str> = a.split('.').collect::<Vec<_>>();
+    let ys: Vec<&str> = b.split('.').collect::<Vec<_>>();
+    let n = (xs.len() as i64).min(ys.len() as i64);
+    for k in 0..n { if *nikaia_std::index::get(&xs, (k) as usize) != *nikaia_std::index::get(&ys, (k) as usize) { return false; } }
+    true
+}
+
+fn emit_order_assignment(stmt: &Stmt, at: i64, proofs: &EmitOrderProofs, words: &winnow_grammar::InternerContext, touch: &mut EmitOrderTouch) -> bool {
+    match stmt {
+        Stmt::Assign { target, op, value } => {
+            let place = match emit_order_place(target, proofs, words, touch) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if !emit_order_quiet(value, proofs, words, touch) { return false; }
+            if op.is_some() {
+                let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return false };
+                match o {
+                    BinaryOp::Add => { if !emit_order_proved(&proofs.operations, &proofs.proved_operations, at) { return false; } },
+                    BinaryOp::Sub => { if !emit_order_proved(&proofs.operations, &proofs.proved_operations, at) { return false; } },
+                    BinaryOp::Mul => { if !emit_order_proved(&proofs.operations, &proofs.proved_operations, at) { return false; } },
+                    BinaryOp::Shl => { if !emit_order_proved(&proofs.operations, &proofs.proved_operations, at) { return false; } },
+                    BinaryOp::Shr => { if !emit_order_proved(&proofs.operations, &proofs.proved_operations, at) { return false; } },
+                    BinaryOp::BitAnd => { },
+                    BinaryOp::BitOr => { },
+                    BinaryOp::BitXor => { },
+                    _ => { return false; },
+                }
+                touch.reads.push(place.to_owned());
+            }
+            touch.writes.push(place);
+            return true;
+        },
+        _ => return false,
+    }
+}
+
+fn emit_order_branch(stmt: &Stmt, proofs: &EmitOrderProofs, words: &winnow_grammar::InternerContext, touch: &mut EmitOrderTouch) -> bool {
+    match stmt {
+        Stmt::Expr(value) => {
+            match value {
+                Expr::If { cond, then_branch, else_branch, .. } => {
+                    let cond = nikaia_std::boxed::open(cond);
+                    if !emit_order_quiet(cond, proofs, words, touch) { return false; }
+                    if !emit_order_arm(then_branch, proofs, words, touch) { return false; }
+                    if else_branch.is_some() {
+                        let other: &Block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+                        if !emit_order_arm(other, proofs, words, touch) { return false; }
+                    }
+                    return true;
+                },
+                _ => return false,
+            }
+        },
+        _ => return false,
+    }
+}
+
+fn emit_order_arm(arm: &Block, proofs: &EmitOrderProofs, words: &winnow_grammar::InternerContext, touch: &mut EmitOrderTouch) -> bool {
+    for stmt in arm.stmts.iter() { if !emit_order_assignment(&stmt.node, stmt.span.start as i64, proofs, words, touch) && !emit_order_branch(&stmt.node, proofs, words, touch) { return false; } }
+    true
+}
+
+fn emit_order_proved(sites: &collections::BTreeSet<i64>, proved: &collections::BTreeSet<i64>, at: i64) -> bool { sites.contains(&at) && proved.contains(&at) }
+
+fn emit_order_place(expr: &Expr, proofs: &EmitOrderProofs, words: &winnow_grammar::InternerContext, touch: &mut EmitOrderTouch) -> Option<String> {
+    match expr {
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_owned()) },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let inner = match emit_order_place(base, proofs, words, touch) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(format!("{}.{}", inner, words.resolve(name)))
+        },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            if !emit_order_proved(&proofs.indices, &proofs.proved_indices, node_key(base)) { return None; }
+            let inner = match emit_order_place(base, proofs, words, touch) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if !emit_order_quiet(index, proofs, words, touch) { return None; }
+            Some(format!("{}.[]", inner))
+        },
+        _ => None,
+    }
+}
+
+fn emit_order_quiet(expr: &Expr, proofs: &EmitOrderProofs, words: &winnow_grammar::InternerContext, touch: &mut EmitOrderTouch) -> bool {
+    match expr {
+        Expr::LitInt { .. } => return true,
+        Expr::LitBool(_, _) => return true,
+        Expr::LitChar(_, _) => return true,
+        Expr::LitFloat(_, _) => return true,
+        Expr::Variable(_, _) => {
+            let place = match emit_order_place(expr, proofs, words, touch) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            touch.reads.push(place);
+            return true;
+        },
+        Expr::Field { .. } => {
+            let place = match emit_order_place(expr, proofs, words, touch) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            touch.reads.push(place);
+            return true;
+        },
+        Expr::Index { .. } => {
+            let place = match emit_order_place(expr, proofs, words, touch) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            touch.reads.push(place);
+            return true;
+        },
+        Expr::Unary { op, expr: inner, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            match op {
+                UnaryOp::Not => return emit_order_quiet(inner, proofs, words, touch),
+                UnaryOp::Neg => {
+                    if !emit_order_proved(&proofs.negations, &proofs.proved_negations, node_key(expr)) { return false; }
+                    return emit_order_quiet(inner, proofs, words, touch);
+                },
+                _ => return false,
+            }
+        },
+        Expr::Binary { op, lhs, rhs, span, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            let checked = matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Shl | BinaryOp::Shr);
+            let stops = matches!(op, BinaryOp::Div | BinaryOp::Rem);
+            if stops { return false; }
+            if checked && !emit_order_proved(&proofs.operations, &proofs.proved_operations, span.start as i64) { return false; }
+            return emit_order_quiet(lhs, proofs, words, touch) && emit_order_quiet(rhs, proofs, words, touch);
+        },
+        _ => return false,
+    }
+}
+
+
 // --- emit_out.nika ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47313,8 +47515,8 @@ fn qualified_default(text: &str, prefix: &str, declared: &collections::BTreeSet<
                 at += 2;
                 continue;
             }
-            if here == '"' { quoted = false; }
             at += 1;
+            if here == '"' { quoted = false; }
             continue;
         }
         if here == '"' {
@@ -49062,8 +49264,8 @@ impl LgIndexed {
             while at < by_form.len() as i64 {
                 let order = lg_terms_cmp(&atom.terms, &nikaia_std::index::get(&by_form, nikaia_std::index::at(at)).terms);
                 if order == 0 {
-                    if atom.constant > nikaia_std::index::get(&by_form, nikaia_std::index::at(at)).constant { by_form[nikaia_std::index::at(at)].constant = atom.constant; }
                     placed = true;
+                    if atom.constant > nikaia_std::index::get(&by_form, nikaia_std::index::at(at)).constant { by_form[nikaia_std::index::at(at)].constant = atom.constant; }
                     break;
                 }
                 if order < 0 { break; }
@@ -71242,6 +71444,10 @@ pub mod emit_misc {
 pub mod emit_ops {
     #[allow(unused_imports)]
     pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, never_a_value, a_number, only_literals, a_negation_inside, is_length, is_count, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
+}
+pub mod emit_order {
+    #[allow(unused_imports)]
+    pub use super::{EmitOrderProofs, emit_order};
 }
 pub mod emit_out {
     #[allow(unused_imports)]

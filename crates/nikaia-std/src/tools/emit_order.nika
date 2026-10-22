@@ -1,0 +1,277 @@
+// The order a block's statements are written in (ADR-379): an assignment
+// that runs unconditionally is written before the `if`s directly in front
+// of it where no program can tell.
+
+use std::collections
+
+/// **Which checks there are, and which are proved**, whatever the build
+/// writes of them (ADR-306 D14): a statement whose every check is proved
+/// cannot stop the program.
+pub struct EmitOrderProofs {
+    /// The indexes into lists, by their base's node, and those proved.
+    pub indices: collections::BTreeSet[i64],
+    pub proved_indices: collections::BTreeSet[i64],
+    /// The `+`, `-`, `*` and shifts of whole numbers, by where they stand,
+    /// and those proved.
+    pub operations: collections::BTreeSet[i64],
+    pub proved_operations: collections::BTreeSet[i64],
+    /// The negations, by node, and those proved.
+    pub negations: collections::BTreeSet[i64],
+    pub proved_negations: collections::BTreeSet[i64],
+}
+
+/// What a statement reads and writes, as paths of places: `self.slots.[].sum`,
+/// with `[]` for any element.
+struct EmitOrderTouch {
+    reads: Vec[String],
+    writes: Vec[String],
+}
+
+/// **The order to write `block`'s statements in** (ADR-379 D1), as their
+/// positions in it. An assignment that can be moved is written before the
+/// `if`s directly in front of it that it can be moved past; the last
+/// statement, the block's value, stays where it is.
+pub fn emit_order(block: ref Block, proofs: ref EmitOrderProofs, words: ref winnow_grammar::InternerContext) -> Vec[i64] {
+    let mut order: Vec[i64] = []
+    let count = block.stmts.len()
+    // What each statement touches where it may move or be moved past.
+    let mut movable: collections::BTreeMap[i64, EmitOrderTouch] = collections::BTreeMap()
+    let mut passable: collections::BTreeMap[i64, EmitOrderTouch] = collections::BTreeMap()
+    let mut i = 0
+    for stmt in block.stmts {
+        let mut touch = EmitOrderTouch { reads: [], writes: [] }
+        if emit_order_assignment(stmt.node, stmt.span.start as i64, proofs, words, touch) {
+            movable.insert(i, touch)
+        } else {
+            let mut other = EmitOrderTouch { reads: [], writes: [] }
+            if emit_order_branch(stmt.node, proofs, words, other) {
+                passable.insert(i, other)
+            }
+        }
+        i += 1
+    }
+    for i in 0..<count {
+        let mut at = order.len()
+        if i + 1 < count && movable.contains_key(i) {
+            let moved = movable[i] ?? return emit_order_written(count)
+            while at > 0 {
+                let before = order[at - 1]
+                let passed = passable[before] ?? break
+                if !emit_order_independent(moved, passed) {
+                    break
+                }
+                at -= 1
+            }
+        }
+        order.insert(at, i)
+    }
+    return order
+}
+
+/// The written order.
+fn emit_order_written(count: i64) -> Vec[i64] {
+    let mut order: Vec[i64] = []
+    for i in 0..<count {
+        order.push(i)
+    }
+    return order
+}
+
+/// Whether `moved` may be written before `passed`: `passed` neither reads nor
+/// writes what `moved` writes, and `moved` reads nothing `passed` writes.
+fn emit_order_independent(moved: ref EmitOrderTouch, passed: ref EmitOrderTouch) -> bool {
+    for w in moved.writes {
+        for r in passed.reads {
+            if emit_order_overlap(w, r) {
+                return false
+            }
+        }
+        for o in passed.writes {
+            if emit_order_overlap(w, o) {
+                return false
+            }
+        }
+    }
+    for r in moved.reads {
+        for o in passed.writes {
+            if emit_order_overlap(r, o) {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+/// Whether two paths may name the same memory: one is the other or a part
+/// of it, `[]` standing for any element.
+fn emit_order_overlap(a: ref String, b: ref String) -> bool {
+    let xs: Vec[ref String] = a.split(".").collect()
+    let ys: Vec[ref String] = b.split(".").collect()
+    let n = xs.len().min(ys.len())
+    for k in 0..<n {
+        if xs[k] != ys[k] {
+            return false
+        }
+    }
+    return true
+}
+
+/// **An assignment that may move** (ADR-379 D1): `p = e` or `p op= e` to a
+/// place, whose checks are all proved and which calls nothing.
+fn emit_order_assignment(stmt: ref Stmt, at: i64, proofs: ref EmitOrderProofs, words: ref winnow_grammar::InternerContext, mut touch: EmitOrderTouch) -> bool {
+    match stmt {
+        Stmt::Assign { target, op, value } => {
+            let place = emit_order_place(target, proofs, words, touch) ?? return false
+            if !emit_order_quiet(value, proofs, words, touch) {
+                return false
+            }
+            if op != null {
+                let o: ref BinaryOp = op ?? return false
+                match o {
+                    BinaryOp::Add => { if !emit_order_proved(proofs.operations, proofs.proved_operations, at) { return false } },
+                    BinaryOp::Sub => { if !emit_order_proved(proofs.operations, proofs.proved_operations, at) { return false } },
+                    BinaryOp::Mul => { if !emit_order_proved(proofs.operations, proofs.proved_operations, at) { return false } },
+                    BinaryOp::Shl => { if !emit_order_proved(proofs.operations, proofs.proved_operations, at) { return false } },
+                    BinaryOp::Shr => { if !emit_order_proved(proofs.operations, proofs.proved_operations, at) { return false } },
+                    BinaryOp::BitAnd => {},
+                    BinaryOp::BitOr => {},
+                    BinaryOp::BitXor => {},
+                    else => return false,
+                }
+                touch.reads.push(place.clone())
+            }
+            touch.writes.push(place)
+            return true
+        },
+        else => return false,
+    }
+}
+
+/// **An `if` an assignment may move past** (ADR-379 D1): its condition and
+/// its arms only read and assign, cannot stop, and leave nothing - no
+/// `break`, `return` or other way out between.
+fn emit_order_branch(stmt: ref Stmt, proofs: ref EmitOrderProofs, words: ref winnow_grammar::InternerContext, mut touch: EmitOrderTouch) -> bool {
+    match stmt {
+        Stmt::Expr(value) => {
+            match value {
+                Expr::If { cond, then_branch, else_branch, .. } => {
+                    if !emit_order_quiet(cond, proofs, words, touch) {
+                        return false
+                    }
+                    if !emit_order_arm(then_branch, proofs, words, touch) {
+                        return false
+                    }
+                    if else_branch != null {
+                        let other: ref Block = else_branch ?? return false
+                        if !emit_order_arm(other, proofs, words, touch) {
+                            return false
+                        }
+                    }
+                    return true
+                },
+                else => return false,
+            }
+        },
+        else => return false,
+    }
+}
+
+fn emit_order_arm(arm: ref Block, proofs: ref EmitOrderProofs, words: ref winnow_grammar::InternerContext, mut touch: EmitOrderTouch) -> bool {
+    for stmt in arm.stmts {
+        if !emit_order_assignment(stmt.node, stmt.span.start as i64, proofs, words, touch) && !emit_order_branch(stmt.node, proofs, words, touch) {
+            return false
+        }
+    }
+    return true
+}
+
+/// Whether the check at `at` is one there is and is proved.
+fn emit_order_proved(sites: ref collections::BTreeSet[i64], proved: ref collections::BTreeSet[i64], at: i64) -> bool {
+    return sites.contains(at) && proved.contains(at)
+}
+
+/// **The path of a place**, its indexes' checks proved and what they read
+/// added to `touch`: `self.slots.[].sum` of `self.slots[at].sum`.
+fn emit_order_place(expr: ref Expr, proofs: ref EmitOrderProofs, words: ref winnow_grammar::InternerContext, mut touch: EmitOrderTouch) -> String? {
+    return match expr {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Field { base, name, .. } => {
+            let inner = emit_order_place(base, proofs, words, touch) ?? return null
+            f"{inner}.{words.resolve(name)}"
+        },
+        Expr::Index { base, index, .. } => {
+            if !emit_order_proved(proofs.indices, proofs.proved_indices, node_key(base)) {
+                return null
+            }
+            let inner = emit_order_place(base, proofs, words, touch) ?? return null
+            if !emit_order_quiet(index, proofs, words, touch) {
+                return null
+            }
+            f"{inner}.[]"
+        },
+        else => null,
+    }
+}
+
+/// **Whether `expr` only reads memory and cannot stop the program**, what it
+/// reads added to `touch`: names, places, literals, and operators whose
+/// checks are proved. A call, a conversion or a division may stop or do
+/// more, and is not.
+fn emit_order_quiet(expr: ref Expr, proofs: ref EmitOrderProofs, words: ref winnow_grammar::InternerContext, mut touch: EmitOrderTouch) -> bool {
+    match expr {
+        Expr::LitInt { .. } => return true,
+        Expr::LitBool(_, _) => return true,
+        Expr::LitChar(_, _) => return true,
+        Expr::LitFloat(_, _) => return true,
+        Expr::Variable(_, _) => {
+            let place = emit_order_place(expr, proofs, words, touch) ?? return false
+            touch.reads.push(place)
+            return true
+        },
+        Expr::Field { .. } => {
+            let place = emit_order_place(expr, proofs, words, touch) ?? return false
+            touch.reads.push(place)
+            return true
+        },
+        Expr::Index { .. } => {
+            let place = emit_order_place(expr, proofs, words, touch) ?? return false
+            touch.reads.push(place)
+            return true
+        },
+        Expr::Unary { op, expr: inner, .. } => {
+            match op {
+                UnaryOp::Not => return emit_order_quiet(inner, proofs, words, touch),
+                UnaryOp::Neg => {
+                    if !emit_order_proved(proofs.negations, proofs.proved_negations, node_key(expr)) {
+                        return false
+                    }
+                    return emit_order_quiet(inner, proofs, words, touch)
+                },
+                else => return false,
+            }
+        },
+        Expr::Binary { op, lhs, rhs, span, .. } => {
+            let checked = match op {
+                BinaryOp::Add => true,
+                BinaryOp::Sub => true,
+                BinaryOp::Mul => true,
+                BinaryOp::Shl => true,
+                BinaryOp::Shr => true,
+                else => false,
+            }
+            let stops = match op {
+                BinaryOp::Div => true,
+                BinaryOp::Rem => true,
+                else => false,
+            }
+            if stops {
+                return false
+            }
+            if checked && !emit_order_proved(proofs.operations, proofs.proved_operations, span.start as i64) {
+                return false
+            }
+            return emit_order_quiet(lhs, proofs, words, touch) && emit_order_quiet(rhs, proofs, words, touch)
+        },
+        else => return false,
+    }
+}

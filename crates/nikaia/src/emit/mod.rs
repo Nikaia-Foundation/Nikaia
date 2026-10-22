@@ -1197,6 +1197,9 @@ struct Emitter<'p> {
     /// **The counters `bounds::proven` already found never negative**, by the
     /// address of the body in `parsed` (`Proven::nonnegative_locals`).
     nonnegative_bodies: HashMap<usize, HashSet<Symbol>>,
+    /// **Which checks there are and which are proved**, for the order a
+    /// block's statements are written in (ADR-379).
+    order_proofs: nikaia_std::tools::emit_order::EmitOrderProofs,
     /// **The program's `main`'s parameters as its definition wrote them**,
     /// `name: type`, for the entry that reads the words into them
     /// ([ADR-360](../../docs/specification/adr/adr-360.md) D1).
@@ -1984,6 +1987,23 @@ impl<'p> Emitter<'p> {
             build.prove_through_loops,
         );
 
+        // **Which checks a statement holds and which are proved**, whatever
+        // the build writes of them: the order of a block's statements reads
+        // it (ADR-379).
+        let order_proofs = nikaia_std::tools::emit_order::EmitOrderProofs {
+            indices: propagation.list_indices.iter().copied().collect(),
+            proved_indices: proven.indices.iter().copied().collect(),
+            operations: propagation
+                .arithmetic
+                .keys()
+                .chain(propagation.shifts.keys())
+                .copied()
+                .collect(),
+            proved_operations: proven.arithmetic.iter().copied().collect(),
+            negations: propagation.negations.keys().copied().collect(),
+            proved_negations: proven.negations.iter().copied().collect(),
+        };
+
         // ADR-037 D7: which count each `Shared` value gets. Computed over the
         // whole unit, because a count belongs to an allocation and a handle's
         // class may reach into another function.
@@ -2214,6 +2234,7 @@ impl<'p> Emitter<'p> {
             grammar_raw: std::cell::Cell::new(false),
             nonnegative_bodies: std::mem::take(&mut proven.nonnegative_locals),
             main_params: std::cell::RefCell::new(Vec::new()),
+            order_proofs,
         };
         made.s.sums = made.s.error_sums(&made.world);
         made
@@ -5957,14 +5978,23 @@ impl<'p> Emitter<'p> {
             out.push("\n");
         }
         let last = block.stmts.len() - 1;
-        let mut i = 0;
-        while i < block.stmts.len() {
-            // **Statements run in the order they are written**
-            // ([ADR-292](../../../docs/specification/adr/adr-292.md) D1), and no
-            // analysis stands between the source and the schedule. A program
-            // that wants overlap writes `overlap { … }` and has the claim
-            // checked (D3).
-
+        // **Statements run in the order they are written**
+        // ([ADR-292](../../../docs/specification/adr/adr-292.md) D1), and no
+        // analysis stands between the source and the schedule. A program
+        // that wants overlap writes `overlap { … }` and has the claim
+        // checked (D3). One exception no program can tell: an assignment
+        // that runs unconditionally is written before the `if`s directly in
+        // front of it that neither touch what it touches nor can stop the
+        // program ([ADR-379](../../../docs/specification/adr/adr-379.md)),
+        // so the optimiser sees its read and its write in one block.
+        let order = nikaia_std::tools::emit_order::emit_order(
+            block,
+            &self.order_proofs,
+            &self.parsed.interner,
+        );
+        let mut pos = 0;
+        while pos < order.len() {
+            let i = order[pos] as usize;
             let stmt = &block.stmts[i];
             // **An empty list made `n` long at once is `vec![v; n]`**
             // ([ADR-270](../../docs/specification/adr/adr-270.md) D8 step 1):
@@ -5973,6 +6003,9 @@ impl<'p> Emitter<'p> {
             // which is what Rust writes, and what lets the optimiser drop the
             // bounds checks of every read below that it can see is in range.
             if i < last
+                && order
+                    .get(pos + 1)
+                    .is_some_and(|&next| next as usize == i + 1)
                 && let Some((fill, length)) = self.filled_at_once(stmt, &block.stmts[i + 1])
             {
                 let declared = {
@@ -6020,7 +6053,7 @@ impl<'p> Emitter<'p> {
                         out.record(&stmt.span, st);
                     }
                     out.push("\n");
-                    i += 2;
+                    pos += 2;
                     continue;
                 }
             }
@@ -6039,7 +6072,7 @@ impl<'p> Emitter<'p> {
                 out.record(&stmt.span, st);
             }
             out.push("\n");
-            i += 1;
+            pos += 1;
         }
         out.push(&pad);
         out.push("}");

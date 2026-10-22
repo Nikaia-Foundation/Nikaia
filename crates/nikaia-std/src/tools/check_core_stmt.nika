@@ -121,6 +121,15 @@ fn check_core_stmt_a_name_or_field(value: ref Expr) -> bool sync {
     }
 }
 
+/// A call of a function or a method.
+fn check_core_stmt_a_call(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Call { .. } => true,
+        Expr::MethodCall { .. } => true,
+        else => false,
+    }
+}
+
 /// A field or an index, the places a `let` is a view of.
 fn check_core_stmt_a_place(value: ref Expr) -> bool sync {
     return match value {
@@ -331,6 +340,19 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let findings_before = state.findings.len() as i64
     let found = check_core_expr(state, world, host, value, span)
     state.flow.lambda_expected = null
+    // **A call's whole-number result is a number of the bounds walk**
+    // (#781): `let at = self.slot_of(…)` is bounded by what is assumed of
+    // `at`, as a name bound to a sum is.
+    if names.len() == 1 && check_core_stmt_a_call(value) {
+        match found {
+            Ty::Named { name, args, .. } => {
+                if args.is_empty() && is_whole_number(name) {
+                    state.facts.whole_fields.insert(id_of(value) as i64)
+                }
+            },
+            else => {}
+        }
+    }
     // **A map's read past a jump, bound to a declared type that owns its
     // value** (ADR-293 D15): refused or copied out as an assignment's is.
     if ty != null && names.len() == 1 && shape.len() == 0 {

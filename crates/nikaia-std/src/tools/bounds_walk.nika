@@ -2659,6 +2659,9 @@ fn bounding_let(mut walk: BoundsWalk, names: ref Vec[winnow_grammar::Symbol], ty
     // is a number too, of which nothing is known yet (#714).
     let whole_field = match value {
         Expr::Field { .. } => context.whole_fields.contains(node_key(value)),
+        // A call's whole-number result too (#781).
+        Expr::Call { .. } => context.whole_fields.contains(node_key(value)),
+        Expr::MethodCall { .. } => context.whole_fields.contains(node_key(value)),
         else => false,
     }
     let whole = bounding_declared_whole(ty, words) ?? (value_lin != null || value_range != null || whole_field)

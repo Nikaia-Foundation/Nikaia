@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1194] — 2026-10-22
+
+**An unconditional write before the ifs that cannot tell (built)**
+- The emitter writes an assignment that runs unconditionally before the `if`s directly in front of it where nothing can tell: they neither read nor write what it writes, it reads nothing they write, neither side calls out or can stop the program, the `if`s do not leave, and it is not the block's last statement; in every build (ADR-379, Part I 8.1.1, #781). A `let` bound to a call's whole-number result is a number of the bounds walk. 1BRC `fast-unsafe.nika` in its natural order: 88.0 -> 84.0 instructions a row at x86-64-v3, 102.0 -> 98.0 at x86-64 (1 unit).
+
 ## [0.0.1193] — 2026-10-22
 
 **A field through one element is a name of the walk**

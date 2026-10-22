@@ -111,7 +111,8 @@ pub struct CheckFacts {
     pub std_lengths: collections::BTreeSet[i64],
     pub sized_lengths: collections::BTreeSet[i64],
     /// **The field reads of a whole-number type**, by node (ADR-306 D17):
-    /// the bounds walk reads a path of fields to one as a number.
+    /// the bounds walk reads a path of fields to one as a number. And the
+    /// calls of that type a `let` binds (#781).
     pub whole_fields: collections::BTreeSet[i64],
     /// **The `N` of each `Array[T, N]` read or counted**, by node (#711).
     pub array_lengths: collections::BTreeMap[i64, i64],

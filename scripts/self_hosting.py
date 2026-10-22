@@ -151,6 +151,7 @@ COMPILER_NIKA = {
     "emit_walk.nika": "emit: every expression inside a block or an expression, and the holes of a template (0.0.789)",
     "emit_reach.nika": "emit: which pausing functions reach which, and so which futures are infinitely sized (0.0.790)",
     "emit_locals.nika": "emit: the locals of a body that are never negative (0.0.790)",
+    "emit_order.nika": "emit: the order of a block's statements, an unconditional write before the ifs that cannot tell (0.0.1194)",
     "check_consts.nika": "check: a computed value as the program holds it, and whether it crosses as the fixed type its declaration names (0.0.791)",
     "check_exprs.nika": "check: eight reports about one expression, said in its own words (0.0.791)",
     "emit_calls.nika": "emit: whether a call pauses or can fail, the errors a set of branches throws, and whether a function returns an Either (0.0.792)",
