@@ -184,8 +184,8 @@ fn a_grammar_action_runs_the_same_without_its_proved_checks() {
         ..Build::default()
     };
     let rust = emit_program(&parsed, build).expect("lowers").rust;
-    assert!(rust.contains("<i32>::wrapping_neg("), "{rust}");
-    assert!(!rust.contains("<i64>::wrapping_neg("), "{rust}");
+    assert!(rust.contains("nikaia_std::proven::neg::<i32>("), "{rust}");
+    assert!(!rust.contains("nikaia_std::proven::neg::<i64>("), "{rust}");
     let dir = common::scratch_dir("grammar-bindings");
     let file = dir.join("main.rs");
     std::fs::write(&file, &rust).expect("write the Rust");

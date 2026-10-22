@@ -47,7 +47,8 @@ fn unchecked_arithmetic(rust: &str) -> usize {
     rust.matches("unsafe { nikaia_std::proven::add::<").count()
         + rust.matches("unsafe { nikaia_std::proven::sub::<").count()
         + rust.matches("unsafe { nikaia_std::proven::mul::<").count()
-        + rust.matches(">::unchecked_sh").count()
+        + rust.matches("unsafe { nikaia_std::proven::shl::<").count()
+        + rust.matches("unsafe { nikaia_std::proven::shr::<").count()
 }
 
 fn run(purpose: &str, source: &str, level: Level) -> (bool, String, String) {
@@ -162,7 +163,7 @@ fn main() {
 
 /// ADR-306 D18: a shift's count the walk proves inside `0..<64` - here from
 /// `trailing_zeros`'s `0..=64` and the guard - is written as Rust's release
-/// without its check as the shift that may assume it, `unchecked_shl`, and
+/// without its check as the shift that may assume it, `proven::shl`, and
 /// so is the `28 - k` it is made of; at `off` both keep their checks.
 #[test]
 fn a_shift_proved_inside_its_width_is_written_without_its_check() {
@@ -181,7 +182,7 @@ fn main() {
 ";
     assert_eq!(unchecked_arithmetic(&lowered(source, Level::Off)), 0);
     let rust = lowered(source, Level::Aggressive);
-    assert!(rust.contains("<u64>::unchecked_shl("), "{rust}");
+    assert!(rust.contains("nikaia_std::proven::shl::<u64>("), "{rust}");
     assert!(rust.contains("nikaia_std::proven::sub::<u32>("), "{rust}");
     prints("proved-shift", source, "16777216 0 768\n");
 }

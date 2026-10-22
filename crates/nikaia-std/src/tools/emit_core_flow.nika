@@ -459,10 +459,11 @@ impl EmitState {
             // D18) is written as the shift that may assume it, as a proved
             // index is read without its test: a masked count would hide the
             // count's range from the optimiser below, which then cannot tell
-            // `x & (ONES >> (64 - 8 * n))` is `x`'s low `8 * n` bits.
+            // `x & (ONES >> (64 - 8 * n))` is `x`'s low `8 * n` bits. It is
+            // `proven-index`'s, as every dropped check is (ADR-378 D2).
             if op == BinaryOp::Shl || op == BinaryOp::Shr {
-                let shift = if op == BinaryOp::Shl { "unchecked_shl" } else { "unchecked_shr" }
-                out.push(f"unsafe {{ <{ty}>::{shift}(")
+                let shift = if op == BinaryOp::Shl { "nikaia_std::proven::shl" } else { "nikaia_std::proven::shr" }
+                out.push(f"unsafe {{ {shift}::<{ty}>(")
                 host.expr(walk, out, lhs, depth, wide, scope)
                 out.push(", (")
                 host.expr(walk, out, rhs, depth, wide, scope)

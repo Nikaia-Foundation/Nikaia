@@ -1,7 +1,7 @@
 //! **An element of a slice read or written without the bounds check**, at a
-//! position the caller has proved is inside, and **a whole-number `+`, `-`
-//! or `*` without the overflow check**, where the caller has proved it stays
-//! inside its type.
+//! position the caller has proved is inside, and **a whole-number `+`, `-`,
+//! `*`, shift or negation without its check**, where the caller has proved it
+//! stays inside its type.
 //!
 //! The caller is the Nikaia compiler's generated code, at an index its
 //! `--optimization=remove-bounds-checks` pass proved: by a loop over the
@@ -103,6 +103,25 @@ pub trait Whole: Copy + core::fmt::Debug {
     /// The operation does not overflow.
     #[doc(hidden)]
     unsafe fn unchecked(self, other: Self, op: u8) -> Self;
+    #[doc(hidden)]
+    const BITS: u32;
+    /// # Safety
+    ///
+    /// `k` is below `Self::BITS`.
+    #[doc(hidden)]
+    unsafe fn unchecked_shift(self, k: u32, left: bool) -> Self;
+}
+
+/// **A signed whole number whose negation a proof keeps inside its type**:
+/// what [`neg`] takes.
+pub trait Signed: Whole {
+    #[doc(hidden)]
+    fn negates(self) -> bool;
+    /// # Safety
+    ///
+    /// `self` is not the type's least value.
+    #[doc(hidden)]
+    unsafe fn unchecked_negation(self) -> Self;
 }
 
 macro_rules! whole {
@@ -129,12 +148,48 @@ macro_rules! whole {
                         }
                     }
                 }
+                const BITS: u32 = <$t>::BITS;
+                #[inline(always)]
+                unsafe fn unchecked_shift(self, k: u32, left: bool) -> Self {
+                    // SAFETY: the caller guarantees `k < Self::BITS`; told
+                    // so, the optimiser drops the mask `wrapping_sh*` puts on
+                    // the count (`unchecked_sh*` is newer than Rust 1.88).
+                    unsafe { core::hint::assert_unchecked(k < Self::BITS) };
+                    if left {
+                        self.wrapping_shl(k)
+                    } else {
+                        self.wrapping_shr(k)
+                    }
+                }
             }
         )*
     };
 }
 
-whole!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+whole!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
+);
+
+macro_rules! signed {
+    ($($t:ty),*) => {
+        $(
+            impl Signed for $t {
+                #[inline(always)]
+                fn negates(self) -> bool {
+                    self.checked_neg().is_some()
+                }
+                #[inline(always)]
+                unsafe fn unchecked_negation(self) -> Self {
+                    // SAFETY: the caller guarantees `self` is not the least
+                    // value, so `0 - self` does not overflow.
+                    unsafe { (0 as $t).unchecked_sub(self) }
+                }
+            }
+        )*
+    };
+}
+
+signed!(i8, i16, i32, i64, i128, isize);
 
 #[inline(always)]
 unsafe fn operation<T: Whole>(a: T, b: T, op: u8, written: &str) -> T {
@@ -179,6 +234,48 @@ pub unsafe fn mul<T: Whole>(a: T, b: T) -> T {
     unsafe { operation(a, b, 2, "*") }
 }
 
+/// `a << k`, `k` proved below `T`'s width.
+///
+/// # Safety
+///
+/// `k < T::BITS`. A debug build checks it.
+#[inline(always)]
+pub unsafe fn shl<T: Whole>(a: T, k: u32) -> T {
+    debug_assert!(
+        k < T::BITS,
+        "a proved shift counts past the width: {a:?} << {k}"
+    );
+    // SAFETY: the caller guarantees `k < T::BITS`.
+    unsafe { a.unchecked_shift(k, true) }
+}
+
+/// `a >> k`, `k` proved below `T`'s width.
+///
+/// # Safety
+///
+/// `k < T::BITS`. A debug build checks it.
+#[inline(always)]
+pub unsafe fn shr<T: Whole>(a: T, k: u32) -> T {
+    debug_assert!(
+        k < T::BITS,
+        "a proved shift counts past the width: {a:?} >> {k}"
+    );
+    // SAFETY: the caller guarantees `k < T::BITS`.
+    unsafe { a.unchecked_shift(k, false) }
+}
+
+/// `-a`, `a` proved not to be `T`'s least value.
+///
+/// # Safety
+///
+/// `a` is not `T::MIN`. A debug build checks it.
+#[inline(always)]
+pub unsafe fn neg<T: Signed>(a: T) -> T {
+    debug_assert!(a.negates(), "a proved negation overflows: -({a:?})");
+    // SAFETY: the caller guarantees `a` is not the least value.
+    unsafe { a.unchecked_negation() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,6 +293,33 @@ mod tests {
             assert_eq!(mul::<i32>(-46341, 46340), -2147441940);
             assert_eq!(add::<usize>(1, 2), 3);
         }
+    }
+
+    #[test]
+    fn a_proved_shift_and_negation_are_the_operations() {
+        // SAFETY: each count is below the width, and no value is the least.
+        unsafe {
+            assert_eq!(shl::<u64>(1, 63), 1 << 63);
+            assert_eq!(shr::<i32>(-8, 1), -4);
+            assert_eq!(neg::<i64>(i64::MAX), -i64::MAX);
+            assert_eq!(neg::<i8>(-127), 127);
+        }
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "a proved shift counts past the width: 1 << 64")]
+    fn a_debug_build_catches_a_wrong_shift() {
+        // SAFETY: deliberately broken; the debug assertion stops it first.
+        let _ = unsafe { shl::<u64>(1, 64) };
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "a proved negation overflows: -(-128)")]
+    fn a_debug_build_catches_a_wrong_negation() {
+        // SAFETY: deliberately broken; the debug assertion stops it first.
+        let _ = unsafe { neg::<i8>(i8::MIN) };
     }
 
     #[test]

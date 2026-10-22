@@ -8036,16 +8036,16 @@ impl<'p> Emitter<'p> {
                     return self.expr(out, expr, depth, flow);
                 }
                 // **`-x` proved to stay inside its type** (ADR-314 D5) is
-                // written without its check.
+                // written without its check, by `proven-index` (ADR-378 D2).
                 if let (UnaryOp::Neg, Some(ty)) = (
                     op,
                     self.s
                         .proven_negations
                         .get(&((crate::check::value_node(whole) as usize) as i64)),
                 ) {
-                    out.push(&format!("<{ty}>::wrapping_neg("));
+                    out.push(&format!("unsafe {{ nikaia_std::proven::neg::<{ty}>("));
                     self.expr(out, expr, depth, flow)?;
-                    out.push(")");
+                    out.push(") }");
                     return Ok(());
                 }
                 out.push(&unary_op(*op));

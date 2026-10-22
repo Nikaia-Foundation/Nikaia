@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1191] — 2026-10-22
+
+**The emitted code is `unsafe` only where a switch or the program says so**
+- With every `remove-*` switch off the emitted code holds no `unsafe` but the program's own; each check a switch drops is a call into `nikaia_std::proven` (ADR-378). A proved shift is `proven::shl`/`shr` instead of `<T>::unchecked_shl`, which also kept the emitted code above Rust 1.88, and a proved negation `proven::neg` instead of `wrapping_neg`; each asserts its dropped check in a debug build.
+
 ## [0.0.1190] — 2026-10-22
 
 **A proved `+`, `-`, `*` tells the optimiser it does not overflow**
