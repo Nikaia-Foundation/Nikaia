@@ -113,6 +113,45 @@ pub fn any_of<const L: usize, const N: usize>(block: &[u8; L], few: [u8; N]) -> 
     return by_words(block, few);
 }
 
+/// **The bytes of `lanes` whose top bit is set**: bit `i` where `lanes[i]`
+/// is at least 128, as a vector compare leaves a lane that holds. `L` is 16,
+/// 32 or 64.
+#[inline(always)]
+pub fn high_bits<const L: usize>(lanes: &[u8; L]) -> u64 {
+    const { assert!(L == 16 || L == 32 || L == 64) };
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    if L % 32 == 0 {
+        // SAFETY: the build enables AVX2 for every function (`cfg`).
+        return unsafe { avx2::high(lanes) };
+    }
+    #[cfg(target_arch = "x86_64")]
+    // SAFETY: SSE2 is x86-64's baseline.
+    return unsafe { sse2_high(lanes) };
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let mut bits = 0u64;
+        for (i, &b) in lanes.iter().enumerate() {
+            bits |= u64::from(b >> 7) << i;
+        }
+        bits
+    }
+}
+
+/// [`high_bits`] 16 bytes a `pmovmskb`.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+#[target_feature(enable = "sse2")]
+fn sse2_high<const L: usize>(lanes: &[u8; L]) -> u64 {
+    use core::arch::x86_64::*;
+    let mut mask = 0u64;
+    for (i, part) in lanes.as_chunks::<16>().0.iter().enumerate() {
+        // SAFETY: the load reads the 16 bytes of `part`, unaligned.
+        let v = unsafe { _mm_loadu_si128(part.as_ptr().cast::<__m128i>()) };
+        mask |= u64::from(_mm_movemask_epi8(v) as u16) << (16 * i);
+    }
+    mask
+}
+
 /// **The bytes of `block` in the set `tables` holds**: bit `i` where
 /// `block[i]` is. `block` is a whole block or half of one ([`HALF`]).
 #[inline(always)]
@@ -187,6 +226,12 @@ mod avx2 {
             mask |= u64::from(_mm256_movemask_epi8(each(v)) as u32) << (32 * i);
         }
         mask
+    }
+
+    #[inline]
+    #[target_feature(enable = "avx2")]
+    pub(super) fn high<const L: usize>(lanes: &[u8; L]) -> u64 {
+        bits(lanes, |v| v)
     }
 
     #[inline]
@@ -293,7 +338,7 @@ mod sse2 {
 
 #[cfg(test)]
 mod tests {
-    use super::{BLOCK, HALF, Tables, any_of, by_map, by_words, in_tables};
+    use super::{BLOCK, HALF, Tables, any_of, by_map, by_words, high_bits, in_tables};
 
     fn block(seed: &mut u64) -> [u8; BLOCK] {
         let mut out = [0u8; BLOCK];
@@ -312,6 +357,20 @@ mod tests {
             map[usize::from(b >> 6)] |= 1 << (b & 63);
         }
         map
+    }
+
+    /// `high_bits` sets bit `i` exactly where byte `i` is at least 128, at
+    /// each of its widths.
+    #[test]
+    fn high_bits_are_the_top_bits() {
+        let mut seed = 5u64;
+        for _ in 0..64 {
+            let b = block(&mut seed);
+            let top = |n: usize| (0..n).fold(0u64, |m, i| m | (u64::from(b[i] >> 7) << i));
+            assert_eq!(high_bits::<64>(&b), top(64));
+            assert_eq!(high_bits::<32>(b[..32].try_into().unwrap()), top(32));
+            assert_eq!(high_bits::<16>(b[..16].try_into().unwrap()), top(16));
+        }
     }
 
     /// Every way agrees with the byte-by-byte one, on sets of one row, of more

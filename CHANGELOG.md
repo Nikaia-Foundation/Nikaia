@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1187] — 2026-10-22
+
+**`Mask.first()` of byte lanes is one `pmovmskb`**
+- A mask of byte lanes (`Fixed[u8, N]`, `Fixed[i8, N]`, N of 16, 32 or 64) gathers its lanes into bits with one `pmovmskb` a 16 or 32 lanes (`byte_blocks::high_bits`), and `first()` is the lowest bit; other masks gather their bits in one pass instead of searching lane by lane. A 1BRC `;` search with `simd::Fixed[u8, 32]` costs 96 instructions a row instead of 362.
+
 ## [0.0.1186] — 2026-10-21
 
 **`low_bits` cuts by a count up to 255 with one bzhi**

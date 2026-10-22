@@ -46,6 +46,8 @@ pub trait Lane: Copy + Default + PartialEq + PartialOrd + std::fmt::Debug + 'sta
     fn shr(self, k: u32) -> Self;
     /// The lane read from `Self::SIZE` bytes, least significant first.
     fn from_le(bytes: &[u8]) -> Self;
+    /// The lane's least significant byte.
+    fn low_byte(self) -> u8;
 }
 
 macro_rules! lane {
@@ -98,6 +100,10 @@ macro_rules! lane {
             #[inline(always)]
             fn shr(self, k: u32) -> Self {
                 <$t>::wrapping_shr(self, k)
+            }
+            #[inline(always)]
+            fn low_byte(self) -> u8 {
+                self as u8
             }
             #[inline(always)]
             fn from_le(bytes: &[u8]) -> Self {
@@ -374,7 +380,33 @@ impl<T: Lane, const N: usize> Mask<T, N> {
     /// The first lane that holds, or nothing.
     #[inline(always)]
     pub fn first(self) -> Option<i64> {
-        (0..N).find(|&i| self.holds(i)).map(|i| i as i64)
+        let bits = self.bits();
+        if bits == 0 {
+            None
+        } else {
+            Some(i64::from(bits.trailing_zeros()))
+        }
+    }
+
+    /// Lane `i` as bit `i`; `N` is at most 64 (ADR-377 D2).
+    #[inline(always)]
+    fn bits(&self) -> u64 {
+        // A byte lane that holds is all ones: one `pmovmskb` a 16 or 32
+        // lanes, where LLVM would gather the bits one by one.
+        if T::SIZE == 1 {
+            let byte = |i: usize| self.0[i].low_byte();
+            match N {
+                16 => return byte_blocks::high_bits::<16>(&std::array::from_fn(byte)),
+                32 => return byte_blocks::high_bits::<32>(&std::array::from_fn(byte)),
+                64 => return byte_blocks::high_bits::<64>(&std::array::from_fn(byte)),
+                _ => {}
+            }
+        }
+        let mut bits = 0u64;
+        for i in 0..N {
+            bits |= u64::from(self.holds(i)) << i;
+        }
+        bits
     }
 
     /// The lanes that hold, rising.
@@ -468,6 +500,29 @@ mod tests {
         assert_eq!(v.count() as usize, WIDTH);
         let w: Lanes<u64> = splat(1);
         assert_eq!(w.count() as usize, WIDTH / 8);
+    }
+
+    #[test]
+    fn a_byte_mask_answers_its_first_lane_at_every_width() {
+        fn first_of<const N: usize>(hit: Option<usize>) {
+            let mut lanes = [0u8; N];
+            if let Some(i) = hit {
+                lanes[i] = 7;
+                lanes[N - 1] = 7;
+            }
+            let m = Fixed::from(lanes).eq(splat(7));
+            assert_eq!(m.first(), hit.map(|i| i as i64), "{N} lanes, {hit:?}");
+            let signed: Fixed<i8, N> = splat(-1);
+            assert_eq!(signed.eq(signed).first(), Some(0));
+        }
+        for hit in [None, Some(0), Some(5), Some(15)] {
+            first_of::<16>(hit);
+            first_of::<32>(hit);
+            first_of::<64>(hit);
+            first_of::<8>(hit.filter(|&i| i < 8));
+        }
+        first_of::<32>(Some(31));
+        first_of::<64>(Some(63));
     }
 
     #[test]
