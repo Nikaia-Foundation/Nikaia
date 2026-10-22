@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1192] — 2026-10-22
+
+**An unconditional write before the ifs that cannot tell (decided)**
+- Part I 8.1.1: the compiler may write a statement that assigns to a place before the `if`s directly in front of it, where none of them touches that place or what it reads, neither side calls out, pauses or can stop the program; in every build (ADR-379). Decided, not yet built.
+
 ## [0.0.1191] — 2026-10-22
 
 **The emitted code is `unsafe` only where a switch or the program says so**

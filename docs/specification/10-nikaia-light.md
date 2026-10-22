@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1191 (Draft)
+**Version:** 0.0.1192 (Draft)
 **Date:** 2026-10-22
 
 ---
@@ -3215,6 +3215,13 @@ stands where something branches, and nowhere else.
 Two statements run in the order they are written, whether or not they touch
 anything in common. No analysis stands between the source and the schedule. A
 program that wants two things to run together says so (8.1.2).
+
+The compiler may write a statement that assigns to a place before the `if`s
+directly in front of it where no program can tell: none of those `if`s reads
+or writes that place, the statement reads nothing they write, neither side
+calls a function that is not pure, does input or output, pauses, locks or
+spawns, and neither side can stop the program. It does so in every build
+([ADR-379](adr/adr-379.md)).
 
 ### 8.1.2. Asking for Overlap: `overlap { … }`
 
