@@ -44,7 +44,10 @@ fn unchecked_indexes(rust: &str) -> usize {
 
 /// Operations written without their overflow check.
 fn unchecked_arithmetic(rust: &str) -> usize {
-    rust.matches(">::wrapping_").count() + rust.matches(">::unchecked_sh").count()
+    rust.matches("unsafe { nikaia_std::proven::add::<").count()
+        + rust.matches("unsafe { nikaia_std::proven::sub::<").count()
+        + rust.matches("unsafe { nikaia_std::proven::mul::<").count()
+        + rust.matches(">::unchecked_sh").count()
 }
 
 fn run(purpose: &str, source: &str, level: Level) -> (bool, String, String) {
@@ -101,7 +104,8 @@ fn stops(purpose: &str, source: &str, said: &str) {
 }
 
 /// D1, D5: an operation the walk proves inside its type is written
-/// `<T>::wrapping_*`, naming the type; nothing is unchecked at `off`.
+/// `nikaia_std::proven::*::<T>`, naming the type (ADR-306 D19); nothing is
+/// unchecked at `off`.
 #[test]
 fn an_operation_proved_inside_its_type_is_written_without_its_check() {
     let source = "\
@@ -117,7 +121,7 @@ fn main() {
     assert_eq!(unchecked_arithmetic(&lowered(source, Level::Off)), 0);
     let rust = lowered(source, Level::Aggressive);
     assert_eq!(unchecked_arithmetic(&rust), 2, "{rust}");
-    assert!(rust.contains("<u32>::wrapping_add("), "{rust}");
+    assert!(rust.contains("nikaia_std::proven::add::<u32>("), "{rust}");
     prints("proved-arithmetic", source, "3999\n");
 }
 
@@ -178,7 +182,7 @@ fn main() {
     assert_eq!(unchecked_arithmetic(&lowered(source, Level::Off)), 0);
     let rust = lowered(source, Level::Aggressive);
     assert!(rust.contains("<u64>::unchecked_shl("), "{rust}");
-    assert!(rust.contains("<u32>::wrapping_sub("), "{rust}");
+    assert!(rust.contains("nikaia_std::proven::sub::<u32>("), "{rust}");
     prints("proved-shift", source, "16777216 0 768\n");
 }
 
@@ -455,11 +459,11 @@ fn main() {
     assert_eq!(unchecked_arithmetic(&lowered(source, Level::Off)), 0);
     let rust = lowered(source, Level::Aggressive);
     assert!(
-        rust.contains("other = <u32>::wrapping_add(other, 7)"),
+        rust.contains("other = unsafe { nikaia_std::proven::add::<u32>(other, 7)"),
         "{rust}"
     );
     assert!(
-        rust.contains("other = <u32>::wrapping_mul(other, 2)"),
+        rust.contains("other = unsafe { nikaia_std::proven::mul::<u32>(other, 2)"),
         "{rust}"
     );
     prints("proved-compound", source, "4012\n");
@@ -568,11 +572,20 @@ fn main() {
             .expect("the function is lowered");
         rust[at..].lines().next().unwrap_or_default().to_string()
     };
-    assert!(body("after").contains("<i64>::wrapping_add("), "{rust}");
-    assert!(body("both").contains("<i64>::wrapping_add("), "{rust}");
-    assert!(body("inner").contains("<i64>::wrapping_sub("), "{rust}");
-    assert!(!body("grid").contains("wrapping_mul"), "{rust}");
-    assert!(!body("ones").contains("wrapping_"), "{rust}");
+    assert!(
+        body("after").contains("nikaia_std::proven::add::<i64>("),
+        "{rust}"
+    );
+    assert!(
+        body("both").contains("nikaia_std::proven::add::<i64>("),
+        "{rust}"
+    );
+    assert!(
+        body("inner").contains("nikaia_std::proven::sub::<i64>("),
+        "{rust}"
+    );
+    assert!(!body("grid").contains("proven::mul"), "{rust}");
+    assert_eq!(unchecked_arithmetic(&body("ones")), 0, "{rust}");
     prints("lengths", source, "3 4 -1 9 2\n");
 }
 
@@ -625,7 +638,7 @@ fn main() {
     let untyped = typed.replace("let mut i: i64 = 0", "let mut i = 0");
     let rust = lowered(&untyped, Level::Aggressive);
     assert_eq!(unchecked_arithmetic(&rust), 2, "{rust}");
-    assert!(rust.contains("<i64>::wrapping_add("), "{rust}");
+    assert!(rust.contains("nikaia_std::proven::add::<i64>("), "{rust}");
     prints("while-step-untyped", &untyped, "10\n");
 }
 
@@ -693,7 +706,11 @@ fn main() {
 }
 ";
     let rust = lowered(source, Level::Aggressive);
-    assert_eq!(rust.matches("<i64>::wrapping_add(i, ").count(), 2, "{rust}");
+    assert_eq!(
+        rust.matches("nikaia_std::proven::add::<i64>(i, ").count(),
+        2,
+        "{rust}"
+    );
     assert!(rust.contains("i += e"), "{rust}");
     prints("untyped-compound", source, "4 3\n");
 }

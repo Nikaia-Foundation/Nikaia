@@ -6651,14 +6651,9 @@ impl<'p> Emitter<'p> {
                 out.push(&format!("let {STORED} = "));
                 match (self.s.proven_arithmetic.get(&(span.at() as i64)), op) {
                     (Some(ty), BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) => {
-                        let name = match op {
-                            BinaryOp::Add => "wrapping_add",
-                            BinaryOp::Sub => "wrapping_sub",
-                            _ => "wrapping_mul",
-                        };
-                        out.push(&format!("<{ty}>::{name}("));
+                        out.push(&format!("unsafe {{ {}::<{ty}>(", proven_operation(*op)));
                         read(self, out)?;
-                        out.push(&format!(", {STORED})"));
+                        out.push(&format!(", {STORED}) }}"));
                     }
                     _ => {
                         read(self, out)?;
@@ -6681,17 +6676,12 @@ impl<'p> Emitter<'p> {
                 value,
             } if self.s.proven_arithmetic.contains_key(&(span.at() as i64)) => {
                 let ty = &self.s.proven_arithmetic[&(span.at() as i64)];
-                let name = match op {
-                    BinaryOp::Add => "wrapping_add",
-                    BinaryOp::Sub => "wrapping_sub",
-                    _ => "wrapping_mul",
-                };
                 self.expr(out, target, depth, flow.place())?;
-                out.push(&format!(" = <{ty}>::{name}("));
+                out.push(&format!(" = unsafe {{ {}::<{ty}>(", proven_operation(*op)));
                 self.expr(out, target, depth, flow)?;
                 out.push(", ");
                 self.expr(out, value, depth, flow)?;
-                out.push(");");
+                out.push(") };");
             }
             Stmt::Assign { target, op, value } => {
                 let (before, after) =
@@ -8744,6 +8734,16 @@ fn pointing(mutable: bool) -> String {
 
 fn only_literals(index: &Expr) -> bool {
     nikaia_std::tools::emit_ops::only_literals(index)
+}
+
+/// **A `+`, `-` or `*` proved to stay inside its type** (ADR-306 D19): the
+/// operation without its check, `debug_assert`ed, from `proven-index`.
+fn proven_operation(op: BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Add => "nikaia_std::proven::add",
+        BinaryOp::Sub => "nikaia_std::proven::sub",
+        _ => "nikaia_std::proven::mul",
+    }
 }
 
 fn binary_op(op: BinaryOp) -> String {

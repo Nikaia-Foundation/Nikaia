@@ -1,5 +1,7 @@
 //! **An element of a slice read or written without the bounds check**, at a
-//! position the caller has proved is inside.
+//! position the caller has proved is inside, and **a whole-number `+`, `-`
+//! or `*` without the overflow check**, where the caller has proved it stays
+//! inside its type.
 //!
 //! The caller is the Nikaia compiler's generated code, at an index its
 //! `--optimization=remove-bounds-checks` pass proved: by a loop over the
@@ -90,6 +92,93 @@ pub unsafe fn write<T>(items: &mut [T], at: usize, value: T) {
     unsafe { *slot(items, at) = value }
 }
 
+/// **A whole number whose `+`, `-` and `*` a proof keeps inside its type**
+/// (ADR-306 D19): the operations [`add`], [`sub`] and
+/// [`mul`] take.
+pub trait Whole: Copy + core::fmt::Debug {
+    #[doc(hidden)]
+    fn checked(self, other: Self, op: u8) -> bool;
+    /// # Safety
+    ///
+    /// The operation does not overflow.
+    #[doc(hidden)]
+    unsafe fn unchecked(self, other: Self, op: u8) -> Self;
+}
+
+macro_rules! whole {
+    ($($t:ty),*) => {
+        $(
+            impl Whole for $t {
+                #[inline(always)]
+                fn checked(self, other: Self, op: u8) -> bool {
+                    match op {
+                        0 => self.checked_add(other).is_some(),
+                        1 => self.checked_sub(other).is_some(),
+                        _ => self.checked_mul(other).is_some(),
+                    }
+                }
+                #[inline(always)]
+                unsafe fn unchecked(self, other: Self, op: u8) -> Self {
+                    // SAFETY: the caller guarantees the operation does not
+                    // overflow.
+                    unsafe {
+                        match op {
+                            0 => self.unchecked_add(other),
+                            1 => self.unchecked_sub(other),
+                            _ => self.unchecked_mul(other),
+                        }
+                    }
+                }
+            }
+        )*
+    };
+}
+
+whole!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+
+#[inline(always)]
+unsafe fn operation<T: Whole>(a: T, b: T, op: u8, written: &str) -> T {
+    debug_assert!(
+        a.checked(b, op),
+        "a proved operation overflows: {a:?} {written} {b:?}"
+    );
+    // SAFETY: the caller guarantees the operation does not overflow.
+    unsafe { a.unchecked(b, op) }
+}
+
+/// `a + b`, proved to stay inside `T`.
+///
+/// # Safety
+///
+/// `a + b` does not overflow `T`. A debug build checks it.
+#[inline(always)]
+pub unsafe fn add<T: Whole>(a: T, b: T) -> T {
+    // SAFETY: the caller's guarantee.
+    unsafe { operation(a, b, 0, "+") }
+}
+
+/// `a - b`, proved to stay inside `T`.
+///
+/// # Safety
+///
+/// `a - b` does not overflow `T`. A debug build checks it.
+#[inline(always)]
+pub unsafe fn sub<T: Whole>(a: T, b: T) -> T {
+    // SAFETY: the caller's guarantee.
+    unsafe { operation(a, b, 1, "-") }
+}
+
+/// `a * b`, proved to stay inside `T`.
+///
+/// # Safety
+///
+/// `a * b` does not overflow `T`. A debug build checks it.
+#[inline(always)]
+pub unsafe fn mul<T: Whole>(a: T, b: T) -> T {
+    // SAFETY: the caller's guarantee.
+    unsafe { operation(a, b, 2, "*") }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,6 +186,25 @@ mod tests {
     extern crate std;
     use std::string::String;
     use std::vec;
+
+    #[test]
+    fn a_proved_operation_is_the_operation() {
+        // SAFETY: none of these overflows.
+        unsafe {
+            assert_eq!(add::<i64>(i64::MAX - 3, 3), i64::MAX);
+            assert_eq!(sub::<u8>(7, 7), 0);
+            assert_eq!(mul::<i32>(-46341, 46340), -2147441940);
+            assert_eq!(add::<usize>(1, 2), 3);
+        }
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "a proved operation overflows: 255 + 1")]
+    fn a_debug_build_catches_a_wrong_operation() {
+        // SAFETY: deliberately broken; the debug assertion stops it first.
+        let _ = unsafe { add::<u8>(255, 1) };
+    }
 
     #[test]
     fn reads_the_element_inside() {

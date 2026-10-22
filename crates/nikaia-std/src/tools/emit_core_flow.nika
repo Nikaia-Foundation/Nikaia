@@ -64,11 +64,13 @@ fn emit_flow_is_whole(ty: ref String) -> bool {
     return signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
 }
 
-fn emit_flow_wrapping(op: BinaryOp) -> String {
+/// **A `+`, `-` or `*` proved to stay inside its type** (ADR-306 D19): the
+/// operation without its check, `debug_assert`ed, from `proven-index`.
+fn emit_flow_proven(op: BinaryOp) -> String {
     return match op {
-        BinaryOp::Add => "wrapping_add",
-        BinaryOp::Sub => "wrapping_sub",
-        else => "wrapping_mul",
+        BinaryOp::Add => "nikaia_std::proven::add",
+        BinaryOp::Sub => "nikaia_std::proven::sub",
+        else => "nikaia_std::proven::mul",
     }
 }
 
@@ -467,12 +469,12 @@ impl EmitState {
                 out.push(") as u32) }")
                 return
             }
-            let name = emit_flow_wrapping(op)
-            out.push(f"<{ty}>::{name}(")
+            let name = emit_flow_proven(op)
+            out.push(f"unsafe {{ {name}::<{ty}>(")
             host.expr(walk, out, lhs, depth, wide, scope)
             out.push(", ")
             host.expr(walk, out, rhs, depth, wide, scope)
-            out.push(")")
+            out.push(") }")
             return
         }
         // Parenthesised only where precedence needs it: the operators mean the same

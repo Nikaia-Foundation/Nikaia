@@ -121,7 +121,7 @@ fn main() {
 ";
     let (rust, _) = lowered("facts-at-calls-sign", source);
     let tenths = body(&rust, "tenths");
-    assert!(tenths.contains("wrapping_sub"), "{tenths}");
+    assert!(tenths.contains("proven::sub::<"), "{tenths}");
 }
 
 /// **A method's precondition is a goal at `self.m(…)`** (#776): proved there,

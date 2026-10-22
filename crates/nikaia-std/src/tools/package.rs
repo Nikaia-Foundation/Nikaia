@@ -37886,11 +37886,11 @@ fn emit_flow_is_whole(ty: &str) -> bool {
     signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
 }
 
-fn emit_flow_wrapping(op: BinaryOp) -> &'static str {
+fn emit_flow_proven(op: BinaryOp) -> &'static str {
     match op {
-        BinaryOp::Add => "wrapping_add",
-        BinaryOp::Sub => "wrapping_sub",
-        _ => "wrapping_mul",
+        BinaryOp::Add => "nikaia_std::proven::add",
+        BinaryOp::Sub => "nikaia_std::proven::sub",
+        _ => "nikaia_std::proven::mul",
     }
 }
 
@@ -38136,12 +38136,12 @@ impl EmitState {
                 out.push(") as u32) }");
                 return Ok(());
             }
-            let name = emit_flow_wrapping(op);
-            out.push(&format!("<{}>::{}(", ty, name));
+            let name = emit_flow_proven(op);
+            out.push(&format!("unsafe {{ {}::<{}>(", name, ty));
             host.expr(walk, out, lhs, depth, wide, scope)?;
             out.push(", ");
             host.expr(walk, out, rhs, depth, wide, scope)?;
-            out.push(")");
+            out.push(") }");
             return Ok(());
         }
         let here = precedence(op);

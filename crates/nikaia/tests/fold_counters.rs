@@ -171,11 +171,11 @@ fn the_1brc_output_is_unchanged_without_the_counters_checks() {
     };
     let rust = emit_program(&parsed, build).expect("lowers").rust;
     assert!(
-        rust.contains("self.count = <i64>::wrapping_add(self.count, 1"),
+        rust.contains("self.count = unsafe { nikaia_std::proven::add::<i64>(self.count, 1"),
         "the counter keeps its check:\n{rust}"
     );
     assert!(
-        !rust.contains("self.sum = <i64>::wrapping_add"),
+        !rust.contains("self.sum = unsafe { nikaia_std::proven::add"),
         "the sum lost its check"
     );
     let dir = common::scratch_dir("fold-counters");

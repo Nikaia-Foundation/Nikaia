@@ -89,7 +89,7 @@ fn a_slot_carried_through_a_loop_is_proved_inside_its_table() {
     let on = lowered("through-loops-on", ALL_ON);
     let probe = body(&on, "probe");
     assert!(!probe.contains("index::get"), "{probe}");
-    assert!(probe.contains("wrapping_add(at, 1)"), "{probe}");
+    assert!(probe.contains("proven::add::<i64>(at, 1)"), "{probe}");
     let off = lowered("through-loops-off", WALK_ONLY);
     let probe = body(&off, "probe");
     assert!(probe.contains("nikaia_std::index::get(&xs"), "{probe}");

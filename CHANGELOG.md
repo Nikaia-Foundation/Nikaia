@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1190] — 2026-10-22
+
+**A proved `+`, `-`, `*` tells the optimiser it does not overflow**
+- A `+`, `-` or `*` proved to stay inside its type lowers to `nikaia_std::proven::add::<T>` (`sub`, `mul`) from `proven-index`, `unchecked_*` behind a `debug_assert`, instead of `<T>::wrapping_*` (ADR-306 D19). A wrong proof stops at the assertion in a build that keeps debug assertions and is undefined behaviour in one that does not, as a wrong proved index or shift already is.
+
 ## [0.0.1189] — 2026-10-22
 
 **`x += d` and `x ?? d` keep what bounds them**
