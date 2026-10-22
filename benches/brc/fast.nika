@@ -14,10 +14,10 @@
 //   word read goes past the end;
 // * on more than one core, `par_pieces` cuts the file at line ends and
 //   `Par::fold` scans the pieces into a table each and merges them.
-use std::bytes
 use std::cli
 use std::collections
 use std::fs
+use std::simd
 use std::target
 use std::task
 
@@ -95,11 +95,23 @@ impl Table {
         // A row starts before `stop`, which leaves `MARGIN` bytes behind it.
         assert(stop > 0 && stop <= buf.len() - MARGIN; message: "a row starts `MARGIN` bytes before the end")
         let mut pos = 0
-        // A row is about 14 bytes, so the next `;` lies mostly within half a
-        // block of the last: looked for right after each one, the test
-        // whether it was found is predicted, where a block's mask runs out
-        // after a varying number of rows.
-        for sep in buf.find_all(bytes::ByteSet([';']); scan: bytes::Scan::AfterHit) {
+        // The `;` after each row's start, 32 bytes a compare: a row is about
+        // 14 bytes, so it is mostly in the first 32, and the test whether it
+        // was found is predicted. A name has at most 100 bytes, so at most
+        // four loads look for it, each inside the input.
+        let semis: simd::Fixed[u8, 32] = simd::splat(';')
+        while true {
+            let mut sep = pos
+            while true {
+                assert(sep >= pos && sep - pos <= 100; message: "a station's name has at most 100 bytes")
+                let block: simd::Fixed[u8, 32] = simd::load(buf, sep)
+                let hit = block.eq(semis).first() ?? -1
+                if hit >= 0 {
+                    sep += hit
+                    break
+                }
+                sep += 32
+            }
             // The name's first two words, zeros past its end: each cut to
             // the name without a branch on the length, which names of
             // varying length would mispredict. Where `bzhi` cuts, the length
