@@ -5905,11 +5905,13 @@ sync = true
 touches = []
 signature = "(self) -> ?"
 
-# The first lane that holds, or nothing (D5); at least 0 and below the count.
+# The first lane that holds, or nothing (D5); at least 0 and below the count,
+# which is at most 64 lanes: a fact of the number it holds (D7).
 [fn."simd::Mask::first"]
 pub = true
 sync = true
 touches = []
+ensures = ["0 <= result", "result < 64"]
 signature = "(self) -> i64?"
 
 # The lanes that hold, rising (D5); each at least 0 and below the count, which

@@ -858,21 +858,26 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         let plain = check_core_stmt_plain_name(into.unseen())
         if plain != null {
             let name: String = (plain ?? "").clone()
+            // A number this use types (ADR-285 D23) takes the name's type.
             let same = match value {
                 Expr::LitInt { .. } => true,
-                else => value_of_a_copy(found.unseen()) == into.unseen(),
+                else => value_of_a_copy(found.unseen()) == into.unseen() || state.open_numbers_in(world, value).len() > 0,
             }
             if is_whole_number(name) && same {
                 state.facts.arithmetic.insert(span.start as i64, name)
             }
         } else {
-            // **`i += 1` on an untyped `let mut i = 0`** waits for the
-            // number's type, as `i + 1` does (ADR-285 D23).
+            // **`i += d` on an untyped `let mut i = 0`** takes `d`'s type
+            // where `d` has one, and otherwise waits for the number's type,
+            // as `i + 1` does (ADR-285 D23).
+            let given = check_core_stmt_plain_name(found.unseen())
             let counted = match value {
                 Expr::LitInt { .. } => true,
                 else => state.open_numbers_in(world, value).len() > 0,
             }
-            if counted {
+            if given != null && is_whole_number(given ?? "") && !counted {
+                state.facts.arithmetic.insert(span.start as i64, (given ?? "").clone())
+            } else if counted {
                 state.open_number_site(world, [target], span.start as i64)
             }
         }

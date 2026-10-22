@@ -663,3 +663,81 @@ fn main() {
     );
     stops("unguarded-step", unguarded, "overflow");
 }
+
+/// `i += d` on an untyped `let mut i = 0` takes `d`'s type and is proved as
+/// `i + d` (ADR-285 D23, ADR-306 D9), also where `d` is a number this use
+/// types; a `d` nothing bounds keeps its check.
+#[test]
+fn a_compound_step_on_an_untyped_name_is_proved() {
+    let source = "\
+fn a(d: i64, e: i64) -> i64 {
+    let mut i = 0
+    if d >= 0 && d < 4 {
+        i += d
+    }
+    i += e
+    return i
+}
+
+fn b(d: i64) -> i64 {
+    let mut i = 0
+    let k = if d > 2 { 3 } else { -1 }
+    if k >= 0 {
+        i += k
+    }
+    return i
+}
+
+fn main() {
+    println(f\"{a(3, 1)} {b(3)}\")
+}
+";
+    let rust = lowered(source, Level::Aggressive);
+    assert_eq!(rust.matches("<i64>::wrapping_add(i, ").count(), 2, "{rust}");
+    assert!(rust.contains("i += e"), "{rust}");
+    prints("untyped-compound", source, "4 3\n");
+}
+
+/// `x ?? d` lies where the number in `x` and `d` do, with what the ledger
+/// ensures of a callee's `result` said of the number in it: a mask's first
+/// lane is below 64 (ADR-377 D7), so it indexes 64 slots without a check.
+#[test]
+fn what_a_callee_ensures_holds_of_the_number_an_option_gives() {
+    let source = "\
+use std::simd
+
+fn a(b: ref Bytes, xs: ref Vec[i64]) -> i64 {
+    assert(b.len() >= 32 && xs.len() == 64)
+    let v: simd::Fixed[u8, 32] = simd::load(b, 0)
+    let s: simd::Fixed[u8, 32] = simd::splat(';')
+    let first = v.eq(s).first() ?? 0
+    let other = v.eq(s).first() ?? -1
+    let mut r = xs[first]
+    if other >= 0 { r = r + xs[other] }
+    return r
+}
+
+fn main() {
+    println(\"\")
+}
+";
+    let rust = lowered(source, Level::Aggressive);
+    assert!(
+        rust.contains("nikaia_std::proven::read(&xs, (first) as usize)"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("nikaia_std::proven::read(&xs, (other) as usize)"),
+        "{rust}"
+    );
+    // Past the slots by up to 63: the index keeps its check.
+    let past = source.replace(
+        "let other = v.eq(s).first() ?? -1",
+        "let other = xs.len() - 1 + (v.eq(s).first() ?? 0)",
+    );
+    let rust = lowered(&past, Level::Aggressive);
+    assert!(
+        !rust.contains("proven::read(&xs, (other) as usize)"),
+        "{rust}"
+    );
+}

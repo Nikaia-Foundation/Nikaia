@@ -492,6 +492,11 @@ struct BoundsMissed {
 /// Whether `goal` follows from what holds, on a certificate the checker
 /// accepts.
 fn bounding_proves(walk: ref BoundsWalk, facts: ref BoundsFacts, goal: i64, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    return ask(walk.arena, bounding_known(walk, facts), goal)
+}
+
+/// The facts and what the ledgers ensure of the values the walk named.
+fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts) -> Vec[i64] {
     let mut all = facts.facts.clone()
     for (name, axiom) in walk.axioms {
         if !walk.unsized_names.contains(name) {
@@ -505,7 +510,7 @@ fn bounding_proves(walk: ref BoundsWalk, facts: ref BoundsFacts, goal: i64, ask:
             all.push(floor)
         }
     }
-    return ask(walk.arena, all, goal)
+    return all
 }
 
 /// **What is known of a linear term, as constants**: a candidate from
@@ -517,7 +522,7 @@ fn bounding_term(mut walk: BoundsWalk, term: i64, facts: ref BoundsFacts, ask: f
     if known != null {
         return Range::exactly(known ?? 0)
     }
-    let guess = candidate(term, facts.facts, fn(at) { walk.arena.at(at) })
+    let guess = candidate(term, bounding_known(walk, facts), fn(at) { walk.arena.at(at) })
     let mut confirmed = Range::open()
     if guess.hi != null {
         let hi = guess.hi ?? 0
@@ -594,6 +599,16 @@ fn bounding_range(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFacts, 
             return bounding_assumed(walk, key)
         },
         Expr::If { cond, then_branch, else_branch, .. } => return bounding_if_range(walk, cond, then_branch, else_branch, facts, context, program, words, ask),
+        // **`x ?? d` lies where the number `x` holds or `d` does**: what the
+        // ledger ensures of a callee's `result` is said of the number in it.
+        Expr::Coalesce { value, fallback, .. } => {
+            let held = bounding_range(walk, value, facts, context, program, words, ask) ?? return null
+            let otherwise = bounding_range(walk, fallback, facts, context, program, words, ask) ?? return null
+            let joined = held.join(otherwise)
+            if joined.is_bounded() {
+                return joined
+            }
+        },
         else => {},
     }
     return null

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1189] — 2026-10-22
+
+**`x += d` and `x ?? d` keep what bounds them**
+- `x += d` on an untyped `let mut x = 0` takes `d`'s type and is proved as `x + d` (ADR-285 D23, ADR-306 D9); `x ?? d` lies where the number in `x` and `d` do, and what a callee's ledger entry ensures of `result` is said of the number its option holds; `simd::Mask::first()` ensures `0 <= result < 64` (ADR-377 D7). The bounds walk guesses a value's bounds from what the ledgers ensure as well as from the facts.
+
 ## [0.0.1188] — 2026-10-22
 
 **`simd::splat(';')` into byte lanes is a byte**

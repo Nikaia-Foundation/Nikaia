@@ -2779,7 +2779,9 @@ struct BoundsMissed {
     facts: Vec<i64>,
 }
 
-fn bounding_proves(walk: &BoundsWalk, facts: &BoundsFacts, goal: i64, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
+fn bounding_proves(walk: &BoundsWalk, facts: &BoundsFacts, goal: i64, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool { ask(&walk.arena, &bounding_known(walk, facts), goal) }
+
+fn bounding_known(walk: &BoundsWalk, facts: &BoundsFacts) -> Vec<i64> {
     let mut all = facts.facts.to_owned();
     for (name, axiom) in walk.axioms.iter() {
         if !walk.unsized_names.contains(name) {
@@ -2793,13 +2795,13 @@ fn bounding_proves(walk: &BoundsWalk, facts: &BoundsFacts, goal: i64, ask: &impl
         let floor = nikaia_std::num::value(floor);
         if walk.unsized_names.contains(name) { all.push(floor); }
     }
-    ask(&walk.arena, &all, goal)
+    all
 }
 
 fn bounding_term(walk: &mut BoundsWalk, term: i64, facts: &BoundsFacts, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> Range {
     let known = walk.arena.constant(term);
     if known.is_some() { return Range::exactly(nikaia_std::index::or(known, || 0)); }
-    let guess = candidate(term, &facts.facts, &|at| { walk.arena.at(at) });
+    let guess = candidate(term, &bounding_known(&walk, facts), &|at| { walk.arena.at(at) });
     let mut confirmed = Range::open();
     if guess.hi.is_some() {
         let hi = nikaia_std::index::or(guess.hi, || 0);
@@ -2858,6 +2860,13 @@ fn bounding_range(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, conte
             return bounding_assumed(&walk, &key);
         },
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); return bounding_if_range(walk, cond, then_branch, (else_branch).as_ref(), facts, context, program, words, ask); },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            let held = match bounding_range(walk, value, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let otherwise = match bounding_range(walk, fallback, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let joined = held.join(&otherwise);
+            if joined.is_bounded() { return Some(joined); }
+        },
         _ => { },
     }
     None
@@ -3862,7 +3871,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
                     _ => { },
                 }
             }
-            let __keep_82071 = nikaia_std::tether::Keep::new();
+            let __keep_82839 = nikaia_std::tether::Keep::new();
             match target {
                 Expr::Variable(name, _) => { let name = *name; bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask); },
                 Expr::Field { .. } => {
@@ -4466,8 +4475,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
         bounding_push(&walk, facts, fact);
     }
     for list in filled.iter() {
-        let __keep_115856 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_115856).put(length_of(list)), count);
+        let __keep_116624 = nikaia_std::tether::Keep::new();
+        bounding_shift(walk, facts, (&__keep_116624).put(length_of(list)), count);
     }
 }
 
@@ -21108,15 +21117,16 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
             let name: String = nikaia_std::index::or(plain.as_deref(), || "").to_owned();
             let same = match value {
                 Expr::LitInt { .. } => true,
-                _ => value_of_a_copy(&found.unseen()) == into.unseen(),
+                _ => value_of_a_copy(&found.unseen()) == into.unseen() || !state.open_numbers_in(world, value).is_empty(),
             };
             if is_whole_number(&name) && same { state.facts.arithmetic.insert(span.start as i64, name); }
         } else {
+            let given = check_core_stmt_plain_name(&found.unseen());
             let counted = match value {
                 Expr::LitInt { .. } => true,
                 _ => !state.open_numbers_in(world, value).is_empty(),
             };
-            if counted { state.open_number_site(world, &vec![target], span.start as i64); }
+            if given.is_some() && is_whole_number(nikaia_std::index::or(given.as_deref(), || "")) && !counted { state.facts.arithmetic.insert(span.start as i64, nikaia_std::index::or(given.as_deref(), || "").to_owned()); } else if counted { state.open_number_site(world, &vec![target], span.start as i64); }
         }
     }
     if check_core_stmt_a_slot_operator(op) && check_core_stmt_an_index(target) {
