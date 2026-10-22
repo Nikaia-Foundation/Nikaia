@@ -128,6 +128,9 @@ struct BoundsChanged {
     /// Of `values`, those changed otherwise than by adding to them: by a
     /// call, or by an assignment of another shape (#711).
     jumps: collections::BTreeSet[String],
+    /// Places written through an element (#781), as `list|at|.fields`:
+    /// the same fields of every element of `list` may change.
+    elements: collections::BTreeSet[String],
 }
 
 struct BoundsWalk {
@@ -240,7 +243,7 @@ fn no_proofs() -> BoundsProven {
 }
 
 fn nothing_changed() -> BoundsChanged {
-    return BoundsChanged { values: collections::BTreeSet(), lengths: collections::BTreeSet(), parts: collections::BTreeSet(), jumps: collections::BTreeSet() }
+    return BoundsChanged { values: collections::BTreeSet(), lengths: collections::BTreeSet(), parts: collections::BTreeSet(), jumps: collections::BTreeSet(), elements: collections::BTreeSet() }
 }
 
 /// **Every index and every operation the walk proves in one body**, a
@@ -1021,11 +1024,17 @@ fn bounding_touches(walk: ref BoundsWalk, term: i64, name: ref String) -> bool {
     let mut read: collections::BTreeSet[String] = collections::BTreeSet()
     walk.arena.variables(term, read)
     for v in read {
-        if path_within(v, name) {
+        if path_within(v, name) || bounding_in_elements(v, name) {
             return true
         }
     }
     return false
+}
+
+/// **A path through an element** (`t.slots[at].sum`) is part of the list it
+/// indexes and reads the name it is indexed by: it moves when either does.
+fn bounding_in_elements(path: ref String, name: ref String) -> bool {
+    return path.starts_with(f"{name}[") || path.contains(f"[{name}]")
 }
 
 /// What is known of the paths of fields from `name` (ADR-306 D17) holds no
@@ -1039,7 +1048,7 @@ fn bounding_forget_parts(walk: ref BoundsWalk, mut facts: BoundsFacts, name: ref
         walk.arena.variables(fact, read)
         let mut touched = false
         for v in read {
-            if v.starts_with(under) && v != length {
+            if (v.starts_with(under) || v.starts_with(f"{name}[")) && v != length {
                 touched = true
             }
         }
@@ -1055,6 +1064,137 @@ fn bounding_forget_length(walk: ref BoundsWalk, mut facts: BoundsFacts, name: re
     let mut kept: Vec[i64] = []
     for fact in facts.facts {
         if !walk.arena.mentions(fact, length) {
+            kept.push(fact)
+        }
+    }
+    facts.facts = kept
+}
+
+/// **The path of a place through at most one element** (ADR-306 D17,
+/// #781): `t.slots[at].sum`, the element's index a name. A path of fields
+/// alone is `path_of`'s.
+fn bounding_place_path(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Field { base, name, .. } => {
+            let inner = bounding_place_path(base, words) ?? return null
+            f"{inner}.{words.resolve(name)}"
+        },
+        Expr::Index { base, index, .. } => {
+            let list = path_of(base, words) ?? return null
+            let at = bounding_variable(index, words) ?? return null
+            f"{list}[{at}]"
+        },
+        else => null,
+    }
+}
+
+/// The list a place writes into through an element, the element's index
+/// where it is a name (else empty), and the fields after the element:
+/// `t.slots`, `at` and `.sum` of `t.slots[at].sum`. Where the list is not a
+/// path of fields, its root, with the index and the fields empty.
+fn bounding_element_written(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> (String, String, String)? {
+    match expr {
+        Expr::Field { base, name, .. } => {
+            let (list, at, rest) = bounding_element_written(base, words) ?? return null
+            if at.is_empty() && rest.is_empty() {
+                return (list, at, rest)
+            }
+            return (list, at, f"{rest}.{words.resolve(name)}")
+        },
+        Expr::Index { base, index, .. } => {
+            let list = path_of(base, words)
+            if list == null {
+                let root = bounding_root_of(base, words) ?? return null
+                return (root, "".clone(), "".clone())
+            }
+            let at = bounding_variable(index, words) ?? ""
+            return ((list ?? "").clone(), at.clone(), "".clone())
+        },
+        else => return null,
+    }
+}
+
+fn bounding_root_of(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Field { base, .. } => bounding_root_of(base, words),
+        Expr::Index { base, .. } => bounding_root_of(base, words),
+        else => null,
+    }
+}
+
+/// **A write through an element** (#781): what was known of the same fields
+/// of every element goes, the index not being known to differ; another
+/// field of the same element stays. The written path itself is the
+/// write's own (`bounding_assign`). Where the element's index is not a
+/// name, every element of the list goes; where the list is not a path of
+/// fields, every element under its root.
+fn bounding_forget_aliases(walk: ref BoundsWalk, mut facts: BoundsFacts, target: ref Expr, words: ref winnow_grammar::InternerContext) {
+    let (list, at, rest) = bounding_element_written(target, words) ?? return
+    bounding_forget_element(walk, facts, f"{list}|{at}|{rest}", true)
+}
+
+/// A place written through an element, kept as `list|at|.fields` among
+/// what a block changes.
+fn bounding_element_changed(target: ref Expr, words: ref winnow_grammar::InternerContext, mut out: BoundsChanged) {
+    let (list, at, rest) = bounding_element_written(target, words) ?? return
+    out.elements.insert(f"{list}|{at}|{rest}")
+}
+
+/// What is known of the paths `place` (`list|at|.fields`) may change goes;
+/// with `keep_own`, the written path itself stays, for the write to move it.
+fn bounding_forget_element(walk: ref BoundsWalk, mut facts: BoundsFacts, place: ref String, keep_own: bool) {
+    let mut kept: Vec[i64] = []
+    for fact in facts.facts {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(fact, read)
+        let mut touched = false
+        for v in read {
+            if bounding_element_hit(v, place, keep_own) {
+                touched = true
+            }
+        }
+        if !touched {
+            kept.push(fact)
+        }
+    }
+    facts.facts = kept
+}
+
+/// Whether a write to `place` (`list|at|.fields`) may change the path `v`:
+/// `v` goes through an element of the same list, the index not being known
+/// to differ, to the same fields, a part of them or a whole they are part
+/// of. Where the index is not a name, every element of the list; where the
+/// list is only the root of the written place, every element under it.
+fn bounding_element_hit(v: ref String, place: ref String, keep_own: bool) -> bool {
+    let parts: Vec[ref String] = place.split("|").collect()
+    let list = parts[0]
+    let at = parts[1]
+    let rest = parts[2]
+    if keep_own && v == f"{list}[{at}]{rest}" {
+        return false
+    }
+    if v.starts_with(f"{list}[") {
+        let after: String = (v.split("]").last() ?? "").clone()
+        return at.is_empty() || rest.is_empty() || after.is_empty() || after == rest || after.starts_with(f"{rest}.") || rest.starts_with(f"{after}.")
+    }
+    return at.is_empty() && v.starts_with(f"{list}.") && v.contains("[")
+}
+
+/// What was known of an element indexed by `name` goes when `name` moves.
+fn bounding_forget_elements_at(walk: ref BoundsWalk, mut facts: BoundsFacts, name: ref String) {
+    let mut kept: Vec[i64] = []
+    for fact in facts.facts {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(fact, read)
+        let mut touched = false
+        for v in read {
+            if v.contains(f"[{name}]") {
+                touched = true
+            }
+        }
+        if !touched {
             kept.push(fact)
         }
     }
@@ -1091,6 +1231,9 @@ fn bounding_after_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: 
     for name in changed.parts {
         bounding_forget_parts(walk, facts, name)
     }
+    for place in changed.elements {
+        bounding_forget_element(walk, facts, place, false)
+    }
 }
 
 /// **`expr` as a linear term**, where it is one.
@@ -1125,7 +1268,7 @@ fn bounding_lin(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFacts, co
         // type: a number of its own, `p.end`.
         Expr::Field { .. } => {
             if context.whole_fields.contains(node_key(expr)) {
-                let path = path_of(expr, words) ?? return null
+                let path = bounding_place_path(expr, words) ?? return null
                 return walk.arena.var(path)
             }
         },
@@ -1915,12 +2058,16 @@ fn bounding_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, c
                     else => {},
                 }
             }
+            bounding_forget_aliases(walk, facts, target, words)
             match target {
-                Expr::Variable(name, _) => bounding_assign(walk, facts, words.resolve(name), op, value, context, program, words, ask),
+                Expr::Variable(name, _) => {
+                    bounding_forget_elements_at(walk, facts, words.resolve(name))
+                    bounding_assign(walk, facts, words.resolve(name), op, value, context, program, words, ask)
+                },
                 // **A write to a path of fields** (ADR-306 D17): the path
                 // moves as a name does, and what was known of its parts goes.
                 Expr::Field { .. } => {
-                    let path = path_of(target, words)
+                    let path = bounding_place_path(target, words)
                     if path != null {
                         let p = path ?? ""
                         if context.whole_fields.contains(node_key(target)) {
@@ -2329,6 +2476,16 @@ fn bounding_changes_name(changed: ref BoundsChanged, name: ref String) -> bool {
             return true
         }
     }
+    for value in changed.values {
+        if bounding_in_elements(name, value) {
+            return true
+        }
+    }
+    for place in changed.elements {
+        if bounding_element_hit(name, place, false) {
+            return true
+        }
+    }
     return false
 }
 
@@ -2576,7 +2733,12 @@ fn bounding_compound(mut walk: BoundsWalk, op: ref BinaryOp?, target: ref Expr, 
     if !arithmetic || walk.collecting {
         return
     }
-    if path_of(target, words) == null {
+    // A path of fields, through at most one element (#781).
+    let place = match target {
+        Expr::Field { .. } => bounding_place_path(target, words),
+        else => path_of(target, words),
+    }
+    if place == null {
         return
     }
     let ty = context.arithmetic[at] ?? return
@@ -2732,7 +2894,7 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
             filled = lists
         }
     }
-    let mut outer = BoundsChanged { values: changed.values.clone(), lengths: changed.lengths.clone(), parts: changed.parts.clone(), jumps: changed.jumps.clone() }
+    let mut outer = BoundsChanged { values: changed.values.clone(), lengths: changed.lengths.clone(), parts: changed.parts.clone(), jumps: changed.jumps.clone(), elements: changed.elements.clone() }
     for list in filled {
         outer.lengths.remove(list)
     }
@@ -2776,13 +2938,22 @@ fn bounding_unchanged(walk: ref BoundsWalk, t: i64, changed: ref BoundsChanged) 
             return false
         }
     }
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    walk.arena.variables(t, read)
+    for v in read {
+        for place in changed.elements {
+            if bounding_element_hit(v, place, false) {
+                return false
+            }
+        }
+    }
     return true
 }
 
 /// Whether either end reads `c` or its length.
 fn bounding_reads(walk: ref BoundsWalk, l: i64, h: i64, c: ref String) -> bool {
     let length = length_of(c)
-    return walk.arena.mentions(l, c) || walk.arena.mentions(h, c) || walk.arena.mentions(l, length) || walk.arena.mentions(h, length)
+    return bounding_touches(walk, l, c) || bounding_touches(walk, h, c) || walk.arena.mentions(l, length) || walk.arena.mentions(h, length)
 }
 
 /// `name = value`, or `name op= value`.
@@ -3165,6 +3336,11 @@ fn bounding_method_call(mut walk: BoundsWalk, receiver: ref Expr, method: ref St
             bounding_write(walk, key ?? "", args[written ?? 0], facts, context, program, words, ask)
         }
     }
+    // **A method on an element may change it** and, the index not being
+    // known to differ, any element's same fields (#781).
+    if context.around.changing_receivers.contains(method) || !keeps_length(method) {
+        bounding_forget_aliases(walk, facts, receiver, words)
+    }
     let receiver_path = path_of(receiver, words)
     if receiver_path != null {
         let name = receiver_path ?? ""
@@ -3191,6 +3367,7 @@ fn bounding_method_call(mut walk: BoundsWalk, receiver: ref Expr, method: ref St
     // method changes (ADR-320), and keeps its length and its values.
     if context.around.changing_methods.contains(method) {
         for arg in args {
+            bounding_forget_aliases(walk, facts, arg, words)
             let text = path_of(arg, words) ?? continue
             bounding_forget(walk, facts, text)
         }
@@ -3343,6 +3520,9 @@ fn bounding_extend(mut changed: BoundsChanged, other: BoundsChanged) {
     for name in other.jumps {
         changed.jumps.insert(name.clone())
     }
+    for place in other.elements {
+        changed.elements.insert(place.clone())
+    }
 }
 
 fn bounding_extend_maybe(mut changed: BoundsChanged, block: ref Block?, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) {
@@ -3380,6 +3560,7 @@ fn changed_in_block(block: ref Block, context: ref BoundsContext, words: ref win
                     out.lengths.insert(name.clone())
                     out.values.insert(name)
                 }
+                bounding_element_changed(target, words, out)
                 changed_in_expr(target, context, words, out)
                 changed_in_expr(value, context, words, out)
             },
@@ -3543,6 +3724,9 @@ fn changed_by(expr: ref Expr, context: ref BoundsContext, words: ref winnow_gram
 }
 
 fn changed_by_method(receiver: ref Expr, method: ref String, args: ref Vec[Expr], context: ref BoundsContext, words: ref winnow_grammar::InternerContext, mut out: BoundsChanged) {
+    if context.around.changing_receivers.contains(method) || !keeps_length(method) {
+        bounding_element_changed(receiver, words, out)
+    }
     let receiver_path = path_of(receiver, words)
     if receiver_path != null {
         let name = receiver_path ?? ""
@@ -3558,6 +3742,7 @@ fn changed_by_method(receiver: ref Expr, method: ref String, args: ref Vec[Expr]
     // Only a `mut` parameter changes what it is handed (ADR-094 D3).
     if context.around.changing_methods.contains(method) {
         for arg in args {
+            bounding_element_changed(arg, words, out)
             let text = path_of(arg, words) ?? continue
             out.values.insert(text.clone())
             out.jumps.insert(text.clone())

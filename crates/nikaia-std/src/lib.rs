@@ -253,6 +253,7 @@ pub mod runtime {
     clippy::useless_format,
     clippy::map_entry,
     clippy::large_enum_variant,
+    clippy::double_ended_iterator_last,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):

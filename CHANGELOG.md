@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1193] — 2026-10-22
+
+**A field through one element is a name of the walk**
+- Part III: a path of fields through one element of a list, indexed by a name (`t.slots[at].sum`), is a name of the walk as `t.used` is, until the name changes or a write may reach the same fields of any element (ADR-306 D20, #781 step 1). `unsafe { assume(t.slots[at].sum <= B) }` now proves `t.slots[at].sum += v`.
+
 ## [0.0.1192] — 2026-10-22
 
 **An unconditional write before the ifs that cannot tell (decided)**

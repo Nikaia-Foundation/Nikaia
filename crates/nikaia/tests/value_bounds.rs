@@ -716,6 +716,86 @@ fn main() {
     prints("untyped-compound", source, "4 3\n");
 }
 
+/// **A field of an element is a number of its own** (#781): an `assume` on
+/// `self.slots[at].sum` proves `self.slots[at].sum += v`, also after a write
+/// to another field of the same element. A write that may reach the same
+/// field of the element - through another index, after the index moved, in
+/// a branch, by a method, by a `push`, or to the whole element - takes what
+/// was known of it.
+#[test]
+fn a_field_of_an_element_bounded_by_an_assume_is_proved() {
+    let cases = [
+        ("same_element_other_field", "self.slots[at].min = 5", true),
+        ("nothing_between", "", true),
+        (
+            "other_index",
+            "self.slots[j].sum = 9223372036854775807",
+            false,
+        ),
+        ("index_moved", "at = j", false),
+        (
+            "in_a_branch",
+            "if v > 3 { self.slots[at].sum = 9223372036854775807 }",
+            false,
+        ),
+        (
+            "other_index_in_a_branch",
+            "if v > 3 { self.slots[j].sum = 9223372036854775807 }",
+            false,
+        ),
+        ("index_moved_in_a_branch", "if v > 3 { at = j }", false),
+        ("by_a_method", "self.bump()", false),
+        (
+            "by_a_push",
+            "self.slots.push(Slot { min: 0, sum: 0 })",
+            false,
+        ),
+        (
+            "the_whole_element",
+            "self.slots[j] = Slot { min: 0, sum: 9223372036854775807 }",
+            false,
+        ),
+    ];
+    let mut source = String::from(
+        "struct Slot {\n    min: i64,\n    sum: i64,\n}\n\nstruct Table {\n    slots: Vec[Slot],\n}\n\n\
+         impl Table {\n    fn bump(ref mut self) {\n        self.slots[0].sum = 9223372036854775807\n    }\n",
+    );
+    for (name, between, _) in &cases {
+        source.push_str(&format!(
+            "    fn {name}(ref mut self, first: i64, j: i64, v: i64) -> i64 {{\n\
+             \x20       let mut at = first\n\
+             \x20       unsafe {{\n\
+             \x20           assume(at >= 0 && at < self.slots.len() && j >= 0 && j < self.slots.len())\n\
+             \x20           assume(self.slots[at].sum >= -1000 && self.slots[at].sum <= 1000)\n\
+             \x20           assume(v >= -999 && v <= 999)\n\
+             \x20       }}\n\
+             \x20       {between}\n\
+             \x20       self.slots[at].sum += v\n\
+             \x20       return self.slots[at].sum\n\
+             \x20   }}\n"
+        ));
+    }
+    source.push_str(
+        "}\n\nfn main() {\n    let mut t = Table { slots: [] }\n    \
+         t.slots.push(Slot { min: 0, sum: 7 })\n    \
+         println(f\"{t.same_element_other_field(0, 0, 5)} {t.nothing_between(0, 0, -2)}\")\n}\n",
+    );
+    let rust = lowered(&source, Level::Aggressive);
+    for (name, _, proved) in &cases {
+        let body = rust
+            .split(&format!("fn {name}("))
+            .nth(1)
+            .and_then(|rest| rest.split("\n    }").next())
+            .unwrap_or_else(|| panic!("{name} is emitted: {rust}"));
+        assert_eq!(
+            body.contains(".sum = unsafe { nikaia_std::proven::add::<i64>("),
+            *proved,
+            "{name}: {body}"
+        );
+    }
+    prints("element-field", &source, "12 10\n");
+}
+
 /// `x ?? d` lies where the number in `x` and `d` do, with what the ledger
 /// ensures of a callee's `result` said of the number in it: a mask's first
 /// lane is below 64 (ADR-377 D7), so it indexes 64 slots without a check.
