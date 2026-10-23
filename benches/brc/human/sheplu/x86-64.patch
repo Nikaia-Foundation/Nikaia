@@ -1,0 +1,57 @@
+diff --git a/src/swar.rs b/src/swar.rs
+index 7273637..8dfae26 100644
+--- a/src/swar.rs
++++ b/src/swar.rs
+@@ -272,6 +272,7 @@ pub fn scan_flat_keyed_tz(data: &[u8], pos: usize) -> Option<(usize, u64, u64, u
+ /// are unchanged, and `m0 | m1 == 0` still means "no `;` in sixteen bytes".
+ ///
+ /// Reads [`FLAT_SLACK`] bytes from `pos`, as [`scan_flat_keyed`] does.
++#[cfg(target_arch = "aarch64")]
+ #[inline(always)]
+ pub fn scan_flat_keyed_neon(data: &[u8], pos: usize) -> Option<(usize, u64, u64, u64)> {
+     use std::arch::aarch64::{
+@@ -342,6 +343,7 @@ pub fn scan_flat_keyed_neon(data: &[u8], pos: usize) -> Option<(usize, u64, u64,
+ /// simply what a single window costs.
+ ///
+ /// Reads [`FLAT_SLACK`] bytes from `pos`, as [`scan_flat_keyed`] does.
++#[cfg(target_arch = "aarch64")]
+ #[inline(always)]
+ pub fn scan_flat_keyed_vmask(data: &[u8], pos: usize) -> Option<(usize, u64, u64, u64)> {
+     use std::arch::aarch64::{
+@@ -415,6 +417,7 @@ pub fn scan_flat_keyed_vmask(data: &[u8], pos: usize) -> Option<(usize, u64, u64
+ /// holds it there.
+ ///
+ /// Reads [`FLAT_SLACK`] bytes from `pos`, as [`scan_flat_keyed`] does.
++#[cfg(target_arch = "aarch64")]
+ #[inline(always)]
+ pub fn scan_flat_keyed_pfx(data: &[u8], pos: usize) -> Option<(usize, u64, u64, u64)> {
+     use std::arch::aarch64::{
+@@ -506,6 +509,7 @@ pub fn scan_flat_keyed_win(w: &[u8; 16]) -> Option<(usize, u64, u64, u64)> {
+ ///
+ /// `neon_win_agrees_with_the_slice_form` holds it equal to [`scan_flat_keyed`], as the other
+ /// copies are held.
++#[cfg(target_arch = "aarch64")]
+ #[inline(always)]
+ pub fn scan_flat_keyed_neon_win(w: &[u8; 16]) -> Option<(usize, u64, u64, u64)> {
+     use std::arch::aarch64::{
+diff --git a/src/sys.rs b/src/sys.rs
+index c95514b..6e3ac92 100644
+--- a/src/sys.rs
++++ b/src/sys.rs
+@@ -32,10 +32,16 @@ extern "C" {
+     fn munmap(addr: *mut c_void, len: usize) -> c_int;
+     fn madvise(addr: *mut c_void, len: usize, advice: c_int) -> c_int;
+     fn mlock(addr: *const c_void, len: usize) -> c_int;
++}
++
++#[cfg(target_os = "macos")]
++extern "C" {
+     fn pthread_set_qos_class_self_np(qos_class: c_uint, relative_priority: c_int) -> c_int;
+ }
+ 
++/// Darwin only; elsewhere there are no QoS classes, and it does nothing.
+ pub fn set_thread_qos_user_interactive() {
++    #[cfg(target_os = "macos")]
+     unsafe { pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) };
+ }
+ 

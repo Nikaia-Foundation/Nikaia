@@ -10,6 +10,9 @@
 #
 # * beowolx/fast_1brc has no licence: `fetch.sh` clones it at a fixed commit
 #   into `benches/brc/target/human`, nothing of it is in the repository.
+# * sheplu/1brc is MIT, written for aarch64 macOS: `fetch.sh` clones it too
+#   and builds `v12_pairs`, its fastest stage without NEON, from a copy with
+#   `sheplu/x86-64.patch` applied, which only lets it build on x86-64 Linux.
 # * automataIA/1brc-rs is MIT: `automataia/` holds what its two binaries need.
 #   `v20_safe` runs as it is; `v16_flat_table` only derived and corrected,
 #   with `automataia/v16-derived.patch` applied to a copy.
@@ -17,7 +20,8 @@
 # These programs run on every core. Callgrind runs their threads one at a
 # time and counts every thread's instructions, so a count is the total work,
 # not the time on the clock. beowolx takes its thread count from
-# `FAST1BRC_THREADS` and is also counted at 1; automataIA's take
+# `FAST1BRC_THREADS` and sheplu from `OBRC_THREADS` (8 unless set); both are
+# set to the core count and also counted at 1. automataIA's take
 # `available_parallelism` and have no setting.
 set -euo pipefail
 
@@ -62,7 +66,9 @@ grep -q -w avx512f /proc/cpuinfo && native_countable=no
 
 # --- the same answer, first ------------------------------------------------
 
-for p in beowolx v20 v16d; do
+cores=$(nproc)
+export OBRC_THREADS=$cores
+for p in beowolx sheplu v20 v16d; do
     for s in $human_settings; do
         "$bin/$p.$s" "$input" | cmp -s - "$expected" \
             || { echo "FAIL: $p.$s disagrees with naive"; exit 1; }
@@ -71,6 +77,8 @@ done
 for s in cu1 cu16; do
     FAST1BRC_THREADS=1 "$bin/beowolx.$s" "$input" | cmp -s - "$expected" \
         || { echo "FAIL: beowolx.$s at 1 thread disagrees with naive"; exit 1; }
+    OBRC_THREADS=1 "$bin/sheplu.$s" "$input" | cmp -s - "$expected" \
+        || { echo "FAIL: sheplu.$s at 1 thread disagrees with naive"; exit 1; }
 done
 
 # --- the counts ------------------------------------------------------------
@@ -97,14 +105,18 @@ a="$here/automataia/src"
 t_beowolx=$(tokens "$human_out/beowolx/src/main.rs")
 t_v20=$(tokens "$a/bin/v20_safe.rs" "$a/lib.rs")
 t_v16d=$(tokens "$derived/src/bin/v16_flat_table.rs" "$derived/src/lib.rs" "$derived/src/hash.rs")
+# The binary and the library files it uses, whole: their tests and the other
+# stages' variants included, so at most what `v12_pairs` needs.
+s="$human_out/sheplu/src"
+t_sheplu=$(tokens "$s/bin/v12_pairs.rs" "$s/lib.rs" "$s/chunk.rs" "$s/inline_table.rs" \
+    "$s/output.rs" "$s/parse.rs" "$s/swar.rs" "$s/sys.rs")
 
-cores=$(nproc)
 # The rows of one program: the bench's settings, then its authors' build.
 rows_of() {
     local p=$1 label=$2 tokens=$3
     echo "| $label, $cores threads | $(count "$bin/$p.cu1") | $(count "$bin/$p.cu16") | $tokens |"
-    if [ "$p" = beowolx ]; then
-        echo "| $label, 1 thread | $(FAST1BRC_THREADS=1 count "$bin/$p.cu1") | $(FAST1BRC_THREADS=1 count "$bin/$p.cu16") | |"
+    if [ "$p" = beowolx ] || [ "$p" = sheplu ]; then
+        echo "| $label, 1 thread | $(FAST1BRC_THREADS=1 OBRC_THREADS=1 count "$bin/$p.cu1") | $(FAST1BRC_THREADS=1 OBRC_THREADS=1 count "$bin/$p.cu16") | |"
     fi
     echo "| $label, \`x86-64-v3\`, $cores threads | $(count "$bin/$p.v3-cu1") | $(count "$bin/$p.v3-cu16") | |"
     if [ "$native_countable" = yes ]; then
@@ -115,5 +127,6 @@ rows_of() {
     echo "| $label, its authors' profile at \`x86-64-v3\` | $(count "$bin/$p.authors-v3") | | | |"
 }
 rows_of beowolx 'Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc)' "$t_beowolx"
+rows_of sheplu 'Rust, human: [sheplu `v12_pairs`](https://github.com/sheplu/1brc), on x86-64' "at most $t_sheplu"
 rows_of v20 'Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs)' "$t_v20"
 rows_of v16d 'Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected' "$t_v16d"
