@@ -2,7 +2,7 @@ name: Nikaia
 
 # **Once per change, not twice.** A push to a pull request's branch used to
 # start the workflow as a `push` and again as a `pull_request`, the same
-# commit twice. Pull requests run as `pull_request`; `develop` and `main` run
+# commit twice. Pull requests run as `pull_request`; `develop` run
 # on their push; everything runs weekly and by hand.
 #
 # **`develop` is where every change lands at once; `main` is what was tested**
@@ -12,7 +12,7 @@ name: Nikaia
 # `develop` is pushed.
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
   pull_request:
   schedule:
     - cron: "17 3 * * 1"
