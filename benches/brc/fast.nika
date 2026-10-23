@@ -18,7 +18,6 @@ use std::cli
 use std::collections
 use std::fs
 use std::simd
-use std::target
 use std::task
 
 struct Slot {
@@ -40,11 +39,31 @@ struct Table {
 
 comptime BITS: i64 = 14
 comptime SLOTS: i64 = 16384
-// Whether the CPU level cuts a word to its low bits in one instruction.
-comptime CUT_IN_ONE: bool = target::has(target::Instruction::Bmi2)
+// What of a name's first and second word belongs to it, by its length: a
+// name of `len` bytes keeps the low `len` bytes of the first word and the
+// low `len - 8` of the second, computed while the program is built.
+comptime FIRST: Array[u64, 101] = word_masks(0)
+comptime SECOND: Array[u64, 101] = word_masks(8)
 // How far behind the last row start a word read may reach: a name of 100
 // bytes, its temperature and a word beyond.
 comptime MARGIN: i64 = 256
+
+// The masks of `FIRST` (`skip` 0) and `SECOND` (`skip` 8): for each length
+// up to 100, a byte of ones for each of the name's bytes from `skip` on, at
+// most eight.
+fn word_masks(skip: i64) -> Vec[u64] {
+    let mut masks: Vec[u64] = []
+    for len in 0..<101 {
+        let mut mask: u64 = 0
+        let mut k = skip
+        while k < len && k < skip + 8 {
+            mask = (mask << 8) | 0xFF
+            k += 1
+        }
+        masks.push(mask)
+    }
+    return masks
+}
 
 fn table() -> Table {
     let mut slots: Vec[Slot] = []
@@ -113,15 +132,12 @@ impl Table {
                 sep += 32
             }
             // The name's first two words, zeros past its end: each cut to
-            // the name without a branch on the length, which names of
-            // varying length would mispredict. Where `bzhi` cuts, the length
-            // is first held to the 16 bytes the words cover, so `bzhi` needs
-            // no clamp of its own above.
+            // the name by a mask looked up by its length, without a branch on
+            // the length, which names of varying length would mispredict.
             let len = sep - pos
             assert(len >= 0 && len <= 100; message: "a station's name has at most 100 bytes")
-            let cut = if CUT_IN_ONE { len.min(16) } else { len }
-            let w0 = buf.u64_le(pos).low_bits(8 * cut)
-            let w1 = buf.u64_le(pos + 8).low_bits(8 * cut - 64)
+            let w0 = buf.u64_le(pos) & FIRST[len]
+            let w1 = buf.u64_le(pos + 8) & SECOND[len]
 
             let at = self.slot_of(w0, w1, len, buf, pos)
             // The temperature, `-?d?d.d`, from one word: where the `.` is
