@@ -36,12 +36,25 @@ benches/brc/brc.sh 200000     # quicker
   `user-parallelism = "yes"`, before anything is counted.
 * **Release builds on both sides.** The Rust programs are `cargo build
   --release` (`opt-level = 3`, no overflow checks). Nikaia's is a project built
-  with `nikaia build` at `opt-level = 3`, every `optimization` on
-  (`remove-bounds-checks`, `remove-overflow-checks`, `prove-through-loops`,
-  which asks a check a loop leaves open through the loop's invariant,
-  `skip-free-at-exit`), no
-  debug assertions; it keeps the overflow checks the language promises. **Neither side
-  uses link-time optimisation.**
+  with `nikaia build` at `opt-level = 3`, no debug assertions; it keeps the
+  overflow checks the language promises. **Neither side uses link-time
+  optimisation.**
+* **Two modes for each Nikaia program.**
+  * **Nikaia safe**: only `prove-through-loops` on, which changes what is
+    proved and nothing that is written. Every index and overflow check is
+    kept, proved ones included, an `assume` is checked as an `assert`, and
+    the emitted Rust holds no `unsafe` at all (ADR-378), so every guarantee
+    of safe Rust holds for it, as for any safe Rust program over its `std`.
+  * **Nikaia optimized**: every `optimization` on (`remove-bounds-checks`,
+    `remove-overflow-checks`, `prove-through-loops`, which asks a check a
+    loop leaves open through the loop's invariant, `skip-free-at-exit`). A
+    check the compiler proved is written without it, in `unsafe` Rust
+    (`nikaia_std::proven`, ADR-306 D18); an `assume` is believed, as
+    `core::hint::assert_unchecked`; the memory `main` holds at its end is
+    left to the operating system, through an allocator that is `unsafe` too.
+    A check that is not proved stays. The program means the same; what
+    stands behind a removed check is the prover, or for an `assume` the
+    programmer, no longer the Rust compiler.
 * **Two codegen-unit settings, the same on both sides each time: 1 and 16**
   (release's default). Which unit rustc puts a function in decides whether
   LLVM inlines it into the hot loop: `hashbrown`'s `entry` on both sides, and on
@@ -68,13 +81,6 @@ benches/brc/brc.sh 200000     # quicker
   marked `x86-64-v3` (AVX2, BMI2, SSE 4.2) build AI variant 2 with
   `RUSTFLAGS="-C target-cpu=x86-64-v3"` and `fast.nika` with `nikaia build
   --cpu=x86-64-v3`, at the same unit counts.
-* **`fast-unsafe.nika`** is built twice. In the build every other row has,
-  which removes checks, its assumes are believed: each lowers to
-  `core::hint::assert_unchecked`, the "unsafe Nikaia" row. In a build that
-  removes none (`remove-bounds-checks` and `remove-overflow-checks` off, the
-  rest on), each assume is checked as an `assert`; that row keeps every
-  check, proved ones included, so it is not `fast.nika`'s like for like.
-  Both print `naive`'s answer.
 * **The human-written programs** are built by `human/build.sh` at the bench's
   settings (`opt-level = 3`, no LTO, `panic = "unwind"`, 1 and 16 units,
   `x86-64` and `x86-64-v3`), overriding their projects' profiles, and once as
@@ -102,19 +108,23 @@ Nikaia 0.0.1194, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 1 000 000 rows, per row:
 
 | | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
-| Rust, `naive` | 840.5 | 9.22 | 859.5 | 8.64 | 556 |
+| Rust, `naive` | 841.0 | 9.24 | 859.0 | 8.61 | 556 |
 | Nikaia, `naive.nika` | 557.4 | 8.07 | 544.8 | 8.31 | 375 |
 | Rust, AI variant 1 (`ai1`) | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
 | Rust, AI variant 2 (`ai2`) | 147.4 | 0.38 | 147.4 | 0.38 | 1775 |
-| **Nikaia**, `examples/1brc.nika` | 209.2 | 0.92 | 208.8 | 0.95 | 642 |
-| Nikaia, overflow checks off | 210.2 | 0.92 | 208.8 | 1.04 |  |
-| **Nikaia**, `fast.nika` | 94.8 | 0.14 | 95.0 | 0.14 | 1593 |
-| Nikaia, `fast.nika`, overflow checks off | 90.8 | 0.14 | 91.0 | 0.14 |  |
-| **Nikaia**, `fast-unsafe.nika`, assumes believed | 87.0 | 0.14 | 87.2 | 0.15 | 1981 |
-| Nikaia, `fast-unsafe.nika`, assumes checked | 187.9 | 0.97 | 191.6 | 0.23 |  |
+| **Nikaia safe**, `examples/1brc.nika`: every check kept, no `unsafe` in the emitted Rust | 211.2 | 0.95 | 206.0 | 0.95 | 642 |
+| **Nikaia optimized**, `examples/1brc.nika`: proved checks removed in `unsafe` Rust | 209.2 | 0.92 | 208.8 | 0.95 |  |
+| Nikaia optimized, `examples/1brc.nika`, overflow checks off | 210.2 | 0.92 | 208.8 | 1.04 |  |
+| **Nikaia safe**, `fast.nika`: every check kept, no `unsafe` in the emitted Rust | 139.9 | 0.23 | 143.4 | 0.14 | 1593 |
+| **Nikaia optimized**, `fast.nika`: proved checks removed in `unsafe` Rust | 94.8 | 0.14 | 95.0 | 0.14 |  |
+| Nikaia optimized, `fast.nika`, overflow checks off | 90.8 | 0.14 | 91.0 | 0.14 |  |
+| **Nikaia safe**, `fast-unsafe.nika`: assumes and every check kept, no `unsafe` in the emitted Rust | 188.1 | 0.97 | 191.8 | 0.23 | 1981 |
+| **Nikaia optimized**, `fast-unsafe.nika`: assumes believed, proved checks removed in `unsafe` Rust | 87.0 | 0.14 | 87.2 | 0.15 |  |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 |  |
-| Nikaia, `fast.nika`, `x86-64-v3` | 89.8 | 0.14 | 89.9 | 0.14 |  |
-| Nikaia, `fast-unsafe.nika`, assumes believed, `x86-64-v3` | 79.0 | 0.14 | 79.1 | 0.14 |  |
+| Nikaia safe, `fast.nika`, `x86-64-v3` | 134.8 | 0.24 | 138.4 | 0.14 |  |
+| Nikaia optimized, `fast.nika`, `x86-64-v3` | 89.8 | 0.14 | 89.9 | 0.14 |  |
+| Nikaia safe, `fast-unsafe.nika`, `x86-64-v3` | 179.1 | 0.23 | 182.7 | 0.15 |  |
+| Nikaia optimized, `fast-unsafe.nika`, `x86-64-v3` | 79.0 | 0.14 | 79.1 | 0.14 |  |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 4 threads | 133.7 | 0.47 | 131.3 | 0.47 | 12907 |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 1 thread | 133.1 | 0.47 | 130.8 | 0.48 | |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), `x86-64-v3`, 4 threads | 93.4 | 0.69 | 91.5 | 0.30 | |
@@ -122,10 +132,10 @@ Nikaia 0.0.1194, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), its authors' profile at `x86-64-v3` | 92.2 | 0.69 | | | |
 | Rust, human: [sheplu `v12_pairs`](https://github.com/sheplu/1brc), on x86-64, 4 threads | 149.2 | 0.76 | 152.2 | 0.57 | at most 17654 |
 | Rust, human: [sheplu `v12_pairs`](https://github.com/sheplu/1brc), on x86-64, 1 thread | 147.6 | 0.73 | 150.6 | 0.54 | |
-| Rust, human: [sheplu `v12_pairs`](https://github.com/sheplu/1brc), on x86-64, `x86-64-v3`, 4 threads | 132.0 | 0.56 | 131.3 | 0.69 | |
+| Rust, human: [sheplu `v12_pairs`](https://github.com/sheplu/1brc), on x86-64, `x86-64-v3`, 4 threads | 132.0 | 0.57 | 131.3 | 0.69 | |
 | Rust, human: [sheplu `v12_pairs`](https://github.com/sheplu/1brc), on x86-64, as its authors build it (`native`, fat LTO, 1 unit, `panic = "abort"`) | not countable with callgrind (AVX-512) | | | | |
 | Rust, human: [sheplu `v12_pairs`](https://github.com/sheplu/1brc), on x86-64, its authors' profile at `x86-64-v3` | 131.7 | 0.57 | | | |
-| Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), 4 threads | 210.4 | 1.60 | 220.6 | 1.60 | 5961 |
+| Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), 4 threads | 210.4 | 1.60 | 216.1 | 1.60 | 5961 |
 | Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), `x86-64-v3`, 4 threads | 185.2 | 1.60 | 190.9 | 1.60 | |
 | Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), as its authors build it (`native`, fat LTO, 1 unit, `panic = "abort"`) | not countable with callgrind (AVX-512) | | | | |
 | Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs), its authors' profile at `x86-64-v3` | 187.7 | 1.60 | | | |
@@ -134,8 +144,22 @@ Nikaia 0.0.1194, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, as its authors build it (`native`, fat LTO, 1 unit, `panic = "abort"`) | not countable with callgrind (AVX-512) | | | | |
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, its authors' profile at `x86-64-v3` | 198.6 | 0.57 | | | |
 | C++, human: [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), `g++ -O3`, `x86-64-v3`, 4 threads | 86.6 | 0.48 | 86.6 | 0.48 | 5412 |
-| C++, human: [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), `g++ -O3`, `x86-64-v3`, 1 thread | 81.5 | 0.45 | 81.5 | 0.45 | |
+| C++, human: [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), `g++ -O3`, `x86-64-v3`, 1 thread | 81.4 | 0.46 | 81.4 | 0.46 | |
 | C++, human: [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), `g++ -O3`, as its authors build it (`native`) | not countable with callgrind (AVX-512) | | | | |
+
+**Safe against optimized.** In the safe mode the emitted Rust holds no
+`unsafe`; every check of the row stays, each a compare and a branch: the
+word and vector loads from the input, the table's indexes, and each `+` and
+`-`. `fast.nika` then runs 143.4 instructions a row at 16 units against 95.0
+optimized, 3 % fewer than AI variant 2 (147.4, `unsafe` Rust) and 6 % fewer
+than sheplu's `v12_pairs` (152.2, no `unsafe` on x86-64), 9 % more than
+beowolx (131.3, `unsafe` Rust); at `x86-64-v3` 138.4 against 89.9. The
+mispredictions stay at 0.14 at 16 units: the checks are never taken.
+`fast-unsafe.nika` safe runs 191.8, its assumes checked as `assert`s.
+`1brc.nika` is the same in both modes within 3 instructions (206.0 safe,
+208.8 optimized, apart by where the code lies): the checks the optimized
+build drops there are few. Everywhere below, a Nikaia program without a
+mode is the optimized one.
 
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
@@ -227,7 +251,7 @@ half as often there (0.14 against 0.30 at 16 units, 0.14 against 0.69 at 1 unit)
 beowolx parses two rows' temperatures in one AVX2 vector; written so in
 `fast-unsafe.nika` with `core::arch` intrinsics, that saved 1.6
 instructions a row (ADR-377 D8, at 0.0.1166). Checked, the same file
-costs 191.6 at 16 units: every assume tested and no check removed.
+costs 191.8 at 16 units: every assume tested and no check removed.
 
 sheplu's `v12_pairs` is the fastest of its stages that builds on x86-64; the
 later ones search with NEON, and by its own clock on an Apple M5 its fastest,

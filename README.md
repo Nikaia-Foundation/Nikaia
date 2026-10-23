@@ -135,9 +135,11 @@ syntax](guide/syntax.md) shows the language on one page.
 A preliminary comparison on the One Billion Row Challenge, counted with callgrind
 ([benches/brc](benches/brc/README.md)), instructions a row at 16 codegen units: the fastest
 Rust program written by a person runs 131, an AI-written one after several measured rounds
-(AI variant 2) 147, Nikaia's safe `fast.nika` 95 and its plain `examples/1brc.nika` 209;
-`fast-unsafe.nika`, the same program with its claims written `unsafe { assume(…) }`, runs 87.
-Both Nikaia programs mispredict 0.14 branches a row, the person's program 0.47. At
+(AI variant 2) 147. Nikaia's `fast.nika` runs 95 built optimized, where a check the compiler
+proved is written without it in `unsafe` Rust, and 143 built safe, every check kept and no
+`unsafe` in the emitted Rust; its plain `examples/1brc.nika` runs 209 and 206.
+`fast-unsafe.nika`, the same program with its claims written `unsafe { assume(…) }`, runs 87
+optimized. Both Nikaia programs mispredict 0.14 branches a row, the person's program 0.47. At
 `x86-64-v3` the person's program runs 92 instructions a row, `fast-unsafe.nika` 79.
 
 ---
