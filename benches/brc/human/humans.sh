@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The human-written 1BRC programs in Rust, counted as `brc.sh` counts its own:
+# The human-written 1BRC programs in Rust and C++, counted as `brc.sh` counts its own:
 # instructions and mispredicted branches per row by callgrind, at codegen units
 # 1 and 16, after each one's output has been compared with `naive`'s byte for
 # byte. It prints the rows in the format of `README.md`'s table; `brc.sh`
@@ -13,6 +13,10 @@
 # * sheplu/1brc is MIT, written for aarch64 macOS: `fetch.sh` clones it too
 #   and builds `v12_pairs`, its fastest stage without NEON, from a copy with
 #   `sheplu/x86-64.patch` applied, which only lets it build on x86-64 Linux.
+# * lehuyduc/1brc-simd is C++ with no licence, fetched as beowolx is. It
+#   writes `result.txt` in the directory it runs in rather than printing, and
+#   forks once, so its runs are compared there and counted with every
+#   process callgrind sees.
 # * automataIA/1brc-rs is MIT: `automataia/` holds what its two binaries need.
 #   `v20_safe` runs as it is; `v16_flat_table` only derived and corrected,
 #   with `automataia/v16-derived.patch` applied to a copy.
@@ -80,6 +84,14 @@ for s in cu1 cu16; do
     OBRC_THREADS=1 "$bin/sheplu.$s" "$input" | cmp -s - "$expected" \
         || { echo "FAIL: sheplu.$s at 1 thread disagrees with naive"; exit 1; }
 done
+# lehuyduc's runs, each in a directory of its own for its `result.txt`.
+lehuyduc_dir="$work/lehuyduc"
+for s in v3 v3-1 authors; do
+    rm -rf "$lehuyduc_dir" && mkdir -p "$lehuyduc_dir"
+    ( cd "$lehuyduc_dir" && "$bin/lehuyduc.$s" "$input" )
+    cmp -s "$lehuyduc_dir/result.txt" "$expected" \
+        || { echo "FAIL: lehuyduc.$s disagrees with naive"; exit 1; }
+done
 
 # --- the counts ------------------------------------------------------------
 
@@ -91,6 +103,18 @@ count() {
     cmp -s "$work/out.human" "$expected" \
         || { echo "FAIL: $* under callgrind disagrees with naive" >&2; kill $$; }
     awk -v r="$rows" '/^summary:/ { printf "%.1f | %.2f", $2 / r, ($4 + $6) / r }' "$work/cg-human.out"
+}
+
+# The same for lehuyduc: its `result.txt` compared, and the counts of the
+# process it forks summed with its own.
+count_lehuyduc() {
+    rm -rf "$lehuyduc_dir" && mkdir -p "$lehuyduc_dir"
+    ( cd "$lehuyduc_dir" && valgrind --tool=callgrind --branch-sim=yes --trace-children=yes \
+        --callgrind-out-file="$lehuyduc_dir/cg.%p" "$1" "$input" >/dev/null 2>&1 )
+    cmp -s "$lehuyduc_dir/result.txt" "$expected" \
+        || { echo "FAIL: $1 under callgrind disagrees with naive" >&2; kill $$; }
+    cat "$lehuyduc_dir"/cg.* | awk -v r="$rows" \
+        '/^summary:/ { i += $2; m += $4 + $6 } END { printf "%.1f | %.2f", i / r, m / r }'
 }
 
 # Tokens by `scripts/tokens.nika`, summed over the files a binary is built
@@ -108,6 +132,8 @@ t_v16d=$(tokens "$derived/src/bin/v16_flat_table.rs" "$derived/src/lib.rs" "$der
 # The binary and the library files it uses, whole: their tests and the other
 # stages' variants included, so at most what `v12_pairs` needs.
 s="$human_out/sheplu/src"
+# The same rule applied to C++: its comments are Rust's.
+t_lehuyduc=$(tokens "$human_out/lehuyduc/main.cpp" "$human_out/lehuyduc/my_timer.h")
 t_sheplu=$(tokens "$s/bin/v12_pairs.rs" "$s/lib.rs" "$s/chunk.rs" "$s/inline_table.rs" \
     "$s/output.rs" "$s/parse.rs" "$s/swar.rs" "$s/sys.rs")
 
@@ -130,3 +156,16 @@ rows_of beowolx 'Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/f
 rows_of sheplu 'Rust, human: [sheplu `v12_pairs`](https://github.com/sheplu/1brc), on x86-64' "at most $t_sheplu"
 rows_of v20 'Rust, human: [automataIA `v20_safe`](https://github.com/automataIA/1brc-rs)' "$t_v20"
 rows_of v16d 'Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected' "$t_v16d"
+
+# lehuyduc: one translation unit, no codegen units, so the one count stands in
+# both columns; no build at `x86-64`, which it does not compile for.
+label='C++, human: [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), `g++ -O3`'
+c=$(count_lehuyduc "$bin/lehuyduc.v3")
+echo "| $label, \`x86-64-v3\`, $cores threads | $c | $c | $t_lehuyduc |"
+c=$(count_lehuyduc "$bin/lehuyduc.v3-1")
+echo "| $label, \`x86-64-v3\`, 1 thread | $c | $c | |"
+if [ "$native_countable" = yes ]; then
+    echo "| $label, as its authors build it (\`native\`) | $(count_lehuyduc "$bin/lehuyduc.authors") | | | |"
+else
+    echo "| $label, as its authors build it (\`native\`) | not countable with callgrind (AVX-512) | | | | |"
+fi

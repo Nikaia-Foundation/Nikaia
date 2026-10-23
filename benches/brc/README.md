@@ -14,7 +14,7 @@ the same aggregation written in Rust:
 | [`examples/1brc.nika`](../../examples/1brc.nika) | a grammar over the whole file, a `par_fold`, names that are slices of a mapped file, `std`'s `HashMap` |
 | [`fast.nika`](fast.nika) | the building blocks of AI variant 2 as far as today's `std` has them: the mapped file read as `Bytes`, each row's `;` looked for in the 32 bytes from its start with `simd::Fixed[u8, 32]` (`simd::load`, `eq`, `first()`), each load proved inside the input (the line's end follows from the temperature's shape), the name's first sixteen bytes read as two words with `u64_le`, cut to the name by a mask looked up by its length and no branch, as its hash and key, the temperature from one word without a branch, an own open-addressing table in a `Vec`, the last rows read from a copy with zeros behind them; no `unsafe`, each station's name checked as UTF-8 once, where it is printed. On more than one core it cuts the file with `par_pieces` and folds the pieces with `Par::fold` |
 | [`fast-unsafe.nika`](fast-unsafe.nika) | `fast.nika` with the claims a programmer who knows the 1BRC format vouches for, each in `unsafe { assume(…) }` (ADR-376): the table's index in range, a name of at most 100 bytes inside the input, the `;` at least 16 bytes before the end, the temperature's `.` as its second, third or fourth byte, its value at most 99.9, fewer than 10 000 stations, the sums and counts below 10^15 and 10^12. Every one holds for a valid 1BRC file. Where the CPU level has `crc32` (`x86-64-v3`), it hashes the name's two words with `hash::crc32c`, chosen while it is built |
-| human-written Rust ([`human/humans.sh`](human/humans.sh)) | [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), fetched at a fixed commit (it has no licence, so nothing of it is in the repository); [sheplu `1brc`](https://github.com/sheplu/1brc)'s `v12_pairs`, fetched at a fixed commit (MIT, written for aarch64 macOS: [`human/sheplu/x86-64.patch`](human/sheplu/x86-64.patch) compiles its NEON functions on aarch64 only and its Darwin QoS call nowhere else, and changes nothing else; its later stages, `v19` on, are NEON and do not build on x86-64); and automataIA's [`v20_safe`](https://github.com/automataIA/1brc-rs) and `v16_flat_table` (MIT, in [`human/automataia`](human/automataia), `v16` derived and corrected by its patch); all four run on every core |
+| human-written Rust and C++ ([`human/humans.sh`](human/humans.sh)) | [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), fetched at a fixed commit (it has no licence, so nothing of it is in the repository); [sheplu `1brc`](https://github.com/sheplu/1brc)'s `v12_pairs`, fetched at a fixed commit (MIT, written for aarch64 macOS: [`human/sheplu/x86-64.patch`](human/sheplu/x86-64.patch) compiles its NEON functions on aarch64 only and its Darwin QoS call nowhere else, and changes nothing else; its later stages, `v19` on, are NEON and do not build on x86-64); and automataIA's [`v20_safe`](https://github.com/automataIA/1brc-rs) and `v16_flat_table` (MIT, in [`human/automataia`](human/automataia), `v16` derived and corrected by its patch); and in C++ [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), fetched at a fixed commit (no licence either); all five run on every core |
 
 Each pair is compared like for like: `naive.nika` with `naive.rs`, `1brc.nika`
 with the two AI variants, `fast.nika` with AI variant 2, `fast-unsafe.nika` with the human-written
@@ -78,7 +78,11 @@ benches/brc/brc.sh 200000     # quicker
 * **The human-written programs** are built by `human/build.sh` at the bench's
   settings (`opt-level = 3`, no LTO, `panic = "unwind"`, 1 and 16 units,
   `x86-64` and `x86-64-v3`), overriding their projects' profiles, and once as
-  their authors build them. They run on every core; callgrind runs the threads
+  their authors build them. lehuyduc's C++ is built with its authors' `g++ -O3
+  -std=c++17` at `x86-64-v3` (it is AVX2 throughout and does not compile for
+  `x86-64`), its thread count compiled in, at the core count and at one; a
+  single translation unit has no codegen units, so its one count stands in
+  both columns, and its counts include the process it forks. They run on every core; callgrind runs the threads
   one at a time and counts them all, so a count is the total work. beowolx and
   sheplu are also counted at one thread (`FAST1BRC_THREADS=1`,
   `OBRC_THREADS=1`); sheplu's thread count is otherwise set to the core
@@ -129,6 +133,9 @@ Nikaia 0.0.1194, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, `x86-64-v3`, 4 threads | 197.7 | 0.57 | 197.7 | 0.57 | |
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, as its authors build it (`native`, fat LTO, 1 unit, `panic = "abort"`) | not countable with callgrind (AVX-512) | | | | |
 | Rust, human: [automataIA `v16_flat_table`](https://github.com/automataIA/1brc-rs), derived and corrected, its authors' profile at `x86-64-v3` | 198.6 | 0.57 | | | |
+| C++, human: [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), `g++ -O3`, `x86-64-v3`, 4 threads | 86.6 | 0.48 | 86.6 | 0.48 | 5412 |
+| C++, human: [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), `g++ -O3`, `x86-64-v3`, 1 thread | 81.5 | 0.45 | 81.5 | 0.45 | |
+| C++, human: [lehuyduc `1brc-simd`](https://github.com/lehuyduc/1brc-simd), `g++ -O3`, as its authors build it (`native`) | not countable with callgrind (AVX-512) | | | | |
 
 The naive programs: Nikaia's is a third shorter and runs a third fewer
 instructions at both settings, from the same algorithm (below).
@@ -233,6 +240,12 @@ fewer at 16, `fast.nika` 36 % and 37 % fewer, with about a quarter of its
 mispredictions (0.14 against 0.54 to 0.73). At `x86-64-v3` `fast-unsafe.nika`
 runs 79.1 against its 131.3 at 16 units, 40 % fewer. sheplu's program is
 tuned for aarch64 on an Apple M5; what it does there is not counted here.
+
+lehuyduc's `1brc-simd`, in C++ with AVX2 throughout, is the closest: at
+`x86-64-v3` on one thread it runs 81.5 instructions a row against
+`fast-unsafe.nika`'s 79.1, 3 % more, and 86.6 on four threads; `fast.nika` runs 89.9. It
+mispredicts three times as often as either Nikaia program (0.45 to 0.48
+against 0.14), in 5412 tokens, 2.7 times `fast-unsafe.nika`'s.
 
 ## Where Nikaia's instructions go
 

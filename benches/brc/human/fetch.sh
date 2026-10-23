@@ -11,6 +11,11 @@
 #   patch compiles the NEON functions on aarch64 only and makes the QoS call
 #   a no-op elsewhere, and changes nothing else. Its fastest stage without
 #   NEON, `v12_pairs`, is the one counted.
+# * lehuyduc/1brc-simd is C++ with no licence: built as it is cloned, with
+#   its authors' `g++ -O3 -std=c++17` (`run.sh`). Its thread count is
+#   compiled in (`N_THREADS_PARAM`, `N_CORES_PARAM`), so there is a binary at
+#   the core count and one at a single thread. It is AVX2 throughout and
+#   builds at `x86-64-v3` and above only; `authors` is its `-march=native`.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -46,3 +51,15 @@ patch --quiet -p1 -d "$ported" < "$root/benches/brc/human/sheplu/x86-64.patch"
 # A workspace of its own, or Cargo takes it for a stray member of this one.
 printf '\n[workspace]\n' >> "$ported/Cargo.toml"
 human_build "$ported" sheplu v12_pairs
+
+human_fetch https://github.com/lehuyduc/1brc-simd 995e89ba84feeecdf1084bcde45a484461f25e7c \
+    "$human_out/lehuyduc"
+# lehuyduc_build SETTING MARCH THREADS
+lehuyduc_build() {
+    g++ -o "$human_out/bin/lehuyduc.$1" "$human_out/lehuyduc/main.cpp" -O3 -std=c++17 \
+        -march="$2" -m64 -lpthread -DN_THREADS_PARAM="$3" -DN_CORES_PARAM="$3" \
+        || { echo "build failed: lehuyduc at $1" >&2; exit 1; }
+}
+lehuyduc_build v3 x86-64-v3 "$(nproc)"
+lehuyduc_build v3-1 x86-64-v3 1
+lehuyduc_build authors native "$(nproc)"
