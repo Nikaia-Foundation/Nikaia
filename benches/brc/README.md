@@ -39,10 +39,11 @@ benches/brc/brc.sh 200000     # quicker
   with `nikaia build` at `opt-level = 3`, no debug assertions; it keeps the
   overflow checks the language promises. **Neither side uses link-time
   optimisation.**
-* **Two modes for each Nikaia program.**
+* **Two modes for `1brc.nika` and `fast.nika`.** `fast-unsafe.nika` is
+  counted optimized only: what it is for is its assumes believed.
   * **Nikaia safe**: only `prove-through-loops` on, which changes what is
     proved and nothing that is written. Every index and overflow check is
-    kept, proved ones included, an `assume` is checked as an `assert`, and
+    kept, proved ones included, and
     the emitted Rust holds no `unsafe` at all (ADR-378), so every guarantee
     of safe Rust holds for it, as for any safe Rust program over its `std`.
   * **Nikaia optimized**: every `optimization` on (`remove-bounds-checks`,
@@ -118,12 +119,10 @@ Nikaia 0.0.1194, rustc 1.97.0, Intel Xeon @ 2.10 GHz, 4 cores; callgrind,
 | **Nikaia safe**, `fast.nika`: every check kept, no `unsafe` in the emitted Rust | 139.9 | 0.23 | 143.4 | 0.14 | 1593 |
 | **Nikaia optimized**, `fast.nika`: proved checks removed in `unsafe` Rust | 94.8 | 0.14 | 95.0 | 0.14 |  |
 | Nikaia optimized, `fast.nika`, overflow checks off | 90.8 | 0.14 | 91.0 | 0.14 |  |
-| **Nikaia safe**, `fast-unsafe.nika`: assumes and every check kept, no `unsafe` in the emitted Rust | 188.1 | 0.97 | 191.8 | 0.23 | 1981 |
-| **Nikaia optimized**, `fast-unsafe.nika`: assumes believed, proved checks removed in `unsafe` Rust | 87.0 | 0.14 | 87.2 | 0.15 |  |
+| **Nikaia optimized**, `fast-unsafe.nika`: assumes believed, proved checks removed in `unsafe` Rust | 87.0 | 0.14 | 87.2 | 0.15 | 1981 |
 | Rust, AI variant 2 (`ai2`), `x86-64-v3` | 132.7 | 0.27 | 132.7 | 0.27 |  |
 | Nikaia safe, `fast.nika`, `x86-64-v3` | 134.8 | 0.24 | 138.4 | 0.14 |  |
 | Nikaia optimized, `fast.nika`, `x86-64-v3` | 89.8 | 0.14 | 89.9 | 0.14 |  |
-| Nikaia safe, `fast-unsafe.nika`, `x86-64-v3` | 179.1 | 0.23 | 182.7 | 0.15 |  |
 | Nikaia optimized, `fast-unsafe.nika`, `x86-64-v3` | 79.0 | 0.14 | 79.1 | 0.14 |  |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 4 threads | 133.7 | 0.47 | 131.3 | 0.47 | 12907 |
 | Rust, human: [beowolx `fast_1brc`](https://github.com/beowolx/fast_1brc), 1 thread | 133.1 | 0.47 | 130.8 | 0.48 | |
@@ -155,7 +154,6 @@ optimized, 3 % fewer than AI variant 2 (147.4, `unsafe` Rust) and 6 % fewer
 than sheplu's `v12_pairs` (152.2, no `unsafe` on x86-64), 9 % more than
 beowolx (131.3, `unsafe` Rust); at `x86-64-v3` 138.4 against 89.9. The
 mispredictions stay at 0.14 at 16 units: the checks are never taken.
-`fast-unsafe.nika` safe runs 191.8, its assumes checked as `assert`s.
 `1brc.nika` is the same in both modes within 3 instructions (206.0 safe,
 208.8 optimized, apart by where the code lies): the checks the optimized
 build drops there are few. Everywhere below, a Nikaia program without a
@@ -250,8 +248,7 @@ beowolx's 93.4 on four threads at 1 unit, and 79.1 against 91.5 at 16 units,
 half as often there (0.14 against 0.30 at 16 units, 0.14 against 0.69 at 1 unit).
 beowolx parses two rows' temperatures in one AVX2 vector; written so in
 `fast-unsafe.nika` with `core::arch` intrinsics, that saved 1.6
-instructions a row (ADR-377 D8, at 0.0.1166). Checked, the same file
-costs 191.8 at 16 units: every assume tested and no check removed.
+instructions a row (ADR-377 D8, at 0.0.1166).
 
 sheplu's `v12_pairs` is the fastest of its stages that builds on x86-64; the
 later ones search with NEON, and by its own clock on an Apple M5 its fastest,

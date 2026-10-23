@@ -50,13 +50,13 @@ done
 # A Nikaia program is built the way a user builds it: a project with a
 # `nikaia.toml`. `opt-level = 3` as Cargo's release profile has it, no LTO on
 # either side. The unit count is the project's `codegen-units` (ADR-002 D6).
-# Each program is built in two modes:
+# `1brc.nika` and `fast.nika` are built in two modes, `fast-unsafe.nika`
+# optimized only:
 # * optimized, every optimization the compiler offers on: a check the
 #   compiler proved is written without it, in `unsafe` Rust (ADR-306 D18,
 #   ADR-378), and an `assume` is believed;
 # * safe (`SAFE`), only `prove-through-loops`, which changes what is proved
-#   and nothing that is written: every check is kept, an `assume` is checked,
-#   and the emitted Rust holds no `unsafe` at all, so every guarantee of safe
+#   and nothing that is written: every check is kept, and the emitted Rust holds no `unsafe` at all, so every guarantee of safe
 #   Rust holds for it (`skip-free-at-exit` is off too: its allocator is
 #   `unsafe`).
 proj="$work/project"
@@ -105,13 +105,11 @@ for u in $units; do
     OPTIMIZATION=$SAFE build_nikaia "$u" fast-safe-v3 no "$fast" x86-64-v3
     RUSTFLAGS="-C overflow-checks=off" build_nikaia "$u" fast-unchecked no "$fast"
     build_nikaia "$u" fast-v3 no "$fast" x86-64-v3
-    # `fast.nika` with `unsafe { assume(…) }` (ADR-376): believed where the
-    # build removes checks; checked in the safe mode, which removes none.
+    # `fast.nika` with `unsafe { assume(…) }` (ADR-376), optimized only: its
+    # assumes believed.
     unsafe_src="$root/benches/brc/fast-unsafe.nika"
     build_nikaia "$u" fast-unsafe no "$unsafe_src"
     build_nikaia "$u" fast-unsafe-v3 no "$unsafe_src" x86-64-v3
-    OPTIMIZATION=$SAFE build_nikaia "$u" fast-unsafe-checked no "$unsafe_src"
-    OPTIMIZATION=$SAFE build_nikaia "$u" fast-unsafe-checked-v3 no "$unsafe_src" x86-64-v3
     # On every core: checked for its output, not counted.
     build_nikaia "$u" fast-parallel yes "$fast"
 done
@@ -125,9 +123,8 @@ for u in $units; do
         "$work/nikaia.unchecked.cu$u" "$work/nikaia.parallel.cu$u" "$work/nikaia.naive.cu$u" \
         "$work/target-v3-cu$u/release/ai2" "$work/nikaia.fast.cu$u" "$work/nikaia.fast-unchecked.cu$u" \
         "$work/nikaia.fast-v3.cu$u" "$work/nikaia.fast-parallel.cu$u" "$work/nikaia.fast-unsafe.cu$u" \
-        "$work/nikaia.fast-unsafe-v3.cu$u" "$work/nikaia.fast-unsafe-checked.cu$u" \
-        "$work/nikaia.checked-safe.cu$u" "$work/nikaia.fast-safe.cu$u" "$work/nikaia.fast-safe-v3.cu$u" \
-        "$work/nikaia.fast-unsafe-checked-v3.cu$u"; do
+        "$work/nikaia.fast-unsafe-v3.cu$u" \
+        "$work/nikaia.checked-safe.cu$u" "$work/nikaia.fast-safe.cu$u" "$work/nikaia.fast-safe-v3.cu$u"; do
         "$p" "$input" | cmp -s - "$work/out.naive" \
             || { echo "FAIL: $p disagrees with naive"; exit 1; }
     done
@@ -182,11 +179,9 @@ row 'Nikaia optimized, `examples/1brc.nika`, overflow checks off' '' "$work/nika
 row '**Nikaia safe**, `fast.nika`: every check kept, no `unsafe` in the emitted Rust' "$(tokens benches/brc/fast.nika)" "$work/nikaia.fast-safe.cu@"
 row '**Nikaia optimized**, `fast.nika`: proved checks removed in `unsafe` Rust' '' "$work/nikaia.fast.cu@"
 row 'Nikaia optimized, `fast.nika`, overflow checks off' '' "$work/nikaia.fast-unchecked.cu@"
-row '**Nikaia safe**, `fast-unsafe.nika`: assumes and every check kept, no `unsafe` in the emitted Rust' "$(tokens benches/brc/fast-unsafe.nika)" "$work/nikaia.fast-unsafe-checked.cu@"
-row '**Nikaia optimized**, `fast-unsafe.nika`: assumes believed, proved checks removed in `unsafe` Rust' '' "$work/nikaia.fast-unsafe.cu@"
+row '**Nikaia optimized**, `fast-unsafe.nika`: assumes believed, proved checks removed in `unsafe` Rust' "$(tokens benches/brc/fast-unsafe.nika)" "$work/nikaia.fast-unsafe.cu@"
 row 'Rust, AI variant 2 (`ai2`), `x86-64-v3`' '' "$work/target-v3-cu@/release/ai2"
 row 'Nikaia safe, `fast.nika`, `x86-64-v3`' '' "$work/nikaia.fast-safe-v3.cu@"
 row 'Nikaia optimized, `fast.nika`, `x86-64-v3`' '' "$work/nikaia.fast-v3.cu@"
-row 'Nikaia safe, `fast-unsafe.nika`, `x86-64-v3`' '' "$work/nikaia.fast-unsafe-checked-v3.cu@"
 row 'Nikaia optimized, `fast-unsafe.nika`, `x86-64-v3`' '' "$work/nikaia.fast-unsafe-v3.cu@"
 cat "$work/humans.rows"
