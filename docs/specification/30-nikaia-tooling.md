@@ -770,6 +770,18 @@ description of `X` does not match the crate*, keeps the backend's words as a
 note, and the way out is the same command and another review
 ([ADR-290](adr/adr-290.md) D21).
 
+**A crate may ship its reviewed description.** A crate that keeps a
+`nikaia.contracts` beside its `Cargo.toml`, with the `[sources]` it was reviewed
+against in a `nikaia.derived` beside it, ships its description. For a `path`
+dependency on such a crate, `nikaia describe <crate>` adopts that description
+instead of drafting one: it checks that the file's `# crate: <crate> <version>`
+line names the crate's version and that every source file hashes as recorded,
+and copies both files to `contracts/<crate>.contracts` and
+`contracts/<crate>.derived`, saying so. A shipped description that names
+another version, or whose sources hash differently, is refused, and the way out
+is another review in the crate. The project's copy is the one the build
+believes, under the rule above ([ADR-290](adr/adr-290.md) D22).
+
 **Thread Safety (Send/Sync)**
 Whether a value may cross into foreign code is decided from the Nikaia type of
 the argument. No crate metadata is read.

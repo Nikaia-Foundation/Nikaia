@@ -568,6 +568,12 @@ fn describe(crate_name: &str, project: Option<PathBuf>) -> Result<i32> {
             )
         })?;
     let written = nikaia::describe::describe(&root, crate_name)?;
+    if let Some(shipped) = &written.adopted {
+        println!(
+            "`{crate_name}` ships its reviewed description: adopted {}.",
+            shipped.display()
+        );
+    }
     println!(
         "Wrote {} for {crate_name} {}: {} function{}, {} type{}",
         written.path.display(),
@@ -628,10 +634,16 @@ fn describe(crate_name: &str, project: Option<PathBuf>) -> Result<i32> {
             },
         );
     }
-    println!(
-        "\nReview it before you commit it: what a signature can't say is written as \n\
-         the safe answer, and a mistake in it is only caught by you."
-    );
+    match written.adopted {
+        Some(_) => println!(
+            "\nIt was reviewed where the crate is, for this version and these sources; \n\
+             commit it like code."
+        ),
+        None => println!(
+            "\nReview it before you commit it: what a signature can't say is written as \n\
+             the safe answer, and a mistake in it is only caught by you."
+        ),
+    }
     Ok(0)
 }
 

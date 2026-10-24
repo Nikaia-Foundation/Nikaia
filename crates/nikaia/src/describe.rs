@@ -92,10 +92,20 @@ pub struct Described {
     /// ([ADR-290](../../docs/specification/adr/adr-290.md) D8, D10), written
     /// into the file as comments.
     pub notes: Notes,
+    /// The crate's own reviewed ledger, where the description was adopted
+    /// from one rather than drafted (ADR-290 D22).
+    pub adopted: Option<PathBuf>,
 }
+
+/// The file a crate ships its reviewed description in, beside its
+/// `Cargo.toml` (ADR-290 D22); its `[sources]` are in `nikaia.derived`.
+pub const SHIPPED: &str = "nikaia.contracts";
 
 /// Write `contracts/<crate>.contracts` for the crate the program calls.
 pub fn describe(root: &Path, crate_word: &str) -> Result<Described> {
+    if let Some(adopted) = adopt(root, crate_word)? {
+        return Ok(adopted);
+    }
     let (ledger, mut written) = draft(root, crate_word)?;
     let directory = root.join(crate::project::CONTRACTS);
     std::fs::create_dir_all(&directory).with_context(|| format!("{}", directory.display()))?;
@@ -112,6 +122,117 @@ pub fn describe(root: &Path, crate_word: &str) -> Result<Described> {
         .with_context(|| format!("{}", derived.display()))?;
     written.path = path;
     Ok(written)
+}
+
+/// **The crate's own reviewed ledger, where it ships one** (ADR-290 D22):
+/// `nikaia.contracts` beside the `Cargo.toml` of a `path` dependency, copied
+/// into `contracts/<crate>.contracts` with its `nikaia.derived`. Nothing where
+/// the crate ships none, and the caller drafts.
+///
+/// **Checked before it is copied, as the build checks the copy** (D5): a
+/// ledger that names another version than the crate's, or whose recorded
+/// sources hash differently from the crate's own, describes code that is no
+/// longer there, and is refused rather than believed.
+fn adopt(root: &Path, crate_word: &str) -> Result<Option<Described>> {
+    let manifest = crate::manifest::Manifest::read(&root.join("nikaia.toml"))
+        .with_context(|| format!("{}/nikaia.toml", root.display()))?;
+    let (declared, value) = rust_dependency(&manifest, crate_word)?;
+    let Some(path) = value.get("path").and_then(toml::Value::as_str) else {
+        return Ok(None);
+    };
+    let shipped = without_dots(&root.join(path)).join(SHIPPED);
+    if !shipped.is_file() {
+        return Ok(None);
+    }
+    let text =
+        std::fs::read_to_string(&shipped).with_context(|| format!("{}", shipped.display()))?;
+    let Some(ledger) = Ledger::read_beside(&shipped) else {
+        bail!(
+            "`{declared}` ships {}, and it doesn't read as a ledger. Fix it in the crate, \
+             or remove it so that `nikaia describe` drafts a description for this project.",
+            shipped.display()
+        );
+    };
+    let sources = crate_sources(root, &value, crate_word, &declared)?;
+    let says = text.lines().find_map(|line| line.strip_prefix("# crate: "));
+    let described = says.and_then(|line| {
+        let mut words = line.split_whitespace();
+        (words.next() == Some(crate_word)).then(|| words.next().unwrap_or("?").to_string())
+    });
+    match described {
+        Some(version) if version == sources.version => {}
+        Some(version) => bail!(
+            "`{declared}`'s shipped {} describes version {version}, and the crate is \
+             {}. A description is reviewed for one version: review it again in the crate.",
+            shipped.display(),
+            sources.version
+        ),
+        None => bail!(
+            "`{declared}`'s shipped {} doesn't say which crate and version it describes. \
+             Its header needs the line `# crate: {crate_word} {}`.",
+            shipped.display(),
+            sources.version
+        ),
+    }
+    let derived = crate::contracts::derived_path(&shipped);
+    if ledger.sources.is_empty() {
+        bail!(
+            "`{declared}`'s shipped {} has no `[sources]` in {} beside it, so nothing says \
+             which sources it was reviewed against.",
+            shipped.display(),
+            derived.display()
+        );
+    }
+    let now: BTreeMap<String, String> = sources
+        .files
+        .iter()
+        .map(|(file, text)| {
+            (
+                file.clone(),
+                orchestrator::cache::sha256_hex(text.as_bytes()),
+            )
+        })
+        .collect();
+    let moved: Vec<&String> = now
+        .keys()
+        .chain(ledger.sources.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|file| now.get(*file) != ledger.sources.get(*file))
+        .collect();
+    if let Some(first) = moved.first() {
+        bail!(
+            "`{declared}` has changed since its shipped description was reviewed: `{first}`{} \
+             changed since.\nA description is written by a person, so the crate's {SHIPPED} \
+             has to be reviewed again, not just regenerated.",
+            match moved.len() {
+                1 => String::new(),
+                n => format!(" and {} more file{}", n - 1, if n == 2 { "" } else { "s" }),
+            }
+        );
+    }
+
+    let directory = root.join(crate::project::CONTRACTS);
+    std::fs::create_dir_all(&directory).with_context(|| format!("{}", directory.display()))?;
+    let path = directory.join(format!("{crate_word}.contracts"));
+    std::fs::write(&path, &text).with_context(|| format!("{}", path.display()))?;
+    let copy = crate::contracts::derived_path(&path);
+    std::fs::copy(&derived, &copy).with_context(|| format!("{}", copy.display()))?;
+
+    let unanswered = names_the_program_writes(root, crate_word)?
+        .into_iter()
+        .map(|name| format!("{crate_word}::{name}"))
+        .filter(|name| !ledger.functions.contains_key(name) && !ledger.types.contains_key(name))
+        .collect();
+    Ok(Some(Described {
+        path,
+        version: sources.version,
+        functions: ledger.functions.len(),
+        types: ledger.types.len(),
+        unanswered,
+        notes: Notes::empty(),
+        adopted: Some(shipped),
+    }))
 }
 
 /// The same draft, **without writing it**.
@@ -162,6 +283,7 @@ pub fn draft(root: &Path, crate_word: &str) -> Result<(Ledger, Described)> {
         types: ledger.types.len(),
         unanswered,
         notes,
+        adopted: None,
     };
     Ok((ledger, described))
 }

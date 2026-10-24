@@ -747,7 +747,13 @@ pub fn packages_of(
             root,
             // **Its own keys**, so its `use` lines are read the way its own
             // build would read them (ADR-286 D21).
-            reachable: dependency.dependencies().keys().cloned().collect(),
+            // A Rust crate among them under the name a call writes it by.
+            reachable: dependency
+                .dependencies()
+                .keys()
+                .cloned()
+                .chain(dependency.foreign_crates())
+                .collect(),
         });
     }
     Ok(out)

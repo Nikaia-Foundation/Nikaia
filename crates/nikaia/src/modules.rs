@@ -116,7 +116,10 @@ pub fn collect(entry: &Path) -> Result<Vec<Unit>> {
 /// dependency is a project and that is where a project keeps its files
 /// (Part III, 13.1).
 pub fn collect_with(entry: &Path, dependencies: &[Dependency]) -> Result<Vec<Unit>> {
-    let names: BTreeSet<String> = dependencies.iter().map(|d| d.name.clone()).collect();
+    let mut names: BTreeSet<String> = dependencies.iter().map(|d| d.name.clone()).collect();
+    // **A Rust crate is a package a `use` may name** (Part III 15.2's `use
+    // image`), under the name a call writes it by (ADR-290 D1).
+    names.extend(foreign_beside(entry));
     let mut units = package_at(entry, None, &names, &BTreeMap::new())?;
 
     // **Read, and not emitted** ([ADR-286](../../../docs/specification/adr/adr-286.md)
@@ -1367,6 +1370,18 @@ fn names_in(files: &[&crate::parser::Parsed]) -> std::collections::BTreeSet<Stri
 
 /// The descriptions of the crates the project around `entry` declares
 /// (`contracts/<crate>.contracts`), or none outside a project.
+/// The Rust crates the manifest of the project an entry belongs to declares,
+/// under the name a program writes them by; none outside a project.
+fn foreign_beside(entry: &Path) -> BTreeSet<String> {
+    entry
+        .ancestors()
+        .skip(1)
+        .find(|dir| dir.join("nikaia.toml").is_file())
+        .and_then(|root| crate::manifest::Manifest::read(&root.join("nikaia.toml")).ok())
+        .map(|manifest| manifest.foreign_crates())
+        .unwrap_or_default()
+}
+
 fn described_beside(entry: &Path) -> crate::contracts::Ledger {
     entry
         .ancestors()
