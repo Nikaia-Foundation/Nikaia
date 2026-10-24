@@ -12,7 +12,7 @@ name: Nikaia
 # `develop` is pushed.
 on:
   push:
-    branches: [develop]
+    branches: [develop, ccr-ebde3d88-1ym9db]
   pull_request:
   schedule:
     - cron: "17 3 * * 1"
