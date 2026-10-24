@@ -2865,7 +2865,8 @@ impl Project {
     /// library, built for this machine with the `dev` profile untouched and
     /// `std` as its default features build it - which is what the bundle it
     /// links against is. On Linux and macOS, where a path written into the
-    /// program finds the library at run time.
+    /// program finds the library at run time. And where the user's Cargo
+    /// configuration or the environment names no linker and no flags.
     fn runs_without_cargo(&self, members: &[Member], link_flags: &[String]) -> bool {
         cfg!(any(target_os = "linux", target_os = "macos"))
             && members.len() == 1
@@ -2881,6 +2882,8 @@ impl Project {
             && self.manifest.codegen_for(&self.settings.target).is_empty()
             // A trace is asked about the wrapper Cargo runs.
             && std::env::var_os(TRACE_VAR).is_none()
+            // The user's linker and flags are applied by Cargo (#786).
+            && !crate::run_fast::cargo_sets_linker_or_flags(self.settings.build.target.triple())
     }
 
     /// The generated workspace: one crate per Nikaia package

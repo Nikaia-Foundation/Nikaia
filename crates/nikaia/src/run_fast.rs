@@ -155,3 +155,63 @@ pub(crate) fn compile(
         messages,
     }))
 }
+
+/// **Whether the user's Cargo would link the program differently** (#786):
+/// a linker or flags for `triple` in a configuration file Cargo reads when
+/// started where the tools start (that directory upward, then `CARGO_HOME`;
+/// [ADR-325](../../../docs/specification/adr/adr-325.md) D3), or in the
+/// environment. `rustc` started here reads none of them, so such a program
+/// takes Cargo's path, which applies them; they are not handed to `rustc`.
+pub(crate) fn cargo_sets_linker_or_flags(triple: &str) -> bool {
+    let shouted = triple.to_uppercase().replace(['-', '.'], "_");
+    let set = |var: &str| std::env::var_os(var).is_some_and(|v| !v.is_empty());
+    let environment = [
+        "RUSTFLAGS".to_string(),
+        "CARGO_ENCODED_RUSTFLAGS".to_string(),
+        "CARGO_BUILD_RUSTFLAGS".to_string(),
+        format!("CARGO_TARGET_{shouted}_LINKER"),
+        format!("CARGO_TARGET_{shouted}_RUSTFLAGS"),
+    ];
+    if environment.iter().any(|var| set(var)) {
+        return true;
+    }
+    let start = orchestrator::cache::Layout::where_tools_start();
+    let start = start.canonicalize().unwrap_or(start);
+    let home = std::env::var_os("CARGO_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")));
+    let dirs = start.ancestors().map(|dir| dir.join(".cargo")).chain(home);
+    dirs.flat_map(|dir| [dir.join("config.toml"), dir.join("config")])
+        .filter(|file| file.is_file())
+        .any(|file| config_sets_linker_or_flags(&file, triple))
+}
+
+/// One configuration file's answer to [`cargo_sets_linker_or_flags`]. A
+/// file that cannot be read as TOML counts as setting them: Cargo, which
+/// reads it too, then says what is wrong with it.
+fn config_sets_linker_or_flags(file: &Path, triple: &str) -> bool {
+    let Ok(config) = std::fs::read_to_string(file)
+        .map_err(|_| ())
+        .and_then(|text| text.parse::<toml::Table>().map_err(|_| ()))
+    else {
+        return true;
+    };
+    let has = |table: Option<&toml::Value>, keys: &[&str]| {
+        table
+            .and_then(toml::Value::as_table)
+            .is_some_and(|table| keys.iter().any(|key| table.contains_key(*key)))
+    };
+    let build = has(config.get("build"), &["rustflags"]);
+    // A `cfg(...)` table may apply to the host as well; it is not evaluated.
+    let target = config
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .is_some_and(|targets| {
+            targets.iter().any(|(name, table)| {
+                (name == triple || name.starts_with("cfg("))
+                    && has(Some(table), &["linker", "rustflags"])
+            })
+        });
+    build || target
+}

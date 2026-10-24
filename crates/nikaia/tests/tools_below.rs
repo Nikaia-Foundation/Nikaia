@@ -130,13 +130,16 @@ fn a_projects_toolchain_file_is_not_read() {
 /// are and on the linker's path, so a home or a linker at a new path every run
 /// rebuilt `std` and all under it, and in the cache the other tests share,
 /// rebuilt it again for the next of them.
+///
+/// **The cache is warmed by a first program before the one checked** (#786):
+/// on a cold cache the linker ran for the library `std` is built into, and
+/// that hid a program linked without it.
 #[test]
 fn the_users_cargo_home_is_read() {
     let real = std::env::var_os("CARGO_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
         .expect("a cargo home");
-    let dir = project("below-cargo-home", "linked-by-the-user");
     let kept_here = common::deps_dir()
         .parent()
         .expect("the profile directory")
@@ -148,21 +151,72 @@ fn the_users_cargo_home_is_read() {
             std::os::unix::fs::symlink(real.join(kept), home.join(kept)).expect("linked");
         }
     }
-    let marker = dir.join("MARKER");
+    let marker = kept_here.join("MARKER");
     let linker = marking_linker(&kept_here, &marker);
     std::fs::write(
         home.join("config.toml"),
         format!("[target.{}]\nlinker = '{}'\n", host(), linker.display()),
     )
     .expect("the config");
-    let out = nikaia(&dir)
-        .env("CARGO_HOME", &home)
-        .env("NIKAIA_CACHE_DIR", kept_here.join("cache"))
-        .output()
-        .expect("the nikaia binary runs");
+    let run = |dir: &Path| {
+        nikaia(dir)
+            .env("CARGO_HOME", &home)
+            .env("NIKAIA_CACHE_DIR", kept_here.join("cache"))
+            .output()
+            .expect("the nikaia binary runs")
+    };
+    let warm = project("below-cargo-home-warm", "warmed-by-the-user");
+    let warmed = run(&warm);
+    let _ = std::fs::remove_dir_all(&warm);
+    assert!(warmed.status.success(), "{}", said(&warmed));
+    let _ = std::fs::remove_file(&marker);
+    let dir = project("below-cargo-home", "linked-by-the-user");
+    let out = run(&dir);
     let marked = marker.exists();
     let _ = std::fs::remove_dir_all(&dir);
     assert!(out.status.success(), "{}", said(&out));
     assert!(said(&out).contains("linked-by-the-user"));
     assert!(marked, "the user's linker did not run");
+}
+
+/// **Without a linker or flags of the user's, `run` still skips Cargo**
+/// (#786): a program needing only `std` is compiled by `rustc`, and Cargo
+/// builds no binary of it. The user's own configuration is the one read; where
+/// it names a linker or flags, there is nothing to check here.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn without_the_users_linker_cargo_is_not_started() {
+    let home = std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
+        .expect("a cargo home");
+    let configured = ["config.toml", "config"].iter().any(|name| {
+        std::fs::read_to_string(home.join(name))
+            .is_ok_and(|text| text.contains("linker") || text.contains("rustflags"))
+    });
+    if configured {
+        eprintln!("skipped: the user's Cargo configuration names a linker or flags");
+        return;
+    }
+    let triple = host().to_uppercase().replace(['-', '.'], "_");
+    let dir = project("below-no-linker", "compiled-by-rustc");
+    let out = nikaia(&dir)
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("CARGO_BUILD_RUSTFLAGS")
+        .env_remove(format!("CARGO_TARGET_{triple}_LINKER"))
+        .env_remove(format!("CARGO_TARGET_{triple}_RUSTFLAGS"))
+        .output()
+        .expect("the nikaia binary runs");
+    let fast = dir.join("target/nikaia/fast/below").is_file();
+    let by_cargo = dir.join("target/nikaia/bin/below").exists();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(out.status.success(), "{}", said(&out));
+    assert!(said(&out).contains("compiled-by-rustc"));
+    assert!(
+        fast,
+        "the program was not compiled without Cargo: {}",
+        said(&out)
+    );
+    assert!(!by_cargo, "Cargo built the program");
 }
