@@ -24,7 +24,7 @@ description: >-
   <div class="home-inner home-split">
     <div class="home-split-text">
       <span class="safe-chip safe-chip-build">Plain calls</span>
-      <h2>No <code>async</code>, no <code>await</code></h2>
+      <h2>Every function can be <code>async</code></h2>
       <p><strong>In many languages, code that waits has to be marked everywhere it touches: <code>async</code> here, <code>await</code> there.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> A call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. To run things at the same time, put them in an <code>overlap</code> block: it runs its lines together and waits for all of them.</p>
       <p><span class="lead-in">The limit.</span> Every function may pause unless it says otherwise. A function marked <code>sync</code> never pauses and may call only other <code>sync</code> functions, which is how you say that a piece of code must not wait.</p>
