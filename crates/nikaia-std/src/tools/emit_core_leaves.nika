@@ -367,12 +367,12 @@ impl EmitState {
 
     /// Kap 5.1 at a **method** call: the options become positional, in the order
     /// the declaration gives, and one that was left out becomes its default.
-    pub fn emit_core_method_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: winnow_grammar::Symbol, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    pub fn emit_core_method_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: winnow_grammar::Symbol, on_node: i64, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
         if self.dsl_drivers.contains(name) {
             return
         }
-        let options = self.facts.method_options.get((flow.statement, name.clone())) ?? return
+        let options = self.facts.method_options.get((on_node, name.clone())) ?? return
         let mut n = 0
         for (option, default) in options {
             // **The comma belongs *between* arguments** (ADR-133 D1).

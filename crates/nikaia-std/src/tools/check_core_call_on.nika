@@ -770,7 +770,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         state.facts.par_folds.insert(node)
     }
     // ADR-023 D8: the failure leaves at the call.
-    state.method_options(world, method, contract, span)
+    state.method_options(world, method, contract, node)
     let fails = !known_text && (contract.fails_with.len() > 0 || state.walks_a_failing_sequence(on, contract))
     state.method_propagates(node, fails)
     // ADR-055 D2, the method half, and a walk of a sequence whose step

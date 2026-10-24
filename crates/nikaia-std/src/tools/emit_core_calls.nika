@@ -1158,7 +1158,7 @@ impl EmitState {
             host.expr(walk, out, limit[0], depth, flow, scope)
         } else {
             self.emit_core_dsl_parameters(world, walk, out, host, name, args.len(), config, depth, flow, scope)
-            self.emit_core_method_options(world, walk, out, host, method, args.len(), config, depth, flow, scope)
+            self.emit_core_method_options(world, walk, out, host, method, on_node, args.len(), config, depth, flow, scope)
         }
         out.push(")")
         // **What hands back an element of a held list reads it through its

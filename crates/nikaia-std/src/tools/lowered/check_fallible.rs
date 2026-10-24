@@ -38,12 +38,12 @@ pub(crate) fn check_cleanup_fails(ledger: &Ledger, owner: &str) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn method_options(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, contract: &FnContract, span: &Span) {
+    pub fn method_options(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, contract: &FnContract, on: i64) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         if signature.config.is_empty() { return; }
         let mut options: Vec<(String, String)> = vec![];
         for option in signature.config.iter() { options.push((option.name.to_owned(), option.default.to_owned())); }
-        let key = (span.start as i64, world.words.resolve(method).to_owned());
+        let key = (on, world.words.resolve(method).to_owned());
         self.facts.method_options.insert(key, options);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

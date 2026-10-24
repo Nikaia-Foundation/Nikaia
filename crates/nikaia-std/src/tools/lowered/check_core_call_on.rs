@@ -606,7 +606,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         }
     }
     if key == "Par::fold" { state.facts.par_folds.insert(node); }
-    state.method_options(world, method, contract, span);
+    state.method_options(world, method, contract, node);
     let fails = !known_text && (!contract.fails_with.is_empty() || state.walks_a_failing_sequence(on, contract));
     state.method_propagates(node, fails);
     let chained = a_paused_chain(key, on);

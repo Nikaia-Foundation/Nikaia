@@ -762,7 +762,7 @@ impl EmitState {
             self.emit_core_postfix_base(world, walk, out, host, nikaia_std::index::get(&witness, 0), depth, flow, scope)?;
         } else if !limit.is_empty() { host.expr(walk, out, nikaia_std::index::get(&limit, 0), depth, flow, scope)?; } else {
             self.emit_core_dsl_parameters(world, walk, out, host, &name, args.len() as i64, config, depth, flow, scope)?;
-            self.emit_core_method_options(world, walk, out, host, method, args.len() as i64, config, depth, flow, scope)?;
+            self.emit_core_method_options(world, walk, out, host, method, on_node, args.len() as i64, config, depth, flow, scope)?;
         }
         out.push(")");
         if (name == "iter" || name == "first" || name == "last" || name == "get") && receiver.is_some() {

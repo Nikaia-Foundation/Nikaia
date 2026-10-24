@@ -258,10 +258,10 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_method_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: winnow_grammar::Symbol, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_method_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: winnow_grammar::Symbol, on_node: i64, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let name = emit_text(world, method);
         if self.dsl_drivers.contains(&name) { return Ok(()); }
-        let options = match self.facts.method_options.get(&(flow.statement, name.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let options = match self.facts.method_options.get(&(on_node, name.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let mut n = 0;
         for (option, default) in options.iter() {
             if n > 0 || args > 0 { out.push(", "); }

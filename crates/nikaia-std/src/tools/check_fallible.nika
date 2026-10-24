@@ -62,7 +62,7 @@ impl CheckState {
     /// **The options a method call leaves out, from the contract** and not from
     /// the call, so a call that leaves an option out still gets its default,
     /// which is the half the emitter could not work out on its own either.
-    pub fn method_options(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, contract: ref FnContract, span: ref Span) sync {
+    pub fn method_options(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, contract: ref FnContract, on: i64) sync {
         let signature = contract.signature ?? return
         if signature.config.len() == 0 {
             return
@@ -71,7 +71,7 @@ impl CheckState {
         for option in signature.config {
             options.push((option.name.clone(), option.default.clone()))
         }
-        let key = (span.start as i64, world.words.resolve(method).clone())
+        let key = (on, world.words.resolve(method).clone())
         self.facts.method_options.insert(key, options)
     }
 
