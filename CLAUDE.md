@@ -17,6 +17,7 @@
   allowed on the `tools` module in `crates/nikaia-std/src/lib.rs`, not fixed in
   the generated files (`crates/nikaia-std/src/tools/lowered/*.rs`, index `lowered.rs`; a change to one `.nika`
   changes one file).
+* **Before pushing, run `scripts/pre-push-check.sh`** (fmt, badges and version check, seconds): CI fails on these first.
 * **Before pushing, rebase onto the latest `origin/develop`**
   (`git pull --rebase origin develop`). Other sessions push all the time.
   If the push is rejected, rebase again and push again.

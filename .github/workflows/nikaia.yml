@@ -129,7 +129,15 @@ jobs:
         run: cargo test --workspace --release --no-run
 
       - name: Test
-        run: cargo test --workspace --release --no-fail-fast
+        run: |
+          set -o pipefail
+          cargo test --workspace --release --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      - name: Name the failing tests
+        if: failure()
+        run: |
+          grep -E '^test .* FAILED' "$RUNNER_TEMP/test.log" | sed 's/^/::error::/' || true
+          awk '/^failures:$/{f=1;next} /^test result/{f=0} f&&/^    /{print "::error::failed: "$1}' "$RUNNER_TEMP/test.log" | sort -u | head -50 || true
 
       - name: Test the unsafe crates
         run: |
@@ -320,7 +328,15 @@ jobs:
       - name: Test
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
-        run: cargo test --workspace --release --no-fail-fast
+        run: |
+          set -o pipefail
+          cargo test --workspace --release --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      - name: Name the failing tests
+        if: failure()
+        run: |
+          grep -E '^test .* FAILED' "$RUNNER_TEMP/test.log" | sed 's/^/::error::/' || true
+          awk '/^failures:$/{f=1;next} /^test result/{f=0} f&&/^    /{print "::error::failed: "$1}' "$RUNNER_TEMP/test.log" | sort -u | head -50 || true
 
       # **Every program a checker test accepts compiles in `rustc`** (#705):
       # lowered and checked by `rustc --emit=metadata`, in batches. A refusal
