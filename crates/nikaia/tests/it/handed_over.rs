@@ -561,3 +561,39 @@ fn a_drained_mut_parameter_stays_the_callers() {
     );
     assert!(found.is_empty(), "{found:#?}");
 }
+
+// --- #810: a scrutinee the arms only compare is read, not kept ----------------
+
+const ONLY_COMPARED: &str = "fn is_len(name: String) -> bool sync {\n    return match name {\n        \"len\" | \"count\" => true,\n        else => false,\n    }\n}\n\n";
+
+/// A `String` parameter matched against literals alone is read (ADR-282 D5,
+/// D6): a second use of the argument is fine and the parameter is a `&str`.
+#[test]
+fn a_parameter_only_compared_in_a_match_is_read() {
+    let source = format!(
+        "{ONLY_COMPARED}fn main() {{\n    let n = \"len\".clone()\n    let a = is_len(n)\n    let b = is_len(n)\n    print(a && b)\n}}\n"
+    );
+    let found = findings(&source);
+    assert!(found.is_empty(), "{found:#?}");
+    let rust = lowered(&source, Build::default());
+    assert!(rust.contains("fn is_len(name: &str)"), "{rust}");
+}
+
+/// An arm that hands the scrutinee on keeps it.
+#[test]
+fn a_parameter_a_match_arm_returns_is_kept() {
+    let found = findings(
+        "fn pick(name: String) -> String sync {\n    return match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n}\n\nfn main() {\n    let n = \"a\".clone()\n    let a = pick(n)\n    let b = pick(n)\n    print(a)\n}\n",
+    );
+    assert_eq!(codes_of(&found), ["NK2105"], "{found:#?}");
+}
+
+/// A value an `if` condition hands over is gone for the `else if` after it
+/// (the condition's takings ended with the whole statement's span).
+#[test]
+fn a_value_handed_over_in_a_condition_is_gone_in_the_else_if() {
+    let found = findings(
+        "fn pick(name: String) -> String sync {\n    return match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n}\n\nfn main() {\n    let n = \"a\".clone()\n    if pick(n) == \"a\" {\n        print(1)\n    } else if pick(n) == \"b\" {\n        print(2)\n    }\n}\n",
+    );
+    assert_eq!(codes_of(&found), ["NK2105"], "{found:#?}");
+}

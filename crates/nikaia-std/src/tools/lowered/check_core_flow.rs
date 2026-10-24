@@ -296,8 +296,8 @@ pub(crate) fn check_core_flow_else<H: CheckHost>(state: &mut CheckState, world: 
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: &Span) -> Ty {
-    let cond_ty = check_core_expr(state, world, host, cond, span);
     let at = check_span_at(world, cond, span);
+    let cond_ty = check_core_expr(state, world, host, cond, &at);
     state.expect_bool(&cond_ty, &at, "An `if` decides on a `bool`.");
     let outer_condition = state.stamped_condition;
     if cond_ty.is_seen() { state.stamped_condition = Some(span.start as i64); }

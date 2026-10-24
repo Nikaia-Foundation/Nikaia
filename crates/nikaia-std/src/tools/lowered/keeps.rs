@@ -360,10 +360,10 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
             keep_named(base, interner, context, own, library, walk);
             for field in fields.iter() { if field.value.is_some() { keep_part((field.value).as_ref(), interner, context, own, library, walk); } }
         },
-        Expr::Match { value, .. } => {
+        Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
             let name = match parameter_named(value, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if !context.lent.contains(&name) { walk.uses.kept.insert(name); }
+            if !context.lent.contains(&name) && !keeps_only_compared(arms) { walk.uses.kept.insert(name); }
         },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); keep_what_a_task_names(body, interner, holes_of, context, walk); },
         Expr::Call { func, args, config, .. } => {
@@ -623,4 +623,22 @@ pub(crate) fn resolved_callee(func: &Expr, interner: &winnow_grammar::InternerCo
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn name_as_it_is(name: &str) -> String { name.to_owned() }
+
+pub(crate) fn keeps_only_compared(arms: &[MatchArm]) -> bool {
+    for arm in arms.iter() { if !a_comparison(&arm.pattern) { return false; } }
+    true
+}
+
+pub(crate) fn a_comparison(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Otherwise => true,
+        MatchPattern::Literal(..) => true,
+        MatchPattern::Range { .. } => true,
+        MatchPattern::Or(alternatives) => {
+            for p in alternatives.iter() { if !a_comparison(p) { return false; } }
+            true
+        },
+        _ => false,
+    }
+}
 

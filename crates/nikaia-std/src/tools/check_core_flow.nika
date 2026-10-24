@@ -360,8 +360,11 @@ fn check_core_flow_else[H: CheckHost](mut state: CheckState, world: ref CheckWor
 /// (ADR-281 D25), and what the test proves holds in each branch and, after an
 /// early exit, in the rest of the block (ADR-350).
 pub fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: ref Span) -> Ty sync {
-    let cond_ty = check_core_expr(state, world, host, cond, span)
+    // **The condition is walked at its own place** (#810): a value it hands
+    // over ends where the condition ends, so an `else if` after it, which is
+    // inside this statement's span, reads it again.
     let at = check_span_at(world, cond, span)
+    let cond_ty = check_core_expr(state, world, host, cond, at)
     state.expect_bool(cond_ty, at, "An `if` decides on a `bool`.")
     let outer_condition = state.stamped_condition
     if cond_ty.is_seen() {

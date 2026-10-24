@@ -577,9 +577,9 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         // through a reference with its default binding modes, and this compiler
         // writes no `*`. A parameter the author lent is a reference whatever
         // this column says, so it is not this arm's (issue #173).
-        Expr::Match { value, .. } => {
+        Expr::Match { value, arms, .. } => {
             let name = parameter_named(value, interner, context) ?? return
-            if !context.lent.contains(name) {
+            if !context.lent.contains(name) && !keeps_only_compared(arms) {
                 walk.uses.kept.insert(name)
             }
         }
@@ -983,4 +983,33 @@ fn resolved_callee(func: ref Expr, interner: ref winnow_grammar::InternerContext
 
 fn name_as_it_is(name: ref String) -> String sync {
     return name.clone()
+}
+
+/// **A scrutinee its arms only compare is read, not kept** (ADR-282 D5/D6, #810):
+/// every arm is a literal, a range, `else`, or an alternative of those, so
+/// nothing is taken out of the value. Any other pattern may bind a part of it.
+fn keeps_only_compared(arms: ref Vec[MatchArm]) -> bool {
+    for arm in arms {
+        if !a_comparison(arm.pattern) {
+            return false
+        }
+    }
+    return true
+}
+
+fn a_comparison(pattern: ref MatchPattern) -> bool {
+    return match pattern {
+        MatchPattern::Otherwise => true,
+        MatchPattern::Literal(..) => true,
+        MatchPattern::Range { .. } => true,
+        MatchPattern::Or(alternatives) => {
+            for p in alternatives {
+                if !a_comparison(p) {
+                    return false
+                }
+            }
+            true
+        },
+        else => false,
+    }
 }
