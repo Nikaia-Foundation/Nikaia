@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1200] — 2026-10-24
+
+**`nikaia run` applies the user's linker and flags again**
+- A program that needs only `std` is compiled without Cargo only when no Cargo configuration Cargo would read (from where the tools start upward, then `CARGO_HOME`) sets `[build] rustflags` or a `[target]` linker or rustflags, and no `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS` or `CARGO_TARGET_<TRIPLE>_LINKER`/`_RUSTFLAGS` is set; otherwise Cargo builds it and applies them (ADR-325 D3, #786).
+
 ## [0.0.1199] — 2026-10-24
 
 **A method argument that lends the receiver's local to a `mut` parameter is bound before the call**
