@@ -604,6 +604,11 @@ fn lower_tools_files_cached(
         };
         part(b"nikaia-lower-file-v1");
         part(compiler.as_bytes());
+        part(
+            std::env::var("NIKAIA_LOWER_CACHE_SALT")
+                .unwrap_or_default()
+                .as_bytes(),
+        );
         part(format!("{build:?}{provenance:?}{facts_reusable}").as_bytes());
         part(format!("{own:?}").as_bytes());
         for (path, (text, one)) in paths.iter().zip(texts.iter().zip(&parsed)) {
@@ -1327,6 +1332,13 @@ struct LoweredBefore {
     compiler: Option<String>,
 }
 
+/// **Which compiler wrote an entry** (#667): the language version, not the
+/// binary's bytes. A rebuild of the same sources, in any checkout, then keeps
+/// every entry; a change to the lowering raises the version (CLAUDE.md), which
+/// starts the cache afresh. `NIKAIA_LOWER_CACHE_SALT` in the environment
+/// separates entries by hand while a lowering is being worked on.
+const COMPILER_IDENTITY: &str = concat!("nikaia-", env!("CARGO_PKG_VERSION"));
+
 /// The file in an entry's directory that holds what was lowered.
 const LOWERED: &str = "lowered.rs";
 
@@ -1340,10 +1352,15 @@ impl LoweredBefore {
     }
 
     fn open() -> LoweredBefore {
-        let compiler = std::env::current_exe()
-            .and_then(std::fs::read)
-            .ok()
-            .map(|bytes| cache::sha256_hex(&bytes));
+        LoweredBefore::with_compiler(&format!(
+            "{COMPILER_IDENTITY}{}",
+            std::env::var("NIKAIA_LOWER_CACHE_SALT").unwrap_or_default()
+        ))
+    }
+
+    /// A cache read and written as the compiler `compiler`.
+    fn with_compiler(compiler: &str) -> LoweredBefore {
+        let compiler = Some(compiler.to_string());
         LoweredBefore {
             root: Layout::user_cache_dir().join("lower-std"),
             compiler,
@@ -1400,6 +1417,29 @@ impl LoweredBefore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #667: the key is the compiler's identity plus the files' names and
+    /// text; it holds no binary bytes and no checkout path.
+    #[test]
+    fn the_lowering_key_follows_text_and_compiler_not_the_binary() {
+        let dir = std::env::temp_dir().join(format!("nika-key-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("a.nika");
+        std::fs::write(&file, "fn f() -> i64 sync { 1 }\n").unwrap();
+        let files = [file.clone()];
+        let one = LoweredBefore::with_compiler("c1").key("m", &files);
+        assert_eq!(one, LoweredBefore::with_compiler("c1").key("m", &files));
+        assert_ne!(one, LoweredBefore::with_compiler("c2").key("m", &files));
+        std::fs::write(&file, "fn f() -> i64 sync { 2 }\n").unwrap();
+        assert_ne!(one, LoweredBefore::with_compiler("c1").key("m", &files));
+        let _ = std::fs::remove_dir_all(&dir);
+        // Two opens, as before and after a rebuild, name the same compiler.
+        assert_eq!(
+            LoweredBefore::open().compiler,
+            LoweredBefore::open().compiler
+        );
+        assert!(!COMPILER_IDENTITY.contains('/'));
+    }
 
     /// The default sysroot is the checkout, and `std` is in it. This is the
     /// in-tree flow's whole configuration.
