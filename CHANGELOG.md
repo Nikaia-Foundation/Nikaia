@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1199] — 2026-10-24
+
+**A method argument that lends the receiver's local to a `mut` parameter is bound before the call**
+- `w.add(g(w, 1))` lowered to two `&mut` borrows of `w` (E0499); the argument is now bound first, together with every earlier computed argument, so effects still run in the order written (#785).
+
 ## [0.0.1198] — 2026-10-24
 
 **An argument that reuses a mut argument's local is bound before the call**
