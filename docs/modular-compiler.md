@@ -8,7 +8,7 @@ linking was the idea), and two builders can work at once?
 
 Every self-hosting step runs one cycle: edit a `tools/*.nika` file (and its
 Rust adapter in `crates/nikaia`), build `nikaia`, `nikaia lower-std` to
-regenerate `crates/nikaia-std/src/tools/package.rs`, build again, run the
+regenerate `crates/nikaia-std/src/tools/lowered/*.rs` (was `package.rs`; split in 8dd21e75), build again, run the
 touched tests. The cycle's length decides how fast the work goes, and its
 shape decides whether two builders can run side by side.
 

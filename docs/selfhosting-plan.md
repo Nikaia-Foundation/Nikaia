@@ -114,7 +114,7 @@ Call-graph scripts: `scripts/e9/` (`callgraph.py`, `units.py`, `arms.py`).
   arms of one variant move together in their original order; the Rust match
   stays the dispatcher until U10.
 * **Oracle per unit:** `lower-std` with the previous unit's binary and with the
-  new one on the same tree: `package.rs` byte-identical; then the NK tests the
+  new one on the same tree: `lowered/*.rs` byte-identical; then the NK tests the
   moved arms touch and `examples.rs`.
 * **Units:** U0a compiler: a trait declaration's `mut` parameter lowers to
   `&mut T` (today by value in the declaration, `&mut` in the impl; see
@@ -141,7 +141,7 @@ Call-graph scripts: `scripts/e9/` (`callgraph.py`, `units.py`, `arms.py`).
   an error that loses its identity across a crossing breaks diagnostics
   silently; arms reordered; stack depth of generic frames (keep a deep-nesting
   test); findings, `next_choice` and id order; units must not overlap in time
-  (`package.rs`).
+  (`lowered/*.rs`).
 
 ## C-6 in units (host-trait strangler, decided 2026-10-11)
 
@@ -310,7 +310,7 @@ gives what each core unit calls.
 **Oracle per unit:**
 
 1. **`lower-std`** with the previous unit's binary and the new one, on the same
-   tree: `package.rs` must be byte-identical. Check runs over the 173 `tools`
+   tree: `lowered/*.rs` must be byte-identical. Check runs over the 173 `tools`
    files, and its facts drive emit.
 2. **`scripts/c6/oracle.py OLD NEW .`**: both binaries lower every
    `tests/**/*.nika` and `examples/**/*.nika` (142 files, about 35 s) with
@@ -368,7 +368,7 @@ above (C-7), and `value_node`/`host()`/`others()` until C-7.
 * **Arms reordered,** or a finding pushed in a different order (`finished`
   keeps ties in push order).
 * **`fresh_id` and `intern` calls reordered.**
-* **Units overlapping in time.** `mod.rs` and `package.rs` are shared, so
+* **Units overlapping in time.** `mod.rs` and `lowered.rs` are shared, so
   strictly one unit at a time, C-5e to C-5h included.
 * **`Checker.spares`** must not leak a state that is still lent: assert when it
   is pushed back.

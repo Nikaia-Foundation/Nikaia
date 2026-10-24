@@ -6,7 +6,7 @@ What it costs the compiler to lower a package (#727).
 
 * **(a)** lowers the tools package cold (`nikaia lower-std` with an empty
   `NIKAIA_CACHE_DIR`), prints the phases `NIKAIA_LOWER_TIMES` reports and
-  checks that `crates/nikaia-std/src/tools/package.rs` comes out byte for
+  checks that `crates/nikaia-std/src/tools/lowered/*.rs` comes out byte for
   byte as committed (`git diff --exit-code`): a change that moves the output
   is not a speed-up. The phases are a clock and only say *where* the time
   goes; they are not quoted as a result.

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1207] — 2026-10-24
+
+**lower-std: one generated Rust module per tools file**
+- `nikaia lower-std` writes `tools/lowered.rs` plus `tools/lowered/<file>.rs` (and `runtime/lowered*`), replacing the 73k-line `package.rs` (7.4 MB single unit, now 214 files, largest object 1.66 MB); a change to one `.nika` recompiles one Rust module (one of 256 objects in the incremental session changed, 78,216 bytes); two sessions changing different files no longer conflict in generated code; cross-file visibility by a lexical pass making top-level items pub(crate); a cold run equals a cached one byte for byte. Also this round: docs/ci-cache.md and issue #795 (CI time shares), docs/long-jobs.md.
+
 ## [0.0.1206] — 2026-10-24
 
 **Self-hosting: the checker's defaults, item constants and folds are Nikaia (U-d3)**

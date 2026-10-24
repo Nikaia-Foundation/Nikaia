@@ -15,7 +15,8 @@
   later job off (it kept `develop` red from the first self-hosting move until
   0.0.773, so `main` did not move). Lints about code the lowering writes are
   allowed on the `tools` module in `crates/nikaia-std/src/lib.rs`, not fixed in
-  `package.rs`.
+  the generated files (`crates/nikaia-std/src/tools/lowered/*.rs`, index `lowered.rs`; a change to one `.nika`
+  changes one file).
 * **Before pushing, rebase onto the latest `origin/develop`**
   (`git pull --rebase origin develop`). Other sessions push all the time.
   If the push is rejected, rebase again and push again.
@@ -227,8 +228,8 @@ Rules from the sessions that moved the most; they save tokens, not just time.
 * **Reproduce a lowering defect in seconds**, not with a cargo build:
   `target/release/nikaia lower f.nika` or `nikaia run f.nika`. A defect that
   shows only in `tools/*.nika` needs a throwaway probe function in a tools
-  file and `nikaia lower-std`; look at `package.rs`, then restore both. A
-  lowering change can change `package.rs`: run `lower-std` after building and
+  file and `nikaia lower-std`; look at `tools/lowered/<file>.rs`, then restore both. A
+  lowering change can change the generated files: run `lower-std` after building and
   commit the diff. `lower-std` reports every refusal of a file, in file order,
   as `nikaia check` does: fix them all before the next cycle.
 * **A version collision on rebase is routine.** Take upstream's version files
@@ -243,7 +244,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   (status label `ready`), never in a file in the repository, and the work that
   needs it waits for the fix.
 * **Known compiler defects, to fix in the compiler** (ADR-294 D3): the
-  generated package still has "never read" and unreachable-code warnings,
+  generated files still have "never read" and unreachable-code warnings,
   allowed on the `tools` module. The rest of this list (`f().trim_start()`,
   an index fallback after `??`, mixed arms in a `T?` match, `strip_prefix` in a
   loop, `mut` parameter plus `.drain()`, `Spanned(x, span)`) runs today; the
@@ -260,11 +261,11 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   unused-variable clippy error in the lowering.
 * **After any `*.nika` or `described.contracts` change**, run `lower-std` with a
   binary built from that tree, or the sysroot test fails on a stale
-  `package.rs`. `lower-std` reads and writes the checkout the binary was
+  `lowered/*.rs`. `lower-std` reads and writes the checkout the binary was
   **built in** (`CARGO_MANIFEST_DIR`, unless `NIKAIA_SYSROOT` says otherwise),
   not the working directory: a worktree agent running the main checkout's
   `target/release/nikaia` lowers the main checkout's sources and rewrites its
-  `package.rs`. Use the worktree's own binary. A layout change breaks tests keyed on an address by allocator
+  `lowered/*.rs`. Use the worktree's own binary. A layout change breaks tests keyed on an address by allocator
   luck. Never `str.replace('', ...)` in an edit script (an empty-slice replace
   corrupted `emit/mod.rs` once). Never run the full suite locally (about 45
   minutes here): CI runs it on every push to `develop`; run the touched tests

@@ -13,7 +13,7 @@ Durations are observed wall clock of build tools, not program measurements
 
 | Job | Observed | Where the time goes | Who needs it |
 | :--- | ---: | :--- | :--- |
-| `cargo build --profile fast -p nikaia` | ~20 s after a Rust change; longer after `package.rs` changes | one 7.4 MB codegen unit for all of `package.rs`, on one core | every step |
+| `cargo build --profile fast -p nikaia` | ~20 s after a Rust change; longer after a `.nika` change | one module per `.nika` since 8dd21e75 (was one 7.4 MB unit) | every step |
 | `nikaia lower-std` | ~40 s; under 1 s when the whole-package cache hits | 213 files checked and lowered; the cache key is package plus binary hash, so an edit always misses | every `.nika` step |
 | Touched tests (`--test a --test b`) | ~10 min | 267 test binaries, each relinked (16-20 MB each) | every step |
 | Full suite, locally | ~45 min | the same 267 binaries, all run | nobody locally |
