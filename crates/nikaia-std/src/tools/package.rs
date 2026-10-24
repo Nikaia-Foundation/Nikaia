@@ -23185,7 +23185,21 @@ fn check_claim_held(held: Option<&ClaimHeld>) -> String {
     }
 }
 
-pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>, source: &str, path: &str, published: &collections::BTreeMap<String, Published>, colour: bool) -> String {
+fn check_claim_refused(held: Option<&ClaimHeld>) -> Option<String> {
+    let given = match held { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match given {
+        ClaimHeld::AtRunTime(why) => return Some(format!("refused, not proved: {}", why)),
+        ClaimHeld::Precondition(f, n) => {
+            let n = *n;
+            if f == "main" || n == 0 { return None; }
+            if n == 1 { return Some(format!("refused, precondition of `{}`: one call does not prove it", f)); }
+            return Some(format!("refused, precondition of `{}`: {} calls do not prove it", f, n));
+        },
+        _ => return None,
+    }
+}
+
+pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>, source: &str, path: &str, published: &collections::BTreeMap<String, Published>, colour: bool, refuses: bool) -> String {
     let mut refused: Vec<String> = vec![];
     let mut at_run_time: Vec<String> = vec![];
     let mut arrives: Vec<String> = vec![];
@@ -23211,7 +23225,10 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
             assumed.push(format!("  {}:{}  {}  assumed: a fact the program vouches for in `unsafe`, checked only where the build removes no checks", path, line, claim.written));
             continue;
         }
-        let how = check_claim_held((claim.held).as_ref());
+        let how = match refuses {
+            true => nikaia_std::index::or(check_claim_refused((claim.held).as_ref()), || check_claim_held((claim.held).as_ref()).into()),
+            false => check_claim_held((claim.held).as_ref()),
+        };
         let row = format!("  {}:{}  {}  {}", path, line, claim.written, how);
         if how == "proved" { proved.push(row); } else if how.starts_with("proved through") {
             through_loops += 1;

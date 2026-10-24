@@ -205,8 +205,8 @@ fn main() {
 
 ```text
 $ nikaia build --asserts
-asserts in …/rep/src/main.nika: 4 - not proved 1 (refused 0, checked at run time 1, checked by a test 0); checked where the words arrive 0; proved 3 (proved 1, preconditions proved at every call 2)
-  …/rep/src/main.nika:9  assert(a >= 0)  checked at run time: `a` is not a whole number the prover reads
+asserts in …/rep/src/main.nika: 4 - not proved 1 (refused 1, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 3 (proved 1, preconditions proved at every call 2)
+  …/rep/src/main.nika:9  assert(a >= 0)  refused, not proved: `a` is not a whole number the prover reads
   …/rep/src/main.nika:16  assert(n == 3)  proved
   …/rep/src/main.nika:2  assert(count > 0)  precondition of `average`: proved at every call the compiler sees; any other reaches the entry that checks it
   …/rep/src/main.nika:7  assert(w >= 0 && h >= 0)  precondition of `area`: proved at every call the compiler sees; any other reaches the entry that checks it

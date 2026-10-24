@@ -536,6 +536,25 @@ fn check_claim_held(held: ref ClaimHeld?) -> String {
     }
 }
 
+/// How a claim the build refuses as not proved (`NK1300`, ADR-380 D1) is
+/// listed; nothing where it is not refused so.
+fn check_claim_refused(held: ref ClaimHeld?) -> String? {
+    let given = held ?? return null
+    match given {
+        ClaimHeld::AtRunTime(why) => return f"refused, not proved: {why}",
+        ClaimHeld::Precondition(f, n) => {
+            if f == "main" || n == 0 {
+                return null
+            }
+            if n == 1 {
+                return f"refused, precondition of `{f}`: one call does not prove it"
+            }
+            return f"refused, precondition of `{f}`: {n} calls do not prove it"
+        },
+        else => return null,
+    }
+}
+
 /// **`--asserts`** (ADR-269 D7): every `assert` of one file, by line, how
 /// the compiler holds it, and how many of each. What is not proved comes
 /// first, in red - refused, checked at run time, checked by a test -, then
@@ -545,7 +564,7 @@ fn check_claim_held(held: ref ClaimHeld?) -> String {
 /// order of their lines; `colour` asks for the colours. `published` gives
 /// `main`'s preconditions carried back from a callee (ADR-269 D15, ADR-360
 /// D3), which no `assert` of `main` states: each is a row of its own.
-pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String, published: ref collections::BTreeMap[String, Published], colour: bool) -> String {
+pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String, published: ref collections::BTreeMap[String, Published], colour: bool, refuses: bool) -> String {
     let mut refused: Vec[String] = []
     let mut at_run_time: Vec[String] = []
     let mut arrives: Vec[String] = []
@@ -575,7 +594,12 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
             assumed.push(f"  {path}:{line}  {claim.written}  assumed: a fact the program vouches for in `unsafe`, checked only where the build removes no checks")
             continue
         }
-        let how = check_claim_held(claim.held)
+        // **Where the build refuses what it did not prove** (ADR-380 D1),
+        // such a claim is refused, not checked at run time.
+        let how = match refuses {
+            true => check_claim_refused(claim.held) ?? check_claim_held(claim.held),
+            false => check_claim_held(claim.held),
+        }
         let row = f"  {path}:{line}  {claim.written}  {how}"
         if how == "proved" {
             proved.push(row)

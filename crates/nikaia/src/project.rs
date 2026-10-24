@@ -2583,6 +2583,7 @@ pub fn explain(
                     &program.contracts,
                     library,
                     reads,
+                    settings.unproved_claims != "warn",
                 )
             );
         }

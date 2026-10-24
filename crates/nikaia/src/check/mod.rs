@@ -3060,6 +3060,7 @@ impl Checker<'_> {}
 /// **Checked as the build checks it**: with the program's other files and
 /// what the build may read and compile, so that a `comptime` a call computes
 /// and a call run for a claim (ADR-359 D7, D11) answer here as they did there.
+#[allow(clippy::too_many_arguments)]
 pub fn claims_report(
     parsed: &Parsed,
     source: &str,
@@ -3068,6 +3069,7 @@ pub fn claims_report(
     own: &Ledger,
     library: &Ledger,
     reads: &Reads,
+    refuses: bool,
 ) -> String {
     let checked = check_against(
         parsed,
@@ -3088,6 +3090,7 @@ pub fn claims_report(
         path,
         &checked.facts.published,
         colour,
+        refuses,
     )
 }
 

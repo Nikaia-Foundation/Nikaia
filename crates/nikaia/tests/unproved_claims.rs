@@ -259,3 +259,19 @@ fn a_rule_is_proved_over_a_literal_of_plain_fields() {
     assert!(out.status.success(), "{text}");
     assert!(!text.contains("NK1300"), "{text}");
 }
+
+/// **D1: where the build refuses it, the report says refused**, not checked
+/// at run time.
+#[test]
+fn the_report_counts_a_refused_claim_as_refused() {
+    let out = checked("report-refused", UNPROVED, &["--asserts"]);
+    let text = said(&out);
+    assert!(
+        text.contains("main.nika:5  assert(y > 0; message: \"positive\")  refused, not proved: nothing before it shows it"),
+        "{text}"
+    );
+    assert!(
+        text.contains("(refused 1, checked at run time 0,"),
+        "{text}"
+    );
+}
