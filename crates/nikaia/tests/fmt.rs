@@ -229,3 +229,123 @@ fn every_nika_file_formats_to_the_same_tree_and_a_fixed_point() {
             .join("\n")
     );
 }
+
+/// A fresh package directory with these files under it, for `nikaia fmt`.
+fn package(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("nikaia-fmt-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    for (path, text) in files {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    root
+}
+
+/// `nikaia fmt ARGS` in `dir`: the exit code, stdout and stderr.
+fn fmt_in(dir: &std::path::Path, args: &[&str]) -> (i32, String, String) {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .arg("fmt")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("runs nikaia");
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+const MANIFEST: &str = "[package]\nname = \"p\"\nversion = \"0.1.0\"\n";
+const DIRTY: &str = "fn main() {\n    let a = 1;\n    println(f\"{a}\");\n}\n";
+const CLEAN: &str = "fn main() {\n\tlet a = 1\n\tprintln(f\"{a}\")\n}\n";
+
+#[test]
+fn fmt_rewrites_the_package_files_that_change_and_only_those() {
+    let root = package(
+        "rewrite",
+        &[
+            ("nikaia.toml", MANIFEST),
+            ("src/main.nika", DIRTY),
+            ("src/clean.nika", CLEAN),
+            ("target/skipped.nika", DIRTY),
+        ],
+    );
+    let before = std::fs::metadata(root.join("src/clean.nika"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let (code, stdout, stderr) = fmt_in(&root.join("src"), &[]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("main.nika"), "{stdout}");
+    assert!(!stdout.contains("clean.nika"), "{stdout}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("src/main.nika")).unwrap(),
+        CLEAN
+    );
+    let after = std::fs::metadata(root.join("src/clean.nika"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    assert_eq!(before, after, "an unchanged file is not written");
+    assert_eq!(
+        std::fs::read_to_string(root.join("target/skipped.nika")).unwrap(),
+        DIRTY
+    );
+
+    // A second run finds nothing to do.
+    let (code, stdout, stderr) = fmt_in(&root, &[]);
+    assert_eq!((code, stdout.as_str()), (0, ""), "{stderr}");
+    let (code, stdout, _) = fmt_in(&root, &["--check"]);
+    assert_eq!((code, stdout.as_str()), (0, ""));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn fmt_check_names_the_files_that_would_change_and_writes_nothing() {
+    let root = package("check", &[("dirty.nika", DIRTY), ("clean.nika", CLEAN)]);
+    let (code, stdout, _) = fmt_in(&root, &["--check", "clean.nika"]);
+    assert_eq!((code, stdout.as_str()), (0, ""));
+    let (code, stdout, _) = fmt_in(&root, &["--check", "dirty.nika", "clean.nika"]);
+    assert_eq!(code, 1);
+    assert_eq!(stdout, "dirty.nika\n");
+    assert_eq!(
+        std::fs::read_to_string(root.join("dirty.nika")).unwrap(),
+        DIRTY
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn fmt_names_a_file_it_refuses_and_leaves_it() {
+    let broken = "fn main( {\n    let a = 1;\n}\n";
+    let root = package("refused", &[("broken.nika", broken), ("dirty.nika", DIRTY)]);
+    let (code, stdout, stderr) = fmt_in(&root, &["broken.nika", "dirty.nika"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("broken.nika: not formatted"), "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("broken.nika")).unwrap(),
+        broken
+    );
+    // The others are still formatted.
+    assert!(stdout.contains("dirty.nika"), "{stdout}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("dirty.nika")).unwrap(),
+        CLEAN
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn fmt_alone_outside_a_package_is_refused() {
+    let root = package("outside", &[("dirty.nika", DIRTY)]);
+    let (code, _, stderr) = fmt_in(&root, &[]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("nikaia.toml"), "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("dirty.nika")).unwrap(),
+        DIRTY
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

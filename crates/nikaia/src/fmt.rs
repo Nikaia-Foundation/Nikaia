@@ -3,9 +3,14 @@
 //! adapter: it parses the file for its comments (D2), hands the printer their
 //! places in characters, and guards what comes back (D3).
 
-use anyhow::{Result, bail};
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result, bail};
+use orchestrator::cache::Layout;
 
 use crate::parser::parse_to_ast;
+use crate::project::EXTENSION;
+use crate::refuse;
 
 /// The file in the one style, or why it cannot be formatted.
 ///
@@ -73,4 +78,86 @@ fn placeless(tree: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// `nikaia fmt [FILE...] [--check]` (D5): the exit code.
+///
+/// No file named means every `.nika` file of the package `start` stands in:
+/// the one whose `nikaia.toml` is found walking up, its directories read
+/// down to the next package's own `nikaia.toml`, without `target/` and the
+/// hidden ones. A directory named is read the same way. Without `--check` a
+/// file that changes is rewritten and named; with it nothing is written and
+/// each file that would change is named. Either way a file the guard refuses
+/// is named with its reason and left as it is, and the code is 1 when a file
+/// was refused or, under `--check`, would change.
+pub fn run(start: &Path, named: &[PathBuf], check: bool) -> Result<i32> {
+    let mut files = Vec::new();
+    if named.is_empty() {
+        let layout = Layout::resolve(&start.join("nikaia.toml"));
+        if !layout.in_project {
+            refuse!(
+                "There's no `nikaia.toml` in {} or any folder above it.\n\
+                 `nikaia fmt` alone formats a package. To format single files, \
+                 name them: `nikaia fmt main.nika`.",
+                start.display()
+            );
+        }
+        sources_under(&layout.root, &mut files)?;
+    } else {
+        for path in named {
+            match path.is_dir() {
+                true => sources_under(path, &mut files)?,
+                false => files.push(path.clone()),
+            }
+        }
+    }
+
+    let mut code = 0;
+    for file in &files {
+        let source = std::fs::read_to_string(file)
+            .with_context(|| format!("cannot read {}", file.display()))?;
+        let formatted = match format(&source) {
+            Ok(formatted) => formatted,
+            Err(refusal) => {
+                eprintln!("{}: not formatted: {refusal:#}", file.display());
+                code = 1;
+                continue;
+            }
+        };
+        if formatted == source {
+            continue;
+        }
+        if check {
+            println!("{}", file.display());
+            code = 1;
+        } else {
+            std::fs::write(file, &formatted)
+                .with_context(|| format!("cannot write {}", file.display()))?;
+            println!("formatted {}", file.display());
+        }
+    }
+    Ok(code)
+}
+
+/// Every `.nika` file under `dir`, in name order: not in `target/`, a hidden
+/// directory, or a directory with a `nikaia.toml` of its own (another package).
+fn sources_under(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
+        .with_context(|| format!("cannot read {}", dir.display()))?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .collect();
+    entries.sort();
+    for path in entries {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if path.is_dir() {
+            if name == "target" || name.starts_with('.') || path.join("nikaia.toml").is_file() {
+                continue;
+            }
+            sources_under(&path, files)?;
+        } else if path.extension().is_some_and(|e| e == EXTENSION) {
+            files.push(path);
+        }
+    }
+    Ok(())
 }

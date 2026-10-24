@@ -246,6 +246,20 @@ pub enum Command {
         #[arg(value_name = "FILE")]
         file: PathBuf,
     },
+    /// Format `.nika` files in the one style (Part III 13.2,
+    /// [ADR-337](../../../docs/specification/adr/adr-337.md)).
+    ///
+    /// With no file, every `.nika` file of the package the working directory
+    /// is in. A file that changes is rewritten and named; one the guard
+    /// refuses is named with the reason and left as it is (exit code 1).
+    Fmt {
+        /// The `.nika` files, or directories to format the `.nika` files of.
+        #[arg(value_name = "FILE")]
+        files: Vec<PathBuf>,
+        /// Write nothing: name each file that would change, and fail if one would.
+        #[arg(long)]
+        check: bool,
+    },
     /// Run one `.nika` file in the interpreter; nothing is written and
     /// nothing is compiled.
     ///
@@ -721,6 +735,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         Command::Lower { .. }
         | Command::Cache { .. }
         | Command::Check { .. }
+        | Command::Fmt { .. }
         | Command::Interpret { .. }
         | Command::Explain { .. } => {
             unreachable!("the single-file verbs are dispatched by `run`")
@@ -1035,6 +1050,11 @@ fn run() -> Result<()> {
             },
         ),
         Command::Check { file } => single_file(&args, file, Verb::Check),
+        Command::Fmt { files, check } => {
+            let start = std::env::current_dir().context("finding the working directory")?;
+            let code = nikaia::fmt::run(&start, files, *check)?;
+            std::process::exit(code);
+        }
         Command::Interpret { file } => single_file(&args, file, Verb::Interpret),
         Command::Explain { file } => single_file(&args, file, Verb::Explain),
         Command::Cache {
