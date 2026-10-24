@@ -19,8 +19,14 @@ on:
   workflow_dispatch:
 
 # A newer push to the same pull request makes the older run's answer moot.
+# A push to develop gets a group of its own (its run id): in one shared group a
+# *pending* run is cancelled by the next pending one even with
+# cancel-in-progress off (GitHub keeps one running and one pending run per
+# group), so most develop commits never got an answer. `promote` only moves
+# main forward (it skips a commit main already contains), so runs finishing
+# out of order are safe.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.run_id) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -36,6 +42,7 @@ jobs:
       rs2nika: ${{ steps.decide.outputs.rs2nika }}
       floor: ${{ steps.decide.outputs.floor }}
       arm64: ${{ steps.decide.outputs.arm64 }}
+      docs: ${{ steps.decide.outputs.docs }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -49,6 +56,15 @@ jobs:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+
+      # A documentation-only change skips the build and test jobs; these cheap
+      # checks still run for it (the full ones run again in bootstrap_compiler).
+      - name: Cheap checks (documentation-only change)
+        if: steps.decide.outputs.docs == 'true'
+        run: |
+          python3 scripts/check-adr-refs.py
+          python3 scripts/check-roadmap-numbers.py
+          python3 scripts/badges.py --check
 
   # The oldest Rust Nikaia claims (ADR-305), with the whole suite run on it:
   # the compiler, `std`, and every program the tests emit. The channel for
@@ -260,6 +276,8 @@ jobs:
   # stable - the `rust` backend, the interpreter, projects, the ledger, the whole
   # test suite.
   bootstrap_compiler:
+    needs: changes
+    if: needs.changes.outputs.docs != 'true'
     runs-on: ubuntu-latest
     # A hang is a failure, in an hour and a half (see `arm64`).
     timeout-minutes: 90

@@ -19,6 +19,12 @@
 #   develop or main and weekly; on a pull request only where one of those
 #   changed.
 #
+# * `docs` - the change touches only documentation: Markdown outside
+#   docs/specification/, CHANGELOG.md and the code trees (crates/, packages/,
+#   examples/, benches/, tools/, scripts/, tests/), guide/, and the website's
+#   own files. Then every build and test job is off (nothing there can break
+#   them); the `changes` job runs the cheap checks itself.
+#
 # Everything is on for a manual run, a scheduled one, a first push of a branch
 # (nothing to compare against), and when the workflow itself changed.
 set -e
@@ -28,6 +34,7 @@ all() {
     echo "rs2nika=true" >>"$out"
     echo "floor=true" >>"$out"
     echo "arm64=true" >>"$out"
+    echo "docs=false" >>"$out"
     exit 0
 }
 case "$EVENT" in
@@ -42,6 +49,17 @@ echo "$changed" | sed 's/^/  /'
 if echo "$changed" | grep -q '^\.github/workflows/\|^scripts/ci-changes\.sh$'; then
     all
 fi
+code=$(echo "$changed" | grep -v -E '^(guide|_includes|_layouts)/|^(_config\.yml|index\.html|robots\.txt|favicon\.ico)$' |
+    grep -v -E '^(CHANGELOG\.md|(crates|packages|examples|benches|tools|scripts|tests|docs/specification)/.*)$' |
+    grep -v -E '\.md$' || true)
+code2=$(echo "$changed" | grep -E '^(CHANGELOG\.md|(crates|packages|examples|benches|tools|scripts|tests|docs/specification)/)' || true)
+if [ -z "$code" ] && [ -z "$code2" ] && [ -n "$changed" ]; then
+    echo "documentation only: build and test jobs are skipped"
+    for k in unsafe rs2nika floor arm64; do echo "$k=false" >>"$out"; done
+    echo "docs=true" >>"$out"
+    exit 0
+fi
+echo "docs=false" >>"$out"
 if echo "$changed" | grep -q '^crates/unsafe/\|^scripts/check-unsafe-crates\.sh$'; then
     echo "unsafe=true" >>"$out"
 else
