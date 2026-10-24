@@ -454,3 +454,10 @@ filed as #809 (`v[i]?.clone()`), #810 (a matched scrutinee counted as kept),
 #811 (`'a` on every `ref` parameter of a method of a struct with a `ref` field;
 `maps.nika` passes `words` instead until it is fixed), #812 (`?? []` for a list
 view). Next slice: **R-3 `type_rules.rs`** (1,382 lines).
+Then: #807 built (bd535e67: a named diagnosis; the panic did not reproduce);
+#811 steps 1-3 built (b7e98462), its last step blocked by #813 (NK2302 counts a
+view stored into a local struct as kept); #808, #809, #810 and R-3 running.
+**Note:** in the shared checkout the test binary sometimes does not compile
+because of another builder's half-done files (seen: `Build::Release` in
+`handed_over.rs`). Prove a change in a clean copy (a fresh worktree on the
+commit) before reporting it, and say which.
