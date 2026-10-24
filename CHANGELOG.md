@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1215] — 2026-10-24
+
+**Check: the kept-function call, the findings order and the unsigned-slot verdicts are Nikaia (C7-a to C7-c, #125)**
+- The kept-function call (takes the interner as a callback), the findings sort (in check_walked_settle) and the unsigned-slot verdicts (take bounds::proven as a callback) moved into Nikaia. claims_report now takes its colour as a bool from the caller. Tools that lower panic(..) are an open compiler defect (issue to be filed). No language change.
+
 ## [0.0.1214] — 2026-10-24
 
 **Check: the walk's settling and the unrolling report are Nikaia (U-d6, #125)**
