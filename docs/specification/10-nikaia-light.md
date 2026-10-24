@@ -1210,7 +1210,7 @@ catches everything too. `bool` is the exception: `true` and `false` are two arms
 missing: the variants, or `else`. A guarded arm covers nothing, so a `match`
 whose only catch-all carries an `if` is refused with `NK1151`. A `match` over a `T?` with a `null` arm is complete
 when an unguarded `null` arm or `else` covers `null`, and the other arms cover
-the `T`: `null => …` and `n => …` are a complete `match`.
+the `T`: `null => …` and `n => …` are a complete `match`. `Some(…)` and `None` are not patterns of a `T?` and are refused (`NK1???`, the code the supervisor assigns), unless the subject's type declares such a variant.
 
 An arm's body is an expression or a block. The expression may be a `throw`, a
 `return`, a `break`, a `continue` or a `panic(…)`. Their type is **never**, so
