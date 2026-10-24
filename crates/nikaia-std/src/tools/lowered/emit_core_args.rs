@@ -39,6 +39,14 @@ pub(crate) fn emit_arg_opening_in(contract: &FnContract, i: i64) -> String {
 
 pub(crate) fn emit_arg_names_a_place(arg: &Expr) -> bool { matches!(arg, Expr::Variable(_, _) | Expr::Field { .. }) }
 
+pub(crate) fn emit_arg_through_index(arg: &Expr) -> bool {
+    match arg {
+        Expr::Index { .. } => true,
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); emit_arg_through_index(base) },
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_arg_is_closure(arg: &Expr) -> bool { matches!(arg, Expr::Closure { .. }) }
 
 pub(crate) fn emit_arg_is_null(arg: &Expr) -> bool { matches!(arg, Expr::LitNull(_)) }
@@ -261,6 +269,7 @@ impl EmitState {
         let mut inside = flow;
         if wants_a_size && !count { inside = flow.inferred(); }
         if self.emit_arg_handed_on_changed(world, &scope.function, callee, i, arg) { inside = inside.place(); }
+        if change && pointer == 0 && emit_arg_through_index(arg) { inside = inside.place(); }
         let in_place = nikaia_std::index::or(self.facts.in_place_folds.get(&node), || 0);
         if in_place > 0 {
             let second = if in_place == 2 { "&__nk_x" } else { "__nk_x" };

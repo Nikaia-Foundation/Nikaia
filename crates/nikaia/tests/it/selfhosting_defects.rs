@@ -2018,3 +2018,86 @@ fn main() {
     );
     assert_eq!(said, "yz\n7\n5 0\n");
 }
+
+/// #814: an element of a `mut` list handed to a `mut` parameter is lent
+/// mutably (`&mut args[i]`), not read through `index::get`.
+#[test]
+fn an_element_handed_to_a_mut_parameter_is_changed_in_place() {
+    let (said, lowered) = printed_and_lowered(
+        "element-to-a-mut-parameter",
+        r#"
+struct Expr {
+    n: i64,
+}
+struct Block {
+    args: Vec[Expr],
+}
+fn bump(mut e: Expr) {
+    e.n += 1
+}
+fn main() {
+    let mut args: Vec[Expr] = [Expr { n: 1 }]
+    let i = 0
+    bump(args[i])
+    print(args[0].n)
+    let mut b = Block { args: [Expr { n: 5 }] }
+    bump(b.args[i])
+    println(f" {b.args[0].n}")
+}
+"#,
+    );
+    assert_eq!(said, "2 6\n");
+    assert!(
+        !lowered.contains("&mut *nikaia_std::index::get"),
+        "{lowered}"
+    );
+}
+
+/// The same off a list that is not `mut` is the checker's refusal.
+#[test]
+fn an_element_of_a_list_that_is_not_mut_is_refused_by_the_checker() {
+    let said = refused(
+        "element-of-an-immutable-list",
+        r#"
+struct Expr {
+    n: i64,
+}
+fn bump(mut e: Expr) {
+    e.n += 1
+}
+fn main() {
+    let args: Vec[Expr] = [Expr { n: 1 }]
+    let i = 0
+    bump(args[i])
+    print(args[0].n)
+}
+"#,
+    );
+    assert!(said.contains("NK1139"), "{said}");
+}
+
+/// #817: `m["k"]?.clone()` on a map matched on `&*get(..)`, a `&Option<&T>`,
+/// whose arm bound a `&&T` and cloned the `&T` (E0308). A map's read is the
+/// option of a reference already and is matched as it is.
+#[test]
+fn a_reach_off_a_map_read_matches_the_option_it_is() {
+    let said = printed(
+        "reach-off-a-map-read",
+        r#"
+use std::collections
+fn look(m: ref collections::HashMap[String, String], k: String) -> String? {
+    return m[k]?.clone()
+}
+fn main() {
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    m["k"] = "vv"
+    println(look(m, "k") ?? "none")
+    println(look(m, "q") ?? "none")
+    let a = m["k"]?.clone()
+    println(a ?? "none")
+    println(f"{m["k"]?.len() ?? 0} {m["z"]?.len() ?? 0}")
+}
+"#,
+    );
+    assert_eq!(said, "vv\nnone\nvv\n2 0\n");
+}

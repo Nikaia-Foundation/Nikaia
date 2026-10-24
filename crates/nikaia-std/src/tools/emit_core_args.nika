@@ -68,6 +68,16 @@ fn emit_arg_names_a_place(arg: ref Expr) -> bool {
     }
 }
 
+/// Whether the argument is a place that goes through an index: `xs[i]`,
+/// `b.xs[i]`, `xs[i].inner`.
+fn emit_arg_through_index(arg: ref Expr) -> bool {
+    return match arg {
+        Expr::Index { .. } => true,
+        Expr::Field { base, .. } => emit_arg_through_index(base),
+        else => false,
+    }
+}
+
 fn emit_arg_is_closure(arg: ref Expr) -> bool {
     return match arg {
         Expr::Closure { .. } => true,
@@ -431,6 +441,12 @@ impl EmitState {
         // **A `mut` parameter handed to a `mut` parameter is handed on as the
         // `&mut` it is** (ADR-094 D3), and not read as its number.
         if self.emit_arg_handed_on_changed(world, scope.function, callee, i, arg) {
+            inside = inside.place()
+        }
+        // **An element handed to a `mut` parameter is a place** (#814): it is
+        // lent as `&mut xs[at]`, never read through `index::get`, which is
+        // behind a shared reference.
+        if change && pointer == 0 && emit_arg_through_index(arg) {
             inside = inside.place()
         }
         // **A fold's step or merge that changes its accumulator in place**
