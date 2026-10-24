@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1202] — 2026-10-24
+
+**The repository's unsafe crates ship their reviewed ledgers**
+- crc32c, low-bits, child-usage and checked-text ship a `nikaia.contracts` that `nikaia describe` adopts (ADR-290 D22). Each lists only the crate's safe, non-generic free functions, with any cfg gate in a comment; an `unsafe fn` stays NK1171. `examples/crate-ledger` calls `crc32c::u64` and `low_bits` through `use`. Fixes #788.
+
 ## [0.0.1201] — 2026-10-24
 
 **`use` names a Rust crate; a crate may ship its reviewed ledger (ADR-290 D22)**
