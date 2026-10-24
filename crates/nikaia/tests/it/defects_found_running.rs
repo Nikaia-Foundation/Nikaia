@@ -934,3 +934,31 @@ fn a_method_receiver_lent_again_in_an_argument() {
         |_| {},
     );
 }
+
+/// **`?? []` beside a list view is a view** (#812): `f.value?.parts ?? []` is
+/// the list's slice or a static empty one, never a refused `Vec[?]` and never
+/// a borrowed temporary; an owned `Vec[T]? ?? []` still builds a `Vec`.
+#[test]
+fn an_empty_list_beside_a_list_view_is_a_view() {
+    runs_in(
+        "empty-list-view",
+        "struct Expr {\n    parts: Vec[i64],\n}\n\
+         struct Field {\n    value: Expr?,\n}\n\
+         fn total(f: ref Field) -> i64 {\n\
+         \x20   let e = f.value?.parts ?? []\n\
+         \x20   return e.len()\n\
+         }\n\
+         fn owned(v: Vec[i64]?) -> i64 {\n\
+         \x20   let mut e = v ?? []\n\
+         \x20   e.push(1)\n\
+         \x20   return e.len()\n\
+         }\n\
+         fn main() {\n\
+         \x20   let f = Field { value: Expr { parts: [1, 2] } }\n\
+         \x20   let g = Field { value: null }\n\
+         \x20   println(f\"{total(f)} {total(g)} {owned(null)}\")\n\
+         }\n",
+        "2 0 1\n",
+        |_| {},
+    );
+}

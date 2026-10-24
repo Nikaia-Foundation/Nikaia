@@ -73,6 +73,13 @@ pub(crate) fn emit_flow_struct_headed(node: &Expr) -> bool {
 
 pub(crate) fn emit_flow_a_lit_str(node: &Expr) -> bool { matches!(node, Expr::LitStr { .. }) }
 
+pub(crate) fn emit_flow_an_empty_list(node: &Expr) -> bool {
+    match node {
+        Expr::ListLit { items, .. } => items.is_empty(),
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_flow_an_index(node: &Expr) -> bool { matches!(node, Expr::Index { .. }) }
 
 pub(crate) fn emit_flow_a_field_of_an_index(node: &Expr) -> bool {
@@ -437,6 +444,10 @@ impl EmitState {
         }
         if !bare && emit_flow_a_lit_str(fallback) && emit_flow_an_iterator_answer(world, value) { out.push(".map(|__nikaia_found| __nikaia_found.to_string())"); }
         out.push(", || ");
+        if self.facts.view_fallbacks.contains(&node_key(fallback)) && emit_flow_an_empty_list(fallback) {
+            out.push("&[][..])");
+            return Ok(());
+        }
         if self.facts.text_view_fallbacks.contains(&node_key(node)) {
             out.push("std::convert::AsRef::<str>::as_ref(");
             host.expr(walk, out, fallback, depth, flow, scope)?;

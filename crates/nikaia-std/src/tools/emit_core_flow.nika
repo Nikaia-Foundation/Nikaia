@@ -116,6 +116,13 @@ fn emit_flow_a_lit_str(node: ref Expr) -> bool {
     }
 }
 
+fn emit_flow_an_empty_list(node: ref Expr) -> bool {
+    return match node {
+        Expr::ListLit { items, .. } => items.len() == 0,
+        else => false,
+    }
+}
+
 fn emit_flow_an_index(node: ref Expr) -> bool {
     return match node {
         Expr::Index { .. } => true,
@@ -689,6 +696,12 @@ impl EmitState {
             out.push(".map(|__nikaia_found| __nikaia_found.to_string())")
         }
         out.push(", || ")
+        // **An empty list beside a view of a list** (#812): `&[][..]`, a slice
+        // that lives forever, so `index::or` answers `&[T]`.
+        if self.facts.view_fallbacks.contains(node_key(fallback)) && emit_flow_an_empty_list(fallback) {
+            out.push("&[][..])")
+            return
+        }
         // **A name that is a view of text beside a view of text** (#719): read
         // as `str`, whether it is `&String` or `&str` below.
         if self.facts.text_view_fallbacks.contains(node_key(node)) {

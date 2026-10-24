@@ -44,6 +44,24 @@ pub(crate) fn check_core_ops_lit_str(value: &Expr) -> bool { matches!(value, Exp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_empty_list(value: &Expr) -> bool {
+    match value {
+        Expr::ListLit { items, .. } => items.is_empty(),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_view_of_a_list(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; view && type_last_segment(name) == "Vec" },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_variable(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -539,6 +557,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
             state.facts.lent_list_reads.insert(id_of(expr) as i64);
             return check_core_ops_view("str");
         }
+    }
+    if nullable && !from_a_map && check_core_ops_view_of_a_list(&inner) && check_core_ops_empty_list(fallback) {
+        state.facts.view_fallbacks.insert(id_of(fallback) as i64);
+        return inner;
     }
     if nullable && inner == check_core_ops_named("String") && from_a_map && other.is_a_view() && check_core_ops_place(fallback) && check_core_ops_text_base(&other) {
         state.facts.view_coalesces.insert(id_of(expr) as i64);

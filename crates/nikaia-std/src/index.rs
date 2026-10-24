@@ -603,6 +603,20 @@ impl<T: Copy> Or<T> for &Option<T> {
     }
 }
 
+/// **A list view, with an empty list after `??`** (#812): `x?.items ?? []`
+/// answers the slice, and `&[][..]` is as static as a text literal.
+impl<'a, T> Or<&'a [T]> for Option<&'a Vec<T>> {
+    fn or(self, fallback: impl FnOnce() -> &'a [T]) -> &'a [T] {
+        self.map(Vec::as_slice).unwrap_or_else(fallback)
+    }
+}
+
+impl<'a, T> Or<&'a [T]> for &'a Option<Vec<T>> {
+    fn or(self, fallback: impl FnOnce() -> &'a [T]) -> &'a [T] {
+        self.as_deref().unwrap_or_else(fallback)
+    }
+}
+
 /// **A map's text, read, with a literal after `??`**
 /// ([ADR-293](../../../docs/specification/adr/adr-293.md) D28): the map hands
 /// out its `String` by reference and the literal is a `&str`, so what the two

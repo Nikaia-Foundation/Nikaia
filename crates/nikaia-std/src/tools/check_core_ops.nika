@@ -124,6 +124,22 @@ fn check_core_ops_lit_str(value: ref Expr) -> bool sync {
     }
 }
 
+/// An empty list written out: `[]`.
+fn check_core_ops_empty_list(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::ListLit { items, .. } => items.len() == 0,
+        else => false,
+    }
+}
+
+/// A view of a list: `ref Vec[T]`.
+fn check_core_ops_view_of_a_list(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, view, .. } => view && type_last_segment(name) == "Vec",
+        else => false,
+    }
+}
+
 /// A name.
 fn check_core_ops_variable(value: ref Expr) -> bool sync {
     return match value {
@@ -774,6 +790,12 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
             state.facts.lent_list_reads.insert(id_of(expr) as i64)
             return check_core_ops_view("str")
         }
+    }
+    // **An empty list beside a view of a list is a view too** (#812): `&[]`
+    // is as static as a text literal, so `x?.items ?? []` answers the view.
+    if nullable && !from_a_map && check_core_ops_view_of_a_list(inner) && check_core_ops_empty_list(fallback) {
+        state.facts.view_fallbacks.insert(id_of(fallback) as i64)
+        return inner
     }
     // **And a name that is a view of text beside it** (#297).
     if nullable && inner == check_core_ops_named("String") && from_a_map && other.is_a_view() && check_core_ops_place(fallback) && check_core_ops_text_base(other) {
