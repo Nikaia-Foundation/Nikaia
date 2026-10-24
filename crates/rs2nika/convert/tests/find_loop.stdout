@@ -1,0 +1,43 @@
+// ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
+fn payload(parsed_here: ref CheckWorld, beside: ref Vec[ref CheckWorld], ty: ref String) -> Vec[Ty]? sync {
+    // ADAPTER: bleibt in Rust (`std::iter::once(`)
+    for parsed in once(parsed_here).chain(beside.iter().copied()) {
+        let t = parsed_view_of(parsed)
+        let found = check_payload_in(t, ty)
+        if found != null {
+            return found
+        }
+    }
+    return null
+}
+
+fn walks(generics: ref Vec[G], parsed: ref CheckWorld) sync {
+    // TODO(rs2nika): the type of `walked` (an option of the element)
+    let mut walked = null
+    for g in generics {
+        let parameter = parsed.words.resolve(g.name).to_string()
+        let asked = g.bounds.iter().any(fn(b) { shape(b) })
+        let found = asked.then_some(parameter)
+        if found != null {
+            walked = found
+            break
+        }
+    }
+    // TODO(rs2nika): the type of `hit` (an option of the element)
+    let mut hit = null
+    for item in items {
+        if item.name == name {
+            hit = item
+            break
+        }
+    }
+    // TODO(rs2nika): the type of `low` (an option of the element)
+    let mut low = null
+    for l in lowered {
+        if l.name == name && l.ty.is_a_view() {
+            low = l
+            break
+        }
+    }
+}
+

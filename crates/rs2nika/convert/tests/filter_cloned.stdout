@@ -5,7 +5,15 @@ fn kept(thrown: ref Vec[Thrown], items: ref Vec[Item]) -> Vec[Thrown] sync {
             fatal.push(t.clone())
         }
     }
-    let first = items.iter().find_map(fn(item) { item.name.clone() })
+    // TODO(rs2nika): the type of `first` (an option of the element)
+    let mut first = null
+    for item in items {
+        let found = item.name.clone()
+        if found != null {
+            first = found
+            break
+        }
+    }
     return fatal
 }
 

@@ -1,7 +1,12 @@
 // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
 fn payload_of(parsed_here: ref CheckWorld, beside: ref Vec[ref CheckWorld], ty: ref String, variant: ref String) -> Vec[Ty]? sync {
     // ADAPTER: bleibt in Rust (`std::iter::once(`)
-    // TODO(rs2nika): `.cloned()` of an iterator: a `for` loop with `push` of `x.clone()`
-    return std::iter::once(parsed_here).chain(beside.iter().copied()).find_map(fn(parsed) { parsed.program.items.iter().find_map(fn(item) { match item.node { Item::Enum { name, variants, .. } if parsed.words.resolve(name) == ty => variants.iter().find(fn(held) { parsed.words.resolve(held.name) == variant }).map(fn(held) { match held.fields { VariantFields::Unit => [], VariantFields::Tuple(types) => { types.iter().map(fn(t) { Ty::from_ast(parsed, t) }).collect() } VariantFields::Named(fields) => { fields.iter().map(fn(f) { Ty::from_ast(parsed, f.ty) }).collect() } } }), else => null } }) })
+    for parsed in once(parsed_here).chain(beside.iter().copied()) {
+        let found = parsed.program.items.iter().find_map(fn(item) { match item.node { Item::Enum { name, variants, .. } if parsed.words.resolve(name) == ty => variants.iter().find(fn(held) { parsed.words.resolve(held.name) == variant }).map(fn(held) { match held.fields { VariantFields::Unit => [], VariantFields::Tuple(types) => { types.iter().map(fn(t) { Ty::from_ast(parsed, t) }).collect() } VariantFields::Named(fields) => { fields.iter().map(fn(f) { Ty::from_ast(parsed, f.ty) }).collect() } } }), else => null } })
+        if found != null {
+            return found
+        }
+    }
+    return null
 }
 

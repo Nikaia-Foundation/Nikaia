@@ -7,6 +7,10 @@ fn wide(o: String?) -> bool sync {
 }
 
 fn head(v: ref Vec[ref String]) -> i64? sync {
-    return v.iter().find_map(fn(s) { let t = s.strip_prefix("a") ?? return null; Some(t.len()) })
+    for s in v {
+        let t = s.strip_prefix("a") ?? continue
+        return t.len()
+    }
+    return null
 }
 
