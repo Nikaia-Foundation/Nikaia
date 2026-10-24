@@ -84,6 +84,12 @@ performance*).
 
 ## State
 
-*Updated by the architect when it ends.* Stage: 1. Current issue: none yet.
-Next order: the architect's first task is to read the self-hosting plan and
-issue list, and return the first work order.
+*Updated by the architect when it ends.* 2026-10-24, develop 97385b5, 0.0.1204.
+Stage: 1 (serial). Current issue: #125, C-7 of `selfhosting-plan.md`: U-d0 and
+U-d1 done, **U-d2** (`check/attributes.rs`, 714 lines, to
+`tools/check_attributes.nika`) ordered; then U-d3 .. U-d6 in table order, then
+E10/E11. Known risk for new tools files: #791 (methods matched by bare name),
+#667 (lower-std ~5 min per cycle; first tool repair if builders report it).
+Parked: branch `wip/bounding-candidates-2026-10-19` (loop counter candidates in
+the bounds analysis, ~24 lines, 120 versions stale): not merged, no order until
+self-hosting reaches `bounds`; re-done fresh then, the branch is a sketch only.
