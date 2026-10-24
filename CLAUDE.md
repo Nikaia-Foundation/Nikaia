@@ -46,6 +46,15 @@
   When every job passes, the `promote` job fast-forwards `main` to that commit
   (`.github/workflows/nikaia.yml`) - that commit, not `develop`'s tip, which
   may have moved on during the run. `main` is always a commit that passed.
+* **CI runs are not cancelled by newer pushes; it only looks so.** For pushes
+  (`cancel-in-progress` is only for pull requests) a running run always
+  finishes; only a *pending* run is replaced by a newer pending one, so it
+  never starts. A missing run for a commit means a newer one took its place,
+  not that a running one was aborted.
+* **The supervisor checks every 20 minutes that CI on `develop` is green.**
+  A red run is fixed forward at once (a fix-forward builder), because `main`
+  and everything that hangs on it (the website, `promote`) stands still while
+  `develop` is red.
 * **The commit that finishes an issue says `Fixes #N`.** `promote` closes an
   issue only when a commit it brings to `main` names it with `Fixes`, `Closes`
   or `Resolves` (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close
