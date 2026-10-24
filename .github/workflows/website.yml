@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+  # Started by the `promote` job of nikaia.yml: a push made with GITHUB_TOKEN
+  # starts no other workflow, so the push trigger above never fires for it.
+  workflow_dispatch:
 
 jobs:
   deploy:
