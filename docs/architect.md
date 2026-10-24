@@ -101,6 +101,8 @@ steps 1-3 are in `sysroot.rs` (NIKAIA_LOWER_TIMES, `LoweredBefore`,
 `in_parallel`), but the key is the whole package plus the binary's hash, so the
 real cycle (edit one .nika, rebuild) always misses; order is per-file keys on
 file + package interface, then step 4. Then U-d3 .. U-d6, then E10/E11.
+Modular compiler (owner's question): basis in `modular-compiler.md`, #793
+(`decision`); #667 step 4 is the next order after the current #667 builder.
 Known risk for new tools files: #791 (methods matched by bare name).
 Parked: branch `wip/bounding-candidates-2026-10-19` (loop counter candidates in
 the bounds analysis, ~24 lines, 120 versions stale): not merged, no order until
