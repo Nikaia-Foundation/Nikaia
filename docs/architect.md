@@ -114,6 +114,8 @@ Modular compiler (owner's question): basis in `modular-compiler.md`, #793
 Long jobs (owner's question): basis in `long-jobs.md`, #794 (`decision`); no measuring agent; CI is the verifier, the main
 session watches it. develop red since 9f090392 (badges check, arm64 Test):
 the repair comes before the next step.
+CI caches (owner's question): basis in `ci-cache.md`, #795 (`decision`);
+its step 1 (split test build from test run) needs no decision.
 Known risk for new tools files: #791 (methods matched by bare name).
 Parked: branch `wip/bounding-candidates-2026-10-19` (loop counter candidates in
 the bounds analysis, ~24 lines, 120 versions stale): not merged, no order until

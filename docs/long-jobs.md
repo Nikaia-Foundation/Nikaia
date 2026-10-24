@@ -64,7 +64,7 @@ it is slow by construction.
    edit re-lowers one file and its readers), #667 step 4 (one Rust module per
    `.nika`: one small unit re-optimised), one test binary (#793 step 3: one
    link instead of 267), then nextest in CI if CI's 17 minutes become the
-   limit.
+   limit. CI's own run and its caches: [`ci-cache.md`](ci-cache.md).
 5. **Revisit** a shared measuring tool (a `tools/*.nika` behind `nikaia`,
    per `CLAUDE.md`) only in stage 2 or 3, if two builders' jobs queue on the
    machine; it would serialise their `cargo` and callgrind runs and hand back
