@@ -1463,6 +1463,14 @@ mod parsed_view_lowered {
 #[allow(unused_imports)]
 pub use parsed_view_lowered::*;
 
+mod parser_leaves_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/parser_leaves.rs");
+}
+#[allow(unused_imports)]
+pub use parser_leaves_lowered::*;
+
 mod paths_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2428,6 +2436,10 @@ pub mod parsed_tree {
 pub mod parsed_view {
     #[allow(unused_imports)]
     pub use super::{ParsedView};
+}
+pub mod parser_leaves {
+    #[allow(unused_imports)]
+    pub use super::{PrTrivia, pr_trivia};
 }
 pub mod paths {
     #[allow(unused_imports)]

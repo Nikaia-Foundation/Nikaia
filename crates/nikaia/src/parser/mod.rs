@@ -52,74 +52,45 @@ fn guarded(user: &mut Trivia, jump: ast::Stmt, cond: ast::Expr, span: ast::Span)
 /// **The grammar's one piece of state, and both things in it are there for the
 /// same reason.** The generator skips the implicit whitespace *before* an
 /// alternative is tried, so by the time a rule runs, what stood in front of it
-/// is consumed and gone — and a PEG only looks ahead. A `[` at the start of a
+/// is consumed and gone - and a PEG only looks ahead. A `[` at the start of a
 /// line is a list literal and not an index
 /// ([ADR-135](../../../docs/specification/adr/adr-135.md) D3); a run of `///`
 /// before an item is that item's documentation
 /// ([ADR-307](../../../docs/specification/adr/adr-307.md) D4). Neither
 /// question can be asked of the input that is left.
 ///
-/// **Idempotent, which is what backtracking asks of state**: what whitespace
-/// stands at a position is a property of the input, so a branch that reads it
-/// and then loses has written the same answer a branch that wins would. The
-/// doc buffer keeps that true by position — a comment that starts before where
-/// the run already ended is one this has seen, and appending it again is the
-/// one thing that would make re-running it matter.
-#[derive(Clone, Debug, Default)]
+/// The state and its rules (idempotent, by position, which is what
+/// backtracking asks) are `tools/parser_leaves.nika`'s `PrTrivia`; this keeps
+/// what holds the tree's types.
+#[derive(Clone, Debug)]
 pub struct Trivia {
-    /// Where the run ended. Compared against a token's start, so trivia that
-    /// ended somewhere else is trivia this token does not follow.
-    end: usize,
-    /// Whether it held a `\n`.
-    newline: bool,
-    /// The run of `///` lines seen most recently, joined by newlines and with
-    /// the slashes and one leading space taken off.
-    doc: String,
-    /// Where that run ended, which is what makes appending to it idempotent.
-    doc_end: usize,
-    /// How far the unbroken trivia after that run reaches — the position the
-    /// prose is *about*.
-    ///
-    /// **A position and not a flag**, and that is the whole of what makes this
-    /// survive backtracking. `item` tries nine alternatives and eight of them
-    /// fail, but a failed alternative has still consumed tokens and still run
-    /// the whitespace skip after them — so a flag saying *the run still
-    /// reaches here* is false by the time the arm that matches asks. A
-    /// position is a fact about the input, and a later skip somewhere else
-    /// neither extends it nor spoils it.
-    doc_reaches: usize,
-    /// Whether a run has been seen at all. Nothing clears it: a run that no
-    /// longer reaches the position being asked about is ruled out by
-    /// `doc_reaches`, which is a fact about the input rather than a flag a
-    /// losing branch can spoil.
-    doc_live: bool,
+    /// Runs, doc lines and comments (Nikaia).
+    core: nikaia_std::tools::parser_leaves::PrTrivia,
     /// **The next id the parser gives an expression node**
     /// ([ADR-340](../../../docs/specification/adr/adr-340.md) D1): the number of
     /// nodes made so far in this file, counted from where the parse began.
     ///
     /// Not idempotent the way the rest of this state is, and it need not be: a
-    /// branch that loses has still made its nodes, and the ids it used are
-    /// gone, which leaves a gap and nothing else. What D1 asks is that no two
-    /// nodes of the file share one and that the same source gives the same
-    /// ids, and a counter that only goes up gives both.
+    /// branch that loses has still made its nodes, which leaves a gap and
+    /// nothing else; a counter that only goes up gives unique, reproducible ids.
     next_id: u32,
     /// **Where each parsed expression stands** (#107): its id's number and
     /// the bytes it was read from, the innermost rule that finished the node
-    /// first. A losing branch leaves entries for ids no node keeps, which
-    /// nothing asks for. By the id's number less `spans_from`: the ids are
-    /// counted up from there, so a vector holds them with no search (#727).
+    /// first. By the id's number less `spans_from` (#727).
     spans: Vec<Option<ast::Span>>,
     /// The id `spans` starts at: where the parse began counting.
     spans_from: u32,
-    /// Where the run of trivia that ends at `end` began, so a span that ends
-    /// in it is cut back to the last token.
-    trivia_start: usize,
-    /// **Every comment the whitespace skip read**, by where it starts, to
-    /// where it ends ([ADR-337](../../../docs/specification/adr/adr-337.md)
-    /// D2): what `nikaia fmt` puts back. A position is a fact about the
-    /// input, so a branch that loses and reads the same comment again writes
-    /// the same entry; a nested `/* … */` is dropped for the one around it.
-    comments: std::collections::BTreeMap<usize, usize>,
+}
+
+impl Default for Trivia {
+    fn default() -> Self {
+        Trivia {
+            core: nikaia_std::tools::parser_leaves::pr_trivia(),
+            next_id: 0,
+            spans: Vec::new(),
+            spans_from: 0,
+        }
+    }
 }
 
 impl Trivia {
@@ -129,9 +100,7 @@ impl Trivia {
         // numbered in parse order, so it has no entry.
         let id = ast::id_of(&expr);
         let mut span = span;
-        if span.end == self.end && self.trivia_start >= span.start {
-            span.end = self.trivia_start;
-        }
+        span.end = self.core.cut(span.start as i64, span.end as i64) as usize;
         if id < 1 << 31 && id >= self.spans_from {
             let at = (id - self.spans_from) as usize;
             if self.spans.len() <= at {
@@ -160,111 +129,29 @@ impl Trivia {
     }
 
     /// Record a run of trivia.
-    ///
-    /// A comment that a line break ran straight into **carries** the flag, so
-    /// `\n/* c */[1]` is a line that begins with a `[` exactly as `\n[1]` is.
-    ///
-    /// **And a doc run reaches as far as the trivia after it is unbroken**,
-    /// which is what says which item the prose is about: a gap means a token
-    /// was consumed in between, and a sentence on the other side of one
-    /// belongs to nothing here.
     fn ran(&mut self, at: std::ops::Range<usize>, newline: bool) {
-        let carried = self.end == at.start && self.newline;
-        if self.end != at.start {
-            self.trivia_start = at.start;
-        }
-        self.end = at.end;
-        self.newline = newline || carried;
-        if self.doc_reaches == at.start {
-            self.doc_reaches = at.end;
-        }
+        self.core.ran(at.start as i64, at.end as i64, newline);
     }
 
-    /// One `//…` comment, which is a doc comment when a third slash follows
-    /// ([ADR-307](../../../docs/specification/adr/adr-307.md) D4).
-    ///
-    /// `body` is what stands after the two slashes, so a doc comment's body
-    /// begins with the third. `////` is an ordinary comment, as it is in every
-    /// language that has both.
+    /// One `//...` comment; `body` is what stands after the two slashes.
     fn comment(&mut self, at: std::ops::Range<usize>, body: &str) {
-        self.noted(at.clone());
-        let line = match body.strip_prefix('/') {
-            Some(rest) if !rest.starts_with('/') => rest,
-            // **An ordinary comment neither adds to a run nor ends one.** It is
-            // trivia, so a token has not been consumed and the prose is still
-            // about the item below — and the shape it allows is the one this
-            // repository is written in: a sentence for whoever reaches the
-            // item, then a note for whoever reads the source. What ends a run
-            // is *code*, because then `doc_reaches` stops at the token.
-            _ => {
-                self.ran(at, false);
-                return;
-            }
-        };
-        // Seen already — a `WS` is run speculatively at the same position many
-        // times, and appending twice is the only way that could matter.
-        if at.start < self.doc_end {
-            self.ran(at, false);
-            return;
-        }
-        // A run continues where the trivia after the last line runs straight
-        // into this one; anywhere else it is a new run.
-        if !self.doc_live || self.doc_reaches != at.start {
-            self.doc.clear();
-        }
-        if !self.doc.is_empty() {
-            self.doc.push('\n');
-        }
-        self.doc.push_str(line.strip_prefix(' ').unwrap_or(line));
-        self.doc_end = at.end;
-        self.doc_reaches = at.end;
-        self.doc_live = true;
-        self.ran(at, false);
+        self.core
+            .comment(at.start as i64, at.end as i64, body.to_string());
     }
 
     /// The documentation standing immediately before the item at this byte.
-    ///
-    /// **Read and not taken**, which is what backtracking asks for: `item`
-    /// tries nine alternatives and eight of them fail, so a read that emptied
-    /// the buffer would hand the prose to whichever arm failed first. Nothing
-    /// has to be cleared, because the run expires on its own — the next item
-    /// has a token between it and this prose, so `ran` finds the trivia broken
-    /// and `doc_live` is false by the time it asks.
     fn doc_at(&self, at: usize) -> Option<String> {
-        match self.doc_live && !self.doc.is_empty() && self.doc_reaches == at {
-            true => Some(self.doc.clone()),
-            false => None,
-        }
+        self.core.doc_at(at as i64)
     }
 
-    /// Keep a comment's place, unless one around it is kept already, and
-    /// drop those it holds (a `/* … */` nested in this one).
-    fn noted(&mut self, at: std::ops::Range<usize>) {
-        if let Some((_, &end)) = self.comments.range(..=at.start).next_back()
-            && end >= at.end
-        {
-            return;
-        }
-        let inside: Vec<usize> = self
-            .comments
-            .range(at.start..at.end)
-            .map(|(&start, _)| start)
-            .collect();
-        for start in inside {
-            self.comments.remove(&start);
-        }
-        self.comments.insert(at.start, at.end);
-    }
-
-    /// A `/* … */` comment.
+    /// A `/* ... */` comment.
     fn block_comment(&mut self, at: std::ops::Range<usize>) {
-        self.noted(at.clone());
-        self.ran(at, false);
+        self.core.block_comment(at.start as i64, at.end as i64);
     }
 
     /// Whether the token at this byte is the first thing on its line.
     fn began_a_line(&self, at: usize) -> bool {
-        self.end == at && self.newline
+        self.core.began_a_line(at as i64)
     }
 }
 
@@ -926,9 +813,12 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         .enumerate()
         .filter_map(|(at, span)| Some((at as u32 + spans_from, span?)))
         .collect();
-    let comments = std::mem::take(&mut stream.state.user_state.comments)
-        .into_iter()
-        .map(|(start, end)| ast::Span::from(start..end))
+    let core = &stream.state.user_state.core;
+    let comments = core
+        .starts
+        .iter()
+        .zip(&core.ends)
+        .map(|(&start, &end)| ast::Span::from(start as usize..end as usize))
         .collect();
     let aliases = nikaia_std::tools::parsed_tree::aliases_of(&program.items, &interner);
     let mut parsed = Parsed {

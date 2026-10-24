@@ -1,0 +1,167 @@
+// crates/nikaia-std/src/tools/parser_leaves.nika
+//
+// **What the whitespace skip has seen** (ADR-135 D3, ADR-307 D4, ADR-337 D2),
+// moved from the compiler's `parser::Trivia` (ADR-294, #125, R-4): where the
+// last run of trivia ended, whether it held a line break, the run of `///`
+// lines in it and every comment's place. Positions are bytes of the source.
+//
+// **The grammar's one piece of state, and all of it is idempotent**, which is
+// what backtracking asks of state: what whitespace stands at a position is a
+// property of the input, so a branch that reads it and loses writes the same
+// answer a branch that wins would. The doc buffer keeps that true by
+// position: a comment that starts before where the run already ended is one
+// this has seen, and appending it again is the one thing that would make
+// re-running it matter. A doc run reaches as far as the trivia after it is
+// unbroken, which says which item the prose is about.
+//
+// The Rust `Trivia` keeps the parts that hold the tree's types (the node
+// counter and the spans by id, `ast::Span`) and hands this the numbers.
+
+/// The trivia state; `starts[k]` to `ends[k]` is the k-th comment by place.
+pub struct PrTrivia {
+    /// Where the run ended.
+    pub end: i64,
+    /// Whether it held a `\n`.
+    pub newline: bool,
+    /// The run of `///` lines seen most recently, joined by newlines.
+    pub doc: String,
+    /// Where that run ended, which makes appending to it idempotent.
+    pub doc_end: i64,
+    /// How far the unbroken trivia after that run reaches.
+    pub doc_reaches: i64,
+    /// Whether a run has been seen at all.
+    pub doc_live: bool,
+    /// Where the run of trivia that ends at `end` began.
+    pub trivia_start: i64,
+    /// Every comment's start, ascending.
+    pub starts: Vec[i64],
+    /// Every comment's end, by the start.
+    pub ends: Vec[i64],
+}
+
+pub fn pr_trivia() -> PrTrivia {
+    return PrTrivia {
+        end: 0,
+        newline: false,
+        doc: "",
+        doc_end: 0,
+        doc_reaches: 0,
+        doc_live: false,
+        trivia_start: 0,
+        starts: [],
+        ends: [],
+    }
+}
+
+impl PrTrivia {
+    /// The end a span read from `start` to `end` is cut back to: the last
+    /// token, where the span ends in the trivia after it.
+    pub fn cut(ref self, start: i64, end: i64) -> i64 {
+        if end == self.end && self.trivia_start >= start {
+            return self.trivia_start
+        }
+        return end
+    }
+
+    /// Record a run of trivia. A comment that a line break ran straight into
+    /// carries the flag.
+    pub fn ran(ref mut self, start: i64, end: i64, newline: bool) {
+        let carried = self.end == start && self.newline
+        if self.end != start {
+            self.trivia_start = start
+        }
+        self.end = end
+        self.newline = newline || carried
+        if self.doc_reaches == start {
+            self.doc_reaches = end
+        }
+    }
+
+    /// One `//...` comment, a doc comment when a third slash follows. `body`
+    /// is what stands after the two slashes; `////` is an ordinary comment.
+    pub fn comment(ref mut self, start: i64, end: i64, body: String) {
+        self.noted(start, end)
+        let rest = (body.strip_prefix("/") ?? "").clone()
+        if !body.starts_with("/") || rest.starts_with("/") {
+            // An ordinary comment neither adds to a run nor ends one.
+            self.ran(start, end, false)
+            return
+        }
+        // Seen already: a skip is run speculatively at the same position many
+        // times, and appending twice is the only way that could matter.
+        if start < self.doc_end {
+            self.ran(start, end, false)
+            return
+        }
+        // A run continues where the trivia after the last line runs straight
+        // into this one; anywhere else it is a new run.
+        if !self.doc_live || self.doc_reaches != start {
+            self.doc = ""
+        }
+        if !self.doc.is_empty() {
+            self.doc.push_str("\n")
+        }
+        let line = if rest.starts_with(" ") { (rest.strip_prefix(" ") ?? "").clone() } else { rest.clone() }
+        self.doc.push_str(line)
+        self.doc_end = end
+        self.doc_reaches = end
+        self.doc_live = true
+        self.ran(start, end, false)
+    }
+
+    /// The documentation standing immediately before the item at this byte:
+    /// read and not taken, because eight of nine alternatives fail.
+    pub fn doc_at(ref self, at: i64) -> String? {
+        if self.doc_live && !self.doc.is_empty() && self.doc_reaches == at {
+            return self.doc.clone()
+        }
+        return null
+    }
+
+    /// How many comments start before `at`.
+    fn before(ref self, at: i64) -> i64 {
+        let mut low = 0
+        let mut high = self.starts.len()
+        while low < high {
+            let mid = (low + high) / 2
+            if self.starts[mid] < at {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        return low
+    }
+
+    /// Keep a comment's place, unless one around it is kept already, and drop
+    /// those it holds (a `/* ... */` nested in this one).
+    pub fn noted(ref mut self, start: i64, end: i64) {
+        let low = self.before(start)
+        let mut around = -1
+        if low < self.starts.len() && self.starts[low] == start {
+            around = low
+        } else if low > 0 {
+            around = low - 1
+        }
+        if around >= 0 && self.ends[around] >= end {
+            return
+        }
+        while low < self.starts.len() && self.starts[low] < end {
+            self.starts.remove(low)
+            self.ends.remove(low)
+        }
+        self.starts.insert(low, start)
+        self.ends.insert(low, end)
+    }
+
+    /// A `/* ... */` comment.
+    pub fn block_comment(ref mut self, start: i64, end: i64) {
+        self.noted(start, end)
+        self.ran(start, end, false)
+    }
+
+    /// Whether the token at this byte is the first thing on its line.
+    pub fn began_a_line(ref self, at: i64) -> bool {
+        return self.end == at && self.newline
+    }
+}
