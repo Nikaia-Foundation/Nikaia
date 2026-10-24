@@ -49,3 +49,16 @@ impl TextNormalized for str {
         normalized(self, form)
     }
 }
+
+/// `s.quoted()`: the text as Rust's `{:?}` writes it (#804).
+pub trait TextQuoted {
+    /// The text between double quotes, with `"`, `\`, newline, tab, carriage
+    /// return and the other control characters escaped, as new text.
+    fn quoted(&self) -> String;
+}
+
+impl TextQuoted for str {
+    fn quoted(&self) -> String {
+        format!("{self:?}")
+    }
+}

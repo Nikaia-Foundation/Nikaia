@@ -134,3 +134,18 @@ fn a_surrogate_char_literal_is_refused() {
     assert!(err.contains("NK1184"), "{err}");
     assert!(!err.contains("NK1212"), "{err}");
 }
+
+/// `s.quoted()` is Rust's `{:?}` of a string (#804).
+#[test]
+fn quoted_escapes_like_debug() {
+    let out = run(
+        "text_quoted",
+        r#"fn main() {
+    println("a\"b\\c\nd\te".quoted())
+    println("ä".quoted())
+    println("".quoted())
+}
+"#,
+    );
+    assert_eq!(out, "\"a\\\"b\\\\c\\nd\\te\"\n\"ä\"\n\"\"\n");
+}

@@ -627,6 +627,8 @@ pub mod prelude {
     pub use crate::graphemes::TextGraphemes as _;
     // A text in a normalisation form, `s.normalized(form)` (ADR-320 D10).
     pub use crate::text::TextNormalized as _;
+    // A text between quotes as Rust's `{:?}` writes it, `s.quoted()` (#804).
+    pub use crate::text::TextQuoted as _;
     // **How a value goes into text both kinds flow into**
     // ([ADR-282](../../../docs/specification/adr/adr-282.md) D5): the tier
     // pass writes `value.into_either()` (and `into_either_maybe`,

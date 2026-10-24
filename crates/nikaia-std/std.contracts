@@ -3768,6 +3768,16 @@ sync = true
 touches = []
 signature = "(self: ref String, form: text::Form) -> String"
 
+# **The text between double quotes, escaped as Rust's `{:?}` writes it**, as new
+# text (#804): `"` and `\` get a backslash, newline, tab and carriage return are
+# `\n`, `\t`, `\r`, other control characters `\u{..}`; every other character
+# stands as it is.
+[fn."str::quoted"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref String) -> String"
+
 # **The way out `NK1131` names, so it has to be described here**
 # ([ADR-083](../../docs/specification/adr/adr-083.md)). A field of a borrowed
 # subject cannot be handed out by value and the message says to write
