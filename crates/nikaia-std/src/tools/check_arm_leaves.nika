@@ -135,7 +135,9 @@ impl CheckState {
                 continue
             }
             let ty = self.arm_type_of(leaf) ?? Ty::Unknown
-            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) {
+            // **A name `Some(a)` bound over a lent place** is a view of it,
+            // lent where it stands (#808).
+            if (ty == text && self.a_place_of_a_lent_parameter(world, leaf)) || world.here.viewed_arms.contains(node_key(check_peeled(leaf))) {
                 lent.push(node_key(leaf))
             } else if arm_leaves_a_text_literal(leaf) {
                 // **A literal is a view of static text** (ADR-282 D13, #740).
@@ -153,7 +155,9 @@ impl CheckState {
             }
         }
         for node in lent {
-            self.facts.lent_reads.insert(node)
+            if !world.here.viewed_arms.contains(node) {
+                self.facts.lent_reads.insert(node)
+            }
             self.flow.lent_tail_leaves.insert(node)
         }
         if either {

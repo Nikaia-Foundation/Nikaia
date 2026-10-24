@@ -368,6 +368,14 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
     if lending {
         found = view_of_type(found)
     }
+    // **A `return` of a choice whose arms read through a borrowed parameter**
+    // is asked as the function's last value is (#808).
+    if !lending && value != null {
+        let given = value ?? return
+        if state.lent_arms_handed_back(world, given, check_function_is_nullable(expected)) {
+            found = view_of_type(found)
+        }
+    }
     if value != null {
         let given = value ?? return
         // **`s.bytes` handed back is kept beyond the text** (ADR-320 D11).

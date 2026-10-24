@@ -276,7 +276,8 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
         check_core_expr_an_open_char_read(state, expr, &name, span);
         state.a_sequence_is_taken(&name, &ty, span);
         if world.here.viewed_arms.contains(&node_key(expr)) && ty == a_string_type() {
-            state.facts.lent_reads.insert(node_key(expr));
+            let already_lent = nikaia_std::index::or(state.binding(&name).as_ref().map(|__nikaia_it| __nikaia_it.lent), || false);
+            if !already_lent { state.facts.lent_reads.insert(node_key(expr)); }
             return Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true };
         }
         let nullable = matches!(ty, Ty::Nullable(_));

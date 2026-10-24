@@ -313,6 +313,7 @@ pub(crate) struct TierLocal {
     pub(crate) from: Option<String>,
     pub(crate) empty: i64,
     pub(crate) through: Vec<String>,
+    pub(crate) lent: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -447,7 +448,7 @@ pub(crate) fn tier_arm_read(node: i64, walk: &mut TierWalk) -> bool {
     walk.param_arms.contains(&node)
 }
 
-pub(crate) fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1, through: vec![] } }
+pub(crate) fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1, through: vec![], lent: false } }
 
 pub(crate) fn tier_at(word: &str, walk: &mut TierWalk) -> Tier {
     if !walk.reads.tiers.contains(word) { walk.reads.tiers.insert(word.to_owned()); }
@@ -761,6 +762,43 @@ pub(crate) fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_,
         _ => { },
     }
     bound
+}
+
+pub(crate) fn bind_some_payload(pattern: &MatchPattern, scrutinee: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
+    if kinds.either || kinds.owned && (kinds.view || kinds.still) { return None; }
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            if path.len() != 1 || parts.len() != 1 || joined_segments(path, ask.names) != "Some" { return None; }
+            let place = match place_of(scrutinee, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if !plain_string(ask.names, &place.ty) || !place.ty.is_nullable { return None; }
+            let base = match scrutinee {
+                Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
+                _ => return None,
+            };
+            if !lent_root(base, ask, walk) { return None; }
+            match nikaia_std::index::get(&parts, 0) {
+                MatchPattern::Path(named) => {
+                    if named.len() != 1 || names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) { return None; }
+                    if kinds.still {
+                        let mut local = plain_local(still_kinds());
+                        local.from = Some(seen(&place.owner, &no_path(), walk));
+                        let word = match local.from.as_ref() {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                        bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
+                        return word;
+                    }
+                    let mut local = plain_local(owned_kinds());
+                    local.lent = true;
+                    bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
+                    return None;
+                },
+                _ => return None,
+            }
+        },
+        _ => return None,
+    }
 }
 
 pub(crate) fn variant_named(callee: &str) -> (String, String) {
@@ -1265,7 +1303,9 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_>
             tie_leaves(given, -1, None, true, ask, walk);
             let before = walk.handed_back;
             walk.handed_back = handed_struct(given);
+            walk.tail_back = true;
             let kinds = tier_expr(given, ask, walk);
+            walk.tail_back = false;
             walk.handed_back = before;
             flow_result(given, &kinds, ask, walk);
         },
@@ -1318,7 +1358,7 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, through };
+        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, through, lent: false };
         bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned(), local, walk);
         return;
     }
@@ -2287,6 +2327,13 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut T
                 walk.flows.viewed_arms.insert(node_key(expr));
                 return view_kinds();
             }
+            if back && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
+                let lent = match tier_local(ask.names.resolve(name), &walk) { Some(__nikaia_value) => __nikaia_value, None => return kinds };
+                if lent.lent {
+                    walk.flows.viewed_arms.insert(node_key(expr));
+                    return view_kinds();
+                }
+            }
             kinds
         },
         Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; method_kinds(receiver, ask.names.resolve(method), args, ask, walk) },
@@ -2356,8 +2403,10 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut T
             let mut payloads: Vec<String> = vec![];
             for arm in arms.iter() {
                 open_tier_scope(walk);
-                let bound = bind_static_payloads(&arm.pattern, ask, walk);
+                let mut bound = bind_static_payloads(&arm.pattern, ask, walk);
                 bind_tuple_parts(&arm.pattern, &scrutinee, ask, walk);
+                let some_from = bind_some_payload(&arm.pattern, value, &scrutinee, ask, walk);
+                if some_from.is_some() { bound = true; }
                 if arm.guard.is_some() {
                     let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                     tier_expr(guard, ask, walk);
@@ -3070,7 +3119,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'
         let owner = TextOwner::Param(key.to_owned(), at);
         let kinds = kinds_of(&owner, &arg.ty, &mut vec![], ask, walk);
         let of: String = ask.names.resolve(arg.ty.name).to_owned();
-        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty: arg.ty.clone() }), from: None, empty: -1, through: vec![] };
+        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty: arg.ty.clone() }), from: None, empty: -1, through: vec![], lent: false };
         bind_tier_local(ask.names.resolve(arg.name).to_owned(), local, walk);
         at += 1;
     }
@@ -3081,7 +3130,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'
         let local = TierLocal { kinds: owned_kinds(), of: match target.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, literal: -1, declared: None, from: None, empty: -1, through: vec![] };
+        }, literal: -1, declared: None, from: None, empty: -1, through: vec![], lent: false };
         bind_tier_local(String::from("self"), local, walk);
     }
     walk.handed_back = -1;

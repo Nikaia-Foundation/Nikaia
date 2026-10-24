@@ -2141,3 +2141,41 @@ fn a_literal_arm_beside_a_lent_field_lends() {
         "{rust}"
     );
 }
+
+/// **A name `Some(a)` binds over a field a `ref` parameter lends is a view of
+/// that field** (#808, ADR-282 D7, D13): a literal beside it is a view too,
+/// so the result lends and nothing is copied.
+#[test]
+fn a_name_bound_over_a_lent_option_field_is_a_view() {
+    let source = "struct Rule { name: String, action: String? }\n\
+                  fn action_of(rule: ref Rule) -> String { return match rule.action { Some(a) => a, else => \"none\" } }\n\
+                  fn main() {\n    let k = 1\n    let r = Rule { name: f\"n{k}\", action: f\"go{k}\" }\n    let q = Rule { name: \"n\", action: null }\n    println(r.name)\n    println(action_of(r))\n    println(action_of(q))\n}\n";
+    runs("some-over-a-lent-field", source, "n1\ngo1\nnone");
+    let rust = lowered(source, Build::default());
+    assert!(
+        rust.contains("fn action_of(rule: &Rule) -> &str")
+            && !rust.contains("String::from(\"none\")"),
+        "{rust}"
+    );
+}
+
+/// **Text of its own beside the view** makes the result `EitherText`.
+#[test]
+fn an_interpolated_arm_beside_a_lent_option_field_is_either() {
+    let source = "struct Rule { action: String? }\n\
+                  fn action_of(rule: ref Rule, k: i64) -> String { return match rule.action { Some(a) => a, else => f\"none{k}\" } }\n\
+                  fn main() {\n    let r = Rule { action: f\"go{1}\" }\n    let q = Rule { action: null }\n    println(action_of(r, 1))\n    println(action_of(q, 2))\n}\n";
+    runs("some-beside-an-owned-arm", source, "go1\nnone2");
+    let rust = lowered(source, Build::default());
+    assert!(rust.contains("EitherText"), "{rust}");
+}
+
+/// **A match over an owned local stays a move**: no lent parameter, no view.
+#[test]
+fn a_match_over_an_owned_local_stays_a_move() {
+    let source = "fn pick(k: i64) -> String {\n    let o: String? = f\"go{k}\"\n    return match o { Some(a) => a, else => \"none\" }\n}\n\
+                  fn main() { println(pick(1)) }\n";
+    runs("some-over-an-owned-local", source, "go1");
+    let rust = lowered(source, Build::default());
+    assert!(rust.contains("fn pick(k: i64) -> String"), "{rust}");
+}

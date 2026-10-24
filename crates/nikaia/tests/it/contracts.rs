@@ -1567,3 +1567,17 @@ fn a_rule_carries_what_the_grammar_beside_it_reaches() {
         entry.touches
     );
 }
+
+/// **A name `Some(a)` binds over a field a `ref` parameter lends is a view of
+/// it** (#808): the result handed back points into that parameter.
+#[test]
+fn a_result_bound_over_a_lent_option_field_points_into_the_parameter() {
+    let l = ledger(
+        "struct Rule { action: String? }\n\
+         pub fn action_of(rule: ref Rule, other: ref String) -> String {\n\
+         \x20   return match rule.action { Some(a) => a, else => \"none\" }\n\
+         }\n\
+         fn main() { let r = Rule { action: f\"go{1}\" }\n    println(action_of(r, \"x\")) }",
+    );
+    assert_eq!(l.functions["action_of"].borrows, ["rule"]);
+}

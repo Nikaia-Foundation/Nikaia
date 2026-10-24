@@ -341,7 +341,12 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
         // **An arm that is a name still read later is a view of it**, lent
         // where it stands (ADR-282 D7, D13, #712): the tier pass found it.
         if world.here.viewed_arms.contains(node_key(expr)) && ty == a_string_type() {
-            state.facts.lent_reads.insert(node_key(expr))
+            // A name a pattern binds through a lent value is a `&String`
+            // below already (#808): it needs no `&` of its own.
+            let already_lent = state.binding(name)?.lent ?? false
+            if !already_lent {
+                state.facts.lent_reads.insert(node_key(expr))
+            }
             return Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
         }
         // What a test proves not `null` is read as the `T` (ADR-350).

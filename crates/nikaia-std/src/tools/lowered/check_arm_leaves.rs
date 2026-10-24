@@ -96,7 +96,7 @@ impl CheckState {
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) { continue; }
             let ty = nikaia_std::index::or(self.arm_type_of(leaf), || Ty::Unknown);
-            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) { lent.push(node_key(leaf)); } else if arm_leaves_a_text_literal(leaf) { literals.push(node_key(check_peeled(leaf))); } else if !views_into_text(&ty, &text) { others_view = false; }
+            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) || world.here.viewed_arms.contains(&node_key(check_peeled(leaf))) { lent.push(node_key(leaf)); } else if arm_leaves_a_text_literal(leaf) { literals.push(node_key(check_peeled(leaf))); } else if !views_into_text(&ty, &text) { others_view = false; }
         }
         if lent.is_empty() || !either && !others_view { return false; }
         if !either {
@@ -107,7 +107,7 @@ impl CheckState {
         }
         for node in lent.iter() {
             let node = nikaia_std::num::value(node);
-            self.facts.lent_reads.insert(node);
+            if !world.here.viewed_arms.contains(&node) { self.facts.lent_reads.insert(node); }
             self.flow.lent_tail_leaves.insert(node);
         }
         if either {

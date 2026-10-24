@@ -319,6 +319,10 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     if lending { found = view_of_type(&found); }
+    if !lending && value.is_some() {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        if state.lent_arms_handed_back(world, given, check_function_is_nullable(&expected)) { found = view_of_type(&found); }
+    }
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         if !lending && !expected.is_a_view() { state.a_text_bytes_kept(world, given); }
