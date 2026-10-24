@@ -232,6 +232,7 @@ COMPILER_NIKA = {
     "check_program.nika": "check: the program walk, shape-walk instantiations and unrolled turns (U-d5)",
     "check_walked.nika": "check: the walk's settling and the unrolling report (U-d6)",
     "check_defaults.nika": "check: defaults, attribute arguments, item constants and folds (U-d3)",
+    "fold_bound.nika": "fold bound: the fewest bytes a rule takes, the most steps a fold takes, the merge and the counters' invariant (ADR-367)",
     "fmt.nika": "fmt: the printer of `nikaia fmt`, over the tokens with the comments the parser records (ADR-337, #101)",
 }
 
