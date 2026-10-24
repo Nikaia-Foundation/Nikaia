@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1208] — 2026-10-24
+
+**Named properties: a pure bool call is proved by name (ADR-381)**
+- A pure bool call over unchanging values is a named property: the prover proves it by name instead of unfolding it.
+- The property carries to callers as a fact and is published in the ledger (Part III 14.2).
+- Decided in ADR-381; see docs/specification Part III 14.2.
+
 ## [0.0.1207] — 2026-10-24
 
 **lower-std: one generated Rust module per tools file**
