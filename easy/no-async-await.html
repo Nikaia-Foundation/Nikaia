@@ -21,9 +21,11 @@ description: >-
           <dt>An example</dt>
           <dd>Read two files and add up their sizes. Reading a file waits for the disk.</dd>
           <dt>What Nikaia checks</dt>
-          <dd>A call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. To run things at the same time, put them in an <code>overlap</code> block: it runs its lines together and waits for all of them.</dd>
+          <dd>Any function can run asynchronously without you writing it: a call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. There is no <code>async</code>/<code>await</code> colouring, so a function that waits never forces its callers to change. That is decided and stable.</dd>
           <dt>The limit</dt>
           <dd>Every function may pause unless it says otherwise. A function marked <code>sync</code> never pauses and may call only other <code>sync</code> functions, which is how you say that a piece of code must not wait.</dd>
+          <dt>Still open</dt>
+          <dd>How tasks are orchestrated is being worked out: the exact forms, today <code>overlap</code>, <code>thread::scope</code>, <code>par</code> and <code>par_iter</code>. Under discussion are <code>let async</code> and other forms, aiming for a syntax that is familiar, safe and expressive, and so more uniform. The example below uses today's <code>overlap</code>.</dd>
         </dl>
 
         <details class="limit-details home-code markdown-body" open>
