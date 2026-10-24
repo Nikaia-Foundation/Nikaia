@@ -129,6 +129,11 @@ pub = true
 views = ["src: borrowed", "profile: borrowed", "prefix: borrowed", "repo: borrowed", "facts: borrowed"]
 signature = "(src: ref String, profile: ref String, prefix: ref String, repo: ref String, facts: ref Vec[String]) -> Rs2nikaOut"
 
+[fn."rs2nika_corpus"]
+locks = true
+views = ["dir: borrowed"]
+signature = "(dir: ref String) -> i64"
+
 [fn."rs2nika_count"]
 sync = "inferred"
 touches = []
@@ -164,6 +169,12 @@ sync = "inferred"
 touches = []
 views = ["t: borrowed"]
 signature = "(t: ref String) -> bool"
+
+[fn."rs2nika_edit_kind"]
+sync = "inferred"
+touches = []
+views = ["t: borrowed"]
+signature = "(t: ref String) -> ref String"
 
 [fn."rs2nika_enum_arity"]
 sync = "inferred"
@@ -385,7 +396,7 @@ sync = "inferred"
 keeps = ["code"]
 touches = []
 views = ["code: borrowed", "params: borrowed"]
-signature = "(code: ref String, params: ref Vec[String]) -> Vec[ref String]"
+signature = "(code: ref String, params: ref Vec[String]) -> Vec[String]"
 
 [fn."rs2nika_load"]
 views = ["repo: borrowed"]
@@ -568,6 +579,19 @@ sync = "inferred"
 touches = []
 views = ["a: borrowed", "b: borrowed"]
 signature = "(a: ref String, b: ref String) -> bool"
+
+[fn."rs2nika_score"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["draft: borrowed", "fin: borrowed"]
+signature = "(draft: ref String, fin: ref String) -> Rs2nikaScore"
+
+[fn."rs2nika_scored"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(line: ref String) -> String"
 
 [fn."rs2nika_self_call"]
 sync = "inferred"
@@ -782,3 +806,7 @@ fields = ["profile: String", "world: ref String", "prefix: String", "hits: Vec[S
 [type."Rs2nikaOut"]
 pub = true
 fields = ["pub text: String", "pub hits: Vec[String]", "pub missing: Vec[String]", "pub twins: Vec[String]"]
+
+[type."Rs2nikaScore"]
+pub = true
+fields = ["kept: i64", "total: i64", "kinds: Vec[String]"]

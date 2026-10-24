@@ -12,6 +12,7 @@ use std::fs
 use std::cli
 use std::process
 use std::collections
+use std::text
 
 /// What a run made: the draft and the rules it applied, one entry a hit.
 pub struct Rs2nikaOut {
@@ -4929,12 +4930,143 @@ fn rs2nika_read_facts(facts: ref String, path: ref String) -> Vec[String] {
     return out
 }
 
+// The score of a draft against the file a person made of it (#802): the lines
+// of FINAL that the draft already had, and the kinds of line that were written
+// by hand. A blank line, a comment and a line of only closing brackets do not
+// count: they are in every file.
+fn rs2nika_scored(line: ref String) -> String {
+    let t: String = line.trim().clone()
+    if t == "" || t.starts_with("//") || t == "}" || t == "{" || t == ")" || t == "]" || t == "})" || t == "}," || t == ")," {
+        return ""
+    }
+    return t
+}
+
+fn rs2nika_edit_kind(t: ref String) -> String {
+    if t.contains("catch") {
+        return "catch"
+    }
+    if t.contains("??") {
+        return "?? default"
+    }
+    if t.contains("ref ") {
+        return "ref"
+    }
+    if t.contains(".clone()") {
+        return ".clone()"
+    }
+    if t.starts_with("fn ") || t.starts_with("pub fn ") {
+        return "signature"
+    }
+    if t.starts_with("let ") {
+        return "let"
+    }
+    if t.starts_with("return") {
+        return "return"
+    }
+    if t.starts_with("match ") || t.starts_with("if ") || t.starts_with("} else") || t.starts_with("for ") || t.starts_with("while ") {
+        return "control flow"
+    }
+    if t.contains("f\"") {
+        return "format string"
+    }
+    return "other"
+}
+
+// kept lines, all lines, and the kind of every line written by hand.
+pub struct Rs2nikaScore {
+    kept: i64,
+    total: i64,
+    kinds: Vec[String]
+}
+
+pub fn rs2nika_score(draft: ref String, fin: ref String) -> Rs2nikaScore {
+    let mut have: Vec[String] = []
+    for l in draft.lines() {
+        let t = rs2nika_scored(l)
+        if t != "" {
+            have.push(t)
+        }
+    }
+    let mut used: Vec[bool] = []
+    for _h in have.clone() {
+        used.push(false)
+    }
+    let mut kept = 0
+    let mut total = 0
+    let mut kinds: Vec[String] = []
+    for l in fin.lines() {
+        let t = rs2nika_scored(l)
+        if t == "" {
+            continue
+        }
+        total = total + 1
+        let mut found = false
+        let mut i = 0
+        while i < have.len() && !found {
+            if !used[i] && have[i] == t {
+                used[i] = true
+                found = true
+            }
+            i = i + 1
+        }
+        if found {
+            kept = kept + 1
+        } else {
+            kinds.push(rs2nika_edit_kind(t).clone())
+        }
+    }
+    return Rs2nikaScore { kept: kept, total: total, kinds: kinds }
+}
+
+// `name floor profile prefix` per line of DIR/manifest; each NAME/ holds
+// before.rs (the Rust before the move, from git history) and after.nika (the
+// committed result). Fails when a score falls under its floor: a rule that
+// lowered it.
+fn rs2nika_corpus(dir: ref String) -> i64 {
+    let manifest = fs::read_to_string(f"{dir}/manifest", fs::Root::Anywhere) catch {
+        eprintln(f"cannot read {dir}/manifest: {error}")
+        return 1
+    }
+    let mut bad = 0
+    for line in manifest.lines() {
+        let cols: Vec[String] = line.split(" ").map(fn(c) { c.clone() }).collect()
+        if cols.len() < 3 {
+            continue
+        }
+        let name: String = cols[0].clone()
+        let floor: i64 = text::parse_i64(cols[1].clone()) ?? 0
+        let mut prefix: String = ""
+        if cols.len() > 3 {
+            prefix = cols[3].clone()
+        }
+        let before = fs::read_to_string(f"{dir}/{name}/before.rs", fs::Root::Anywhere) catch {
+            eprintln(f"cannot read {dir}/{name}/before.rs: {error}")
+            return 1
+        }
+        let after = fs::read_to_string(f"{dir}/{name}/after.nika", fs::Root::Anywhere) catch {
+            eprintln(f"cannot read {dir}/{name}/after.nika: {error}")
+            return 1
+        }
+        let out = rs2nika_convert(before, cols[2], prefix, "", [])
+        let s = rs2nika_score(out.text, after)
+        println(f"{name}: kept {s.kept} of {s.total} lines")
+        if s.kept < floor {
+            println(f"{name}: below its floor {floor}")
+            bad = bad + 1
+        }
+    }
+    return bad
+}
+
 fn main() throws {
     let mut profile: String = "check"
     let mut prefix: String = ""
     let mut stats = false
     let mut whole = false
     let mut lint = false
+    let mut score = false
+    let mut corpus: String = ""
     let mut repo: String = "?"
     let mut facts_path: String = ""
     let mut only: String = ""
@@ -4961,6 +5093,11 @@ fn main() throws {
             whole = true
         } else if arg == "--lint" {
             lint = true
+        } else if arg == "--score" {
+            score = true
+        } else if arg == "--corpus" {
+            at = at + 1
+            corpus = args[at].clone()
         } else if arg == "--profile" {
             at = at + 1
             profile = args[at].clone()
@@ -4976,12 +5113,38 @@ fn main() throws {
         } else if arg == "--repo" {
             at = at + 1
             repo = args[at].clone()
-        } else if lint {
+        } else if lint || score {
             lints.push(arg)
         } else {
             path = arg
         }
         at = at + 1
+    }
+    if corpus != "" {
+        let bad = rs2nika_corpus(corpus)
+        if bad > 0 {
+            process::exit(1)
+        }
+        return
+    }
+    if score {
+        if lints.len() != 2 {
+            eprintln("usage: rs2nika --score DRAFT FINAL")
+            process::exit(2)
+        }
+        let draft = fs::read_to_string(ref lints[0], fs::Root::Anywhere) catch {
+            eprintln(f"cannot read {lints[0]}: {error}")
+            return
+        }
+        let fin = fs::read_to_string(ref lints[1], fs::Root::Anywhere) catch {
+            eprintln(f"cannot read {lints[1]}: {error}")
+            return
+        }
+        let s = rs2nika_score(draft, fin)
+        println(f"kept {s.kept} of {s.total} lines")
+        let kinds: Vec[String] = s.kinds.clone()
+        print(rs2nika_stats(kinds))
+        return
     }
     if lint {
         let mut n = 0

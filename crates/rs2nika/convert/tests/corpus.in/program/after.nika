@@ -1,0 +1,238 @@
+// crates/nikaia-std/src/tools/check_program.nika
+//
+// **The checker's walk over a program's items** (ADR-294, #125, #558, C-7,
+// U-d5): every item of the file in turn, then the other files' calls of its
+// shape walks, then the body once per unrolled turn (ADR-304 D6, D7). Free
+// functions over the state, the world and the host.
+
+use std::collections
+
+/// **A test or a bench is code**, and nothing about it is exempt from the
+/// language's rules (Part III, 14.1 and 13.4): nothing produces these yet, so
+/// this is what stops their bodies from arriving unchecked on the day it does.
+fn check_program_body[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, body: ref Block) sync {
+    let outer: Ty? = state.expected?.clone()
+    state.expected = null
+    state.scope.push([])
+    check_core_block(state, world, host, body)
+    state.scope.pop()
+    state.expected = outer
+}
+
+/// **`NK1227`: the convention is not written** (ADR-324 D6).
+fn check_program_extern_convention(mut state: CheckState, abi: ref String, span: ref Span) sync {
+    let shown = f"\"{abi}\""
+    let note = "`extern` is the C calling convention, the only one on every target, so it is not written.".clone()
+    state.findings.push(CheckFinding {
+        severity: CheckSeverity::Error,
+        span: span.clone(),
+        code: "NK1227".clone(),
+        message: f"`extern` takes no convention, and this names `{shown}`.",
+        notes: [note],
+        help: "Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.".clone(),
+        labels: [],
+    })
+}
+
+/// **An `impl`'s methods**, each walked with the head's parameters in scope
+/// and the head's brackets as types (ADR-295 D2, D4).
+fn check_program_impl[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Type, methods: ref Vec[Spanned[Item]]) sync {
+    // An `impl`'s own parameters carry no bounds: the head writes
+    // `impl Stack[T]` and there is nowhere in it for a `: Summarize` to stand.
+    let mut outer: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for name in host.impl_parameters(target) {
+        outer.insert(name, [])
+    }
+    // **The head's own brackets, as types.** `impl Holder[T]` writes a
+    // parameter and `impl Holder[i64]` writes a type, and `type_of` needs to
+    // know nothing about which.
+    let mut arguments: Vec[Ty] = []
+    for g in target.generics {
+        arguments.push(host.type_of(g))
+    }
+    let named: String? = world.here.text(target.name)
+    for method in methods {
+        state.enclosing = outer.clone()
+        state.subject_arguments = arguments.clone()
+        check_function_function(state, world, host, method.node, method.span, named)
+    }
+    state.enclosing = collections::BTreeMap()
+    state.subject_arguments = []
+}
+
+/// **The program's items, one by one** (after the passes that are about the
+/// declarations, and before any body).
+pub fn check_program_program[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+    // **A frame under every body, filled before any of them is walked**
+    // (ADR-287): a `comptime` at item level is in scope for the whole file, so
+    // the name has to be there before the first `fn` is entered.
+    check_defaults_item_constants(state, world, host)
+    state.types_that_contain_themselves(world.here, world.beside)
+    // **Attributes** (ADR-331), before the bodies: they are about the
+    // declarations.
+    check_attributes_all(state, world, host)
+    for item in world.here.items {
+        match item.node {
+            // Walked by `item_constants` above, in a frame that stays.
+            Item::Comptime { .. } => {},
+            Item::Extern { abi, .. } => {
+                if abi != null {
+                    let written = abi.clone() ?? continue
+                    check_program_extern_convention(state, written, item.span)
+                }
+            },
+            Item::Fn { .. } => {
+                state.an_entry_point(world, item.node, item.span, false)
+                // **`main`'s parameters are the command line** (ADR-360 D2).
+                state.main_parameters(world, item.node, item.span)
+                check_function_function(state, world, host, item.node, item.span, null)
+            },
+            Item::Struct { fields, .. } => {
+                for field in fields {
+                    check_defaults_a_field_default(state, world, host, field)
+                }
+                state.an_extern_struct(world, item.node, item.span)
+            },
+            Item::Enum { .. } => {
+                state.an_extern_enum(world, item.node, item.span)
+            },
+            Item::Impl { target, methods, trait_name } => {
+                for method in methods {
+                    state.an_entry_point(world, method.node, method.span, trait_name != null)
+                }
+                if trait_name != null {
+                    let named = trait_name ?? continue
+                    let written = world.here.text(named)
+                    let owner = world.here.text(target.name)
+                    if written == "Cleanup" {
+                        state.a_cleanup_shaped(world, owner, methods, item.span)
+                    }
+                    if written == "Fatal" {
+                        state.a_fatal_type_that_is_no_error(world, owner, item.span)
+                    }
+                    state.a_trait_nothing_declares(world.here, world, written, item.span)
+                }
+                check_program_impl(state, world, host, target, methods)
+            },
+            Item::Test { body, .. } => {
+                check_program_body(state, world, host, body)
+            },
+            Item::Bench { body, .. } => {
+                check_program_body(state, world, host, body)
+            },
+            Item::Grammar(gram) => {
+                check_function_grammar(state, world, host, gram)
+            },
+            // **A `use` brings no name in, for `std` as for a package** (ADR-140 D5).
+            Item::Import { path, .. } => {
+                state.an_import_that_brings_a_name_in(world, path, item.span)
+            },
+            else => {},
+        }
+    }
+}
+
+/// **The instantiations that stand in the program's other files**
+/// (ADR-304 D6): a copy is written by the unit that declares the function,
+/// and which copies there are is decided at the **call**, which may stand in
+/// any file of the package. Nothing to ask about costs nothing: a unit that
+/// declares no shape walk returns before a second file is looked at.
+pub fn check_program_instantiations_beside[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+    if state.flow.harvesting || world.beside.len() == 0 {
+        return
+    }
+    let mut mine: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in world.here.items {
+        match item.node {
+            Item::Fn { name, .. } => {
+                let written = name ?? continue
+                let spelled = world.here.text(written)
+                if state.walks_fields.contains_key(spelled) {
+                    mine.insert(spelled.clone())
+                }
+            },
+            else => {},
+        }
+    }
+    if mine.len() == 0 {
+        return
+    }
+    // **This unit's own calls win**, because they were typed by the walk that
+    // also holds the spans: the two agree, and a harvest that disagreed would
+    // be a second answer to a question already answered.
+    for (key, fields) in host.instantiations_beside(state.modules, mine) {
+        if !state.facts.unrolled.contains_key(key) {
+            state.facts.unrolled.insert(key.clone(), fields)
+        }
+    }
+}
+
+/// One function's body, once per field of the type it is unrolled over.
+fn check_program_turns[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, item: ref Item, span: ref Span, name: ref String, on: ref String, fields: ref Vec[FieldContract]) sync {
+    for field in fields {
+        let before = state.findings.len()
+        let outer: CheckUnrolling? = state.flow.unrolling?.clone()
+        state.flow.unrolling = CheckUnrolling { on: on.clone(), field: field.clone() }
+        check_function_function(state, world, host, item, span, null)
+        state.flow.unrolling = outer
+        // **What the generic walk already said is not said again.** The same
+        // body was walked once with nothing known, and a message from that
+        // walk is about the **function**, so repeating it once per field would
+        // turn one mistake into as many as the type has fields.
+        let mut already: collections::BTreeSet[(String, u32)] = collections::BTreeSet()
+        let mut at = 0
+        while at < before {
+            already.insert((state.findings[at].code.clone(), state.findings[at].span.start))
+            at += 1
+        }
+        let isenum = state.enums.contains_key(on)
+        let mut member = "fields"
+        let mut one = "field"
+        if isenum {
+            member = "variants"
+            one = "variant"
+        }
+        let walker = state.walks_fields.get(name)?.clone() ?? "T".clone()
+        let said = f"This happened while going through `{walker}::{member}` for `{on}`, at the {one} `{field.name}`."
+        let mut fresh: Vec[CheckFinding] = []
+        let mut next = before
+        while next < state.findings.len() {
+            let mut found = state.findings[next].clone()
+            if !already.contains((found.code.clone(), found.span.start)) {
+                found.notes.push(said.clone())
+                fresh.push(found)
+            }
+            next += 1
+        }
+        state.findings.truncate(before)
+        for found in fresh {
+            state.findings.push(found.clone())
+        }
+    }
+}
+
+/// **The body, once per unrolled turn** (ADR-304 D7): `field.of(value)` has a
+/// different type in each turn, so there is no one type to check the body
+/// against, and a body that is wrong for one field is **right** for the
+/// others. After the ordinary walk, because the instantiations are what that
+/// walk found.
+pub fn check_program_unroll[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+    let mut instantiations: Vec[(String, String, Vec[FieldContract])] = []
+    for ((name, on), fields) in state.facts.unrolled {
+        instantiations.push((name.clone(), on.clone(), fields.clone()))
+    }
+    for (name, on, fields) in instantiations {
+        for item in world.here.items {
+            match item.node {
+                Item::Fn { name: written, .. } => {
+                    let called = written ?? continue
+                    if world.here.text(called) == name {
+                        check_program_turns(state, world, host, item.node, item.span, name, on, fields)
+                        break
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+}
