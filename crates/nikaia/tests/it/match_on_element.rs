@@ -17,7 +17,11 @@ fn run(purpose: &str, call: &str, extra: &str) -> String {
         .output()
         .expect("the nikaia binary runs");
     std::fs::remove_dir_all(&dir).ok();
-    assert!(out.status.success(), "{purpose}: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{purpose}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     String::from_utf8_lossy(&out.stdout).to_string()
 }
 

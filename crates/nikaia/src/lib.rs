@@ -9,8 +9,8 @@
 #![recursion_limit = "256"]
 
 pub mod assets;
-pub(crate) mod baton;
 pub mod ast;
+pub(crate) mod baton;
 pub mod bounds;
 pub mod bounds_report;
 pub mod build_time;
