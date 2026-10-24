@@ -44,6 +44,7 @@ nikaia test --bless            # write the expectations from what the program di
 | [`hello-http/`](hello-http/) | a **server**, and a program that reaches `http` **by a path**: one address and one function that decides | ✅ `crates/nikaia/tests/project.rs`, over a real socket |
 | [`sqlite/`](sqlite/) | a real **C library**, end to end: a buffer, two handles with their `cleanup`, an out-parameter and text the library owns | ✅ `crates/nikaia/tests/foreign_pointers.rs`, skipped where the machine has no `libsqlite3` |
 | [`c-library/`](c-library/) | the other direction: a **library C calls**, with a handle, text into the caller's buffer, an `enum` and a callback | ✅ `crates/nikaia/tests/c_library.rs`, with its C program |
+| [`crate-ledger/`](crate-ledger/) | two of the repository's `unsafe` crates, `crc32c` and `low_bits`, called through `use` under the **ledgers they ship** (ADR-290 D22), at `--cpu=x86-64-v3` | ✅ `crates/nikaia/tests/shipped_ledger.rs` |
 
 Each of the twelve programs - eleven of them packages now - is compiled and run **at both
 settings**, and their output must be identical — that is the claim the switches rest on, and a test is where it belongs

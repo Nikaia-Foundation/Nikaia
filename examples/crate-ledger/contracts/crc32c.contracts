@@ -1,0 +1,23 @@
+# The boundary of `crc32c`, as this crate ships it to a Nikaia program
+# ([ADR-290](../../../docs/specification/adr/adr-290.md) D22, Part III 15.2).
+#
+# Drafted by `nikaia describe crc32c` and reviewed against `src/lib.rs`.
+# The scope is #788's: the safe free functions that take no type parameter.
+# An `unsafe fn` is left out, so a call to one stays NK1171. Methods and
+# generic results are left out until #789. `nikaia.derived` beside this
+# file records the sources it was reviewed against: a change to them
+# makes `nikaia describe` refuse this file until it is reviewed again.
+#
+# crate: crc32c 0.1.0
+version = 4
+
+# Only where the build enables SSE 4.2 (`cfg(all(target_arch = "x86_64",
+# target_feature = "sse4.2"))`, `--cpu=x86-64-v3`): one `crc32` instruction,
+# no memory, no lock, no thread, and no failure.
+[fn."crc32c::u64"]
+pub = true
+sync = true
+touches = []
+locks = false
+threads = false
+signature = "(crc: u32, word: u64) -> u32"

@@ -1,0 +1,13 @@
+[package]
+name = "crate-ledger"
+version = "0.1.0"
+
+# Two of the repository's `unsafe` crates, called directly from Nikaia through
+# `use` (#788). Each ships its reviewed `nikaia.contracts` beside its
+# `Cargo.toml` ([ADR-290](../../docs/specification/adr/adr-290.md) D22), and
+# `nikaia describe crc32c` and `nikaia describe low_bits` adopted those into
+# `contracts/`. Both functions exist only where the build enables SSE 4.2 and
+# BMI2, so the program is built with `--cpu=x86-64-v3`.
+[dependencies]
+crc32c = { type = "rust", path = "../../crates/unsafe/crc32c" }
+low-bits = { type = "rust", path = "../../crates/unsafe/low-bits" }

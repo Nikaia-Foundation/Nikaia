@@ -1,0 +1,17 @@
+// Two instructions of the build's CPU, reached through the crates that
+// wrap them: `crc32c::u64` is one `crc32`, `low_bits::u64` one `bzhi`.
+use crc32c
+use low_bits
+
+fn main() {
+    // "123456789abcdefg" as two little-endian words.
+    let words: Vec[u64] = [0x3837363534333231, 0x6766656463626139]
+    let mut crc: u32 = 0xFFFFFFFF
+    for word in words {
+        crc = crc32c::u64(crc, word)
+    }
+    println(f"crc32c: {crc ^ 0xFFFFFFFF}")
+    let all: u64 = 0xFFFFFFFFFFFFFFFF
+    println(f"low 12 bits: {low_bits::u64(all, 12)}")
+    println(f"low 40 bits of a u32: {low_bits::u32(0xDEADBEEF, 40)}")
+}

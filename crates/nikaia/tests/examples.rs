@@ -72,6 +72,13 @@ const DIRECTORIES_CHECKED_ELSEWHERE: &[(&str, &str)] = &[
         "c-library",
         "tests/c_library.rs: the_example_builds_and_its_c_program_runs",
     ),
+    // **Two `unsafe` crates through `use`, under the ledgers they ship**
+    // (#788). Both functions exist only at `--cpu=x86-64-v3`, which an output
+    // test cannot ask for, so its test runs it at that level.
+    (
+        "crate-ledger",
+        "tests/shipped_ledger.rs: the_crate_ledger_example_runs",
+    ),
 ];
 
 #[test]

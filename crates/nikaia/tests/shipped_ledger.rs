@@ -154,3 +154,94 @@ fn a_shipped_ledger_for_another_version_is_refused() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// The repository's `unsafe` crates that ship a ledger (#788 step 4), by
+/// directory and by the word a program writes. The other ten have no safe,
+/// non-generic free function, which is all a shipped ledger lists until #789.
+const SHIPPING: &[(&str, &str)] = &[
+    ("crc32c", "crc32c"),
+    ("low-bits", "low_bits"),
+    ("child-usage", "child_usage"),
+    ("checked-text", "checked_text"),
+];
+
+/// A project that depends on each of `crates` (directory, word) by an
+/// absolute path, with `entry` as its program.
+fn a_project_on(purpose: &str, crates: &[(&str, &str)], entry: &str) -> PathBuf {
+    let dir = common::scratch_dir(purpose);
+    std::fs::create_dir_all(dir.join("src")).expect("src");
+    let unsafe_crates = repo_root()
+        .join("crates/unsafe")
+        .canonicalize()
+        .expect("crates/unsafe");
+    let mut manifest =
+        String::from("[package]\nname = \"probe\"\nversion = \"0.1.0\"\n\n[dependencies]\n");
+    for (directory, _) in crates {
+        manifest.push_str(&format!(
+            "{directory} = {{ type = \"rust\", path = \"{}\" }}\n",
+            unsafe_crates.join(directory).display()
+        ));
+    }
+    std::fs::write(dir.join("nikaia.toml"), manifest).expect("manifest");
+    std::fs::write(dir.join("src/main.nika"), entry).expect("entry");
+    dir
+}
+
+/// **Every shipped ledger still describes its crate**: a change to a crate's
+/// sources without another review of its `nikaia.contracts` fails here, as
+/// `nikaia describe` would refuse it in every project that adopts it.
+#[test]
+fn every_unsafe_crate_ledger_is_adopted() {
+    let dir = a_project_on("shipped-unsafe", SHIPPING, "fn main() {\n}\n");
+    for (directory, word) in SHIPPING {
+        let adopted = nikaia(&["describe", word], &dir);
+        assert!(
+            adopted.status.success() && said(&adopted).contains("adopted"),
+            "crates/unsafe/{directory}: {}",
+            said(&adopted)
+        );
+        let shipped = repo_root().join(format!("crates/unsafe/{directory}/nikaia.contracts"));
+        assert_eq!(
+            std::fs::read_to_string(dir.join(format!("contracts/{word}.contracts"))).ok(),
+            std::fs::read_to_string(shipped).ok(),
+            "{word}"
+        );
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`examples/crate-ledger` runs** (#788 step 5): two `unsafe` crates called
+/// from Nikaia through `use`, under the descriptions they ship. Its committed
+/// `contracts/` are what `describe` adopts today, and its output is the
+/// CRC-32C a bitwise reference gives. Both functions are gated on the CPU
+/// level, so the run is `--cpu=x86-64-v3`, on x86-64 Linux as
+/// `tests/hash_crc32c.rs` runs it.
+#[test]
+fn the_crate_ledger_example_runs() {
+    let example = repo_root().join("examples/crate-ledger");
+    let entry = std::fs::read_to_string(example.join("src/main.nika")).expect("the example");
+    let crates = [("crc32c", "crc32c"), ("low-bits", "low_bits")];
+    let dir = a_project_on("shipped-example", &crates, &entry);
+    for (_, word) in crates {
+        let adopted = nikaia(&["describe", word], &dir);
+        assert!(adopted.status.success(), "{}", said(&adopted));
+        for kind in ["contracts", "derived"] {
+            let file = format!("contracts/{word}.{kind}");
+            assert_eq!(
+                std::fs::read_to_string(dir.join(&file)).ok(),
+                std::fs::read_to_string(example.join(&file)).ok(),
+                "examples/crate-ledger/{file} is not what `nikaia describe {word}` adopts"
+            );
+        }
+    }
+    if cfg!(all(target_arch = "x86_64", target_os = "linux")) {
+        let run = nikaia(&["run", "--cpu=x86-64-v3"], &dir);
+        assert_eq!(
+            String::from_utf8_lossy(&run.stdout),
+            "crc32c: 1889714756\nlow 12 bits: 4095\nlow 40 bits of a u32: 3735928559\n",
+            "{}",
+            said(&run)
+        );
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
