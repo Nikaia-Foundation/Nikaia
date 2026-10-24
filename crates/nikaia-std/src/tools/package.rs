@@ -37706,6 +37706,76 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_method_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let hoisted = self.emit_method_hoisted(world, receiver, args);
+        if hoisted.is_empty() {
+            walk.hoisted_args = None;
+            self.emit_core_method_call_body(world, walk, out, host, receiver, on_node, method, args, config, depth, flow, scope)?;
+            return Ok(());
+        }
+        let mut inner = EmitOut::empty();
+        walk.hoisted_args = Some(hoisted);
+        walk.hoisted_lets = None;
+        self.emit_core_method_call_body(world, walk, &mut inner, host, receiver, on_node, method, args, config, depth, flow, scope)?;
+        walk.hoisted_args = None;
+        let lets: EmitOut = nikaia_std::index::or(match walk.hoisted_lets.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || EmitOut::empty());
+        walk.hoisted_lets = None;
+        if lets.buf == "" {
+            out.append(inner);
+            return Ok(());
+        }
+        out.push("({ ");
+        out.append(lets);
+        out.append(inner);
+        out.push(" })");
+        Ok(())
+    }
+    fn emit_method_hoisted(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: Option<&Expr>, args: &[Expr]) -> Vec<i64> {
+        let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        if !emit_pure_place(on) { return vec![]; }
+        let mut last = -1;
+        let root = root_of(world.words, on);
+        if root.is_some() {
+            let name = nikaia_std::index::or(root, || "".into());
+            let mut j = 0;
+            for later in args.iter() {
+                if made_in_the_call(later) && !emit_arg_is_closure(later) && self.emit_lends_mut(world, later, &name) { last = j; }
+                j += 1;
+            }
+        }
+        let mut i = 0;
+        for arg in args.iter() {
+            if self.facts.mut_args.contains(&node_key(arg)) {
+                let lent_root = root_of(world.words, arg);
+                if lent_root.is_some() {
+                    let lent_name = nikaia_std::index::or(lent_root, || "".into());
+                    let mut j = 0;
+                    for later in args.iter() {
+                        if j > i && j > last && made_in_the_call(later) && !emit_arg_is_closure(later) && emit_mentions(world, later, &lent_name) { last = j; }
+                        j += 1;
+                    }
+                }
+            }
+            i += 1;
+        }
+        let mut hoisted: Vec<i64> = vec![];
+        let mut k = 0;
+        for arg in args.iter() {
+            if k <= last && made_in_the_call(arg) && !emit_arg_is_closure(arg) && !self.facts.mut_args.contains(&node_key(arg)) { hoisted.push(k); }
+            k += 1;
+        }
+        hoisted
+    }
+    fn emit_lends_mut(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
+        for each in visited_in_expr(expr) { if self.facts.mut_args.contains(&node_key(each)) && nikaia_std::index::or(root_of(world.words, each), || "".into()) == name { return true; } }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_core_method_call_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let name = emit_text(world, method);
         if self.emit_call_chars(world, walk, out, host, receiver, &name, args, depth, flow, scope)? { return Ok(()); }
         if receiver.is_some() && args.len() == 1 {
@@ -37714,7 +37784,7 @@ impl EmitState {
                 Expr::Variable(named, _) => {
                     let named = *named;
                     let written = emit_text(world, named);
-                    if self.grammars.contains_key(&written) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("A grammar's rules are reached with `::`, not a dot. Write `{}::{}(…)`.", written, name), at: Some(flow.statement) }, &"emit_core_method_call")); }
+                    if self.grammars.contains_key(&written) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("A grammar's rules are reached with `::`, not a dot. Write `{}::{}(…)`.", written, name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
                 },
                 _ => { },
             }
@@ -37920,9 +37990,9 @@ impl EmitState {
             if self.facts.counted.contains(&node_key(on)) { out.push(".map(|at| at as i64)"); }
         }
         if boxed { out.push(")"); }
-        if self.facts.pausing_walks.contains(&on_node) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", name), at: Some(flow.statement) }, &"emit_core_method_call")); }
+        if self.facts.pausing_walks.contains(&on_node) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
         if self.method_pauses(on_node) {
-            if flow.in_lambda { return Err(nikaia_std::error::raise(EmitRefused { message: format!("This lambda calls `{}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{}` outside the lambda and pass in the value.", name, name), at: Some(flow.statement) }, &"emit_core_method_call")); }
+            if flow.in_lambda { return Err(nikaia_std::error::raise(EmitRefused { message: format!("This lambda calls `{}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{}` outside the lambda and pass in the value.", name, name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
             out.push(".await");
         }
         let fails = self.method_can_fail(on_node);
@@ -38082,6 +38152,15 @@ impl EmitState {
         let contract = match self.type_contract(world, owner) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         for variant in contract.variants.iter() { if variant.name == field { return variant.attributes.to_owned(); } }
         vec![]
+    }
+}
+
+fn emit_pure_place(expr: &Expr) -> bool {
+    match expr {
+        Expr::Variable(_, _) => true,
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); emit_pure_place(base) },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); emit_pure_place(base) && !made_in_the_call(index) },
+        _ => false,
     }
 }
 

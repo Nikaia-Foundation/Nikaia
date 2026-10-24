@@ -717,6 +717,98 @@ impl EmitState {
     /// ADR-023 D8's `?`. `receiver` is `null` for the safe form, where the
     /// receiver is the name the enclosing `match` already bound.
     pub fn emit_core_method_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **An argument that lends the receiver's local to a `mut` parameter
+        // is bound before the call**, as a call's is (`emit_core_call`): Rust
+        // borrows the receiver from before the arguments to the call, so
+        // `w.add(g(w))` is `({ let a = g(&mut w); w.add(a) })`. Only on a
+        // receiver that is a place, which nothing is done to evaluate.
+        let hoisted = self.emit_method_hoisted(world, receiver, args)
+        if hoisted.len() == 0 {
+            walk.hoisted_args = null
+            self.emit_core_method_call_body(world, walk, out, host, receiver, on_node, method, args, config, depth, flow, scope)
+            return
+        }
+        let mut inner = EmitOut::empty()
+        walk.hoisted_args = hoisted
+        walk.hoisted_lets = null
+        self.emit_core_method_call_body(world, walk, inner, host, receiver, on_node, method, args, config, depth, flow, scope)
+        walk.hoisted_args = null
+        let lets: EmitOut = (walk.hoisted_lets?.clone() ?? EmitOut::empty())
+        walk.hoisted_lets = null
+        if lets.buf == "" {
+            out.append(inner)
+            return
+        }
+        out.push("({ ")
+        out.append(lets)
+        out.append(inner)
+        out.push(" })")
+    }
+
+    /// The arguments of a method call bound before it: none, unless one is
+    /// made in the call and lends the local the receiver, or an earlier
+    /// argument lent to a `mut` parameter, is rooted in to a `mut`
+    /// parameter or mentions that earlier argument's local. Then every
+    /// argument up to the last such one that is made in the call, is not code
+    /// and is not itself lent to a `mut` parameter.
+    fn emit_method_hoisted(ref self, world: ref EmitWorld, receiver: ref Expr?, args: ref Vec[Expr]) -> Vec[i64] {
+        let on = receiver ?? return []
+        if !emit_pure_place(on) {
+            return []
+        }
+        let mut last = -1
+        let root = root_of(world.words, on)
+        if root != null {
+            let name = root ?? ""
+            let mut j = 0
+            for later in args {
+                if made_in_the_call(later) && !emit_arg_is_closure(later) && self.emit_lends_mut(world, later, name) {
+                    last = j
+                }
+                j += 1
+            }
+        }
+        let mut i = 0
+        for arg in args {
+            if self.facts.mut_args.contains(node_key(arg)) {
+                let lent_root = root_of(world.words, arg)
+                if lent_root != null {
+                    let lent_name = lent_root ?? ""
+                    let mut j = 0
+                    for later in args {
+                        if j > i && j > last && made_in_the_call(later) && !emit_arg_is_closure(later) && emit_mentions(world, later, lent_name) {
+                            last = j
+                        }
+                        j += 1
+                    }
+                }
+            }
+            i += 1
+        }
+        let mut hoisted: Vec[i64] = []
+        let mut k = 0
+        for arg in args {
+            if k <= last && made_in_the_call(arg) && !emit_arg_is_closure(arg) && !self.facts.mut_args.contains(node_key(arg)) {
+                hoisted.push(k)
+            }
+            k += 1
+        }
+        return hoisted
+    }
+
+    /// Whether `expr` hands the local `name`, or a part of it, to a `mut`
+    /// parameter anywhere in it.
+    fn emit_lends_mut(ref self, world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool {
+        for each in visited_in_expr(expr) {
+            if self.facts.mut_args.contains(node_key(each)) && (root_of(world.words, each) ?? "") == name {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// The method call, its arguments bound or not.
+    fn emit_core_method_call_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
         // **`text.chars().collect()` is a list of characters asked for at its
         // size** (`nikaia_std::list::chars`): the same list, without the growing a
@@ -1335,5 +1427,16 @@ impl EmitState {
             }
         }
         return []
+    }
+}
+
+/// A place nothing is done to evaluate: a local, a field of one, or an element
+/// at a local or a literal.
+fn emit_pure_place(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(_, _) => true,
+        Expr::Field { base, .. } => emit_pure_place(base),
+        Expr::Index { base, index, .. } => emit_pure_place(base) && !made_in_the_call(index),
+        else => false,
     }
 }

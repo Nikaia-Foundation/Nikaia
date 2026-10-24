@@ -896,3 +896,42 @@ fn a_mut_argument_used_again_in_a_later_argument() {
         |_| {},
     );
 }
+
+/// **The same for a method call's receiver** (#785): `w.add(g(w, 1))` lowered
+/// to `w.add(g(&mut w, 1))`, which `rustc` refused (`E0499`): the receiver's
+/// `&mut` is taken before the arguments. The argument is bound first, and so
+/// is every argument before it that does something, so `trace` still runs in
+/// order; a field as the receiver too.
+#[test]
+fn a_method_receiver_lent_again_in_an_argument() {
+    runs_in(
+        "method-receiver-lent-again",
+        "struct W { n: i64 }\n\
+         struct S { w: W }\n\
+         impl W {\n\
+         \x20   fn add(ref mut self, k: i64) { self.n = self.n + k }\n\
+         \x20   fn put(ref mut self, a: i64, v: i64, s: i64) {\n\
+         \x20       self.n = self.n * 100 + a + v + s\n\
+         \x20   }\n\
+         }\n\
+         fn g(mut w: W, x: i64) -> i64 {\n\
+         \x20   w.n = w.n * 10 + x\n\
+         \x20   return w.n\n\
+         }\n\
+         fn trace(x: i64) -> i64 {\n\
+         \x20   println(f\"trace {x}\")\n\
+         \x20   return x\n\
+         }\n\
+         fn main() {\n\
+         \x20   let mut w = W { n: 0 }\n\
+         \x20   w.add(g(w, 1))\n\
+         \x20   w.put(trace(1), g(w, 2), trace(3))\n\
+         \x20   println(f\"{w.n}\")\n\
+         \x20   let mut s = S { w: W { n: 1 } }\n\
+         \x20   s.w.put(0, g(s.w, 4), 0)\n\
+         \x20   println(f\"{s.w.n}\")\n\
+         }\n",
+        "trace 1\ntrace 3\n2226\n1414\n",
+        |_| {},
+    );
+}
