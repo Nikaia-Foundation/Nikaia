@@ -94,6 +94,8 @@ rules above bring in the *Runs* table, then decide on more agents at once.
 * **Think little on mechanical work.** A move by the call graph needs the
   graph, not deliberation. Deliberate where a design choice is open, and then
   stop and report it instead of guessing.
+* **The architect is a standing role** (`.claude/agents/architect.md`, charter
+  in [`architect.md`](architect.md)): started and restarted by the main session.
 * **Architecture goes to one Opus agent on high effort, read-only, with a
   question and a page limit** (the plans of 2026-10-11 cost 7-21 M each, a
   fraction of one long build agent). It returns a decision and ordered steps;

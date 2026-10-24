@@ -1,0 +1,89 @@
+# The architect and the main session
+
+How work is organised when a session is started by the owner. Rules for the
+agents' tokens are in [`tokensaverstrategy.md`](tokensaverstrategy.md); the
+rules for commits are in `CLAUDE.md`.
+
+## Roles
+
+| Role | Who | Tools | Job |
+| :--- | :--- | :--- | :--- |
+| Owner | the person | - | Sets goals, stages and priorities; decides what is theirs |
+| Main session | the session the owner started | all | Talks to the owner; starts and restarts the architect; starts builders from the architect's work orders; watches cost; carries information between them |
+| Architect | `.claude/agents/architect.md`, Opus | read, search, `Bash`, `Edit`/`Write` for docs, GitHub issues read/write | Decides what is built next and how; writes ADR and specification text; keeps issues current; improves the process |
+| Builder | `.claude/agents/builder.md` | six file and shell tools, no GitHub | Builds one or two steps, commits, pushes, reports, ends |
+
+The architect cannot start agents (a subagent has no `Agent` tool). So the
+architect **coordinates by orders**, and the main session carries them out.
+
+## The loop
+
+1. The owner states a wish or answers a question to the main session.
+2. The main session starts the architect with a short task: the wish, the issue
+   numbers, and the last report. Nothing else; the state is in the repository.
+3. The architect returns (at most 40 lines): the decision, **one work order**,
+   the repository and issue changes it made, and questions for the owner.
+4. The main session relays the owner's questions, and the answers go back to
+   the architect (a fresh one, or the same while it is young).
+5. The main session starts one builder with the work order. The builder builds,
+   commits, pushes, reports and ends.
+6. The main session reads the builder's report, puts it into the next
+   architect task (the report, not the transcript), and goes to 2. A builder
+   that hit an error does not go on: its report goes to the architect, whose next
+   order is the repair (compiler defect first, `CLAUDE.md`'s *Fix, do not work
+   around*), then the step that was blocked.
+
+## The work order
+
+What the architect hands the main session for a builder, in this form:
+
+* **Issue and steps**: `#N`, the one or two steps of its *To build* list.
+* **Files**: the files to read first, and the files the builder may change.
+* **Probes**: the whole matrix of cases to run after the single build.
+* **Done when**: the tests to run, the commit message line (`Fixes #N` only for
+  the last step).
+* **Stop and report if**: an open design choice, an error in another file.
+* **Two lines of context** the builder cannot find in the repository.
+
+## The main session's duties
+
+* **Cost watch.** Look at each agent's size. A builder past about 120 turns or
+  200k context is told to push what is verified and end. An architect past about
+  80 turns or 150k context ends the same way. Restart with a fresh agent; never
+  resume one for a second slice.
+* **Hand-over.** A fresh agent gets: the task, the issue numbers, the two or
+  three facts that are in no file. If a fact will be needed again, it is written
+  to the repository (the architect's *State* below, a doc, a commit message), not
+  carried in the prompt.
+* **Owner channel.** The owner talks to the main session only. When the
+  architect needs a decision, the main session asks the owner, following
+  `CLAUDE.md`'s *Decision rounds* (introduction from zero first).
+* **Supervisor duties** from `CLAUDE.md` stay with the main session: version
+  raises, `CHANGELOG.md`, badges, reserved `NK` blocks, rebases, a red `develop`.
+* **No building in the main session**, except what a work order cannot reach.
+
+## Stages
+
+The owner sets the stage and moves to the next. Each stage ends with a short
+note in *State* on what it measured.
+
+| Stage | Rule | Goal |
+| :--- | :--- | :--- |
+| 1 Serial | One builder at a time. A defect found on the way is repaired first, by the same chain (architect orders, builder repairs), then the work resumes | Self-hosting forward (#125, `selfhosting-plan.md`); the right tools; the tools improved by the tools; compiler defects fixed |
+| 2 Two | A second builder works on parts the first does not touch (the architect names the files of each). Each commits only its own files; the main session rebases | Speed, once stage 1 has removed the common stalls |
+| 3 More | Decided by the owner, with the figures of stage 2 | |
+
+## Self-optimisation
+
+Every cycle the architect looks at the builder reports for waste: turns on
+polling, repeated builds, a missed rule, a chafing tool, a missing script. It
+changes the rule or the tool at the source and notes the figure in
+[`tokenspeed.md`](tokenspeed.md). The measure is tokens and turns per finished
+step, and steps finished per day; counted, not timed (`CLAUDE.md`, *Measuring
+performance*).
+
+## State
+
+*Updated by the architect when it ends.* Stage: 1. Current issue: none yet.
+Next order: the architect's first task is to read the self-hosting plan and
+issue list, and return the first work order.
