@@ -55,7 +55,7 @@ def ts(s):
 
 def agents(directory):
     rows = []
-    for f in sorted(Path(directory).glob("agent-*.jsonl")):
+    for f in sorted([*Path(directory).glob("agent-*.jsonl"), *Path(directory).glob("*.output")]):
         stamps, turns, ctx, out, first = [], 0, 0, 0, ""
         for l in f.open():
             try:
@@ -81,7 +81,7 @@ def agents(directory):
         else:
             i, j = head.find("emit"), head.find("check")
             module = "plan" if i < 0 and j < 0 else "emit" if j < 0 or (0 <= i < j) else "check"
-        rows.append(dict(id=f.stem[6:12], module=module, start=min(stamps), end=max(stamps),
+        rows.append(dict(id=f.stem.removeprefix("agent-")[:6], module=module, start=min(stamps), end=max(stamps),
                          turns=turns, ctx=ctx, out=out, minutes=active / 60, task=re.sub(r"\s+", " ", first)[:50]))
     return rows
 
