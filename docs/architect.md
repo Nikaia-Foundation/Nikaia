@@ -45,8 +45,12 @@ What the architect hands the main session for a builder, in this form:
 * **Issue and steps**: `#N`, the one or two steps of its *To build* list.
 * **Files**: the files to read first, and the files the builder may change.
 * **Probes**: the whole matrix of cases to run after the single build.
-* **Done when**: the tests to run, the commit message line (`Fixes #N` only for
-  the last step).
+* **Done when**: the touched tests to run (never the full suite: CI runs it on
+  the push), the commit message line (`Fixes #N` only for the last step).
+* **Measure**: none, unless the step's point is a number. Then the count to
+  report (a work count the tool prints, such as files re-lowered, comes
+  first) and the smallest input for callgrind; never callgrind over a whole
+  `lower-std` or a test run ([`long-jobs.md`](long-jobs.md)).
 * **Stop and report if**: an open design choice, an error in another file.
 * **Two lines of context** the builder cannot find in the repository.
 
@@ -56,6 +60,10 @@ What the architect hands the main session for a builder, in this form:
   200k context is told to push what is verified and end. An architect past about
   80 turns or 150k context ends the same way. Restart with a fresh agent; never
   resume one for a second slice.
+* **CI watch.** After each builder's push, one background call
+  `gh run watch <run id> --exit-status` on that commit's run; it wakes the
+  session at the end, no polling. The next builder starts meanwhile. A red
+  run goes to the architect, whose next order is the repair.
 * **Hand-over.** A fresh agent gets: the task, the issue numbers, the two or
   three facts that are in no file. If a fact will be needed again, it is written
   to the repository (the architect's *State* below, a doc, a commit message), not
@@ -103,6 +111,9 @@ real cycle (edit one .nika, rebuild) always misses; order is per-file keys on
 file + package interface, then step 4. Then U-d3 .. U-d6, then E10/E11.
 Modular compiler (owner's question): basis in `modular-compiler.md`, #793
 (`decision`); #667 step 4 is the next order after the current #667 builder.
+Long jobs (owner's question): basis in `long-jobs.md`, #794 (`decision`); no measuring agent; CI is the verifier, the main
+session watches it. develop red since 9f090392 (badges check, arm64 Test):
+the repair comes before the next step.
 Known risk for new tools files: #791 (methods matched by bare name).
 Parked: branch `wip/bounding-candidates-2026-10-19` (loop counter candidates in
 the bounds analysis, ~24 lines, 120 versions stale): not merged, no order until
