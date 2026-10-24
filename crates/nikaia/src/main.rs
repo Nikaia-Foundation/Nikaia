@@ -809,7 +809,8 @@ fn test_command(
         nikaia::modules::Program::read_for_tests(&project.entry(), &project.packages()?, true)?
             .tests;
     let outputs = project::output_tests(&project.root)?;
-    if tests.is_empty() && outputs.is_empty() {
+    let program_tests = project::program_tests(&project.root)?;
+    if tests.is_empty() && outputs.is_empty() && program_tests.is_empty() {
         println!(
             "no tests: nothing in this package is a `test \"…\" {{ … }}` block, and \
              `tests/` holds no `NAME.stdout` and no `NAME.out/`"
@@ -874,6 +875,8 @@ fn test_command(
         outputs: &outputs,
         programs: &programs,
         root: &project.root,
+        programs_of_their_own: &program_tests,
+        settings: &settings,
         bless,
     })
 }

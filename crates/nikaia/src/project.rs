@@ -3711,6 +3711,8 @@ pub struct OutputTest {
     pub dir: PathBuf,
     /// `NAME.stdout`, where there is one.
     pub stdout: Option<Vec<u8>>,
+    /// `NAME.stderr`, where there is one (ADR-269 D22).
+    pub stderr: Option<Vec<u8>>,
     /// `NAME.out/`: each file by the name it has under the working directory.
     pub files: Vec<(String, Vec<u8>)>,
     /// `NAME.in/`, copied into the working directory before the run.
@@ -3774,6 +3776,8 @@ pub fn output_tests(root: &Path) -> Result<Vec<OutputTest>> {
             Err(error) => Err(error).with_context(|| format!("reading {}", path.display())),
         }
     };
+    // A `NAME.nika` beside them makes the files that program's (D22).
+    names.retain(|name| !dir.join(format!("{name}.nika")).is_file());
     names
         .into_iter()
         .map(|name| {
@@ -3800,10 +3804,12 @@ pub fn output_tests(root: &Path) -> Result<Vec<OutputTest>> {
                         .collect()
                 })
                 .unwrap_or_default();
+            let stderr = optional(dir.join(format!("{name}.stderr")))?;
             Ok(OutputTest {
                 name,
                 dir: dir.clone(),
                 stdout,
+                stderr,
                 files,
                 inputs,
                 stdin,
@@ -3894,6 +3900,10 @@ pub struct Suite<'a> {
     /// One build of the program per setting, where there are output tests.
     pub programs: &'a [(String, PathBuf)],
     pub root: &'a Path,
+    /// The test programs, `tests/NAME.nika` (ADR-269 D22).
+    pub programs_of_their_own: &'a [ProgramTest],
+    /// The `user_parallelism` settings each runs at.
+    pub settings: &'a [String],
     /// `--bless` ([ADR-247](../../docs/specification/adr/adr-247.md) D3).
     pub bless: bool,
 }
@@ -3911,7 +3921,7 @@ pub struct Suite<'a> {
 /// difference is a fault of this compiler. A failing test does not stop the
 /// others.
 pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
-    let total = suite.tests.len() + suite.outputs.len();
+    let total = suite.tests.len() + suite.outputs.len() + suite.programs_of_their_own.len();
     let plural = if total == 1 { "" } else { "s" };
     println!("running {total} test{plural}");
     let mut failed: Vec<Failed<'_>> = Vec::new();
@@ -3963,6 +3973,10 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 .stdout
                 .as_ref()
                 .is_none_or(|want| *want == out.stdout);
+            let said_right = output
+                .stderr
+                .as_ref()
+                .is_none_or(|want| *want == out.stderr);
             let wrote_right = output
                 .files
                 .iter()
@@ -3972,7 +3986,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 setting.clone(),
                 Outcome {
                     ended_well,
-                    passed: ended_well && printed_right && wrote_right,
+                    passed: ended_well && printed_right && said_right && wrote_right,
                     stdout: out.stdout,
                     stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
                     files,
@@ -3993,6 +4007,30 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
         }
         if !verdict(&label, &outcomes) {
             failed.push((label, outcomes, Some(output)));
+        }
+    }
+    for program in suite.programs_of_their_own {
+        let mut outcomes = Vec::new();
+        for setting in suite.settings {
+            outcomes.push((
+                setting.clone(),
+                run_program_test(program, suite.root, setting)?,
+            ));
+        }
+        let label = format!("program \"{}\" (tests/{}.nika)", program.name, program.name);
+        if suite.bless {
+            match bless_program(program, &outcomes)? {
+                Blessed::Unchanged => println!("{label} ... ok"),
+                Blessed::Written => println!("{label} ... blessed"),
+                Blessed::Refused(why) => {
+                    println!("{label} ... FAILED ({why}, so it is not blessed)");
+                    failed.push((label, outcomes, None));
+                }
+            }
+            continue;
+        }
+        if !verdict(&label, &outcomes) {
+            failed.push((label, outcomes, None));
         }
     }
     if !failed.is_empty() {
@@ -4025,6 +4063,164 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
     Ok(if failed.is_empty() { 0 } else { 1 })
 }
 
+/// **A test program** ([ADR-269](../../docs/specification/adr/adr-269.md)
+/// D22): `tests/NAME.nika`, with what it must produce beside it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProgramTest {
+    pub name: String,
+    pub dir: PathBuf,
+    pub stdout: Option<Vec<u8>>,
+    /// What it writes to standard error, or, where it is refused, the
+    /// compiler's whole message (it starts `error`).
+    pub stderr: Option<Vec<u8>>,
+}
+
+/// The package's test programs, by name.
+pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
+    let dir = root.join("tests");
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Ok(Vec::new());
+    };
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let path = entry.path();
+        if path.is_file()
+            && path.extension().and_then(|x| x.to_str()) == Some("nika")
+            && let Some(stem) = path.file_stem()
+        {
+            names.insert(stem.to_string_lossy().into_owned());
+        }
+    }
+    let optional = |path: PathBuf| -> Result<Option<Vec<u8>>> {
+        match std::fs::read(&path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error).with_context(|| format!("reading {}", path.display())),
+        }
+    };
+    names
+        .into_iter()
+        .map(|name| {
+            Ok(ProgramTest {
+                stdout: optional(dir.join(format!("{name}.stdout")))?,
+                stderr: optional(dir.join(format!("{name}.stderr")))?,
+                dir: dir.clone(),
+                name,
+            })
+        })
+        .collect()
+}
+
+/// Whether a stderr file holds a compiler's refusal.
+fn is_refusal(text: &[u8]) -> bool {
+    text.starts_with(b"error")
+}
+
+/// **Build and run one test program** in a package of its own, in a directory
+/// of its own: the package it tests is its dependency, so `use` reaches it. A
+/// refusal is the outcome (`ended_well` false, `stderr` the message with the
+/// path written `tests/NAME.nika`); a program that builds is run there.
+fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Outcome> {
+    let own = Sandbox::new()?;
+    let project = own.0.join("project");
+    std::fs::create_dir_all(project.join("src"))?;
+    let source = test.dir.join(format!("{}.nika", test.name));
+    std::fs::copy(&source, project.join(ENTRY))
+        .with_context(|| format!("copying {}", source.display()))?;
+    let dependency = match Manifest::read(&root.join("nikaia.toml"))?.package_name() {
+        Some(name) => format!(
+            "\n[dependencies]\n{name} = {{ path = {:?} }}\n",
+            canonical(root)
+        ),
+        None => String::new(),
+    };
+    std::fs::write(
+        project.join("nikaia.toml"),
+        format!("[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{dependency}"),
+    )?;
+    let exe = std::env::current_exe().context("finding this compiler")?;
+    let run = |verb: &str, scratch: &Path| -> Result<std::process::Output> {
+        std::process::Command::new(&exe)
+            .args([verb, "--user-parallelism", setting, "--project"])
+            .arg(&project)
+            .current_dir(&own.0)
+            .env(nikaia_std::fs::TEST_DIR_VAR, scratch)
+            .env_remove("CARGO_TARGET_DIR")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .with_context(|| format!("running {}", exe.display()))
+    };
+    let built = run("build", &own.0)?;
+    if !built.status.success() {
+        let shown = String::from_utf8_lossy(&built.stderr).into_owned();
+        let entry = project.join(ENTRY);
+        let shown = shown
+            .replace(
+                &entry.display().to_string(),
+                &format!("tests/{}.nika", test.name),
+            )
+            .replace(
+                &canonical(&entry).display().to_string(),
+                &format!("tests/{}.nika", test.name),
+            );
+        return Ok(Outcome {
+            ended_well: false,
+            passed: test
+                .stderr
+                .as_deref()
+                .is_some_and(|want| want == shown.as_bytes()),
+            stdout: Vec::new(),
+            stderr: shown,
+            files: Vec::new(),
+        });
+    }
+    let out = run("run", &own.0)?;
+    let ended_well = out.status.success();
+    let printed_right = test.stdout.as_ref().is_none_or(|want| *want == out.stdout);
+    let said_right = test
+        .stderr
+        .as_ref()
+        .is_none_or(|want| !is_refusal(want) && *want == out.stderr);
+    Ok(Outcome {
+        ended_well,
+        passed: ended_well && printed_right && said_right,
+        stdout: out.stdout,
+        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        files: Vec::new(),
+    })
+}
+
+/// `--bless` for a test program: `NAME.stdout` and `NAME.stderr` are written
+/// from what happened, a refusal into `NAME.stderr` only. A program that
+/// built and ended unsuccessfully, or whose settings disagree, is not blessed.
+fn bless_program(test: &ProgramTest, outcomes: &[(String, Outcome)]) -> Result<Blessed> {
+    let agree = outcomes.windows(2).all(|pair| pair[0].1 == pair[1].1);
+    let Some((_, first)) = outcomes.first() else {
+        return Ok(Blessed::Unchanged);
+    };
+    if !agree {
+        return Ok(Blessed::Refused("the settings disagree"));
+    }
+    let refused = !first.ended_well && is_refusal(first.stderr.as_bytes());
+    if !first.ended_well && !refused {
+        return Ok(Blessed::Refused("the program did not end successfully"));
+    }
+    if first.passed {
+        return Ok(Blessed::Unchanged);
+    }
+    let write = |extension: &str, bytes: &[u8]| -> Result<()> {
+        let path = test.dir.join(format!("{}.{extension}", test.name));
+        std::fs::write(&path, bytes).with_context(|| format!("blessing {}", path.display()))
+    };
+    if !refused && (test.stdout.is_some() || !first.stdout.is_empty()) {
+        write("stdout", &first.stdout)?;
+    }
+    if refused || test.stderr.is_some() || !first.stderr.is_empty() {
+        write("stderr", first.stderr.as_bytes())?;
+    }
+    Ok(Blessed::Written)
+}
+
 /// What names an output test in its report: its `.stdout`, or its `.out/`.
 fn named_by(output: &OutputTest) -> String {
     match output.stdout.is_some() {
@@ -4044,6 +4240,12 @@ fn explain_output(output: &OutputTest, outcome: &Outcome) {
     {
         println!("standard output (- expected, + printed):");
         print!("{}", difference(want, &outcome.stdout));
+    }
+    if let Some(want) = &output.stderr
+        && *want != outcome.stderr.as_bytes()
+    {
+        println!("standard error (- expected, + written):");
+        print!("{}", difference(want, outcome.stderr.as_bytes()));
     }
     for ((relative, want), (_, got)) in output.files.iter().zip(&outcome.files) {
         match got {
@@ -4102,6 +4304,11 @@ fn bless(output: &OutputTest, outcomes: &[(String, Outcome)]) -> Result<Blessed>
     if output.stdout.is_some() {
         let path = output.dir.join(format!("{}.stdout", output.name));
         std::fs::write(&path, &first.stdout)
+            .with_context(|| format!("blessing {}", path.display()))?;
+    }
+    if output.stderr.is_some() {
+        let path = output.dir.join(format!("{}.stderr", output.name));
+        std::fs::write(&path, first.stderr.as_bytes())
             .with_context(|| format!("blessing {}", path.display()))?;
     }
     for (relative, got) in &first.files {

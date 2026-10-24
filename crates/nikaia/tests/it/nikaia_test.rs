@@ -358,3 +358,51 @@ fn both_settings_run_again_build_nothing_again() {
     assert_eq!(lowered("second.log"), 0, "the second run finds both fresh");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// ADR-269 D22: `tests/NAME.nika` is a program of its own that may `use` the
+/// package; `NAME.stdout` is what it prints, `NAME.stderr` the compiler's whole
+/// message where it is refused, and `--bless` writes them.
+#[test]
+fn a_test_program_is_compared_with_its_files() {
+    let dir = a_project(
+        "test-programs",
+        &[(
+            "main.nika",
+            "pub fn twice(n: i64) -> i64 {\n    return n * 2\n}\n\nfn main() {\n}\n",
+        )],
+    );
+    std::fs::create_dir_all(dir.join("tests")).expect("tests");
+    let tests = dir.join("tests");
+    std::fs::write(
+        tests.join("ok.nika"),
+        "use tally\n\nfn main() {\n    println(f\"{tally::twice(4)}\")\n}\n",
+    )
+    .expect("ok");
+    std::fs::write(tests.join("ok.stdout"), "").expect("stdout");
+    std::fs::write(tests.join("bad.nika"), "fn main() { let x: i64 = \"a\" }\n").expect("bad");
+    std::fs::write(tests.join("bad.stderr"), "").expect("stderr");
+    let blessed = nikaia(&["test", "--bless"], &dir);
+    assert!(
+        blessed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&blessed.stderr)
+    );
+    assert_eq!(
+        std::fs::read_to_string(tests.join("ok.stdout")).unwrap(),
+        "8\n"
+    );
+    let refusal = std::fs::read_to_string(tests.join("bad.stderr")).unwrap();
+    assert!(refusal.starts_with("error[NK1103]"), "{refusal}");
+    assert!(refusal.contains("--> tests/bad.nika:1:26"), "{refusal}");
+    let again = nikaia(&["test"], &dir);
+    assert!(
+        again.status.success(),
+        "{}",
+        String::from_utf8_lossy(&again.stdout)
+    );
+    std::fs::write(tests.join("bad.nika"), "fn main() { let x: i64 = 1 }\n").expect("bad");
+    assert!(
+        !nikaia(&["test"], &dir).status.success(),
+        "built where a refusal is written"
+    );
+}
