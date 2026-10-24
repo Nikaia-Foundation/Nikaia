@@ -42,3 +42,5 @@ Baseline row. Missing: the `lower-std` counts (see Method).
 
 The last 5 runs were red at `bootstrap_compiler`/`arm64`, so only three jobs
 ran to a result; the other jobs were skipped and have no time yet.
+
+Agent cost (`scripts/tokenspeed.py`, 2026-10-24): 88 agents, 272 M context tokens read, agents over 120 turns = 47 % of reads; finished check builders cost 8-15 k tokens per moved line (`docs/tokenspeed.md`, Runs).

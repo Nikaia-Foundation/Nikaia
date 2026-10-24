@@ -160,3 +160,16 @@ ends, with the builder's rs2nika line.
 | date | agent | module | turns | context M | Rust lines moved | tokens per moved line | rs2nika |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | :--- |
 | 2026-10-24 | a312a5 | fmt (#101 step 4) | 38 | 1.2 | 0 | - | - |
+| 2026-10-24 | a66fd3 | check (fold_bound) | 185 | 14.4 | 1346 | 10,732 | - |
+| 2026-10-24 | af07ce | check | 99 | 8.5 | 1024 | 8,295 | - |
+| 2026-10-24 | adc4be | check | 89 | 6.4 | 569 | 11,185 | - |
+| 2026-10-24 | a88404 | check | 75 | 5.3 | 353 | 14,935 | - |
+
+Moved lines are attributed by `scripts/tokenspeed.py`: commits in the agent's
+window that changed a file it edited (Edit/Write/`git add` in its transcript)
+or whose subject names its id. Files edited by two agents in one window are
+counted for both, so a row can be too high; the 0 rows are agents that
+committed no `crates/nikaia/src` Rust. The turn count is assistant messages in
+the transcript (a66fd3 shows 185, not about 100). The full table also has
+"read after 150k / 300k" columns: no agent but a96a76 (75 % / 2 %) read
+meaningfully past 150k, so context size is not what made the long agents dear.
