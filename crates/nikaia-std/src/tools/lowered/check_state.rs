@@ -178,8 +178,8 @@ pub(crate) fn what_a_loop_does(words: &winnow_grammar::InternerContext, block: &
 pub fn a_body_never_ends(body: &Block) -> bool {
     if body.stmts.is_empty() { return false; }
     let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
-    match last.node {
-        Stmt::While { ref cond, ref body } => { return a_true_literal(cond) && !a_jump_leaves(body, 0); },
+    match &last.node {
+        Stmt::While { cond, body } => { return a_true_literal(cond) && !a_jump_leaves(body, 0); },
         _ => { return false; },
     }
 }

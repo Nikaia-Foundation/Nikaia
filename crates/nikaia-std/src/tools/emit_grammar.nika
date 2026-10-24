@@ -216,8 +216,8 @@ impl EmitState {
         }
         out.push(f"        {vis}rule {emit_text(world, rule.name)}{ret}{label} =\n")
 
-        let mut i = 0
-        for alt in rule.alts {
+        for i in 0..<rule.alts.len() {
+            let alt = rule.alts[i]
             let separator = if i == 0 { "  " } else { "| " }
             match alt.action {
                 Some(action) => {
@@ -262,7 +262,6 @@ impl EmitState {
                     }
                 },
             }
-            i += 1
         }
     }
 }

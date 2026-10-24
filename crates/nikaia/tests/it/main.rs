@@ -11,6 +11,7 @@ mod block_comments;
 mod blocks_in_expressions;
 mod borrowed_part;
 mod borrowed_subject;
+mod match_on_element;
 mod bounds_checks;
 mod bounds_report;
 mod btree_set_walks;

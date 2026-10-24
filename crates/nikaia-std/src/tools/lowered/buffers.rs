@@ -201,8 +201,8 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
         }
         if walk.result_carries && !body.stmts.is_empty() {
             let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
-            match last.node {
-                Stmt::Expr(ref value) => {
+            match &last.node {
+                Stmt::Expr(value) => {
                     walk.statement = last.span.start as i64;
                     let origins = origins_of(value, ask, holes_of, unaliased, &mut walk);
                     if !is_the_buffer(value, ask, &walk) { escape_all(&origins, &Escape::Returned, &mut walk); }
@@ -1036,8 +1036,8 @@ pub(crate) fn tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     if block.stmts.is_empty() { return none; }
     let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
-    match last.node {
-        Stmt::Expr(ref value) => {
+    match &last.node {
+        Stmt::Expr(value) => {
             let outer = walk.statement;
             walk.statement = last.span.start as i64;
             let origins = origins_of(value, ask, holes_of, unaliased, walk);

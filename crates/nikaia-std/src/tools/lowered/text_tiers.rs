@@ -2763,20 +2763,20 @@ pub(crate) fn walk_unit(program: &Program, item_at: i64, method_at: i64, ask: &T
     walk.tail_back = false;
     walk.handed_back = -1;
     walk.lent_self = false;
-    match item.node {
+    match &item.node {
         Item::Fn { .. } => { walk_function(&item.node, None, ask, walk); },
-        Item::Impl { ref target, ref methods, .. } => {
+        Item::Impl { target, methods, .. } => {
             let owner = ask.names.resolve(target.name).to_owned();
             walk_function(&nikaia_std::index::get(&methods, nikaia_std::index::at(method_at)).node, Some(owner), ask, walk);
         },
-        Item::Grammar(ref def) => { walk_grammar(def, ask, walk); },
-        Item::Test { ref body, .. } => { walk_body(body, ask, walk); },
-        Item::Bench { ref body, .. } => { walk_body(body, ask, walk); },
-        Item::Comptime { ref value, .. } => {
+        Item::Grammar(def) => { walk_grammar(def, ask, walk); },
+        Item::Test { body, .. } => { walk_body(body, ask, walk); },
+        Item::Bench { body, .. } => { walk_body(body, ask, walk); },
+        Item::Comptime { value, .. } => {
             fresh_tier_frame(walk);
             kept_unseen(value, ask, walk);
         },
-        Item::Struct { ref fields, .. } => {
+        Item::Struct { fields, .. } => {
             fresh_tier_frame(walk);
             for field in fields.iter() {
                 let given = match field.default.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };

@@ -163,8 +163,8 @@ impl EmitState {
             _ => { },
         }
         out.push(&format!("        {}rule {}{}{} =\n", vis, emit_text(world, rule.name), ret, label));
-        let mut i = 0;
-        for alt in rule.alts.iter() {
+        for i in 0..rule.alts.len() as i64 {
+            let alt = nikaia_std::index::get(&rule.alts, (i) as usize);
             let separator = if i == 0 { "  " } else { "| " };
             match &alt.action {
                 Some(action) => {
@@ -193,7 +193,6 @@ impl EmitState {
                     }
                 },
             }
-            i += 1;
         }
         Ok(())
     }

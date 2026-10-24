@@ -201,8 +201,8 @@ pub(crate) fn check_function_is_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nul
 pub(crate) fn check_function_tail_hands_nothing(block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
     let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
-    match last.node {
-        Stmt::Expr(ref value) => check_function_end_hands_nothing(value),
+    match &last.node {
+        Stmt::Expr(value) => check_function_end_hands_nothing(value),
         _ => false,
     }
 }
@@ -221,8 +221,8 @@ pub(crate) fn check_function_end_hands_nothing(expr: &Expr) -> bool {
 pub(crate) fn check_function_tail_is_a_value(block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
     let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
-    match last.node {
-        Stmt::Expr(ref value) => check_function_every_end_is_a_value(value),
+    match &last.node {
+        Stmt::Expr(value) => check_function_every_end_is_a_value(value),
         Stmt::Return(_) => true,
         Stmt::Break => true,
         Stmt::Continue => true,
@@ -341,8 +341,8 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
     }, || Ty::Unknown);
     let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
     let at = Span { start: last.span.start, end: last.span.end };
-    match last.node {
-        Stmt::Expr(ref value) => {
+    match &last.node {
+        Stmt::Expr(value) => {
             if !a_body_never_ends(body) {
                 let mut plain = false;
                 match tail {
@@ -374,8 +374,8 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
     let nullable = check_function_is_nullable(expected);
     let mut shown = tail;
     if lending || tail_view { shown = view_of_type(&shown); }
-    match last.node {
-        Stmt::Expr(ref value) => {
+    match &last.node {
+        Stmt::Expr(value) => {
             if lending && nullable { state.facts.lent_reads.insert(id_of(value) as i64); } else if lending { state.facts.lent_returns.insert(span.start as i64); }
             if !lending {
                 let mut result: Option<Ty> = state.text_literal(world, expected, value, true);
@@ -407,8 +407,8 @@ pub(crate) fn check_function_hands_nothing(state: &mut CheckState, body: &Block,
     if body.stmts.is_empty() && !is_extern { state.findings.push(check_refusal("NK1104", at, format!("This function returns `()`, but it's declared to return `{}`.", want), vec!["Its body is empty, so it hands nothing back.".to_owned()], Some(format!("Write the `{}` it returns as the body's last expression, or remove `-> {}`.", want, want)))); }
     if !body.stmts.is_empty() && ends {
         let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
-        match last.node {
-            Stmt::Expr(ref value) => { if check_function_end_hands_nothing(value) { state.findings.push(check_refusal("NK1104", &last.span, format!("This function returns `()` where this `if` is not taken, but it's declared to return `{}`.", want), vec!["An `if` without `else` hands nothing back when its condition is false, and nothing comes after it.".to_owned()], Some(format!("Add an `else` that hands back a `{}`, or a `return` after the `if`.", want)))); } },
+        match &last.node {
+            Stmt::Expr(value) => { if check_function_end_hands_nothing(value) { state.findings.push(check_refusal("NK1104", &last.span, format!("This function returns `()` where this `if` is not taken, but it's declared to return `{}`.", want), vec!["An `if` without `else` hands nothing back when its condition is false, and nothing comes after it.".to_owned()], Some(format!("Add an `else` that hands back a `{}`, or a `return` after the `if`.", want)))); } },
             _ => { },
         }
     }

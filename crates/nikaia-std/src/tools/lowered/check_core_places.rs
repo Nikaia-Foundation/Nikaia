@@ -358,8 +358,8 @@ pub(crate) fn check_core_places_tail_into<H: CheckHost>(state: &CheckState, worl
         return;
     }
     let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(n - 1));
-    match last.node {
-        Stmt::Expr(ref e) => { check_core_places_code_into(state, world, host, e, stored); },
+    match &last.node {
+        Stmt::Expr(e) => { check_core_places_code_into(state, world, host, e, stored); },
         _ => { stored.unresolved = true; },
     }
 }
