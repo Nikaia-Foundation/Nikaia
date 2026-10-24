@@ -743,8 +743,9 @@ pub(crate) fn handed_to(unit: &Unit, asked: &Asked<'_, '_, '_>, receiver: &Expr,
     let mut named = false;
     match way {
         Root::Subject => {
-            callee = format!("{}::{}", nikaia_std::index::or(text_of(asked, (here.subject).as_ref()), || "".into()), asked.names.resolve(method));
-            named = true;
+            let owner = nikaia_std::index::or(text_of(asked, (here.subject).as_ref()), || "".into());
+            callee = format!("{}::{}", owner, asked.names.resolve(method));
+            named = unit.fields.contains_key(&owner) || !declared_elsewhere_with_a_view(asked, &owner);
         },
         Root::SubjectField(_) => {
             let field_ty = type_of(unit, asked, &here, receiver);

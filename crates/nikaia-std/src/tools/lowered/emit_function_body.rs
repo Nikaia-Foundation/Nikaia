@@ -44,8 +44,8 @@ impl EmitState {
         let mut locals: collections::BTreeSet<String> = collections::BTreeSet::new();
         let known = host.known_nonnegative(body);
         match known {
-            Some(names) => { for name in names.iter() { locals.insert(name.clone()); } },
-            _ => { for symbol in nonnegative_locals(body) { locals.insert(emit_text(world, symbol)); } },
+            None => { for symbol in nonnegative_locals(body) { locals.insert(emit_text(world, symbol)); } },
+            Some(ref names) => { for name in names.iter() { locals.insert(name.to_owned()); } },
         }
         walk.nonnegative.insert(key.to_owned(), locals);
         let flow = EmitFlow { can_throw: throws_, ..EmitFlow::plain() };

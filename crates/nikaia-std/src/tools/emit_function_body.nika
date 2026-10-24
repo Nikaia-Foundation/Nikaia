@@ -64,14 +64,14 @@ impl EmitState {
         let mut locals: collections::BTreeSet[String] = collections::BTreeSet()
         let known = host.known_nonnegative(body)
         match known {
-            Some(names) => {
-                for name in names {
-                    locals.insert(name.clone())
-                }
-            },
-            else => {
+            null => {
                 for symbol in nonnegative_locals(body) {
                     locals.insert(emit_text(world, symbol))
+                }
+            },
+            names => {
+                for name in names {
+                    locals.insert(name.clone())
                 }
             },
         }

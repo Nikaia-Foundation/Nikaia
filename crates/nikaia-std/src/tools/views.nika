@@ -1041,8 +1041,12 @@ fn handed_to(unit: ref Unit, asked: ref Asked, receiver: ref Expr, method: winno
     let mut named = false
     match way {
         Root::Subject => {
-            callee = f"{text_of(asked, here.subject) ?? ""}::{asked.names.resolve(method)}"
-            named = true
+            let owner = text_of(asked, here.subject) ?? ""
+            callee = f"{owner}::{asked.names.resolve(method)}"
+            // **A subject another file declares** has fields this walk does
+            // not see, so a method's store into one is not followed: the
+            // call keeps what it is given, as before the fixpoint (#818).
+            named = unit.fields.contains_key(owner) || !declared_elsewhere_with_a_view(asked, owner)
         }
         Root::SubjectField(_) => {
             let field_ty = type_of(unit, asked, here, receiver)

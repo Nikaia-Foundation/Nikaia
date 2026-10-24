@@ -55,9 +55,10 @@ impl EmitState {
                                 Expr::MethodCall { receiver, method, .. } => {
                                     let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                                     on_accumulator = emit_is_variable(receiver, accumulator);
-                                    match self.by_name.get(&emit_text(world, method)) {
-                                        Some(found) => { mutates = found.mutates_in_place(); },
-                                        _ => { },
+                                    let found = self.by_name.get(&emit_text(world, method));
+                                    match found {
+                                        None => { },
+                                        Some(known) => { mutates = known.mutates_in_place(); },
                                     }
                                 },
                                 _ => { },
@@ -100,7 +101,9 @@ impl EmitState {
                     let owner = *nikaia_std::index::get(&segments, 0);
                     let name = *nikaia_std::index::get(&segments, 1);
                     let key = format!("{}::{}", emit_text(world, owner), emit_text(world, name));
-                    match self.methods.get(&key) {
+                    let declared = self.methods.get(&key);
+                    match declared {
+                        None => { },
                         Some(method) => {
                             if method.mutates_in_place() && method.args.len() == 1 {
                                 let by_view = if nikaia_std::index::get(&method.args, 0).ty.is_view { "&" } else { "" };
@@ -109,7 +112,6 @@ impl EmitState {
                                 return Ok(());
                             }
                         },
-                        _ => { },
                     }
                 }
             },

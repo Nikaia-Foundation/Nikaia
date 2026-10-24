@@ -88,9 +88,10 @@ impl EmitState {
                             match last {
                                 Expr::MethodCall { receiver, method, .. } => {
                                     on_accumulator = emit_is_variable(receiver, accumulator)
-                                    match self.by_name.get(emit_text(world, method)) {
-                                        Some(found) => { mutates = found.mutates_in_place() },
-                                        else => {},
+                                    let found = self.by_name.get(emit_text(world, method))
+                                    match found {
+                                        null => {},
+                                        known => { mutates = known.mutates_in_place() },
                                     }
                                 },
                                 else => {},
@@ -141,8 +142,10 @@ impl EmitState {
                     let owner = segments[0]
                     let name = segments[1]
                     let key = f"{emit_text(world, owner)}::{emit_text(world, name)}"
-                    match self.methods.get(key) {
-                        Some(method) => {
+                    let declared = self.methods.get(key)
+                    match declared {
+                        null => {},
+                        method => {
                             if method.mutates_in_place() && method.args.len() == 1 {
                                 let by_view = if method.args[0].ty.is_view { "&" } else { "" }
                                 // The accumulator's type is annotated because the
@@ -154,7 +157,6 @@ impl EmitState {
                                 return
                             }
                         },
-                        else => {},
                     }
                 }
             },
