@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1210] — 2026-10-24
+
+**Proofs resting on an assume are marked in the reports (ADR-381 D6)**
+- --bounds and --asserts mark a proof that rests on an assume (Part III 14.2, ADR-381 D6).
+
 ## [0.0.1209] — 2026-10-24
 
 **binary_search requires a sorted list; sort ensures it (ADR-381 D5)**
