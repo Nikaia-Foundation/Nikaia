@@ -31,6 +31,7 @@ canc=sum(r["conclusion"]=="cancelled" for r in done)
 print(med, "%d/%d"%(green,len(done)), "%d cancelled"%canc)')
 lower="-"
 echo "| $date | $commit | $ci | $tok | ${share:--} | $lower |"
+python3 scripts/speed_ci.py 5   # per-job medians and share of commits with a run (note under the table)
 if [ "${1:-}" = "--lower" ]; then
   bin=target/fast/nikaia
   valgrind --tool=callgrind --callgrind-out-file=/dev/null $bin lower-std 2>&1 | grep -E 'Collected' 
