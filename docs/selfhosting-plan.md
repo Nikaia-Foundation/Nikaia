@@ -426,3 +426,8 @@ What is left to move, as builder orders, each with what it waits for:
 
 C7-a to C7-c touch `check/mod.rs` and `check_walked.nika`; E10-0 writes only a
 brief. They do not overlap.
+
+**State 2026-10-24:** C7-a..c built (`claims_report`, `unsigned_slots_proved`,
+`kept_function_call`); `finished` and `a_static_integer` stay Rust as adapter
+code. Left: C7-d (#804), E10-0, E10-1.. (#791), E11. `panic(..)` in a tools file
+does not lower yet (#805).
