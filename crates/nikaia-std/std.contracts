@@ -3769,9 +3769,10 @@ touches = []
 signature = "(self: ref String, form: text::Form) -> String"
 
 # **The text between double quotes, escaped as Rust's `{:?}` writes it**, as new
-# text (#804): `"` and `\` get a backslash, newline, tab and carriage return are
-# `\n`, `\t`, `\r`, other control characters `\u{..}`; every other character
-# stands as it is.
+# text (#804): `"` and `\` get a backslash, newline, tab, carriage return and
+# the zero character are `\n`, `\t`, `\r`, `\0`, other control characters and
+# characters that do not print are `\u{..}`; every other character, `ä` among
+# them, stands as it is. The result is a literal that reads back as the text.
 [fn."str::quoted"]
 pub = true
 sync = true

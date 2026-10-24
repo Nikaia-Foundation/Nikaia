@@ -893,7 +893,7 @@ grapheme is a `ref String`, compared with a text literal.
 differ. `s.normalized(text::Form::Nfc)` - or `Nfd`, `Nfkc`, `Nfkd` - makes a
 text that compares as its form says.
 
-**`s.quoted()` is the text as source writes it.** It returns the text between double quotes with `"`, `\`, newline, tab, carriage return and the other control characters escaped, as Rust's `{:?}` does for a string.
+**`s.quoted()` is the text as source writes it.** It returns the text between double quotes, written exactly as Rust's `{:?}` writes a string: `\"` and `\\`, `\n`, `\t`, `\r` and `\0`, `\u{…}` for the other control characters and for characters that do not print, and every other character, `ä` among them, as it is. Read as a literal (2.6), the result is the same text.
 
 ---
 

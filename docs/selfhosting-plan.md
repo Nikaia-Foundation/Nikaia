@@ -431,3 +431,7 @@ brief. They do not overlap.
 `kept_function_call`); `finished` and `a_static_integer` stay Rust as adapter
 code. Left: C7-d (#804), E10-0, E10-1.. (#791), E11. `panic(..)` in a tools file
 does not lower yet (#805).
+Later the same day: #791, #804, #805 built (0.0.1216); E10-1 done (2018cf10,
+`emit_grammar.nika`); E10-2 and C7-d running. Open on the way: #806 (`match`
+on a field of a list element moves out of `&`; E10-1 worked around it, step 3
+removes that), #807 (re-entrant crossing panics in `lower-std`).
