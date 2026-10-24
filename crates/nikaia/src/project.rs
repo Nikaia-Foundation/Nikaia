@@ -4113,7 +4113,7 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
 
 /// Whether a stderr file holds a compiler's refusal.
 fn is_refusal(text: &[u8]) -> bool {
-    text.starts_with(b"error")
+    text.starts_with(b"error") || text.windows(6).any(|w| w == b"\nerror")
 }
 
 /// **Build and run one test program** in a package of its own, in a directory
@@ -4150,19 +4150,16 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
             .output()
             .with_context(|| format!("running {}", exe.display()))
     };
+    let entry = project.join(ENTRY);
+    let written = format!("tests/{}.nika", test.name);
+    let relocate = |bytes: &[u8]| -> String {
+        String::from_utf8_lossy(bytes)
+            .replace(&entry.display().to_string(), &written)
+            .replace(&canonical(&entry).display().to_string(), &written)
+    };
     let built = run("build", &own.0)?;
     if !built.status.success() {
-        let shown = String::from_utf8_lossy(&built.stderr).into_owned();
-        let entry = project.join(ENTRY);
-        let shown = shown
-            .replace(
-                &entry.display().to_string(),
-                &format!("tests/{}.nika", test.name),
-            )
-            .replace(
-                &canonical(&entry).display().to_string(),
-                &format!("tests/{}.nika", test.name),
-            );
+        let shown = relocate(&built.stderr);
         return Ok(Outcome {
             ended_well: false,
             passed: test
@@ -4177,15 +4174,16 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
     let out = run("run", &own.0)?;
     let ended_well = out.status.success();
     let printed_right = test.stdout.as_ref().is_none_or(|want| *want == out.stdout);
+    let said = relocate(&out.stderr);
     let said_right = test
         .stderr
         .as_ref()
-        .is_none_or(|want| !is_refusal(want) && *want == out.stderr);
+        .is_none_or(|want| !is_refusal(want) && *want == said.as_bytes());
     Ok(Outcome {
         ended_well,
         passed: ended_well && printed_right && said_right,
         stdout: out.stdout,
-        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        stderr: said,
         files: Vec::new(),
     })
 }

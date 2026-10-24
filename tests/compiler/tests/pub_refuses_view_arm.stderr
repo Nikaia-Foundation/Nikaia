@@ -1,0 +1,19 @@
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+  --> tests/pub_refuses_view_arm.nika:5:1
+   |
+ 5 | pub fn plain(s: ref String, n: i64) -> String {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+   = help: Write `String` without `ref`.
+error[NK1104]: You're returning `ref String`, but the function is declared to return `String`.
+  --> tests/pub_refuses_view_arm.nika:7:14
+   |
+ 7 |         0 => s,
+   |              ^
+   |
+   = note: `s` is declared `ref String`, so the text belongs to the caller, who still has it.
+   = note: The function returns it, and the caller keeps it after the call ends, so it needs text of its own.
+   = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+   = help: Declare `s: String` so the caller hands its text over, or write `s.clone()` to copy it here.
+1 type error

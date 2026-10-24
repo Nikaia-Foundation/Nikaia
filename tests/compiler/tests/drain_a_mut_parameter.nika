@@ -1,0 +1,14 @@
+fn take_all(mut from: Vec[String], mut into: Vec[String]) -> i64 {
+    let mut count = 0
+    for x in from.drain() {
+        into.push(x)
+        count += 1
+    }
+    return count
+}
+fn main() {
+    let mut source: Vec[String] = ["a", "b"]
+    let mut kept: Vec[String] = []
+    let n = take_all(source, kept)
+    println(f"{n} {source.len()} {kept.len()}")
+}

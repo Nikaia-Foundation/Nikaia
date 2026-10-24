@@ -406,3 +406,19 @@ fn a_test_program_is_compared_with_its_files() {
         "built where a refusal is written"
     );
 }
+
+/// #821 step 2: the compiler's own test package, `tests/compiler`, run by the
+/// real binary at both settings. Its programs are the defects of
+/// `selfhosting_defects.rs` that moved, one `tests/NAME.nika` each.
+#[test]
+fn the_compiler_test_package_passes_at_both_settings() {
+    let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .args(["test", "--both-settings", "--project"])
+        .arg(repo_root().join("tests/compiler"))
+        .env("NIKAIA_CACHE_DIR", shared_cache_dir())
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("RUST_BACKTRACE")
+        .output()
+        .expect("the nikaia binary runs");
+    assert!(out.status.success(), "{}", said(&out));
+}

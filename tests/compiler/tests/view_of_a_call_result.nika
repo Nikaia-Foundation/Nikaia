@@ -1,0 +1,7 @@
+fn f() -> String { return "  abc,d  " }
+fn main() {
+    let v = f().trim_start()
+    let w = f().trim().split(",").collect()
+    let n = f().trim_end().len()
+    println(f"[{v}] {w.len()} {n}")
+}

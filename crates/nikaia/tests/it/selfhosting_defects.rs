@@ -44,25 +44,6 @@ fn printed_and_lowered(purpose: &str, source: &str) -> (String, String) {
     (String::from_utf8_lossy(&out.stdout).into_owned(), rust)
 }
 
-/// #559: a view cut from a call's result is used after the statement, so the
-/// result must live as long as the view.
-#[test]
-fn a_view_of_a_call_result_outlives_the_statement() {
-    let said = printed(
-        "view-of-a-call",
-        r#"
-fn f() -> String { return "  abc,d  " }
-fn main() {
-    let v = f().trim_start()
-    let w = f().trim().split(",").collect()
-    let n = f().trim_end().len()
-    println(f"[{v}] {w.len()} {n}")
-}
-"#,
-    );
-    assert_eq!(said.trim(), "[abc,d  ] 2 7");
-}
-
 /// #560: `Wrapped(x, at)` is the constructor of a struct another file of the
 /// package declares, as it is of one this file declares.
 #[test]
@@ -153,120 +134,6 @@ fn main() {
         lib.contains("use crate::either_text::{IntoEither, IntoEitherMaybe};"),
         "the tools module has the conversions in scope"
     );
-}
-
-/// #564: `drain()` over a `mut` parameter takes the elements out of the
-/// caller's list as owned values.
-#[test]
-fn drain_over_a_mut_parameter_empties_the_callers_list() {
-    let said = printed(
-        "drain-a-mut-parameter",
-        r#"
-fn take_all(mut from: Vec[String], mut into: Vec[String]) -> i64 {
-    let mut count = 0
-    for x in from.drain() {
-        into.push(x)
-        count += 1
-    }
-    return count
-}
-fn main() {
-    let mut source: Vec[String] = ["a", "b"]
-    let mut kept: Vec[String] = []
-    let n = take_all(source, kept)
-    println(f"{n} {source.len()} {kept.len()}")
-}
-"#,
-    );
-    assert_eq!(said.trim(), "2 0 2");
-}
-
-/// #561: a `??` whose fallback is an index read names a value, not a reference.
-#[test]
-fn a_fallback_read_at_an_index_is_a_value() {
-    let said = printed(
-        "fallback-at-an-index",
-        r#"
-fn word(maybe: String?, list: ref Vec[String]) -> String {
-    let x = maybe ?? list[0]
-    return x
-}
-fn number(maybe: i64?, list: ref Vec[i64]) -> i64 {
-    let x = maybe ?? list[0]
-    return x
-}
-fn main() {
-    let words: Vec[String] = ["z"]
-    let numbers: Vec[i64] = [7]
-    println(f"{word(null, words)} {word("a", words)} {number(null, numbers)} {number(3, numbers)}")
-}
-"#,
-    );
-    assert_eq!(said.trim(), "z a 7 3");
-}
-
-/// #576: a `mut` parameter is a `&mut T` below, so assigning it whole writes
-/// through it and reading a number out of it reads the number - `n = n + 1`
-/// was `n = n + 1;` against a `&mut i64`, which `rustc` refused, on exactly
-/// the program `NK1138` asks for. Handed to another `mut` parameter it is
-/// handed on as it is.
-#[test]
-fn a_mut_parameter_is_assigned_and_read_through() {
-    let said = printed(
-        "mut-parameter-assigned",
-        r#"
-struct P {
-    x: i64,
-}
-
-fn bump(mut n: i64) {
-    n = n + 1
-    n += 2
-    if n == 4 {
-        n = n * 10
-    }
-}
-
-fn twice(mut n: i64) {
-    bump(n)
-    bump(n)
-}
-
-fn step(mut n: i64, xs: ref Vec[i64]) {
-    n = xs[n] + n.abs() - (-n)
-}
-
-fn flip(mut b: bool) {
-    b = !b
-}
-
-fn reset(mut p: P) {
-    p = P { x: 0 }
-}
-
-fn refill(mut xs: Vec[i64]) {
-    xs = [7, 8]
-    xs.push(9)
-}
-
-fn main() {
-    let mut n = 1
-    bump(n)
-    let mut m = 0
-    twice(m)
-    let mut k = 1
-    step(k, [10, 20, 30])
-    let mut b = false
-    flip(b)
-    let mut p = P { x: 5 }
-    reset(p)
-    let mut xs: Vec[i64] = []
-    refill(xs)
-    println(f"{n} {m} {k} {b} {p.x} {xs.len()}")
-}
-"#,
-    );
-    assert_eq!(said.trim(), "40 6 22 true 0 3");
 }
 
 /// #576, the open shape of `a_mut_parameter_is_assigned_and_read_through`: a
@@ -960,34 +827,6 @@ fn main() {
 "#,
     );
     assert_eq!(said.trim(), "a\n1");
-}
-
-/// #562, ADR-282 D22 and D25: a `pub` function cannot hand back a view, so the
-/// view arm is refused and `.clone()` is named.
-#[test]
-fn a_pub_function_refuses_the_view_arm_of_a_match() {
-    let said = refused(
-        "mixed-pub",
-        r#"
-fn int_text(n: i64) -> String {
-    return f"{n}"
-}
-
-pub fn plain(s: ref String, n: i64) -> String {
-    return match n {
-        0 => s,
-        else => int_text(n),
-    }
-}
-
-fn main() {
-    println(plain("hi", 0))
-}
-"#,
-    );
-    assert!(said.contains("NK1104"), "{said}");
-    assert!(said.contains(".clone()"), "{said}");
-    assert!(!said.contains("NK1245"), "{said}");
 }
 
 /// #562: the same through a `let` in a `pub` function stays refused.

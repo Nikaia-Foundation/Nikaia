@@ -1,0 +1,14 @@
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+pub fn plain(s: ref String, n: i64) -> String {
+    return match n {
+        0 => s,
+        else => int_text(n),
+    }
+}
+
+fn main() {
+    println(plain("hi", 0))
+}
