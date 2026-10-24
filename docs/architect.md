@@ -103,6 +103,7 @@ Branch `wip/bounding-candidates-2026-10-19` (stash on 0.0.1080) checked
 returns the failed counters, `bounding_for`/`bounding_while` re-walk in a
 loop); no order owed, branch deletable.
 Update 2026-10-24 later: U-d4 done (steps 1-3, dfb42b5f); #667 per-file cache key step running; stage-2 worktree plan (#125 comments) awaits the owner; #799, #800 filed (`ready`).
+Update after daf562f3: U-d6 landed in part; what is left of C-7 and E10/E11 is the table at the end of `selfhosting-plan.md`. C7-a..c and E10-0 have no prerequisite; C7-d waits for #804, E10-1 for #791. #801 is built (0.0.1212); #803 and #804 are `ready`.
 Stage: 1 (serial). Current issue: #125, C-7 of `selfhosting-plan.md`: U-d0 and
 U-d1 done, **U-d2** (`check/attributes.rs`, 714 lines, to
 `tools/check_attributes.nika`) running; then **#667** (owner: before U-d3):

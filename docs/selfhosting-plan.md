@@ -406,3 +406,23 @@ Notes:
   adds.
 * **U-d6 ends C-7:** `Checker` keeps `parsed`, `beside`, `reads`, `newly`,
   `world`, `s` and `spares`; `mod.rs` is the adapter.
+
+## What is left of C-7 and E10/E11 (re-planned 2026-10-24, after daf562f3)
+
+The adapter stays Rust by design: building `CheckWorld` from `Parsed`, the DSL
+and the ledger, `check_against`, `check_for_the_ledger`, `propagation*`,
+`fallible_loops*`, `parsed_view_of`, `host()`, `others()`, `core.rs`, `host.rs`.
+What is left to move, as builder orders, each with what it waits for:
+
+| # | Order | Waits for |
+| :--- | :--- | :--- |
+| C7-a | `finished` (findings sorted by `span.at()`: `Vec::sort_by_key` exists and is stable, probed), `a_static_integer` with its callers in Nikaia, `kept_function_call` | nothing |
+| C7-b | `claims_report`: the colour decision (`NO_COLOR`, terminal) stays in the Rust caller and comes in as a `bool` parameter; the check stays free of I/O | nothing |
+| C7-c | `unsigned_slots_proved`: `bounds::proven` as a callback `fn(..) -> bool sync` (the `bounds_basic.nika` pattern) until `bounds` moves | nothing |
+| C7-d | `written_by` | #804 (`String::quoted`, Rust's `{:?}` of a string) |
+| E10-0 | research brief (at most 80 lines): the call graph of the 215 functions left in `emit/mod.rs`, leaves first, with the names that clash with `check_*` (`function`, `item`, `program`) | nothing (read-only) |
+| E10-1.. | `grammar`, `fold`, `function_body`, `function`, `item`, `program`, in the brief's order | #791 (methods matched by bare name), E10-0 |
+| E11 | `emit/mod.rs` shrinks to the adapter (`with_contracts`, entry points, `SourceMap`, `Build`, `EmitRefused`) | E10; `take_lend` / `insert_after_first_brace` stay Rust until `std` has `String::pop` / `insert_str` (the owner's, not decided) |
+
+C7-a to C7-c touch `check/mod.rs` and `check_walked.nika`; E10-0 writes only a
+brief. They do not overlap.
