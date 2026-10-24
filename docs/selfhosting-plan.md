@@ -440,3 +440,5 @@ C7-d done (90843776, `written_by` with `String::quoted`): **C-7 is finished**;
 `contracts/` (6,925 lines), `parser/` (4,403) and the top-level modules
 (`type_rules.rs`, `modules.rs`, `fold_bound.rs`, `comptime_run.rs`), each after a
 research brief that orders it leaves first.
+Then: #806 built (c4b6d01a), E10-2 built (efbc784e); R-2 (`contracts/maps.rs`)
+and #807 running; #808 (a `match` arm's view of a `ref` path, ADR-282 D13) filed.
