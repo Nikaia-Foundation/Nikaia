@@ -407,15 +407,28 @@ impl CheckHost for Host<'_> {
         format!("{number:?}")
     }
 
-    fn computed_attribute(
-        &self,
-        _state: &mut CheckState,
-        _name: &str,
-        _ty: &Ty,
-        _value: &Expr,
-        _span: &Span,
-    ) {
-        unreachable!("`computed_attribute` is asked of the core's host, not of the services")
+    fn type_of(&self, ty: &crate::ast::Type) -> Ty {
+        Ty::from_ast(self.parsed, ty)
+    }
+
+    fn constants_beside(&self) -> Vec<(String, Ty)> {
+        let mut found = Vec::new();
+        for (at, other) in self.beside.iter().enumerate() {
+            if Some(at) == self.here {
+                continue;
+            }
+            for item in &other.program.items {
+                let Item::Comptime { name, ty, .. } = &item.node else {
+                    continue;
+                };
+                let declared = ty
+                    .as_ref()
+                    .map(|ty| Ty::from_ast(other, ty))
+                    .unwrap_or(Ty::Unknown);
+                found.push((other.text(*name).to_string(), declared));
+            }
+        }
+        found
     }
 
     fn an_escape_nothing_names(

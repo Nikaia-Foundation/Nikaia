@@ -1,0 +1,349 @@
+// crates/nikaia-std/src/tools/check_defaults.nika
+//
+// **What is computed where it is declared** (ADR-294, #125, #558, C-7, U-d3):
+// an option's default (ADR-318), a field's (ADR-331 D5), an attribute's
+// argument (`check_attributes.nika`), every item-level `comptime` (ADR-287),
+// and a grammar's folds (ADR-296). Free functions over the state, the world and
+// a host; the walk comes back through the hub `check_core_expr`.
+
+use std::collections
+
+/// What a computed build-time value stands for, which its refusal names.
+pub enum CheckComputing {
+    Option,
+    Field,
+    Attribute,
+}
+
+/// **A default's type as its run builds it** (#468): the value a view views -
+/// `ref String`'s `String` - which the run hands back, and which is written
+/// into the ledger the same way.
+fn check_defaults_as_built(ty: Ty) -> Ty {
+    return match ty {
+        // `ref String` is read as `str`.
+        Ty::Named { name, args, view } => {
+            if name == "str" {
+                Ty::Named { name: "String".clone(), args: args, view: false }
+            } else {
+                Ty::Named { name: name, args: args, view: false }
+            }
+        },
+        else => ty,
+    }
+}
+
+/// Whether the findings from `from` on hold an error.
+fn check_defaults_errors_since(state: ref CheckState, from: i64) -> bool {
+    let mut at = from
+    while at < state.findings.len() {
+        match state.findings[at].severity {
+            CheckSeverity::Error => return true,
+            else => {},
+        }
+        at = at + 1
+    }
+    return false
+}
+
+/// **A value that is a list.**
+fn check_defaults_a_list(value: ref BuildValue) -> bool {
+    return match value {
+        BuildValue::List(_) => true,
+        else => false,
+    }
+}
+
+/// Text written for an owned `String`.
+fn check_defaults_a_text_for_string(value: ref Expr, want: ref Ty) -> bool {
+    let mut text = false
+    match value {
+        Expr::LitStr { .. } => { text = true },
+        else => {},
+    }
+    if !text {
+        return false
+    }
+    return match want {
+        Ty::Named { name, .. } => name == "String",
+        else => false,
+    }
+}
+
+/// **An option's default that is computed rather than written** (ADR-318 D1,
+/// D7): evaluated as a `comptime` is, and refused as one is where it cannot
+/// be. A number, text, a `bool`, and a struct or a variant of those, is what
+/// the ledger records; a list as a default is not built yet, and is said to be
+/// rather than handed to the language below empty.
+pub fn check_defaults_a_computed_default[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, option: ref ConfigParam) sync {
+    let name = world.here.text(option.name)
+    let declared = host.type_of(option.ty)
+    check_defaults_computed_value(state, world, host, name, declared, option.default, option.default_span, CheckComputing::Option)
+}
+
+/// **A field's default** (ADR-331 D5): a literal is checked against the
+/// field's type as a literal's value is, and anything else is computed as an
+/// option's default is, under the same codes.
+pub fn check_defaults_a_field_default[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, field: ref FieldDef) sync {
+    let given: FieldDefault? = field.default?.clone()
+    if given == null {
+        return
+    }
+    let default: FieldDefault = given ?? return
+    let name = world.here.text(field.name)
+    let declared = host.type_of(field.ty)
+    if !a_literal(default.value) {
+        check_defaults_computed_value(state, world, host, name, declared, default.value, default.span, CheckComputing::Field)
+        return
+    }
+    let found = check_core_expr(state, world, host, default.value, default.span)
+    let mut want: Ty = declared.clone()
+    match default.value {
+        Expr::LitNull(_) => return,
+        else => {
+            match declared {
+                Ty::Nullable(inner) => { want = inner.clone() },
+                else => {},
+            }
+        },
+    }
+    // Text written for an owned `String` is one, as an option's default is
+    // (#498): the field gets text of its own.
+    if check_defaults_a_text_for_string(default.value, want) {
+        return
+    }
+    let kind = check_attributes_literal_misfit(default.value, want)
+    if kind != null {
+        let said = kind ?? return
+        let wanted = want.text()
+        state.findings.push(check_refusal("NK1166", default.span, f"`{name}` holds `{wanted}`, but its default is {said}.", [], f"Give `{name}` a default that is a `{wanted}`."))
+        return
+    }
+    state.expect_type(world, found, want, default.span, "const", fn(found_text, wanted_text) { f"`{name}` holds `{wanted_text}`, but its default is `{found_text}`." })
+}
+
+/// [`check_defaults_a_computed_default`] over a type already read, which an
+/// attribute's argument has: its field may be another package's (ADR-331 D4).
+pub fn check_defaults_computed_value[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, ty: ref Ty, default: ref Expr, span: ref Span, kind: CheckComputing) sync {
+    if a_literal(default) {
+        return
+    }
+    let walked_from = state.findings.len()
+    check_core_expr(state, world, host, default, span)
+    if check_defaults_errors_since(state, walked_from) {
+        return
+    }
+    state.computing_default = true
+    let declared_ty = check_defaults_as_built(ty.clone())
+    let compiled = state.compiled_build_time_value(world, host, default, declared_ty, name, span)
+    let mut value: BuildValue? = null
+    let mut said = false
+    if compiled.answered {
+        value = compiled.value
+        said = compiled.said
+    } else {
+        let (built, refused) = state.build_time_value(host, default, name, span)
+        value = built
+        said = refused
+    }
+    state.computing_default = false
+    if said {
+        return
+    }
+    // **A list a `Vec` option would own is `NK1167`** (ADR-318 D4, D7):
+    // refused for what it is, as a `comptime` is, with the length the build
+    // computed in the way out.
+    let declared = ty.clone()
+    if value != null {
+        let computed: BuildValue = value?.clone() ?? return
+        // **A view of a list takes one** (D4): `xs: ref Vec[i64] = [4, 5]`
+        // crosses as the `&[4, 5]` the parameter is below. Only one it owns is
+        // refused.
+        if check_defaults_a_list(computed) && is_growable(declared) && !declared.is_a_view() {
+            state.a_constant_that_owns_memory(name, declared, computed, "a default", span)
+            return
+        }
+        // **A struct is only as writable as its fields** (D4), named as a
+        // `comptime`'s is.
+        let owned = unwritable_in(state, world, computed, fn(of, variant) { host.payload_of(of, variant) })
+        if owned.len() == 2 {
+            state.a_field_that_owns_memory(name, owned[0], owned[1], "a default", span)
+            return
+        }
+    }
+    let mut message = f"The default of `{name}` can't be computed while the program is built."
+    if value != null {
+        let held: BuildValue = value?.clone() ?? return
+        if literal_of(held, fn(number) { host.float_text(number) }) != null {
+            return
+        }
+        message = f"The default of `{name}` is a list of something other than numbers or `bool`s, or a list it would own, and a default of that shape is not built yet."
+    }
+    let (note, help) = match kind {
+        CheckComputing::Field => ("A field's default is computed once, where the struct is declared, as a `comptime` is.", f"Give `{name}` a default the build can compute, or leave the default out and give the field in each literal."),
+        CheckComputing::Option => ("An option's default is computed once, where the function is declared, as a `comptime` is.", f"Give `{name}` a default the build can compute, or make it a `T?` and decide in the body."),
+        CheckComputing::Attribute => ("An attribute's argument is computed once, where it is written, as a `comptime` is.", f"Give `{name}` a value the build can compute, or write the value itself."),
+    }
+    state.findings.push(check_refusal("NK1127", span, message, [note.clone()], help))
+}
+
+/// **Every item-level `comptime`, in a frame that stays under the whole
+/// file** (ADR-287).
+///
+/// A pass of its own, and both halves of that are load-bearing. It runs
+/// *before* the item loop, because a `fn` declared **above** a constant sees it
+/// as much as one below - an item is visible in its whole scope, which is what
+/// makes it an item. And the frame is pushed and never popped, because this
+/// checker's scope is a stack pushed per function and there is nothing under
+/// all of them otherwise.
+///
+/// The bodies go through `check_core_comptime_binding`, the same function the
+/// statement form uses, so the fold, the refusal and the spelling the emitter
+/// is handed are one thing in one place (ADR-287 D3).
+pub fn check_defaults_item_constants[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+    state.scope.push([])
+    // **Every name first, because a constant is an item.** A function declared
+    // below its caller has always been callable - items are order-independent
+    // - and a constant was not, because this walk goes down the file and binds
+    // as it goes. So `comptime A = B * 2` above `comptime B = 21` was
+    // `NK1117`, *nothing declares `B`*: a correct program refused (Part III
+    // C.4). The type is the **declared** one where there is one and `?` where
+    // there is not; the binding below shadows it with the answer.
+    //
+    // **And every constant another file of the package declares** (ADR-286
+    // D1): one namespace holds them as it holds the functions and the types.
+    // Its declared type, read in its own file; its value is that file's to
+    // check.
+    for (beside, declared) in host.constants_beside() {
+        state.facts.comptime_names.insert(beside.clone())
+        state.bind_with(beside, declared, null)
+    }
+    for item in world.here.items {
+        match item.node {
+            Item::Comptime { name, ty, .. } => {
+                let mut declared: Ty = Ty::Unknown
+                if ty != null {
+                    let written = ty ?? continue
+                    declared = host.declared(state, written, item.span)
+                }
+                let spelled = world.here.text(name)
+                state.facts.comptime_names.insert(spelled.clone())
+                state.bind_with(spelled, declared, null)
+            },
+            else => {},
+        }
+    }
+    for item in world.here.items {
+        match item.node {
+            Item::Comptime { name, ty, value, bounds, .. } => {
+                check_core_comptime_binding(state, world, host, name, ty, value, bounds, item.span)
+            },
+            else => {},
+        }
+    }
+}
+
+/// **A fold's `init`, `step` and `merge`, typed** (0.0.230, issue #160 before
+/// it).
+///
+/// The step is handed the accumulator `init` builds and one item of the rule it
+/// folds, so its parameters are typed from those two: without that,
+/// `fn(acc, m) { acc.record(m) }` resolved `record` to nothing and a pausing
+/// one compiled - into a future the fold dropped, so the parse counted
+/// nothing. Typed, the call meets `NK2209` like any action's.
+///
+/// A `merge` is handed two accumulators. An `init` or a `merge` written as a
+/// function's name is a call the fold makes, so it is asked the same question
+/// of the function it names.
+pub fn check_defaults_fold[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, spec: ref FoldSpec, span: ref Span) sync {
+    let item = check_defaults_item_of(host, gram, spec)
+    let named: Ty? = state.a_named_fold_part_that_may_pause(world, spec.init, span)
+    let built = check_core_expr(state, world, host, spec.init, span)
+    // A function's name - `Summary` is its constructor, `Summary::new` -
+    // builds what its signature hands back; anything else is the value.
+    let mut acc: Ty = built.clone()
+    match built {
+        Ty::Fn { result, .. } => { acc = result?.clone() ?? Ty::Unknown },
+        else => {},
+    }
+    if named != null {
+        acc = named?.clone() ?? Ty::Unknown
+    }
+    // **`NK2209` is the rule here and not `NK2206`**: no parameter type says
+    // `sync` about this lambda, the language does, and the action rule inside
+    // it names the call that breaks it.
+    let promised = CheckPromises { may_pause: true, may_fail: true }
+    let mut owner = "fold"
+    if spec.merge != null {
+        owner = "par_fold"
+    }
+    check_defaults_fold_part(state, world, host, spec.step, [acc.clone(), item], "step", owner, acc, promised, span)
+    let merge: Expr? = spec.merge?.clone()
+    if merge != null {
+        let part = merge ?? return
+        check_defaults_fold_part(state, world, host, part, [acc.clone(), acc.clone()], "merge", owner, acc, promised, span)
+    }
+    // **A `par_fold`'s options** (ADR-372 D6): each typed as `Par::fold`'s.
+    for option in spec.config {
+        let found = check_core_expr(state, world, host, option.value, span)
+        check_core_fold_option(state, world, option.name, option.value, found, span)
+    }
+}
+
+/// What the rule a fold folds hands back, which is what each item is.
+fn check_defaults_item_of[H: CheckHost](host: ref H, gram: ref GrammarDef, spec: ref FoldSpec) -> Ty sync {
+    for rule in gram.rules {
+        if rule.name == spec.rule {
+            let written: Type? = rule.ret_type?.clone()
+            if written != null {
+                let one = written ?? return Ty::Unknown
+                return host.type_of(one)
+            }
+            return Ty::Unknown
+        }
+    }
+    return Ty::Unknown
+}
+
+/// One part of a fold - its `step` or its `merge` - typed from the types it is
+/// handed.
+fn check_defaults_fold_part[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, part: ref Expr, given: Vec[Ty], role: String, owner: String, acc: ref Ty, promised: CheckPromises, span: ref Span) sync {
+    let mut found: Ty = Ty::Unknown
+    match part {
+        Expr::Closure { params, mutable, body, .. } => {
+            let (tail, paused) = check_core_lambda(state, world, host, params, mutable, body, given, promised, span)
+            found = Ty::Fn { params: given.clone(), result: tail, is_sync: true, can_throw: false }
+        },
+        else => {
+            state.a_named_fold_part_that_may_pause(world, part, span)
+            found = check_core_expr(state, world, host, part, span)
+        },
+    }
+    // **Returning or in place, by the result type** (ADR-372 D9).
+    check_core_fold_form(state, world, part, found, acc, owner, role, span)
+}
+
+/// Every fold in a pattern, typed.
+pub fn check_defaults_folds_in[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, pattern: ref Pattern, span: ref Span) sync {
+    match pattern {
+        Pattern::Fold(spec) => check_defaults_fold(state, world, host, gram, spec, span),
+        Pattern::Seq(parts) => {
+            for part in parts {
+                check_defaults_folds_in(state, world, host, gram, part.node, part.span)
+            }
+        },
+        Pattern::Choice(parts) => {
+            for part in parts {
+                check_defaults_folds_in(state, world, host, gram, part.node, part.span)
+            }
+        },
+        Pattern::Bind { pat, .. } => check_defaults_folds_in(state, world, host, gram, pat.node, pat.span),
+        Pattern::Repeat { pat, .. } => check_defaults_folds_in(state, world, host, gram, pat.node, pat.span),
+        Pattern::Group(pat) => check_defaults_folds_in(state, world, host, gram, pat.node, pat.span),
+        Pattern::Ref { args, .. } => {
+            for arg in args {
+                check_defaults_folds_in(state, world, host, gram, arg.node, arg.span)
+            }
+        },
+        else => {},
+    }
+}

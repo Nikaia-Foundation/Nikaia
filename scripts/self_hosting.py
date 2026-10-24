@@ -221,6 +221,7 @@ COMPILER_NIKA = {
     "check_narrow.nika": "check: what a test proves not `null` (ADR-350, U-d0) (0.0.959)",
     "check_crossings.nika": "check: what the core crossed back into Rust for (U-d1) (0.0.968)",
     "check_attributes.nika": "check: attributes, their marks and arguments (U-d2)",
+    "check_defaults.nika": "check: defaults, attribute arguments, item constants and folds (U-d3)",
     "fmt.nika": "fmt: the printer of `nikaia fmt`, over the tokens with the comments the parser records (ADR-337, #101)",
 }
 

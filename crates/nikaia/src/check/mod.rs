@@ -39,26 +39,22 @@ use crate::contracts::{FieldContract, Ledger, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_attributes;
-use nikaia_std::tools::check_consts;
-use nikaia_std::tools::check_core_args;
-use nikaia_std::tools::check_core_comptime;
-use nikaia_std::tools::check_core_expr;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_stmt;
 use nikaia_std::tools::check_crossings;
+use nikaia_std::tools::check_defaults;
 use nikaia_std::tools::check_flow::{
     CheckConstant, CheckFlow, CheckUnrolling, CheckUnsignedSlot as UnsignedSlot,
 };
 use nikaia_std::tools::check_items;
 use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_reports::CheckWall;
-use nikaia_std::tools::check_shapes::is_growable;
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
 use nikaia_std::tools::check_state::{
-    CheckImmutable as Immutable, CheckKind as Kind, CheckLocal as Local, CheckPromises as Promises,
-    CheckState, CheckWorld, a_body_never_ends,
+    CheckImmutable as Immutable, CheckKind as Kind, CheckLocal as Local, CheckState, CheckWorld,
+    a_body_never_ends,
 };
 use nikaia_std::tools::check_texts::{self};
 use nikaia_std::tools::check_widen::{self};
@@ -99,8 +95,6 @@ fn payload_of(
             nikaia_std::tools::check_items::check_payload_in(&parsed_view_of(parsed), ty, variant)
         })
 }
-
-use winnow_grammar::Symbol as Ident;
 
 /// What one pass of the checker learned: its findings, the facts the emitter
 /// reads (`tools/check_facts.nika`), and what each function calls.
@@ -735,14 +729,6 @@ fn finished(checker: Checker<'_>) -> Checked {
 /// arm written `=> { throw NotFound }` still has.
 impl Checker<'_> {}
 
-/// What a computed build-time value stands for, which its refusal names.
-#[derive(Clone, Copy)]
-pub(crate) enum Computing {
-    Option,
-    Field,
-    Attribute,
-}
-
 /// An integer type's name as a name that lives for the program.
 fn a_static_integer(name: &str) -> &'static str {
     INTEGERS
@@ -1165,7 +1151,9 @@ impl<'a> Checker<'a> {
         // before the first `fn` is entered, and it has to be there for a
         // function declared *above* the constant as much as below it. That is
         // the whole of why this is a pass and not an arm.
-        self.item_constants();
+        self.nikaia(|state, world, host| {
+            check_defaults::check_defaults_item_constants(state, world, host)
+        });
         self.types_that_contain_themselves();
         // **Attributes** (ADR-331), before the bodies: they are about the
         // declarations.
@@ -1206,7 +1194,11 @@ impl<'a> Checker<'a> {
                 }
                 Item::Struct { fields, .. } => {
                     for field in fields {
-                        self.a_field_default(field);
+                        self.nikaia(|state, world, host| {
+                            check_defaults::check_defaults_a_field_default(
+                                state, world, host, field,
+                            )
+                        });
                     }
                     self.an_extern_struct(&item.node, &item.span);
                 }
@@ -1354,7 +1346,16 @@ impl<'a> Checker<'a> {
                 let named = self.parsed.text(rule.name).to_string();
                 let outer_action = self.s.inside_an_action.replace(named);
                 self.s.scope.push(frame.iter().map(Local::clone).collect());
-                self.folds_in(grammar, &alt.pattern.node, &alt.pattern.span);
+                self.nikaia(|state, world, host| {
+                    check_defaults::check_defaults_folds_in(
+                        state,
+                        world,
+                        host,
+                        grammar,
+                        &alt.pattern.node,
+                        &alt.pattern.span,
+                    )
+                });
                 self.s.scope.pop();
                 let Some(action) = &alt.action else {
                     self.s.inside_an_action = outer_action;
@@ -1375,138 +1376,6 @@ impl<'a> Checker<'a> {
             }
             self.s.current = outer_current;
         }
-    }
-
-    /// **A `fold`'s `init`, `step` and `merge`, walked like any other code**
-    /// ([ADR-296](../../../docs/specification/adr/adr-296.md)).
-    ///
-    /// They are expressions inside a **pattern**, and the walk above takes a
-    /// rule's *action block* and nothing else - so
-    /// `fn(acc, m) { nothing_declares_this }` lowered without a word and the
-    /// message was `rustc`'s about a file nobody wrote (Part III, C.1).
-    ///
-    /// [ADR-276](../../../docs/specification/adr/adr-276.md) D16 closed the half
-    /// a **jump** can reach and deliberately no more, with its own walk of
-    /// these same expressions. This subsumes that walk rather than standing
-    /// beside it: [`Expr::Closure`]'s arm already crosses a boundary and counts
-    /// loops from zero, so a jump here meets `NK1132` through the path every
-    /// other lambda's does - and gets the better of the two messages, naming
-    /// the lambda instead of saying there is no loop.
-    fn folds_in(&mut self, grammar: &ast::GrammarDef, pattern: &ast::Pattern, span: &Span) {
-        match pattern {
-            ast::Pattern::Fold(spec) => self.fold(grammar, spec, span),
-            ast::Pattern::Seq(parts) | ast::Pattern::Choice(parts) => {
-                for part in parts {
-                    self.folds_in(grammar, &part.node, &part.span);
-                }
-            }
-            ast::Pattern::Bind { pat, .. }
-            | ast::Pattern::Repeat { pat, .. }
-            | ast::Pattern::Group(pat) => self.folds_in(grammar, &pat.node, &pat.span),
-            ast::Pattern::Ref { args, .. } => {
-                for arg in args {
-                    self.folds_in(grammar, &arg.node, &arg.span);
-                }
-            }
-            ast::Pattern::Literal(_) | ast::Pattern::Cut => {}
-        }
-    }
-
-    /// **A fold's `init`, `step` and `merge`, typed** (0.0.230, issue #160
-    /// before it).
-    ///
-    /// The step is handed the accumulator `init` builds and one item of the
-    /// rule it folds, so its parameters are typed from those two: without that,
-    /// `fn(acc, m) { acc.record(m) }` resolved `record` to nothing and a
-    /// pausing one compiled - into a future the fold dropped, so the parse
-    /// counted nothing. Typed, the call meets `NK2209` like any action's.
-    ///
-    /// A `merge` is handed two accumulators. An `init` or a `merge` written as
-    /// a function's name is a call the fold makes, so it is asked the same
-    /// question of the function it names.
-    fn fold(&mut self, grammar: &ast::GrammarDef, spec: &ast::FoldSpec, span: &Span) {
-        let item = grammar
-            .rules
-            .iter()
-            .find(|rule| rule.name == spec.rule)
-            .and_then(|rule| rule.ret_type.as_ref())
-            .map(|t| Ty::from_ast(self.parsed, t))
-            .unwrap_or(Ty::Unknown);
-        let named = self.a_named_fold_part_that_may_pause(&spec.init, span);
-        let built = self.expr(&spec.init, span);
-        // A function's name - `Summary` is its constructor, `Summary::new` -
-        // builds what its signature hands back; anything else is the value.
-        let acc = match (named, built) {
-            (Some(result), _) => result,
-            (None, Ty::Fn { result, .. }) => (*result).unwrap_or(Ty::Unknown),
-            (None, other) => other,
-        };
-        // **`NK2209` is the rule here and not `NK2206`**: no parameter type
-        // says `sync` about this lambda, the language does, and the action
-        // rule inside it names the call that breaks it.
-        let promised = Promises {
-            may_pause: true,
-            may_fail: true,
-        };
-        let owner = if spec.merge.is_some() {
-            "par_fold"
-        } else {
-            "fold"
-        };
-        for (part, given, role) in [
-            (Some(&spec.step), vec![acc.clone(), item], "step"),
-            (spec.merge.as_ref(), vec![acc.clone(), acc.clone()], "merge"),
-        ] {
-            let Some(part) = part else { continue };
-            let found = match part {
-                Expr::Closure {
-                    params,
-                    mutable,
-                    body,
-                    ..
-                } => {
-                    let (tail, _) = self.lambda(params, mutable, body, &given, promised, span);
-                    Ty::Fn {
-                        params: given,
-                        result: Box::new(Some(tail)),
-                        is_sync: true,
-                        can_throw: false,
-                    }
-                }
-                _ => {
-                    let _ = self.a_named_fold_part_that_may_pause(part, span);
-                    self.expr(part, span)
-                }
-            };
-            // **Returning or in place, by the result type** (ADR-372 D9).
-            self.nikaia(|state, world, _| {
-                check_core_args::check_core_fold_form(
-                    state, world, part, &found, &acc, owner, role, span,
-                )
-            });
-        }
-        // **A `par_fold`'s options** (ADR-372 D6): each typed as `Par::fold`'s.
-        for option in &spec.config {
-            let found = self.expr(&option.value, span);
-            self.nikaia(|state, world, _| {
-                check_core_args::check_core_fold_option(
-                    state,
-                    world,
-                    option.name,
-                    &option.value,
-                    &found,
-                    span,
-                )
-            });
-        }
-    }
-
-    /// `Summary::merge` or `Summary` in a fold: a function the fold calls, so
-    /// a pausing one is refused as a call in an action is. What the function
-    /// hands back, where its signature says.
-    fn a_named_fold_part_that_may_pause(&mut self, part: &Expr, span: &Span) -> Option<Ty> {
-        self.s
-            .a_named_fold_part_that_may_pause(self.world, part, span)
     }
 
     fn function(&mut self, item: &Item, at: &Span, target: Option<&str>) {
@@ -1683,7 +1552,9 @@ impl<'a> Checker<'a> {
         // declared** (ADR-318 D1, D7): refused here, with a `comptime`'s codes
         // and the option's name, where it cannot be.
         for option in config {
-            self.a_computed_default(option);
+            self.nikaia(|state, world, host| {
+                check_defaults::check_defaults_a_computed_default(state, world, host, option)
+            });
         }
         let lowered_options = own_contract
             .as_ref()
@@ -2006,192 +1877,6 @@ impl<'a> Checker<'a> {
             .a_trait_nothing_declares(&self.world.here, self.world, written, span)
     }
 
-    /// `?.` over a value that is never absent (`tools/check_fields.nika`).
-    /// **An option's default that is computed rather than written** (ADR-318
-    /// D1, D7): evaluated as a `comptime` is, and refused as one is where it
-    /// cannot be. A number, text, a `bool`, and a struct or a variant of
-    /// those, is what the ledger records; a list as a default is not built
-    /// yet, and is said to be rather than handed to the language below empty.
-    fn a_computed_default(&mut self, option: &ast::ConfigParam) {
-        let name = self.parsed.text(option.name).to_string();
-        self.computed_default(
-            &name,
-            &option.ty,
-            &option.default,
-            option.default_span,
-            false,
-        );
-    }
-
-    /// **A field's default** (ADR-331 D5): a literal is checked against the
-    /// field's type as a literal's value is, and anything else is computed as
-    /// an option's default is, under the same codes.
-    fn a_field_default(&mut self, field: &ast::FieldDef) {
-        let Some(default) = &field.default else {
-            return;
-        };
-        let name = self.parsed.text(field.name).to_string();
-        if !crate::contracts::a_literal(&default.value) {
-            self.computed_default(&name, &field.ty, &default.value, default.span, true);
-            return;
-        }
-        let found = self.expr(&default.value, &default.span);
-        let declared = Ty::from_ast(self.parsed, &field.ty);
-        let want = match (&declared, &default.value) {
-            (_, Expr::LitNull(_)) => return,
-            (Ty::Nullable(inner), _) => (**inner).clone(),
-            _ => declared,
-        };
-        // Text written for an owned `String` is one, as an option's default
-        // is (#498): the field gets text of its own.
-        if matches!(&default.value, Expr::LitStr { .. })
-            && matches!(&want, Ty::Named { name, .. } if name == "String")
-        {
-            return;
-        }
-        if let Some(kind) = check_attributes::check_attributes_literal_misfit(&default.value, &want)
-        {
-            self.s.findings.push(Finding {
-                code: "NK1166".to_string(),
-                severity: Severity::Error,
-                span: default.span,
-                message: format!(
-                    "`{name}` holds `{}`, but its default is {kind}.",
-                    want.text()
-                ),
-                notes: Vec::new(),
-                help: Some(format!(
-                    "Give `{name}` a default that is a `{}`.",
-                    want.text()
-                )),
-                labels: Vec::new(),
-            });
-            return;
-        }
-        self.expect(&found, &want, default.span, "const", move |found, want| {
-            format!("`{name}` holds `{want}`, but its default is `{found}`.")
-        });
-    }
-
-    fn computed_default(
-        &mut self,
-        name: &str,
-        ty: &ast::Type,
-        default: &Expr,
-        span: Span,
-        field: bool,
-    ) {
-        let declared = Ty::from_ast(self.parsed, ty);
-        let kind = match field {
-            true => Computing::Field,
-            false => Computing::Option,
-        };
-        self.computed_value(name, &declared, default, span, kind);
-    }
-
-    /// [`Checker::computed_default`] over a type already read, which an
-    /// attribute's argument has: its field may be another package's
-    /// (ADR-331 D4).
-    fn computed_value(&mut self, name: &str, ty: &Ty, default: &Expr, span: Span, kind: Computing) {
-        if crate::contracts::a_literal(default) {
-            return;
-        }
-        let name = name.to_string();
-        let walked_from = self.s.findings.len();
-        self.expr(default, &span);
-        if self.s.findings[walked_from..]
-            .iter()
-            .any(|f| f.severity == Severity::Error)
-        {
-            return;
-        }
-        self.s.computing_default = true;
-        let declared_ty = crate::comptime_run::as_built(ty.clone());
-        let (value, said) =
-            match self.compiled_build_time_value(default, &declared_ty, &name, &span) {
-                Some(outcome) => outcome,
-                None => self.build_time_value(default, &name, &span),
-            };
-        self.s.computing_default = false;
-        if said {
-            return;
-        }
-        // **A list a `Vec` option would own is `NK1167`** (ADR-318 D4, D7):
-        // refused for what it is, as a `comptime` is, with the length the
-        // build computed in the way out.
-        let declared = ty.clone();
-        // **A view of a list takes one** (D4): `xs: ref Vec[i64] = [4, 5]`
-        // crosses as the `&[4, 5]` the parameter is below. Only one it owns
-        // is refused.
-        if let Some(computed @ build_time::Value::List(_)) = &value
-            && is_growable(&declared)
-            && !declared.is_a_view()
-        {
-            let computed = computed.clone();
-            self.s
-                .a_constant_that_owns_memory(&name, &declared, &computed, "a default", &span);
-            return;
-        }
-        // **A struct is only as writable as its fields** (D4), named as a
-        // `comptime`'s is.
-        if let Some(computed) = &value
-            && let Some((field, held)) = self.unwritable_in(computed)
-        {
-            self.s
-                .a_field_that_owns_memory(&name, &field, &held, "a default", &span);
-            return;
-        }
-        let message = match &value {
-            None => {
-                format!("The default of `{name}` can't be computed while the program is built.")
-            }
-            Some(value) if crate::contracts::literal_of(value).is_none() => format!(
-                "The default of `{name}` is a list of something other than numbers or \
-                 `bool`s, or a list it would own, and a default of that shape is not built yet."
-            ),
-            Some(_) => return,
-        };
-        self.s.findings.push(Finding {
-            code: "NK1127".to_string(),
-            severity: Severity::Error,
-            span,
-            message,
-            notes: vec![
-                match kind {
-                    Computing::Field => {
-                        "A field's default is computed once, where the struct is declared, as \
-                         a `comptime` is."
-                    }
-                    Computing::Option => {
-                        "An option's default is computed once, where the function is declared, \
-                         as a `comptime` is."
-                    }
-                    Computing::Attribute => {
-                        "An attribute's argument is computed once, where it is written, as a \
-                         `comptime` is."
-                    }
-                }
-                .to_string(),
-            ],
-            help: Some(match kind {
-                Computing::Field => format!(
-                    "Give `{name}` a default the build can compute, or leave the default out \
-                     and give the field in each literal."
-                ),
-                Computing::Option => format!(
-                    "Give `{name}` a default the build can compute, or make it a `T?` and \
-                     decide in the body."
-                ),
-                Computing::Attribute => {
-                    format!(
-                        "Give `{name}` a value the build can compute, or write the value itself."
-                    )
-                }
-            }),
-            labels: Vec::new(),
-        });
-    }
-
     /// **A value with a cleanup dies in this function**, a kept parameter's
     /// (`tools/check_crossings.nika`, U-d1).
     fn a_value_with_a_cleanup_dying(&mut self, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
@@ -2299,13 +1984,6 @@ impl<'a> Checker<'a> {
     }
 
     // --- expressions --------------------------------------------------------
-
-    /// **The walk of one expression** (`tools/check_core_expr.nika`, U-c11).
-    fn expr(&mut self, expr: &Expr, span: &Span) -> Ty {
-        self.nikaia(|state, world, host| {
-            check_core_expr::check_core_expr(state, world, host, expr, span)
-        })
-    }
 
     /// `Shared(x)`, `SharedMut(x)` and `Locked(x)` make a hull
     /// ([ADR-281](../../docs/specification/adr/adr-281.md) D2).
@@ -2478,56 +2156,6 @@ impl<'a> Checker<'a> {
         self.s.an_extern_enum(self.world, item, span);
     }
 
-    /// **The interpreter, and the two refusals it can raise**
-    /// ([ADR-287](../../docs/specification/adr/adr-287.md) D6's second stage,
-    /// bounded by [ADR-287](../../docs/specification/adr/adr-287.md)).
-    ///
-    /// `None` is *this compiler cannot evaluate it*, which the caller turns
-    /// into `NK1127` — the refusal that has always been there and whose note
-    /// says what the stage knows. A body the rule **forbids** is a different
-    /// claim and gets `NK1152`: the shape is understood and the answer is no.
-    ///
-    /// The second half of the pair is **whether a refusal was already
-    /// reported**. Two errors for one mistake is what this used to print:
-    /// `NK1152` naming the callee the rule forbids, and then `NK1127` saying
-    /// the compiler cannot evaluate it — which is not a second fact, it is the
-    /// first one said again with less in it. The caller keeps `NK1127` for the
-    /// case it is about: a shape this evaluator does not read, which nothing
-    /// else has a sentence for.
-    /// **An initialiser that calls a function, compiled and run**
-    /// ([ADR-321](../../docs/specification/adr/adr-321.md) D1,
-    /// `crate::comptime_run`), where this stage builds one: the build has a
-    /// workshop, the program is this one file and declares no grammar, and the
-    /// initialiser is numbers, names and calls to this file's own functions.
-    /// Nothing where it does not apply, and the interpreter answers as before.
-    ///
-    /// **The rule is asked first** (D2): each function the initialiser calls
-    /// is read off the ledger, and one that may not run is `NK1152` before
-    /// anything is compiled. What a callee calls in turn is in its own entry.
-    fn compiled_build_time_value(
-        &mut self,
-        value: &Expr,
-        found: &Ty,
-        bound: &str,
-        span: &Span,
-    ) -> Option<(Option<build_time::Value>, bool)> {
-        let host = self.host();
-        let done = self
-            .s
-            .compiled_build_time_value(self.world, &host, value, found, bound, span);
-        done.answered.then_some((done.value, done.said))
-    }
-
-    fn build_time_value(
-        &mut self,
-        value: &Expr,
-        bound: &str,
-        span: &Span,
-    ) -> (Option<build_time::Value>, bool) {
-        let host = self.host();
-        self.s.build_time_value(&host, value, bound, span)
-    }
-
     /// A tuple of text literals where a tuple with text is wanted
     /// (`tools/check_texts.nika`).
     fn tuple_literal(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
@@ -2542,20 +2170,6 @@ impl<'a> Checker<'a> {
 }
 
 impl<'a> Checker<'a> {
-    /// A field or a payload a `const` cannot hold, anywhere in a computed value
-    /// (`tools/check_consts.nika`).
-    fn unwritable_in(&self, value: &build_time::Value) -> Option<(String, String)> {
-        let (parsed, beside) = (self.parsed, self.beside);
-        match check_consts::unwritable_in(&self.s, self.world, value, &|ty: &str, variant: &str| {
-            payload_of(parsed, beside, ty, variant)
-        })
-        .as_slice()
-        {
-            [name, held] => Some((name.clone(), held.clone())),
-            _ => None,
-        }
-    }
-
     /// **The instantiations that stand in the program's other files**
     /// ([ADR-304](../../docs/specification/adr/adr-304.md) D6).
     ///
@@ -2700,131 +2314,6 @@ impl<'a> Checker<'a> {
     fn local_free(&mut self, name: String, ty: Ty) -> Local {
         let id = self.a_new_binding();
         Local::free(name, ty, id)
-    }
-
-    /// Bind a name, with the constant it stands for where there is one
-    /// (ADR-285 D29). Only [`Stmt::Let`] ever passes anything but `None`.
-    fn bind_with(&mut self, name: String, ty: Ty, constant: Option<build_time::Integer>) {
-        self.s.bind_with(name, ty, constant);
-    }
-
-    /// A lambda whose parameters have types, because the callee said so.
-    ///
-    /// The implicit form is the one that matters and the one that had no way
-    /// to work: `fn { a.add(t) }` records **no parameters at all** in the AST -
-    /// Part I 5.3 settles how many it takes from which of `a`, `b`, `c` the
-    /// body mentions, and that is decided when it is emitted. So the names are
-    /// bound here, in order, to whatever the signature says the lambda is
-    /// handed. A body that mentions fewer of them simply leaves the later
-    /// bindings unused.
-    fn lambda(
-        &mut self,
-        params: &[winnow_grammar::Symbol],
-        mutable: &[winnow_grammar::Symbol],
-        body: &Block,
-        given: &[Ty],
-        promised: Promises,
-        span: &Span,
-    ) -> (Ty, bool) {
-        self.nikaia(|state, world, host| {
-            check_core_leaves::check_core_lambda(
-                state, world, host, params, mutable, body, given, &promised, span,
-            )
-        })
-    }
-
-    /// **Every item-level `comptime`, in a frame that stays under the whole
-    /// file** ([ADR-287](../../../docs/specification/adr/adr-287.md)).
-    ///
-    /// A pass of its own, and both halves of that are load-bearing. It runs
-    /// *before* the item loop, because a `fn` declared **above** a constant
-    /// sees it as much as one below — an item is visible in its whole scope,
-    /// which is what makes it an item. And the frame is pushed and never
-    /// popped, because this checker's scope is a stack pushed per function and
-    /// there is nothing under all of them otherwise.
-    ///
-    /// The bodies go through [`Self::comptime_binding`], the same function the
-    /// statement form uses, so the fold, the refusal and the spelling the
-    /// emitter is handed are one thing in one place
-    /// ([ADR-287](../../docs/specification/adr/adr-287.md) D3: the difference
-    /// between the two places is where the name is visible and nothing else).
-    fn item_constants(&mut self) {
-        self.s.scope.push(Vec::new());
-        // **Every name first, because a constant is an item.** A function
-        // declared below its caller has always been callable — items are
-        // order-independent — and a constant was not, because this walk goes
-        // down the file and binds as it goes. So `comptime A = B * 2` above
-        // `comptime B = 21` was `NK1117`, *nothing declares `B`*: a correct
-        // program refused ([Part III C.4](../../docs/specification/30-nikaia-tooling.md))
-        // with a sentence that was not true, since the next line declares it.
-        //
-        // The type is the **declared** one where there is one and `?` where
-        // there is not — which says nothing, and is what a name whose value
-        // this walk has not reached yet honestly is. The binding below shadows
-        // it with the answer.
-        // **And every constant another file of the package declares**
-        // (ADR-286 D1): one namespace holds them as it holds the functions
-        // and the types, so `TEXT` from `ty.nika` is read in `views.nika` -
-        // where it was `NK1117`, *isn't declared anywhere* (found moving the
-        // compiler's `views` into Nikaia, #125). Its declared type, read in
-        // its own file; its value is that file's to check.
-        for other in self.others() {
-            for item in &other.program.items {
-                let Item::Comptime { name, ty, .. } = &item.node else {
-                    continue;
-                };
-                let declared = ty
-                    .as_ref()
-                    .map(|ty| Ty::from_ast(other, ty))
-                    .unwrap_or(Ty::Unknown);
-                let name = other.text(*name).to_string();
-                self.s.facts.comptime_names.insert(name.clone());
-                self.bind_with(name, declared, None);
-            }
-        }
-        for item in &self.parsed.program.items {
-            let Item::Comptime { name, ty, .. } = &item.node else {
-                continue;
-            };
-            let declared = ty
-                .as_ref()
-                .map(|ty| self.declared(ty, &item.span))
-                .unwrap_or(Ty::Unknown);
-            let name = self.parsed.text(*name).to_string();
-            self.s.facts.comptime_names.insert(name.clone());
-            self.bind_with(name, declared, None);
-        }
-        for item in &self.parsed.program.items {
-            let Item::Comptime {
-                name,
-                ty,
-                value,
-                bounds,
-                ..
-            } = &item.node
-            else {
-                continue;
-            };
-            self.comptime_binding(*name, ty.as_ref(), value, bounds, &item.span);
-        }
-    }
-
-    /// **One `comptime`, wherever it stands** (ADR-287,
-    /// `tools/check_core_comptime.nika`).
-    fn comptime_binding(
-        &mut self,
-        name: Ident,
-        ty: Option<&crate::ast::Type>,
-        value: &Expr,
-        bounds: &[crate::ast::ConfigArg],
-        span: &Span,
-    ) -> Ty {
-        let bounds = bounds.to_vec();
-        self.nikaia(|state, world, host| {
-            check_core_comptime::check_core_comptime_binding(
-                state, world, host, name, ty, value, &bounds, span,
-            )
-        })
     }
 }
 

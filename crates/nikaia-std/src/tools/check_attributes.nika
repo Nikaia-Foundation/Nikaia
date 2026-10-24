@@ -533,7 +533,7 @@ fn check_attributes_argument[H: CheckHost](mut state: CheckState, world: ref Che
     // default is, under the same codes.
     if !a_literal(arg) {
         let label = f"{owner}.{field.name}"
-        host.computed_attribute(state, label, want, arg, span)
+        check_defaults_computed_value(state, world, host, label, want, arg, span, CheckComputing::Attribute)
         return
     }
     let found = check_core_expr(state, world, host, arg, span)

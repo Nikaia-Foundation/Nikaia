@@ -294,17 +294,12 @@ impl CheckHost for Core<'_, '_> {
         self.h.float_text(number)
     }
 
-    fn computed_attribute(
-        &self,
-        state: &mut CheckState,
-        name: &str,
-        ty: &Ty,
-        value: &Expr,
-        span: &Span,
-    ) {
-        self.hosted(state, |checker| {
-            checker.computed_value(name, ty, value, *span, Computing::Attribute)
-        })
+    fn type_of(&self, ty: &crate::ast::Type) -> Ty {
+        self.h.type_of(ty)
+    }
+
+    fn constants_beside(&self) -> Vec<(String, Ty)> {
+        self.h.constants_beside()
     }
 
     fn an_escape_nothing_names(
