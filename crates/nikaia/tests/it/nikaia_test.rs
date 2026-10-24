@@ -422,3 +422,32 @@ fn the_compiler_test_package_passes_at_both_settings() {
         .expect("the nikaia binary runs");
     assert!(out.status.success(), "{}", said(&out));
 }
+
+/// #822: a dependency that has a `fn main` is a library there, and rustc said
+/// *Function `main` is never used* at a statement of the depending program.
+#[test]
+fn a_dependency_with_a_main_raises_no_dead_code_warning() {
+    let lib = a_project("dep_main_lib", &[("main.nika", "fn main() {\n}\n")]);
+    let dir = common::scratch_dir("dep_main_user");
+    std::fs::create_dir_all(dir.join("src")).expect("src");
+    std::fs::write(
+        dir.join("nikaia.toml"),
+        format!(
+            "[package]\nname = \"user\"\nversion = \"0.1.0\"\n\n[dependencies]\ntally = {{ path = {:?} }}\n",
+            lib.display().to_string()
+        ),
+    )
+    .expect("manifest");
+    std::fs::write(
+        dir.join("src/main.nika"),
+        "fn main() {\n    println(\"hi\")\n}\n",
+    )
+    .expect("source");
+    let out = nikaia(&["build"], &dir);
+    assert!(out.status.success(), "{}", said(&out));
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("never used"),
+        "{}",
+        said(&out)
+    );
+}
