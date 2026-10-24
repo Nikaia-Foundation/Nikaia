@@ -6,6 +6,8 @@ compiler becomes modular (one Rust unit per `.nika`, #667 step 4,
 changed? Companion to [`long-jobs.md`](long-jobs.md). Durations below are
 GitHub's step timestamps, given as shares; #795 holds the runs.
 
+**Parked by the owner (2026-10-24):** the plan below is not enough; the build has to become more cacheable first (modular units, #667 step 4, #793).
+
 ## Where a run goes (three develop runs, 2026-10-24)
 
 * **Up to 40 % is waiting, not working.** The workflow's `concurrency` group

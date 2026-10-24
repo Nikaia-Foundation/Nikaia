@@ -97,7 +97,7 @@ performance*).
 
 ## State
 
-*Updated by the architect when it ends.* 2026-10-24, develop 97385b5, 0.0.1204.
+*Updated by the architect when it ends.* 2026-10-24, develop 8d56f29c, 0.0.1204.
 Branch `wip/bounding-candidates-2026-10-19` (stash on 0.0.1080) checked
 2026-10-24: everything in it is on develop in a later form (`bounding_grew`
 returns the failed counters, `bounding_for`/`bounding_while` re-walk in a
@@ -114,10 +114,15 @@ Modular compiler (owner's question): basis in `modular-compiler.md`, #793
 Long jobs (owner's question): basis in `long-jobs.md`, #794 (`decision`); no measuring agent; CI is the verifier, the main
 session watches it. develop red since 9f090392 (badges check, arm64 Test):
 the repair comes before the next step.
-CI caches (owner's question): basis in `ci-cache.md`, #795 (`decision`);
-its step 1 (split test build from test run) needs no decision.
-Formal verification (owner's question): basis in `formal-verification.md`, #796
-(`decision`); claim (b) absence of run-time errors is B, CompCert-style D.
+CI caches: #795 parked by the owner (plan insufficient; more cacheability,
+#667 step 4, first); no order.
+Formal verification, #796 (`decision` while question 3 is open): owner chose
+claim (b), the compiler's Nikaia code free of run-time errors, riding with
+stage 1; "formally verified" stays off README/website/guide (rule in
+`formal-verification.md` 6). First order owed: `scripts/proved.nika` (counts
+over `tools/*.nika`), slotted after the running builder. Formal semantics:
+basis in `formal-semantics.md`, owner to decide. #386 and #388 lack a status
+label (noted to the main session).
 Known risk for new tools files: #791 (methods matched by bare name).
 Parked: branch `wip/bounding-candidates-2026-10-19` (loop counter candidates in
 the bounds analysis, ~24 lines, 120 versions stale): not merged, no order until

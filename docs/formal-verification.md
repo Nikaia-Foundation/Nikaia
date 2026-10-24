@@ -97,8 +97,8 @@ solvers) or major rework; E probably never.
 | 6 | Parser against a formal grammar: grammar written down, round-trip `parse(fmt(t)) == t` as a property test | B | grammar text plus fuzzing (14.3); a proof of the parser is D |
 | 7 | Local functional contracts on components (struct rules, preconditions on the tree, spans nest) | B | ADR-369 rules and ADR-269 D5 exist; need postconditions |
 | 8 | Contracts over collections and recursion (the checker's tables are consistent, a walk visits every node) | C | needs quantifiers, inductive predicates, `ensures`, lemmas, termination measures: a Dafny-level verifier in our own tool |
-| 9 | Reference semantics: the interpreter declared the meaning, compiled output compared with it | B | `interpreter` exists; differential runs of interpreter against binary on the suite |
-| 10 | Mathematical semantics of Nikaia (formal grammar, typing, operational rules) | C/D | rewriting Parts I-II as a formal object; mechanised only in a proof assistant |
+| 9 | Reference semantics: an executable reference interpreter declared the meaning, compiled output compared with it | B/C | today's `interpreter` evaluates nothing (Stage 0); a new one, rule by rule ([`formal-semantics.md`](formal-semantics.md), level 2) |
+| 10 | Mathematical semantics of Nikaia (formal grammar, typing, operational rules) | C/D | rewriting Parts I-II as a formal object; mechanised only in a proof assistant; levels and examples in [`formal-semantics.md`](formal-semantics.md) |
 | 11 | Soundness of the checker (well-typed programs do not go wrong; contracts imply rustc's borrow checker accepts) | D | needs item 10 and a proof assistant; rustc's borrow checker is a backstop for memory safety meanwhile |
 | 12 | Translation validation of the lowering per build (each function's Rust equals its Nikaia) | D | needs items 10 and 13 and an equivalence checker; per-rule validation (Alive2/ISLE style) for arithmetic and indexing alone is C |
 | 13 | A formal semantics of the Rust the lowering writes | D | MiniRust/RustBelt are partial; a model of our narrow safe subset in a proof assistant |
@@ -134,3 +134,16 @@ that sums the `--bounds` and `--asserts` counts over `tools/*.nika` and
 prints one line, recorded with each self-hosting snapshot, so the share of
 proved checks is visible beside the share of moved lines and a regression
 shows. Everything else waits for the owner's answer.
+
+## 6. Owner's decisions (2026-10-24, #796)
+
+* **Claim (b) is the goal**: the compiler's Nikaia code proved free of
+  run-time errors. It rides with stage 1: the counting tool first, then the
+  prover extensions (#386, #432, #388) as compiler work in the serial
+  queue, the certificate checker (item 5) as the first file brought to zero
+  unproved checks.
+* **No "formally verified" in `README.md`, the website or `guide/`** until item
+  14 exists; the honest claims of section 4 may be used once they are true and
+  measured.
+* **A formal semantics (item 10) is open**: the basis is
+  [`formal-semantics.md`](formal-semantics.md).
