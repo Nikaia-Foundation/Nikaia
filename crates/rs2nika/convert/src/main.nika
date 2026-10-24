@@ -25,6 +25,7 @@ pub struct Rs2nikaOut {
 /// The state of one run.
 struct Rs2nikaCtx {
     profile: String,
+    free: bool,
     world: String,
     prefix: String,
     hits: Vec[String],
@@ -131,6 +132,9 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R77  `self.s.m(..)` (a `CheckState` method already in Nikaia) -> `self.m(..)`, name and arguments as written",
         "R78  a `struct`'s field `name: T,` -> `name: T'`, the type by the rules of a parameter's (R2-R5)",
         "R69  a Rust name Nikaia reserves (`grammar`, `throws`, `with`, ..) -> `name_`",
+        "R83  profile `check-free` / `emit-free`: a method is a free function, `self` is `state`: `ref self` -> `state: ref CheckState`, `ref mut self` -> `mut state: CheckState`, then `world: ref CheckWorld`, `host: ref H` and the generic `[H: CheckHost]`; `self.m(a)` -> `m(state, world, host, a)`, `self.x` -> `state.x`",
+        "R84  `-free` profiles: `let mut x = \"..\"` / `String::new()` -> `let mut x: String = ..`, `let mut n = 0` -> `let mut n: i64 = 0`",
+        "R85  `-free` profiles: a function with no `self` is not marked `sync` (it threads no state, it does not pause)",
         "R82  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
 }
@@ -554,11 +558,21 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     let mut has_self = false
     for p in rs2nika_split_args(params) {
         if p == "&self" || p == "&'a self" {
-            out.push("ref self")
+            if ctx.free {
+                let state_ty = ctx.world.replace("World", "State")
+                out.push(f"state: ref {state_ty}")
+            } else {
+                out.push("ref self")
+            }
             has_self = true
             rs2nika_hit(ctx, "R2")
         } else if p == "&mut self" {
-            out.push("ref mut self")
+            if ctx.free {
+                let state_ty = ctx.world.replace("World", "State")
+                out.push(f"mut state: {state_ty}")
+            } else {
+                out.push("ref mut self")
+            }
             has_self = true
             rs2nika_hit(ctx, "R2")
         } else if p == "self" || p == "mut self" {
@@ -590,11 +604,25 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: ref String) -> String {
             withw.push(o.clone())
             if i == 0 {
                 withw.push(w.clone())
+                if ctx.free {
+                    withw.push("host: ref H")
+                }
             }
             i = i + 1
         }
         out = withw
         rs2nika_hit(ctx, "R33")
+        if ctx.free {
+            // R83: the host the state threads is a generic of the function
+            let host_ty = ctx.world.replace("World", "Host")
+            if gen == "" {
+                gen = f"[H: {host_ty}]"
+            } else {
+                let opened: String = (gen.strip_suffix("]") ?? "").clone()
+                gen = f"{opened}, H: {host_ty}]"
+            }
+            rs2nika_hit(ctx, "R83")
+        }
     }
     let mut ret: String = ""
     let mut throws_: String = ""
@@ -631,7 +659,13 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     ctx.fn_opt = ret.ends_with("?")
     rs2nika_hit(ctx, "R11")
     let joined = rs2nika_join(out, ", ")
-    return f"{ind}{pub_}fn {name}{gen}({joined}){ret} sync{throws_} {{"
+    // R85: a free function that threads no state does not pause, so it does not promise `sync`
+    let mut sync_: String = " sync"
+    if ctx.free && !has_self {
+        sync_ = ""
+        rs2nika_hit(ctx, "R85")
+    }
+    return f"{ind}{pub_}fn {name}{gen}({joined}){ret}{sync_}{throws_} {{"
 }
 
 /// `f: impl Fn(A) -> B` -> `f: fn(A) -> B sync`.
@@ -1773,7 +1807,10 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
         s = s2.clone()
         for m in ctx.methods.clone() {
             let n2 = rs2nika_renamed(ctx, m)
-            let s3: String = rs2nika_self_call(s, m, n2)
+            let mut s3: String = rs2nika_self_call(s, m, n2)
+            if ctx.free {
+                s3 = rs2nika_state_call(s, m, n2)
+            }
             if !rs2nika_same(s3, s) {
                 rs2nika_hit(ctx, "R33")
             }
@@ -1781,7 +1818,16 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
         }
         // R77: `self.s.m(..)` calls a `CheckState` method that already moved:
         // its name and arguments stay
-        s = s.replace("self.§", "self.")
+        if ctx.free {
+            s = s.replace("self.§", "state.")
+            let s4: String = rs2nika_replace_word(s, "self", "state")
+            if s4 != s {
+                rs2nika_hit(ctx, "R83")
+            }
+            s = s4.clone()
+        } else {
+            s = s.replace("self.§", "self.")
+        }
     }
     let mut k = 0
     while k < ctx.renamed_from.len() {
@@ -2238,6 +2284,28 @@ fn rs2nika_self_call(s: ref String, m: ref String, n2: ref String) -> String {
     return out.replace("(world, )", "(world)")
 }
 
+/// R83: `self.m(a)` -> `m2(state, world, host, a)`, `self.m()` -> `m2(state, world, host)`.
+fn rs2nika_state_call(s: ref String, m: ref String, n2: ref String) -> String {
+    let c: Vec[scalar] = s.chars().collect()
+    let pat = f"self.{m}("
+    let mut out: String = ""
+    let mut at = 0
+    while at < c.len() {
+        let i = rs2nika_find_from(c, pat, at)
+        if i < 0 {
+            out.push_str(rs2nika_text(c, at, c.len()))
+            return out.replace("(state, world, host, )", "(state, world, host)")
+        }
+        out.push_str(rs2nika_text(c, at, i))
+        out.push_str(f"{n2}(state, world, host, ")
+        at = i + pat.chars().count()
+        while at < c.len() && (c[at] == ' ' || c[at] == '\t') {
+            at = at + 1
+        }
+    }
+    return out.replace("(state, world, host, )", "(state, world, host)")
+}
+
 /// The parameters of a signature line contain `self`.
 fn rs2nika_takes_self(line: ref String) -> bool {
     let open = line.find("(") ?? return false
@@ -2490,10 +2558,10 @@ fn rs2nika_let_type(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     if !st.starts_with("let ") {
         return line.clone()
     }
-    let colon = line.find(":") ?? return line.clone()
     let eq = line.find(" = ") ?? return line.clone()
+    let colon = line.find(":") ?? return rs2nika_let_literal(ctx, line)
     if colon > eq {
-        return line.clone()
+        return rs2nika_let_literal(ctx, line)
     }
     let head: String = line[0..<colon + 1].clone()
     let name: String = head[0..<head.len() - ":".len()].trim().clone()
@@ -2512,6 +2580,38 @@ fn rs2nika_let_type(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     let tt = rs2nika_ty(ctx, t)
     let rest: String = line[eq..<line.len()].clone()
     return f"{head} {tt}{rest}"
+}
+
+/// R84: `let mut x = "";` -> `let mut x: String = "";`, `let mut n = 0;` ->
+/// `let mut n: i64 = 0;`: a `mut` local starts from a literal whose type the
+/// written program names.
+fn rs2nika_let_literal(mut ctx: Rs2nikaCtx, line: ref String) -> String {
+    if !ctx.free {
+        return line.clone()
+    }
+    let eq = line.find(" = ") ?? return line.clone()
+    let head: String = line[0..<eq].clone()
+    let name: String = (head.trim_start().strip_prefix("let mut ") ?? return line.clone()).clone()
+    if !rs2nika_is_path(name) {
+        return line.clone()
+    }
+    let tail: String = line[eq + " = ".len()..].trim().clone()
+    let mut v: String = tail.clone()
+    if tail.ends_with(";") {
+        v = (tail.strip_suffix(";") ?? "").trim().clone()
+    }
+    let mut ty: String = ""
+    if (v.starts_with("\"") && v.ends_with("\"")) || v == "String::new()" {
+        ty = "String"
+    } else if v != "" && v.chars().all(fn(ch) { ch.is_ascii_digit() }) {
+        ty = "i64"
+    }
+    if ty == "" {
+        return line.clone()
+    }
+    rs2nika_hit(ctx, "R84")
+    let rest: String = line[eq..].clone()
+    return f"{head}: {ty}{rest}"
 }
 
 /// An arm `Some(x) => body`, `None => body` or `_ => body`: its pattern and
@@ -3489,14 +3589,21 @@ fn rs2nika_struct_field(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     return f"{ind}{vis}{name}: {ty},"
 }
 
-pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String, repo: ref String, facts: ref Vec[String]) -> Rs2nikaOut {
+pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref String, repo: ref String, facts: ref Vec[String]) -> Rs2nikaOut {
+    // R83: `check-free` / `emit-free` turn the methods into free functions
+    let free = profile_given.ends_with("-free")
+    let mut base: String = profile_given.clone()
+    if free {
+        base = profile_given[0..<profile_given.len() - "-free".len()].clone()
+    }
+    let profile = base.clone()
     let mut world: String = ""
     if profile == "check" {
         world = "CheckWorld"
     } else if profile == "emit" {
         world = "EmitWorld"
     }
-    let mut ctx = Rs2nikaCtx { profile: profile.clone(), world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [] }
+    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [] }
     if repo != "" {
         rs2nika_load(ctx, repo)
     }
@@ -5161,8 +5268,8 @@ fn main() throws {
         }
         return
     }
-    if profile != "check" && profile != "emit" && profile != "none" {
-        eprintln(f"`--profile` is `check`, `emit` or `none`, not `{profile}`")
+    if profile != "check" && profile != "emit" && profile != "none" && profile != "check-free" && profile != "emit-free" {
+        eprintln(f"`--profile` is `check`, `emit`, `none`, `check-free` or `emit-free`, not `{profile}`")
         return
     }
     if repo == "?" {

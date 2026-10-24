@@ -1,0 +1,8 @@
+fn check_x_build(n: i64) -> String {
+    let mut text: String = ""
+    let mut note: String = "x"
+    let mut at: i64 = 0
+    let found = 0
+    return text
+}
+

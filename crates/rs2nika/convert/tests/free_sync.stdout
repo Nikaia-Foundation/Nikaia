@@ -1,0 +1,7 @@
+fn check_x_plain(a: ref String) -> i64 {
+    return a.len()
+}
+fn check_x_threaded[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, a: ref String) -> i64 sync {
+    return a.len()
+}
+

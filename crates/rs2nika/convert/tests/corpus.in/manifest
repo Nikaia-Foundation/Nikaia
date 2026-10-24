@@ -1,4 +1,4 @@
-attributes 62 check
-defaults 36 check
-function 6 check
-program 13 check
+attributes 65 check-free check_attributes_
+defaults 41 check-free check_defaults_
+function 6 check-free check_function_
+program 24 check-free check_program_

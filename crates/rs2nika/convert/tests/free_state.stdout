@@ -1,0 +1,17 @@
+impl CheckState {
+}
+
+fn check_x_bump[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, by: i64) sync {
+    state.count += by
+}
+
+fn check_x_both[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+    check_x_bump(state, world, host, 1)
+    check_x_bump(state, world, host, 2)
+    state.other()
+}
+
+fn check_x_peek[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H) -> i64 sync {
+    return state.count
+}
+
