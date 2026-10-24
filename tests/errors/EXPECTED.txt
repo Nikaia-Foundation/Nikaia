@@ -23,7 +23,7 @@ There are two commas here. (line 2, column 12)
 `if` needs a condition before its `{`. (line 2, column 5)
 
 === B4
-Expected expression here, but found `)`. (line 2, column 18)
+Expected expression here, but found `*`. (line 2, column 18)
 
 === B5
 Expected type here, but found `=`. (line 2, column 12)

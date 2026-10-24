@@ -65,7 +65,7 @@ Y.*, made from what the grammar required at that position.
 | B1 | `let y = ` | the `=` with nothing after it | ✅ *`=` has nothing after it.* on the `=` |
 | B2 | `let y = 1 + ` | the `+` with nothing after it | ✅ *`+` has nothing on its right.* on the `+` |
 | B3 | `if { }` | the missing condition | ✅ *`if` needs a condition before its `{`.* |
-| B4 | `f(1, )` | an expression | ✅ *Expected expression here, but found `)`.* |
+| B4 | `f(1, *)` | an expression | ✅ *Expected expression here, but found `*`.* |
 | B5 | `let x: = 1` | a type | ✅ *Expected type here, but found `=`.* |
 
 B1 and B2 used to fail at the `}` on the next line; the reading moves the

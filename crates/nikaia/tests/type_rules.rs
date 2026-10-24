@@ -146,9 +146,9 @@ fn a_literal_is_proved_or_checked() {
         "{main}"
     );
     let ring = body(&rust, "ring");
-    // The fields are plain names: the rule reads them, not a new binding.
-    assert!(ring.contains("assert(slots.len() == CAP"), "{ring}");
-    assert!(ring.contains("the rule of `Ring`"), "{ring}");
+    // `resize(CAP, 0)` of an empty vector proves `slots.len() == CAP`: no check.
+    assert!(!ring.contains("assertion_failed"), "{ring}");
+    assert!(!ring.contains("the rule of `Ring`"), "{ring}");
 }
 
 /// D2: a method that changes the value checks the rule when it ends, and
