@@ -16,6 +16,11 @@ rules for commits are in `CLAUDE.md`.
 The architect cannot start agents (a subagent has no `Agent` tool). So the
 architect **coordinates by orders**, and the main session carries them out.
 
+## Effort
+
+The main session starts the architect with `effort: medium` (owner's decision).
+It raises it to `high` for one task only when the owner asks for it.
+
 ## The loop
 
 1. The owner states a wish or answers a question to the main session.
