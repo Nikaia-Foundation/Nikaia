@@ -571,6 +571,7 @@ fn the_ledger_is_never_published_for_a_caller_that_does_not_say_it_can_fail() {
         source,
         "no",
         "error",
+        "error",
         // A program, not a library (ADR-284 D4).
         false,
         None,

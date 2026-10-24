@@ -243,9 +243,10 @@ pub fn check_against<'a>(
     // nothing.
     reads: &'a Reads,
 ) -> Checked {
-    let checked = walked(
+    let mut checked = walked(
         parsed, beside, own, library, modules, newly, reads, false, true,
     );
+    refuse_unproved_claims(&mut checked);
     if beside.is_empty() && modules.is_empty() {
         dump_accepted(parsed, &checked);
     }
@@ -3092,6 +3093,76 @@ pub fn claims_report(
 
 /// The prelude's claim ([ADR-269](../../docs/specification/adr/adr-269.md) D2).
 pub const ASSERT: &str = "assert";
+
+/// **A claim the compiler did not prove is refused** (`NK1300`,
+/// [ADR-380](../../docs/specification/adr/adr-380.md) D1): an `assert` it
+/// checks when the program runs, and a precondition some call does not prove.
+/// Not proved is not false, and the message says so. The build's
+/// `unproved-claims = "warn"` lowers each to a warning and keeps its check
+/// (D2); that is the project's, as `refuted-claims` is. A precondition of
+/// `main`, checked where the words arrive, a test's verdict and an `assume`
+/// are not asked; nor is a claim shown false (`NK1207`), which is worse than
+/// not proved and told already, or a precondition only calls that break it
+/// every time leave open.
+pub fn refuse_unproved_claims(checked: &mut Checked) {
+    use nikaia_std::tools::prover_results::ClaimHeld;
+    let refuted: Vec<&Finding> = checked
+        .findings
+        .iter()
+        .filter(|f| f.code == "NK1207")
+        .collect();
+    let mut unproved = Vec::new();
+    for ((start, _), claim) in &checked.facts.claims {
+        if claim.assumed || refuted.iter().any(|f| i64::from(f.span.start) == *start) {
+            continue;
+        }
+        let message = match &claim.held {
+            Some(ClaimHeld::AtRunTime(why)) => {
+                format!("`{}` is not proved: {why}.", claim.written)
+            }
+            Some(ClaimHeld::Precondition(f, n)) if f != "main" => {
+                // The calls `NK1207` told break it every time.
+                let broken = refuted
+                    .iter()
+                    .filter(|r| r.message.contains(&format!("`{f}`'s precondition")))
+                    .count() as i64;
+                let calls = match n - broken {
+                    n if n <= 0 => continue,
+                    1 => "one call does".to_string(),
+                    n => format!("{n} calls do"),
+                };
+                format!(
+                    "`{}`, the precondition of `{f}`, is not proved: {calls} not prove it.",
+                    claim.written
+                )
+            }
+            _ => continue,
+        };
+        let start = *start as u32;
+        unproved.push(Finding {
+            severity: Severity::Error,
+            span: Span {
+                start,
+                end: start + "assert".len() as u32,
+            },
+            code: "NK1300".to_string(),
+            message,
+            notes: vec![
+                "Not proved is not false: the compiler could not show the claim from what it \
+                 knows where it stands, and it may well hold."
+                    .to_string(),
+                "`nikaia check --asserts` lists every claim and why it is not proved.".to_string(),
+            ],
+            help: Some(
+                "Give the compiler what it needs to prove it, or build with \
+                 `unproved-claims = \"warn\"` to have it checked when the program runs."
+                    .to_string(),
+            ),
+            labels: Vec::new(),
+        });
+    }
+    checked.findings.extend(unproved);
+}
 
 /// **`std` assumes nothing** ([ADR-376](../../docs/specification/adr/adr-376.md)
 /// D3): every `assume` of a file of `std`'s Nikaia is refused (`NK1295`). The

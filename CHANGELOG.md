@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1195] — 2026-10-24
+
+**Unproved asserts refused: `NK1300`, `unproved-claims` (ADR-380)**
+- An `assert` the compiler cannot prove (neither proved nor shown false) is refused with `NK1300` by default; `[build] unproved-claims = "warn"` or `--unproved-claims warn` makes it a warning and the claim is checked at run time. Not asked: proved claims, preconditions every call proves, `main`'s, a test's, an `assume`.
+- A type's rule at a struct literal whose fields are names or literals is asserted over those values, so the prover reads e.g. `slots.len()` rather than a field of a new binding.
+
 ## [0.0.1194] — 2026-10-22
 
 **An unconditional write before the ifs that cannot tell (built)**

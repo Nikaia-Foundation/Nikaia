@@ -61,6 +61,8 @@ const REENTRANCY_VAR: &str = "NIKAIA_REENTRANCY_CHECK";
 const OPTIMIZATION_VAR: &str = "NIKAIA_OPTIMIZATION";
 /// `--refuted-claims`, resolved, for the wrapper ([ADR-269](../../docs/specification/adr/adr-269.md) D8).
 const REFUTED_VAR: &str = "NIKAIA_REFUTED_CLAIMS";
+/// `--unproved-claims`, resolved, for the wrapper ([ADR-380](../../docs/specification/adr/adr-380.md) D2).
+const UNPROVED_VAR: &str = "NIKAIA_UNPROVED_CLAIMS";
 /// `[build] artifact` and `symbol-prefix` (ADR-284 D4, D13), for the wrapper.
 const ARTIFACT_VAR: &str = "NIKAIA_BUILD_ARTIFACT";
 const PREFIX_VAR: &str = "NIKAIA_SYMBOL_PREFIX";
@@ -130,6 +132,11 @@ pub struct Settings {
     /// default, refuses the program; `warn` builds it, the claim checked where
     /// it is reached. The bypass for a program a better prover now refutes.
     pub refuted_claims: String,
+    /// **What a claim the compiler did not prove is**
+    /// ([ADR-380](../../docs/specification/adr/adr-380.md) D2): `error`, the
+    /// default, refuses the program (`NK1300`); `warn` builds it, each such
+    /// claim a warning and a check where it is reached.
+    pub unproved_claims: String,
     /// **What is made** (ADR-284 D4): `"program"`, or `"c-library"`, which
     /// exports every `pub extern fn` with a body and writes the header.
     pub artifact: String,
@@ -161,6 +168,19 @@ fn refuted_claims(word: &str) -> Result<String> {
             "`refuted-claims` is `error` or `warn`, not `{other}`. `error` refuses a program \
              with a claim the compiler shows false with values; `warn` builds it and checks the \
              claim when it runs."
+        )),
+    }
+}
+
+/// `error` or `warn`, what `--unproved-claims` and `[build] unproved-claims`
+/// may say ([ADR-380](../../docs/specification/adr/adr-380.md) D2).
+fn unproved_claims(word: &str) -> Result<String> {
+    match word {
+        "error" | "warn" => Ok(word.to_string()),
+        other => Err(anyhow!(
+            "`unproved-claims` is `error` or `warn`, not `{other}`. `error` refuses a program \
+             with a claim the compiler did not prove; `warn` builds it and checks the claim \
+             when it runs."
         )),
     }
 }
@@ -321,6 +341,7 @@ impl Settings {
             .to_string();
         let optimization = manifest.setting("optimization", None, "").to_string();
         let refuted_claims = refuted_claims(manifest.setting("refuted-claims", None, "error"))?;
+        let unproved_claims = unproved_claims(manifest.setting("unproved-claims", None, "error"))?;
         let artifact = artifact(manifest.setting("artifact", None, "program"))?;
         let symbol_prefix = symbol_prefix(
             manifest.setting(
@@ -344,6 +365,7 @@ impl Settings {
             reentrancy_check,
             optimization,
             refuted_claims,
+            unproved_claims,
             artifact,
             symbol_prefix,
             tests: false,
@@ -360,9 +382,14 @@ impl Settings {
     /// ([ADR-269](../../docs/specification/adr/adr-269.md) D8): a single build
     /// may let through a claim a newer prover refutes, as it may name another
     /// target.
-    pub fn refutations(&mut self, flag: Option<&str>) -> Result<()> {
-        if let Some(word) = flag {
+    /// **The command line's `--unproved-claims` over the manifest's**
+    /// ([ADR-380](../../docs/specification/adr/adr-380.md) D2), the same way.
+    pub fn refutations(&mut self, refuted: Option<&str>, unproved: Option<&str>) -> Result<()> {
+        if let Some(word) = refuted {
             self.refuted_claims = refuted_claims(word)?;
+        }
+        if let Some(word) = unproved {
+            self.unproved_claims = unproved_claims(word)?;
         }
         Ok(())
     }
@@ -450,6 +477,10 @@ impl Settings {
                 REFUTED_VAR.to_string(),
                 OsString::from(&self.refuted_claims),
             ),
+            (
+                UNPROVED_VAR.to_string(),
+                OsString::from(&self.unproved_claims),
+            ),
             (ARTIFACT_VAR.to_string(), OsString::from(&self.artifact)),
             (PREFIX_VAR.to_string(), OsString::from(&self.symbol_prefix)),
         ]
@@ -476,6 +507,7 @@ impl Settings {
         let reentrancy_check = word(REENTRANCY_VAR, "yes");
         let optimization = word(OPTIMIZATION_VAR, "");
         let refuted_claims = refuted_claims(&word(REFUTED_VAR, "error"))?;
+        let unproved_claims = unproved_claims(&word(UNPROVED_VAR, "error"))?;
         let artifact = artifact(&word(ARTIFACT_VAR, "program"))?;
         let symbol_prefix = symbol_prefix(&word(PREFIX_VAR, "program"))?;
         let mut build = Build::parse(&target, &user_parallelism, &reentrancy_check)?;
@@ -490,6 +522,7 @@ impl Settings {
             reentrancy_check,
             optimization,
             refuted_claims,
+            unproved_claims,
             artifact,
             symbol_prefix,
             tests: std::env::var_os(TESTS_VAR).is_some(),
@@ -513,7 +546,7 @@ impl Settings {
     pub fn choices(&self) -> Choices {
         Choices::new(
             format!(
-                "{}/{}/{}{}{}{}{}{}{}{}{}",
+                "{}/{}/{}{}{}{}{}{}{}{}{}{}",
                 self.target,
                 self.user_parallelism,
                 self.reentrancy_check,
@@ -522,6 +555,12 @@ impl Settings {
                 // lowering to one that refuses it.
                 if self.refuted_claims == "warn" {
                     "/refuted-claims:warn"
+                } else {
+                    ""
+                },
+                // The same for a claim not proved (ADR-380 D2).
+                if self.unproved_claims == "warn" {
+                    "/unproved-claims:warn"
                 } else {
                     ""
                 },
@@ -1376,6 +1415,7 @@ pub fn lower_reading(
                                 &unit.source,
                                 &settings.user_parallelism,
                                 &settings.refuted_claims,
+                                &settings.unproved_claims,
                                 settings.library(),
                                 keep.then_some(&mut facts),
                             )
@@ -1836,6 +1876,7 @@ pub fn check(
     source: &str,
     user_parallelism: &str,
     refuted_claims: &str,
+    unproved_claims: &str,
     building_a_library: bool,
     // Where the walk's facts go, for an emitter that would ask the same.
     facts_out: Option<&mut Option<check::CheckFacts>>,
@@ -1874,6 +1915,7 @@ pub fn check(
     all.sort_by_key(|finding| finding.span.at());
     lint_where_nothing_crosses(&mut all, user_parallelism);
     let_refuted_claims_through(&mut all, refuted_claims);
+    let_unproved_claims_through(&mut all, unproved_claims);
     let violations = sync::check(parsed, own, &library);
     if all.is_empty() && violations.is_empty() {
         return Ok(String::new());
@@ -2202,6 +2244,23 @@ fn let_refuted_claims_through(findings: &mut [check::Finding], refuted_claims: &
         finding.notes.push(
             "`refuted-claims = \"warn\"` lets this build through: the claim is checked when \
              the program runs, and stops it there"
+                .to_string(),
+        );
+    }
+}
+
+/// **`unproved-claims = "warn"`: a claim the compiler did not prove builds**
+/// ([ADR-380](../../docs/specification/adr/adr-380.md) D2), as a warning, and
+/// is checked where it is reached, as every claim was before the switch.
+fn let_unproved_claims_through(findings: &mut [check::Finding], unproved_claims: &str) {
+    if unproved_claims != "warn" {
+        return;
+    }
+    for finding in findings.iter_mut().filter(|f| f.code == "NK1300") {
+        finding.severity = check::Severity::Warning;
+        finding.notes.push(
+            "`unproved-claims = \"warn\"` lets this build through: the claim is checked when \
+             the program runs, and a false one stops it there"
                 .to_string(),
         );
     }

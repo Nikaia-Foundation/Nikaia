@@ -98,6 +98,8 @@ fn run(purpose: &str, source: &str) -> (bool, String, String) {
     let lowered = Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(&dir)
         .args(["lower", "rules.nika", "--output", "rules.rs"])
+        // A rule not proved is checked where it must hold (ADR-380 D2).
+        .args(["--unproved-claims", "warn"])
         .args(["--optimization", "remove-bounds-checks:on"])
         .output()
         .expect("the nikaia binary runs");
@@ -144,7 +146,8 @@ fn a_literal_is_proved_or_checked() {
         "{main}"
     );
     let ring = body(&rust, "ring");
-    assert!(ring.contains("assert(ring.slots.len() == CAP"), "{ring}");
+    // The fields are plain names: the rule reads them, not a new binding.
+    assert!(ring.contains("assert(slots.len() == CAP"), "{ring}");
     assert!(ring.contains("the rule of `Ring`"), "{ring}");
 }
 
@@ -327,6 +330,7 @@ fn run_package(purpose: &str, main: &str) -> (bool, String, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(&dir)
         .args(["run", "--optimization", "remove-bounds-checks:on"])
+        .args(["--unproved-claims", "warn"])
         .env_remove("RUST_BACKTRACE")
         .output()
         .expect("the nikaia binary runs");
@@ -406,6 +410,7 @@ fn a_rule_over_a_pub_field_is_no_fact_in_a_dependency() {
     let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(dir.join("app"))
         .args(["run", "--optimization", "remove-bounds-checks:on"])
+        .args(["--unproved-claims", "warn"])
         .env_remove("RUST_BACKTRACE")
         .output()
         .expect("the nikaia binary runs");

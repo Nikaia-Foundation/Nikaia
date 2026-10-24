@@ -107,6 +107,7 @@ implementation.
 | [377](adr-377.md) | Vectors a program holds: `simd::Lanes[T]` at the build's width, `simd::Fixed[T, N]` at a fixed one; lane arithmetic names wrap or saturation; a mask is read as positions (provisional) |
 | [378](adr-378.md) | The emitted code is `unsafe` only where a switch or the program says so: with every `remove-*` off only the program's own `unsafe`; each check a switch drops a call into `nikaia_std::proven`, asserted in a debug build | Accepted | yes |
 | [379](adr-379.md) | An unconditional write is emitted before the `if`s directly in front of it where no program can tell: neither side touches the other's places, calls out, pauses or can stop the program, and the `if`s do not leave; in every build | Accepted | yes |
+| [380](adr-380.md) | An `assert` the compiler does not prove refuses the program (`NK1300`), the message saying not proved is not false; `unproved-claims = "warn"` builds it, the claim checked where it is reached | Accepted | yes |
 | [243](adr-243.md) | `std::process::run` starts a program and waits for it on a thread of its own, and a non-zero exit is an answer, not a failure. The child's environment is the caller's, changed by `env_clear`, `env_remove`, `env` in that order, names compared as the platform does; `program` is found on the caller's `PATH`; every entry is checked before the start; `env_clear` is not a sandbox (D5-D8). | Accepted | yes |
 | [258](adr-258.md) | A design question is weighed by four weights: the special case pays, the compiler works for the developer, the common case costs nothing, and the language is consistent with itself. | Accepted | yes |
 | [001](adr-001.md) | The toolchain is stable Rust named in one file, the parser is generated from a grammar over bytes, and the build is staged with Stage 0 a transpiler. | Accepted | yes |
@@ -295,6 +296,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [269](adr-269.md) D4 | [380](adr-380.md) D1, D2 | an `assert` not proved refuses the program (`NK1300`) unless `unproved-claims = "warn"`, where it is checked |
 | [010](adr-010.md) D2, D3 | [365](adr-365.md) D1-D3 | standard input and files are untrusted; `trusted: true` at the source; assets trusted |
 | [278](adr-278.md) D1 | [364](adr-364.md) D1-D3 | a tuple may be nullable, `(A, B)?`; `NK1254` retired |
 | [023](adr-023.md) D4, [280](adr-280.md) D18, [308](adr-308.md) D11 | [357](adr-357.md) D1-D3 | the set of error types at a `catch` is closed; a `match` naming every type needs no `else`, and a grown set refuses it |

@@ -1,7 +1,9 @@
 //! **Every `assert` outside a test is proved while the program is built
 //! where it can be, and checked when the program runs where it cannot**
 //! ([ADR-269](../../../docs/specification/adr/adr-269.md) D4). A proved claim
-//! leaves nothing behind in the emitted Rust.
+//! leaves nothing behind in the emitted Rust. One that is not proved is
+//! `NK1300` and builds only at `unproved-claims = "warn"`
+//! ([ADR-380](../../../docs/specification/adr/adr-380.md)), as `ran` does.
 use nikaia::check::CodeOps;
 
 mod common;
@@ -51,9 +53,15 @@ fn the_one(source: &str, code: &str) -> nikaia::check::Finding {
     matching.remove(0)
 }
 
-/// Lowers, compiles and runs; the program's output, and the Rust it came from.
+/// Lowers, compiles and runs, as a build at `unproved-claims = "warn"` does
+/// (ADR-380 D2): a claim not proved is no refusal there, and is checked; the
+/// program's output, and the Rust it came from.
 fn ran(purpose: &str, source: &str) -> (String, String) {
-    assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    let refused: Vec<_> = findings(source)
+        .into_iter()
+        .filter(|f| f.code != "NK1300")
+        .collect();
+    assert!(refused.is_empty(), "{refused:#?}");
     let parsed = parse_to_ast(source).expect("the source parses");
     let rust = emit_program(&parsed, Build::default())
         .expect("it lowers")
@@ -152,6 +160,8 @@ fn a_claim_nothing_shows_is_checked_when_the_program_runs() {
             "nothing before it shows it".to_string()
         )]
     );
+    // Refused unless the build says `warn` (ADR-380 D1).
+    assert_eq!(codes(source), ["NK1300"]);
     let (out, rust) = ran("prove-at-run-time", source);
     assert_eq!(out, "2\n");
     assert!(

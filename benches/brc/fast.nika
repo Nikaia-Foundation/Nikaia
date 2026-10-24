@@ -122,7 +122,8 @@ impl Table {
         while true {
             let mut sep = pos
             while true {
-                assert(sep >= pos && sep - pos <= 100; message: "a station's name has at most 100 bytes")
+                // The input's, so checked here, and a fact from here on.
+                if !(sep >= pos && sep - pos <= 100) { panic("a station's name has at most 100 bytes") }
                 let block: simd::Fixed[u8, 32] = simd::load(buf, sep)
                 let hit = block.eq(semis).first() ?? -1
                 if hit >= 0 {
@@ -135,7 +136,7 @@ impl Table {
             // the name by a mask looked up by its length, without a branch on
             // the length, which names of varying length would mispredict.
             let len = sep - pos
-            assert(len >= 0 && len <= 100; message: "a station's name has at most 100 bytes")
+            if !(len >= 0 && len <= 100) { panic("a station's name has at most 100 bytes") }
             let w0 = buf.u64_le(pos) & FIRST[len]
             let w1 = buf.u64_le(pos + 8) & SECOND[len]
 

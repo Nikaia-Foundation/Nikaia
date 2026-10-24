@@ -50803,7 +50803,7 @@ pub enum Switch {
     Moved(String),
 }
 
-pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("artifact"), String::from("symbol-prefix")] }
+pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("artifact"), String::from("symbol-prefix")] }
 
 fn withdrawn(key: &str) -> &'static str {
     if key == "ordering" { return "statements run in the order they are written, so there's nothing left for it to turn off. To run two things together, write `overlap { … }`; `--overlaps` shows which branches did"; }
