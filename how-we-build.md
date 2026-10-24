@@ -42,21 +42,21 @@ performance; never seconds.
 Click a tile for what the number counts, how it was taken, and what it does not show.
 
 <div class="hwb-grid">
-<a class="hwb-tile" href="#share"><span class="hwb-num">68.8 %</span><span class="hwb-lbl">of the toolchain is written in Nikaia</span><span class="hwb-more">details</span></a>
+<a class="hwb-tile" href="#share"><span class="hwb-num">69.4 %</span><span class="hwb-lbl">of the toolchain is written in Nikaia</span><span class="hwb-more">details</span></a>
 <a class="hwb-tile" href="#perline"><span class="hwb-num">143k &rarr; 71k</span><span class="hwb-lbl">context tokens per moved Rust line, long agents against restarted ones</span><span class="hwb-more">details</span></a>
 <a class="hwb-tile" href="#context"><span class="hwb-num">566-626k</span><span class="hwb-lbl">tokens of context at the end of a long agent; 71-78 % of its cost came after 300k</span><span class="hwb-more">details</span></a>
 <a class="hwb-tile" href="#builder"><span class="hwb-num">52k &rarr; ~15k</span><span class="hwb-lbl">context at the start of a builder with six tools instead of about forty</span><span class="hwb-more">details</span></a>
-<a class="hwb-tile" href="#tests"><span class="hwb-num">267</span><span class="hwb-lbl">test binaries, 16-20 MB each, relinked after every change</span><span class="hwb-more">details</span></a>
-<a class="hwb-tile" href="#package"><span class="hwb-num">1 unit</span><span class="hwb-lbl">holds the lowered tools: 73k lines in one module (7.4 MB object)</span><span class="hwb-more">details</span></a>
+<a class="hwb-tile" href="#tests"><span class="hwb-num">267 &rarr; 1</span><span class="hwb-lbl">test binaries (16-20 MB each); now one, <code>--test it</code></span><span class="hwb-more">details</span></a>
+<a class="hwb-tile" href="#package"><span class="hwb-num">1 of 256</span><span class="hwb-lbl">objects changed on a one-file change; was one 7.4 MB unit</span><span class="hwb-more">details</span></a>
 </div>
 
 <div class="hwb-detail" id="share" markdown="1">
 
-### 68.8 % in Nikaia
+### 69.4 % in Nikaia
 
 `python3 scripts/self_hosting.py` counts code lines (not blank, not only a
-comment) in `tools/*.nika` against the Rust of the toolchain. Today that is
-71,691 lines of Nikaia. It was 43.8 % at 0.0.787 and 54.3 % at 0.0.823 on
+comment) in `tools/*.nika` against the Rust of the toolchain. Today (0.0.1210) that is
+72,529 lines of Nikaia (71,944 at 0.0.1207, 68.9 %). It was 43.8 % at 0.0.787 and 54.3 % at 0.0.823 on
 2026-10-11. It moves with every step, so the figure on this page is the day
 it was written. It does not say how much of the *hard* part is left: what
 remains are the cycles of `check` and `emit` and the services below them.
@@ -109,29 +109,29 @@ on polling a build or a test: waiting is now one call.
 
 <div class="hwb-detail" id="tests" markdown="1">
 
-### 267 test binaries
+### 267 test binaries become one
 
-Checked in the code on 2026-10-24 (`docs/modular-compiler.md`): 267 test
-files in `crates/nikaia/tests` are 267 binaries, each 16-20 MB at the fast
-profile, because each links the compiler and `std` statically. That is about
-4.5 GB per profile and 267 links after a change, and it is why the disk ran
-out. One integration binary is the proposed fix (option B); it is a proposal,
-not built. The count of sizes and links is read from the tree, the saving is
-not measured.
+Before 0.0.1207 the 267 test files in `crates/nikaia/tests` were 267
+binaries, 16-20 MB each at the fast profile, because each linked the compiler
+and `std`: about 4.5 GB per profile and 267 links after a change
+(`docs/modular-compiler.md`). Commit 539ea132 merged them into one
+integration binary, `tests/it` (#793 step B); `--test a` became a filter,
+`cargo test --profile fast -p nikaia --test it a::`. The 267 -> 1 is a count
+of binaries; the saving in links is read from the tree, the saving in disk
+is not re-measured here.
 
 </div>
 
 <div class="hwb-detail" id="package" markdown="1">
 
-### One compilation unit for the lowered tools
+### One Rust module per `.nika`
 
-`crates/nikaia-std/src/tools/package.rs` is 73k lines, 3.9 MB, with 3,300
-functions in one module. rustc splits a crate along modules, so the fast
-profile's incremental session holds one 7.4 MB object with 1,832 `tools`
-functions, and any `.nika` change re-optimises all of it on one core. The
-direction is one Rust module per `.nika` (#667 step 4, #793). It shows what
-the problem is, not what the fix will win: that is to be measured as
-re-optimised bytes, not as time.
+`package.rs` (73k lines, 3,300 functions, one 7.4 MB object) is gone. Since
+0.0.1207 `lower-std` writes one generated file per `.nika` in
+`crates/nikaia-std/src/tools/lowered/`, with `lowered.rs` as the index
+(#667 step 4, #793). The commit measures it: changing one body changed
+**1 of 256** incremental objects (78 KB); the largest object is 1.6 MB.
+Counted in objects and bytes, not in time.
 
 </div>
 
@@ -155,9 +155,33 @@ measured yet" means nobody has counted.
 | 2026-10-24 | Rules: count, never time; callgrind for performance | A rule; the same binary varied 1.4-1.9 times between days |
 | 2026-10-24 | Architect role, main session as carrier, stage 1: one builder at a time (`docs/architect.md`) | Running. First run rows in `docs/tokenspeed.md`: a312a5, 38 turns, 1.2 M tokens, no line moved. Not enough to judge |
 | 2026-10-24 | Decision basis for a modular compiler (#793) | Planned: one module per `.nika` in `package.rs` (#667 step 4), one test binary, then stage 2 with two builders. Nothing built, nothing measured |
-| (#667) | Per-file cache keys for the lowering | Planned, in front of step 4 |
+| (#667) | Per-file cache keys for the lowering | Built (cbb86798, bc65ff63): the key is the compiler's identity, then its fingerprint with rustc and `Cargo.lock`. A review found a stale-hit risk in the first form and filed it as #801 before it caused harm |
+| 2026-10-24 | `lower-std`: one module per `.nika` (0.0.1207, ADR-294 D18/D19) | 1 of 256 objects changed on a one-file change, was one 7.4 MB unit |
+| 2026-10-24 | Test binaries 267 -> 1 (`--test it`, 539ea132) | Count of binaries; links per change 267 -> 1 |
+| 2026-10-24 | CI: tests built in a step of their own (#795 step 1) | Separates compiling from running. A slip on the way: an unquoted `accepted_sweep:: -- --ignored` in the workflow was a YAML mapping error; fixed in 8d56f29c |
+| 2026-10-24 | CI findings, three develop runs (`docs/ci-cache.md`) | Up to 40 % of a run is queue wait (one run 40 %, another 14 %); `Test` is 68-83 % of a job. The owner parked the cache plan until the build is more cacheable |
+| 2026-10-24 | Self-hosting, U-d4 (check_function.nika, 3 steps) | Share 68.9 % at 0.0.1207, 69.4 % at 0.0.1210 (72,529 lines). The 520-line reduction of `check/mod.rs` is not re-counted here |
+| 2026-10-24 | Named properties, ADR-381 (0.0.1208-0.0.1210) | A pure bool call is a fact the prover reads by name; `binary_search` requires `is_sorted()` and `sort` ensures it (D5); a proof resting on an `assume` is marked in `--bounds` and `--asserts` (D6) |
+| 2026-10-24 | Measure of the compiler's own code (`docs/formal-verification.md`) | Indexes 802 of 1,473 proved (54 %); arithmetic 491 of 1,101 (45 %). The rest keep their run-time checks |
 
 </div>
+
+## What we learned on the way
+
+* A binary search needs lengths and counters (`0 <= lo <= hi <= len`), not
+  sortedness, to be free of index errors (`docs/facts-about-data.md`);
+  sortedness matters for the answer, not for the bounds.
+* A property such as "sorted" can be expressible in the language and still
+  unreadable to the prover; naming it (ADR-381) made it a fact.
+* Reading a decision basis with the owner changed the claim: the owner chose
+  the honest wording over "formally verified".
+* The owner takes one question at a time in a decision round.
+
+## The claim we make
+
+The compiler's own Nikaia code is proved free of run-time errors **in part**,
+and measured: 802 of 1,473 indexes and 491 of 1,101 arithmetic steps today.
+It is not complete, and we do not say the compiler is formally verified.
 
 ## What is not proven
 
@@ -167,7 +191,7 @@ shortens the cycle, and that two builders can run without conflicts.
 
 ## The language builds itself
 
-The goal is that Nikaia hosts itself. Today 68.8 % of the toolchain is
+The goal is that Nikaia hosts itself. Today 69.4 % of the toolchain is
 written in Nikaia (`scripts/self_hosting.py`; the figure moves with every
 step). A converter, `crates/rs2nika`, translates a Rust function into a first
 draft in Nikaia, marks with TODO where it cannot, and names the functions it
