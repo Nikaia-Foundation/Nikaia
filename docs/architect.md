@@ -85,6 +85,10 @@ performance*).
 ## State
 
 *Updated by the architect when it ends.* 2026-10-24, develop 97385b5, 0.0.1204.
+Branch `wip/bounding-candidates-2026-10-19` (stash on 0.0.1080) checked
+2026-10-24: everything in it is on develop in a later form (`bounding_grew`
+returns the failed counters, `bounding_for`/`bounding_while` re-walk in a
+loop); no order owed, branch deletable.
 Stage: 1 (serial). Current issue: #125, C-7 of `selfhosting-plan.md`: U-d0 and
 U-d1 done, **U-d2** (`check/attributes.rs`, 714 lines, to
 `tools/check_attributes.nika`) running; then **#667** (owner: before U-d3):
