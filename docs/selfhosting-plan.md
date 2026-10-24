@@ -476,3 +476,6 @@ functions of `contracts/mod.rs` (lines about 931-1439, about 500), then R-3
 chunk 2 once #814 and #816 are built, then R-6 the `visit_*` walkers of
 `contracts/send.rs`/`sync.rs`, then `fold_bound.rs`, then `modules.rs`'s
 `Program` core.
+#813 built (d7164ae0) and closed; #818 (a parameter handed to a method on
+`self` counted as kept; least fixpoint over the impl's methods) now blocks
+#811's last step, and also carries #813's loosening to read-only arguments.
