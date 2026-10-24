@@ -68,6 +68,9 @@ name = "brc"
 version = "0.1.0"
 
 [build]
+# `fast.nika`'s table rule needs the length `Vec::resize` leaves, which the
+# prover does not follow yet: checked once at run time (ADR-380 D2).
+unproved-claims = "warn"
 user-parallelism = "$1"
 optimization = "${OPTIMIZATION:-remove-bounds-checks:on,remove-overflow-checks:on,prove-through-loops:on,skip-free-at-exit:on}"
 

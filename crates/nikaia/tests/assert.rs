@@ -62,11 +62,16 @@ fn run_with(purpose: &str, source: &str, parallel: &str, flags: &[&str]) -> Outp
 }
 
 /// Runs at both settings and hands back what the program printed to each
-/// stream, having checked it is the same at both.
+/// stream, having checked it is the same at both. Built at
+/// `unproved-claims = "warn"` (ADR-380 D2), where a claim not proved is
+/// checked when the program runs, which is what these tests watch.
 fn outcome(purpose: &str, source: &str) -> (bool, String, String) {
-    let found = findings(source);
+    let found: Vec<_> = findings(source)
+        .into_iter()
+        .filter(|f| f.code != "NK1300")
+        .collect();
     assert!(found.is_empty(), "{purpose}: {found:#?}");
-    outcome_with(purpose, source, &[])
+    outcome_with(purpose, source, &["--unproved-claims", "warn"])
 }
 
 /// **A program with a claim the compiler shows false** (ADR-269 D8): refused
@@ -446,7 +451,9 @@ fn the_owners_program_is_refused_while_it_is_built() {
 }
 
 /// `--asserts` over a program, with `NO_COLOR` set and its output not a
-/// terminal: the report as printed, without colour.
+/// terminal: the report as printed, without colour. At
+/// `unproved-claims = "warn"`, so that a program with a claim not proved
+/// builds and its report can be read.
 fn asserts_report(name: &str, source: &str) -> String {
     let dir = common::scratch_dir(&format!("assert-report-{name}"));
     std::fs::write(dir.join(format!("{name}.nika")), source).expect("write");
@@ -459,6 +466,8 @@ fn asserts_report(name: &str, source: &str) -> String {
             "--output",
             &format!("{name}.rs"),
             "--asserts",
+            "--unproved-claims",
+            "warn",
         ])
         .output()
         .expect("the nikaia binary runs");

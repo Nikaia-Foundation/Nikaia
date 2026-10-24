@@ -4,7 +4,9 @@ This page shows what Nikaia does with an `assert`. Formal verification usually m
 second language: specification clauses, ghost code, loop invariants and a proof assistant
 beside the program. In Nikaia it is an `assert`. You write `assert(whole > 0)`, and the
 compiler turns it into a contract that every caller must meet. A call that breaks it does
-not build. A claim the compiler cannot prove yet is checked at run time.
+not build. A claim the compiler cannot prove yet is refused too, with `NK1300`, unless the
+build says `unproved-claims = "warn"`: then it is a warning, and the program checks the
+claim when it runs.
 
 Each program below was built with today's compiler, and the output is pasted as it came (the
 path of the scratch directory shortened to `…`). To try one, put it in `src/main.nika` of a
@@ -174,9 +176,11 @@ $ target/nikaia/bin/loop
 `nikaia build --asserts` lists every `assert` and what became of it. *Proved* means no check
 is left in the program. A *precondition* is each caller's to show. *Checked at run time*
 means the prover could not read the claim: it reads linear integer arithmetic, lengths and
-branch conditions, not the product of two names like `w * h`. Such a claim does not stop the
-build; the program checks it when it runs. A better prover removes checks and does not
-change what a correct program does.
+branch conditions, not the product of two names like `w * h`. Such a claim stops the build
+with `NK1300`: not proved is not false, but nothing has shown it. With `[build]
+unproved-claims = "warn"` in `nikaia.toml`, or `--unproved-claims=warn` on the command line,
+it is a warning instead, and the program checks the claim when it runs. A better prover
+removes checks and does not change what a correct program does.
 
 ```nika
 fn average(total: int, count: int) -> int {
@@ -206,6 +210,34 @@ asserts in …/rep/src/main.nika: 4 - not proved 1 (refused 0, checked at run ti
   …/rep/src/main.nika:16  assert(n == 3)  proved
   …/rep/src/main.nika:2  assert(count > 0)  precondition of `average`: proved at every call the compiler sees; any other reaches the entry that checks it
   …/rep/src/main.nika:7  assert(w >= 0 && h >= 0)  precondition of `area`: proved at every call the compiler sees; any other reaches the entry that checks it
+error[NK1300]: `assert(a >= 0)` is not proved: `a` is not a whole number the prover reads.
+  --> …/rep/src/main.nika:9:5
+   |
+ 9 |     assert(a >= 0)
+   |     ^^^^^^
+   |
+   = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+   = note: `nikaia check --asserts` lists every claim and why it is not proved.
+   = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+1 type error
+```
+
+With the switch the same claim is a warning, and the program builds and runs:
+
+```text
+$ nikaia build --unproved-claims=warn
+warning[NK1300]: `assert(a >= 0)` is not proved: `a` is not a whole number the prover reads.
+  --> …/rep/src/main.nika:9:5
+   |
+ 9 |     assert(a >= 0)
+   |     ^^^^^^
+   |
+   = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+   = note: `nikaia check --asserts` lists every claim and why it is not proved.
+   = note: `unproved-claims = "warn"` lets this build through: the claim is checked when the program runs, and a false one stops it there.
+   = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+$ ./target/nikaia/bin/rep
+5 20
 ```
 
 ## `main`'s parameters are its command line

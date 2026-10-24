@@ -12,9 +12,13 @@ use std::process::{Command, Output};
 
 const ALL_ON: &str = "remove-bounds-checks:on,remove-overflow-checks:on,prove-through-loops:on";
 
+/// The command line, at `unproved-claims = "warn"` (ADR-380 D2): what these
+/// tests watch is the facts at a call, and a claim elsewhere in a program
+/// that is not proved is checked when it runs.
 fn nikaia(dir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(dir)
+        .args(["--unproved-claims", "warn"])
         .args(args)
         .output()
         .expect("the nikaia binary runs")

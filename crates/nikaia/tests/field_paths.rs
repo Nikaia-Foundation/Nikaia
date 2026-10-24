@@ -292,6 +292,7 @@ fn asserted(purpose: &str, source: &str) -> (String, String) {
     let lowered = Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(&dir)
         .args(["--asserts", "lower", "p.nika", "--output", "p.rs"])
+        .args(["--unproved-claims", "warn"])
         .output()
         .expect("the nikaia binary runs");
     assert!(

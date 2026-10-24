@@ -39,6 +39,10 @@ benches/brc/brc.sh 200000     # quicker
   with `nikaia build` at `opt-level = 3`, no debug assertions; it keeps the
   overflow checks the language promises. **Neither side uses link-time
   optimisation.**
+* **`unproved-claims = "warn"`** (ADR-380 D2). `fast.nika`'s table rule,
+  `slots.len() == SLOTS`, is not proved: the prover does not follow the length
+  `Vec::resize` leaves in a `mut` list. It is checked once, when the table is
+  built; every other claim of the three programs is proved.
 * **Two modes for `1brc.nika` and `fast.nika`.** `fast-unsafe.nika` is
   counted optimized only: what it is for is its assumes believed.
   * **Nikaia safe**: only `prove-through-loops` on, which changes what is
@@ -212,7 +216,8 @@ the branch's outcome varies with the input:
   row at 0.0.1178). A row is about 14 bytes, so the `;` is almost always in
   the first 32, and that test is predicted. Each load is proved inside the
   input, with no `unsafe`: the row starts before `stop`, `MARGIN` bytes
-  before the end, and an `assert` bounds the name to 100 bytes.
+  before the end, and a guard on the input (`panic` past 100 bytes) bounds
+  the name.
   `find_all`'s `Scan::AfterHit` searches the same way inside `std`, but its
   iterator keeps its position in a field, and Rust cannot tell LLVM that
   `at <= len` holds from one call to the next without an `unsafe` assume; it

@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1194 (Draft)
-**Date:** 2026-10-22
+**Version:** 0.0.1195 (Draft)
+**Date:** 2026-10-24
 
 ---
 
@@ -1366,8 +1366,8 @@ The claim reads the fields by name, and it is the type's **invariant**. It
 holds after every construction - a literal, a `with`, the constructor's
 result - at the end of every method that changes the value, and after every
 write to a field from outside such a method; inside a method it may be broken
-for a while. Each of these points is proved where the compiler can and checked
-where it cannot, as any `assert` is (Part III 14.2). Wherever a value of the
+for a while. Each of these points is proved, or where the compiler cannot,
+refused or checked as the build says, as any `assert` is (Part III 14.2). Wherever a value of the
 type is read, the rule is a fact the compiler proves from. Where a struct with
 private fields writes no rule, the compiler may find one its package's code
 always keeps, and uses it only as a fact.

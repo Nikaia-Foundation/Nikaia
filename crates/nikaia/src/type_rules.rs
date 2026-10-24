@@ -650,6 +650,30 @@ fn check_literals(
             let at = spans.get(&id.get()).copied().unwrap_or(span);
             let literal = std::mem::replace(expr, Expr::LitNull(NodeId::fresh()));
             let binding = Expr::Variable(rules.binding, NodeId::fresh());
+            // **Fields that are plain values are read as they are**: the rule
+            // is asserted over them before the literal, so that the prover
+            // sees `slots.len()` rather than a field of a new binding.
+            if let Some(values) = plain_fields(&literal) {
+                let mut checks = Block {
+                    stmts: asserts(interner, rules, &type_name, &binding, at, false),
+                };
+                crate::text_tiers::visit_block_mut(
+                    &mut checks,
+                    &mut |e| {
+                        if let Expr::Field { base, name, .. } = e
+                            && matches!(&**base, Expr::Variable(b, _) if *b == rules.binding)
+                            && let Some(value) = values.get(name)
+                        {
+                            *e = renumbered(value);
+                        }
+                    },
+                    &mut |_, _| {},
+                );
+                let mut stmts = checks.stmts;
+                stmts.push(Spanned::new(Stmt::Expr(literal), at));
+                *expr = Expr::Block(Block { stmts }, NodeId::fresh());
+                return;
+            }
             let mut stmts = vec![Spanned::new(
                 Stmt::Let {
                     names: vec![rules.binding],
@@ -669,6 +693,30 @@ fn check_literals(
         },
         &mut |_, _| {},
     );
+}
+
+/// The literal's field values by name, where each is a name or a literal:
+/// a value read twice means the same.
+fn plain_fields(literal: &Expr) -> Option<BTreeMap<Symbol, Expr>> {
+    let Expr::StructLit { fields, .. } = literal else {
+        return None;
+    };
+    let mut out = BTreeMap::new();
+    for field in fields {
+        let value = match &field.value {
+            None => Expr::Variable(field.name, NodeId::fresh()),
+            Some(
+                v @ (Expr::Variable(..)
+                | Expr::LitInt { .. }
+                | Expr::LitBool(..)
+                | Expr::LitChar(..)
+                | Expr::LitFloat(..)),
+            ) => v.clone(),
+            Some(_) => return None,
+        };
+        out.insert(field.name, value);
+    }
+    Some(out)
 }
 
 /// A `return` written as a statement, anywhere in the body but a lambda:

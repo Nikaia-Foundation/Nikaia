@@ -85,6 +85,15 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "error|warn")]
     pub refuted_claims: Option<String>,
 
+    /// What a claim the compiler did not prove is
+    /// ([ADR-380](../../../docs/specification/adr/adr-380.md) D2): `error`,
+    /// the default, refuses the program (`NK1300`); `warn` builds it and
+    /// checks the claim where it is reached.
+    ///
+    /// Overrides `nikaia.toml`'s `[build] unproved-claims`.
+    #[arg(long, global = true, value_name = "error|warn")]
+    pub unproved_claims: Option<String>,
+
     /// Verify the Borrow Contract Ledger instead of updating it (Part III,
     /// 13.5).
     ///
@@ -412,21 +421,14 @@ fn explain(input: &std::path::Path, settings: &Settings, source: &str) -> Result
     Ok(())
 }
 
-/// The single-file `rust` backend: one `.nika` entry to one `.rs` file.
-///
-/// Unchanged by the project build, deliberately. A one-off transformation of a
-/// file that belongs to no project is a real thing to want (ADR-021 D11), and
-/// it is what every test that drives the emitter uses.
-fn lower_to_rust(
+/// The explanations a single-file `lower` or `check` was asked for, printed,
+/// and the packages of the file's program: `check --asserts` answers as
+/// `lower --asserts` does.
+fn explained(
     input: &std::path::Path,
-    output: Option<&std::path::Path>,
     args: &Cli,
     settings: &Settings,
-) -> Result<()> {
-    let output_path = output
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_else(|| input.with_extension("rs"));
-
+) -> Result<Vec<nikaia::modules::Dependency>> {
     // `--trust`, `--overlaps` and `--sharing` are explanations, so they are
     // answered before the cache is consulted: a build that reuses a cached
     // lowering still answers the question, and the answer cannot differ from the
@@ -451,14 +453,32 @@ fn lower_to_rust(
     // **Read here only for an explanation**: `lower_reading` reads the
     // program itself, and a second read parsed every file and inferred its
     // ledger again (#727).
-    let packages = match want.asked() {
+    Ok(match want.asked() {
         true => {
             let (program, packages) = project::read_file(input)?;
             project::explain(&program, settings, want, &reads)?;
             packages
         }
         false => project::packages_of_file(input)?,
-    };
+    })
+}
+
+/// The single-file `rust` backend: one `.nika` entry to one `.rs` file.
+///
+/// Unchanged by the project build, deliberately. A one-off transformation of a
+/// file that belongs to no project is a real thing to want (ADR-021 D11), and
+/// it is what every test that drives the emitter uses.
+fn lower_to_rust(
+    input: &std::path::Path,
+    output: Option<&std::path::Path>,
+    args: &Cli,
+    settings: &Settings,
+) -> Result<()> {
+    let output_path = output
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| input.with_extension("rs"));
+
+    let packages = explained(input, args, settings)?;
 
     // The cache key gains the dependencies with them: their units are part of
     // the program, and the key is made of the program's sources and paths.
@@ -661,9 +681,10 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             )?;
             project.settings.optimize(&args.optimization)?;
             project.settings.choose_cpu(args.cpu.as_deref())?;
-            project
-                .settings
-                .refutations(args.refuted_claims.as_deref())?;
+            project.settings.refutations(
+                args.refuted_claims.as_deref(),
+                args.unproved_claims.as_deref(),
+            )?;
             return drive(args, &project, "run", program_args);
         }
         Command::Run {
@@ -706,9 +727,10 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
     )?;
     project.settings.optimize(&args.optimization)?;
     project.settings.choose_cpu(args.cpu.as_deref())?;
-    project
-        .settings
-        .refutations(args.refuted_claims.as_deref())?;
+    project.settings.refutations(
+        args.refuted_claims.as_deref(),
+        args.unproved_claims.as_deref(),
+    )?;
     drive(args, &project, subcommand, &program_args)
 }
 
@@ -752,9 +774,10 @@ fn test_command(
     )?;
     project.settings.optimize(&args.optimization)?;
     project.settings.choose_cpu(args.cpu.as_deref())?;
-    project
-        .settings
-        .refutations(args.refuted_claims.as_deref())?;
+    project.settings.refutations(
+        args.refuted_claims.as_deref(),
+        args.unproved_claims.as_deref(),
+    )?;
     let tests =
         nikaia::modules::Program::read_for_tests(&project.entry(), &project.packages()?, true)?
             .tests;
@@ -790,7 +813,10 @@ fn test_command(
             ));
             built.settings.optimize(&args.optimization)?;
             built.settings.choose_cpu(args.cpu.as_deref())?;
-            built.settings.refutations(args.refuted_claims.as_deref())?;
+            built.settings.refutations(
+                args.refuted_claims.as_deref(),
+                args.unproved_claims.as_deref(),
+            )?;
             let (code, binary) = built.drive_to(
                 "build",
                 &[],
@@ -861,7 +887,10 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
         args.user_parallelism.as_deref(),
     )?;
     settings.optimize(&args.optimization)?;
-    settings.refutations(args.refuted_claims.as_deref())?;
+    settings.refutations(
+        args.refuted_claims.as_deref(),
+        args.unproved_claims.as_deref(),
+    )?;
     if let Some(missing) = settings.build.target.unbuildable() {
         refuse!(
             "cannot build for `{}` yet: {missing}",
@@ -881,7 +910,7 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
         }
         Verb::Lower { output } => lower_to_rust(input, output, args, &settings),
         Verb::Check => {
-            let packages = project::packages_of_file(input)?;
+            let packages = explained(input, args, &settings)?;
             project::lower_reading(
                 input,
                 &settings,
