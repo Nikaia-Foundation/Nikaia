@@ -103,8 +103,8 @@ error[NK1207]: This call breaks `share`'s precondition `total > 0` every time it
 
 The `assert` became a precondition, carried back through `share` to the call that passes 0.
 `at_least_zero`'s `assert` is a claim about its result, so `per_row`'s call to `percent` is
-proved and has no check at run time. A claim the compiler cannot prove is checked at run time
-instead.
+proved and has no check at run time. A claim the compiler cannot prove is refused (`NK1300`);
+a build that says `unproved-claims = "warn"` builds it with a warning and checks it at run time.
 
 More: loops without written invariants, the `--asserts` report, and data from outside, in
 [Contracts](guide/contracts.md); `main`'s parameters as the command line in [The command

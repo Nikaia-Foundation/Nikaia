@@ -174,7 +174,7 @@ $ target/nikaia/bin/loop
 ## The report: what was proved
 
 `nikaia build --asserts` lists every `assert` and what became of it. *Proved* means no check
-is left in the program. A *precondition* is each caller's to show. *Checked at run time*
+is left in the program. A *precondition* is each caller's to show. *Refused*
 means the prover could not read the claim: it reads linear integer arithmetic, lengths and
 branch conditions, not the product of two names like `w * h`. Such a claim stops the build
 with `NK1300`: not proved is not false, but nothing has shown it. With `[build]

@@ -292,10 +292,11 @@ commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75</code></pre>
         each caller's to show; here every call shows it.
       </p>
       <p>
-        <em>Checked at run time</em> means the prover could not read the claim. It reads sums,
+        <em>Refused</em> means the prover could not read the claim. It reads sums,
         differences and comparisons, not the product of two names like <code>w * h</code>. Such
-        a claim does not stop the build. The program checks it when it runs, and the report
-        says why.
+        a claim stops the build with <code>NK1300</code>: not proved is not false, but nothing
+        has shown it. A build that says <code>unproved-claims = "warn"</code> builds it with a
+        warning, and the program checks it when it runs.
       </p>
     </div>
     <div class="home-code markdown-body home-code-stack">
@@ -319,11 +320,14 @@ fn main() {
 }
 </code></pre>
 <pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
-<b>asserts in …/rep/src/main.nika: 4 - not proved 1 (refused 0, checked at run time 1, checked by a test 0); checked where the words arrive 0; proved 3 (proved 1, preconditions proved at every call 2)</b>
-  …/rep/src/main.nika:9  assert(a &gt;= 0)  checked at run time: `a` is not a whole number the prover reads
+<b>asserts in …/rep/src/main.nika: 4 - not proved 1 (refused 1, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 3 (proved 1, preconditions proved at every call 2)</b>
+  …/rep/src/main.nika:9  assert(a &gt;= 0)  refused, not proved: `a` is not a whole number the prover reads
   …/rep/src/main.nika:16  assert(n == 3)  proved
   …/rep/src/main.nika:2  assert(count &gt; 0)  precondition of `average`: proved at every call the compiler sees; any other reaches the entry that checks it
-  …/rep/src/main.nika:7  assert(w &gt;= 0 &amp;&amp; h &gt;= 0)  precondition of `area`: proved at every call the compiler sees; any other reaches the entry that checks it</code></pre>
+  …/rep/src/main.nika:7  assert(w &gt;= 0 &amp;&amp; h &gt;= 0)  precondition of `area`: proved at every call the compiler sees; any other reaches the entry that checks it
+<span class="d-error">error[NK1300]</span><b>: `assert(a &gt;= 0)` is not proved: `a` is not a whole number the prover reads.</b>
+<span class="d-gutter">  --&gt;</span> …/rep/src/main.nika:9:5
+1 type error</code></pre>
     </div>
   </div>
 </section>
