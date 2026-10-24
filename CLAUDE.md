@@ -221,6 +221,10 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * `for mut x in v` is not accepted;
   * a reserved word (`grammar`, `throws`) as a parameter name gives
     *Expected `)`* (#799): rename it.
+  * the catch-all arm of a `match` is `else =>`; `_ =>` and `None =>` are refused;
+  * a `String?` field needs `x?.clone()` before it can be matched;
+  * calls to other tools files are unqualified (one global namespace);
+  * a new `.nika` needs one `lower-std` run with the old binary before `cargo build`: the module only appears in `lowered.rs` after that run.
 * **Lowered types:** `String` is `&str` where a view suffices and `String`
   where it is owned (the compiler decides, ADR-282 D2), `ref T` is `&T`, `Vec[String]` is
   `Vec<String>` (a `ref` one a slice), `String?` is `Option<String>`. Most Rust

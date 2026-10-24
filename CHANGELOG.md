@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1214] — 2026-10-24
+
+**Check: the walk's settling and the unrolling report are Nikaia (U-d6, #125)**
+- NK1245 is dropped last when another error exists; the a/an articles pass, the method facts (fallible, pausing, narrowing casts) and the unrolling report text are tools/check_walked.nika. No language change.
+
 ## [0.0.1213] — 2026-10-24
 
 **Self-hosting: the checker's program walk is Nikaia (U-d5)**
