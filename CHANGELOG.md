@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1201] — 2026-10-24
+
+**`use` names a Rust crate; a crate may ship its reviewed ledger (ADR-290 D22)**
+- `use <crate>` resolves a `type = "rust"` path dependency. A crate may ship `nikaia.contracts` beside its `Cargo.toml`; `nikaia describe` adopts it after checking its `# crate:` version and source hashes, and refuses a stale one (#788).
+
 ## [0.0.1200] — 2026-10-24
 
 **`nikaia run` applies the user's linker and flags again**
