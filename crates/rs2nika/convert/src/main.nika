@@ -87,7 +87,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R36  `loop {` -> `while true {`",
         "R37  rustfmt-split patterns and struct literals joined onto one line",
         "R38  `X::default()` of a moved struct -> `X::empty()`",
-        "R39  `.iter().enumerate()` / slice patterns / `match` on `Some` / `.entry()` / `is_ok_and` / `map_or` R59 cannot take -> TODO marker",
+        "R39  `.iter().enumerate()` / slice patterns / `match` on `Some` / `.entry()` / `is_ok_and` / `map_or` R79 cannot take -> TODO marker",
         "R40  `.len() as i64` cast dropped, `.unwrap()` -> `?? panic(\"unwrap\")`",
         "R41  function name prefixed (`--prefix`): tools/*.nika is one global namespace",
         "R42  a function's tail expression -> `return expr` (the style of tools/*.nika)",
@@ -111,17 +111,17 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R60  `let P = v else { jump }` -> `let x = match v { P => x, else => jump }` (a tuple of the names it binds)",
         "R62  a match arm whose value is an assignment -> `P => { n += 1 },`",
         "R61  `let (mut a, mut b): (A, B) = (x, y)` -> one `let` each",
-        "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
-        "R60  `String::with_capacity(n)` -> `\"\"`",
-        "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
+        "R79  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
+        "R80  `String::with_capacity(n)` -> `\"\"`",
+        "R81  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
         "R67  `.find('c')` / `.rfind('c')` -> `.find(\"c\")`: `str::find` takes text",
         "R66  `build_time::decoded(x)` -> `decoded(x) fn(n) { ascii_scalar(n) }` (escapes.nika), with a TODO: above ASCII it reads no text",
         "R65  `?` in a lambda -> `?? return null`; `x.starts_with([a, b])` -> `(x.starts_with(a) || x.starts_with(b))`; a `use` inside a function -> TODO",
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
-        "R63  what R59 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))` (used twice: `match o ?? panic(..) { x => p }`), `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
+        "R63  what R79 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))` (used twice: `match o ?? panic(..) { x => p }`), `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
         "R68  a positional rest `V(a, ..)` and a slice pattern pass through; `rest @ ..` -> `..rest` (ADR-355)",
-        "R70  a `format!` hole hoisted out of a match arm (R61) -> the arm becomes a block holding it",
+        "R70  a `format!` hole hoisted out of a match arm (R81) -> the arm becomes a block holding it",
         "R71  a `None =>` / `None if guard =>` arm -> `null =>` / `null if guard =>` (ADR-352)",
         "R72  a `Some(p) =>` arm -> `p =>`, `Some(_)` -> `_value` (the other arms of a `match` with `null` match the `T`, ADR-352)",
         "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
@@ -131,7 +131,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R77  `self.s.m(..)` (a `CheckState` method already in Nikaia) -> `self.m(..)`, name and arguments as written",
         "R78  a `struct`'s field `name: T,` -> `name: T'`, the type by the rules of a parameter's (R2-R5)",
         "R69  a Rust name Nikaia reserves (`grammar`, `throws`, `with`, ..) -> `name_`",
-        "R62  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
+        "R82  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
 }
 
@@ -1180,7 +1180,7 @@ fn rs2nika_format(mut ctx: Rs2nikaCtx, given: ref String) -> String {
                 let n = ctx.hits.len()
                 ctx.todo_extra.push(f"let hole_{n} = {a}")
                 bound.push(f"hole_{n}")
-                rs2nika_hit(ctx, "R61")
+                rs2nika_hit(ctx, "R81")
             } else {
                 bound.push(a.clone())
             }
@@ -2001,15 +2001,15 @@ fn rs2nika_iter_recv(recv: ref String) -> bool {
     return false
 }
 
-/// R59: `o.map(|x| x.f)` -> `o?.f`, `o.and_then(|x| x.g())` -> `o?.g()`,
+/// R79: `o.map(|x| x.f)` -> `o?.f`, `o.and_then(|x| x.g())` -> `o?.g()`,
 /// `o.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `o.map_or(d, |x| x.f)`
 /// -> `(o?.f ?? d)`; every step of the chain gets its own `?.`. The `?` is
 /// written `¿` until R35 has run.
-/// R59 with its hit counted.
+/// R79 with its hit counted.
 fn rs2nika_opt_comb_hit(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     let out: String = rs2nika_opt_comb(given)
     if out != given {
-        rs2nika_hit(ctx, "R59")
+        rs2nika_hit(ctx, "R79")
     }
     let general: String = rs2nika_some_and(out)
     if general != out {
@@ -2018,7 +2018,7 @@ fn rs2nika_opt_comb_hit(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     return general
 }
 
-/// R63: what R59 leaves of `o.is_some_and(f)` on a plain path `o`:
+/// R63: what R79 leaves of `o.is_some_and(f)` on a plain path `o`:
 /// `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as
 /// `(o ?? panic(..))`, and `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`.
 fn rs2nika_some_and(given: ref String) -> String {
@@ -2166,7 +2166,7 @@ fn rs2nika_opt_comb(given: ref String) -> String {
     return s
 }
 
-/// R60: `String::with_capacity(n)` -> `""`; R57: `x as char` -> `(x as u8) as scalar`.
+/// R80: `String::with_capacity(n)` -> `""`; R57: `x as char` -> `(x as u8) as scalar`.
 fn rs2nika_capacity_char(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     let mut s: String = given.clone()
     let eq = s.find(" = String::with_capacity(") ?? 0
@@ -2187,7 +2187,7 @@ fn rs2nika_capacity_char(mut ctx: Rs2nikaCtx, given: ref String) -> String {
         let pre: String = rs2nika_text(c, 0, at)
         let post: String = rs2nika_text(c, end + 1, c.len())
         s = f"{pre}\"\"{post}"
-        rs2nika_hit(ctx, "R60")
+        rs2nika_hit(ctx, "R80")
     }
     while true {
         let c: Vec[scalar] = s.chars().collect()
@@ -3838,7 +3838,7 @@ fn rs2nika_ranges(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     return out
 }
 
-/// R62: a local closure with arguments (`let f = |a: &T| -> R { .. };`) gets
+/// R82: a local closure with arguments (`let f = |a: &T| -> R { .. };`) gets
 /// its type on the `let`: `let f: fn(ref T) -> R sync = |a| { .. };` (R26
 /// then writes the lambda). The type is the `local` fact of rust-analyzer
 /// for that line (`--facts`), or the closure's own annotations when every
@@ -3913,7 +3913,7 @@ fn rs2nika_typed_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String], facts: re
         let ind = rs2nika_indent(l)
         let args = rs2nika_join(names, ", ")
         out.push(f"{ind}let {decl} = |{args}| {body}")
-        rs2nika_hit(ctx, "R62")
+        rs2nika_hit(ctx, "R82")
     }
     return out
 }
