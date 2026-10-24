@@ -18,14 +18,13 @@
 //   (ADR-361 D4), and a field's checks are proved where `k * 2^60 / max(w, 1)`
 //   fits its type.
 
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{Expr, FoldSpec, GrammarDef, Item, Pattern};
 use crate::parser::Parsed;
 use nikaia_std::tools::fold_bound::{
-    FbHost, FbSource, fb_fold_counters, fb_folds, fb_index, fb_least_width, fb_most_steps,
-    fb_uses, fb_whole_changes_itself,
+    FbHost, FbSource, fb_fold_counters, fb_folds, fb_index, fb_least_width, fb_most_steps, fb_uses,
+    fb_whole_changes_itself,
 };
 use nikaia_std::tools::prover_arena::TermArena;
 
