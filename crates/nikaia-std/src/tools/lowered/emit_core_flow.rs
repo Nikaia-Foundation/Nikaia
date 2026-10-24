@@ -392,6 +392,31 @@ impl EmitState {
             return Ok(());
         }
         if jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) {
+            if self.facts.mut_view_reads.contains_key(&node_key(node)) {
+                match value {
+                    Expr::Index { base, index, .. } => {
+                        let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                        let lend = match self.facts.mut_view_reads.get(&node_key(node)) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                        out.push(&format!("match nikaia_std::index::get_mut({}", lend));
+                        self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
+                        out.push(", ");
+                        let key = self.map_key(index, false);
+                        if key.is_some() {
+                            let form = match key { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                            self.emit_core_key(world, walk, out, host, form, index, depth, flow, scope)?;
+                        } else {
+                            out.push("nikaia_std::index::at(");
+                            host.expr(walk, out, index, depth, flow, scope)?;
+                            out.push(")");
+                        }
+                        out.push(") { Some(__nikaia_value) => __nikaia_value, None => ");
+                        host.expr(walk, out, fallback, depth, flow, scope)?;
+                        out.push(" }");
+                        return Ok(());
+                    },
+                    _ => { },
+                }
+            }
             out.push("match ");
             host.expr(walk, out, value, depth, flow, scope)?;
             let opened_jump = self.emit_flow_opened(node);

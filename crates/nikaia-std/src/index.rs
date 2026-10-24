@@ -559,6 +559,103 @@ where
     target.get(key)
 }
 
+/// **A place of a `mut` container, lent for change** (#816): what
+/// `let mut x = m[k] ?? continue` binds - a mutable view of the entry, not a
+/// copy (ADR-282 D7). A map answers `Option<&mut V>`; a list of options
+/// answers the `Option<&mut T>` inside the element.
+pub trait GetMut<K> {
+    type Out<'a>
+    where
+        Self: 'a;
+
+    fn get_mut(&mut self, key: K) -> Self::Out<'_>;
+}
+
+impl<K, Q, V, S> GetMut<&Q> for crate::hash::HashMap<K, V, S>
+where
+    K: std::cmp::Eq + std::hash::Hash + std::borrow::Borrow<Q>,
+    Q: std::cmp::Eq + std::hash::Hash + ?Sized,
+    S: std::hash::BuildHasher,
+{
+    type Out<'a>
+        = Option<&'a mut V>
+    where
+        Self: 'a;
+
+    fn get_mut(&mut self, key: &Q) -> Option<&mut V> {
+        crate::hash::HashMap::get_mut(self, key)
+    }
+}
+
+impl<K, Q, V> GetMut<&Q> for std::collections::BTreeMap<K, V>
+where
+    K: Ord + std::borrow::Borrow<Q>,
+    Q: Ord + ?Sized,
+{
+    type Out<'a>
+        = Option<&'a mut V>
+    where
+        Self: 'a;
+
+    fn get_mut(&mut self, key: &Q) -> Option<&mut V> {
+        std::collections::BTreeMap::get_mut(self, key)
+    }
+}
+
+impl<K, T, V, S> GetMut<Key<T>> for crate::hash::HashMap<K, V, S>
+where
+    T: AsKey,
+    K: std::cmp::Eq + std::hash::Hash + std::borrow::Borrow<T::Q>,
+    T::Q: std::cmp::Eq + std::hash::Hash,
+    S: std::hash::BuildHasher,
+{
+    type Out<'a>
+        = Option<&'a mut V>
+    where
+        Self: 'a;
+
+    fn get_mut(&mut self, key: Key<T>) -> Option<&mut V> {
+        crate::hash::HashMap::get_mut(self, key.0.as_key())
+    }
+}
+
+impl<K, T, V> GetMut<Key<T>> for std::collections::BTreeMap<K, V>
+where
+    T: AsKey,
+    K: Ord + std::borrow::Borrow<T::Q>,
+    T::Q: Ord,
+{
+    type Out<'a>
+        = Option<&'a mut V>
+    where
+        Self: 'a;
+
+    fn get_mut(&mut self, key: Key<T>) -> Option<&mut V> {
+        std::collections::BTreeMap::get_mut(self, key.0.as_key())
+    }
+}
+
+impl<V> GetMut<usize> for Vec<Option<V>> {
+    type Out<'a>
+        = Option<&'a mut V>
+    where
+        Self: 'a;
+
+    #[track_caller]
+    fn get_mut(&mut self, key: usize) -> Option<&mut V> {
+        self[key].as_mut()
+    }
+}
+
+/// The emitted spelling: `nikaia_std::index::get_mut(&mut m, nikaia_std::index::at(k))`.
+#[track_caller]
+pub fn get_mut<T, K>(target: &mut T, key: K) -> T::Out<'_>
+where
+    T: GetMut<K> + ?Sized,
+{
+    target.get_mut(key)
+}
+
 /// What `??` does, once the left of it may be a **view into a container**
 /// ([ADR-293](../../../docs/specification/adr/adr-293.md) D4).
 ///

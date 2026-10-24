@@ -602,6 +602,32 @@ impl EmitState {
         // fallback would return from the closure and the program would carry on.
         // **And so is one whose fallback is another `??` that jumps.**
         if jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) {
+            // **A `let mut` of a `mut` place is a mutable view of the entry**
+            // (#816): `get_mut`, and the answer is the `&mut` itself.
+            if self.facts.mut_view_reads.contains_key(node_key(node)) {
+                match value {
+                    Expr::Index { base, index, .. } => {
+                        let lend = self.facts.mut_view_reads.get(node_key(node)) ?? return
+                        out.push(f"match nikaia_std::index::get_mut({lend}")
+                        self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+                        out.push(", ")
+                        let key = self.map_key(index, false)
+                        if key != null {
+                            let form = key ?? return
+                            self.emit_core_key(world, walk, out, host, form, index, depth, flow, scope)
+                        } else {
+                            out.push("nikaia_std::index::at(")
+                            host.expr(walk, out, index, depth, flow, scope)
+                            out.push(")")
+                        }
+                        out.push(") { Some(__nikaia_value) => __nikaia_value, None => ")
+                        host.expr(walk, out, fallback, depth, flow, scope)
+                        out.push(" }")
+                        return
+                    },
+                    else => {},
+                }
+            }
             out.push("match ")
             host.expr(walk, out, value, depth, flow, scope)
             // **A loan on the left is opened, and the answer is a view** (ADR-279

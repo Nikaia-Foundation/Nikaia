@@ -80,6 +80,32 @@ pub(crate) fn check_core_stmt_copied_jump_reads(state: &mut CheckState, value: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_mut_view(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, span: &Span) {
+    match value {
+        Expr::Coalesce { value: read, .. } => {
+            let read = nikaia_std::boxed::open(read);
+            match read {
+                Expr::Index { base, .. } => {
+                    let base = nikaia_std::boxed::open(base);
+                    let path = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
+                    let root = (*nikaia_std::index::get(&parts, 0)).to_owned();
+                    let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    if found.immutable.is_none() {
+                        let mut lend: String = String::from("&mut ");
+                        if parts.len() == 1 && state.a_mut_parameter_place(world, base).is_some() { lend = String::from(""); }
+                        state.facts.mut_view_reads.insert(id_of(value) as i64, lend);
+                    } else { state.a_changed_binding_says_mut(&root, "a mutable view of the entry is taken here", span.clone()); }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_name_or_field(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _) | Expr::Field { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -462,6 +488,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let copied_word = ty.is_none() && jumped && !copied_read && state.a_package_copy(world, &bound) && check_core_stmt_a_named(&bound);
     if copied_word { state.a_map_read_assigned(world, &bound, value, span); }
     let read_through_a_jump = jumped && !copied_read && !copied_word;
+    if mutable && read_through_a_jump { check_core_stmt_mut_view(state, world, value, span); }
     if check_core_stmt_a_path(&bound) && state.made_from_text(world, value) { state.flow.text_paths.insert(id); }
     if bound.is_unknown() || state.a_drivers_row(world, value) { state.flow.unknown_bound.insert(id); }
     let mut literal: Option<String> = None;

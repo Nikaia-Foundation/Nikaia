@@ -5942,7 +5942,14 @@ impl<'p> Emitter<'p> {
                 ty,
                 value,
             } => {
-                let unmuted = self.give_ups.unmuted.contains(&(span.at() as i64));
+                // **A mutable view of an entry is the `&mut` itself** (#816): the
+                // binding is never reassigned, so it takes no `mut`.
+                let unmuted = self.give_ups.unmuted.contains(&(span.at() as i64))
+                    || self
+                        .s
+                        .facts
+                        .mut_view_reads
+                        .contains_key(&nikaia_std::tools::ast::node_key(value));
                 let mutable = if *mutable && !unmuted { "mut " } else { "" };
                 // **A tuple of names is Rust's own tuple pattern**
                 // ([ADR-291](../../docs/specification/adr/adr-291.md)): the
