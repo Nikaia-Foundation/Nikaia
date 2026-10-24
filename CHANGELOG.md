@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1204] — 2026-10-24
+
+**`nikaia fmt` formats a package, `--check` reports**
+- `nikaia fmt [FILE...]` rewrites the package's `.nika` files, or the named files and directories, in the ADR-337 style and names each file it changes. `--check` writes nothing, names each file that would change and exits 1. A file the guard refuses is named with the reason, left untouched, and makes the exit code 1.
+
 ## [0.0.1203] — 2026-10-24
 
 **`nikaia fmt`: the printer and its guard; a trailing `,` after parameters and arguments**
