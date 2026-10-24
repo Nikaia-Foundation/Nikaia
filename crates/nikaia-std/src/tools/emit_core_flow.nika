@@ -606,6 +606,14 @@ impl EmitState {
             // (#816): `get_mut`, and the answer is the `&mut` itself.
             if self.facts.mut_view_reads.contains_key(node_key(node)) {
                 match value {
+                    Expr::Field { .. } => {
+                        out.push("match ")
+                        host.expr(walk, out, value, depth, flow, scope)
+                        out.push(".as_mut() { Some(__nikaia_value) => __nikaia_value, None => ")
+                        host.expr(walk, out, fallback, depth, flow, scope)
+                        out.push(" }")
+                        return
+                    },
                     Expr::Index { base, index, .. } => {
                         let lend = self.facts.mut_view_reads.get(node_key(node)) ?? return
                         out.push(f"match nikaia_std::index::get_mut({lend}")

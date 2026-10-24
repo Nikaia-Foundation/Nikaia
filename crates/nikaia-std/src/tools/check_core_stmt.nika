@@ -83,6 +83,21 @@ fn check_core_stmt_read_through_a_jump(state: ref CheckState, world: ref CheckWo
     }
 }
 
+/// An option field read whose fallback jumps: `c.field ?? return`.
+fn check_core_stmt_a_field_jump(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_field(read) && state.jumps(world, fallback),
+        else => false,
+    }
+}
+
+fn check_core_stmt_a_field(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Field { .. } => true,
+        else => false,
+    }
+}
+
 /// A named type, not a tuple or an option.
 fn check_core_stmt_a_named(ty: ref Ty) -> bool sync {
     return match ty {
@@ -115,10 +130,25 @@ fn check_core_stmt_copied_jump_reads(mut state: CheckState, value: ref Expr) syn
 /// **`let mut x = m[k] ?? <jump>` is a mutable view of the entry** (#816,
 /// ADR-282 D7: a copy is never inserted). The place has to be a `mut` one,
 /// the same rule as a change through it (`NK1138`, `NK1139`).
-fn check_core_stmt_mut_view(mut state: CheckState, world: ref CheckWorld, value: ref Expr, span: ref Span) sync {
+fn check_core_stmt_mut_view(mut state: CheckState, world: ref CheckWorld, value: ref Expr, span: ref Span, copies: bool) sync {
     match value {
         Expr::Coalesce { value: read, .. } => {
             match read {
+                Expr::Field { .. } => {
+                    // A field that is an option, read through a `mut` place: `as_mut`.
+                    // A word that is copied stays a copy.
+                    if !copies {
+                        let path = dotted_path(world, read) ?? return
+                        let parts: Vec[ref String] = path.split(".").collect()
+                        let root = parts[0].clone()
+                        let found = state.binding(root) ?? return
+                        if found.immutable == null {
+                            state.facts.mut_view_reads.insert(id_of(value) as i64, "")
+                        } else {
+                            state.a_changed_binding_says_mut(root, "a mutable view of the field is taken here", span.clone())
+                        }
+                    }
+                },
                 Expr::Index { base, .. } => {
                     let path = dotted_path(world, base) ?? return
                     let parts: Vec[ref String] = path.split(".").collect()
@@ -681,8 +711,8 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         state.a_map_read_assigned(world, bound, value, span)
     }
     let read_through_a_jump = jumped && !copied_read && !copied_word
-    if mutable && read_through_a_jump {
-        check_core_stmt_mut_view(state, world, value, span)
+    if mutable && (read_through_a_jump || check_core_stmt_a_field_jump(state, world, value)) {
+        check_core_stmt_mut_view(state, world, value, span, a_copy_by_value(bound))
     }
     if check_core_stmt_a_path(bound) && state.made_from_text(world, value) {
         state.flow.text_paths.insert(id)

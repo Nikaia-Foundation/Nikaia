@@ -394,6 +394,14 @@ impl EmitState {
         if jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) {
             if self.facts.mut_view_reads.contains_key(&node_key(node)) {
                 match value {
+                    Expr::Field { .. } => {
+                        out.push("match ");
+                        host.expr(walk, out, value, depth, flow, scope)?;
+                        out.push(".as_mut() { Some(__nikaia_value) => __nikaia_value, None => ");
+                        host.expr(walk, out, fallback, depth, flow, scope)?;
+                        out.push(" }");
+                        return Ok(());
+                    },
                     Expr::Index { base, index, .. } => {
                         let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
                         let lend = match self.facts.mut_view_reads.get(&node_key(node)) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };

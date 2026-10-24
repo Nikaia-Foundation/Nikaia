@@ -140,10 +140,9 @@ pub fn set_default(mut ledger: Ledger, key: ref String, at: i64, field: bool, te
         }
     } else {
         let mut contract = ledger.functions[key] ?? return
-        let mut signature = contract.signature?.clone() ?? return
+        let mut signature = contract.signature ?? return
         if at < signature.config.len() {
             signature.config[at].default = text
-            contract.signature = signature
         }
     }
 }

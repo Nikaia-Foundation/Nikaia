@@ -93,14 +93,8 @@ pub fn set_default(ledger: &mut Ledger, key: &str, at: i64, field: bool, text: S
         if at < entry.fields.len() as i64 { entry.fields[nikaia_std::index::at(at)].default = text; }
     } else {
         let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let mut signature = match match contract.signature.as_ref() {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return };
-        if at < signature.config.len() as i64 {
-            signature.config[nikaia_std::index::at(at)].default = text;
-            contract.signature = Some(signature);
-        }
+        let signature = match contract.signature.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return };
+        if at < signature.config.len() as i64 { signature.config[nikaia_std::index::at(at)].default = text; }
     }
 }
 

@@ -2193,3 +2193,39 @@ fn main() {
     assert!(!checked.status.success(), "{said}");
     assert!(said.contains("NK1138"), "{said}");
 }
+
+/// #816: `let mut s = c.field ?? return` on a `mut` view of an option field
+/// is a mutable view too (`as_mut`), so a change through `s` reaches the map.
+#[test]
+fn a_let_mut_of_a_mut_views_option_field_is_a_mutable_view() {
+    let said = printed(
+        "mut-view-of-an-option-field",
+        r#"
+use std::collections
+
+struct Sig {
+    names: Vec[String],
+}
+
+struct C {
+    sig: Sig?,
+}
+
+fn add(mut m: collections::HashMap[String, C], k: ref String) {
+    let mut c = m[k] ?? return
+    let mut s = c.sig ?? return
+    s.names.push("n".clone())
+}
+
+fn main() {
+    let mut m: collections::HashMap[String, C] = collections::HashMap()
+    m["a"] = C { sig: Sig { names: [] } }
+    add(m, "a")
+    let c = m["a"] ?? return
+    let n = c.sig?.names?.len() ?? 0
+    println(n)
+}
+"#,
+    );
+    assert_eq!(said.trim(), "1");
+}
