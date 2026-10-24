@@ -58,6 +58,8 @@ pub trait CheckHost {
     fn float_text(&self, number: f64) -> String;
     fn type_of(&self, ty: &Type) -> Ty;
     fn constants_beside(&self) -> Vec<(String, Ty)>;
+    fn impl_parameters(&self, target: &Type) -> Vec<String>;
+    fn instantiations_beside(&self, modules: &collections::BTreeSet<String>, mine: &collections::BTreeSet<String>) -> Vec<((String, String), Vec<FieldContract>)>;
 }
 
 pub(crate) fn host_known(local: &CheckLocal) -> Option<BuildValue> {

@@ -122,6 +122,12 @@ pub trait CheckHost {
     /// Every `comptime` the package's other files declare, by name, with its
     /// declared type read in its own file (`?` where it declares none).
     fn constants_beside(ref self) -> Vec[(String, Ty)] sync
+    /// The type parameters an `impl` head declares, in the order it writes
+    /// them (`contracts::impl_parameters`, ADR-295 D4).
+    fn impl_parameters(ref self, target: ref Type) -> Vec[String] sync
+    /// **What the program's other files called this unit's shape walks with**
+    /// (ADR-304 D6), keyed by (function, type), for the walks in `mine`.
+    fn instantiations_beside(ref self, modules: ref collections::BTreeSet[String], mine: ref collections::BTreeSet[String]) -> Vec[((String, String), Vec[FieldContract])] sync
 }
 
 /// What the build worked out a local is: the whole value, or the integer the

@@ -222,6 +222,7 @@ COMPILER_NIKA = {
     "check_crossings.nika": "check: what the core crossed back into Rust for (U-d1) (0.0.968)",
     "check_attributes.nika": "check: attributes, their marks and arguments (U-d2)",
     "check_function.nika": "check: shape walks and comparisons collected before the bodies (U-d4)",
+    "check_program.nika": "check: the program walk, shape-walk instantiations and unrolled turns (U-d5)",
     "check_defaults.nika": "check: defaults, attribute arguments, item constants and folds (U-d3)",
     "fmt.nika": "fmt: the printer of `nikaia fmt`, over the tokens with the comments the parser records (ADR-337, #101)",
 }

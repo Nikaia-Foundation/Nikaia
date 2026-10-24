@@ -431,6 +431,37 @@ impl CheckHost for Host<'_> {
         found
     }
 
+    fn impl_parameters(&self, target: &crate::ast::Type) -> Vec<String> {
+        let declared = crate::contracts::declared_types(self.parsed);
+        crate::contracts::impl_parameters(self.parsed, target, &declared)
+    }
+
+    fn instantiations_beside(
+        &self,
+        modules: &BTreeSet<String>,
+        mine: &BTreeSet<String>,
+    ) -> Vec<((String, String), Vec<FieldContract>)> {
+        let mut found = Vec::new();
+        for (at, other) in self.beside.iter().enumerate() {
+            if Some(at) == self.here {
+                continue;
+            }
+            found.extend(
+                instantiations_in(
+                    other,
+                    self.beside,
+                    self.own,
+                    self.library,
+                    modules,
+                    self.reads,
+                )
+                .into_iter()
+                .filter(|((name, _), _)| mine.contains(name)),
+            );
+        }
+        found
+    }
+
     fn an_escape_nothing_names(
         &self,
         text: &str,

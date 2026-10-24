@@ -32,19 +32,14 @@ use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::assets::Reads;
-use crate::ast::{self, Block, Expr, Item, Span, UnaryOp};
+use crate::ast::{self, Expr, Item, Span, UnaryOp};
 use crate::build_time;
 use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
-use nikaia_std::tools::check_attributes;
-use nikaia_std::tools::check_core_stmt;
 use nikaia_std::tools::check_crossings;
-use nikaia_std::tools::check_defaults;
-use nikaia_std::tools::check_flow::{
-    CheckConstant, CheckFlow, CheckUnrolling, CheckUnsignedSlot as UnsignedSlot,
-};
+use nikaia_std::tools::check_flow::{CheckConstant, CheckFlow, CheckUnsignedSlot as UnsignedSlot};
 use nikaia_std::tools::check_items;
 use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_reports::CheckWall;
@@ -473,7 +468,9 @@ fn walked<'a>(
         spares: Vec::new(),
     };
     checker.collect_types();
-    checker.program();
+    checker.nikaia(|state, world, host| {
+        nikaia_std::tools::check_program::check_program_program(state, world, host)
+    });
     // **Only the call sites were wanted**, and everything below this line
     // answers a different question at a cost the asking unit has already paid
     // for itself (ADR-304 D6).
@@ -483,10 +480,14 @@ fn walked<'a>(
     // **The calls that stand in the program's other files**, before the turns
     // are walked, because a copy is written by the unit that declares the
     // function and decided at the call - which may be a file away (Part I 9.1).
-    checker.instantiations_beside();
+    checker.nikaia(|state, world, host| {
+        nikaia_std::tools::check_program::check_program_instantiations_beside(state, world, host)
+    });
     // **And once more per unrolled turn** (ADR-304 D7, ADR-304 D6), which the
     // walk above is what found: a call may stand above the function it names.
-    checker.unroll();
+    checker.nikaia(|state, world, host| {
+        nikaia_std::tools::check_program::check_program_unroll(state, world, host)
+    });
     checker.unsigned_slots_proved(parsed);
     checker.s.walls_a_refusal_explains();
     checker.s.facts.walks_fields = checker.s.walks_fields.clone();
@@ -926,11 +927,6 @@ pub(super) fn written_by(parsed: &Parsed, value: &Expr) -> String {
     }
 }
 
-/// The members Part II 10.3 writes: a `struct`'s fields under `[T: Struct]`,
-/// an `enum`'s variants under `[T: Enum]`.
-const FIELDS: &str = "fields";
-const VARIANTS: &str = "variants";
-
 impl From<Constant> for CheckConstant {
     fn from(c: Constant) -> CheckConstant {
         CheckConstant {
@@ -994,16 +990,6 @@ impl<'a> Checker<'a> {
         self.collect_copies();
     }
 
-    /// The other files of the program: `beside` without this one.
-    fn others(&self) -> impl Iterator<Item = &'a Parsed> + use<'a> {
-        let (beside, here) = (self.beside, self.here);
-        beside
-            .iter()
-            .enumerate()
-            .filter(move |(at, _)| Some(*at) != here)
-            .map(|(_, other)| *other)
-    }
-
     /// **Which declared types derive `Copy`**
     /// ([ADR-294](../../docs/specification/adr/adr-294.md) D9.1,
     /// [`Checked::copies`]).
@@ -1018,216 +1004,6 @@ impl<'a> Checker<'a> {
         self.s.collect_copies(self.world);
     }
 
-    fn program(&mut self) {
-        // **A frame under every body, filled before any of them is walked**
-        // ([ADR-287](../../../docs/specification/adr/adr-287.md)). A `comptime`
-        // at item level is in scope for the whole file, and this checker's
-        // scope is a stack pushed per function — so the name has to be there
-        // before the first `fn` is entered, and it has to be there for a
-        // function declared *above* the constant as much as below it. That is
-        // the whole of why this is a pass and not an arm.
-        self.nikaia(|state, world, host| {
-            check_defaults::check_defaults_item_constants(state, world, host)
-        });
-        self.types_that_contain_themselves();
-        // **Attributes** (ADR-331), before the bodies: they are about the
-        // declarations.
-        self.nikaia(|state, world, host| {
-            check_attributes::check_attributes_all(state, world, host)
-        });
-        for item in &self.parsed.program.items {
-            match &item.node {
-                // Walked by `item_constants` above, in a frame that stays.
-                Item::Comptime { .. } => {}
-                // **`NK1227`: the convention is not written**
-                // ([ADR-324](../../docs/specification/adr/adr-324.md) D6).
-                Item::Extern { abi: Some(abi), .. } => {
-                    self.s.findings.push(Finding {
-                        severity: Severity::Error,
-                        span: item.span,
-                        code: "NK1227".to_string(),
-                        message: format!("`extern` takes no convention, and this names `{abi:?}`."),
-                        notes: vec![
-                            "`extern` is the C calling convention, the only one on every target, \
-                             so it is not written."
-                                .to_string(),
-                        ],
-                        help: Some(
-                            "Write `extern { … }`, or `extern(library: \"name\") { … }` for a \
-                             block whose functions come from a system library."
-                                .to_string(),
-                        ),
-                        labels: Vec::new(),
-                    });
-                }
-                Item::Fn { .. } => {
-                    self.an_entry_point(&item.node, &item.span, false);
-                    // **`main`'s parameters are the command line**
-                    // ([ADR-360](../../docs/specification/adr/adr-360.md) D2).
-                    self.s.main_parameters(self.world, &item.node, &item.span);
-                    self.function(&item.node, &item.span, None)
-                }
-                Item::Struct { fields, .. } => {
-                    for field in fields {
-                        self.nikaia(|state, world, host| {
-                            check_defaults::check_defaults_a_field_default(
-                                state, world, host, field,
-                            )
-                        });
-                    }
-                    self.an_extern_struct(&item.node, &item.span);
-                }
-                Item::Enum { .. } => self.an_extern_enum(&item.node, &item.span),
-                Item::Impl {
-                    target,
-                    methods,
-                    trait_name,
-                } => {
-                    for method in methods {
-                        self.an_entry_point(&method.node, &method.span, trait_name.is_some());
-                    }
-                    if trait_name.is_some_and(|t| self.parsed.text(t) == "Cleanup") {
-                        self.s.a_cleanup_shaped(
-                            self.world,
-                            self.parsed.text(target.name),
-                            methods,
-                            &item.span,
-                        );
-                    }
-                    if trait_name.is_some_and(|t| self.parsed.text(t) == "Fatal") {
-                        self.s.a_fatal_type_that_is_no_error(
-                            self.world,
-                            self.parsed.text(target.name),
-                            &item.span,
-                        );
-                    }
-                    if let Some(trait_name) = trait_name {
-                        let written = self.parsed.text(*trait_name).to_string();
-                        self.a_trait_nothing_declares(&written, &item.span);
-                    }
-                    // `impl Stack[T]` puts `T` in scope for every method in it,
-                    // exactly as the ledger reads it (`Ledger::of`), so a method
-                    // body sees the same names its signature was recorded with -
-                    // one rule, called from both (`contracts::impl_parameters`).
-                    let declared = crate::contracts::declared_types(self.parsed);
-                    // An `impl`'s own parameters carry no bounds: the head
-                    // writes `impl Stack[T]` and there is nowhere in it for a
-                    // `: Summarize` to stand
-                    // ([ADR-295](../../docs/specification/adr/adr-295.md)).
-                    let outer: BTreeMap<String, Vec<String>> =
-                        crate::contracts::impl_parameters(self.parsed, target, &declared)
-                            .into_iter()
-                            .map(|name| (name, Vec::new()))
-                            .collect();
-                    // **The head's own brackets, as types.** `impl Holder[T]`
-                    // writes a parameter and `impl Holder[i64]` writes a type,
-                    // and `Ty::from_ast` needs to know nothing about which: a
-                    // parameter's in-body representation *is* its name as a
-                    // type (`Ty::Named { name: "T" }`), which is what
-                    // `type_parameters` above is keyed by and what `NK1126`
-                    // reads. So one line answers both, and the receiver below
-                    // binds the struct's parameters the way any other value of
-                    // that type does (ADR-295 D2).
-                    let arguments: Vec<Ty> = target
-                        .generics
-                        .iter()
-                        .map(|g| Ty::from_ast(self.parsed, g))
-                        .collect();
-                    let target = self.parsed.text(target.name).to_string();
-                    for method in methods {
-                        self.s.enclosing = outer.clone();
-                        self.s.subject_arguments = arguments.clone();
-                        self.function(&method.node, &method.span, Some(&target));
-                    }
-                    self.s.enclosing = BTreeMap::new();
-                    self.s.subject_arguments = Vec::new();
-                }
-                // A test and a bench are code, and nothing about them is
-                // exempt from the language's rules (Part III, 14.1 and 13.4).
-                // Nothing produces these yet - the items are in the AST and the
-                // grammar has no rule for either - so this is what stops their
-                // bodies from arriving unchecked on the day it does.
-                Item::Test { body, .. } | Item::Bench { body, .. } => {
-                    let outer = self.s.expected.take();
-                    self.s.scope.push(Vec::new());
-                    self.block(body);
-                    self.s.scope.pop();
-                    self.s.expected = outer;
-                }
-                Item::Grammar(grammar) => self.nikaia(|state, world, host| {
-                    nikaia_std::tools::check_function::check_function_grammar(
-                        state, world, host, grammar,
-                    )
-                }),
-                // **A `use` brings no name in, for `std` as for a package**
-                // ([ADR-140](../../docs/specification/adr/adr-140.md) D5).
-                Item::Import { path, .. } => self
-                    .s
-                    .an_import_that_brings_a_name_in(self.world, path, &item.span),
-                _ => {}
-            }
-        }
-    }
-
-    fn function(&mut self, item: &Item, at: &Span, target: Option<&str>) {
-        self.nikaia(|state, world, host| {
-            nikaia_std::tools::check_function::check_function_function(
-                state,
-                world,
-                host,
-                item,
-                at,
-                &target.map(str::to_string),
-            )
-        });
-    }
-
-    /// **A type that holds itself holds itself through a box the compiler
-    /// writes** ([ADR-246](../../docs/specification/adr/adr-246.md) D1).
-    ///
-    /// `enum Expr { Add(Expr, Expr) }` is a program as written: a value that
-    /// holds a whole value of its own type inline has no size, so the fields on
-    /// such a ring are the ones that go behind a `Box` below, and this is the
-    /// walk that finds them. It was `NK1192`'s refusal at 0.0.234, until the
-    /// owner decided the question it named.
-    ///
-    /// **A field is boxed where what it holds inline reaches back to the type
-    /// that declares it** - the type itself, or one on the same ring. Only an
-    /// edge that is certainly inline counts: the type, nullable or not, a
-    /// tuple's parts and an array's element. A view, a function, a list or
-    /// anything this compiler cannot see through is an indirection already.
-    ///
-    /// Recorded for **every** type of the program, not only this file's: a
-    /// literal in this file may build a type declared beside it.
-    fn types_that_contain_themselves(&mut self) {
-        self.s
-            .types_that_contain_themselves(&self.world.here, &self.world.beside)
-    }
-
-    /// **An `impl` of a trait nothing declares** (0.0.231).
-    ///
-    /// `impl db::Connection for Fake` lowered as it was written, and the
-    /// language below answered *unresolved import `db`* about a file nobody
-    /// wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md));
-    /// a bare `impl Connection for Fake` was *cannot find trait* the same way.
-    /// Nothing looked at the trait an `impl` names: a **bound** fails open on a
-    /// trait it does not know ([`Checker::answers_for`]), and that is right for
-    /// a bound, which only asks. An `impl` *writes* the name into the program.
-    ///
-    /// **A path is [`Checker::a_head_nothing_declares`]'s question**, asked of
-    /// its head: a package, a module, a described crate or a `std` module may
-    /// hold the trait, and past a head this compiler knows it does not claim
-    /// to know the rest. **A bare name is `NK1117`'s**, and it is declared by
-    /// the three traits the language itself names (`Error`, Part I 7.1; `Drop`
-    /// and `Cleanup`, Part I 6), a `trait` in any ledger this program reads, a
-    /// `use` that brings it in, or a foreign name. Everything this cannot see
-    /// is a name it must not refuse ([Part III
-    /// C.4](../../docs/specification/30-nikaia-tooling.md)).
-    fn a_trait_nothing_declares(&mut self, written: &str, span: &Span) {
-        self.s
-            .a_trait_nothing_declares(&self.world.here, self.world, written, span)
-    }
-
     /// **Every open number of a body, decided** once the body has been walked
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D24, D25, D27).
     fn numbers_typed_by_their_uses(&mut self) {
@@ -1235,13 +1011,6 @@ impl<'a> Checker<'a> {
     }
 
     // --- statements ---------------------------------------------------------
-
-    /// Walk a block and hand back the type of its tail.
-    fn block(&mut self, block: &Block) -> Ty {
-        self.nikaia(|state, world, host| {
-            check_core_stmt::check_core_block(state, world, host, block)
-        })
-    }
 
     // --- expressions --------------------------------------------------------
 
@@ -1359,163 +1128,6 @@ impl<'a> Checker<'a> {
     // whose type no ledger describes would need the same question asked of its
     // arguments, and nothing in the corpus reaches it - ADR-288 D11's rule, that
     // an entry exists because a program asked for it.
-
-    /// **What an entry point may be** ([ADR-284](../../docs/specification/adr/adr-284.md)
-    /// D4, D5): `extern` before a function with a body exports it to C, and four
-    /// shapes are refused at the declaration.
-    fn an_entry_point(&mut self, item: &Item, span: &Span, of_a_trait: bool) {
-        self.s.an_entry_point(self.world, item, span, of_a_trait);
-    }
-
-    /// **What a `pub extern struct` may hold**
-    /// ([ADR-284](../../docs/specification/adr/adr-284.md) D14, D15): it is
-    /// `pub`, it is not generic, and every field is a C value.
-    fn an_extern_struct(&mut self, item: &Item, span: &Span) {
-        self.s.an_extern_struct(self.world, item, span);
-    }
-
-    /// **What a `pub extern enum` may hold**
-    /// ([ADR-284](../../docs/specification/adr/adr-284.md) D32): it is `pub`,
-    /// and every field of every variant is a C value, as an `extern` struct's.
-    fn an_extern_enum(&mut self, item: &Item, span: &Span) {
-        self.s.an_extern_enum(self.world, item, span);
-    }
-}
-
-impl<'a> Checker<'a> {
-    /// **The instantiations that stand in the program's other files**
-    /// ([ADR-304](../../docs/specification/adr/adr-304.md) D6).
-    ///
-    /// A copy is written by the unit that declares the function, and which
-    /// copies there are is decided at the **call** — which may stand in any
-    /// file of the package, because they share one namespace (Part I 9.1). So
-    /// this unit asks the others what they called its shape walks with, and
-    /// without it `describe` in `shapes.nika` called from `main.nika` is a
-    /// function with no copies and no generic original: a name that reaches
-    /// the language below undeclared, which is
-    /// [Part III C.1](../../docs/specification/30-nikaia-tooling.md)'s class.
-    ///
-    /// **Nothing to ask about costs nothing**: a unit that declares no shape
-    /// walk returns before a second file is looked at, which is every unit of
-    /// every program in the corpus.
-    fn instantiations_beside(&mut self) {
-        if self.s.flow.harvesting || self.beside.is_empty() {
-            return;
-        }
-        let mine: BTreeSet<String> = self
-            .parsed
-            .program
-            .items
-            .iter()
-            .filter_map(|item| match &item.node {
-                Item::Fn {
-                    name: Some(name), ..
-                } => Some(self.parsed.text(*name).to_string()),
-                _ => None,
-            })
-            .filter(|name| self.s.walks_fields.contains_key(name))
-            .collect();
-        if mine.is_empty() {
-            return;
-        }
-        let mut found: Vec<((String, String), Vec<FieldContract>)> = Vec::new();
-        for other in self.others() {
-            found.extend(
-                instantiations_in(
-                    other,
-                    self.beside,
-                    self.world.own,
-                    self.world.library,
-                    &self.s.modules,
-                    self.reads,
-                )
-                .into_iter()
-                .filter(|((name, _), _)| mine.contains(name)),
-            );
-        }
-        // **This unit's own calls win**, because they were typed by the walk
-        // that also holds the spans: the two agree, and a harvest that
-        // disagreed would be a second answer to a question already answered.
-        for (instantiation, fields) in found {
-            self.s.facts.unrolled.entry(instantiation).or_insert(fields);
-        }
-    }
-
-    /// **The body, once per unrolled turn**
-    /// ([ADR-304](../../docs/specification/adr/adr-304.md) D7).
-    ///
-    /// `field.of(value)` has a different type in each turn, so there is no one
-    /// type to check the body against — and a body that is wrong for one field
-    /// is **right** for the others, on the same line. So the walk is repeated
-    /// with the field bound, and every finding it makes carries the note that
-    /// says which turn it came from. Without that line this is the error class
-    /// C++ templates carried for twenty years.
-    ///
-    /// **After the ordinary walk**, because the instantiations are what that
-    /// walk found: a call may stand above the function it names, and which
-    /// types a function is used with is not knowable until every call has been
-    /// read.
-    ///
-    /// The cost is fields × instantiations, and only for the functions that
-    /// walk a shape and only for the types actually used (D5). A function
-    /// nobody calls is not unrolled at all.
-    fn unroll(&mut self) {
-        let instantiations: Vec<(String, String, Vec<FieldContract>)> = self
-            .s
-            .facts
-            .unrolled
-            .iter()
-            .map(|((name, on), fields)| (name.clone(), on.clone(), fields.clone()))
-            .collect();
-        for (name, on, fields) in instantiations {
-            let Some(item) = self.parsed.program.items.iter().find(|item| {
-                matches!(&item.node, Item::Fn { name: Some(written), .. }
-                    if self.parsed.text(*written) == name)
-            }) else {
-                continue;
-            };
-            let item = item.clone();
-            for field in fields {
-                let before = self.s.findings.len();
-                let outer = self.s.flow.unrolling.replace(CheckUnrolling {
-                    on: on.clone(),
-                    field: field.clone(),
-                });
-                self.function(&item.node, &item.span, None);
-                self.s.flow.unrolling = outer;
-                // **What the generic walk already said is not said again.**
-                // The same body was walked once with nothing known, and a
-                // message from that walk is about the **function** — a
-                // misspelled member, say — so repeating it once per field
-                // would turn one mistake into as many as the type has fields.
-                // What is left is what this turn alone found, which is D5's
-                // whole point.
-                let already: BTreeSet<(String, usize)> = self.s.findings[..before]
-                    .iter()
-                    .map(|f| (f.code.clone(), f.span.at()))
-                    .collect();
-                let mut fresh: Vec<Finding> = self.s.findings.split_off(before);
-                fresh.retain(|f| !already.contains(&(f.code.clone(), f.span.at())));
-                for found in &mut fresh {
-                    let (member, one) = match self.s.enums.contains_key(&on) {
-                        true => (VARIANTS, "variant"),
-                        false => (FIELDS, "field"),
-                    };
-                    found.notes.push(format!(
-                        "This happened while going through `{}::{member}` for `{on}`, at the {one} `{}`.",
-                        self.s.walks_fields
-                            .get(&name)
-                            .map(String::as_str)
-                            .unwrap_or("T"),
-                        field.name
-                    ));
-                }
-                self.s.findings.extend(fresh);
-            }
-        }
-    }
-
-    // --- looking things up ---------------------------------------------------
 }
 
 /// **Whether this file declares a type by this name**

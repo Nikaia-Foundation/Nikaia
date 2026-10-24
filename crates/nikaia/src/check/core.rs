@@ -302,6 +302,18 @@ impl CheckHost for Core<'_, '_> {
         self.h.constants_beside()
     }
 
+    fn impl_parameters(&self, target: &crate::ast::Type) -> Vec<String> {
+        self.h.impl_parameters(target)
+    }
+
+    fn instantiations_beside(
+        &self,
+        modules: &BTreeSet<String>,
+        mine: &BTreeSet<String>,
+    ) -> Vec<((String, String), Vec<FieldContract>)> {
+        self.h.instantiations_beside(modules, mine)
+    }
+
     fn an_escape_nothing_names(
         &self,
         text: &str,

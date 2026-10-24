@@ -693,6 +693,14 @@ mod check_places_lowered {
 #[allow(unused_imports)]
 pub use check_places_lowered::*;
 
+mod check_program_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/check_program.rs");
+}
+#[allow(unused_imports)]
+pub use check_program_lowered::*;
+
 mod check_reads_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2030,6 +2038,10 @@ pub mod check_pauses {
 pub mod check_places {
     #[allow(unused_imports)]
     pub use super::{members_named, a_root_is_one_of_two};
+}
+pub mod check_program {
+    #[allow(unused_imports)]
+    pub use super::{check_program_program, check_program_instantiations_beside, check_program_unroll};
 }
 pub mod check_reads {}
 pub mod check_references {
