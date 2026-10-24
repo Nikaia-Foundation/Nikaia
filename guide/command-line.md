@@ -387,6 +387,34 @@ $ echo $?
 2
 ```
 
+## Claims the build does not prove: `unproved-claims` and `refuted-claims`
+
+The compiler proves every `assert` ([Contracts](contracts.md)). It refuses a claim it does
+not prove (`NK1300`), and it refuses a claim it shows false with values (`NK1207`). Two build
+settings in `nikaia.toml` change that, and each has a flag that overrides it for one build:
+
+```toml
+[build]
+unproved-claims = "warn"   # default "error"
+refuted-claims = "warn"    # default "error"
+```
+
+```
+$ nikaia build --unproved-claims warn
+```
+
+* **`unproved-claims`** ([ADR-380](../docs/specification/adr/adr-380.md) D2): at `warn` each
+  `NK1300` is a warning, and the claim is checked where it is reached and stops the program
+  when it is false. Nothing in the program has to change: the compiler writes the check.
+* **`refuted-claims`** ([ADR-269](../docs/specification/adr/adr-269.md) D8): at `warn` a claim
+  shown false, and an index or an arithmetic operation shown to fail for a value the program
+  reaches, is a warning and a check where it is reached. It is the bypass for the day a better
+  prover refutes what an older one built, for that emergency only: a claim newly refuted is
+  fixed in the code.
+
+`nikaia check` reports every claim it did not prove either way; the setting only decides
+whether the build stops. Both are part of the build's cache key.
+
 ## What is not supported yet
 
 These are not part of the language yet. A program that needs one reads `cli::args()` itself:
