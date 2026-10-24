@@ -121,7 +121,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         }
         false
     }
-    pub(crate) fn payloads_of(&self, name: &'a str) -> Vec<Ty> {
+    pub(crate) fn payloads_of(&self, name: &str) -> Vec<Ty> {
         let held = self.payloads.get(name);
         if held.is_some() { return match held { Some(__nikaia_value) => __nikaia_value, None => return vec![] }.to_owned(); }
         let mut all: Vec<Ty> = vec![];

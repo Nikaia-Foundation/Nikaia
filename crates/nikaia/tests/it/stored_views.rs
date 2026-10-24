@@ -808,3 +808,21 @@ fn main() {{
         assert!(found.is_empty(), "{body}\n{found:#?}");
     }
 }
+
+/// **A parameter handed over by value keeps `'a`** (#811): its view fields may
+/// move into the struct, which only `rustc` sees through a call chain, so the
+/// signature does not write a lifetime of its own for it.
+#[test]
+fn a_struct_parameter_handed_over_by_value_keeps_the_impls_lifetime() {
+    let rust = lowered(
+        "struct Hit { path: ref String }\n\
+         struct Seen { paths: Vec[ref String] }\n\
+         \n\
+         impl Seen {\n\
+         \x20   fn note(ref mut self, e: Hit) { self.paths.push(e.path) }\n\
+         }\n\
+         \n\
+         fn main() { println(\"x\") }\n",
+    );
+    assert!(rust.contains("fn note(&mut self, e: Hit<'a>)"), "{rust}");
+}

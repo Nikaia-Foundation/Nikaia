@@ -4086,6 +4086,22 @@ impl<'p> Emitter<'p> {
             && (receiver.is_some()
                 || lowered_views > 0
                 || args.iter().any(|a| self.carries_a_view(&a.ty)));
+        // Whether the parameter is borrowed (`&`, `&mut`) and not handed over.
+        let read_only = |name: Symbol| {
+            args.iter().position(|a| a.name == name).is_some_and(|at| {
+                let at = at + usize::from(receiver.is_some());
+                lent.is_some_and(|c| {
+                    c.signature
+                        .as_ref()
+                        .is_some_and(|s| s.mutable.iter().any(|m| m == self.text(name)))
+                        || crate::contracts::keeps::lends_in_own(
+                            c,
+                            at,
+                            &[self.world.library, &self.s.described],
+                        )
+                })
+            })
+        };
         let how = |name: Symbol| {
             if store_place(self.text(name))
                 || (store_source(self.text(name))
@@ -4114,7 +4130,10 @@ impl<'p> Emitter<'p> {
                 // **A parameter of a method of a borrowing type that nothing
                 // stores into the struct** has a lifetime of its own, left to
                 // elision (Part I 6.7); `'a` is for what is stored (#811).
-                (false, _) if lifetimes == Lifetimes::Inner => Lifetimes::Elided,
+                // A parameter **handed over** (by value) may be stored, as its
+                // view fields move into the struct; only one the method
+                // borrows is known to be read only.
+                (false, _) if lifetimes == Lifetimes::Inner && read_only(name) => Lifetimes::Elided,
                 (false, _) => lifetimes,
             }
         };
