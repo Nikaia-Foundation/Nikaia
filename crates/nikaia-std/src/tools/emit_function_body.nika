@@ -1,0 +1,192 @@
+// crates/nikaia-std/src/tools/emit_function_body.nika
+//
+// **The body of a function**, moved from `emit/mod.rs` (ADR-294, #125, #558,
+// E10-3): it differs from any other block in one way, a `throws` function has
+// to hand back an `Ok`. The block, a statement and the text insertions are the
+// host's.
+use std::collections
+
+/// Whether `expr` is a call that never comes back: `panic(..)`, which is
+/// ADR-293 D1's written way out for a key the program knows is present.
+fn emit_never_returns(world: ref EmitWorld, expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Call { func, .. } => match func {
+            Expr::Variable(name, _) => emit_text(world, name) == "panic",
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// Whether a body ending in this statement has left before its `Ok(())`
+/// (0.0.240): `panic(..)`, `throw` or `return`.
+fn emit_ends_in_a_jump(world: ref EmitWorld, stmt: ref Stmt) -> bool {
+    return match stmt {
+        Stmt::Return(..) => true,
+        Stmt::Expr(expr) => jumps(expr) || emit_never_returns(world, expr),
+        else => false,
+    }
+}
+
+/// Whether the statement is a `throw`, which writes its own `Err(..)`
+/// (ADR-292 D20).
+fn emit_is_a_throw(stmt: ref Stmt) -> bool {
+    return match stmt {
+        Stmt::Expr(expr) => match expr {
+            Expr::Throw(_, _) => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+fn emit_is_a_return_tail(tail: EmitTail) -> bool {
+    return match tail {
+        EmitTail::Return => true,
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// The body of a `!throws` function: the function's own settle point
+    /// stands around it, so it is not settled a second time as a block
+    /// (ADR-297 D2).
+    fn emit_function_block[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, settled: bool) sync throws {
+        if settled {
+            host.block_plain(walk, out, body, depth, flow, scope, tail)
+        } else {
+            self.emit_core_block(world, walk, out, host, body, depth, flow, scope, tail)
+        }
+    }
+
+    pub fn emit_function_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, body: ref Block, depth: i64, throws_: bool, returns_value: bool, awaited: ref Vec[winnow_grammar::Symbol], key: ref String, channel: ref String, counts_steps: bool, skip_free_at_exit: bool) sync throws {
+        walk.keep_function = key.clone()
+        let mut locals: collections::BTreeSet[String] = collections::BTreeSet()
+        let known = host.known_nonnegative(body)
+        match known {
+            Some(names) => {
+                for name in names {
+                    locals.insert(name.clone())
+                }
+            },
+            else => {
+                for symbol in nonnegative_locals(body) {
+                    locals.insert(emit_text(world, symbol))
+                }
+            },
+        }
+        walk.nonnegative.insert(key.clone(), locals)
+        // A function body is not a handler, not a `catch`'s guarded half, not
+        // written inside whatever lambda the call to it sits in (the one
+        // boundary these flags do not cross), binds nothing until a statement
+        // in it does, is in no loop, and has no `catch` to break out to.
+        let flow = EmitFlow::plain() with { can_throw: throws_ }
+        let scope = EmitScope { origin: (key.rsplit("::").next() ?? "").clone(), function: key.clone(), channel: channel.clone(), caught_sum: null, caught_member: null, bound: "", changed: [], awaited: awaited.clone(), tasks_channel: "", tasks_function: "" }
+
+        // A function body's last statement is the *function's* value, which is
+        // the one place a `return x` may be written as `x`.
+        let tail = if returns_value { EmitTail::Return } else { EmitTail::Statement }
+
+        // A published parameter taken as it goes in (ADR-282 D23), first.
+        let mut first: Vec[String] = walk.either_prelude.clone()
+        walk.either_prelude = []
+        // **A call is a step of a build-time run**, and the function is on its
+        // path while it runs (ADR-321 D7).
+        if counts_steps {
+            first.insert(0, f"let __nikaia_frame = nikaia_std::build_time::enter({key.quoted()});")
+        }
+        // **Not after a statement that never comes back** (0.0.240): a body
+        // that ends in `panic(..)`, `throw` or `return` has left before the
+        // `Ok(())`, and `rustc` said *unreachable expression*.
+        let mut leaves = false
+        let count = body.stmts.len()
+        let mut seen = 0
+        for stmt in body.stmts {
+            seen += 1
+            if seen == count {
+                leaves = emit_ends_in_a_jump(world, stmt.node)
+            }
+        }
+        // **The program's `main` says where its last statement ended**
+        // (ADR-348 D1): from there, `skip-free-at-exit:on` leaves the memory
+        // of what dies to the system.
+        let main_ends = skip_free_at_exit && depth == 0 && key == "main" && self.user_main(world) != null && !leaves
+        let main_call = " nikaia_std::rt::exit::main_ends(); "
+        if !throws_ {
+            let settled = self.facts.settle_fns.contains_key(key)
+            if first.is_empty() && !main_ends {
+                self.emit_function_block(world, walk, out, host, body, depth, flow, scope, tail, settled)
+                return
+            }
+            // Inside the body's own brace, so there is one block and not two.
+            let mut written = EmitOut::empty()
+            self.emit_function_block(world, walk, written, host, body, depth, flow, scope, tail, settled)
+            if main_ends {
+                host.insert_before_last_brace(written, main_call)
+            }
+            if !first.is_empty() {
+                host.insert_after_first_brace(written, f" {first.join(" ")}")
+            }
+            out.append(written)
+            return
+        }
+
+        let pad = "    ".repeat(depth)
+        let inner_pad = "    ".repeat(depth + 1)
+
+        out.push("{\n")
+        for line in first {
+            out.push(f"{inner_pad}{line}\n")
+        }
+        let last = if count == 0 { 0 } else { count - 1 }
+        let mut i = 0
+        for stmt in body.stmts {
+            out.push(inner_pad)
+            // A value-returning `throws` function ends in its value; one that
+            // returns nothing ends in the `Ok(())` below, so its last statement
+            // is a statement like any other.
+            let here = tail.at(i, last)
+            // **A tail that is a `throw` is not wrapped** (ADR-292 D20): it
+            // writes its own `Err(..)` and leaves. A tail `return` stays
+            // wrapped: it is rewritten to its bare value here, and the `Ok(`
+            // makes that value the function's outcome.
+            let wrap = emit_is_a_return_tail(here) && !emit_is_a_throw(stmt.node)
+            // **A tail that enters a grammar binds its value first** (ADR-185
+            // D2): the lowering's temporaries borrowing the local would live
+            // past it inside `Ok(..)`; a `let` makes them drop at the `;`.
+            // Only where the lowering writes the borrow, so every other tail
+            // keeps `Ok(x)` (ADR-296 D17).
+            let binds = wrap && self.a_tail_that_enters_a_grammar(world, stmt.node)
+            // **The keeps a statement needs are declared before it** (ADR-283),
+            // and before the `Ok(` a tail is wrapped in.
+            self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1)
+            let st = out.mark()
+            if wrap {
+                if binds {
+                    out.push("let __nikaia_value = ")
+                } else {
+                    out.push("Ok(")
+                }
+            }
+            host.stmt(walk, out, stmt.node, stmt.span, depth + 1, here, flow, scope)
+            if wrap {
+                if binds {
+                    out.push(f";\n{inner_pad}Ok(__nikaia_value)")
+                } else {
+                    out.push(")")
+                }
+            }
+            out.record(stmt.span, st)
+            out.push("\n")
+            i += 1
+        }
+        if main_ends {
+            out.push(f"{inner_pad}nikaia_std::rt::exit::main_ends();\n")
+        }
+        if !returns_value && !leaves {
+            out.push(f"{inner_pad}Ok(())\n")
+        }
+        out.push(pad)
+        out.push("}")
+    }
+}

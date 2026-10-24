@@ -1384,23 +1384,9 @@ fn base(name: &str) -> &str {
     crate::contracts::ty::base(name)
 }
 
-/// The call that never comes back
-/// ([Part III A.2](../../docs/specification/30-nikaia-tooling.md), Part I 1.3).
-const PANIC: &str = "panic";
-
 /// Where a write through the brackets holds its value while the read in it
 /// finishes ([ADR-293](../../docs/specification/adr/adr-293.md) D2).
 const STORED: &str = "__nikaia_stored";
-
-/// The name an arm's value is bound to before it is put back in an `Ok`
-/// ([ADR-292](../../docs/specification/adr/adr-292.md) D18).
-///
-/// **The binding is what keeps `rustc` quiet.** `Ok({ … })` around a block
-/// holding one expression is `unused_braces` — a warning about a file nobody
-/// wrote, which is [Part III C.1](../../docs/specification/30-nikaia-tooling.md)
-/// one severity down. A block with a `let` in it is a block the lint has
-/// nothing to say about.
-const ARM_VALUE: &str = "__nikaia_value";
 
 /// The name a **pausing** sequence is bound to for the length of its loop
 /// ([ADR-172](../../docs/specification/adr/adr-172.md) D1).
@@ -4873,206 +4859,24 @@ impl<'p> Emitter<'p> {
             key,
             channel,
         } = declared;
-        self.walking(|w| w.keep_function = key.to_string());
-        let locals: std::collections::BTreeSet<String> = match self
-            .nonnegative_bodies
-            .get(&(std::ptr::from_ref(body) as usize))
-        {
-            Some(known) => known.iter().map(|s| self.text(*s).to_string()).collect(),
-            None => nikaia_std::tools::emit_locals::nonnegative_locals(body)
-                .into_iter()
-                .map(|s| self.text(s).to_string())
-                .collect(),
-        };
-        self.walking(|w| w.nonnegative.insert(key.to_string(), locals));
-        let flow = Flow {
-            changed: &[],
-            tasks_channel: "",
-            tasks_function: "",
-            awaited,
-            throws,
-            origin: key.rsplit("::").next().unwrap_or(key),
-            caught: false,
-            // A function body is not a handler, whatever the call to it sits
-            // inside: the boundary `in_lambda` does not cross, this does not
-            // cross either.
-            caught_named: false,
-            caught_sum: None,
-            caught_member: None,
-            in_a_place: false,
-            arms_are_statements: false,
-            statement: usize::MAX,
-            function: key,
-            channel,
-            // A function body is not a `catch`'s guarded half.
-            handled_here: false,
-            // A function body was not written inside whatever lambda the call
-            // to it sits in: this is the one boundary the flag does not cross.
-            in_lambda: false,
-            // A function body binds nothing until a statement in it does.
-            bound: "",
-            // Both are decided per expression, so a body starts with neither.
-            widen: false,
-            inferred: false,
-            // And no loop encloses a function's first statement.
-            in_loop: false,
-            // Nor a `catch` a call in it could break out to.
-            breaks_to: -1,
-        };
-
-        // A function body's last statement is the *function's* value, which is
-        // the one place a `return x` may be written as `x`.
-        let tail = if returns_value {
-            Tail::Return
-        } else {
-            Tail::Statement
-        };
-
-        // A published parameter taken as it goes in (ADR-282 D23), first.
-        let mut first = self.walking(|w| std::mem::take(&mut w.either_prelude));
-        // **A call is a step of a build-time run**, and the function is on its
-        // path while it runs (ADR-321 D7).
-        if self.build.counts_steps {
-            first.insert(
-                0,
-                format!("let __nikaia_frame = nikaia_std::build_time::enter({key:?});"),
-            );
-        }
-        // **Not after a statement that never comes back** (0.0.240): a body
-        // that ends in `panic(…)`, `throw` or `return` has left before the
-        // `Ok(())`, and `rustc` said *unreachable expression* about a file
-        // nobody wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-        let leaves = body.stmts.last().is_some_and(|stmt| match &stmt.node {
-            Stmt::Return(_) => true,
-            Stmt::Expr(expr) => jumps(expr) || self.never_returns(expr),
-            _ => false,
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_function_body(
+                &self.world,
+                walk,
+                out,
+                self,
+                body,
+                depth as i64,
+                throws,
+                returns_value,
+                awaited,
+                key,
+                channel,
+                self.build.counts_steps,
+                self.build.skip_free_at_exit,
+            )
         });
-        // **The program's `main` says where its last statement ended**
-        // ([ADR-348](../../docs/specification/adr/adr-348.md) D1): from there,
-        // `skip-free-at-exit:on` leaves the memory of what dies to the system.
-        let main_ends = (self.build.skip_free_at_exit
-            && depth == 0
-            && key == MAIN
-            && self.user_main().is_some()
-            && !leaves)
-            .then_some("nikaia_std::rt::exit::main_ends();");
-        if !throws {
-            // The function's own settle point stands around the body, so the
-            // body is not settled a second time as a block (ADR-297 D2).
-            let settled = self.s.facts.settle_fns.contains_key(key);
-            let body_block = |out: &mut Out| match settled {
-                true => self.block_plain(out, body, depth, flow, tail, None),
-                false => self.block(out, body, depth, flow, tail),
-            };
-            if first.is_empty() && main_ends.is_none() {
-                return body_block(out);
-            }
-            // Inside the body's own brace, so there is one block and not two.
-            let mut written = Out::empty();
-            body_block(&mut written)?;
-            if let Some(call) = main_ends {
-                written.insert_before_last_brace(&format!(" {call} "));
-            }
-            if !first.is_empty() {
-                written.insert_after_first_brace(&format!(" {}", first.join(" ")));
-            }
-            out.append(written);
-            return Ok(());
-        }
-
-        let pad = "    ".repeat(depth);
-        let inner_pad = "    ".repeat(depth + 1);
-
-        out.push("{\n");
-        for line in &first {
-            out.push(&format!("{inner_pad}{line}\n"));
-        }
-        let last = body.stmts.len().saturating_sub(1);
-        let mut i = 0;
-        while i < body.stmts.len() {
-            let stmt = &body.stmts[i];
-            out.push(&inner_pad);
-            // A value-returning `throws` function ends in its value; one that
-            // returns nothing ends in the `Ok(())` below, so its last statement
-            // is a statement like any other.
-            let here = tail.at(i as i64, last as i64);
-            // **A tail that is a `throw` is not wrapped**
-            // ([ADR-292](../../docs/specification/adr/adr-292.md) D20): it writes
-            // its own `Err(…)` and leaves, so an `Ok(` around it is
-            // `Ok(return Err(…))` — *unreachable call*, about a file nobody
-            // wrote. `fn f() -> String throws { throw E() }` is the whole
-            // program it takes.
-            //
-            // A tail `return` is the other way round and stays wrapped: it is
-            // rewritten to its bare value here (the one place Part I allows
-            // that), and the `Ok(` is what makes that value the function's
-            // outcome.
-            let wrap = here == Tail::Return && !matches!(&stmt.node, Stmt::Expr(Expr::Throw(_, _)));
-            // **And a tail that enters a grammar binds its value first**
-            // ([ADR-185](../../docs/specification/adr/adr-185.md) D2). The
-            // lowering of an entry is a block holding `let _source = &*data`
-            // and a stream over it, and in `Ok({ … }?)` those temporaries live
-            // to the end of the enclosing block — past the **local** that owns
-            // the text. `rustc` then says *`data` does not live long enough*
-            // about a file nobody wrote
-            // ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)),
-            // and its own hint is this fix: *save the expression's value in a
-            // new local variable*.
-            //
-            // A `let` makes the block a **statement**, so its temporaries drop
-            // at the `;` and ahead of the local — which is `ARM_VALUE`'s trick
-            // one construct over ([ADR-292](../../docs/specification/adr/adr-292.md)
-            // D1), for the same kind of reason.
-            //
-            // **Only where the lowering writes the borrow**, which is the one
-            // shape this emitter can be sure of: it is the emitter's own
-            // `_source`, not something a program's expression left behind. Every
-            // other tail keeps `Ok(x)`, because a line the generated file does
-            // not need is a line a reader has to skip (ADR-296 D17).
-            let binds = wrap && self.a_tail_that_enters_a_grammar(&stmt.node);
-            // **The keeps a statement needs are declared before it**
-            // (ADR-283), and before the `Ok(` a tail is wrapped in: a `let`
-            // inside it would not be Rust.
-            self.write_keep_prelude(out, key, stmt.span.at(), depth + 1);
-            {
-                let st = out.mark();
-                match (wrap, binds) {
-                    (true, true) => out.push(&format!("let {ARM_VALUE} = ")),
-                    (true, false) => out.push("Ok("),
-                    (false, _) => {}
-                }
-                self.stmt(out, &stmt.node, &stmt.span, depth + 1, here, flow)?;
-                match (wrap, binds) {
-                    (true, true) => out.push(&format!(";\n{inner_pad}Ok({ARM_VALUE})")),
-                    (true, false) => out.push(")"),
-                    (false, _) => {}
-                }
-                out.record(&stmt.span, st);
-            }
-            out.push("\n");
-            i += 1;
-        }
-        if let Some(call) = main_ends {
-            out.push(&format!("{inner_pad}{call}\n"));
-        }
-        if !returns_value && !leaves {
-            out.push(&format!("{inner_pad}Ok(())\n"));
-        }
-        out.push(&pad);
-        out.push("}");
-        Ok(())
-    }
-
-    /// **Whether this statement enters a grammar**
-    /// ([ADR-185](../../docs/specification/adr/adr-185.md) D2).
-    ///
-    /// The one lowering that leaves a temporary borrowing a local behind: the
-    /// entry's block binds `_source` to a view of its input and builds a stream
-    /// over it. Read off the **statement** rather than off the type, because
-    /// what has to know is the writer of the `Ok(` around it and this emitter
-    /// has no types ([ADR-288](../../docs/specification/adr/adr-288.md)).
-    fn a_tail_that_enters_a_grammar(&self, stmt: &Stmt) -> bool {
-        self.s.a_tail_that_enters_a_grammar(&self.world, stmt)
+        self.crossed(crossed)
     }
 
     // --- Grammars ---
@@ -8149,19 +7953,6 @@ impl<'p> Emitter<'p> {
         self.crossed(crossed)
     }
 
-    /// Whether an expression **never comes back**, so that nothing joins with
-    /// it ([Part III A.2](../../docs/specification/30-nikaia-tooling.md)).
-    ///
-    /// `panic(…)` is the one call of that shape, and it is
-    /// [ADR-293](../../docs/specification/adr/adr-293.md) D1's own written way
-    /// out for a key the program knows is present: `m[k] ?? panic(f"…")`. It
-    /// belongs beside [`jumps`] rather than inside it, because telling it apart
-    /// needs the name and a free function has no parse to read one from.
-    fn never_returns(&self, expr: &Expr) -> bool {
-        matches!(expr, Expr::Call { func, .. }
-            if matches!(func.as_ref(), Expr::Variable(name, _) if self.text(*name) == PANIC))
-    }
-
     /// Whether a function of **this program** can pause, and is therefore an
     /// `async fn` ([ADR-055](../../../docs/specification/adr/adr-055.md) D1).
     ///
@@ -8382,17 +8173,6 @@ fn unary_op(op: UnaryOp) -> String {
 /// argument type *from* - every integer type answers with the same `usize`, so the
 /// call is ambiguous and `cannot infer type` about a generated file is what
 /// Part III C.1 forbids.
-/// Whether this expression **leaves** rather than coming to a value
-/// ([ADR-276](../../docs/specification/adr/adr-276.md) D20).
-///
-/// What it decides is where the jump is *written*: a closure is a function
-/// boundary ([ADR-276](../../docs/specification/adr/adr-276.md) D16), so a
-/// lowering that puts an expression inside one has to know whether that
-/// expression is a jump before it does.
-fn jumps(expr: &Expr) -> bool {
-    nikaia_std::tools::emit_ops::jumps(expr)
-}
-
 /// `const` or `mut`, the word Rust puts between the `*` and the type.
 fn pointing(mutable: bool) -> String {
     nikaia_std::tools::emit_ops::pointing(mutable)

@@ -55,6 +55,22 @@ pub trait EmitHost {
     /// (`Checked::task_handles`); a set cannot be walked in Nikaia.
     fn task_handles(ref self, task: i64) -> Vec[String] sync
 
+    /// `Emitter::block_plain`: a block as it is written, with no settle point
+    /// after it.
+    fn block_plain(ref self, mut walk: EmitWalk, mut out: EmitOut, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws
+
+    /// The locals the prover knew to be whole non-negative numbers in `body`
+    /// (`Emitter::nonnegative_bodies`, keyed by the block's address); `null`
+    /// where it recorded none.
+    fn known_nonnegative(ref self, body: ref Block) -> Vec[String]? sync
+
+    /// Text put just inside the first `{` of `out`, the map moved along
+    /// (`std` has no `String::insert_str`).
+    fn insert_after_first_brace(ref self, mut out: EmitOut, text: ref String) sync
+
+    /// The same, just before the last `}`.
+    fn insert_before_last_brace(ref self, mut out: EmitOut, text: ref String) sync
+
     /// `Emitter::pattern`: a grammar pattern, written to `out`.
     fn pattern(ref self, mut walk: EmitWalk, mut out: EmitOut, pattern: ref Spanned[Pattern]) sync throws
 

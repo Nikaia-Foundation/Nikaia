@@ -481,3 +481,7 @@ chunk 2 once #814 and #816 are built, then R-6 the `visit_*` walkers of
 #811's last step, and also carries #813's loosening to read-only arguments.
 R-5 built: the free functions of `contracts/mod.rs` are in `tools/ledger_defaults.nika`
 (`apply_attribute`, `set_default`, `write_result_sources` with per-unit callbacks) after #816.
+E10-3 built: `function_body` is in `tools/emit_function_body.nika` (`emit_function_body`); the
+host gained `block_plain`, `known_nonnegative`, `insert_after_first_brace` and
+`insert_before_last_brace` (`OutText` stays Rust until `std` has `String::insert_str`). Dead in Rust
+now: `never_returns`, `jumps`, `a_tail_that_enters_a_grammar`, `PANIC`, `ARM_VALUE`. Next: E10-4 `function`.

@@ -13,6 +13,10 @@ pub trait EmitHost {
     fn block_mentions(&self, block: &Block, name: &str) -> bool;
     fn error_type(&self, node: &Expr) -> Option<String>;
     fn task_handles(&self, task: i64) -> Vec<String>;
+    fn block_plain(&self, walk: &mut EmitWalk, out: &mut EmitOut, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>>;
+    fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>>;
+    fn insert_after_first_brace(&self, out: &mut EmitOut, text: &str);
+    fn insert_before_last_brace(&self, out: &mut EmitOut, text: &str);
     fn pattern(&self, walk: &mut EmitWalk, out: &mut EmitOut, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>>;
     fn ty_named(&self, walk: &mut EmitWalk, ty: &Type) -> Result<String, Box<dyn std::error::Error>>;
     fn stmt(&self, walk: &mut EmitWalk, out: &mut EmitOut, stmt: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>>;

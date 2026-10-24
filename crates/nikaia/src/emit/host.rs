@@ -216,6 +216,43 @@ impl EmitHost for Emitter<'_> {
         })
     }
 
+    fn block_plain(
+        &self,
+        walk: &mut EmitWalk,
+        out: &mut Out,
+        block: &Block,
+        depth: i64,
+        flow: EmitFlow,
+        scope: &EmitScope,
+        tail: Tail,
+    ) -> Crossing {
+        self.hosted(walk, || {
+            Emitter::block_plain(
+                self,
+                out,
+                block,
+                depth as usize,
+                Flow::from_emit(flow, scope),
+                tail,
+                None,
+            )
+        })
+    }
+
+    fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>> {
+        self.nonnegative_bodies
+            .get(&(std::ptr::from_ref(body) as usize))
+            .map(|known| known.iter().map(|s| self.text(*s).to_string()).collect())
+    }
+
+    fn insert_after_first_brace(&self, out: &mut Out, text: &str) {
+        super::OutText::insert_after_first_brace(out, text);
+    }
+
+    fn insert_before_last_brace(&self, out: &mut Out, text: &str) {
+        super::OutText::insert_before_last_brace(out, text);
+    }
+
     fn pattern(
         &self,
         walk: &mut EmitWalk,
