@@ -39,10 +39,6 @@ benches/brc/brc.sh 200000     # quicker
   with `nikaia build` at `opt-level = 3`, no debug assertions; it keeps the
   overflow checks the language promises. **Neither side uses link-time
   optimisation.**
-* **`unproved-claims = "warn"`** (ADR-380 D2). `fast.nika`'s table rule,
-  `slots.len() == SLOTS`, is not proved: the prover does not follow the length
-  `Vec::resize` leaves in a `mut` list. It is checked once, when the table is
-  built; every other claim of the three programs is proved.
 * **Two modes for `1brc.nika` and `fast.nika`.** `fast-unsafe.nika` is
   counted optimized only: what it is for is its assumes believed.
   * **Nikaia safe**: only `prove-through-loops` on, which changes what is
