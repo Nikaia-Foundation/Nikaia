@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1206] — 2026-10-24
+
+**Self-hosting: the checker's defaults, item constants and folds are Nikaia (U-d3)**
+- Option, field and attribute defaults, item-level `comptime` constants and grammar folds are checked in `tools/check_defaults.nika` (252 code lines); `CheckHost` loses `computed_attribute` and gains `type_of` and `constants_beside`; `check/mod.rs` shrinks by 506 lines; behaviour unchanged; the self-hosted share is 69.1 % (71944 lines).
+- Tests: the errors corpus case B4 is now `f(1, *)` because a trailing comma in call arguments parses since the formatter (ADR-337); the type_rules test a_literal_is_proved_or_checked expects no check in `ring` because `slots.len() == CAP` is provable.
+
 ## [0.0.1205] — 2026-10-24
 
 **tools: attributes check moved (U-d2); lower-std caches each file of a package (#667, #125)**
