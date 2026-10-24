@@ -435,6 +435,13 @@ Later the same day: #791, #804, #805 built (0.0.1216); E10-1 done (2018cf10,
 `emit_grammar.nika`); E10-2 and C7-d running. Open on the way: #806 (`match`
 on a field of a list element moves out of `&`; E10-1 worked around it, step 3
 removes that), #807 (re-entrant crossing panics in `lower-std`).
+#807 not reproduced: on 64661b76 plus 2018cf10's `.nika` and Rust, the old binary
+lowers all 218 files without a panic; the nested crossing the builder met came from
+a binary and sources that disagreed on a host signature. Both batons (`Emitter::nikaia`,
+`Checker::nikaia`) now take through `baton::out_of`, whose panic names the place of
+the second crossing and the rule (a host method Nikaia calls hands the walk back with
+`hosted`, or takes it as a parameter) and says to rebuild after `lower-std`. Still
+a panic, not a refusal: `nikaia` returns the closure's `R`, 24 callers.
 C7-d done (90843776, `written_by` with `String::quoted`): **C-7 is finished**;
 `check/` (2,205 lines) is the adapter. The check side goes on outside this plan:
 `contracts/` (6,925 lines), `parser/` (4,403) and the top-level modules

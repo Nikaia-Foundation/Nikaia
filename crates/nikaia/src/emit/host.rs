@@ -99,12 +99,10 @@ impl<'a> Flow<'a> {
 impl Emitter<'_> {
     /// Run `f` with the walk handed to Nikaia: the baton leaves the emitter for
     /// the time, and comes back.
+    #[track_caller]
     pub(super) fn nikaia<R>(&self, f: impl FnOnce(&mut EmitWalk) -> R) -> R {
-        let mut walk = self
-            .w
-            .borrow_mut()
-            .take()
-            .expect("the walk is already out on a crossing");
+        let slot = self.w.borrow_mut().take();
+        let mut walk = crate::baton::out_of(slot, "the walk");
         let result = f(&mut walk);
         *self.w.borrow_mut() = Some(walk);
         result

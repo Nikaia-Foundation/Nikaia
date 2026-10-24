@@ -145,15 +145,12 @@ pub(super) struct Core<'c, 'a> {
 impl<'a> Checker<'a> {
     /// Run `f` with the state handed to Nikaia: the box leaves the checker for
     /// the time, with the world and a host that can bring it back.
+    #[track_caller]
     pub(super) fn nikaia<R>(
         &mut self,
         f: impl FnOnce(&mut CheckState, &CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a>, &Core<'_, 'a>) -> R,
     ) -> R {
-        let mut state = self
-            .s
-            .0
-            .take()
-            .expect("the state is already out on a crossing");
+        let mut state = crate::baton::out_of(self.s.0.take(), "the state");
         let spare = self.spares.pop().unwrap_or_else(hollow);
         let world = self.world;
         let h = self.host();
