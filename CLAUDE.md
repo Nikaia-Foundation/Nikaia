@@ -215,6 +215,9 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * a nested `Some(FactWrap::Widen(x))` pattern leaves `x` untyped and counts
     as an unanswered method call (`sequences::`, ceiling 17): bind
     `how ?? ...` first and match the plain enum;
+  * a `T?` local needs `?.clone()` (NK1125);
+  * a `ref String?` parameter does not accept a bare `String` argument: pass a `String?` local;
+  * `for mut x in v` is not accepted;
   * a reserved word (`grammar`, `throws`) as a parameter name gives
     *Expected `)`* (#799): rename it.
 * **Lowered types:** `String` is `&str` where a view suffices and `String`

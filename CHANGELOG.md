@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1213] — 2026-10-24
+
+**Self-hosting: the checker's program walk is Nikaia (U-d5)**
+- The item walk, the shape-walk instantiations from the other files and the unrolled turns are tools/check_program.nika; CheckHost gained impl_parameters and instantiations_beside; no language change.
+
 ## [0.0.1212] — 2026-10-24
 
 **The lowering cache is keyed by the compiler's source fingerprint, not by the package version (#801)**
