@@ -126,8 +126,8 @@ signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
 [fn."rs2nika_convert"]
 pub = true
-views = ["src: borrowed", "profile: borrowed", "prefix: borrowed", "repo: borrowed", "facts: borrowed"]
-signature = "(src: ref String, profile: ref String, prefix: ref String, repo: ref String, facts: ref Vec[String]) -> Rs2nikaOut"
+views = ["src: borrowed", "profile_given: borrowed", "prefix: borrowed", "repo: borrowed", "facts: borrowed"]
+signature = "(src: ref String, profile_given: ref String, prefix: ref String, repo: ref String, facts: ref Vec[String]) -> Rs2nikaOut"
 
 [fn."rs2nika_corpus"]
 locks = true
@@ -362,6 +362,13 @@ sync = "inferred"
 touches = []
 views = ["line: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String]"
+
+[fn."rs2nika_let_literal"]
+sync = "inferred"
+keeps = ["line"]
+touches = []
+views = ["line: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> String"
 
 [fn."rs2nika_let_pair"]
 sync = "inferred"
@@ -666,6 +673,12 @@ touches = []
 views = ["text: borrowed"]
 signature = "(text: ref String) -> bool"
 
+[fn."rs2nika_state_call"]
+sync = "inferred"
+touches = []
+views = ["s: borrowed", "m: borrowed", "n2: borrowed"]
+signature = "(s: ref String, m: ref String, n2: ref String) -> String"
+
 [fn."rs2nika_stats"]
 pub = true
 sync = "inferred"
@@ -801,7 +814,7 @@ touches = []
 signature = "(c: scalar) -> bool"
 
 [type."Rs2nikaCtx"]
-fields = ["profile: String", "world: ref String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[ref String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]"]
+fields = ["profile: String", "free: bool", "world: ref String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[ref String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]"]
 
 [type."Rs2nikaOut"]
 pub = true
