@@ -124,6 +124,9 @@ jobs:
 
       - name: Build the workspace
         run: cargo build --workspace --release
+      - name: Build the tests
+        run: cargo test --workspace --release --no-run
+
 
       - name: Test
         run: cargo test --workspace --release --no-fail-fast
@@ -298,6 +301,9 @@ jobs:
 
       - name: No clippy warnings
         run: cargo clippy --all-targets -- -D warnings
+      - name: Build the tests
+        run: cargo test --workspace --release --no-run
+
 
       # Every failure at once, rather than the first test binary's. Each
       # one-file program a checker test accepts is written to the dump the
