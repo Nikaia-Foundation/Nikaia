@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1197] — 2026-10-24
+
+**The prover follows the length of a mut list**
+- A `mut` list's `v.len()` is a mutable whole number to the prover (ADR-361, #782): known after a list literal or `[x; n]`, set by `push`, `clear`, `resize` and `truncate`, and forgotten after any other method that may change it, a hand-off to a function with a `mut` parameter, and at a join or a loop that may change it. An index proved against the followed length needs no `unproved-claims` relief.
+
 ## [0.0.1196] — 2026-10-24
 
 **check: `--asserts` lists an unproved claim as refused (ADR-380 D1)**
