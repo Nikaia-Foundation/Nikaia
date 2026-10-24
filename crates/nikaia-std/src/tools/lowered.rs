@@ -1391,6 +1391,14 @@ mod manifest_lowered {
 #[allow(unused_imports)]
 pub use manifest_lowered::*;
 
+mod maps_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/maps.rs");
+}
+#[allow(unused_imports)]
+pub use maps_lowered::*;
+
 mod modules_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2376,6 +2384,10 @@ pub mod logic_smtlib {
 pub mod manifest {
     #[allow(unused_imports)]
     pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name};
+}
+pub mod maps {
+    #[allow(unused_imports)]
+    pub use super::{MpHeld, MpShape, MpFnMaps, mp_analyse};
 }
 pub mod modules {
     #[allow(unused_imports)]
