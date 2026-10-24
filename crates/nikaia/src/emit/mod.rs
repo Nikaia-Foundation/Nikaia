@@ -34,8 +34,8 @@ use winnow_grammar::Symbol;
 
 use crate::assets::Reads;
 use crate::ast::{
-    BinaryOp, Block, Expr, FoldSpec, FrameAttr, GrammarDef, GrammarRule, Item, Pattern, Repeat,
-    SelectArm, Span, Spanned, Stmt, Type, UnaryOp, VariantFields,
+    BinaryOp, Block, Expr, FoldSpec, GrammarDef, Item, Pattern, Repeat, SelectArm, Span, Spanned,
+    Stmt, Type, UnaryOp, VariantFields,
 };
 use crate::parser::Parsed;
 use crate::{refused, refused_at};
@@ -5054,204 +5054,11 @@ impl<'p> Emitter<'p> {
 
     // --- Grammars ---
 
-    /// A grammar, and where a call enters it with a `Bytes`, its copy over
-    /// bytes after it ([ADR-366](../../docs/specification/adr/adr-366.md) D1):
-    /// the backend reads one input per grammar (winnow-grammar ADR 25).
+    /// A grammar, its copy over bytes and the options of its `par_fold`
+    /// entries (`tools/emit_grammar.nika`).
     fn grammar(&self, out: &mut Out, def: &GrammarDef) -> Result<()> {
-        let name = self.text(def.name).to_string();
-        self.grammar_over(out, def, &name, false)?;
-        if self.s.facts.bytes_grammars.contains(&name) {
-            let lowered = nikaia_std::tools::emit_core_leaves::emit_bytes_grammar(&name);
-            self.grammar_over(out, def, &lowered, true)?;
-        }
-        for rule in def.rules.iter().filter(|rule| rule.is_entry) {
-            if let Some(spec) = a_par_fold(rule) {
-                self.fold_options(out, &name, self.text(rule.name), spec)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// **The options a `par_fold` entry names after its `;`**
-    /// ([ADR-372](../../docs/specification/adr/adr-372.md) D6), made by a
-    /// function beside the grammar that every call of the entry calls: the
-    /// grammar's own module is the backend's, and they are evaluated, and
-    /// checked, where the parse starts.
-    fn fold_options(
-        &self,
-        out: &mut Out,
-        grammar: &str,
-        rule: &str,
-        spec: &FoldSpec,
-    ) -> Result<()> {
-        let named = |wanted: &str| {
-            spec.config
-                .iter()
-                .find(|option| self.text(option.name) == wanted)
-                .map(|option| &option.value)
-        };
-        let function = nikaia_std::tools::emit_core_leaves::emit_fold_options(grammar, rule);
-        out.push(&format!(
-            "\n#[allow(non_snake_case, dead_code)]\npub fn {function}() -> nikaia_std::par::FoldOptions {{\n    nikaia_std::par::FoldOptions::new("
-        ));
-        match named("order") {
-            Some(order) => self.expr(out, order, 0, Flow::PLAIN)?,
-            None => out.push("nikaia_std::par::Order::Kept"),
-        }
-        for option in ["workers", "piece"] {
-            match named(option) {
-                Some(value) => {
-                    out.push(", Some(");
-                    self.expr(out, value, 0, Flow::PLAIN)?;
-                    out.push(")");
-                }
-                None => out.push(", None"),
-            }
-        }
-        out.push(")\n}\n");
-        Ok(())
-    }
-
-    fn grammar_over(&self, out: &mut Out, def: &GrammarDef, name: &str, bytes: bool) -> Result<()> {
-        out.push("grammar! {\n");
-        out.push(&format!("    grammar {name} {{\n"));
-        if bytes {
-            out.push("        input bytes;\n");
-        }
-        self.grammar_bytes.set(bytes);
-        let written = self.grammar_body(out, def, bytes);
-        self.grammar_bytes.set(false);
-        written
-    }
-
-    fn grammar_body(&self, out: &mut Out, def: &GrammarDef, bytes: bool) -> Result<()> {
-        let types = def
-            .rules
-            .iter()
-            .filter_map(|rule| {
-                let ty = rule.ret_type.as_ref()?;
-                Some((
-                    self.text(rule.name).to_string(),
-                    self.ty_filled(ty, Lifetimes::Named),
-                ))
-            })
-            .collect();
-        self.walking(|w| w.grammar_rule_types = types);
-        for rule in &def.rules {
-            out.push("\n");
-            {
-                let st = out.mark();
-                self.grammar_rule(out, rule)?;
-                if !bytes {
-                    out.record(&rule.span, st);
-                }
-            }
-        }
-        // **`list(item, sep)` is a rule the backend is given** (Part II
-        // 10.8, issue #165 closed at 0.0.249): the backend has no
-        // such element and read `list` as a rule of the grammar's own, so each
-        // grammar that writes one gets the two template rules it lowers to -
-        // the first item, then every `sep item` after it, or nothing at all.
-        let lists = def
-            .rules
-            .iter()
-            .flat_map(|rule| &rule.alts)
-            .any(|alt| writes_a_list(self.parsed, &alt.pattern));
-        if lists {
-            out.push(&format!(
-                "\n        rule {LIST_RULE}<T>(item: Rule<T>, sep) -> Vec<T> =\n\
-                 \x20         first:item rest:{LIST_RULE}_more<T>(item = item, sep = sep)*\n\
-                 \x20           -> {{ let mut all = vec![first]; all.extend(rest); all }}\n\
-                 \x20       | \"\"\n\
-                 \x20           -> {{ Vec::new() }}\n\
-                 \n        rule {LIST_RULE}_more<T>(item: Rule<T>, sep) -> T =\n\
-                 \x20         sep x:item\n\
-                 \x20           -> {{ x }}\n"
-            ));
-        }
-
-        out.push("    }\n");
-        out.push("}\n");
-        Ok(())
-    }
-
-    fn grammar_rule(&self, out: &mut Out, rule: &GrammarRule) -> Result<()> {
-        if let Some(frame) = &rule.frame {
-            out.push(&format!("        {}\n", frame_attribute(frame)));
-        }
-
-        // An entry is a `pub` rule to the backend: one function per entry
-        // (ADR-296 D25).
-        let vis = if rule.is_entry { "pub " } else { "" };
-        let ret = match &rule.ret_type {
-            Some(ty) => format!(" -> {}", self.ty_filled(ty, Lifetimes::Named)),
-            None => String::new(),
-        };
-        // The label sits between the return type and the `=`, in both
-        // languages: `rule expr -> Expr # "expression" = …`.
-        let label = match &rule.label {
-            Some(text) => format!(" # {text:?}"),
-            None => String::new(),
-        };
-        out.push(&format!(
-            "        {vis}rule {}{ret}{label} =\n",
-            self.text(rule.name)
-        ));
-
-        for (i, alt) in rule.alts.iter().enumerate() {
-            let separator = if i == 0 { "  " } else { "| " };
-
-            match &alt.action {
-                Some(action) => {
-                    out.push(&format!("          {separator}"));
-                    self.pattern(out, &alt.pattern)?;
-                    out.push("\n            -> ");
-                    // In a text grammar the backend has no `bytes(p)`: it is
-                    // `text(p)` there, and the action sees its bytes (ADR-366
-                    // D4).
-                    let mut as_bytes = Vec::new();
-                    if !self.grammar_bytes.get() {
-                        bytes_bindings(
-                            &alt.pattern.node,
-                            &|s| self.text(s) == "bytes",
-                            &mut as_bytes,
-                        );
-                    }
-                    if !as_bytes.is_empty() {
-                        out.push("{ ");
-                        for name in &as_bytes {
-                            let name = self.text(*name);
-                            out.push(&format!("let {name} = {name}.as_bytes(); "));
-                        }
-                    }
-                    // A grammar action is the rule's own body: what it ends
-                    // in is what the rule hands back, so a `return` there is
-                    // that value (ADR-296).
-                    self.block(out, action, 3, Flow::PLAIN, Tail::Return)?;
-                    if !as_bytes.is_empty() {
-                        out.push(" }");
-                    }
-                    out.push("\n");
-                }
-                None => {
-                    // The one body that needs no action: a `par_fold` is the
-                    // whole rule (ADR-296 D10), so the value of the rule is the
-                    // value of the fold. The binding the backend wants is
-                    // supplied here rather than demanded from the user.
-                    if rule.ret_type.is_some() {
-                        out.push(&format!("          {separator}folded:"));
-                        self.pattern(out, &alt.pattern)?;
-                        out.push("\n            -> { folded }\n");
-                    } else {
-                        out.push(&format!("          {separator}"));
-                        self.pattern(out, &alt.pattern)?;
-                        out.push("\n");
-                    }
-                }
-            }
-        }
-
-        Ok(())
+        let crossed = self.nikaia(|walk| self.s.emit_grammar(&self.world, walk, out, self, def));
+        self.crossed(crossed)
     }
 
     fn pattern(&self, out: &mut Out, pattern: &Spanned<Pattern>) -> Result<()> {
@@ -8647,56 +8454,8 @@ impl<'p> Emitter<'p> {
 
 // --- Free helpers ---
 
-/// ADR-296 D9: the attribute is keyed in both languages, and the lowering is
-/// one-to-one. A bare `@frame` stays bare - the boundary is then the rule's
-/// trailing literal, which the backend infers and checks.
-fn frame_attribute(frame: &FrameAttr) -> String {
-    nikaia_std::tools::emit_ops::frame_attribute(frame)
-}
-
 /// The template rule `list(item, sep)` lowers to (Part II 10.8).
 const LIST_RULE: &str = "__nikaia_list";
-
-/// Whether a pattern writes `list(item, sep)` anywhere in it.
-fn writes_a_list(parsed: &Parsed, pattern: &Spanned<Pattern>) -> bool {
-    match &pattern.node {
-        Pattern::Seq(parts) | Pattern::Choice(parts) => {
-            parts.iter().any(|p| writes_a_list(parsed, p))
-        }
-        Pattern::Bind { pat, .. } | Pattern::Repeat { pat, .. } | Pattern::Group(pat) => {
-            writes_a_list(parsed, pat)
-        }
-        Pattern::Ref { name, args, .. } => {
-            (parsed.text(*name) == "list" && args.len() == 2)
-                || args.iter().any(|p| writes_a_list(parsed, p))
-        }
-        Pattern::Literal(_) | Pattern::Cut | Pattern::Fold(_) => false,
-    }
-}
-
-/// **The names bound to a `bytes(p)`** in a pattern, for a text grammar's
-/// action to see as bytes (ADR-366 D4).
-fn bytes_bindings(pattern: &Pattern, is_bytes: &dyn Fn(Symbol) -> bool, found: &mut Vec<Symbol>) {
-    match pattern {
-        Pattern::Bind { name, pat } => {
-            if let Pattern::Ref { name: called, .. } = &pat.node
-                && is_bytes(*called)
-            {
-                found.push(*name);
-            }
-            bytes_bindings(&pat.node, is_bytes, found);
-        }
-        Pattern::Seq(parts) | Pattern::Choice(parts) => {
-            for part in parts {
-                bytes_bindings(&part.node, is_bytes, found);
-            }
-        }
-        Pattern::Repeat { pat, .. } | Pattern::Group(pat) => {
-            bytes_bindings(&pat.node, is_bytes, found)
-        }
-        _ => {}
-    }
-}
 
 fn repeat_suffix(rep: Repeat) -> String {
     nikaia_std::tools::emit_ops::repeat_suffix(rep)
@@ -9551,20 +9310,6 @@ fn tuple_pattern(names: &[String], shape: &[i64]) -> String {
         (_, None) | (_, Some(-1)) => format!("({})", names.join(", ")),
         _ => one(names, shape, &mut 0, &mut 0),
     }
-}
-
-/// The `par_fold` a rule's body is, written bare or bound to a name.
-fn a_par_fold(rule: &GrammarRule) -> Option<&FoldSpec> {
-    rule.alts.iter().find_map(|alt| {
-        let pattern = match &alt.pattern.node {
-            Pattern::Bind { pat, .. } => &pat.node,
-            other => other,
-        };
-        match pattern {
-            Pattern::Fold(spec) if spec.parallel => Some(spec),
-            _ => None,
-        }
-    })
 }
 
 #[cfg(test)]

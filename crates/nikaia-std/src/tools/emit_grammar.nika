@@ -1,0 +1,278 @@
+// crates/nikaia-std/src/tools/emit_grammar.nika
+//
+// **The grammars the emitter writes**, moved from `emit/mod.rs` (ADR-294,
+// #125, #558, E10-1): `grammar! { .. }` for a grammar and, after it, its copy
+// over bytes (ADR-366 D1), the options of a `par_fold` entry (ADR-372 D6), and
+// each rule with its alternatives and actions. A pattern and a type are
+// written by the host; an action is a block of Nikaia.
+
+use std::collections
+
+/// The template rule `list(item, sep)` lowers to (Part II 10.8).
+fn emit_list_rule() -> String {
+    return "__nikaia_list"
+}
+
+/// Whether a pattern writes `list(item, sep)` anywhere in it.
+fn emit_writes_a_list(world: ref EmitWorld, pattern: ref Spanned[Pattern]) -> bool {
+    return match pattern.node {
+        Pattern::Seq(parts) => emit_any_writes_a_list(world, parts),
+        Pattern::Choice(parts) => emit_any_writes_a_list(world, parts),
+        Pattern::Bind { pat, .. } => emit_writes_a_list(world, pat),
+        Pattern::Repeat { pat, .. } => emit_writes_a_list(world, pat),
+        Pattern::Group(pat) => emit_writes_a_list(world, pat),
+        Pattern::Ref { name, args, .. } => (emit_text(world, name) == "list" && args.len() == 2) || emit_any_writes_a_list(world, args),
+        else => false,
+    }
+}
+
+fn emit_any_writes_a_list(world: ref EmitWorld, parts: ref Vec[Spanned[Pattern]]) -> bool {
+    for part in parts {
+        if emit_writes_a_list(world, part) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **The names bound to a `bytes(p)`** in a pattern, for a text grammar's
+/// action to see as bytes (ADR-366 D4).
+fn emit_bytes_bindings(world: ref EmitWorld, pattern: ref Pattern, mut found: Vec[String]) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            match pat.node {
+                Pattern::Ref { name: called, .. } => {
+                    if emit_text(world, called) == "bytes" {
+                        found.push(emit_text(world, name))
+                    }
+                },
+                else => {},
+            }
+            emit_bytes_bindings(world, pat.node, found)
+        },
+        Pattern::Seq(parts) => {
+            for part in parts {
+                emit_bytes_bindings(world, part.node, found)
+            }
+        },
+        Pattern::Choice(parts) => {
+            for part in parts {
+                emit_bytes_bindings(world, part.node, found)
+            }
+        },
+        Pattern::Repeat { pat, .. } => emit_bytes_bindings(world, pat.node, found),
+        Pattern::Group(pat) => emit_bytes_bindings(world, pat.node, found),
+        else => {},
+    }
+}
+
+/// The `par_fold` a rule's body is, written bare or bound to a name.
+fn emit_a_par_fold(rule: ref GrammarRule) -> FoldSpec? {
+    for alt in rule.alts {
+        let found: FoldSpec? = match alt.pattern.node {
+            Pattern::Fold(spec) => emit_parallel_fold(spec),
+            Pattern::Bind { pat, .. } => match pat.node {
+                Pattern::Fold(spec) => emit_parallel_fold(spec),
+                else => null,
+            },
+            else => null,
+        }
+        if found != null {
+            return found
+        }
+    }
+    return null
+}
+
+fn emit_parallel_fold(spec: ref FoldSpec) -> FoldSpec? {
+    if spec.parallel {
+        return spec.clone()
+    }
+    return null
+}
+
+impl EmitState {
+    /// A grammar, and where a call enters it with a `Bytes`, its copy over
+    /// bytes after it (ADR-366 D1): the backend reads one input per grammar
+    /// (winnow-grammar ADR 25).
+    pub fn emit_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef) sync throws {
+        let name = emit_text(world, def.name)
+        self.emit_grammar_over(world, walk, out, host, def, name, false)
+        if self.facts.bytes_grammars.contains(name) {
+            let lowered = emit_bytes_grammar(name)
+            self.emit_grammar_over(world, walk, out, host, def, lowered, true)
+        }
+        for rule in def.rules {
+            if rule.is_entry {
+                let spec = emit_a_par_fold(rule)
+                if spec != null {
+                    self.emit_fold_options(world, walk, out, host, name, emit_text(world, rule.name), spec ?? panic("a par_fold"))
+                }
+            }
+        }
+    }
+
+    /// **The options a `par_fold` entry names after its `;`** (ADR-372 D6),
+    /// made by a function beside the grammar that every call of the entry
+    /// calls: the grammar's own module is the backend's, and they are
+    /// evaluated, and checked, where the parse starts.
+    fn emit_fold_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, book: ref String, rule: ref String, spec: FoldSpec) sync throws {
+        let function = emit_fold_options(book, rule)
+        out.push(f"\n#[allow(non_snake_case, dead_code)]\npub fn {function}() -> nikaia_std::par::FoldOptions {{\n    nikaia_std::par::FoldOptions::new(")
+        let order = emit_named_option(world, spec, "order")
+        if order >= 0 {
+            host.expr(walk, out, spec.config[order].value, 0, EmitFlow::plain(), EmitScope::plain())
+        } else {
+            out.push("nikaia_std::par::Order::Kept")
+        }
+        for option in ["workers", "piece"] {
+            let at = emit_named_option(world, spec, option)
+            if at >= 0 {
+                out.push(", Some(")
+                host.expr(walk, out, spec.config[at].value, 0, EmitFlow::plain(), EmitScope::plain())
+                out.push(")")
+            } else {
+                out.push(", None")
+            }
+        }
+        out.push(")\n}\n")
+    }
+
+    fn emit_grammar_over[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef, name: ref String, bytes: bool) sync throws {
+        out.push("grammar! {\n")
+        out.push(f"    grammar {name} {{\n")
+        if bytes {
+            out.push("        input bytes;\n")
+        }
+        host.set_grammar_bytes(bytes)
+        self.emit_grammar_body(world, walk, out, host, def, bytes)
+        host.set_grammar_bytes(false)
+    }
+
+    fn emit_grammar_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef, bytes: bool) sync throws {
+        let mut types: collections::BTreeMap[String, String] = collections::BTreeMap()
+        for rule in def.rules {
+            match rule.ret_type {
+                Some(ty) => types.insert(emit_text(world, rule.name), host.ty_named(walk, ty)),
+                else => {},
+            }
+        }
+        walk.grammar_rule_types = types
+        for rule in def.rules {
+            out.push("\n")
+            let st = out.mark()
+            self.emit_grammar_rule(world, walk, out, host, rule, bytes)
+            if !bytes {
+                out.record(rule.span, st)
+            }
+        }
+        // **`list(item, sep)` is a rule the backend is given** (Part II 10.8,
+        // issue #165 closed at 0.0.249): the backend has no such element and
+        // read `list` as a rule of the grammar's own, so each grammar that
+        // writes one gets the two template rules it lowers to - the first
+        // item, then every `sep item` after it, or nothing at all.
+        let mut lists = false
+        for rule in def.rules {
+            for alt in rule.alts {
+                if emit_writes_a_list(world, alt.pattern) {
+                    lists = true
+                }
+            }
+        }
+        if lists {
+            let list = emit_list_rule()
+            out.push(f"\n        rule {list}<T>(item: Rule<T>, sep) -> Vec<T> =\n")
+            out.push(f"          first:item rest:{list}_more<T>(item = item, sep = sep)*\n")
+            out.push("            -> { let mut all = vec![first]; all.extend(rest); all }\n")
+            out.push("        | \"\"\n")
+            out.push("            -> { Vec::new() }\n")
+            out.push(f"\n        rule {list}_more<T>(item: Rule<T>, sep) -> T =\n")
+            out.push("          sep x:item\n")
+            out.push("            -> { x }\n")
+        }
+        out.push("    }\n")
+        out.push("}\n")
+    }
+
+    fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, bytes: bool) sync throws {
+        match rule.frame {
+            Some(frame) => out.push(f"        {frame_attribute(frame)}\n"),
+            else => {},
+        }
+        // An entry is a `pub` rule to the backend: one function per entry
+        // (ADR-296 D25).
+        let vis = if rule.is_entry { "pub " } else { "" }
+        let mut ret = ""
+        match rule.ret_type {
+            Some(ty) => { ret = f" -> {host.ty_named(walk, ty)}" },
+            else => {},
+        }
+        // The label sits between the return type and the `=`, in both
+        // languages: `rule expr -> Expr # "expression" = ...`.
+        let mut label = ""
+        match rule.label {
+            Some(text) => { label = f" # {rust_string(text)}" },
+            else => {},
+        }
+        out.push(f"        {vis}rule {emit_text(world, rule.name)}{ret}{label} =\n")
+
+        let mut i = 0
+        for alt in rule.alts {
+            let separator = if i == 0 { "  " } else { "| " }
+            match alt.action {
+                Some(action) => {
+                    out.push(f"          {separator}")
+                    host.pattern(walk, out, alt.pattern)
+                    out.push("\n            -> ")
+                    // In a text grammar the backend has no `bytes(p)`: it is
+                    // `text(p)` there, and the action sees its bytes (ADR-366
+                    // D4).
+                    let mut as_bytes: Vec[String] = []
+                    if !bytes {
+                        emit_bytes_bindings(world, alt.pattern.node, as_bytes)
+                    }
+                    if as_bytes.len() > 0 {
+                        out.push("{ ")
+                        for name in as_bytes {
+                            out.push(f"let {name} = {name}.as_bytes(); ")
+                        }
+                    }
+                    // A grammar action is the rule's own body: what it ends
+                    // in is what the rule hands back, so a `return` there is
+                    // that value (ADR-296).
+                    self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
+                    if as_bytes.len() > 0 {
+                        out.push(" }")
+                    }
+                    out.push("\n")
+                },
+                else => {
+                    // The one body that needs no action: a `par_fold` is the
+                    // whole rule (ADR-296 D10), so the value of the rule is
+                    // the value of the fold. The binding the backend wants is
+                    // supplied here rather than demanded from the user.
+                    if rule.ret_type != null {
+                        out.push(f"          {separator}folded:")
+                        host.pattern(walk, out, alt.pattern)
+                        out.push("\n            -> { folded }\n")
+                    } else {
+                        out.push(f"          {separator}")
+                        host.pattern(walk, out, alt.pattern)
+                        out.push("\n")
+                    }
+                },
+            }
+            i += 1
+        }
+    }
+}
+
+/// Where the option `wanted` stands in a `par_fold`'s config, or -1.
+fn emit_named_option(world: ref EmitWorld, spec: ref FoldSpec, wanted: ref String) -> i64 {
+    for i in 0..<spec.config.len() {
+        if emit_text(world, spec.config[i].name) == wanted {
+            return i
+        }
+    }
+    return -1
+}

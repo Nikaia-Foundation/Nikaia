@@ -13,6 +13,9 @@ pub trait EmitHost {
     fn block_mentions(&self, block: &Block, name: &str) -> bool;
     fn error_type(&self, node: &Expr) -> Option<String>;
     fn task_handles(&self, task: i64) -> Vec<String>;
+    fn pattern(&self, walk: &mut EmitWalk, out: &mut EmitOut, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>>;
+    fn ty_named(&self, walk: &mut EmitWalk, ty: &Type) -> Result<String, Box<dyn std::error::Error>>;
+    fn set_grammar_bytes(&self, bytes: bool);
     fn overlaps_user_code(&self) -> bool;
     fn crossings_are_possible(&self) -> bool;
     fn user_parallelism(&self) -> bool;

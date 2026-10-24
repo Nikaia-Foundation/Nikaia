@@ -55,6 +55,17 @@ pub trait EmitHost {
     /// (`Checked::task_handles`); a set cannot be walked in Nikaia.
     fn task_handles(ref self, task: i64) -> Vec[String] sync
 
+    /// `Emitter::pattern`: a grammar pattern, written to `out`.
+    fn pattern(ref self, mut walk: EmitWalk, mut out: EmitOut, pattern: ref Spanned[Pattern]) sync throws
+
+    /// `Emitter::ty_filled` with named lifetimes: a type as a grammar rule
+    /// returns it.
+    fn ty_named(ref self, mut walk: EmitWalk, ty: ref Type) -> String sync throws
+
+    /// Whether the grammar being written is the copy over bytes (the pattern
+    /// writer reads it).
+    fn set_grammar_bytes(ref self, bytes: bool) sync
+
     /// `Build::overlaps_user_code`: user code may run on more than one thread.
     fn overlaps_user_code(ref self) -> bool sync
 

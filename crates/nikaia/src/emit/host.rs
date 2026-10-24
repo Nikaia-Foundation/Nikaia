@@ -218,6 +218,32 @@ impl EmitHost for Emitter<'_> {
         })
     }
 
+    fn pattern(
+        &self,
+        walk: &mut EmitWalk,
+        out: &mut Out,
+        pattern: &crate::ast::Spanned<crate::ast::Pattern>,
+    ) -> Crossing {
+        self.hosted(walk, || Emitter::pattern(self, out, pattern))
+    }
+
+    fn ty_named(
+        &self,
+        walk: &mut EmitWalk,
+        ty: &crate::ast::Type,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let mut written = String::new();
+        self.hosted(walk, || {
+            written = self.ty_filled(ty, super::Lifetimes::Named);
+            Ok(())
+        })?;
+        Ok(written)
+    }
+
+    fn set_grammar_bytes(&self, bytes: bool) {
+        self.grammar_bytes.set(bytes);
+    }
+
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr {
         let wraps: Vec<(usize, winnow_grammar::Symbol)> = wraps
             .iter()
