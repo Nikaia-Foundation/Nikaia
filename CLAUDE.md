@@ -47,10 +47,12 @@
   When every job passes, the `promote` job fast-forwards `main` to that commit
   (`.github/workflows/nikaia.yml`) - that commit, not `develop`'s tip, which
   may have moved on during the run. `main` is always a commit that passed.
-* **A newer push cancels the running CI run of the older one** (seen in the run
-  list: a run ends as `cancelled` the moment the next push starts one). So a
-  commit often has no finished run; the next one that finishes covers it. Only
-  a finished green run of a commit lets `promote` move `main`.
+* **Every push to `develop` gets its own CI run.** The concurrency group of a
+  push contains the run id, so runs overlap and none replaces another. (With one
+  shared group GitHub keeps one running and one pending run and cancels every
+  older pending one, so most commits never got an answer.) `promote` skips a
+  commit `main` already contains, so runs finishing out of order are safe. A
+  docs-only push skips the build and test jobs (`scripts/ci-changes.sh`).
 * **The supervisor checks every 20 minutes that CI on `develop` is green.**
   A red run is fixed forward at once (a fix-forward builder), because `main`
   and everything that hangs on it (the website, `promote`) stands still while
