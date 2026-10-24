@@ -361,6 +361,18 @@ fn uses_of(
         returns_a_view,
         hands_back_its_last: ret_type.is_some() && !returns_a_view,
         unresolved,
+        // **A receiver's declared type narrows the method it reaches** (#791).
+        types: args
+            .iter()
+            .filter(|a| a.ty.generics.is_empty() && !a.ty.is_slice)
+            .map(|a| {
+                (
+                    parsed.text(a.name).to_string(),
+                    parsed.text(a.ty.name).to_string(),
+                )
+            })
+            .chain(target.map(|t| ("self".to_string(), t.to_string())))
+            .collect(),
         own_methods,
         library_methods,
         // **A `ref Bytes` a `.clone()` keeps** (ADR-373 D1, D4).

@@ -39,7 +39,7 @@ pub(crate) struct FmtLexer {
 }
 
 impl FmtLexer {
-    pub(crate) fn fmt_run(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+    pub(crate) fn run(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
         let mut breaks = 0;
         let mut spaced = false;
         while self.at < self.c.len() as i64 {
@@ -53,8 +53,8 @@ impl FmtLexer {
                 self.at += 1;
             } else {
                 let start = self.at;
-                let kind = self.fmt_scan()?;
-                if self.at > self.c.len() as i64 { return Err(nikaia_std::error::throwing(Refused::Because(format!("the text ends inside a token that starts at character {}", start)), &"fmt_run")); }
+                let kind = self.scan()?;
+                if self.at > self.c.len() as i64 { return Err(nikaia_std::error::throwing(Refused::Because(format!("the text ends inside a token that starts at character {}", start)), &"run")); }
                 let mut text: String = String::from("");
                 let mut multi = false;
                 for k in start..self.at {
@@ -70,11 +70,11 @@ impl FmtLexer {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_ahead(&self, k: i64) -> scalar {
+    pub(crate) fn ahead(&self, k: i64) -> scalar {
         if self.at + k < self.c.len() as i64 { return *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at + k)); }
         ' '
     }
-    pub(crate) fn fmt_scan(&mut self) -> Result<FmtKind, nikaia_std::error::Thrown<Refused>> {
+    pub(crate) fn scan(&mut self) -> Result<FmtKind, nikaia_std::error::Thrown<Refused>> {
         while self.next < self.starts.len() as i64 && *nikaia_std::index::get(&self.starts, nikaia_std::index::at(self.next)) < self.at { self.next += 1; }
         if self.next < self.starts.len() as i64 && *nikaia_std::index::get(&self.starts, nikaia_std::index::at(self.next)) == self.at {
             self.at = *nikaia_std::index::get(&self.ends, nikaia_std::index::at(self.next));
@@ -82,28 +82,28 @@ impl FmtLexer {
             return Ok(FmtKind::Comment);
         }
         let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
-        let d = self.fmt_ahead(1);
+        let d = self.ahead(1);
         if c == '/' && (d == '/' || d == '*') {
             let at = self.at;
-            return Err(nikaia_std::error::throwing(Refused::Because(format!("a comment at character {} that the parser did not see", at)), &"fmt_scan"));
+            return Err(nikaia_std::error::throwing(Refused::Because(format!("a comment at character {} that the parser did not see", at)), &"scan"));
         }
         if c == '"' {
             self.at += 1;
-            self.fmt_quoted()?;
+            self.quoted()?;
             return Ok(FmtKind::Text);
         }
         if c == 'f' && d == '"' {
             self.at += 2;
-            self.fmt_interpolated()?;
+            self.interpolated()?;
             return Ok(FmtKind::Text);
         }
-        if c == '\'' && self.fmt_character() { return Ok(FmtKind::Text); }
+        if c == '\'' && self.character() { return Ok(FmtKind::Text); }
         if c.is_alphanumeric() || c == '_' {
-            self.fmt_word();
+            self.word();
             return Ok(FmtKind::Word);
         }
-        if c == '{' && self.fmt_after_dsl() {
-            self.fmt_verbatim()?;
+        if c == '{' && self.after_dsl() {
+            self.verbatim()?;
             return Ok(FmtKind::Verbatim);
         }
         if c == '(' || c == '[' || c == '{' {
@@ -114,10 +114,10 @@ impl FmtLexer {
             self.at += 1;
             return Ok(FmtKind::Close);
         }
-        self.at += fmt_punct_length(c, d, self.fmt_ahead(2));
+        self.at += fmt_punct_length(c, d, self.ahead(2));
         Ok(FmtKind::Punct)
     }
-    pub(crate) fn fmt_quoted(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+    pub(crate) fn quoted(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
         while self.at < self.c.len() as i64 {
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
             if c == '\\' { self.at += 2; } else {
@@ -125,41 +125,41 @@ impl FmtLexer {
                 if c == '"' { return Ok(()); }
             }
         }
-        return Err(nikaia_std::error::throwing(Refused::Because(String::from("a string that is never closed")), &"fmt_quoted"));
+        return Err(nikaia_std::error::throwing(Refused::Because(String::from("a string that is never closed")), &"quoted"));
     }
-    pub(crate) fn fmt_interpolated(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+    pub(crate) fn interpolated(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
         while self.at < self.c.len() as i64 {
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
-            let d = self.fmt_ahead(1);
-            if c == '\\' && d == 'u' && self.fmt_ahead(2) == '{' {
+            let d = self.ahead(1);
+            if c == '\\' && d == 'u' && self.ahead(2) == '{' {
                 while self.at < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at)) != '}' { self.at += 1; }
                 self.at += 1;
             } else if c == '\\' || c == '{' && d == '{' || c == '}' && d == '}' { self.at += 2; } else if c == '{' {
                 self.at += 1;
-                self.fmt_hole()?;
+                self.hole()?;
             } else {
                 self.at += 1;
                 if c == '"' { return Ok(()); }
             }
         }
-        return Err(nikaia_std::error::throwing(Refused::Because(String::from("an `f\"…\"` that is never closed")), &"fmt_interpolated"));
+        return Err(nikaia_std::error::throwing(Refused::Because(String::from("an `f\"…\"` that is never closed")), &"interpolated"));
     }
-    pub(crate) fn fmt_hole(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+    pub(crate) fn hole(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
         let mut depth = 0;
         while self.at < self.c.len() as i64 {
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
-            if c == '\'' && self.fmt_character() { continue; }
+            if c == '\'' && self.character() { continue; }
             self.at += 1;
-            if c == '"' { self.fmt_quoted()?; } else if c == '{' { depth += 1; } else if c == '}' {
+            if c == '"' { self.quoted()?; } else if c == '{' { depth += 1; } else if c == '}' {
                 if depth == 0 { return Ok(()); }
                 depth -= 1;
             }
         }
-        return Err(nikaia_std::error::throwing(Refused::Because(String::from("a hole in an `f\"…\"` that is never closed")), &"fmt_hole"));
+        return Err(nikaia_std::error::throwing(Refused::Because(String::from("a hole in an `f\"…\"` that is never closed")), &"hole"));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_character(&mut self) -> bool {
+    pub(crate) fn character(&mut self) -> bool {
         let mut k = self.at + 1;
         if k < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) == '\\' { k += 2; } else { k += 1; }
         while k < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) != '\'' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) != '\n' { k += 1; }
@@ -171,13 +171,13 @@ impl FmtLexer {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_word(&mut self) {
+    pub(crate) fn word(&mut self) {
         let first = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
         let digits = first >= '0' && first <= '9';
         self.at += 1;
         while self.at < self.c.len() as i64 {
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
-            let d = self.fmt_ahead(1);
+            let d = self.ahead(1);
             let digit_next = d >= '0' && d <= '9';
             let exponent = (c == '+' || c == '-') && *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at - 1)) == 'e';
             if c.is_alphanumeric() || c == '_' || digits && (c == '.' || exponent) && digit_next { self.at += 1; } else { return; }
@@ -185,13 +185,13 @@ impl FmtLexer {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_after_dsl(&self) -> bool {
+    pub(crate) fn after_dsl(&self) -> bool {
         let n = self.tokens.len() as i64;
         if n < 2 || nikaia_std::index::get(&self.tokens, nikaia_std::index::at(n - 1)).kind != FmtKind::Word { return false; }
         if nikaia_std::index::get(&self.tokens, nikaia_std::index::at(n - 2)).text == "dsl" { return true; }
         n >= 4 && nikaia_std::index::get(&self.tokens, nikaia_std::index::at(n - 2)).text == "::" && nikaia_std::index::get(&self.tokens, nikaia_std::index::at(n - 4)).text == "dsl"
     }
-    pub(crate) fn fmt_verbatim(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+    pub(crate) fn verbatim(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
         let mut k = self.at + 1;
         while k + 4 < self.c.len() as i64 {
             if *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) == '}' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k + 1)) == ' ' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k + 2)) == 'e' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k + 3)) == 'o' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k + 4)) == 'd' {
@@ -200,7 +200,7 @@ impl FmtLexer {
             }
             k += 1;
         }
-        return Err(nikaia_std::error::throwing(Refused::Because(String::from("a `dsl` body without its `} eod`")), &"fmt_verbatim"));
+        return Err(nikaia_std::error::throwing(Refused::Because(String::from("a `dsl` body without its `} eod`")), &"verbatim"));
     }
 }
 
@@ -465,15 +465,15 @@ pub(crate) struct FmtPrinter {
 impl FmtPrinter {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_print(&mut self) {
+    pub(crate) fn print(&mut self) {
         while !self.work.is_empty() {
             let line = match self.work.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
             if fmt_comment_only(&line) {
                 self.held.push(line);
                 continue;
             }
-            let indent = self.fmt_indent_of(&line);
-            let pieces = self.fmt_reshape(&line, indent);
+            let indent = self.indent_of(&line);
+            let pieces = self.reshape(&line, indent);
             if !pieces.is_empty() {
                 let mut k = pieces.len() as i64;
                 while k > 0 {
@@ -483,25 +483,25 @@ impl FmtPrinter {
                 continue;
             }
             let mut at = indent;
-            if nikaia_std::index::get(&line.toks, 0).kind == FmtKind::Close { at = self.fmt_inner(); }
-            self.fmt_flush(at);
-            self.fmt_emit(&line, indent);
+            if nikaia_std::index::get(&line.toks, 0).kind == FmtKind::Close { at = self.inner(); }
+            self.flush(at);
+            self.emit(&line, indent);
         }
-        let at = self.fmt_inner();
-        self.fmt_flush(at);
+        let at = self.inner();
+        self.flush(at);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_inner(&self) -> i64 {
+    pub(crate) fn inner(&self) -> i64 {
         let n = self.frames.len() as i64;
         if n == 0 { return 0; }
         nikaia_std::index::get(&self.frames, nikaia_std::index::at(n - 1)).inner
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_indent_of(&self, line: &FmtLine) -> i64 {
+    pub(crate) fn indent_of(&self, line: &FmtLine) -> i64 {
         let first = (*nikaia_std::index::get(&line.toks, 0)).clone();
-        let inner = self.fmt_inner();
+        let inner = self.inner();
         if first.kind == FmtKind::Close {
             if inner > 0 { return inner - 1; }
             return 0;
@@ -513,14 +513,14 @@ impl FmtPrinter {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_flush(&mut self, indent: i64) {
+    pub(crate) fn flush(&mut self, indent: i64) {
         let held = self.held.to_owned();
         self.held = vec![];
-        for line in held.iter() { self.fmt_write(line, indent); }
+        for line in held.iter() { self.write(line, indent); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_write(&mut self, line: &FmtLine, indent: i64) {
+    pub(crate) fn write(&mut self, line: &FmtLine, indent: i64) {
         if line.blank && !self.out.is_empty() { self.out.push('\n'); }
         for k in 0..indent { self.out.push('\t'); }
         self.out.push_str(&fmt_render(&line.toks));
@@ -528,7 +528,7 @@ impl FmtPrinter {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_emit(&mut self, line: &FmtLine, indent: i64) {
+    pub(crate) fn emit(&mut self, line: &FmtLine, indent: i64) {
         let shape = fmt_shape(&line.toks);
         for k in 0..line.toks.len() as i64 {
             let t = (*nikaia_std::index::get(&line.toks, nikaia_std::index::at(k))).clone();
@@ -541,7 +541,7 @@ impl FmtPrinter {
         let end = (*nikaia_std::index::get(&line.toks, nikaia_std::index::at(last))).clone();
         let mut toks = line.toks.to_owned();
         let n = self.frames.len() as i64;
-        if n > 0 && nikaia_std::index::get(&self.frames, nikaia_std::index::at(n - 1)).commas > 0 && self.fmt_next_closes() {
+        if n > 0 && nikaia_std::index::get(&self.frames, nikaia_std::index::at(n - 1)).commas > 0 && self.next_closes() {
             let open = end.kind == FmtKind::Open || end.text == "," || end.text == ";";
             if !open && nikaia_std::index::get(&line.toks, 0).text != ".." {
                 toks = fmt_slice(&line.toks, 0, last + 1);
@@ -553,11 +553,11 @@ impl FmtPrinter {
         self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(end.text.to_owned()) && !glob;
         self.tail = end.text.to_owned();
         self.tail_kind = end.kind;
-        self.fmt_write(&FmtLine { toks, blank: line.blank }, indent);
+        self.write(&FmtLine { toks, blank: line.blank }, indent);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_next_closes(&self) -> bool {
+    pub(crate) fn next_closes(&self) -> bool {
         let mut k = self.work.len() as i64;
         while k > 0 {
             k -= 1;
@@ -567,7 +567,7 @@ impl FmtPrinter {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fmt_reshape(&self, line: &FmtLine, indent: i64) -> Vec<FmtLine> {
+    pub(crate) fn reshape(&self, line: &FmtLine, indent: i64) -> Vec<FmtLine> {
         let toks = line.toks.to_owned();
         let n = toks.len() as i64;
         let last = fmt_last_code(&toks);
@@ -723,7 +723,7 @@ pub(crate) fn fmt_broken(line: &FmtLine, open: i64, close: i64) -> Vec<FmtLine> 
 
 pub fn fmt_source(source: &str, starts: Vec<i64>, ends: Vec<i64>) -> Result<String, nikaia_std::error::Thrown<Refused>> {
     let mut lexer = FmtLexer { c: nikaia_std::list::chars(source.chars()), at: 0, starts, ends, next: 0, tokens: vec![] };
-    lexer.fmt_run()?;
+    lexer.run()?;
     let lines = fmt_joined(&fmt_lines(&lexer.tokens));
     let mut work: Vec<FmtLine> = vec![];
     let mut k = lines.len() as i64;
@@ -732,7 +732,7 @@ pub fn fmt_source(source: &str, starts: Vec<i64>, ends: Vec<i64>) -> Result<Stri
         work.push((*nikaia_std::index::get(&lines, nikaia_std::index::at(k))).clone());
     }
     let mut printer = FmtPrinter { frames: vec![], work, held: vec![], out: String::from(""), hanging: false, tail: String::from(""), tail_kind: FmtKind::Open };
-    printer.fmt_print();
+    printer.print();
     Ok(printer.out)
 }
 

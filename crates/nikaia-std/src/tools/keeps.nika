@@ -35,6 +35,10 @@ pub struct KeepsBody {
     /// A method call of this body went to an entry no ledger has, so the
     /// candidates for a method name are not the whole list.
     pub unresolved: bool,
+    /// The declared type of each parameter that is written as a plain type
+    /// name, `self` included: a method call on one reaches that type's method
+    /// (#791), not every method of the same name.
+    pub types: collections::BTreeMap[String, String],
     /// The two ledgers' functions by a method's name.
     pub own_methods: ref MethodIndex,
     pub library_methods: ref MethodIndex,
@@ -596,12 +600,12 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         }
         Expr::MethodCall { receiver, method, args, config, .. } => {
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, walk)
-            keep_method_arguments(args, interner.resolve(method), interner, context, own, library, walk)
+            keep_method_arguments(receiver, args, interner.resolve(method), interner, context, own, library, walk)
             keep_method_options(config, interner, context, own, library, walk)
         }
         Expr::SafeMethod { receiver, method, args, config, .. } => {
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, walk)
-            keep_method_arguments(args, interner.resolve(method), interner, context, own, library, walk)
+            keep_method_arguments(receiver, args, interner.resolve(method), interner, context, own, library, walk)
             keep_method_options(config, interner, context, own, library, walk)
         }
         else => {}
@@ -688,8 +692,9 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
     if names.len() == 0 {
         return
     }
-    let ours = receiver_taken_in(own, context.own_methods, method)
-    let theirs = receiver_taken_in(library, context.library_methods, method)
+    let owner = keeps_owner_of(receiver, method, interner, context, own, library)
+    let ours = receiver_taken_in(own, context.own_methods, method, owner)
+    let theirs = receiver_taken_in(library, context.library_methods, method, owner)
     if context.unresolved || ours.hit || theirs.hit || (!ours.any && !theirs.any) {
         for name in names {
             walk.uses.kept.insert(name.clone())
@@ -724,10 +729,11 @@ fn takes_its_receiver(contract: ref FnContract) -> bool {
 // `Slots::force` stores (found moving `sharing`'s walk into Nikaia, #125).
 // A library's candidates answer from their ledger, and no candidate at all
 // keeps (D2).
-fn keep_method_arguments(args: ref Vec[Expr], method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
-    let ours = candidate_keys(own, context.own_methods, method)
+fn keep_method_arguments(receiver: ref Expr, args: ref Vec[Expr], method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+    let owner = keeps_owner_of(receiver, method, interner, context, own, library)
+    let ours = candidate_keys(own, context.own_methods, method, owner, args.len())
     for k in 0..<args.len() {
-        let theirs = keeps_at_in(library, context.library_methods, method, k + 1)
+        let theirs = keeps_at_in(library, context.library_methods, method, k + 1, owner)
         for name in keeps_handed(args[k], interner, context, own, library, walk) {
             for key in ours {
                 walk.uses.passed.push(Passed { parameter: name.clone(), callee: key.clone(), at: k + 1 })
@@ -740,11 +746,11 @@ fn keep_method_arguments(args: ref Vec[Expr], method: ref String, interner: ref 
 }
 
 // The keys of a ledger's candidates for a bare method name.
-fn candidate_keys(ledger: ref Ledger, methods: ref MethodIndex, method: ref String) -> Vec[String] {
+fn candidate_keys(ledger: ref Ledger, methods: ref MethodIndex, method: ref String, owner: ref String?, given: i64) -> Vec[String] {
     let mut keys: Vec[String] = []
-    for key in method_keys(methods, method) {
+    for key in method_keys_of(methods, method, owner) {
         let contract = ledger.functions[key] ?? continue
-        if takes_self(contract) {
+        if takes_self(contract) && has_position(contract, given) {
             keys.push(key.clone())
         }
     }
@@ -758,9 +764,9 @@ struct CandidatesSay {
     hit: bool,
 }
 
-fn receiver_taken_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref String) -> CandidatesSay {
+fn receiver_taken_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref String, owner: ref String?) -> CandidatesSay {
     let mut asked = CandidatesSay { any: false, hit: false }
-    for key in method_keys(methods, method) {
+    for key in method_keys_of(methods, method, owner) {
         let contract = ledger.functions[key] ?? continue
         if takes_self(contract) {
             asked.any = true
@@ -773,9 +779,9 @@ fn receiver_taken_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref S
 // **A candidate with no parameter at `at` is not one this call reaches**: it
 // takes fewer arguments than the call gives, so `m.get(key)` is not
 // `Locked::get(self)`, and that entry's silence about `key` is not a keep.
-fn keeps_at_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref String, at: i64) -> CandidatesSay {
+fn keeps_at_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref String, at: i64, owner: ref String?) -> CandidatesSay {
     let mut asked = CandidatesSay { any: false, hit: false }
-    for key in method_keys(methods, method) {
+    for key in method_keys_of(methods, method, owner) {
         let contract = ledger.functions[key] ?? continue
         if takes_self(contract) && has_position(contract, at) {
             asked.any = true
@@ -783,6 +789,39 @@ fn keeps_at_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref String,
         }
     }
     return asked
+}
+
+// **The type a method call is made on** (#791): the declared type of a
+// receiver that is a parameter, when one of the ledgers has that type's method
+// of this name. Then `at.quoted(f)` is `GrCursor::quoted`, and another type's
+// `quoted` is not a candidate. Any other receiver is asked by the bare name.
+fn keeps_owner_of(receiver: ref Expr, method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger) -> String? {
+    match receiver {
+        Expr::Variable(ident, _) => {
+            let declared = context.types[interner.resolve(ident)] ?? return null
+            let key = f"{declared}::{method}"
+            if own.functions.contains_key(key) || library.functions.contains_key(key) {
+                return declared.clone()
+            }
+            return null
+        }
+        else => return null,
+    }
+}
+
+// The keys of a bare method name, narrowed to one type's method when the
+// receiver's type is known.
+fn method_keys_of(methods: ref MethodIndex, method: ref String, owner: ref String?) -> Vec[String] {
+    let keys = method_keys(methods, method)
+    let named = owner ?? return keys
+    let wanted = f"{named}::{method}"
+    let mut out: Vec[String] = []
+    for key in keys {
+        if key == wanted || key.ends_with(ref f"::{wanted}") {
+            out.push(key.clone())
+        }
+    }
+    return out
 }
 
 // Whether a candidate's signature has a parameter at `at`; one without a

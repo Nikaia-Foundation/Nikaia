@@ -9,6 +9,7 @@ pub struct KeepsBody<'a, 'a1> {
     pub returns_a_view: bool,
     pub hands_back_its_last: bool,
     pub unresolved: bool,
+    pub types: collections::BTreeMap<String, String>,
     pub own_methods: &'a MethodIndex,
     pub library_methods: &'a1 MethodIndex,
     pub cloned_keeps: collections::BTreeSet<String>,
@@ -374,13 +375,13 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, walk);
-            keep_method_arguments(args, interner.resolve(method), interner, context, own, library, walk);
+            keep_method_arguments(receiver, args, interner.resolve(method), interner, context, own, library, walk);
             keep_method_options(config, interner, context, own, library, walk);
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, walk);
-            keep_method_arguments(args, interner.resolve(method), interner, context, own, library, walk);
+            keep_method_arguments(receiver, args, interner.resolve(method), interner, context, own, library, walk);
             keep_method_options(config, interner, context, own, library, walk);
         },
         _ => { },
@@ -416,8 +417,9 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
         _ => { },
     }
     if names.is_empty() { return; }
-    let ours = receiver_taken_in(own, context.own_methods, method);
-    let theirs = receiver_taken_in(library, context.library_methods, method);
+    let owner = keeps_owner_of(receiver, method, interner, context, own, library);
+    let ours = receiver_taken_in(own, context.own_methods, method, (owner).as_deref());
+    let theirs = receiver_taken_in(library, context.library_methods, method, (owner).as_deref());
     if context.unresolved || ours.hit || theirs.hit || !ours.any && !theirs.any { for name in names.iter() { walk.uses.kept.insert(name.to_owned()); } }
 }
 
@@ -433,10 +435,12 @@ pub(crate) fn takes_its_receiver(contract: &FnContract) -> bool {
     }
 }
 
-pub(crate) fn keep_method_arguments(args: &[Expr], method: &str, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
-    let ours = candidate_keys(own, context.own_methods, method);
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn keep_method_arguments(receiver: &Expr, args: &[Expr], method: &str, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
+    let owner = keeps_owner_of(receiver, method, interner, context, own, library);
+    let ours = candidate_keys(own, context.own_methods, method, (owner).as_deref(), args.len() as i64);
     for k in 0..args.len() as i64 {
-        let theirs = keeps_at_in(library, context.library_methods, method, k + 1);
+        let theirs = keeps_at_in(library, context.library_methods, method, k + 1, (owner).as_deref());
         for name in keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk) {
             for key in ours.iter() { walk.uses.passed.push(Passed { parameter: name.to_owned(), callee: key.to_owned(), at: k + 1 }); }
             if theirs.hit || ours.is_empty() && !theirs.any { walk.uses.kept.insert(name); }
@@ -444,11 +448,11 @@ pub(crate) fn keep_method_arguments(args: &[Expr], method: &str, interner: &winn
     }
 }
 
-pub(crate) fn candidate_keys(ledger: &Ledger, methods: &MethodIndex, method: &str) -> Vec<String> {
+pub(crate) fn candidate_keys(ledger: &Ledger, methods: &MethodIndex, method: &str, owner: Option<&str>, given: i64) -> Vec<String> {
     let mut keys: Vec<String> = vec![];
-    for key in method_keys(methods, method) {
+    for key in method_keys_of(methods, method, owner) {
         let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if takes_self(contract) { keys.push(key.to_owned()); }
+        if takes_self(contract) && has_position(contract, given) { keys.push(key.to_owned()); }
     }
     keys
 }
@@ -459,9 +463,9 @@ pub(crate) struct CandidatesSay {
     pub(crate) hit: bool,
 }
 
-pub(crate) fn receiver_taken_in(ledger: &Ledger, methods: &MethodIndex, method: &str) -> CandidatesSay {
+pub(crate) fn receiver_taken_in(ledger: &Ledger, methods: &MethodIndex, method: &str, owner: Option<&str>) -> CandidatesSay {
     let mut asked = CandidatesSay { any: false, hit: false };
-    for key in method_keys(methods, method) {
+    for key in method_keys_of(methods, method, owner) {
         let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if takes_self(contract) {
             asked.any = true;
@@ -471,9 +475,9 @@ pub(crate) fn receiver_taken_in(ledger: &Ledger, methods: &MethodIndex, method: 
     asked
 }
 
-pub(crate) fn keeps_at_in(ledger: &Ledger, methods: &MethodIndex, method: &str, at: i64) -> CandidatesSay {
+pub(crate) fn keeps_at_in(ledger: &Ledger, methods: &MethodIndex, method: &str, at: i64, owner: Option<&str>) -> CandidatesSay {
     let mut asked = CandidatesSay { any: false, hit: false };
-    for key in method_keys(methods, method) {
+    for key in method_keys_of(methods, method, owner) {
         let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if takes_self(contract) && has_position(contract, at) {
             asked.any = true;
@@ -481,6 +485,28 @@ pub(crate) fn keeps_at_in(ledger: &Ledger, methods: &MethodIndex, method: &str, 
         }
     }
     asked
+}
+
+pub(crate) fn keeps_owner_of(receiver: &Expr, method: &str, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger) -> Option<String> {
+    match receiver {
+        Expr::Variable(ident, _) => {
+            let ident = *ident;
+            let declared = match *nikaia_std::index::get(&context.types, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let key = format!("{}::{}", declared, method);
+            if own.functions.contains_key(&key) || library.functions.contains_key(&key) { return Some(declared.to_owned()); }
+            return None;
+        },
+        _ => return None,
+    }
+}
+
+pub(crate) fn method_keys_of(methods: &MethodIndex, method: &str, owner: Option<&str>) -> Vec<String> {
+    let keys = method_keys(methods, method);
+    let named = match owner { Some(__nikaia_value) => __nikaia_value, None => return keys };
+    let wanted = format!("{}::{}", named, method);
+    let mut out: Vec<String> = vec![];
+    for key in keys.iter() { if *key == wanted || key.ends_with(&format!("::{}", wanted)) { out.push(key.to_owned()); } }
+    out
 }
 
 pub(crate) fn has_position(contract: &FnContract, at: i64) -> bool {

@@ -702,3 +702,31 @@ fn a_result_that_views_a_parameter_handed_back() {
     let refused = lowered_and_run("view-handed-back-owned", &owned).expect_err("it is refused");
     assert!(refused.contains("error[NK2302]"), "{refused}");
 }
+
+/// **A method is reached by its receiver's type and its name** (#791): another
+/// type's method of the same name, with fewer parameters or one that stores
+/// its argument, does not change what a call on this type keeps.
+#[test]
+fn a_method_of_another_type_with_the_same_name_is_not_asked() {
+    let source = "
+struct Reader { at: i64 }
+impl Reader {
+    fn quoted(ref mut self, step: fn(i64) -> i64 sync) -> i64 {
+        self.at = step(self.at)
+        return self.at
+    }
+}
+struct Lexer { at: i64 }
+impl Lexer {
+    fn quoted(ref mut self) -> i64 { return self.at }
+}
+struct Holder { steps: Vec[fn(i64) -> i64 sync] }
+impl Holder {
+    fn quoted(ref mut self, step: fn(i64) -> i64 sync) { self.steps.push(step) }
+}
+fn read(reader: ref mut Reader, step: fn(i64) -> i64 sync) -> i64 {
+    return reader.quoted(step)
+}
+";
+    assert!(!keeps(source, "read").contains(&"step".to_string()));
+}

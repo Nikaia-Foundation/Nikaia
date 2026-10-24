@@ -50,7 +50,7 @@ struct FmtLexer {
 }
 
 impl FmtLexer {
-    fn fmt_run(ref mut self) throws {
+    fn run(ref mut self) throws {
         let mut breaks = 0
         let mut spaced = false
         while self.at < self.c.len() {
@@ -64,7 +64,7 @@ impl FmtLexer {
                 self.at += 1
             } else {
                 let start = self.at
-                let kind = self.fmt_scan()
+                let kind = self.scan()
                 if self.at > self.c.len() {
                     throw Refused::Because(f"the text ends inside a token that starts at character {start}")
                 }
@@ -83,14 +83,14 @@ impl FmtLexer {
         }
     }
 
-    fn fmt_ahead(ref self, k: i64) -> scalar sync {
+    fn ahead(ref self, k: i64) -> scalar sync {
         if self.at + k < self.c.len() {
             return self.c[self.at + k]
         }
         return ' '
     }
 
-    fn fmt_scan(ref mut self) -> FmtKind throws {
+    fn scan(ref mut self) -> FmtKind throws {
         while self.next < self.starts.len() && self.starts[self.next] < self.at {
             self.next += 1
         }
@@ -100,30 +100,30 @@ impl FmtLexer {
             return FmtKind::Comment
         }
         let c = self.c[self.at]
-        let d = self.fmt_ahead(1)
+        let d = self.ahead(1)
         if c == '/' && (d == '/' || d == '*') {
             let at = self.at
             throw Refused::Because(f"a comment at character {at} that the parser did not see")
         }
         if c == '"' {
             self.at += 1
-            self.fmt_quoted()
+            self.quoted()
             return FmtKind::Text
         }
         if c == 'f' && d == '"' {
             self.at += 2
-            self.fmt_interpolated()
+            self.interpolated()
             return FmtKind::Text
         }
-        if c == '\'' && self.fmt_character() {
+        if c == '\'' && self.character() {
             return FmtKind::Text
         }
         if c.is_alphanumeric() || c == '_' {
-            self.fmt_word()
+            self.word()
             return FmtKind::Word
         }
-        if c == '{' && self.fmt_after_dsl() {
-            self.fmt_verbatim()
+        if c == '{' && self.after_dsl() {
+            self.verbatim()
             return FmtKind::Verbatim
         }
         if c == '(' || c == '[' || c == '{' {
@@ -134,12 +134,12 @@ impl FmtLexer {
             self.at += 1
             return FmtKind::Close
         }
-        self.at += fmt_punct_length(c, d, self.fmt_ahead(2))
+        self.at += fmt_punct_length(c, d, self.ahead(2))
         return FmtKind::Punct
     }
 
     // A plain string, from after its opening quote through its closing one.
-    fn fmt_quoted(ref mut self) throws {
+    fn quoted(ref mut self) throws {
         while self.at < self.c.len() {
             let c = self.c[self.at]
             if c == '\\' {
@@ -156,11 +156,11 @@ impl FmtLexer {
 
     // An `f"…"`, from after `f"`: `{{` and `}}` are braces, `\u{…}` an escape,
     // and a `{` opens a hole of code.
-    fn fmt_interpolated(ref mut self) throws {
+    fn interpolated(ref mut self) throws {
         while self.at < self.c.len() {
             let c = self.c[self.at]
-            let d = self.fmt_ahead(1)
-            if c == '\\' && d == 'u' && self.fmt_ahead(2) == '{' {
+            let d = self.ahead(1)
+            if c == '\\' && d == 'u' && self.ahead(2) == '{' {
                 while self.at < self.c.len() && self.c[self.at] != '}' {
                     self.at += 1
                 }
@@ -170,7 +170,7 @@ impl FmtLexer {
                 self.at += 2
             } else if c == '{' {
                 self.at += 1
-                self.fmt_hole()
+                self.hole()
             } else {
                 self.at += 1
                 if c == '"' {
@@ -183,16 +183,16 @@ impl FmtLexer {
 
     // A hole's code up to its `}`: braces nest in it, and a string or a
     // character in it is one.
-    fn fmt_hole(ref mut self) throws {
+    fn hole(ref mut self) throws {
         let mut depth = 0
         while self.at < self.c.len() {
             let c = self.c[self.at]
-            if c == '\'' && self.fmt_character() {
+            if c == '\'' && self.character() {
                 continue
             }
             self.at += 1
             if c == '"' {
-                self.fmt_quoted()
+                self.quoted()
             } else if c == '{' {
                 depth += 1
             } else if c == '}' {
@@ -206,7 +206,7 @@ impl FmtLexer {
     }
 
     // A character literal from its `'`, if one stands here.
-    fn fmt_character(ref mut self) -> bool sync {
+    fn character(ref mut self) -> bool sync {
         let mut k = self.at + 1
         if k < self.c.len() && self.c[k] == '\\' {
             k += 2
@@ -224,13 +224,13 @@ impl FmtLexer {
     }
 
     // A name, a keyword or a number, `1.5e-4` in one piece.
-    fn fmt_word(ref mut self) sync {
+    fn word(ref mut self) sync {
         let first = self.c[self.at]
         let digits = first >= '0' && first <= '9'
         self.at += 1
         while self.at < self.c.len() {
             let c = self.c[self.at]
-            let d = self.fmt_ahead(1)
+            let d = self.ahead(1)
             let digit_next = d >= '0' && d <= '9'
             let exponent = (c == '+' || c == '-') && self.c[self.at - 1] == 'e'
             if c.is_alphanumeric() || c == '_' || (digits && (c == '.' || exponent) && digit_next) {
@@ -242,7 +242,7 @@ impl FmtLexer {
     }
 
     // Whether the tokens before a `{` are `dsl NAME` or `dsl NAME::NAME`.
-    fn fmt_after_dsl(ref self) -> bool sync {
+    fn after_dsl(ref self) -> bool sync {
         let n = self.tokens.len()
         if n < 2 || self.tokens[n - 1].kind != FmtKind::Word {
             return false
@@ -254,7 +254,7 @@ impl FmtLexer {
     }
 
     // A `dsl` body from its `{` through `} eod`.
-    fn fmt_verbatim(ref mut self) throws {
+    fn verbatim(ref mut self) throws {
         let mut k = self.at + 1
         while k + 4 < self.c.len() {
             if self.c[k] == '}' && self.c[k + 1] == ' ' && self.c[k + 2] == 'e' && self.c[k + 3] == 'o' && self.c[k + 4] == 'd' {
@@ -592,15 +592,15 @@ struct FmtPrinter {
 }
 
 impl FmtPrinter {
-    fn fmt_print(ref mut self) sync {
+    fn print(ref mut self) sync {
         while self.work.len() > 0 {
             let line = self.work.pop() ?? break
             if fmt_comment_only(line) {
                 self.held.push(line)
                 continue
             }
-            let indent = self.fmt_indent_of(line)
-            let pieces = self.fmt_reshape(line, indent)
+            let indent = self.indent_of(line)
+            let pieces = self.reshape(line, indent)
             if pieces.len() > 0 {
                 let mut k = pieces.len()
                 while k > 0 {
@@ -611,16 +611,16 @@ impl FmtPrinter {
             }
             let mut at = indent
             if line.toks[0].kind == FmtKind::Close {
-                at = self.fmt_inner()
+                at = self.inner()
             }
-            self.fmt_flush(at)
-            self.fmt_emit(line, indent)
+            self.flush(at)
+            self.emit(line, indent)
         }
-        let at = self.fmt_inner()
-        self.fmt_flush(at)
+        let at = self.inner()
+        self.flush(at)
     }
 
-    fn fmt_inner(ref self) -> i64 sync {
+    fn inner(ref self) -> i64 sync {
         let n = self.frames.len()
         if n == 0 {
             return 0
@@ -628,9 +628,9 @@ impl FmtPrinter {
         return self.frames[n - 1].inner
     }
 
-    fn fmt_indent_of(ref self, line: ref FmtLine) -> i64 sync {
+    fn indent_of(ref self, line: ref FmtLine) -> i64 sync {
         let first = line.toks[0].clone()
-        let inner = self.fmt_inner()
+        let inner = self.inner()
         if first.kind == FmtKind::Close {
             if inner > 0 {
                 return inner - 1
@@ -648,15 +648,15 @@ impl FmtPrinter {
     }
 
     // The comment lines held so far, at this indentation.
-    fn fmt_flush(ref mut self, indent: i64) sync {
+    fn flush(ref mut self, indent: i64) sync {
         let held = self.held.clone()
         self.held = []
         for line in held {
-            self.fmt_write(line, indent)
+            self.write(line, indent)
         }
     }
 
-    fn fmt_write(ref mut self, line: ref FmtLine, indent: i64) sync {
+    fn write(ref mut self, line: ref FmtLine, indent: i64) sync {
         if line.blank && self.out.len() > 0 {
             self.out.push('\n')
         }
@@ -667,7 +667,7 @@ impl FmtPrinter {
         self.out.push('\n')
     }
 
-    fn fmt_emit(ref mut self, line: ref FmtLine, indent: i64) sync {
+    fn emit(ref mut self, line: ref FmtLine, indent: i64) sync {
         let shape = fmt_shape(line.toks)
         for k in 0..<line.toks.len() {
             let t = line.toks[k].clone()
@@ -684,7 +684,7 @@ impl FmtPrinter {
         let end = line.toks[last].clone()
         let mut toks = line.toks.clone()
         let n = self.frames.len()
-        if n > 0 && self.frames[n - 1].commas > 0 && self.fmt_next_closes() {
+        if n > 0 && self.frames[n - 1].commas > 0 && self.next_closes() {
             let open = end.kind == FmtKind::Open || end.text == "," || end.text == ";"
             if !open && line.toks[0].text != ".." {
                 toks = fmt_slice(line.toks, 0, last + 1)
@@ -698,11 +698,11 @@ impl FmtPrinter {
         self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(end.text.clone()) && !glob
         self.tail = end.text.clone()
         self.tail_kind = end.kind
-        self.fmt_write(FmtLine { toks, blank: line.blank }, indent)
+        self.write(FmtLine { toks, blank: line.blank }, indent)
     }
 
     // Whether the next line of code closes the bracket open now.
-    fn fmt_next_closes(ref self) -> bool sync {
+    fn next_closes(ref self) -> bool sync {
         let mut k = self.work.len()
         while k > 0 {
             k -= 1
@@ -717,7 +717,7 @@ impl FmtPrinter {
     // over 100 columns is broken after its commas, at its last bracket that
     // holds a list or a block, or before its loosest operators. Each piece
     // comes back through here, so a piece too long is broken again.
-    fn fmt_reshape(ref self, line: ref FmtLine, indent: i64) -> Vec[FmtLine] sync {
+    fn reshape(ref self, line: ref FmtLine, indent: i64) -> Vec[FmtLine] sync {
         let toks = line.toks.clone()
         let n = toks.len()
         let last = fmt_last_code(toks)
@@ -937,7 +937,7 @@ fn fmt_broken(line: ref FmtLine, open: i64, close: i64) -> Vec[FmtLine] sync {
 /// ranges: the ones the parser found, in order (D2).
 pub fn fmt_source(source: String, starts: Vec[i64], ends: Vec[i64]) -> String throws {
     let mut lexer = FmtLexer { c: source.chars().collect(), at: 0, starts, ends, next: 0, tokens: [] }
-    lexer.fmt_run()
+    lexer.run()
     let lines = fmt_joined(fmt_lines(lexer.tokens))
     let mut work: Vec[FmtLine] = []
     let mut k = lines.len()
@@ -946,6 +946,6 @@ pub fn fmt_source(source: String, starts: Vec[i64], ends: Vec[i64]) -> String th
         work.push(lines[k].clone())
     }
     let mut printer = FmtPrinter { frames: [], work, held: [], out: "", hanging: false, tail: "", tail_kind: FmtKind::Open }
-    printer.fmt_print()
+    printer.print()
     return printer.out
 }
