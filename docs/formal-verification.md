@@ -96,8 +96,8 @@ solvers) or major rework; E probably never.
 | 5 | Absence of run-time errors in the certificate checker (the trusted kernel) | B | small and leaf-shaped; first candidate for item 4 |
 | 6 | Parser against a formal grammar: grammar written down, round-trip `parse(fmt(t)) == t` as a property test | B | grammar text plus fuzzing (14.3); a proof of the parser is D |
 | 7 | Local functional contracts on components (struct rules, preconditions on the tree, spans nest) | B | ADR-369 rules and ADR-269 D5 exist; need postconditions |
-| 8 | Contracts over collections and recursion (the checker's tables are consistent, a walk visits every node) | C | needs quantifiers, inductive predicates, `ensures`, lemmas, termination measures: a Dafny-level verifier in our own tool |
-| 9 | Reference semantics: an executable reference interpreter declared the meaning, compiled output compared with it | B/C | today's `interpreter` evaluates nothing (Stage 0); a new one, rule by rule ([`formal-semantics.md`](formal-semantics.md), level 2) |
+| 8 | Contracts over collections and recursion (the checker's tables are consistent, a walk visits every node); the ladder from a named property (B, ADR-381) to rules over every element is [`facts-about-data.md`](facts-about-data.md) | C | needs quantifiers, inductive predicates, `ensures`, lemmas, termination measures: a Dafny-level verifier in our own tool |
+| 9 | Reference semantics (optional, not needed for claim b): an executable reference interpreter declared the meaning, compiled output compared with it | B/C | today's `interpreter` evaluates nothing (Stage 0); a new one, rule by rule ([`formal-semantics.md`](formal-semantics.md), level 2) |
 | 10 | Mathematical semantics of Nikaia (formal grammar, typing, operational rules) | C/D | rewriting Parts I-II as a formal object; mechanised only in a proof assistant; levels and examples in [`formal-semantics.md`](formal-semantics.md) |
 | 11 | Soundness of the checker (well-typed programs do not go wrong; contracts imply rustc's borrow checker accepts) | D | needs item 10 and a proof assistant; rustc's borrow checker is a backstop for memory safety meanwhile |
 | 12 | Translation validation of the lowering per build (each function's Rust equals its Nikaia) | D | needs items 10 and 13 and an equivalence checker; per-rule validation (Alive2/ISLE style) for arithmetic and indexing alone is C |
@@ -147,3 +147,13 @@ shows. Everything else waits for the owner's answer.
   measured.
 * **A formal semantics (item 10) is open**: the basis is
   [`formal-semantics.md`](formal-semantics.md).
+
+## 7. What claim (b) needs, and what it does not
+
+Claim (b) needs the prover and its checked certificates, applied to
+`tools/*.nika`, and nothing that runs the program: no interpreter, no formal
+semantics. What it needs beyond today is prover reach - `if` values, lengths
+and counters (#386, #432, #388), then facts about what the compiler's tables
+hold (an index stored in a node points into its table; [`facts-about-data.md`](facts-about-data.md),
+#797, #798). An interpreter (item 9, `formal-semantics.md` level 2) is an
+optional later stage, a test oracle for the lowering, not a step on this path.

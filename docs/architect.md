@@ -123,6 +123,13 @@ stage 1; "formally verified" stays off README/website/guide (rule in
 over `tools/*.nika`), slotted after the running builder. Formal semantics:
 basis in `formal-semantics.md`, owner to decide. #386 and #388 lack a status
 label (noted to the main session).
+Facts about data (owner, 2026-10-24): ADR-381 decided (a pure `bool` call is a
+named property, proved by name, carried, checked once); #797 `ready` (step 0:
+two defects, `run --unproved-claims` ignored on a file and a struct rule over
+an inline list literal; then steps 1-3 in `prove_terms.nika`); #798
+`decision` (Q1 element rules `xs.all(..)`, Q2 std `is_sorted`/`binary_search`);
+basis `facts-about-data.md`. No interpreter needed for claim (b)
+(`formal-verification.md` 7). Supervisor owes the version raise for ADR-381.
 Known risk for new tools files: #791 (methods matched by bare name).
 Parked: branch `wip/bounding-candidates-2026-10-19` (loop counter candidates in
 the bounds analysis, ~24 lines, 120 versions stale): not merged, no order until

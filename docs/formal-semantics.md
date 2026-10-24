@@ -174,7 +174,8 @@ language; that would be an exception to the rule, and it is the owner's.
 
 Not levels 3-4 now. Level 1 for the core of Part I, written into the
 specification as rules, is cheap and would already have found operand order;
-level 2 is worth it once self-hosting has moved `check` and `emit` (#125 C-7
+level 2 is optional and no step towards claim (b), which needs no interpreter
+(`formal-verification.md` 7); it is worth it once self-hosting has moved `check` and `emit` (#125 C-7
 and E10/E11), as the oracle for a lowering that then no longer has a Rust twin
 to be compared with. Not decided here: whether Part I takes formal rules at all
 (STYLE.md would need a notation), and whether a proof assistant may ever enter
