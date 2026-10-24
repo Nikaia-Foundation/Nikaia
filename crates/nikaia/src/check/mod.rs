@@ -35,7 +35,7 @@ use crate::assets::Reads;
 use crate::ast::{self, BinaryOp, Block, Expr, Item, Span, Stmt, UnaryOp};
 use crate::build_time;
 use crate::contracts::ty::TyOps;
-use crate::contracts::{FieldContract, Ledger, ty, ty::Ty};
+use crate::contracts::{FieldContract, Ledger, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_attributes;
@@ -896,40 +896,6 @@ fn propagation(
     checked.facts
 }
 
-/// **Whether this body writes `P::fields` anywhere in it**
-/// ([ADR-304](../../docs/specification/adr/adr-304.md) D4).
-///
-/// The **body** and not the bound, because a bound says only that a shape may
-/// be asked for: a `[T: Struct]` function that never asks is an ordinary
-/// generic one and stays generic in the language below.
-///
-/// `crate::emit::visit_block` rather than a walk of this file's own, for the
-/// reason that function is `pub(crate)` at all: a second walk over one shape is
-/// a second thing to keep in step with the AST.
-fn walks_the_fields_of(
-    parsed: &Parsed,
-    body: &crate::ast::Block,
-    parameter: &str,
-    shape: &str,
-) -> bool {
-    let mut found = false;
-    crate::emit::visit_block(body, &mut |expr| {
-        if let Expr::Path(segments, _) = expr {
-            let names: Vec<&str> = segments.iter().map(|s| parsed.text(*s)).collect();
-            // **`T::attribute(X)` asks for the type too** (ADR-331 D6): its
-            // value is the type's own, so the function is copied per type as
-            // a walk is.
-            if matches!(names.as_slice(), [ty, member]
-                if *ty == parameter
-                    && (*member == shape || *member == "attribute" || *member == "attributes"))
-            {
-                found = true;
-            }
-        }
-    });
-    found
-}
-
 /// **The name of one specialised copy** — `describe__User`
 /// ([ADR-304](../../docs/specification/adr/adr-304.md) D6).
 ///
@@ -968,15 +934,6 @@ pub(super) fn written_by(parsed: &Parsed, value: &Expr) -> String {
 /// an `enum`'s variants under `[T: Enum]`.
 const FIELDS: &str = "fields";
 const VARIANTS: &str = "variants";
-
-/// The member a shape bound makes reachable, and the type of one element of it.
-fn shape_member(bound: &str) -> Option<(&'static str, &'static str)> {
-    match bound {
-        "Struct" => Some((FIELDS, ty::FIELD)),
-        "Enum" => Some((VARIANTS, ty::VARIANT)),
-        _ => None,
-    }
-}
 
 impl From<Constant> for CheckConstant {
     fn from(c: Constant) -> CheckConstant {
@@ -1038,8 +995,6 @@ impl<'a> Checker<'a> {
 
     fn collect_types(&mut self) {
         self.s.collect_types(self.world);
-        self.collect_field_walks();
-        self.collect_comparisons();
         self.collect_copies();
     }
 
@@ -1065,82 +1020,6 @@ impl<'a> Checker<'a> {
     /// would have said it was.
     fn collect_copies(&mut self) {
         self.s.collect_copies(self.world);
-    }
-
-    /// **Which declared types compare**
-    /// ([ADR-204](../../docs/specification/adr/adr-204.md) D1), for the derive
-    /// the emitter writes and the refusal this file raises.
-    ///
-    /// After every type is collected, because the answer is structural: a
-    /// `struct` compares when its fields do, and a field may name a type
-    /// declared further down the file.
-    fn collect_comparisons(&mut self) {
-        // **And what another file of the package declares** (ADR-286 D1).
-        let asking = Comparable {
-            beside: &self.world.parts_beside,
-            structs: &self.s.structs,
-            enums: &self.s.enums,
-            payloads: &self.s.enum_payloads,
-            parameters: &self.s.struct_parameters,
-            own: self.world.own,
-            library: self.world.library,
-        };
-        let found = nikaia_std::tools::check_compare::compare_declared(&asking, &self.world.here);
-        self.s.facts.compares.extend(found.compares);
-        self.s.facts.compares_totally.extend(found.totally);
-    }
-
-    /// **Which functions walk a type's fields, and which parameter each walks**
-    /// ([ADR-304](../../docs/specification/adr/adr-304.md) D4).
-    ///
-    /// Read off the **body** rather than off the bound, because the bound says
-    /// only that a shape *may* be asked for: `fn tell[T: Struct](v: T)` that
-    /// never writes `T::fields` is an ordinary generic function and stays one,
-    /// generic in the language below and emitted once.
-    ///
-    /// Collected before any body is walked, because a call may stand **above**
-    /// the function it names — items are order-independent here — and what a
-    /// call has to do about one of these is decided at the call.
-    ///
-    /// **Over the program's other files too**, for the same reason one file
-    /// over: the files of a package share one namespace (Part I 9.1), so
-    /// `describe` may be declared in `shapes.nika` and called from `main.nika`
-    /// — and a call that did not know it names a shape walk would be left
-    /// pointing at a generic original nobody emits.
-    fn collect_field_walks(&mut self) {
-        self.field_walks_in(self.parsed);
-        for other in self.beside {
-            self.field_walks_in(other);
-        }
-    }
-
-    /// One file's shape walks, under the interner its symbols resolve in.
-    fn field_walks_in(&mut self, parsed: &Parsed) {
-        for item in &parsed.program.items {
-            let Item::Fn {
-                name: Some(name),
-                generics,
-                body,
-                ..
-            } = &item.node
-            else {
-                continue;
-            };
-            let walked = generics.iter().find_map(|g| {
-                let parameter = parsed.text(g.name).to_string();
-                let asked = g.bounds.iter().any(|b| {
-                    shape_member(parsed.text(*b)).is_some_and(|(member, _)| {
-                        walks_the_fields_of(parsed, body, &parameter, member)
-                    })
-                });
-                asked.then_some(parameter)
-            });
-            if let Some(parameter) = walked {
-                self.s
-                    .walks_fields
-                    .insert(parsed.text(*name).to_string(), parameter);
-            }
-        }
     }
 
     fn program(&mut self) {

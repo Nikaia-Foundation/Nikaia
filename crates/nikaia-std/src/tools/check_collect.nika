@@ -191,5 +191,7 @@ impl CheckState {
                 else => {},
             }
         }
+        self.collect_field_walks(world)
+        self.collect_comparisons(world)
     }
 }

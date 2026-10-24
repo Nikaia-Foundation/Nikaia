@@ -485,6 +485,14 @@ mod check_flow_lowered {
 #[allow(unused_imports)]
 pub use check_flow_lowered::*;
 
+mod check_function_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/check_function.rs");
+}
+#[allow(unused_imports)]
+pub use check_function_lowered::*;
+
 mod check_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1946,6 +1954,7 @@ pub mod check_flow {
     #[allow(unused_imports)]
     pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckFlow};
 }
+pub mod check_function {}
 pub mod check_grammar {}
 pub mod check_host {
     #[allow(unused_imports)]

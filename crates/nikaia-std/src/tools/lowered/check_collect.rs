@@ -149,6 +149,8 @@ impl CheckState {
                 _ => { },
             }
         }
+        self.collect_field_walks(world);
+        self.collect_comparisons(world);
     }
 }
 

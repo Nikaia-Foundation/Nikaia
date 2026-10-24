@@ -1,0 +1,99 @@
+// crates/nikaia-std/src/tools/check_function.nika
+//
+// **What is read off the declarations before a function's body is walked**
+// (ADR-294, #125, #558, C-7, U-d4): which functions walk a type's fields
+// (ADR-304 D4) and which declared types compare (ADR-204 D1). Free functions
+// over the world; the state keeps the answers.
+
+use std::collections
+
+/// The member a shape bound makes reachable (Part II 10.3): a `struct`'s
+/// fields under `[T: Struct]`, an `enum`'s variants under `[T: Enum]`.
+fn check_function_shape_member(bound: String) -> String? {
+    if bound == "Struct" {
+        return "fields".clone()
+    }
+    if bound == "Enum" {
+        return "variants".clone()
+    }
+    return null
+}
+
+/// **Whether this body writes `P::fields` anywhere in it** (ADR-304 D4): the
+/// body and not the bound, because a bound says only that a shape may be
+/// asked for. `T::attribute(X)` asks for the type too (ADR-331 D6).
+fn check_function_walks_the_fields_of(here: ref ParsedView, body: ref Block, parameter: ref String, shape: ref String) -> bool {
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Path(segments, _) => {
+                if segments.len() == 2 {
+                    let ty = here.text(segments[0])
+                    let member = here.text(segments[1])
+                    if ty == parameter && (member == shape || member == "attribute" || member == "attributes") {
+                        return true
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// The comparison asked over what the state has collected.
+fn check_function_compared(world: ref CheckWorld, beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]]) -> CompareDeclared {
+    let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
+    return compare_declared(asking, world.here)
+}
+
+impl CheckState {
+    /// One file's shape walks, under the interner its symbols resolve in.
+    fn field_walks_in(ref mut self, file: ref ParsedView) sync {
+        for item in file.items {
+            match item.node {
+                Item::Fn { name, generics, body, .. } => {
+                    let called = name ?? continue
+                    let mut walked: String? = null
+                    for g in generics {
+                        if walked != null {
+                            continue
+                        }
+                        let parameter = file.text(g.name)
+                        for b in g.bounds {
+                            let member = check_function_shape_member(file.text(b)) ?? continue
+                            if check_function_walks_the_fields_of(file, body, parameter, member) {
+                                walked = parameter.clone()
+                            }
+                        }
+                    }
+                    let parameter = walked ?? continue
+                    self.walks_fields.insert(file.text(called), parameter)
+                },
+                else => {},
+            }
+        }
+    }
+
+    /// **Which functions walk a type's fields, and which parameter each
+    /// walks** (ADR-304 D4), over the program's every file: they share one
+    /// namespace (Part I 9.1), so a call may stand in another file.
+    pub fn collect_field_walks(ref mut self, world: ref CheckWorld) sync {
+        self.field_walks_in(world.here)
+        for other in world.beside {
+            self.field_walks_in(other)
+        }
+    }
+
+    /// **Which declared types compare** (ADR-204 D1), for the derive the
+    /// emitter writes and the refusal the checker raises. After every type is
+    /// collected, because the answer is structural.
+    pub fn collect_comparisons(ref mut self, world: ref CheckWorld) sync {
+        let found = check_function_compared(world, world.parts_beside, self.structs, self.enums, self.enum_payloads, self.struct_parameters)
+        for name in found.compares {
+            self.facts.compares.insert(name.clone())
+        }
+        for name in found.totally {
+            self.facts.compares_totally.insert(name.clone())
+        }
+    }
+}
