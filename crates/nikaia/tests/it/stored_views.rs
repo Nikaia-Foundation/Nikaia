@@ -632,6 +632,44 @@ fn a_view_in_a_local_struct_called_on_keeps_nothing() {
     }
 }
 
+/// #818: a parameter handed to a method on `self` is kept only if that method
+/// keeps it - the least fixpoint over the methods. One that only reads it,
+/// through any chain of calls, is lowered without the buffer's `'a`; one that
+/// stores it into a field keeps `'a` for every method that hands it on.
+#[test]
+fn a_parameter_handed_to_a_method_on_self_is_kept_only_if_that_method_keeps_it() {
+    let head = "struct E { k: i64 }\nstruct Walk { last: ref E, n: i64 }\n\n";
+    let reading = "impl Walk {\n    fn peek(ref self, e: ref E) -> i64 { return e.k + self.n }\n    fn walk(ref self, e: ref E) -> i64 { return self.peek(e) }\n}\n";
+    let rust = lowered(&format!("{head}{reading}\nfn main() {{}}\n"));
+    assert!(rust.contains("fn walk(&self, e: &E) -> i64"), "{rust}");
+    assert!(rust.contains("fn peek(&self, e: &E) -> i64"), "{rust}");
+    let storing = "impl Walk {\n    fn put(ref mut self, e: ref E) { self.last = e }\n    fn walk(ref mut self, e: ref E) { self.put(e) }\n}\n";
+    let rust = lowered(&format!("{head}{storing}\nfn main() {{}}\n"));
+    assert!(rust.contains("fn put(&mut self, e: &'a E)"), "{rust}");
+    assert!(rust.contains("fn walk(&mut self, e: &'a E)"), "{rust}");
+    // Two methods calling each other that only read keep nothing.
+    let mutual = "impl Walk {\n    fn even(ref self, e: ref E, d: i64) -> i64 { if d == 0 { return e.k } return self.odd(e, d - 1) }\n    fn odd(ref self, e: ref E, d: i64) -> i64 { if d == 0 { return self.n } return self.even(e, d - 1) }\n}\n";
+    let rust = lowered(&format!("{head}{mutual}\nfn main() {{}}\n"));
+    assert!(rust.contains("fn even(&self, e: &E, d: i64)"), "{rust}");
+    assert!(rust.contains("fn odd(&self, e: &E, d: i64)"), "{rust}");
+}
+
+/// #813 and #818: a non-literal argument to a parameter a `ref self` method
+/// only reads keeps nothing; one handed to a `mut` parameter is still kept.
+#[test]
+fn a_view_handed_to_a_read_only_parameter_of_a_local_struct_keeps_nothing() {
+    let head = "struct W { k: i64 }\nstruct Held { pub ws: ref Vec[ref W] }\nstruct H { w: ref W, n: i64 }\n\nimpl H {\n    fn plus(ref self, other: ref W) -> i64 { return self.w.k + other.k }\n    fn into(ref self, mut out: Vec[i64], other: ref W) { out.push(self.w.k + other.k) }\n}\n\n";
+    let read = "fn run(held: ref Held, at: i64, o: ref W) -> i64 {\n    let b = H { w: held.ws[at], n: 1 }\n    return b.plus(o)\n}\n";
+    let found = findings(&format!("{head}{read}"));
+    assert!(found.is_empty(), "{found:#?}");
+    let written = "fn run(held: ref Held, at: i64, o: ref W, mut v: Vec[i64]) {\n    let b = H { w: held.ws[at], n: 1 }\n    b.into(v, o)\n}\n";
+    let all = findings(&format!("{head}{written}"));
+    assert!(
+        all.iter().any(|f| f.message.contains("keeps `held`")),
+        "{all:#?}"
+    );
+}
+
 /// #706: a view of a parameter kept in another parameter's list
 /// ([ADR-283](../../../docs/specification/adr/adr-283.md) D27): the two share
 /// one lifetime, and an argument made in the call is put into the caller's

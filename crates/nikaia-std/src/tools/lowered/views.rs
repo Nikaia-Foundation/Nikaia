@@ -34,6 +34,43 @@ pub struct Asked<'a, 'a1, 'a2> {
 pub(crate) struct Unit {
     pub(crate) borrowing: collections::BTreeSet<String>,
     pub(crate) fields: collections::BTreeMap<String, Vec<(String, Type)>>,
+    pub(crate) methods: collections::BTreeMap<String, Vec<String>>,
+    pub(crate) kept: collections::BTreeSet<String>,
+    pub(crate) readonly: collections::BTreeSet<String>,
+}
+
+pub(crate) fn plain_unit(borrowing: collections::BTreeSet<String>, fields: collections::BTreeMap<String, Vec<(String, Type)>>) -> Unit { Unit { borrowing, fields, methods: collections::BTreeMap::new(), kept: collections::BTreeSet::new(), readonly: collections::BTreeSet::new() } }
+
+pub(crate) fn method_table(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], unit: &mut Unit) {
+    for item in items.iter() {
+        match &item.node {
+            Item::Impl { target, methods, .. } => {
+                let owner = asked.names.resolve(target.name).to_owned();
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, receiver, args, .. } => {
+                            let name = *name;
+                            let key = format!("{}::{}", owner, function_name(asked.names, name));
+                            let mut params: Vec<String> = vec![];
+                            let mut takes_mut = false;
+                            for arg in args.iter() {
+                                params.push(asked.names.resolve(arg.name).to_owned());
+                                if arg.mutable { takes_mut = true; }
+                            }
+                            let reading = takes_a_view_of_itself((receiver).as_ref()) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
+                            for i in 0..args.len() as i64 {
+                                if takes_mut || !nikaia_std::index::get(&args, (i) as usize).ty.is_view { unit.kept.insert(format!("{}::{}", key, *nikaia_std::index::get(&params, (i) as usize))); }
+                                if reading && !nikaia_std::index::get(&args, (i) as usize).mutable { unit.readonly.insert(format!("{}::{}", key, i)); }
+                            }
+                            { let __nikaia_stored = params; nikaia_std::index::set(&mut unit.methods, key, __nikaia_stored); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,20 +93,38 @@ pub(crate) enum Root {
 }
 
 pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Stored> {
-    let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) };
-    let mut found: Vec<Stored> = vec![];
+    let mut unit = plain_unit(borrowing_types(asked.names, items), view_fields(asked.names, items));
+    method_table(asked, items, &mut unit);
+    let mut round: Vec<Stored> = vec![];
+    let mut growing = true;
+    while growing {
+        round = vec![];
+        for item in items.iter() {
+            match &item.node {
+                Item::Impl { target, methods, .. } => {
+                    let subject: Option<Type> = Some(target.clone());
+                    for method in methods.iter() { scan(&unit, asked, (subject).as_ref(), method.span.start, &method.node, own_buffer, &mut round); }
+                },
+                _ => { },
+            }
+        }
+        growing = false;
+        for stored in round.iter() {
+            let owner = match match stored.subject.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if unit.kept.insert(format!("{}::{}::{}", owner, stored.function, stored.param)) { growing = true; }
+        }
+    }
     let nothing: Option<Type> = None;
     for item in items.iter() {
         match &item.node {
-            Item::Fn { .. } => { scan(&unit, asked, (nothing).as_ref(), item.span.start, &item.node, own_buffer, &mut found); },
-            Item::Impl { target, methods, .. } => {
-                let subject: Option<Type> = Some(target.clone());
-                for method in methods.iter() { scan(&unit, asked, (subject).as_ref(), method.span.start, &method.node, own_buffer, &mut found); }
-            },
+            Item::Fn { .. } => { scan(&unit, asked, (nothing).as_ref(), item.span.start, &item.node, own_buffer, &mut round); },
             _ => { },
         }
     }
-    in_source_order(&found)
+    in_source_order(&round)
 }
 
 pub fn views_checked(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Finding> {
@@ -420,7 +475,7 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                         here.carriers.insert(asked.names.resolve(name).to_owned());
                     }
                 }
-                if views_a_local_struct(asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, own_buffer, here); } else { stores(unit, asked, value, &span, own_buffer, here); }
+                if views_a_local_struct(unit, asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, own_buffer, here); } else { stores(unit, asked, value, &span, own_buffer, here); }
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
@@ -462,19 +517,24 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
     }
 }
 
-pub(crate) fn views_a_local_struct(asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr, ours: Option<&str>) -> bool {
+pub(crate) fn views_a_local_struct(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr, ours: Option<&str>) -> bool {
     let literal = match value {
         Expr::StructLit { name, .. } => { let name = *name; asked.names.resolve(name).to_owned() },
         _ => return false,
     };
     if names.len() != 1 { return false; }
-    let handed = local_struct_handed_back(asked.names, block, at, asked.names.resolve(*nikaia_std::index::get(&names, 0)));
+    let handed = struct_handed_back(asked.names, block, at, asked.names.resolve(*nikaia_std::index::get(&names, 0)), &literal, &unit.readonly);
     if handed == 0 { return true; }
     let result = match ours { Some(__nikaia_value) => __nikaia_value, None => return false };
     handed > 0 && result == literal
 }
 
 pub fn local_struct_handed_back(names: &winnow_grammar::InternerContext, block: &Block, at: i64, name: &str) -> i64 {
+    let nowhere: collections::BTreeSet<String> = collections::BTreeSet::new();
+    struct_handed_back(names, block, at, name, "", &nowhere)
+}
+
+pub(crate) fn struct_handed_back(names: &winnow_grammar::InternerContext, block: &Block, at: i64, name: &str, owner: &str, readonly: &collections::BTreeSet<String>) -> i64 {
     let mut uses: i64 = 0;
     let mut through: i64 = 0;
     let mut handed: i64 = 0;
@@ -494,9 +554,9 @@ pub fn local_struct_handed_back(names: &winnow_grammar::InternerContext, block: 
                     let base = nikaia_std::boxed::open(base);
                     if a_variable_named(names, base, name) { through += 1; }
                 },
-                Expr::MethodCall { receiver, args, config, .. } => {
-                    let receiver = nikaia_std::boxed::open(receiver);
-                    if a_variable_named(names, receiver, name) && config.is_empty() && all_literals(args) { through += 1; }
+                Expr::MethodCall { receiver, method, args, config, .. } => {
+                    let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                    if a_variable_named(names, receiver, name) && config.is_empty() && only_read_by(names, owner, method, args, readonly) { through += 1; }
                 },
                 _ => { },
             }
@@ -506,13 +566,13 @@ pub fn local_struct_handed_back(names: &winnow_grammar::InternerContext, block: 
     handed
 }
 
-pub(crate) fn all_literals(args: &[Expr]) -> bool {
-    for arg in args.iter() {
-        let literal = matches!(arg, Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitBool(_, _) | Expr::LitChar(_, _) | Expr::LitStr { .. });
-        if !literal { return false; }
-    }
+pub(crate) fn only_read_by(names: &winnow_grammar::InternerContext, owner: &str, method: winnow_grammar::Symbol, args: &[Expr], readonly: &collections::BTreeSet<String>) -> bool {
+    let key = format!("{}::{}", owner, names.resolve(method));
+    for i in 0..args.len() as i64 { if !a_plain_literal(nikaia_std::index::get(&args, (i) as usize)) && !readonly.contains(&format!("{}::{}", key, i)) { return false; } }
     true
 }
+
+pub(crate) fn a_plain_literal(arg: &Expr) -> bool { matches!(arg, Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitBool(_, _) | Expr::LitChar(_, _) | Expr::LitStr { .. }) }
 
 pub(crate) fn returns_named(names: &winnow_grammar::InternerContext, stmt: &Stmt, name: &str) -> bool {
     match stmt {
@@ -645,14 +705,14 @@ pub(crate) fn is_self(asked: &Asked<'_, '_, '_>, expr: &Expr) -> bool {
 
 pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
     match expr {
-        Expr::MethodCall { receiver, args, config, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver);
-            handed_to(unit, asked, receiver, args, config, span, here);
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            handed_to(unit, asked, receiver, method, args, config, span, here);
             descend(unit, asked, expr, span, own_buffer, here);
         },
-        Expr::SafeMethod { receiver, args, config, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver);
-            handed_to(unit, asked, receiver, args, config, span, here);
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            handed_to(unit, asked, receiver, method, args, config, span, here);
             descend(unit, asked, expr, span, own_buffer, here);
         },
         Expr::StructLit { name, fields, .. } => {
@@ -676,16 +736,49 @@ pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: 
     }
 }
 
-pub(crate) fn handed_to(unit: &Unit, asked: &Asked<'_, '_, '_>, receiver: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span, here: &mut Here) {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn handed_to(unit: &Unit, asked: &Asked<'_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span, here: &mut Here) {
     let mut handed_over = false;
-    for arg in args.iter() { if mentions(unit, asked, &here, arg) { handed_over = true; } }
-    for setting in config.iter() { if mentions(unit, asked, &here, &setting.value) { handed_over = true; } }
+    let mut held = false;
+    let callee = format!("{}::{}", nikaia_std::index::or(text_of(asked, (here.subject).as_ref()), || "".into()), asked.names.resolve(method));
+    for i in 0..args.len() as i64 {
+        if mentions(unit, asked, &here, nikaia_std::index::get(&args, nikaia_std::index::at(i))) {
+            handed_over = true;
+            if kept_by_callee(unit, asked, &callee, i) { held = true; }
+        }
+    }
+    for setting in config.iter() {
+        if mentions(unit, asked, &here, &setting.value) {
+            handed_over = true;
+            held = true;
+        }
+    }
     if !handed_over { return; }
     match root(unit, asked, &here, receiver) {
         Root::SubjectField(ref field) => { field_of_subject(unit, asked, field, span, here); },
-        Root::Subject => { subject_destination(unit, asked, span, here); },
+        Root::Subject => { if held { subject_destination(unit, asked, span, here); } },
         _ => { },
     }
+}
+
+pub(crate) fn kept_by_callee(unit: &Unit, asked: &Asked<'_, '_, '_>, callee: &str, at: i64) -> bool {
+    let known = match *nikaia_std::index::get(&unit.methods, callee) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if known.is_some() {
+        let params = match known { Some(__nikaia_value) => __nikaia_value, None => return true };
+        if at >= params.len() as i64 { return true; }
+        return unit.kept.contains(&format!("{}::{}", callee, *nikaia_std::index::get(&params, nikaia_std::index::at(at))));
+    }
+    let contract = match *nikaia_std::index::get(&asked.own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return true };
+    let signature = match match contract.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return true };
+    let position = if signature.takes_a_receiver() { at + 1 } else { at };
+    if position >= signature.params.len() as i64 { return true; }
+    contract.keeps.contains(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0)
 }
 
 pub(crate) fn a_field_built(unit: &Unit, asked: &Asked<'_, '_, '_>, owner: &str, declared: &[(String, Type)], init: &FieldInit, span: &Span, here: &mut Here) {
@@ -2011,7 +2104,7 @@ pub struct ResultSource {
 }
 
 pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
-    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) };
+    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
@@ -2033,7 +2126,7 @@ pub struct PlacesStored {
 }
 
 pub fn places_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<PlacesStored> {
-    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) };
+    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
@@ -2137,7 +2230,7 @@ pub(crate) fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet
 }
 
 pub(crate) fn rsrc_findings(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {
-    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) };
+    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, out);
 }

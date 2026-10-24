@@ -87,6 +87,59 @@ pub struct Asked {
 struct Unit {
     borrowing: collections::BTreeSet[String],
     fields: collections::BTreeMap[String, Vec[(String, Type)]],
+    // **The unit's methods** (#818), by `Owner::method`: their parameters'
+    // names, in order, without the receiver.
+    methods: collections::BTreeMap[String, Vec[String]],
+    // `Owner::method::param` for each parameter a method keeps. Starts with
+    // what no walk can follow (a parameter that is not a view, any parameter
+    // of a method that takes a `mut` one) and grows to the least fixpoint.
+    kept: collections::BTreeSet[String],
+    // `Owner::method::position` for each parameter a `ref self` method only
+    // reads (#813): a call on a local struct hands nothing on through it.
+    readonly: collections::BTreeSet[String],
+}
+
+fn plain_unit(borrowing: collections::BTreeSet[String], fields: collections::BTreeMap[String, Vec[(String, Type)]]) -> Unit {
+    return Unit { borrowing: borrowing, fields: fields, methods: collections::BTreeMap(), kept: collections::BTreeSet(), readonly: collections::BTreeSet() }
+}
+
+// Each method of every `impl` of the unit: its parameters, which of them are
+// kept without asking, which are read only.
+fn method_table(asked: ref Asked, items: ref Vec[Spanned[Item]], mut unit: Unit) {
+    for item in items {
+        match item.node {
+            Item::Impl { target, methods, .. } => {
+                let owner = asked.names.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, receiver, args, .. } => {
+                            let key = f"{owner}::{function_name(asked.names, name)}"
+                            let mut params: Vec[String] = []
+                            let mut takes_mut = false
+                            for arg in args {
+                                params.push(asked.names.resolve(arg.name).clone())
+                                if arg.mutable {
+                                    takes_mut = true
+                                }
+                            }
+                            let reading = takes_a_view_of_itself(receiver) && !(receiver?.is_mut ?? false)
+                            for i in 0..<args.len() {
+                                if takes_mut || !args[i].ty.is_view {
+                                    unit.kept.insert(f"{key}::{params[i]}")
+                                }
+                                if reading && !args[i].mutable {
+                                    unit.readonly.insert(f"{key}::{i}")
+                                }
+                            }
+                            unit.methods[key] = params
+                        }
+                        else => {}
+                    }
+                }
+            }
+            else => {}
+        }
+    }
 }
 
 // The walk, for one parameter of one function.
@@ -117,22 +170,43 @@ enum Root {
 /// order. `own_buffer` says whether a `let`'s value is a buffer of its own
 /// (ADR-283) - the compiler's `tether` answers it.
 pub fn views_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
-    let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) }
-    let mut found: Vec[Stored] = []
+    let mut unit = plain_unit(borrowing_types(asked.names, items), view_fields(asked.names, items))
+    method_table(asked, items, unit)
+    // **The methods to their least fixpoint** (#818): a parameter handed to a
+    // method on `self` is kept only if that method keeps it. Nothing is kept
+    // at first; each round adds what it finds stored, returned or handed to a
+    // keeping call, until a round adds nothing.
+    let mut round: Vec[Stored] = []
+    let mut growing = true
+    while growing {
+        round = []
+        for item in items {
+            match item.node {
+                Item::Impl { target, methods, .. } => {
+                    let subject: Type? = target.clone()
+                    for method in methods {
+                        scan(unit, asked, subject, method.span.start, method.node, own_buffer, round)
+                    }
+                }
+                else => {}
+            }
+        }
+        growing = false
+        for stored in round {
+            let owner = stored.subject?.clone() ?? continue
+            if unit.kept.insert(f"{owner}::{stored.function}::{stored.param}") {
+                growing = true
+            }
+        }
+    }
     let nothing: Type? = null
     for item in items {
         match item.node {
-            Item::Fn { .. } => scan(unit, asked, nothing, item.span.start, item.node, own_buffer, found),
-            Item::Impl { target, methods, .. } => {
-                let subject: Type? = target.clone()
-                for method in methods {
-                    scan(unit, asked, subject, method.span.start, method.node, own_buffer, found)
-                }
-            }
+            Item::Fn { .. } => scan(unit, asked, nothing, item.span.start, item.node, own_buffer, round),
             else => {}
         }
     }
-    return in_source_order(found)
+    return in_source_order(round)
 }
 
 /// The refusals: every stored naked view whose destination names no buffer.
@@ -635,7 +709,7 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                 // **A struct that never leaves keeps nothing past the call**
                 // (#585): its fields are no store where the name is read only
                 // through them; where those reads go is asked on their own.
-                if views_a_local_struct(asked, block, i, names, value, here.ours) {
+                if views_a_local_struct(unit, asked, block, i, names, value, here.ours) {
                     descend(unit, asked, value, span, own_buffer, here)
                 } else {
                     stores(unit, asked, value, span, own_buffer, here)
@@ -691,7 +765,7 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
 // rest of the block reads only through its fields, or hands back with
 // `return name` where it is a literal of the result (#678): the value itself
 // is never handed on, stored or called a method on.
-fn views_a_local_struct(asked: ref Asked, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ours: ref String?) -> bool {
+fn views_a_local_struct(unit: ref Unit, asked: ref Asked, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ours: ref String?) -> bool {
     let literal = match value {
         Expr::StructLit { name, .. } => asked.names.resolve(name).clone(),
         else => return false,
@@ -699,7 +773,7 @@ fn views_a_local_struct(asked: ref Asked, block: ref Block, at: i64, names: ref 
     if names.len() != 1 {
         return false
     }
-    let handed = local_struct_handed_back(asked.names, block, at, asked.names.resolve(names[0]))
+    let handed = struct_handed_back(asked.names, block, at, asked.names.resolve(names[0]), literal, unit.readonly)
     if handed == 0 {
         return true
     }
@@ -711,6 +785,13 @@ fn views_a_local_struct(asked: ref Asked, block: ref Block, at: i64, names: ref 
 /// handed back by a `return` of its name in this block** (#585, #678): how
 /// often it is handed back, and -1 where the name goes anywhere else.
 pub fn local_struct_handed_back(names: ref winnow_grammar::InternerContext, block: ref Block, at: i64, name: ref String) -> i64 {
+    let nowhere: collections::BTreeSet[String] = collections::BTreeSet()
+    return struct_handed_back(names, block, at, name, "", nowhere)
+}
+
+// The same, where `readonly` says which positions of the owner's `ref self`
+// methods only read what they are handed (#813).
+fn struct_handed_back(names: ref winnow_grammar::InternerContext, block: ref Block, at: i64, name: ref String, owner: ref String, readonly: ref collections::BTreeSet[String]) -> i64 {
     let mut uses = 0
     let mut through = 0
     let mut handed = 0
@@ -738,8 +819,10 @@ pub fn local_struct_handed_back(names: ref winnow_grammar::InternerContext, bloc
                 // **A call on it that hands nothing in** (#813): the method
                 // takes the struct by `ref self`, so nothing of it outlives
                 // the call; arguments that are literals cannot receive a view.
-                Expr::MethodCall { receiver, args, config, .. } => {
-                    if a_variable_named(names, receiver, name) && config.len() == 0 && all_literals(args) {
+                // An argument that goes to a parameter the method only reads
+                // is no more a hand-over than a literal (#818).
+                Expr::MethodCall { receiver, method, args, config, .. } => {
+                    if a_variable_named(names, receiver, name) && config.len() == 0 && only_read_by(names, owner, method, args, readonly) {
                         through += 1
                     }
                 },
@@ -753,21 +836,25 @@ pub fn local_struct_handed_back(names: ref winnow_grammar::InternerContext, bloc
     return handed
 }
 
-fn all_literals(args: ref Vec[Expr]) -> bool {
-    for arg in args {
-        let literal = match arg {
-            Expr::LitInt { .. } => true,
-            Expr::LitFloat(_, _) => true,
-            Expr::LitBool(_, _) => true,
-            Expr::LitChar(_, _) => true,
-            Expr::LitStr { .. } => true,
-            else => false,
-        }
-        if !literal {
+fn only_read_by(names: ref winnow_grammar::InternerContext, owner: ref String, method: winnow_grammar::Symbol, args: ref Vec[Expr], readonly: ref collections::BTreeSet[String]) -> bool {
+    let key = f"{owner}::{names.resolve(method)}"
+    for i in 0..<args.len() {
+        if !a_plain_literal(args[i]) && !readonly.contains(f"{key}::{i}") {
             return false
         }
     }
     return true
+}
+
+fn a_plain_literal(arg: ref Expr) -> bool {
+    return match arg {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitBool(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
 }
 
 fn returns_named(names: ref winnow_grammar::InternerContext, stmt: ref Stmt, name: ref String) -> bool {
@@ -916,12 +1003,12 @@ fn stores(unit: ref Unit, asked: ref Asked, expr: ref Expr, span: ref Span, own_
     match expr {
         // A store that may not happen is still a store: a `?.` changes only
         // whether the view gets there.
-        Expr::MethodCall { receiver, args, config, .. } => {
-            handed_to(unit, asked, receiver, args, config, span, here)
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            handed_to(unit, asked, receiver, method, args, config, span, here)
             descend(unit, asked, expr, span, own_buffer, here)
         }
-        Expr::SafeMethod { receiver, args, config, .. } => {
-            handed_to(unit, asked, receiver, args, config, span, here)
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
+            handed_to(unit, asked, receiver, method, args, config, span, here)
             descend(unit, asked, expr, span, own_buffer, here)
         }
         Expr::StructLit { name, fields, .. } => {
@@ -945,16 +1032,24 @@ fn stores(unit: ref Unit, asked: ref Asked, expr: ref Expr, span: ref Span, own_
 }
 
 // A carrier handed to a call on the subject, or on a field of it.
-fn handed_to(unit: ref Unit, asked: ref Asked, receiver: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span, mut here: Here) {
+fn handed_to(unit: ref Unit, asked: ref Asked, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span, mut here: Here) {
+    // `handed_over`: some argument holds the view. `held`: and the method on
+    // `self` keeps what it is handed there (#818).
     let mut handed_over = false
-    for arg in args {
-        if mentions(unit, asked, here, arg) {
+    let mut held = false
+    let callee = f"{text_of(asked, here.subject) ?? ""}::{asked.names.resolve(method)}"
+    for i in 0..<args.len() {
+        if mentions(unit, asked, here, args[i]) {
             handed_over = true
+            if kept_by_callee(unit, asked, callee, i) {
+                held = true
+            }
         }
     }
     for setting in config {
         if mentions(unit, asked, here, setting.value) {
             handed_over = true
+            held = true
         }
     }
     if !handed_over {
@@ -962,9 +1057,34 @@ fn handed_to(unit: ref Unit, asked: ref Asked, receiver: ref Expr, args: ref Vec
     }
     match root(unit, asked, here, receiver) {
         Root::SubjectField(field) => field_of_subject(unit, asked, field, span, here),
-        Root::Subject => subject_destination(unit, asked, span, here),
+        Root::Subject => {
+            if held {
+                subject_destination(unit, asked, span, here)
+            }
+        }
         else => {}
     }
+}
+
+// Whether the method `Owner::name` of the subject keeps its argument number
+// `at`: the unit's own methods by the fixpoint, another file's by the ledger,
+// and a method nothing describes keeps it.
+fn kept_by_callee(unit: ref Unit, asked: ref Asked, callee: ref String, at: i64) -> bool {
+    let known = unit.methods[callee]?.clone()
+    if known != null {
+        let params = known ?? return true
+        if at >= params.len() {
+            return true
+        }
+        return unit.kept.contains(f"{callee}::{params[at]}")
+    }
+    let contract = asked.own.functions[callee] ?? return true
+    let signature = contract.signature?.clone() ?? return true
+    let position = if signature.takes_a_receiver() { at + 1 } else { at }
+    if position >= signature.params.len() {
+        return true
+    }
+    return contract.keeps.contains(signature.params[position].0)
 }
 
 // One field of a struct literal of a type that holds views.
@@ -2687,7 +2807,7 @@ pub struct ResultSource {
 /// The answer of D25 for every function of the unit that hands back a view,
 /// the ledger's `ref(..)` (#580 step 5).
 pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
-    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) }
+    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []
     rsrc_solve(unit, asked, items, own_buffer, known, ignored)
@@ -2719,7 +2839,7 @@ pub struct PlacesStored {
 /// The answer of D27 for every function of the unit that has a `mut`
 /// parameter and a text parameter lent to it.
 pub fn places_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[PlacesStored] {
-    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) }
+    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []
     rsrc_solve(unit, asked, items, own_buffer, known, ignored)
@@ -2856,7 +2976,7 @@ fn rsrc_returns_text(params: ref Vec[String], reach: ref collections::BTreeSet[S
 
 // The refusals of D25 and D26 over a unit: the fixpoint first, then one report.
 fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut out: Vec[Finding]) {
-    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) }
+    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     rsrc_solve(unit, asked, items, own_buffer, known, out)
 }
