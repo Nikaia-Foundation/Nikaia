@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1196] — 2026-10-24
+
+**check: `--asserts` lists an unproved claim as refused (ADR-380 D1)**
+- `--asserts` lists a claim refused as not proved (NK1300) as refused, with its reason (ADR-380 D1).
+
 ## [0.0.1195] — 2026-10-24
 
 **Unproved asserts refused: `NK1300`, `unproved-claims` (ADR-380)**
