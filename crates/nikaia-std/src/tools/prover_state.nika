@@ -32,6 +32,9 @@ pub struct ProverState {
     /// Pass 1 records preconditions and says nothing.
     pub collecting: bool,
     pub in_test: bool,
+    /// **The free functions whose parameters are all read-only** (#782): a
+    /// list handed to one keeps its length.
+    pub readers: collections::BTreeSet[String],
     /// **Names whose value the build knows** (ADR-359 D7, D11): each
     /// integer `comptime` of the program's items, and each call run while
     /// the program was built, by `call_result_name`. A local of the same name
@@ -107,6 +110,7 @@ impl ProverState {
             before_return: collections::BTreeMap(),
             collecting: true,
             in_test: false,
+            readers: collections::BTreeSet(),
             pinned: collections::BTreeMap(),
             comptime_at: collections::BTreeMap(),
             call_sites: collections::BTreeMap(),

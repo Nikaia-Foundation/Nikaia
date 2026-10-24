@@ -179,8 +179,10 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
     // **The names of this block the walk may not follow as mutable whole
     // numbers** (ADR-361 D1), asked only where it binds one.
     let mut untracked: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut pinned: collections::BTreeSet[String] = collections::BTreeSet()
     if prover_binds_mutable(block) {
         untracked = untracked_in(block, words)
+        pinned = pinned_in(block, words)
     }
     for index in 0..<block.stmts.len() {
         let stmt = block.stmts[index]
@@ -199,7 +201,7 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
         if prover_stmt(walk, stmt, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition) {
             return true
         }
-        prover_follow_mutables(walk, stmt.node, scope, untracked, words)
+        prover_follow_mutables(walk, stmt.node, stmt.span, scope, untracked, pinned, words)
         // A statement that may leave for some states and not for others
         // narrows what goes on past it, and only an `if` the prover reads says
         // how (`prover_expr_stmt`).
@@ -269,10 +271,11 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             // **What the turn changes** (ADR-361 D1): unknown at the head of
             // a turn and past the loop; a whole number the walk follows is
             // read past it through the loop's invariant (D2).
-            let changed = assigned_in(body, words)
+            let mut changed = assigned_in(body, words)
+            prover_lengths_changed(changed, body, scope, walk.state.readers, words)
             let mut state: Vec[String] = []
             for n in changed {
-                if scope.mutables.contains(n) && scope.ints.contains(n) {
+                if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") {
                     state.push(n.clone())
                 }
             }
@@ -289,8 +292,13 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             let kept_bits = prover_loop_bits(walk, scope, changed, body, words)
             let mut inner = scope.clone()
             for n in changed {
+                if prover_loop_keeps(n, changed, body, scope, words) {
+                    continue
+                }
                 inner.rebind(walk.arena, n)
                 scope.rebind(walk.arena, n)
+                prover_relength(walk, n, inner)
+                prover_relength(walk, n, scope)
             }
             for n in state {
                 inner.ints.insert(n.clone())
@@ -891,7 +899,8 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
     prover_expr(walk, iter, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     let tainted = from_outside(iter, scope.tainted, words, library, holes_of)
     // What a turn changes is unknown at its head and past the loop.
-    let changed = assigned_in(body, words)
+    let mut changed = assigned_in(body, words)
+    prover_lengths_changed(changed, body, scope, walk.state.readers, words)
     let mut state: Vec[String] = []
     let mut records: Vec[LoopRecord] = []
     if bindings.len() == 1 {
@@ -899,7 +908,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
         match iter {
             Expr::Range { start, end, inclusive, .. } => {
                 for n in changed {
-                    if scope.mutables.contains(n) && scope.ints.contains(n) {
+                    if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") {
                         state.push(n.clone())
                     }
                 }
@@ -931,8 +940,13 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
     let kept_bits = prover_loop_bits(walk, scope, changed, body, words)
     let mut inner = scope.clone()
     for n in changed {
+        if prover_loop_keeps(n, changed, body, scope, words) {
+            continue
+        }
         inner.rebind(walk.arena, n)
         scope.rebind(walk.arena, n)
+        prover_relength(walk, n, inner)
+        prover_relength(walk, n, scope)
     }
     for n in state {
         inner.ints.insert(n.clone())
@@ -1207,8 +1221,10 @@ fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref Pro
     if scope.mutables.is_empty() {
         return
     }
-    let then_assigns = assigned_in(then_branch, words)
-    let else_assigns = prover_else_assigns(else_branch, words)
+    let mut then_assigns = assigned_in(then_branch, words)
+    prover_lengths_changed(then_assigns, then_branch, scope, walk.state.readers, words)
+    let mut else_assigns = prover_else_assigns(else_branch, words)
+    prover_else_lengths_changed(else_assigns, else_branch, scope, walk.state.readers, words)
     let mut changed: Vec[String] = []
     for n in then_assigns {
         if scope.mutables.contains(n) {
@@ -1905,6 +1921,13 @@ fn prover_assigned(mut walk: ProverWalk, n: ref String, op: ref BinaryOp?, value
             }
         }
     }
+    prover_assign_term(walk, n, term, span, scope)
+    return true
+}
+
+/// **`n` takes the value `term`** (ADR-361 D9), which may read `n`'s old
+/// value: the old one becomes a name of the history.
+fn prover_assign_term(mut walk: ProverWalk, n: ref String, term: i64, span: Span, mut scope: ProverScope) {
     let at_entry = scope.at_entry(walk.arena, term)
     let mut read_names: collections::BTreeSet[String] = collections::BTreeSet()
     walk.arena.variables(term, read_names)
@@ -1942,7 +1965,6 @@ fn prover_assigned(mut walk: ProverWalk, n: ref String, op: ref BinaryOp?, value
     if at_entry != null {
         scope.entry.insert(n.clone(), at_entry ?? 0)
     }
-    return true
 }
 
 /// The number a fact `n == k` pins `n` to.
@@ -1983,11 +2005,15 @@ fn prover_binds_mutable(block: ref Block) -> bool {
 /// the block hands it on; a statement that changes one inside it - a branch,
 /// a block - leaves it unknown. A `while`, a `for`, an `if` and an
 /// assignment see to their own (ADR-361 D9).
-fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, mut scope: ProverScope, untracked: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
+fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut scope: ProverScope, untracked: ref collections::BTreeSet[String], pinned: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
+    prover_follow_lengths(walk, stmt, span, scope, words)
     match stmt {
-        Stmt::Let { names, mutable, value, .. } => {
+        Stmt::Let { names, mutable, ty, value, .. } => {
             if mutable && names.len() == 1 {
                 let n = words.resolve(names[0]).clone()
+                if !pinned.contains(n) {
+                    prover_mutable_list(walk, n, ty, value, scope, words)
+                }
                 if !untracked.contains(n) {
                     let term = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
                     if term != null && !walk.arena.mentions(term ?? 0, n) {
@@ -2017,6 +2043,183 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, mut scope: Prove
                 }
             }
         },
+    }
+}
+
+/// **A `let mut` list's length is followed** (#782) as a mutable whole
+/// number (ADR-361 D1) under `length_of`: a list literal's is its items', a
+/// repeated one's its count, a written `Vec`'s is unknown but not negative.
+fn prover_mutable_list(mut walk: ProverWalk, n: ref String, ty: ref Type?, value: ref Expr, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+    let length = length_of(n)
+    match value {
+        Expr::ListLit { items, .. } => {
+            let known: i64? = items.len()
+            scope.has_length(walk.arena, n, known)
+        },
+        Expr::ListRepeat { count, .. } => {
+            let term = lin_term(count, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+            scope.has_length(walk.arena, n, null)
+            if term != null && !walk.arena.mentions(term ?? 0, n) && !walk.arena.mentions(term ?? 0, length) {
+                let named = walk.arena.var(length)
+                scope.facts.push(walk.arena.equal(named, term ?? 0))
+                scope.loose.remove(length)
+            }
+        },
+        else => {
+            let t = ty ?? return
+            if words.resolve(t.name) != "Vec" {
+                return
+            }
+            scope.has_length(walk.arena, n, null)
+        },
+    }
+    scope.mutables.insert(length)
+}
+
+/// **The lengths of the followed lists, after a statement** (#782): `push`,
+/// `clear`, `resize` and `truncate` on the list as a statement of its own say
+/// what it becomes; anything else that may change it - another method, the
+/// list handed to a call - leaves it unknown. An `if` and a loop see to
+/// their own (`prover_join`, `prover_lengths_changed`).
+fn prover_follow_lengths(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+    match stmt {
+        Stmt::While { .. } => return,
+        Stmt::For { .. } => return,
+        else => {},
+    }
+    if prover_an_if(stmt) {
+        return
+    }
+    let mut lists: Vec[String] = []
+    for m in scope.mutables {
+        if m.ends_with(".len()") {
+            lists.push((m.strip_suffix(".len()") ?? "").clone())
+        }
+    }
+    for list in lists {
+        if !changes_length_in_statement(stmt, list, walk.state.readers, words) {
+            continue
+        }
+        if !prover_length_set(walk, stmt, list, span, scope, words) {
+            prover_forget_length(walk, list, scope)
+        }
+    }
+}
+
+/// `list`'s length unknown again, but not negative.
+fn prover_forget_length(mut walk: ProverWalk, list: ref String, mut scope: ProverScope) {
+    let length = length_of(list)
+    scope.rebind(walk.arena, length)
+    scope.has_length(walk.arena, list, null)
+}
+
+/// **What a statement `list.push(x)`, `list.clear()`, `list.resize(n, x)` or
+/// `list.truncate(n)` makes `list`'s length**; false for any other.
+fn prover_length_set(mut walk: ProverWalk, stmt: ref Stmt, list: ref String, span: Span, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
+    let expr = match stmt {
+        Stmt::Expr(e) => e,
+        else => return false,
+    }
+    let length = length_of(list)
+    if !scope.ints.contains(length) {
+        scope.has_length(walk.arena, list, null)
+    }
+    return match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let on = match receiver {
+                Expr::Variable(name, _) => words.resolve(name) == list,
+                else => false,
+            }
+            if !on {
+                return false
+            }
+            let m = words.resolve(method).clone()
+            if m == "push" && args.len() == 1 {
+                let old = walk.arena.var(length)
+                let one = walk.arena.int(1)
+                let term = walk.arena.add(old, one)
+                let value = prover_pinned_old(walk, length, term, scope)
+                prover_assign_term(walk, length, value, span, scope)
+                return true
+            }
+            if m == "clear" && args.is_empty() {
+                let zero = walk.arena.int(0)
+                prover_assign_term(walk, length, zero, span, scope)
+                return true
+            }
+            if (m == "resize" && args.len() == 2) || (m == "truncate" && args.len() == 1) {
+                let n = lin_term(args[0], words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return false
+                if m == "resize" {
+                    prover_assign_term(walk, length, n, span, scope)
+                    return true
+                }
+                // `truncate(n)` leaves the smaller of the old length and `n`.
+                let earlier = f"{length}#{span.start}"
+                scope.renamed(walk.arena, length, earlier)
+                let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+                given.insert(length.clone(), walk.arena.var(earlier))
+                let bound = walk.arena.substitute(n, given)
+                let old = walk.arena.var(earlier)
+                let named = walk.arena.var(length)
+                let cut = walk.arena.equal(named, bound)
+                let shorter = walk.arena.le(bound, old)
+                let kept = walk.arena.equal(named, old)
+                let longer = walk.arena.le(old, bound)
+                let first = walk.arena.and([cut, shorter])
+                let second = walk.arena.and([kept, longer])
+                scope.history.push(walk.arena.or([first, second]))
+                scope.ints.insert(length.clone())
+                scope.not_negative(walk.arena, length)
+                scope.loose.insert(length.clone())
+                return true
+            }
+            false
+        },
+        else => false,
+    }
+}
+
+/// `term` with the old value of `n` replaced by the number the facts pin it
+/// to, as `prover_assigned` does: the new one then needs no earlier name.
+fn prover_pinned_old(mut walk: ProverWalk, n: ref String, term: i64, scope: ref ProverScope) -> i64 {
+    let known = prover_known_value(walk.arena, scope.facts, n) ?? return term
+    let mut pinned: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    pinned.insert(n.clone(), walk.arena.int(known))
+    let replaced = walk.arena.substitute(term, pinned)
+    let folded = walk.arena.constant(replaced) ?? return replaced
+    return walk.arena.int(folded)
+}
+
+/// **The followed list lengths `body` may change** (#782), added to
+/// `changed`: a loop forgets them, a join tells its sides apart by them.
+fn prover_lengths_changed(mut changed: collections::BTreeSet[String], body: ref Block, scope: ref ProverScope, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
+    for m in scope.mutables {
+        if m.ends_with(".len()") {
+            let list = (m.strip_suffix(".len()") ?? "").clone()
+            if changes_length_in(body, list, readers, words) {
+                changed.insert(m.clone())
+            }
+        }
+    }
+}
+
+fn prover_else_lengths_changed(mut changed: collections::BTreeSet[String], else_branch: ref Block?, scope: ref ProverScope, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
+    let block = else_branch ?? return
+    prover_lengths_changed(changed, block, scope, readers, words)
+}
+
+/// **A followed list a loop changes only through an index** (#782) keeps
+/// its length: nothing binds it again, and nothing changes the length.
+fn prover_loop_keeps(n: ref String, changed: ref collections::BTreeSet[String], body: ref Block, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
+    let length = length_of(n)
+    return scope.mutables.contains(length) && !changed.contains(length) && !rebinds(body, n, words)
+}
+
+/// **A followed list's length a loop forgets** (#782) is still a length:
+/// never negative.
+fn prover_relength(mut walk: ProverWalk, n: ref String, mut scope: ProverScope) {
+    if n.ends_with(".len()") && scope.mutables.contains(n) {
+        scope.has_length(walk.arena, (n.strip_suffix(".len()") ?? "").clone(), null)
     }
 }
 
@@ -2313,4 +2516,29 @@ fn prover_assigns_inside(mut walk: ProverWalk, block: ref Block, name: ref Strin
         }
     }
     return true
+}
+
+/// **The free functions of `program` with no `mut` parameter** (#782): a
+/// list handed to one of them keeps its length.
+fn prover_readers(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut readers: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, receiver, args, .. } => {
+                if receiver == null {
+                    let mut reads = true
+                    for arg in args {
+                        if arg.mutable {
+                            reads = false
+                        }
+                    }
+                    if reads && name != null {
+                        readers.insert(words.resolve(name ?? return readers).clone())
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return readers
 }

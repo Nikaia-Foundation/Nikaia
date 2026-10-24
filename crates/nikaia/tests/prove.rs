@@ -1453,3 +1453,24 @@ fn a_divisor_a_summary_pins_is_its_value_and_the_note_says_so() {
         "{refused:#?}"
     );
 }
+
+/// **#782: a `let mut` list's length is followed** as a mutable whole number
+/// (ADR-361): `resize`, `push`, `clear` and `truncate` set it, an `if` whose
+/// sides both push joins it.
+#[test]
+fn a_mutable_lists_length_is_followed() {
+    let source = "fn f(c: bool) -> i64 {\n    let mut v: Vec[i64] = []\n    v.resize(8, 0)\n    v.push(1)\n    assert(v.len() == 9)\n    if c {\n        v.push(2)\n    } else {\n        v.push(3)\n    }\n    assert(v.len() == 10)\n    v.truncate(4)\n    assert(v.len() == 4)\n    for i in 0..<3 {\n        v[i] = 1\n    }\n    assert(v.len() == 4)\n    v.clear()\n    assert(v.len() == 0)\n    v.push(5)\n    return v[0]\n}\n\nfn main() {\n    println(f\"{f(true)}\")\n}\n";
+    assert_eq!(codes(source), Vec::<&str>::new());
+}
+
+/// **#782: anything else that may change the list forgets its length**: the
+/// list handed to a call, a loop that pushes.
+#[test]
+fn a_mutable_lists_length_is_forgotten_where_it_may_change() {
+    let handed = "fn grow(mut v: Vec[i64]) {\n    v.push(1)\n}\n\nfn main() {\n    let mut v: Vec[i64] = []\n    v.resize(8, 0)\n    grow(v)\n    assert(v.len() == 8)\n}\n";
+    assert_eq!(codes(handed), ["NK1300"]);
+    let looped = "fn main() {\n    let mut v: Vec[i64] = []\n    v.resize(8, 0)\n    for i in 0..<3 {\n        v.push(i)\n    }\n    assert(v.len() == 8)\n}\n";
+    assert_eq!(codes(looped), ["NK1300"]);
+    let still = "fn main() {\n    let mut v: Vec[i64] = []\n    v.resize(8, 0)\n    for i in 0..<3 {\n        v.push(i)\n    }\n    assert(v.len() >= 0)\n}\n";
+    assert_eq!(codes(still), Vec::<&str>::new());
+}

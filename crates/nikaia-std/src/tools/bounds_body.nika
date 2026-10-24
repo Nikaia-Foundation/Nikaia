@@ -23,8 +23,10 @@ enum Ask {
     /// not one inside a loop, a lambda or a task within it.
     Jumps,
     /// What changes `list`'s length or hands it on: one for a method
-    /// `keeps_length` does not know, two for passing it to a call.
-    Changes(String),
+    /// `keeps_length` does not know, two for passing it to a call that is
+    /// not one of the free functions named in the set, whose parameters are
+    /// all read-only.
+    Changes(String, collections::BTreeSet[String]),
     /// The names a deferred body changes or hands on.
     Pinned,
     /// **Every name assigned anywhere** (ADR-361 D1): what a loop's turn may
@@ -118,7 +120,7 @@ pub fn filled_once(body: ref Block, pinned: ref collections::BTreeSet[String], w
             continue
         }
         let mut changes = tally()
-        tally_block(body, Ask::Changes(list.clone()), false, words, changes)
+        tally_block(body, Ask::Changes(list.clone(), collections::BTreeSet()), false, words, changes)
         if changes.count == 1 && !rebinds(body, list, words) {
             once.push(list.clone())
         }
@@ -233,7 +235,7 @@ fn tally_statement(stmt: ref Stmt, ask: ref Ask, deferred: bool, words: ref winn
                 }
             }
         },
-        Ask::Changes(_) => {},
+        Ask::Changes(_, _) => {},
         Ask::Assigned => match stmt {
             Stmt::Assign { target, .. } => {
                 let root = assigned_root(target, words)
@@ -324,7 +326,7 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             Expr::Continue(_) => { tally.count += 1 },
             else => {},
         },
-        Ask::Changes(list) => match expr {
+        Ask::Changes(list, readers) => match expr {
             Expr::MethodCall { receiver, method, args, .. } => {
                 if (variable_text(receiver, words) ?? "") == list && !keeps_length(words.resolve(method)) {
                     tally.count += 1
@@ -339,8 +341,10 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
                     tally.count += 2
                 }
             },
-            Expr::Call { args, .. } if names_the(args, list, words) => {
-                tally.count += 2
+            Expr::Call { func, args, .. } if names_the(args, list, words) => {
+                if !readers.contains(variable_text(func, words) ?? "") {
+                    tally.count += 2
+                }
             },
             else => {},
         },
@@ -488,4 +492,20 @@ fn tally_expr(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
         Expr::Closure { body, .. } => tally_block(body, ask, true, words, tally),
         else => {},
     }
+}
+
+/// **Whether a statement may change `list`'s length** (#782): a method
+/// `keeps_length` does not know on it, or the list handed to a call or a
+/// method, at any depth.
+pub fn changes_length_in_statement(stmt: ref Stmt, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+    let mut changes = tally()
+    tally_statement(stmt, Ask::Changes(list.clone(), readers.clone()), false, words, changes)
+    return changes.count > 0
+}
+
+/// **Whether a block may change `list`'s length** (#782), at any depth.
+pub fn changes_length_in(body: ref Block, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+    let mut changes = tally()
+    tally_block(body, Ask::Changes(list.clone(), readers.clone()), false, words, changes)
+    return changes.count > 0
 }
