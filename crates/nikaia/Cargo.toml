@@ -5,6 +5,7 @@ edition = "2024"
 # The oldest Rust this builds and is tested on (ADR-305); the emitter's
 # `RUST_FLOOR` says the same.
 rust-version = "1.88"
+autotests = false
 
 [features]
 default = []
@@ -14,6 +15,12 @@ trace = ["winnow-grammar/trace"]
 
 [[bin]]
 name = "nikaia"
+
+# One integration-test binary: one link instead of 267 (#793). Files are
+# modules of tests/it/main.rs.
+[[test]]
+name = "it"
+path = "tests/it/main.rs"
 
 [build-dependencies]
 # `build.rs` fingerprints the compiler's own sources for the cache key.

@@ -313,7 +313,7 @@ jobs:
       - name: Accepted-programs sweep (accepted-sweep)
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
-        run: cargo test --release -p nikaia --test accepted_sweep -- --ignored
+        run: cargo test --release -p nikaia --test it accepted_sweep:: -- --ignored
 
       # The driver needs a file, so run it on the samples rather than bare
       # `cargo run`, which only refuses with nothing to do. `interpret` runs

@@ -1,0 +1,836 @@
+//! **A `comptime` that calls a function is compiled and run**
+//! ([ADR-321](../../../docs/specification/adr/adr-321.md) D1, #468).
+//!
+//! The initialiser and what it calls are lowered as the program is, compiled
+//! for the machine that builds and run there, so the build-time answer is the
+//! run-time one: an `i32` that overflows stops the build where it would stop
+//! the program, and a function of `std`'s Rust half runs as it does in the
+//! program.
+//!
+//! **One workshop for the whole file**, under Cargo's own scratch directory:
+//! the library build-time code links against is built once and kept, as a
+//! build keeps it beside its cache.
+
+use crate::common;
+use nikaia::assets::Reads;
+use nikaia::check::{self, Finding};
+use nikaia::contracts::{Ledger, LedgerOps, STD};
+use nikaia::parser::parse_to_ast;
+use std::collections::BTreeSet;
+use std::path::PathBuf;
+
+fn workshop() -> PathBuf {
+    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("comptime-compiled")
+}
+
+fn reads() -> Reads {
+    Reads::at(workshop()).building_in(workshop())
+}
+
+fn findings(source: &str) -> Vec<Finding> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    check::check_against(
+        &parsed,
+        &[],
+        &own,
+        &library,
+        &BTreeSet::new(),
+        &check::Newly::new(),
+        &reads(),
+    )
+    .findings
+    .into_iter()
+    .filter(|f| f.code != "NK1261")
+    .collect()
+}
+
+fn lowered(source: &str) -> String {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    nikaia::emit::emit_program_reading(&parsed, Default::default(), &reads())
+        .expect("it lowers")
+        .rust
+}
+
+/// **A call is compiled and run**, and the value is what the program computes.
+#[test]
+fn a_call_is_compiled_and_run_while_the_program_is_built() {
+    let source = "fn fib(n: i64) -> i64 {\n\
+                  \x20   if n < 2 {\n\
+                  \x20       return n\n\
+                  \x20   }\n\
+                  \x20   return fib(n - 1) + fib(n - 2)\n\
+                  }\n\
+                  \n\
+                  comptime FIB_10: i64 = fib(10)\n\
+                  comptime FIB_20 = fib(20)\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{FIB_10} {FIB_20}\")\n\
+                  }\n";
+    assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    let rust = lowered(source);
+    assert!(rust.contains("const FIB_10: i64 = 55;"), "{rust}");
+    assert!(rust.contains("const FIB_20: i64 = 6765;"), "{rust}");
+}
+
+/// **The program's own types hold at build time** (ADR-321 D1): an `i32`
+/// that overflows stops the build at the multiplication, in the program's
+/// words, where the interpreter worked the number out in a wider one.
+#[test]
+fn an_overflow_stops_the_build_where_it_would_stop_the_program() {
+    let source = "fn sq(x: i32) -> i32 {\n\
+                  \x20   return x * x\n\
+                  }\n\
+                  \n\
+                  comptime C = sq(100000)\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{C}\")\n\
+                  }\n";
+    let found = findings(source);
+    let stopped = found
+        .iter()
+        .find(|f| f.code == "NK1244")
+        .unwrap_or_else(|| panic!("the overflow stops the build: {found:#?}"));
+    assert_eq!(
+        stopped.message,
+        "`C` stopped while the program was built: attempt to multiply with overflow."
+    );
+    let at = stopped
+        .labels
+        .iter()
+        .find(|label| label.main)
+        .expect("the place it stopped is shown");
+    assert_eq!(&source[at.span.start as usize..][..12], "return x * x");
+}
+
+/// **`std`'s Rust half runs at build time** (ADR-321 D2): a callee that asks
+/// `text::digit_value` was `NK1127` while an interpreter could only run code
+/// written in the program.
+#[test]
+fn a_function_of_std_runs_inside_a_callee() {
+    let source = "use std::text\n\
+                  \n\
+                  fn seven() -> i32 {\n\
+                  \x20   return text::digit_value('7')\n\
+                  }\n\
+                  \n\
+                  comptime S = seven()\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{S}\")\n\
+                  }\n";
+    assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    assert!(lowered(source).contains("const S: i32 = 7;"));
+}
+
+/// **The rule is asked before anything is compiled** (D2): a callee that
+/// prints may not run while the program is built.
+#[test]
+fn a_callee_that_prints_is_refused_before_it_is_compiled() {
+    let source = "fn loud() -> i64 {\n\
+                  \x20   println(\"hi\")\n\
+                  \x20   return 1\n\
+                  }\n\
+                  \n\
+                  comptime L = loud()\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{L}\")\n\
+                  }\n";
+    let found = findings(source);
+    assert!(
+        found.iter().any(|f| f.code == "NK1152"
+            && f.message == "You can't call `loud` while the program is built."),
+        "{found:#?}"
+    );
+}
+
+/// **An unchanged `comptime` is neither compiled nor run again** (D4): its
+/// answer is kept under a key of the code that produced it.
+#[test]
+fn an_unchanged_comptime_is_answered_from_what_was_kept() {
+    let source = "fn twice(n: i64) -> i64 {\n\
+                  \x20   return n * 2\n\
+                  }\n\
+                  \n\
+                  comptime T = twice(4321)\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{T}\")\n\
+                  }\n";
+    assert!(lowered(source).contains("const T: i64 = 8642;"));
+    let kept = workshop().join("comptime");
+    let runs = |dir: &PathBuf| -> Vec<(PathBuf, std::time::SystemTime)> {
+        let mut out: Vec<_> = std::fs::read_dir(dir)
+            .expect("the kept runs")
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| {
+                let answer = entry.path().join("answer");
+                let read = std::fs::read_to_string(&answer).ok()?;
+                (read == "(i 8642)").then(|| {
+                    let modified = std::fs::metadata(entry.path().join("run"))
+                        .and_then(|m| m.modified())
+                        .expect("the run's binary");
+                    (entry.path(), modified)
+                })
+            })
+            .collect();
+        out.sort();
+        out
+    };
+    let before = runs(&kept);
+    // Earlier bundles' runs of the same code stay beside it, under keys of
+    // their own.
+    assert!(!before.is_empty(), "the run was kept");
+    assert!(lowered(source).contains("const T: i64 = 8642;"));
+    assert_eq!(runs(&kept), before);
+}
+
+// --- ADR-321 D7, D10: what a build-time run may spend ------------------------
+
+/// Findings under smaller bounds than a build's, so that a run past them ends
+/// in a moment.
+fn findings_bounded(source: &str, steps: u64, bytes: u64) -> Vec<Finding> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    let reads = reads().bounded(nikaia::comptime_run::Bounds { steps, bytes });
+    check::check_against(
+        &parsed,
+        &[],
+        &own,
+        &library,
+        &BTreeSet::new(),
+        &check::Newly::new(),
+        &reads,
+    )
+    .findings
+    .into_iter()
+    .filter(|f| f.code != "NK1261")
+    .collect()
+}
+
+/// The one run that stopped as the program would (ADR-321 D16): `NK1244`.
+fn the_stop(found: Vec<Finding>) -> Finding {
+    let mut stopped: Vec<Finding> = found.into_iter().filter(|f| f.code == "NK1244").collect();
+    assert_eq!(stopped.len(), 1, "{stopped:#?}");
+    stopped.remove(0)
+}
+
+fn the_one(found: Vec<Finding>) -> Finding {
+    let mut stopped: Vec<Finding> = found.into_iter().filter(|f| f.code == "NK1152").collect();
+    assert_eq!(stopped.len(), 1, "{stopped:#?}");
+    stopped.remove(0)
+}
+
+/// **A loop that does not end is refused, not waited for** (D7), naming the
+/// `comptime` and the path it was in.
+#[test]
+fn a_loop_that_does_not_end_is_stopped_by_the_budget() {
+    let source = "fn spin() -> i64 {\n\
+                  \x20   let mut n = 0\n\
+                  \x20   while true {\n\
+                  \x20       n += 1\n\
+                  \x20   }\n\
+                  \x20   return n\n\
+                  }\n\
+                  \n\
+                  comptime SPUN = spin()\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{SPUN}\")\n\
+                  }\n";
+    let stopped = the_one(findings_bounded(source, 1_000_000, 4 << 30));
+    assert_eq!(
+        stopped.message,
+        "`SPUN` took more than 1000000 steps while the program was built."
+    );
+    assert!(
+        stopped
+            .notes
+            .iter()
+            .any(|n| n == "It was in `SPUN` > `spin`."),
+        "{:#?}",
+        stopped.notes
+    );
+}
+
+/// **`fib(50)` is refused rather than hanging the build; `fib(20)` passes**
+/// (D7): each call is a step.
+#[test]
+fn a_recursion_past_the_budget_is_refused_and_one_inside_it_passes() {
+    let fib = "fn fib(n: i64) -> i64 {\n\
+               \x20   if n < 2 {\n\
+               \x20       return n\n\
+               \x20   }\n\
+               \x20   return fib(n - 1) + fib(n - 2)\n\
+               }\n\
+               \n";
+    let within =
+        format!("{fib}comptime F = fib(20)\n\nfn main() {{\n    println(f\"{{F}}\")\n}}\n");
+    assert!(
+        findings_bounded(&within, 1_000_000, 4 << 30).is_empty(),
+        "fib(20) takes some 22 000 steps"
+    );
+    let past = format!("{fib}comptime F = fib(50)\n\nfn main() {{\n    println(f\"{{F}}\")\n}}\n");
+    let stopped = the_one(findings_bounded(&past, 1_000_000, 4 << 30));
+    assert_eq!(
+        stopped.message,
+        "`F` took more than 1000000 steps while the program was built."
+    );
+}
+
+/// **A recursion with no base case meets the call depth** (D7) before the
+/// budget, and is named as that.
+#[test]
+fn a_recursion_without_a_base_case_meets_the_call_depth() {
+    let source = "fn down(n: i64) -> i64 {\n\
+                  \x20   return down(n + 1)\n\
+                  }\n\
+                  \n\
+                  comptime D = down(0)\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{D}\")\n\
+                  }\n";
+    let stopped = the_one(findings(source));
+    assert_eq!(
+        stopped.message,
+        "`D` went more than 10000 calls deep while the program was built."
+    );
+}
+
+/// **A list that grows without end is stopped by the memory bound** (D10),
+/// counted as the run asks for it.
+#[test]
+fn a_list_that_grows_without_end_is_stopped_by_the_memory_bound() {
+    let source = "fn grow() -> i64 {\n\
+                  \x20   let mut xs: Vec[i64] = []\n\
+                  \x20   while true {\n\
+                  \x20       xs.push(1)\n\
+                  \x20   }\n\
+                  \x20   return xs.len()\n\
+                  }\n\
+                  \n\
+                  comptime G = grow()\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{G}\")\n\
+                  }\n";
+    let stopped = the_one(findings_bounded(source, 10_000_000_000, 100_000_000));
+    assert_eq!(
+        stopped.message,
+        "`G` held more than 100000000 bytes at once while the program was built."
+    );
+}
+
+/// **A method is called as a function is** (ADR-321 D2): one of `std`'s on
+/// text, which the interpreter could not run because its body is Rust, and
+/// one of the program's own.
+#[test]
+fn a_method_runs_at_build_time_whoever_declares_it() {
+    let source = "struct Point {\n\
+                  \x20   x: i64,\n\
+                  \x20   y: i64,\n\
+                  }\n\
+                  \n\
+                  impl Point {\n\
+                  \x20   fn sum(self) -> i64 {\n\
+                  \x20       return self.x + self.y\n\
+                  \x20   }\n\
+                  }\n\
+                  \n\
+                  comptime LOUD = \"abc\".to_uppercase()\n\
+                  comptime S = Point { x: 3, y: 4 }.sum()\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{LOUD} {S}\")\n\
+                  }\n";
+    assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    let rust = lowered(source);
+    assert!(rust.contains("const LOUD: &str = \"ABC\";"), "{rust}");
+    assert!(rust.contains("const S: i64 = 7;"), "{rust}");
+}
+
+/// **A program of several files** (Part I 9.1): the callee is in another
+/// file, which is lowered with the one the `comptime` stands in; a stop there
+/// is named by the function it is in.
+#[test]
+fn a_callee_in_another_file_runs_and_a_stop_there_is_named() {
+    let main = parse_to_ast(
+        "comptime T = triple(14)\n\
+         comptime C = sq(100000)\n\
+         \n\
+         fn main() {\n\
+         \x20   println(f\"{T} {C}\")\n\
+         }\n",
+    )
+    .expect("the source parses");
+    let helpers = parse_to_ast(
+        "fn triple(n: i64) -> i64 {\n\
+         \x20   return n * 3\n\
+         }\n\
+         \n\
+         fn sq(x: i32) -> i32 {\n\
+         \x20   return x * x\n\
+         }\n",
+    )
+    .expect("the source parses");
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    let own = Ledger::infer_package(&[&main, &helpers], &library);
+    let found = check::check_against(
+        &main,
+        &[&main, &helpers],
+        &own,
+        &library,
+        &BTreeSet::new(),
+        &check::Newly::new(),
+        &reads(),
+    )
+    .findings;
+    let stopped = the_stop(found);
+    assert_eq!(
+        stopped.message,
+        "`C` stopped while the program was built: attempt to multiply with overflow."
+    );
+    assert!(
+        stopped
+            .notes
+            .iter()
+            .any(|n| n == "It stopped in `sq`, in another file of the program."),
+        "{:#?}",
+        stopped.notes
+    );
+}
+
+/// **A file the build reads goes in as its text** (ADR-310, ADR-321 D1): the
+/// build reads it by the rules every read keeps, and the run computes with
+/// what was read. A file the list does not name is refused before anything
+/// is compiled.
+#[test]
+fn a_file_the_build_reads_is_handed_to_a_compiled_call() {
+    let dir = common::scratch_dir("comptime-compiled-asset");
+    std::fs::write(dir.join("data.txt"), "four").expect("write the asset");
+    std::fs::write(dir.join("reads.txt"), "data.txt\n").expect("write the allowlist");
+    let reads = Reads::with(
+        &dir,
+        nikaia::assets::Allowlist::read(&dir.join("reads.txt")).expect("the list reads"),
+    )
+    .building_in(workshop());
+    let checked = |source: &str| {
+        let parsed = parse_to_ast(source).expect("the source parses");
+        let own = Ledger::infer(&parsed);
+        let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+        let found = check::check_against(
+            &parsed,
+            &[],
+            &own,
+            &library,
+            &BTreeSet::new(),
+            &check::Newly::new(),
+            &reads,
+        )
+        .findings
+        .into_iter()
+        // `ref String` here is redundant (`NK1261`), and only a warning.
+        .filter(|f| f.code != "NK1261")
+        .collect::<Vec<_>>();
+        let rust = nikaia::emit::emit_program_reading(&parsed, Default::default(), &reads)
+            .map(|lowered| lowered.rust)
+            .unwrap_or_default();
+        (found, rust)
+    };
+    let (found, rust) = checked(
+        "fn twice(text: ref String) -> i64 {\n\
+         \x20   return text.len() * 2\n\
+         }\n\
+         \n\
+         comptime N = twice(asset(\"data.txt\"))\n\
+         \n\
+         fn main() {\n\
+         \x20   println(f\"{N}\")\n\
+         }\n",
+    );
+    assert!(found.is_empty(), "{found:#?}");
+    assert!(rust.contains("const N: i64 = 8;"), "{rust}");
+    let (found, _) = checked(
+        "fn twice(text: ref String) -> i64 {\n\
+         \x20   return text.len() * 2\n\
+         }\n\
+         \n\
+         comptime N = twice(asset(\"other.txt\"))\n\
+         \n\
+         fn main() {\n\
+         \x20   println(f\"{N}\")\n\
+         }\n",
+    );
+    assert!(found.iter().any(|f| f.code == "NK1175"), "{found:#?}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **What an earlier `comptime` came to is carried as its literal** (ADR-321
+/// D1): a struct and a variant the program declares, handed to a later one
+/// that is compiled.
+#[test]
+fn an_earlier_struct_or_variant_is_carried_into_a_later_run() {
+    let source = "struct Point {\n\
+                  \x20   x: i64,\n\
+                  \x20   y: i64,\n\
+                  }\n\
+                  \n\
+                  impl Point {\n\
+                  \x20   fn scaled(self, by: i64) -> Point {\n\
+                  \x20       return Point { x: self.x * by, y: self.y * by }\n\
+                  \x20   }\n\
+                  \n\
+                  \x20   fn sum(self) -> i64 {\n\
+                  \x20       return self.x + self.y\n\
+                  \x20   }\n\
+                  }\n\
+                  \n\
+                  enum Shade {\n\
+                  \x20   Odd,\n\
+                  \x20   Even(i64),\n\
+                  }\n\
+                  \n\
+                  fn origin(x: i64, y: i64) -> Point {\n\
+                  \x20   return Point { x: x, y: y }\n\
+                  }\n\
+                  \n\
+                  fn shade_of(n: i64) -> Shade {\n\
+                  \x20   if n % 2 == 0 {\n\
+                  \x20       return Shade::Even(n)\n\
+                  \x20   }\n\
+                  \x20   return Shade::Odd\n\
+                  }\n\
+                  \n\
+                  fn weight(s: Shade) -> i64 {\n\
+                  \x20   return match s {\n\
+                  \x20       Shade::Even(n) => n,\n\
+                  \x20       Shade::Odd => 1,\n\
+                  \x20   }\n\
+                  }\n\
+                  \n\
+                  comptime ORIGIN = origin(1, 2)\n\
+                  comptime BIG = ORIGIN.scaled(10).sum()\n\
+                  comptime S = shade_of(4)\n\
+                  comptime W = weight(S)\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{BIG} {W}\")\n\
+                  }\n";
+    assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    let rust = lowered(source);
+    assert!(rust.contains("const BIG: i64 = 30;"), "{rust}");
+    assert!(rust.contains("const W: i64 = 4;"), "{rust}");
+}
+
+/// **A program that declares a grammar is compiled with it** (ADR-321 D3):
+/// the library build-time code links against names the grammar runtime too,
+/// so an ordinary call in such a program runs compiled. Running the grammar
+/// itself stays the grammar run's (ADR-177).
+#[test]
+fn a_program_with_a_grammar_compiles_its_other_comptimes() {
+    let source = "struct Setting {\n\
+                  \x20   key: ref String,\n\
+                  \x20   value: ref String,\n\
+                  }\n\
+                  \n\
+                  grammar Cfg {\n\
+                  \x20   rule NAME -> ref String = s:raw_ident { s }\n\
+                  \x20   rule VALUE -> ref String = s:until(line_ending) { s.trim() }\n\
+                  \x20   rule setting -> Setting = key:NAME \"=\" value:VALUE { Setting { key, value } }\n\
+                  \x20   entry rule file -> Vec[Setting] = settings:setting* { settings }\n\
+                  }\n\
+                  \n\
+                  fn triple(n: i64) -> i64 {\n\
+                  \x20   return n * 3\n\
+                  }\n\
+                  \n\
+                  fn sq(x: i32) -> i32 {\n\
+                  \x20   return x * x\n\
+                  }\n\
+                  \n\
+                  comptime T = triple(14)\n\
+                  comptime C = sq(100000)\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(f\"{T} {C}\")\n\
+                  }\n";
+    // The overflow is the compiled run's answer: the interpreter computed it.
+    let stopped = the_stop(findings(source));
+    assert_eq!(
+        stopped.message,
+        "`C` stopped while the program was built: attempt to multiply with overflow."
+    );
+}
+
+/// **An option's computed default is compiled too** (ADR-318 D1, ADR-321 D1):
+/// the ledger records what the run came to, so a call that leaves the option
+/// out gets it, and a default that overflows stops the build at the default.
+#[test]
+fn an_options_default_is_compiled_and_recorded() {
+    let source = |base: &str| {
+        format!(
+            "fn sq(x: i32) -> i32 {{\n\
+             \x20   return x * x\n\
+             }}\n\
+             \n\
+             fn shout(label: ref String; times: i64 = \"abcd\".len(), base: i32 = {base}) -> String {{\n\
+             \x20   return f\"{{label}} {{times}} {{base}}\"\n\
+             }}\n\
+             \n\
+             fn main() {{\n\
+             \x20   println(shout(\"go\"))\n\
+             }}\n"
+        )
+    };
+    let at = workshop();
+    let lowered = nikaia::comptime_run::defaults_compiled_in(Some(&at), || {
+        let parsed = parse_to_ast(&source("sq(9)")).expect("the source parses");
+        assert!(findings(&source("sq(9)")).is_empty());
+        nikaia::emit::emit_program_reading(&parsed, Default::default(), &reads())
+            .expect("it lowers")
+            .rust
+    });
+    assert!(lowered.contains("shout(\"go\", 4, 81)"), "{lowered}");
+    let stopped = nikaia::comptime_run::defaults_compiled_in(Some(&at), || {
+        the_stop(findings(&source("sq(100000)")))
+    });
+    assert_eq!(
+        stopped.message,
+        "`base` stopped while the program was built: attempt to multiply with overflow."
+    );
+}
+
+/// **A `comptime` raises its bounds at its declaration** (ADR-321 D11):
+/// `comptime(steps: 100)` refuses what the default lets through, and
+/// `comptime(steps: 1M)` lets through what a smaller default refused, in
+/// ADR-322's scales.
+#[test]
+fn a_comptime_names_its_own_step_budget() {
+    let fib = "fn fib(n: i64) -> i64 {\n\
+               \x20   if n < 2 {\n\
+               \x20       return n\n\
+               \x20   }\n\
+               \x20   return fib(n - 1) + fib(n - 2)\n\
+               }\n\
+               \n";
+    let main = "\nfn main() {\n    println(f\"{F}\")\n}\n";
+    let lowered_bound = format!("{fib}comptime(steps: 100) F = fib(20)\n{main}");
+    let stopped = the_one(findings(&lowered_bound));
+    assert_eq!(
+        stopped.message,
+        "`F` took more than 100 steps while the program was built."
+    );
+    let raised = format!("{fib}comptime(steps: 1M) F = fib(20)\n{main}");
+    assert!(
+        findings_bounded(&raised, 1_000, 4 << 30).is_empty(),
+        "{:#?}",
+        findings_bounded(&raised, 1_000, 4 << 30)
+    );
+    let inside = format!(
+        "{fib}fn main() {{\n    comptime(steps: 100) F = fib(20)\n    println(f\"{{F}}\")\n}}\n"
+    );
+    let stopped = the_one(findings(&inside));
+    assert_eq!(
+        stopped.message,
+        "`F` took more than 100 steps while the program was built."
+    );
+}
+
+/// **And its memory bound** (D10, D11), in bytes, written `Ki`/`Mi`/`Gi`.
+#[test]
+fn a_comptime_names_its_own_memory_bound() {
+    let grow = "fn grow() -> i64 {\n\
+                \x20   let mut xs: Vec[i64] = []\n\
+                \x20   while true {\n\
+                \x20       xs.push(1)\n\
+                \x20   }\n\
+                \x20   return xs.len()\n\
+                }\n\
+                \n\
+                comptime(ram: 64Mi, steps: 10G) G = grow()\n\
+                \n\
+                fn main() {\n\
+                \x20   println(f\"{G}\")\n\
+                }\n";
+    let stopped = the_one(findings(grow));
+    assert_eq!(
+        stopped.message,
+        "`G` held more than 67108864 bytes at once while the program was built."
+    );
+}
+
+/// **Two names and no third** (D11): another is `NK1109`, and a value the
+/// build does not know is refused; neither runs anything.
+#[test]
+fn a_bound_with_another_name_or_no_number_is_refused() {
+    let found = findings(
+        "fn one() -> i64 {\n    return 1\n}\n\ncomptime(stpes: 5) X = one()\n\nfn main() {\n    println(f\"{X}\")\n}\n",
+    );
+    let wrong: Vec<_> = found.iter().filter(|f| f.code == "NK1109").collect();
+    assert_eq!(wrong.len(), 1, "{found:#?}");
+    assert_eq!(
+        wrong[0].message,
+        "A `comptime` has no bound called `stpes`."
+    );
+    assert_eq!(wrong[0].help.as_deref(), Some("Did you mean `steps`?"));
+    assert!(found.iter().all(|f| f.code != "NK1152"), "{found:#?}");
+
+    let found = findings(
+        "fn one() -> i64 {\n    return 1\n}\n\ncomptime(steps: one()) X = one()\n\nfn main() {\n    println(f\"{X}\")\n}\n",
+    );
+    assert!(
+        found.iter().any(|f| f.code == "NK1102"
+            && f.message == "`steps` takes a whole number the build knows, and this is not one."),
+        "{found:#?}"
+    );
+}
+
+/// **A `comptime` binding is its value to the prover**
+/// ([ADR-359](../../../docs/specification/adr/adr-359.md) D7, #632 step 1):
+/// the value the run computed, here `4 / example(2)`, which is 0.
+#[test]
+fn a_comptime_a_call_computed_is_its_value_to_the_prover() {
+    let source = "fn positive(whole: i64) -> i64 {\n\
+                  \x20   assert(whole > 0)\n\
+                  \x20   return whole\n\
+                  }\n\
+                  \n\
+                  fn example(a: i64) -> i64 {\n\
+                  \x20   let whole = 10 + a\n\
+                  \x20   return positive(whole)\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   comptime B: i64 = 4 / example(2)\n\
+                  \x20   assert(B > 10)\n\
+                  \x20   println(f\"{B}\")\n\
+                  }\n";
+    let found = findings(source);
+    let refuted: Vec<&Finding> = found.iter().filter(|f| f.code == "NK1207").collect();
+    assert_eq!(refuted.len(), 1, "{found:#?}");
+    assert!(
+        refuted[0].message.contains("`B > 10` is false every time"),
+        "{found:#?}"
+    );
+}
+
+// --- ADR-321 D19: no place to compile is a refusal, never an interpretation --
+
+/// A check made through the library with no workshop, as a caller that hands
+/// it none makes: nothing to compile build-time code in.
+fn findings_without_a_workshop(source: &str) -> Vec<Finding> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    check::check_program(&parsed, &own, &library, &BTreeSet::new())
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
+}
+
+const DIVIDED: &str = "fn example(n: i64) -> i64 {\n\
+                       \x20   return n * 2\n\
+                       }\n\
+                       \n\
+                       comptime B = 4 / example(2)\n\
+                       \n\
+                       fn main() {\n\
+                       \x20   println(f\"{B}\")\n\
+                       }\n";
+
+/// **A `comptime` that calls a function is not interpreted** (ADR-321 D1,
+/// D19): a library check with no place to compile it refuses it with
+/// `NK1127` and says why; it neither computes it another way nor leaves it
+/// open.
+#[test]
+fn a_check_with_no_workshop_refuses_a_comptime_that_calls() {
+    let found = findings_without_a_workshop(DIVIDED);
+    let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1127").collect();
+    assert_eq!(refused.len(), 1, "{found:#?}");
+    assert_eq!(
+        refused[0].message,
+        "`B` can't be computed while the program is built."
+    );
+    assert_eq!(
+        refused[0].notes,
+        vec![
+            "This check has no place to compile build-time code in, and a value that runs \
+             code is computed only by compiling it and running it."
+                .to_string()
+        ]
+    );
+    // An initialiser of literals alone is still folded (D1's last paragraph).
+    assert!(
+        findings_without_a_workshop(
+            "comptime K = 4 * 1024\n\nfn main() {\n    println(f\"{K}\")\n}\n"
+        )
+        .is_empty()
+    );
+}
+
+/// **The same program with a workshop**, as a check through the library
+/// that is handed one and as the command line has it, computes the value.
+#[test]
+fn a_check_with_a_workshop_computes_the_same_comptime() {
+    assert!(findings(DIVIDED).is_empty(), "{:#?}", findings(DIVIDED));
+    assert!(
+        lowered(DIVIDED).contains("const B: i64 = 1;"),
+        "{}",
+        lowered(DIVIDED)
+    );
+    let dir = common::scratch_dir("comptime-command-line");
+    std::fs::write(dir.join("divided.nika"), DIVIDED).expect("the file is written");
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["lower", "divided.nika", "--output", "divided.rs"])
+        .output()
+        .expect("the nikaia binary runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let rust = std::fs::read_to_string(dir.join("divided.rs")).expect("the lowered file");
+    assert!(rust.contains("const B: i64 = 1;"), "{rust}");
+}
+
+/// **An option's default that calls a function, both ways** (ADR-318 D1,
+/// ADR-321 D1, D19): compiled where the check has a workshop, `NK1127` at
+/// the default where it has none.
+#[test]
+fn an_options_default_that_calls_is_compiled_or_refused() {
+    let source = "fn sq(x: i64) -> i64 {\n\
+                  \x20   return x * x\n\
+                  }\n\
+                  \n\
+                  fn shout(label: ref String; times: i64 = sq(3)) -> String {\n\
+                  \x20   return f\"{label} {times}\"\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(shout(\"go\"))\n\
+                  }\n";
+    let found = findings_without_a_workshop(source);
+    let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1127").collect();
+    assert_eq!(refused.len(), 1, "{found:#?}");
+    assert_eq!(
+        refused[0].message,
+        "`times` can't be computed while the program is built."
+    );
+    let at = workshop();
+    let lowered = nikaia::comptime_run::defaults_compiled_in(Some(&at), || {
+        assert!(findings(source).is_empty(), "{:#?}", findings(source));
+        let parsed = parse_to_ast(source).expect("the source parses");
+        nikaia::emit::emit_program_reading(&parsed, Default::default(), &reads())
+            .expect("it lowers")
+            .rust
+    });
+    assert!(lowered.contains("shout(\"go\", 9)"), "{lowered}");
+}
