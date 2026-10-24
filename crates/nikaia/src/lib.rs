@@ -22,6 +22,7 @@ pub mod diagnostics;
 pub mod dsl;
 pub mod emit;
 pub mod fixed;
+pub mod fmt;
 pub mod fold;
 pub mod fold_bound;
 pub mod foreign;

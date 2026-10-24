@@ -220,6 +220,7 @@ COMPILER_NIKA = {
     "check_core_expr.nika": "check: the hub `expr`, the dispatcher and the remaining arms (U-c11) (0.0.954)",
     "check_narrow.nika": "check: what a test proves not `null` (ADR-350, U-d0) (0.0.959)",
     "check_crossings.nika": "check: what the core crossed back into Rust for (U-d1) (0.0.968)",
+    "fmt.nika": "fmt: the printer of `nikaia fmt`, over the tokens with the comments the parser records (ADR-337, #101)",
 }
 
 

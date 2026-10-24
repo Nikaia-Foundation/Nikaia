@@ -1483,7 +1483,7 @@ grammar! {
             }
 
         rule fn_params_body -> FnParams =
-            r:receiver args:fn_arg_def_tail* config:config_zone? -> {
+            r:receiver args:fn_arg_def_tail* ","? config:config_zone? -> {
                 params_of(Some(r), args, config)
             }
           // **A signature whose parameters are all options writes no `;`**
@@ -1496,7 +1496,7 @@ grammar! {
           | config:bare_config_params -> {
                 params_of(None, Vec::new(), Some(ConfigZone::Options(config)))
             }
-          | head:fn_arg_def tail:fn_arg_def_tail* config:config_zone? -> {
+          | head:fn_arg_def tail:fn_arg_def_tail* ","? config:config_zone? -> {
                 let mut args = vec![head];
                 args.extend(tail);
                 params_of(None, args, config)
@@ -1532,7 +1532,7 @@ grammar! {
                 "A spread parameter is written `...name: Self::dsl`. `Self::dsl` is \
                  the only type it can have."
             ) -> { ConfigZone::Spread(name) }
-          | ";" head:config_param tail:config_param_tail* -> {
+          | ";" head:config_param tail:config_param_tail* ","? -> {
                 let mut params = vec![head];
                 params.extend(tail);
                 ConfigZone::Options(params)
@@ -1552,7 +1552,7 @@ grammar! {
         // *a configuration parameter needs a default* on every plain signature
         // that failed for some later reason.
         rule bare_config_params -> Vec<ConfigParam> =
-            head:bare_config_param tail:bare_config_param_tail* -> {
+            head:bare_config_param tail:bare_config_param_tail* ","? -> {
                 let mut params = vec![head];
                 params.extend(tail);
                 params
@@ -1808,8 +1808,10 @@ grammar! {
         rule fn_arg_list -> Vec<FnArg> =
             "(" args:fn_arg_defs? ")" -> { args.unwrap_or_default() }
 
+        // **A broken list ends in a `,`** (ADR-337 D1): one after the last
+        // parameter is allowed, as after the last argument of a call.
         rule fn_arg_defs -> Vec<FnArg> =
-            head:fn_arg_def tail:fn_arg_def_tail* -> {
+            head:fn_arg_def tail:fn_arg_def_tail* ","? -> {
                 let mut args = vec![head];
                 args.extend(tail);
                 args
@@ -3210,7 +3212,7 @@ grammar! {
             }
 
         rule call_args -> Vec<Expr> =
-            head:expr tail:call_args_tail* -> {
+            head:expr tail:call_args_tail* ","? -> {
                 let mut args = vec![head];
                 args.extend(tail);
                 args
@@ -3219,7 +3221,7 @@ grammar! {
         rule call_args_tail -> Expr = "," e:expr -> { e }
 
         rule config_args -> Vec<ConfigArg> =
-            ";" head:config_arg tail:config_arg_tail* -> {
+            ";" head:config_arg tail:config_arg_tail* ","? -> {
                 let mut args = vec![head];
                 args.extend(tail);
                 args

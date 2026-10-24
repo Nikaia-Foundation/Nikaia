@@ -1,0 +1,951 @@
+// `nikaia fmt` ([ADR-337](../../../../docs/specification/adr/adr-337.md),
+// Part III 13.2): the one style, laid out over the file's tokens.
+//
+// **Over the tokens, not the tree.** The tree keeps no parentheses, no
+// literal's spelling and no comment, and D3 changes none of them. So the
+// printer reads the text again as tokens, keeps every token as it is written,
+// and decides only what lies between them: the line ends, the indentation and
+// the blanks. The parser's list of comments (D2) is what tells a `//` in the
+// code from one inside a string or a `dsl` body.
+
+enum FmtKind {
+    Word,
+    // A string, an `f"…"` with its holes, a character.
+    Text,
+    // A `dsl` body, from its `{` through `} eod`, copied byte for byte (D3).
+    Verbatim,
+    Comment,
+    Open,
+    Close,
+    Punct,
+}
+
+struct FmtToken {
+    text: String,
+    kind: FmtKind,
+    // Whether blanks stood before it on its line.
+    spaced: bool,
+    // How many line ends stood before it.
+    breaks: i64,
+    width: i64,
+    // Whether it runs over more than one line; the lines after its first are
+    // its own and are copied as they are.
+    multi: bool,
+}
+
+struct FmtLine {
+    toks: Vec[FmtToken],
+    // Whether a blank line stood before it: one is kept, never more (D1).
+    blank: bool,
+}
+
+// The text as tokens, with the parser's comments in character indices.
+struct FmtLexer {
+    c: Vec[scalar],
+    at: i64,
+    starts: Vec[i64],
+    ends: Vec[i64],
+    next: i64,
+    tokens: Vec[FmtToken],
+}
+
+impl FmtLexer {
+    fn fmt_run(ref mut self) throws {
+        let mut breaks = 0
+        let mut spaced = false
+        while self.at < self.c.len() {
+            let c = self.c[self.at]
+            if c == '\n' {
+                breaks += 1
+                spaced = false
+                self.at += 1
+            } else if c.is_whitespace() {
+                spaced = true
+                self.at += 1
+            } else {
+                let start = self.at
+                let kind = self.fmt_scan()
+                if self.at > self.c.len() {
+                    throw Refused::Because(f"the text ends inside a token that starts at character {start}")
+                }
+                let mut text: String = ""
+                let mut multi = false
+                for k in start..<self.at {
+                    if self.c[k] == '\n' {
+                        multi = true
+                    }
+                    text.push(self.c[k])
+                }
+                self.tokens.push(FmtToken { text, kind, spaced, breaks, width: self.at - start, multi })
+                breaks = 0
+                spaced = false
+            }
+        }
+    }
+
+    fn fmt_ahead(ref self, k: i64) -> scalar sync {
+        if self.at + k < self.c.len() {
+            return self.c[self.at + k]
+        }
+        return ' '
+    }
+
+    fn fmt_scan(ref mut self) -> FmtKind throws {
+        while self.next < self.starts.len() && self.starts[self.next] < self.at {
+            self.next += 1
+        }
+        if self.next < self.starts.len() && self.starts[self.next] == self.at {
+            self.at = self.ends[self.next]
+            self.next += 1
+            return FmtKind::Comment
+        }
+        let c = self.c[self.at]
+        let d = self.fmt_ahead(1)
+        if c == '/' && (d == '/' || d == '*') {
+            let at = self.at
+            throw Refused::Because(f"a comment at character {at} that the parser did not see")
+        }
+        if c == '"' {
+            self.at += 1
+            self.fmt_quoted()
+            return FmtKind::Text
+        }
+        if c == 'f' && d == '"' {
+            self.at += 2
+            self.fmt_interpolated()
+            return FmtKind::Text
+        }
+        if c == '\'' && self.fmt_character() {
+            return FmtKind::Text
+        }
+        if c.is_alphanumeric() || c == '_' {
+            self.fmt_word()
+            return FmtKind::Word
+        }
+        if c == '{' && self.fmt_after_dsl() {
+            self.fmt_verbatim()
+            return FmtKind::Verbatim
+        }
+        if c == '(' || c == '[' || c == '{' {
+            self.at += 1
+            return FmtKind::Open
+        }
+        if c == ')' || c == ']' || c == '}' {
+            self.at += 1
+            return FmtKind::Close
+        }
+        self.at += fmt_punct_length(c, d, self.fmt_ahead(2))
+        return FmtKind::Punct
+    }
+
+    // A plain string, from after its opening quote through its closing one.
+    fn fmt_quoted(ref mut self) throws {
+        while self.at < self.c.len() {
+            let c = self.c[self.at]
+            if c == '\\' {
+                self.at += 2
+            } else {
+                self.at += 1
+                if c == '"' {
+                    return
+                }
+            }
+        }
+        throw Refused::Because("a string that is never closed")
+    }
+
+    // An `f"…"`, from after `f"`: `{{` and `}}` are braces, `\u{…}` an escape,
+    // and a `{` opens a hole of code.
+    fn fmt_interpolated(ref mut self) throws {
+        while self.at < self.c.len() {
+            let c = self.c[self.at]
+            let d = self.fmt_ahead(1)
+            if c == '\\' && d == 'u' && self.fmt_ahead(2) == '{' {
+                while self.at < self.c.len() && self.c[self.at] != '}' {
+                    self.at += 1
+                }
+                self.at += 1
+            } else if c == '\\' || (c == '{' && d == '{') || (c == '}' && d == '}') {
+                // An escape, or a doubled brace that stands for itself.
+                self.at += 2
+            } else if c == '{' {
+                self.at += 1
+                self.fmt_hole()
+            } else {
+                self.at += 1
+                if c == '"' {
+                    return
+                }
+            }
+        }
+        throw Refused::Because("an `f\"…\"` that is never closed")
+    }
+
+    // A hole's code up to its `}`: braces nest in it, and a string or a
+    // character in it is one.
+    fn fmt_hole(ref mut self) throws {
+        let mut depth = 0
+        while self.at < self.c.len() {
+            let c = self.c[self.at]
+            if c == '\'' && self.fmt_character() {
+                continue
+            }
+            self.at += 1
+            if c == '"' {
+                self.fmt_quoted()
+            } else if c == '{' {
+                depth += 1
+            } else if c == '}' {
+                if depth == 0 {
+                    return
+                }
+                depth -= 1
+            }
+        }
+        throw Refused::Because("a hole in an `f\"…\"` that is never closed")
+    }
+
+    // A character literal from its `'`, if one stands here.
+    fn fmt_character(ref mut self) -> bool sync {
+        let mut k = self.at + 1
+        if k < self.c.len() && self.c[k] == '\\' {
+            k += 2
+        } else {
+            k += 1
+        }
+        while k < self.c.len() && self.c[k] != '\'' && self.c[k] != '\n' {
+            k += 1
+        }
+        if k < self.c.len() && self.c[k] == '\'' {
+            self.at = k + 1
+            return true
+        }
+        return false
+    }
+
+    // A name, a keyword or a number, `1.5e-4` in one piece.
+    fn fmt_word(ref mut self) sync {
+        let first = self.c[self.at]
+        let digits = first >= '0' && first <= '9'
+        self.at += 1
+        while self.at < self.c.len() {
+            let c = self.c[self.at]
+            let d = self.fmt_ahead(1)
+            let digit_next = d >= '0' && d <= '9'
+            let exponent = (c == '+' || c == '-') && self.c[self.at - 1] == 'e'
+            if c.is_alphanumeric() || c == '_' || (digits && (c == '.' || exponent) && digit_next) {
+                self.at += 1
+            } else {
+                return
+            }
+        }
+    }
+
+    // Whether the tokens before a `{` are `dsl NAME` or `dsl NAME::NAME`.
+    fn fmt_after_dsl(ref self) -> bool sync {
+        let n = self.tokens.len()
+        if n < 2 || self.tokens[n - 1].kind != FmtKind::Word {
+            return false
+        }
+        if self.tokens[n - 2].text == "dsl" {
+            return true
+        }
+        return n >= 4 && self.tokens[n - 2].text == "::" && self.tokens[n - 4].text == "dsl"
+    }
+
+    // A `dsl` body from its `{` through `} eod`.
+    fn fmt_verbatim(ref mut self) throws {
+        let mut k = self.at + 1
+        while k + 4 < self.c.len() {
+            if self.c[k] == '}' && self.c[k + 1] == ' ' && self.c[k + 2] == 'e' && self.c[k + 3] == 'o' && self.c[k + 4] == 'd' {
+                self.at = k + 5
+                return
+            }
+            k += 1
+        }
+        throw Refused::Because("a `dsl` body without its `} eod`")
+    }
+}
+
+// How many characters the operator or mark starting with `c` takes.
+fn fmt_punct_length(c: scalar, d: scalar, e: scalar) -> i64 sync {
+    if c == '.' && d == '.' && (e == '<' || e == '=') {
+        return 3
+    }
+    let mut pair: String = ""
+    pair.push(c)
+    pair.push(d)
+    return match pair {
+        "::" | "->" | "=>" | "==" | "!=" | "<=" | ">=" | "&&" | "||" | "??" | "?." | ".." => 2
+        "+=" | "-=" | "*=" | "/=" | "%=" | "@=" | "<<" | ">>" | "|=" | "&=" | "^=" => 2
+        else => 1
+    }
+}
+
+// The tokens as they stand on the lines of the text.
+fn fmt_lines(tokens: ref Vec[FmtToken]) -> Vec[FmtLine] sync {
+    let mut lines: Vec[FmtLine] = []
+    let mut toks: Vec[FmtToken] = []
+    let mut blank = false
+    for t in tokens {
+        if t.breaks > 0 && toks.len() > 0 {
+            lines.push(FmtLine { toks, blank })
+            toks = []
+        }
+        if toks.len() == 0 {
+            blank = t.breaks > 1 && lines.len() > 0
+        }
+        toks.push(t.clone())
+    }
+    if toks.len() > 0 {
+        lines.push(FmtLine { toks, blank })
+    }
+    return lines
+}
+
+// A `{` on a line of its own goes up to the head it opens, and an `else` up to
+// the `}` before it (ADR-132 D2): `} else if cond {`.
+fn fmt_joined(lines: ref Vec[FmtLine]) -> Vec[FmtLine] sync {
+    let mut out: Vec[FmtLine] = []
+    for line in lines {
+        let n = out.len()
+        if n > 0 && !line.blank && fmt_joins(out[n - 1].toks, line.toks) {
+            for t in line.toks {
+                let mut moved = t.clone()
+                moved.spaced = true
+                moved.breaks = 0
+                out[n - 1].toks.push(moved)
+            }
+        } else {
+            out.push(line.clone())
+        }
+    }
+    return out
+}
+
+fn fmt_joins(before: ref Vec[FmtToken], line: ref Vec[FmtToken]) -> bool sync {
+    let last = before[before.len() - 1].clone()
+    if last.kind == FmtKind::Comment || last.multi {
+        return false
+    }
+    let first = line[0].clone()
+    if first.kind == FmtKind::Open && first.text == "{" {
+        return fmt_head(before[0].text.clone())
+    }
+    if first.text == "else" && first.kind == FmtKind::Word {
+        let arm = line.len() > 1 && line[1].text == "=>"
+        return !arm && last.kind == FmtKind::Close && last.text == "}"
+    }
+    return false
+}
+
+// The words a line starts with when a `{` that follows opens its body.
+fn fmt_head(word: String) -> bool sync {
+    return match word {
+        "fn" | "pub" | "if" | "else" | "for" | "while" | "loop" | "match" | "struct" | "enum" => true
+        "impl" | "trait" | "grammar" | "rule" | "entry" | "test" | "select" | "overlap" | "seq" => true
+        "extern" | "unsafe" | "async" | "mod" | "bench" | "frame" | "describe" | "}" => true
+        else => false
+    }
+}
+
+fn fmt_comment_only(line: ref FmtLine) -> bool sync {
+    for t in line.toks {
+        if t.kind != FmtKind::Comment {
+            return false
+        }
+    }
+    return true
+}
+
+// The index of a line's last token that is not a comment, or -1.
+fn fmt_last_code(toks: ref Vec[FmtToken]) -> i64 sync {
+    let mut k = toks.len()
+    while k > 0 {
+        k -= 1
+        if toks[k].kind != FmtKind::Comment {
+            return k
+        }
+    }
+    return -1
+}
+
+// Whether a blank goes before token `k`: as written, one for any run, and
+// always one before a trailing comment (D1: nothing is aligned).
+fn fmt_spaced(toks: ref Vec[FmtToken], k: i64) -> bool sync {
+    if k == 0 {
+        return false
+    }
+    return toks[k].spaced || (toks[k].kind == FmtKind::Comment && toks[k].text.starts_with("//"))
+}
+
+fn fmt_render(toks: ref Vec[FmtToken]) -> String sync {
+    let mut out: String = ""
+    for k in 0..<toks.len() {
+        if fmt_spaced(toks, k) {
+            out.push(' ')
+        }
+        out.push_str(toks[k].text)
+    }
+    return out
+}
+
+// The width of a line's code, without its trailing comment: a comment is
+// never re-wrapped, so it does not decide where the code breaks.
+fn fmt_code_width(toks: ref Vec[FmtToken]) -> i64 sync {
+    let last = fmt_last_code(toks)
+    let mut width = 0
+    for k in 0..<last + 1 {
+        if fmt_spaced(toks, k) {
+            width += 1
+        }
+        width += toks[k].width
+    }
+    return width
+}
+
+fn fmt_has_multi(toks: ref Vec[FmtToken]) -> bool sync {
+    for t in toks {
+        if t.multi {
+            return true
+        }
+    }
+    return false
+}
+
+fn fmt_slice(toks: ref Vec[FmtToken], from: i64, to: i64) -> Vec[FmtToken] sync {
+    let mut out: Vec[FmtToken] = []
+    for k in from..<to {
+        out.push(toks[k].clone())
+    }
+    return out
+}
+
+fn fmt_comma() -> FmtToken sync {
+    return FmtToken { text: ",", kind: FmtKind::Punct, spaced: false, breaks: 0, width: 1, multi: false }
+}
+
+// Each token's depth in brackets on its own line, an opening or closing
+// bracket at the depth around it; and which tokens are a closure's `|…|`.
+struct FmtShape {
+    depth: Vec[i64],
+    barred: Vec[bool],
+}
+
+fn fmt_shape(toks: ref Vec[FmtToken]) -> FmtShape sync {
+    let mut stack: Vec[String] = []
+    let mut under = 0
+    let mut bars = 0
+    let mut depth: Vec[i64] = []
+    let mut barred: Vec[bool] = []
+    for k in 0..<toks.len() {
+        let t = toks[k].clone()
+        let bar = t.kind == FmtKind::Punct && t.text == "|"
+        let top = (stack.last() ?? "").clone()
+        if t.kind == FmtKind::Close {
+            while stack.len() > 0 && (stack.last() ?? "") == "|" {
+                stack.pop()
+                bars -= 1
+            }
+            if stack.len() > 0 {
+                stack.pop()
+            } else {
+                under += 1
+            }
+            depth.push(stack.len() - under)
+            barred.push(bars > 0)
+        } else if bar && top == "|" {
+            stack.pop()
+            bars -= 1
+            depth.push(stack.len() - under)
+            barred.push(true)
+        } else {
+            depth.push(stack.len() - under)
+            if t.kind == FmtKind::Open {
+                stack.push(t.text.clone())
+                barred.push(bars > 0)
+            } else if bar && fmt_bar_opens(toks, k) {
+                stack.push("|")
+                bars += 1
+                barred.push(true)
+            } else {
+                barred.push(bars > 0)
+            }
+        }
+    }
+    return FmtShape { depth, barred }
+}
+
+// Whether a `|` here opens a closure's parameters rather than being an or.
+fn fmt_bar_opens(toks: ref Vec[FmtToken], k: i64) -> bool sync {
+    if k == 0 {
+        return true
+    }
+    let before = toks[k - 1].clone()
+    if before.kind == FmtKind::Open {
+        return true
+    }
+    if before.kind == FmtKind::Word {
+        return before.text == "return" || before.text == "move"
+    }
+    return match before.text {
+        "," | "=" | "=>" | ":" | "??" | "+=" => true
+        else => false
+    }
+}
+
+// The index of the bracket that closes the one at `k` on the same line, or -1.
+fn fmt_partner(toks: ref Vec[FmtToken], k: i64) -> i64 sync {
+    let mut depth = 0
+    for at in k..<toks.len() {
+        if toks[at].kind == FmtKind::Open {
+            depth += 1
+        } else if toks[at].kind == FmtKind::Close {
+            depth -= 1
+            if depth == 0 {
+                return at
+            }
+        }
+    }
+    return -1
+}
+
+// An operator that, ending a line, makes the next one go on with it.
+fn fmt_operator_ends(text: String) -> bool sync {
+    return match text {
+        "=" | "+" | "-" | "*" | "/" | "%" | "&&" | "||" | "==" | "!=" | "<" | ">" | "<=" | ">=" => true
+        "??" | "->" | "=>" | "|" | "&" | "^" | ".." | "..<" | "..=" | "+=" | "-=" | "*=" | "/=" => true
+        "%=" | "@=" | "." | "?." => true
+        else => false
+    }
+}
+
+// An operator that, starting a line, makes it go on with the one before.
+fn fmt_operator_starts(text: String) -> bool sync {
+    return match text {
+        "." | "?." | "??" | "+" | "-" | "*" | "/" | "%" | "&&" | "||" | "==" | "!=" | "<" | ">" => true
+        "<=" | ">=" | "->" | "=>" | "|" | "&" | "^" | ".." | "..<" | "..=" | "=" => true
+        else => false
+    }
+}
+
+// How loosely the binary operator at `k` binds, the loosest first; 0 if the
+// token is not one. A method call in a chain binds tightest of all.
+fn fmt_looseness(toks: ref Vec[FmtToken], k: i64) -> i64 sync {
+    let t = toks[k].clone()
+    if t.kind != FmtKind::Punct || k == 0 {
+        return 0
+    }
+    if t.text == "." || t.text == "?." {
+        let call = k + 2 < toks.len() && toks[k + 1].kind == FmtKind::Word && toks[k + 2].text == "("
+        if call {
+            return 7
+        }
+        return 0
+    }
+    let before = toks[k - 1].clone()
+    let operand = before.kind == FmtKind::Text || before.kind == FmtKind::Close || before.kind == FmtKind::Word
+    if !operand || fmt_leads(before.text) {
+        return 0
+    }
+    return match t.text {
+        "||" => 1
+        "&&" => 2
+        "==" | "!=" | "<" | ">" | "<=" | ">=" => 3
+        "??" => 4
+        "+" | "-" => 5
+        "*" | "/" | "%" => 6
+        else => 0
+    }
+}
+
+// A keyword after which an operator is a sign, not a binary one.
+fn fmt_leads(word: String) -> bool sync {
+    return match word {
+        "return" | "throw" | "in" | "if" | "while" | "match" | "else" | "break" | "yield" => true
+        else => false
+    }
+}
+
+struct FmtFrame {
+    open: String,
+    // The indentation of the lines inside it.
+    inner: i64,
+    // The commas written at its own depth so far: a list, where a broken last
+    // item takes one too.
+    commas: i64,
+}
+
+struct FmtPrinter {
+    frames: Vec[FmtFrame],
+    // The lines still to print, the next one last.
+    work: Vec[FmtLine],
+    // Comment lines, waiting for the indentation of the code they stand before.
+    held: Vec[FmtLine],
+    out: String,
+    // Whether the last line of code ended on an operator.
+    hanging: bool,
+    // The last token of the last line of code: `,`, an opening bracket, or
+    // nothing at the start, after which a leading operator is not one.
+    tail: String,
+    tail_kind: FmtKind,
+}
+
+impl FmtPrinter {
+    fn fmt_print(ref mut self) sync {
+        while self.work.len() > 0 {
+            let line = self.work.pop() ?? break
+            if fmt_comment_only(line) {
+                self.held.push(line)
+                continue
+            }
+            let indent = self.fmt_indent_of(line)
+            let pieces = self.fmt_reshape(line, indent)
+            if pieces.len() > 0 {
+                let mut k = pieces.len()
+                while k > 0 {
+                    k -= 1
+                    self.work.push(pieces[k].clone())
+                }
+                continue
+            }
+            let mut at = indent
+            if line.toks[0].kind == FmtKind::Close {
+                at = self.fmt_inner()
+            }
+            self.fmt_flush(at)
+            self.fmt_emit(line, indent)
+        }
+        let at = self.fmt_inner()
+        self.fmt_flush(at)
+    }
+
+    fn fmt_inner(ref self) -> i64 sync {
+        let n = self.frames.len()
+        if n == 0 {
+            return 0
+        }
+        return self.frames[n - 1].inner
+    }
+
+    fn fmt_indent_of(ref self, line: ref FmtLine) -> i64 sync {
+        let first = line.toks[0].clone()
+        let inner = self.fmt_inner()
+        if first.kind == FmtKind::Close {
+            if inner > 0 {
+                return inner - 1
+            }
+            return 0
+        }
+        if self.hanging {
+            return inner + 1
+        }
+        let after_item = self.tail == "," || self.tail == "" || self.tail == ";" || self.tail_kind == FmtKind::Open
+        if first.kind == FmtKind::Punct && fmt_operator_starts(first.text) && !after_item {
+            return inner + 1
+        }
+        return inner
+    }
+
+    // The comment lines held so far, at this indentation.
+    fn fmt_flush(ref mut self, indent: i64) sync {
+        let held = self.held.clone()
+        self.held = []
+        for line in held {
+            self.fmt_write(line, indent)
+        }
+    }
+
+    fn fmt_write(ref mut self, line: ref FmtLine, indent: i64) sync {
+        if line.blank && self.out.len() > 0 {
+            self.out.push('\n')
+        }
+        for k in 0..<indent {
+            self.out.push('\t')
+        }
+        self.out.push_str(fmt_render(line.toks))
+        self.out.push('\n')
+    }
+
+    fn fmt_emit(ref mut self, line: ref FmtLine, indent: i64) sync {
+        let shape = fmt_shape(line.toks)
+        for k in 0..<line.toks.len() {
+            let t = line.toks[k].clone()
+            if t.kind == FmtKind::Open {
+                self.frames.push(FmtFrame { open: t.text, inner: indent + 1, commas: 0 })
+            } else if t.kind == FmtKind::Close {
+                self.frames.pop()
+            } else if t.kind == FmtKind::Punct && t.text == "," && !shape.barred[k] && self.frames.len() > 0 {
+                let n = self.frames.len()
+                self.frames[n - 1].commas += 1
+            }
+        }
+        let last = fmt_last_code(line.toks)
+        let end = line.toks[last].clone()
+        let mut toks = line.toks.clone()
+        let n = self.frames.len()
+        if n > 0 && self.frames[n - 1].commas > 0 && self.fmt_next_closes() {
+            let open = end.kind == FmtKind::Open || end.text == "," || end.text == ";"
+            if !open && line.toks[0].text != ".." {
+                toks = fmt_slice(line.toks, 0, last + 1)
+                toks.push(fmt_comma())
+                for k in last + 1..<line.toks.len() {
+                    toks.push(line.toks[k].clone())
+                }
+            }
+        }
+        let glob = end.text == "*" && last > 0 && line.toks[last - 1].text == "::"
+        self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(end.text.clone()) && !glob
+        self.tail = end.text.clone()
+        self.tail_kind = end.kind
+        self.fmt_write(FmtLine { toks, blank: line.blank }, indent)
+    }
+
+    // Whether the next line of code closes the bracket open now.
+    fn fmt_next_closes(ref self) -> bool sync {
+        let mut k = self.work.len()
+        while k > 0 {
+            k -= 1
+            if !fmt_comment_only(self.work[k]) {
+                return self.work[k].toks[0].kind == FmtKind::Close
+            }
+        }
+        return false
+    }
+
+    // The line in pieces, if it has to change: a `;` goes (D1), and a line
+    // over 100 columns is broken after its commas, at its last bracket that
+    // holds a list or a block, or before its loosest operators. Each piece
+    // comes back through here, so a piece too long is broken again.
+    fn fmt_reshape(ref self, line: ref FmtLine, indent: i64) -> Vec[FmtLine] sync {
+        let toks = line.toks.clone()
+        let n = toks.len()
+        let last = fmt_last_code(toks)
+        let mut opens: Vec[i64] = []
+        let mut kinds: Vec[String] = []
+        for f in self.frames {
+            opens.push(-1)
+            kinds.push(f.open.clone())
+        }
+        for k in 0..<n {
+            let t = toks[k].clone()
+            if t.kind == FmtKind::Open {
+                opens.push(k)
+                kinds.push(t.text.clone())
+            } else if t.kind == FmtKind::Close {
+                if opens.len() > 0 {
+                    opens.pop()
+                    kinds.pop()
+                }
+            } else if t.kind == FmtKind::Punct && t.text == ";" {
+                let m = kinds.len()
+                if m == 0 || kinds[m - 1] == "{" {
+                    let mut at = -1
+                    if m > 0 {
+                        at = opens[m - 1]
+                    }
+                    if k == last {
+                        let mut kept = fmt_slice(toks, 0, k)
+                        for j in k + 1..<n {
+                            kept.push(toks[j].clone())
+                        }
+                        return [FmtLine { toks: kept, blank: line.blank }]
+                    }
+                    if at < 0 {
+                        return [FmtLine { toks: fmt_slice(toks, 0, k), blank: line.blank }, FmtLine { toks: fmt_slice(toks, k + 1, n), blank: false }]
+                    }
+                    let close = fmt_partner(toks, at)
+                    if close < 0 {
+                        return [FmtLine { toks: fmt_slice(toks, 0, at + 1), blank: line.blank }, FmtLine { toks: fmt_slice(toks, at + 1, n), blank: false }]
+                    }
+                    return fmt_broken(line, at, close)
+                }
+            }
+        }
+        if fmt_has_multi(toks) || indent * 4 + fmt_code_width(toks) <= 100 {
+            return []
+        }
+        let shape = fmt_shape(toks)
+        let mut cuts: Vec[i64] = []
+        if self.frames.len() > 0 {
+            for k in 0..<last {
+                if toks[k].kind == FmtKind::Punct && toks[k].text == "," && shape.depth[k] == 0 {
+                    cuts.push(k + 1)
+                }
+            }
+        }
+        if cuts.len() > 0 {
+            return fmt_cut(line, cuts)
+        }
+        // The loosest operators outside any bracket first, then the last
+        // bracket that holds a list or a block, and a chain of method calls
+        // last: a call's arguments go apart before the calls do.
+        let loosest = fmt_loosest(toks, shape, last)
+        if loosest > 0 && loosest < 7 {
+            return fmt_cut(line, fmt_operators(toks, shape, last, loosest))
+        }
+        // A line that opens a block breaks its first group, a signature's
+        // parameters before its result type; any other line its last.
+        let mut first = toks[last].text == "{"
+        for k in 0..<last {
+            if toks[k].text == "->" && shape.depth[k] == 0 {
+                first = true
+            }
+        }
+        let mut group = -1
+        let mut close = -1
+        let mut k = 0
+        while k < n {
+            if toks[k].kind == FmtKind::Open {
+                let m = fmt_partner(toks, k)
+                if m > k + 1 && fmt_sealed(toks, k, m) {
+                    k = m
+                } else if m > k + 1 && fmt_breakable(toks, shape, k, m) && (group < 0 || !first) {
+                    group = k
+                    close = m
+                    k = m
+                }
+            }
+            k += 1
+        }
+        if group >= 0 {
+            return fmt_broken(line, group, close)
+        }
+        let calls = fmt_operators(toks, shape, last, 7)
+        if loosest == 0 || calls.len() < 2 {
+            return []
+        }
+        return fmt_cut(line, calls)
+    }
+}
+
+// How loosely the loosest binary operator outside any bracket binds, 0 if
+// there is none.
+fn fmt_loosest(toks: ref Vec[FmtToken], shape: ref FmtShape, last: i64) -> i64 sync {
+    let mut loosest = 0
+    for k in 1..<last + 1 {
+        let level = fmt_looseness(toks, k)
+        if shape.depth[k] == 0 && level > 0 && (loosest == 0 || level < loosest) {
+            loosest = level
+        }
+    }
+    return loosest
+}
+
+// Where the operators of this looseness outside any bracket stand.
+fn fmt_operators(toks: ref Vec[FmtToken], shape: ref FmtShape, last: i64, level: i64) -> Vec[i64] sync {
+    let mut cuts: Vec[i64] = []
+    for k in 1..<last + 1 {
+        if shape.depth[k] == 0 && fmt_looseness(toks, k) == level {
+            cuts.push(k)
+        }
+    }
+    return cuts
+}
+
+// Whether the brackets at `open` and `close` hold what may go one per line: a
+// block, or a list with a comma (one without could be a parenthesis, which
+// a trailing comma would make a tuple).
+// Whether a bracket stays on its line with all it holds: type arguments and
+// an index, a tuple type, and a pattern, whose fields take no trailing comma.
+fn fmt_sealed(toks: ref Vec[FmtToken], open: i64, close: i64) -> bool sync {
+    if toks[open].text == "[" && open > 0 && toks[open - 1].kind == FmtKind::Word {
+        return true
+    }
+    if toks[open].text == "(" && open > 0 && (toks[open - 1].text == "->" || toks[open - 1].text == ":") {
+        return true
+    }
+    if close + 1 >= toks.len() {
+        return false
+    }
+    let after = toks[close + 1].text.clone()
+    return after == "=>" || after == "|" || after == "=" || after == "in"
+}
+
+fn fmt_breakable(toks: ref Vec[FmtToken], shape: ref FmtShape, open: i64, close: i64) -> bool sync {
+    if fmt_sealed(toks, open, close) {
+        return false
+    }
+    if toks[open].text == "{" {
+        return true
+    }
+    for k in open + 1..<close {
+        if toks[k].kind == FmtKind::Punct && toks[k].text == "," && shape.depth[k] == shape.depth[open] + 1 {
+            return true
+        }
+    }
+    return false
+}
+
+// The line cut before each of these token indices.
+fn fmt_cut(line: ref FmtLine, cuts: ref Vec[i64]) -> Vec[FmtLine] sync {
+    let mut pieces: Vec[FmtLine] = []
+    let mut from = 0
+    for at in cuts {
+        pieces.push(FmtLine { toks: fmt_slice(line.toks, from, at), blank: line.blank && from == 0 })
+        from = at
+    }
+    pieces.push(FmtLine { toks: fmt_slice(line.toks, from, line.toks.len()), blank: line.blank && from == 0 })
+    return pieces
+}
+
+// The brackets at `open` and `close` broken: what is inside one item per line,
+// split at its commas and, in a block, at its `;`. A list's last item takes a
+// comma too (D1), unless it is a `..` rest.
+fn fmt_broken(line: ref FmtLine, open: i64, close: i64) -> Vec[FmtLine] sync {
+    let toks = line.toks.clone()
+    let shape = fmt_shape(toks)
+    let inside = shape.depth[open] + 1
+    let block = toks[open].text == "{"
+    let mut pieces: Vec[FmtLine] = [FmtLine { toks: fmt_slice(toks, 0, open + 1), blank: line.blank }]
+    let mut items: Vec[Vec[FmtToken]] = []
+    let mut item: Vec[FmtToken] = []
+    let mut listed = false
+    for k in open + 1..<close {
+        let t = toks[k].clone()
+        let level = t.kind == FmtKind::Punct && shape.depth[k] == inside
+        if level && t.text == "," {
+            item.push(t)
+            items.push(item)
+            item = []
+            listed = true
+        } else if level && block && t.text == ";" {
+            if item.len() > 0 {
+                items.push(item)
+            }
+            item = []
+        } else {
+            item.push(t)
+        }
+    }
+    if item.len() > 0 {
+        items.push(item)
+    }
+    for each in items {
+        let mut toks_of = each.clone()
+        let end = toks_of[toks_of.len() - 1].clone()
+        if listed && end.text != "," && toks_of[0].text != ".." {
+            toks_of.push(fmt_comma())
+        }
+        pieces.push(FmtLine { toks: toks_of, blank: false })
+    }
+    pieces.push(FmtLine { toks: fmt_slice(toks, close, toks.len()), blank: false })
+    return pieces
+}
+
+/// The text in the one style (ADR-337 D1), its comments at these character
+/// ranges: the ones the parser found, in order (D2).
+pub fn fmt_source(source: String, starts: Vec[i64], ends: Vec[i64]) -> String throws {
+    let mut lexer = FmtLexer { c: source.chars().collect(), at: 0, starts, ends, next: 0, tokens: [] }
+    lexer.fmt_run()
+    let lines = fmt_joined(fmt_lines(lexer.tokens))
+    let mut work: Vec[FmtLine] = []
+    let mut k = lines.len()
+    while k > 0 {
+        k -= 1
+        work.push(lines[k].clone())
+    }
+    let mut printer = FmtPrinter { frames: [], work, held: [], out: "", hanging: false, tail: "", tail_kind: FmtKind::Open }
+    printer.fmt_print()
+    return printer.out
+}
