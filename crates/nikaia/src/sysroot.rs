@@ -1453,7 +1453,7 @@ mod tests {
             compiler: Some("iface-test".into()),
         };
         std::fs::write(&b, "fn ifb_two(x: i64) -> i64 sync { ifa_one(x) + 2 }\n").unwrap();
-        let mut run = |a_text: &str| -> usize {
+        let run = |a_text: &str| -> usize {
             std::fs::write(&a, a_text).unwrap();
             let mut reused = 0;
             lower_tools_files_cached(
