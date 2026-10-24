@@ -479,3 +479,5 @@ chunk 2 once #814 and #816 are built, then R-6 the `visit_*` walkers of
 #813 built (d7164ae0) and closed; #818 (a parameter handed to a method on
 `self` counted as kept; least fixpoint over the impl's methods) now blocks
 #811's last step, and also carries #813's loosening to read-only arguments.
+R-5 built: the free functions of `contracts/mod.rs` are in `tools/ledger_defaults.nika`
+(`apply_attribute`, `set_default`, `write_result_sources` with per-unit callbacks) after #816.

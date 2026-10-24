@@ -82,3 +82,61 @@ pub fn computed_options(item: &Item) -> Vec<i64> {
     places
 }
 
+pub fn apply_attribute(ledger: &mut Ledger, owner: &str, kind: i64, at: i64, text: String) {
+    let entry = match nikaia_std::index::get_mut(&mut ledger.types, owner) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if kind == 0 { entry.attributes.push(text); } else if kind == 1 { if at < entry.fields.len() as i64 { entry.fields[nikaia_std::index::at(at)].attributes.push(text); } } else if at < entry.variants.len() as i64 { entry.variants[nikaia_std::index::at(at)].attributes.push(text); }
+}
+
+pub fn set_default(ledger: &mut Ledger, key: &str, at: i64, field: bool, text: String) {
+    if field {
+        let entry = match nikaia_std::index::get_mut(&mut ledger.types, key) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if at < entry.fields.len() as i64 { entry.fields[nikaia_std::index::at(at)].default = text; }
+    } else {
+        let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut signature = match match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return };
+        if at < signature.config.len() as i64 {
+            signature.config[nikaia_std::index::at(at)].default = text;
+            contract.signature = Some(signature);
+        }
+    }
+}
+
+pub(crate) fn ld_columns(ledger: &Ledger) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for (_, contract) in ledger.functions.iter() {
+        let borrows = contract.borrows.join("\n");
+        let stores = contract.stores.join("\n");
+        out.push(format!("{} | {} | {}", borrows, contract.returns, stores));
+    }
+    out
+}
+
+pub fn write_result_sources(ledger: &mut Ledger, units: i64, sources: &impl Fn(i64, &Ledger) -> Vec<ResultSource>, stored: &impl Fn(i64, &Ledger) -> Vec<PlacesStored>) {
+    let mut before = ld_columns(&ledger);
+    for round in 0..8 {
+        if round > 0 {
+            let after = ld_columns(&ledger);
+            if after == before { break; }
+            before = after;
+        }
+        let mut fresh: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+        for unit in 0..units {
+            for source in sources(unit, &ledger) {
+                let contract = match nikaia_std::index::get_mut(&mut ledger.functions, &source.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                contract.borrows = source.borrows;
+                contract.returns = source.returns;
+            }
+            for kept in stored(unit, &ledger) { fresh.insert(kept.key, kept.stores); }
+        }
+        let mut keys: Vec<String> = vec![];
+        for (key, _) in ledger.functions.iter() { keys.push(key.to_owned()); }
+        for key in keys.iter() {
+            let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            contract.stores = nikaia_std::index::or(fresh.remove(key), || vec![].into());
+        }
+    }
+}
+

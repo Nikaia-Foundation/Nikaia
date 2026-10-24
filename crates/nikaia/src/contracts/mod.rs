@@ -1012,45 +1012,14 @@ pub const PARSE_ERROR: &str = "ParseError";
 /// its unit has been (the first pass reads the declaration's list, which only
 /// ever says more).
 fn write_result_sources(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
-    // What a round reads of the columns it writes, to tell a round that would
-    // change nothing: where `borrows`, `returns` and `stores` are what the
-    // round before read, the next would write the same again (#727). A
-    // round reads the `stores` the one before wrote, so a place kept through
-    // a chain of calls settles one call further each round (#740).
-    let written = |ledger: &Ledger| -> Vec<(Vec<String>, String, Vec<String>)> {
-        ledger
-            .functions
-            .values()
-            .map(|c| (c.borrows.clone(), c.returns.clone(), c.stores.clone()))
-            .collect()
-    };
-    let mut before = written(ledger);
-    for round in 0..8 {
-        if round > 0 {
-            let after = written(ledger);
-            if after == before {
-                break;
-            }
-            before = after;
-        }
-        let mut fresh: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for parsed in units.iter().copied() {
-            let sources = crate::views::result_sources(parsed, ledger, library);
-            for source in sources {
-                if let Some(contract) = ledger.functions.get_mut(&source.key) {
-                    contract.borrows = source.borrows;
-                    contract.returns = source.returns;
-                }
-            }
-            // **And what it keeps in a `mut` parameter's place** (D27).
-            for stored in crate::views::places_stored(parsed, ledger, library) {
-                fresh.insert(stored.key, stored.stores);
-            }
-        }
-        for (key, contract) in ledger.functions.iter_mut() {
-            contract.stores = fresh.remove(key).unwrap_or_default();
-        }
-    }
+    // The rounds are in Nikaia (`tools/ledger_defaults.nika`, ADR-294, #125);
+    // the analyses of one unit stay here.
+    nikaia_std::tools::ledger_defaults::write_result_sources(
+        ledger,
+        units.len() as i64,
+        &|unit, own| crate::views::result_sources(units[unit as usize], own, library),
+        &|unit, own| crate::views::places_stored(units[unit as usize], own, library),
+    );
 }
 
 /// The one parameter every grammar entry takes: the text to parse
@@ -1111,23 +1080,6 @@ struct Computed<'a> {
     /// A struct's field rather than a function's option (ADR-331 D5): `key`
     /// is the type and `at` the field's place.
     field: bool,
-}
-
-/// Where a computed default's text goes in the ledger.
-fn default_slot<'l>(ledger: &'l mut Ledger, computed: &Computed<'_>) -> Option<&'l mut String> {
-    match computed.field {
-        true => ledger
-            .types
-            .get_mut(&computed.key)
-            .and_then(|t| t.fields.get_mut(computed.at))
-            .map(|f| &mut f.default),
-        false => ledger
-            .functions
-            .get_mut(&computed.key)
-            .and_then(|c| c.signature.as_mut())
-            .and_then(|s| s.config.get_mut(computed.at))
-            .map(|option| &mut option.default),
-    }
 }
 
 /// The options of `item` whose default is an expression to evaluate.
@@ -1228,17 +1180,12 @@ fn attribute_values(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
         }
     }
     for (owner, at, text) in found {
-        let Some(entry) = ledger.types.get_mut(&owner) else {
-            continue;
+        let (kind, place) = match at {
+            At::Type => (0, 0),
+            At::Field(at) => (1, at as i64),
+            At::Variant(at) => (2, at as i64),
         };
-        let held = match at {
-            At::Type => Some(&mut entry.attributes),
-            At::Field(at) => entry.fields.get_mut(at).map(|f| &mut f.attributes),
-            At::Variant(at) => entry.variants.get_mut(at).map(|v| &mut v.attributes),
-        };
-        if let Some(held) = held {
-            held.push(text);
-        }
+        nikaia_std::tools::ledger_defaults::apply_attribute(ledger, &owner, kind, place, text);
     }
 }
 
@@ -1273,9 +1220,7 @@ fn evaluate_defaults(
         )
         .filter(|_| !computed.field)
         {
-            if let Some(slot) = default_slot(ledger, computed) {
-                *slot = text;
-            }
+            set_default(ledger, computed, text);
             continue;
         }
         let ty = crate::contracts::ty::Ty::from_ast(computed.parsed, computed.ty);
@@ -1289,10 +1234,19 @@ fn evaluate_defaults(
         ) else {
             continue;
         };
-        if let Some(slot) = default_slot(ledger, computed) {
-            *slot = text;
-        }
+        set_default(ledger, computed, text);
     }
+}
+
+/// Where a computed default's text goes in the ledger (`tools/ledger_defaults.nika`).
+fn set_default(ledger: &mut Ledger, computed: &Computed<'_>, text: String) {
+    nikaia_std::tools::ledger_defaults::set_default(
+        ledger,
+        &computed.key,
+        computed.at as i64,
+        computed.field,
+        text,
+    );
 }
 
 /// **A build-time value as the literal the ledger records** (ADR-318 D1-D3):

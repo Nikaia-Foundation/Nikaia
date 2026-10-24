@@ -3,10 +3,11 @@
 // **What the ledger writes beyond an item's signature**, moved from the
 // compiler's `contracts` module (ADR-294, #125, R-5): the value of one
 // attribute (ADR-331 D6, D8) and the options whose default is an expression to
-// evaluate (ADR-318 D1). What stays Rust is what asks the workshop (a callback)
-// and the three writes into the ledger behind `let mut x = m[k] ?? continue`,
-// which lowers to a shared borrow until #816 is built (`attribute_values`'s
-// apply loop, `default_slot`, `write_result_sources`).
+// evaluate (ADR-318 D1), and the writes into the ledger of both and of each
+// function's result sources (R-5). What stays Rust is what asks the workshop,
+// which arrives as a callback.
+
+use std::collections
 
 /// The type contract a name reaches: this package's, or a dependency's by the
 /// name the program writes.
@@ -112,4 +113,84 @@ pub fn computed_options(item: ref Item) -> Vec[i64] {
         else => {},
     }
     return places
+}
+
+/// Where each attribute value goes: the type itself (0), a field (1) or a
+/// variant (2), by its place.
+pub fn apply_attribute(mut ledger: Ledger, owner: ref String, kind: i64, at: i64, text: String) {
+    let mut entry = ledger.types[owner] ?? return
+    if kind == 0 {
+        entry.attributes.push(text)
+    } else if kind == 1 {
+        if at < entry.fields.len() {
+            entry.fields[at].attributes.push(text)
+        }
+    } else if at < entry.variants.len() {
+        entry.variants[at].attributes.push(text)
+    }
+}
+
+/// Writes a computed default's text where it goes: a struct's field (`field`,
+/// `key` is the type) or a function's option.
+pub fn set_default(mut ledger: Ledger, key: ref String, at: i64, field: bool, text: String) {
+    if field {
+        let mut entry = ledger.types[key] ?? return
+        if at < entry.fields.len() {
+            entry.fields[at].default = text
+        }
+    } else {
+        let mut contract = ledger.functions[key] ?? return
+        let mut signature = contract.signature?.clone() ?? return
+        if at < signature.config.len() {
+            signature.config[at].default = text
+            contract.signature = signature
+        }
+    }
+}
+
+/// What a round reads of the columns it writes, one text per function.
+fn ld_columns(ledger: ref Ledger) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for (_, contract) in ledger.functions {
+        let borrows = contract.borrows.join("\n")
+        let stores = contract.stores.join("\n")
+        out.push(f"{borrows} | {contract.returns} | {stores}")
+    }
+    return out
+}
+
+/// What each function's result points into, and what it keeps in a `mut`
+/// parameter's place (ADR-283 D25, D27, #580): rounds until a round would
+/// write what the one before read (#727, #740), at most eight. `sources` and
+/// `stored` ask the workshop for one unit by its place.
+pub fn write_result_sources(mut ledger: Ledger, units: i64, sources: fn(i64, ref Ledger) -> Vec[ResultSource] sync, stored: fn(i64, ref Ledger) -> Vec[PlacesStored] sync) {
+    let mut before = ld_columns(ledger)
+    for round in 0..<8 {
+        if round > 0 {
+            let after = ld_columns(ledger)
+            if after == before {
+                break
+            }
+            before = after
+        }
+        let mut fresh: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+        for unit in 0..<units {
+            for source in sources(unit, ledger) {
+                let mut contract = ledger.functions[source.key] ?? continue
+                contract.borrows = source.borrows
+                contract.returns = source.returns
+            }
+            for kept in stored(unit, ledger) {
+                fresh.insert(kept.key, kept.stores)
+            }
+        }
+        let mut keys: Vec[String] = []
+        for (key, _) in ledger.functions {
+            keys.push(key.clone())
+        }
+        for key in keys {
+            let mut contract = ledger.functions[key] ?? continue
+            contract.stores = fresh.remove(key) ?? []
+        }
+    }
 }
