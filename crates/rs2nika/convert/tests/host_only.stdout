@@ -1,0 +1,13 @@
+fn outer[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, a: ref String) -> bool sync {
+    inner(state, world, host, a)
+    return leaf(state, world, a)
+}
+
+fn inner[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, a: ref String) sync {
+    let _ = state.nikaia(fn(state, world, host) { run(state, world, host, a) })
+}
+
+fn leaf(state: ref CheckState, world: ref CheckWorld, a: ref String) -> bool sync {
+    return a.is_empty()
+}
+

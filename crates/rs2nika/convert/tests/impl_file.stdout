@@ -1,0 +1,16 @@
+use std::collections
+
+pub fn top(x: ref String) -> bool {
+    return x.is_empty()
+}
+
+fn walk(mut state: CheckState, world: ref CheckWorld, a: ref String) -> bool sync {
+    note(state, world, a)
+    state.errors += 1; state.host().x()
+    return a.is_empty()
+}
+
+fn note(state: ref CheckState, world: ref CheckWorld, a: ref String) sync {
+    let _ = a
+}
+

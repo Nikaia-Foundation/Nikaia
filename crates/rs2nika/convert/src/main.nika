@@ -45,6 +45,7 @@ struct Rs2nikaCtx {
     equiv_to: Vec[String],
     todo_extra: Vec[String],
     arity: Vec[String],
+    host_fns: Vec[String],
 }
 
 /// The rules, as `--rules` prints them.
@@ -134,6 +135,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R69  a Rust name Nikaia reserves (`grammar`, `throws`, `with`, ..) -> `name_`",
         "R83  profile `check-free` / `emit-free`: a method is a free function, `self` is `state`: `ref self` -> `state: ref CheckState`, `ref mut self` -> `mut state: CheckState`, then `world: ref CheckWorld`, `host: ref H` and the generic `[H: CheckHost]`; `self.m(a)` -> `m(state, world, host, a)`, `self.x` -> `state.x`",
         "R84  `-free` profiles: `let mut x = \"..\"` / `String::new()` -> `let mut x: String = ..`, `let mut n = 0` -> `let mut n: i64 = 0`",
+        "R87  `-free` profiles: the `impl Checker { .. }` shell goes (methods dedented), and the methods of that `impl` are not hoisted as nested functions (R51), also in `--file`",
+        "R88  `-free` profiles: `host: ref H` and the generic `[H: CheckHost]` only on a method whose text names `host`, calls `self.s.m(..)`, or calls (`self.m(`) one that does; its calls pass `host` only to those",
         "R85  `-free` profiles: a function with no `self` is not marked `sync` (it threads no state, it does not pause)",
         "R86  `let v = xs.iter().find(|x| c)` / `.find_map(|x| e)` (also after `return`, or as the tail) -> a `for` loop with `break` / `return`, a closure block's `return None` -> `continue`",
         "R82  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
@@ -605,7 +608,7 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: ref String) -> String {
             withw.push(o.clone())
             if i == 0 {
                 withw.push(w.clone())
-                if ctx.free {
+                if ctx.free && rs2nika_has(ctx.host_fns, name0) {
                     withw.push("host: ref H")
                 }
             }
@@ -613,7 +616,7 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: ref String) -> String {
         }
         out = withw
         rs2nika_hit(ctx, "R33")
-        if ctx.free {
+        if ctx.free && rs2nika_has(ctx.host_fns, name0) {
             // R83: the host the state threads is a generic of the function
             let host_ty = ctx.world.replace("World", "Host")
             if gen == "" {
@@ -1810,7 +1813,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
             let n2 = rs2nika_renamed(ctx, m)
             let mut s3: String = rs2nika_self_call(s, m, n2)
             if ctx.free {
-                s3 = rs2nika_state_call(s, m, n2)
+                s3 = rs2nika_state_call(s, m, n2, rs2nika_has(ctx.host_fns, m))
             }
             if !rs2nika_same(s3, s) {
                 rs2nika_hit(ctx, "R33")
@@ -2286,7 +2289,11 @@ fn rs2nika_self_call(s: ref String, m: ref String, n2: ref String) -> String {
 }
 
 /// R83: `self.m(a)` -> `m2(state, world, host, a)`, `self.m()` -> `m2(state, world, host)`.
-fn rs2nika_state_call(s: ref String, m: ref String, n2: ref String) -> String {
+fn rs2nika_state_call(s: ref String, m: ref String, n2: ref String, host: bool) -> String {
+    let mut passed = "(state, world, host, "
+    if !host {
+        passed = "(state, world, "
+    }
     let c: Vec[scalar] = s.chars().collect()
     let pat = f"self.{m}("
     let mut out: String = ""
@@ -2295,16 +2302,68 @@ fn rs2nika_state_call(s: ref String, m: ref String, n2: ref String) -> String {
         let i = rs2nika_find_from(c, pat, at)
         if i < 0 {
             out.push_str(rs2nika_text(c, at, c.len()))
-            return out.replace("(state, world, host, )", "(state, world, host)")
+            return out.replace("(state, world, host, )", "(state, world, host)").replace("(state, world, )", "(state, world)")
         }
         out.push_str(rs2nika_text(c, at, i))
-        out.push_str(f"{n2}(state, world, host, ")
+        out.push_str(f"{n2}{passed}")
         at = i + pat.chars().count()
         while at < c.len() && (c[at] == ' ' || c[at] == '\t') {
             at = at + 1
         }
     }
-    return out.replace("(state, world, host, )", "(state, world, host)")
+    return out.replace("(state, world, host, )", "(state, world, host)").replace("(state, world, )", "(state, world)")
+}
+
+/// R83: the methods of the input that need the host: their text names `host`,
+/// or they call (`self.m(`) one that does. The others take no `host`.
+fn rs2nika_host_fns(mut ctx: Rs2nikaCtx, src: ref String) {
+    let mut cur: String = ""
+    let mut edges: Vec[String] = []
+    for raw in src.split("\n") {
+        let name = rs2nika_fn_name(raw)
+        if name != "" {
+            if rs2nika_takes_self(raw) {
+                cur = name.clone()
+            } else if rs2nika_indent(raw).len() <= 4 {
+                cur = ""
+            }
+        }
+        if cur == "" {
+            continue
+        }
+        // `fn host(` and `self.host(` name the method, not the parameter
+        let body: String = raw.replace("self.host(", "self.\u{a7}(").replace("fn host(", "fn \u{a7}(").replace("host::", "\u{a7}::")
+        if (rs2nika_replace_word(body, "host", "\u{a7}") != body || raw.contains("self.s.")) && !rs2nika_has(ctx.host_fns, cur) {
+            ctx.host_fns.push(cur.clone())
+        }
+        for m in ctx.methods.clone() {
+            if raw.contains(f"self.{m}(") {
+                edges.push(f"{cur}>{m}")
+            }
+        }
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for e in edges.clone() {
+            let parts = e.split(">").collect()
+            let a: String = parts[0].clone()
+            let b: String = parts[1].clone()
+            if rs2nika_has(ctx.host_fns, b) && !rs2nika_has(ctx.host_fns, a) {
+                ctx.host_fns.push(a.clone())
+                changed = true
+            }
+        }
+    }
+}
+
+fn rs2nika_has(names: ref Vec[String], name: ref String) -> bool {
+    for n in names {
+        if n == name {
+            return true
+        }
+    }
+    return false
 }
 
 /// The parameters of a signature line contain `self`.
@@ -3757,7 +3816,7 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
     } else if profile == "emit" {
         world = "EmitWorld"
     }
-    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [] }
+    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [] }
     if repo != "" {
         rs2nika_load(ctx, repo)
     }
@@ -3775,6 +3834,9 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
                 ctx.renamed_to.push(f"{prefix}{name}")
             }
         }
+    }
+    if free {
+        rs2nika_host_fns(ctx, src)
     }
     let typed = rs2nika_typed_closures(ctx, lines, facts)
     let inlined = rs2nika_inline_closures(ctx, typed)
@@ -3909,7 +3971,10 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
             }
         }
     }
-    let armed = out.clone()
+    let mut armed = out.clone()
+    if ctx.free {
+        armed = rs2nika_unimpl(ctx, out)
+    }
     let done = rs2nika_tail_returns(ctx, armed)
     let text = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
     let mut missing: Vec[String] = []
@@ -4239,12 +4304,17 @@ fn rs2nika_hoist(mut ctx: Rs2nikaCtx, lines: ref Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut moved: Vec[String] = []
     let mut depth = 0
+    let mut in_impl = false
     let mut i = 0
     while i < lines.len() {
         let l: String = lines[i].clone()
         let ind = rs2nika_indent(l)
         let st: String = l.trim().clone()
-        if depth > 0 && ind != "" && st.starts_with("fn ") {
+        if depth == 0 {
+            // the methods of the state's `impl` are not nested functions
+            in_impl = (st.starts_with("impl ") || st.starts_with("impl<")) && !st.contains(" for ") && (rs2nika_replace_word(st, "Checker", "\u{a7}") != st || rs2nika_replace_word(st, "Emitter", "\u{a7}") != st)
+        }
+        if depth > 0 && !(in_impl && depth == 1) && ind != "" && st.starts_with("fn ") {
             let close: String = f"{ind}}}"
             let mut j = i + 1
             while j < lines.len() && lines[j].trim_end() != close {
@@ -4498,6 +4568,38 @@ fn rs2nika_close_iflet(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
         ctx.stack_kind.pop()
     }
     return []
+}
+
+/// R83: under a `-free` profile the `impl CheckState { .. }` shell goes: its
+/// methods are free functions, dedented one level.
+fn rs2nika_unimpl(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut i = 0
+    while i < given.len() {
+        let l: String = given[i].clone()
+        let st: String = l.trim().clone()
+        if st == "impl CheckState {" || st == "impl EmitState {" {
+            let ind = rs2nika_indent(l)
+            let close: String = f"{ind}}}"
+            let inner: String = f"{ind}    "
+            let mut j = i + 1
+            while j < given.len() && given[j].trim_end() != close {
+                let x: String = given[j].clone()
+                if rs2nika_starts(x, inner) {
+                    out.push((x.bytes[inner.len()..].text() catch { "" }).clone())
+                } else {
+                    out.push(x.clone())
+                }
+                j = j + 1
+            }
+            rs2nika_hit(ctx, "R83")
+            i = j + 1
+            continue
+        }
+        out.push(l.clone())
+        i = i + 1
+    }
+    return out
 }
 
 /// R44: a whole tools file: `use std::collections`, free items at the top

@@ -261,6 +261,12 @@ touches = []
 views = ["c: borrowed"]
 signature = "(c: ref Vec[scalar], from: i64) -> i64"
 
+[fn."rs2nika_has"]
+sync = "inferred"
+touches = []
+views = ["names: borrowed", "name: borrowed"]
+signature = "(names: ref Vec[String], name: ref String) -> bool"
+
 [fn."rs2nika_hit"]
 sync = "inferred"
 touches = []
@@ -278,6 +284,12 @@ sync = "inferred"
 touches = []
 views = ["text: borrowed", "pos: borrowed", "named_k: borrowed", "named_v: borrowed"]
 signature = "(text: ref String, pos: ref Vec[String], named_k: ref Vec[String], named_v: ref Vec[String]) -> String"
+
+[fn."rs2nika_host_fns"]
+sync = "inferred"
+touches = []
+views = ["src: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, src: ref String)"
 
 [fn."rs2nika_idioms"]
 sync = "inferred"
@@ -689,7 +701,7 @@ signature = "(text: ref String) -> bool"
 sync = "inferred"
 touches = []
 views = ["s: borrowed", "m: borrowed", "n2: borrowed"]
-signature = "(s: ref String, m: ref String, n2: ref String) -> String"
+signature = "(s: ref String, m: ref String, n2: ref String, host: bool) -> String"
 
 [fn."rs2nika_stats"]
 pub = true
@@ -809,6 +821,12 @@ touches = []
 views = ["given: borrowed", "facts: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String], facts: ref Vec[String]) -> Vec[String]"
 
+[fn."rs2nika_unimpl"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
+
 [fn."rs2nika_upper"]
 sync = "inferred"
 touches = []
@@ -826,7 +844,7 @@ touches = []
 signature = "(c: scalar) -> bool"
 
 [type."Rs2nikaCtx"]
-fields = ["profile: String", "free: bool", "world: ref String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[ref String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]"]
+fields = ["profile: String", "free: bool", "world: ref String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[ref String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]", "host_fns: Vec[String]"]
 
 [type."Rs2nikaOut"]
 pub = true
