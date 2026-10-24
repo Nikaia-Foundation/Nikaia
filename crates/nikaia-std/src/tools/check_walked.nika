@@ -117,8 +117,7 @@ pub fn check_walked_kept_call(func: ref Expr, arity: i64, receiver: bool, intern
             }
         }
         Expr::Variable(name, _) => Expr::Call { func: Expr::Variable(name, fresh_id()), args: args, config: [], id: fresh_id() }
-        // The adapter has refused anything else: a kept function is a name or a path.
-        else => Expr::Call { func: func.clone(), args: args, config: [], id: fresh_id() }
+        else => panic("a kept function is a name or a path")
     }
     return (names, call)
 }
@@ -172,4 +171,19 @@ pub fn check_walked_unrolling(walks_fields: ref collections::BTreeMap[String, St
         }
     }
     return out
+}
+
+/// **The value as the author wrote it**, where this compiler can say so: a
+/// literal, a name, a negation, and an ellipsis for the rest
+/// (`CheckHost::written`). The text of a string literal is Rust's `{:?}`
+/// (`String::quoted`); `text` names a symbol.
+pub fn check_walked_written(value: ref Expr, text: fn(winnow_grammar::Symbol) -> String sync) -> String sync {
+    return match value {
+        Expr::LitInt { value: n, negative, .. } => if negative && n != 0 { f"-{n}" } else { f"{n}" }
+        Expr::LitBool(yes, _) => f"{yes}"
+        Expr::LitStr { text: s, .. } => s.quoted()
+        Expr::Variable(name, _) => text(name)
+        Expr::Unary { op: UnaryOp::Neg, expr, .. } => f"-{check_walked_written(expr, text)}"
+        else => "…"
+    }
 }

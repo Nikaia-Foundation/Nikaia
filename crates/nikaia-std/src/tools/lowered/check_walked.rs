@@ -84,7 +84,7 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
             } else { Expr::Call { func: Box::new(Expr::Path(segments.to_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
         },
         Expr::Variable(name, _) => { let name = *name; Expr::Call { func: Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
-        _ => Expr::Call { func: Box::new(func.clone()), args, config: vec![], id: fresh_id() },
+        _ => panic("a kept function is a name or a path"),
     };
     (names, call)
 }
@@ -115,5 +115,18 @@ pub fn check_walked_unrolling(walks_fields: &collections::BTreeMap<String, Strin
         if !any { out.push_str(&format!("comptime: `{}` walks `{}::fields` and nothing calls it, so no copy is written\n", function, parameter)); }
     }
     out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_walked_written(value: &Expr, text: &impl Fn(winnow_grammar::Symbol) -> String) -> String {
+    match value {
+        Expr::LitInt { value: n, negative, .. } => { let n = *n; let negative = *negative; if negative && n != 0u64 { format!("-{}", n) } else { format!("{}", n) } },
+        Expr::LitBool(yes, _) => { let yes = *yes; format!("{}", yes) },
+        Expr::LitStr { text: s, .. } => s.quoted(),
+        Expr::Variable(name, _) => { let name = *name; text(name) },
+        Expr::Unary { op: UnaryOp::Neg, expr, .. } => { let expr = nikaia_std::boxed::open(expr); format!("-{}", check_walked_written(expr, text)) },
+        _ => String::from("…"),
+    }
 }
 

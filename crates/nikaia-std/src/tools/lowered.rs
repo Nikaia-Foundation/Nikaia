@@ -2121,7 +2121,7 @@ pub mod check_walk {
 }
 pub mod check_walked {
     #[allow(unused_imports)]
-    pub use super::{check_walked_settle, check_walked_kept_call, check_walked_unsigned_slots, check_walked_unrolling};
+    pub use super::{check_walked_settle, check_walked_kept_call, check_walked_unsigned_slots, check_walked_unrolling, check_walked_written};
 }
 pub mod check_walks {
     #[allow(unused_imports)]

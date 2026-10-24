@@ -280,6 +280,10 @@ pub mod tools {
     #[allow(unused_imports)]
     use crate::prelude::scalar;
 
+    /// `s.quoted()`, Rust's `{:?}` of a text (#804): a tool has no prelude.
+    #[allow(unused_imports)]
+    use crate::text::TextQuoted;
+
     // --- ast.nika ---
 
     /// The longest source the compiler reads: a `Span` holds a byte offset

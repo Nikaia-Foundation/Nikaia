@@ -32,7 +32,7 @@ use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::assets::Reads;
-use crate::ast::{self, Expr, Item, Span, UnaryOp};
+use crate::ast::{self, Expr, Item, Span};
 use crate::build_time;
 use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty::Ty};
@@ -825,20 +825,9 @@ pub(crate) fn specialised(function: &str, on: &str) -> String {
 /// The value as the author wrote it, where this compiler can say so: a literal,
 /// a name, a negation, and an ellipsis for the rest. `CheckHost::written`.
 pub(super) fn written_by(parsed: &Parsed, value: &Expr) -> String {
-    match value {
-        Expr::LitInt {
-            value, negative, ..
-        } => crate::ast::int_value(*value, *negative).to_string(),
-        Expr::LitBool(yes, _) => yes.to_string(),
-        Expr::LitStr { text, .. } => format!("{text:?}"),
-        Expr::Variable(name, _) => parsed.text(*name).to_string(),
-        Expr::Unary {
-            op: UnaryOp::Neg,
-            expr,
-            ..
-        } => format!("-{}", written_by(parsed, expr)),
-        _ => "…".to_string(),
-    }
+    nikaia_std::tools::check_walked::check_walked_written(value, &|name| {
+        parsed.text(name).to_string()
+    })
 }
 
 impl From<Constant> for CheckConstant {
