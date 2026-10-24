@@ -1973,3 +1973,48 @@ fn main() {
     );
     assert_eq!(said, "1\n2 20\na=2\na+b\nsmall b\n3\n");
 }
+
+/// #809: `v[i]?.clone()` on a list of options matched on `*index::get(..)`,
+/// which moves the element out of the list (E0507). The match is on the
+/// reference.
+#[test]
+fn a_reach_off_a_list_element_matches_on_the_reference() {
+    let (said, lowered) = printed_and_lowered(
+        "reach-off-a-list-element",
+        r#"
+fn first(v: ref Vec[String?]) -> String? {
+    return v[0]?.clone()
+}
+fn main() {
+    let v: Vec[String?] = ["a", null]
+    println(first(v) ?? "none")
+    let w = v[1]?.clone()
+    println(w ?? "none")
+    println(f"{v[0]?.len() ?? 0}")
+}
+"#,
+    );
+    assert_eq!(said, "a\nnone\n1\n");
+    assert!(
+        !lowered.contains("match *nikaia_std::index::get"),
+        "{lowered}"
+    );
+}
+
+/// The same off a list of lists, and off a list of numbers.
+#[test]
+fn a_reach_off_a_nested_element_and_a_number_matches_on_the_reference() {
+    let said = printed(
+        "reach-off-a-nested-element",
+        r#"
+fn main() {
+    let d: Vec[Vec[String?]] = [["x", null], [null, "yz"]]
+    println(d[1][1]?.clone() ?? "none")
+    println(f"{d[0][1]?.len() ?? 7}")
+    let n: Vec[i64?] = [5, null]
+    println(f"{n[0]?.abs() ?? 0} {n[1]?.abs() ?? 0}")
+}
+"#,
+    );
+    assert_eq!(said, "yz\n7\n5 0\n");
+}

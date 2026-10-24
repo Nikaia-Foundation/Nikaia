@@ -68,7 +68,10 @@ impl EmitState {
         if self.facts.lent_reaches.contains(&node_key(receiver)) && !emit_place_already_lent(world, receiver) { lent = ".as_ref()".to_owned(); }
         out.push("match ");
         let name = nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_owned();
-        if walk.held.contains_key(&node_key(receiver)) { out.push(&name); } else if lent == "" && emit_place_an_index(receiver) { host.expr(walk, out, receiver, depth, flow, scope)?; } else { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; }
+        if walk.held.contains_key(&node_key(receiver)) { out.push(&name); } else if lent == "" && emit_place_an_index(receiver) {
+            out.push("&");
+            host.expr(walk, out, receiver, depth, flow, scope)?;
+        } else { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; }
         out.push(&lent);
         let inner = "    ".repeat(nikaia_std::count::of(depth + 1));
         let outer = "    ".repeat(nikaia_std::count::of(depth));

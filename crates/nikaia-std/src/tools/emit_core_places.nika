@@ -131,8 +131,12 @@ impl EmitState {
         if walk.held.contains_key(node_key(receiver)) {
             out.push(name)
         } else if lent == "" && emit_place_an_index(receiver) {
-            // A map's read is not lent (0.0.246), so nothing follows it and a
-            // `match` needs no parentheses around the `*`.
+            // **The match is on the reference** (#809): a read is `*get(&v, i)`,
+            // and a `Some(it)` over that moves the element out of the list
+            // (E0507). `&*` borrows what the read finds, so the `match` binds a
+            // reference and the call goes through it. A map's read answers a
+            // `Found`, which `*` turns into the option and `&` lends.
+            out.push("&")
             host.expr(walk, out, receiver, depth, flow, scope)
         } else {
             self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
