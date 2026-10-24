@@ -53,6 +53,7 @@ tried and measured.
 **What was tried, measured and learned.** The laboratory notebook. Nothing here
 is normative and nothing may depend on it to know what a program means.
 
+* [speed](speed.md) — CI time, green share, tokens per moved line and self-hosting share, one row per round (`scripts/speed.sh`).
 * [the issue tracker](https://github.com/Nikaia-Language/Nikaia/issues) — **the running list**: what is found and
   broken, what an ADR decided and the compiler does not do yet, and which
   specification sentences a later decision made false. Every entry carries its
