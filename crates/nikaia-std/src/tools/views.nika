@@ -735,6 +735,14 @@ pub fn local_struct_handed_back(names: ref winnow_grammar::InternerContext, bloc
                         through += 1
                     }
                 },
+                // **A call on it that hands nothing in** (#813): the method
+                // takes the struct by `ref self`, so nothing of it outlives
+                // the call; arguments that are literals cannot receive a view.
+                Expr::MethodCall { receiver, args, config, .. } => {
+                    if a_variable_named(names, receiver, name) && config.len() == 0 && all_literals(args) {
+                        through += 1
+                    }
+                },
                 else => {},
             }
         }
@@ -743,6 +751,23 @@ pub fn local_struct_handed_back(names: ref winnow_grammar::InternerContext, bloc
         return -1
     }
     return handed
+}
+
+fn all_literals(args: ref Vec[Expr]) -> bool {
+    for arg in args {
+        let literal = match arg {
+            Expr::LitInt { .. } => true,
+            Expr::LitFloat(_, _) => true,
+            Expr::LitBool(_, _) => true,
+            Expr::LitChar(_, _) => true,
+            Expr::LitStr { .. } => true,
+            else => false,
+        }
+        if !literal {
+            return false
+        }
+    }
+    return true
 }
 
 fn returns_named(names: ref winnow_grammar::InternerContext, stmt: ref Stmt, name: ref String) -> bool {

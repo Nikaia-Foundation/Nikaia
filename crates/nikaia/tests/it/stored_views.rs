@@ -607,6 +607,31 @@ fn a_local_struct_keeps_a_view_only_where_it_leaves() {
     }
 }
 
+/// #813: a view stored into a struct bound by a local `let` is kept only where
+/// that struct leaves; a call on it by `ref self` keeps nothing. Returned, handed
+/// to a call or into a task, it still keeps the view.
+#[test]
+fn a_view_in_a_local_struct_called_on_keeps_nothing() {
+    let head = "struct W { k: i64 }\nstruct Held { pub ws: ref Vec[ref W] }\nstruct H { w: ref W, n: i64 }\n\nimpl H {\n    fn get(ref self) -> i64 { return self.w.k + self.n }\n}\n\n";
+    let local = "fn run(held: ref Held, at: i64) -> i64 {\n    let mut b = H { w: held.ws[at], n: 1 }\n    return b.get()\n}\n";
+    let found = findings(&format!("{head}{local}"));
+    assert!(found.is_empty(), "{found:#?}");
+    let rust = lowered(&format!("{head}{local}"));
+    assert!(rust.contains("fn run"), "{rust}");
+    for leaves in [
+        "struct Outer { h: H }\n\nfn run(held: ref Held, at: i64) -> Outer {\n    let b = H { w: held.ws[at], n: 1 }\n    return Outer { h: b }\n}\n",
+        "fn keep(x: ref H) {}\n\nfn run(held: ref Held, at: i64) {\n    let b = H { w: held.ws[at], n: 1 }\n    keep(b)\n}\n",
+        "fn run(held: ref Held, at: i64) {\n    let b = H { w: held.ws[at], n: 1 }\n    spawn fn { b.get() }\n}\n",
+    ] {
+        let source = format!("{head}{leaves}");
+        let all = findings(&source);
+        assert!(
+            all.iter().any(|f| f.message.contains("keeps `held`")),
+            "{leaves}: {all:#?}"
+        );
+    }
+}
+
 /// #706: a view of a parameter kept in another parameter's list
 /// ([ADR-283](../../../docs/specification/adr/adr-283.md) D27): the two share
 /// one lifetime, and an argument made in the call is put into the caller's

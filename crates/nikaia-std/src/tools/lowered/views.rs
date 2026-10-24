@@ -494,12 +494,24 @@ pub fn local_struct_handed_back(names: &winnow_grammar::InternerContext, block: 
                     let base = nikaia_std::boxed::open(base);
                     if a_variable_named(names, base, name) { through += 1; }
                 },
+                Expr::MethodCall { receiver, args, config, .. } => {
+                    let receiver = nikaia_std::boxed::open(receiver);
+                    if a_variable_named(names, receiver, name) && config.is_empty() && all_literals(args) { through += 1; }
+                },
                 _ => { },
             }
         }
     }
     if uses != through + handed { return -1; }
     handed
+}
+
+pub(crate) fn all_literals(args: &[Expr]) -> bool {
+    for arg in args.iter() {
+        let literal = matches!(arg, Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitBool(_, _) | Expr::LitChar(_, _) | Expr::LitStr { .. });
+        if !literal { return false; }
+    }
+    true
 }
 
 pub(crate) fn returns_named(names: &winnow_grammar::InternerContext, stmt: &Stmt, name: &str) -> bool {
