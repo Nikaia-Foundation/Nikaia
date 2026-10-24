@@ -1954,7 +1954,10 @@ pub mod check_flow {
     #[allow(unused_imports)]
     pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckFlow};
 }
-pub mod check_function {}
+pub mod check_function {
+    #[allow(unused_imports)]
+    pub use super::{check_function_grown_text, check_function_grammar};
+}
 pub mod check_grammar {}
 pub mod check_host {
     #[allow(unused_imports)]

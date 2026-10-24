@@ -69,3 +69,118 @@ impl CheckState {
     }
 }
 
+pub(crate) fn check_function_grows(op: Option<&BinaryOp>, value: &Expr) -> bool {
+    if op.is_some() { return nikaia_std::index::or(op, || BinaryOp::Sub) == BinaryOp::Add; }
+    match value {
+        Expr::Binary { op, .. } => { return *op == BinaryOp::Add; },
+        Expr::LitInterpolated { .. } => { return true; },
+        _ => { return false; },
+    }
+}
+
+pub(crate) fn check_function_grown_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Assign { target, op, value } => {
+                match target {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        if check_function_grows((op).as_ref(), value) { out.insert(here.text(name)); }
+                    },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { check_function_grown_in(here, inner, out); }
+    }
+}
+
+pub fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    check_function_grown_in(here, body, &mut out);
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
+    let named = world.words.resolve(gram.name).to_owned();
+    let mut results: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+    let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for rule in gram.rules.iter() {
+        rules.insert(world.words.resolve(rule.name).to_owned());
+        let written: Option<Type> = match rule.ret_type.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if written.is_some() {
+            let one = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+            results.insert(world.words.resolve(rule.name).to_owned(), host.type_of(&one));
+        }
+    }
+    state.rule_results = results;
+    for rule in gram.rules.iter() { for alt in rule.alts.iter() { state.a_name_the_page_does_not_have(world, &alt.pattern); } }
+    for rule in gram.rules.iter() {
+        let mut expected: Option<Ty> = None;
+        let written: Option<Type> = match rule.ret_type.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if written.is_some() {
+            let one = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+            expected = Some(host.type_of(&one));
+        }
+        let outer_current: Option<String> = match state.current.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        state.current = Some(format!("{}::{}", named, world.words.resolve(rule.name)));
+        for alt in rule.alts.iter() {
+            let frame = state.bindings_of(world, &alt.pattern.node, &rules);
+            let outer_action: Option<String> = match state.inside_an_action.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            state.inside_an_action = Some(world.words.resolve(rule.name).to_owned());
+            state.scope.push(frame.to_owned());
+            check_defaults_folds_in(state, world, host, gram, &alt.pattern.node, &alt.pattern.span);
+            state.scope.pop();
+            match &alt.action {
+                Some(action) => {
+                    check_function_action(state, world, host, &action, (expected).as_ref(), frame);
+                    state.inside_an_action = outer_action;
+                },
+                _ => { state.inside_an_action = outer_action; },
+            }
+        }
+        state.current = outer_current;
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, action: &Block, expected: Option<&Ty>, frame: Vec<CheckLocal>) {
+    let outer: Option<Ty> = match state.expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.expected = match expected {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    };
+    state.scope.push(frame);
+    let count = action.stmts.len() as i64;
+    let tail = check_core_block(state, world, host, action);
+    state.scope.pop();
+    if expected.is_some() && count > 0 {
+        let wanted = nikaia_std::index::or(match expected {
+            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            None => None,
+        }, || Ty::Unknown);
+        let at = nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).span;
+        state.expect_type(world, &tail, &wanted, &Span { start: at.start, end: at.end }, "returns", &|found, want| { format!("This action builds `{}`, but its rule returns `{}`.", found, want) });
+    }
+    state.expected = outer;
+}
+

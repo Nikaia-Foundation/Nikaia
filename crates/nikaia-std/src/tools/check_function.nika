@@ -97,3 +97,123 @@ impl CheckState {
         }
     }
 }
+
+/// Whether this assignment hands the name text of its own: `s += ..`, or
+/// `s = a + b` and `s = f".."`, which can only give back owned text.
+fn check_function_grows(op: ref BinaryOp?, value: ref Expr) -> bool {
+    if op != null {
+        return (op ?? BinaryOp::Sub) == BinaryOp::Add
+    }
+    match value {
+        Expr::Binary { op, .. } => {
+            return op == BinaryOp::Add
+        },
+        Expr::LitInterpolated { .. } => {
+            return true
+        },
+        else => {
+            return false
+        },
+    }
+}
+
+fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: collections::BTreeSet[String]) {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Assign { target, op, value } => {
+                match target {
+                    Expr::Variable(name, _) => {
+                        if check_function_grows(op, value) {
+                            out.insert(here.text(name))
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            check_function_grown_in(here, inner, out)
+        }
+    }
+}
+
+/// **The names a body gives text of its own by growing them**: `s = s + "…"`,
+/// `s += "…"` or `s = f"…"`, anywhere in it (0.0.232). Syntactic, because it
+/// is asked at the `let`, before the assignment has been walked; and narrow
+/// for the same reason - `+` and an f-string can only hand back owned text,
+/// where a name or a call may hand back a view.
+pub fn check_function_grown_text(here: ref ParsedView, body: ref Block) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    check_function_grown_in(here, body, out)
+    return out
+}
+
+/// **A grammar's actions, checked** (ADR-296): each rule's own key for its
+/// answers, the fold lambdas in the pattern's frame, the action's block against
+/// the rule's declared type. An action may not pause (D35), so the flag is
+/// set around the folds and the block alike.
+pub fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef) sync {
+    let named = world.words.resolve(gram.name).clone()
+    let mut results: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    let mut rules: collections::BTreeSet[String] = collections::BTreeSet()
+    for rule in gram.rules {
+        rules.insert(world.words.resolve(rule.name).clone())
+        let written: Type? = rule.ret_type?.clone()
+        if written != null {
+            let one = written ?? continue
+            results.insert(world.words.resolve(rule.name).clone(), host.type_of(one))
+        }
+    }
+    state.rule_results = results
+    for rule in gram.rules {
+        for alt in rule.alts {
+            state.a_name_the_page_does_not_have(world, alt.pattern)
+        }
+    }
+    for rule in gram.rules {
+        let mut expected: Ty? = null
+        let written: Type? = rule.ret_type?.clone()
+        if written != null {
+            let one = written ?? continue
+            expected = host.type_of(one)
+        }
+        // The rule's own key, so its answers land in its own entry.
+        let outer_current: String? = state.current?.clone()
+        state.current = f"{named}::{world.words.resolve(rule.name)}"
+        for alt in rule.alts {
+            let frame = state.bindings_of(world, alt.pattern.node, rules)
+            let outer_action: String? = state.inside_an_action?.clone()
+            state.inside_an_action = world.words.resolve(rule.name).clone()
+            state.scope.push(frame.clone())
+            check_defaults_folds_in(state, world, host, gram, alt.pattern.node, alt.pattern.span)
+            state.scope.pop()
+            match alt.action {
+                Some(action) => {
+                    check_function_action(state, world, host, action, expected, frame)
+                    state.inside_an_action = outer_action
+                },
+                else => {
+                    state.inside_an_action = outer_action
+                },
+            }
+        }
+        state.current = outer_current
+    }
+}
+
+/// One action's block, in its pattern's frame, against the rule's type.
+fn check_function_action[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, action: ref Block, expected: ref Ty?, frame: Vec[CheckLocal]) sync {
+    let outer: Ty? = state.expected?.clone()
+    state.expected = expected?.clone()
+    state.scope.push(frame)
+    let count = action.stmts.len()
+    let tail = check_core_block(state, world, host, action)
+    state.scope.pop()
+    if expected != null && count > 0 {
+        let wanted = expected?.clone() ?? Ty::Unknown
+        let at = action.stmts[count - 1].span
+        state.expect_type(world, tail, wanted, Span { start: at.start, end: at.end }, "returns", fn(found, want) { f"This action builds `{found}`, but its rule returns `{want}`." })
+    }
+    state.expected = outer
+}

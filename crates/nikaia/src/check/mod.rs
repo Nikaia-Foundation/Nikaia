@@ -32,7 +32,7 @@ use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::assets::Reads;
-use crate::ast::{self, BinaryOp, Block, Expr, Item, Span, Stmt, UnaryOp};
+use crate::ast::{self, Block, Expr, Item, Span, Stmt, UnaryOp};
 use crate::build_time;
 use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty::Ty};
@@ -1158,7 +1158,11 @@ impl<'a> Checker<'a> {
                     self.s.scope.pop();
                     self.s.expected = outer;
                 }
-                Item::Grammar(grammar) => self.grammar(grammar),
+                Item::Grammar(grammar) => self.nikaia(|state, world, host| {
+                    nikaia_std::tools::check_function::check_function_grammar(
+                        state, world, host, grammar,
+                    )
+                }),
                 // **A `use` brings no name in, for `std` as for a package**
                 // ([ADR-140](../../docs/specification/adr/adr-140.md) D5).
                 Item::Import { path, .. } => self
@@ -1166,94 +1170,6 @@ impl<'a> Checker<'a> {
                     .an_import_that_brings_a_name_in(self.world, path, &item.span),
                 _ => {}
             }
-        }
-    }
-
-    fn grammar(&mut self, grammar: &ast::GrammarDef) {
-        let named = self.parsed.text(grammar.name).to_string();
-        self.s.rule_results = grammar
-            .rules
-            .iter()
-            .filter_map(|rule| {
-                let ty = Ty::from_ast(self.parsed, rule.ret_type.as_ref()?);
-                Some((self.parsed.text(rule.name).to_string(), ty))
-            })
-            .collect();
-        for rule in &grammar.rules {
-            for alt in &rule.alts {
-                self.s
-                    .a_name_the_page_does_not_have(self.world, &alt.pattern);
-            }
-        }
-        for rule in &grammar.rules {
-            let expected = rule.ret_type.as_ref().map(|t| Ty::from_ast(self.parsed, t));
-            // **The rule's own key, so its answers land in its own entry.**
-            // A `entry` rule *is* a ledger entry
-            // ([ADR-296](../../docs/specification/adr/adr-296.md) D24), and the
-            // walks that derive `touches` and `locks` read the method answers
-            // this checker files under the caller's key — which was `None` for
-            // an action, so a grammar's entry inherited nothing and every
-            // caller inherited that
-            // ([ADR-186](../../docs/specification/adr/adr-186.md)). What the key
-            // must **not** do is make an action a *function*, and `NK2605` is
-            // where that is said instead: an action's failure leaves the parser
-            // rather than travelling to a caller.
-            let outer_current = self
-                .s
-                .current
-                .replace(format!("{named}::{}", self.parsed.text(rule.name)));
-            for alt in &rule.alts {
-                let rules: BTreeSet<String> = grammar
-                    .rules
-                    .iter()
-                    .map(|r| self.parsed.text(r.name).to_string())
-                    .collect();
-                let frame = self.s.bindings_of(self.world, &alt.pattern.node, &rules);
-                // **A fold's lambdas first, and in the pattern's own frame**
-                // ([ADR-296](../../../docs/specification/adr/adr-296.md)),
-                // because a fold may stand beside a binding in a sequence:
-                // `head:N rest:fold(N, zero, fn(acc, m) { acc + m + head })`
-                // parses, and without this `head` is refused. And outside
-                // `expected`, which is the rule's declared type - what a fold's
-                // `init` and `step` build is the parser backend's arithmetic on
-                // the way to that type, not the type itself.
-                // **An action may not pause**
-                // ([ADR-296](../../docs/specification/adr/adr-296.md) D35), and
-                // a fold's `init`, `step` and `merge` are action code too
-                // ([ADR-296](../../docs/specification/adr/adr-296.md)) - so the
-                // flag is set around both rather than around the block alone.
-                let named = self.parsed.text(rule.name).to_string();
-                let outer_action = self.s.inside_an_action.replace(named);
-                self.s.scope.push(frame.iter().map(Local::clone).collect());
-                self.nikaia(|state, world, host| {
-                    check_defaults::check_defaults_folds_in(
-                        state,
-                        world,
-                        host,
-                        grammar,
-                        &alt.pattern.node,
-                        &alt.pattern.span,
-                    )
-                });
-                self.s.scope.pop();
-                let Some(action) = &alt.action else {
-                    self.s.inside_an_action = outer_action;
-                    continue;
-                };
-                let outer = std::mem::replace(&mut self.s.expected, expected.clone());
-                self.s.scope.push(frame);
-                let tail_span = action.stmts.last().map(|s| s.span);
-                let tail = self.block(action);
-                self.s.scope.pop();
-                self.s.inside_an_action = outer_action;
-                if let (Some(expected), Some(span)) = (&expected, tail_span) {
-                    self.expect(&tail, expected, span, "returns", |found, want| {
-                        format!("This action builds `{found}`, but its rule returns `{want}`.")
-                    });
-                }
-                self.s.expected = outer;
-            }
-            self.s.current = outer_current;
         }
     }
 
@@ -1359,7 +1275,7 @@ impl<'a> Checker<'a> {
                 },
                 None => Ty::Unknown,
             };
-            frame.push(self.local_free("self".to_string(), ty));
+            frame.push(Local::free("self".to_string(), ty, self.a_new_binding()));
         }
         // **A `String` the body only reads is a view of text here**, as it is
         // below (ADR-282 D2, D5, #654): bound as one written `ref String`, so
@@ -1450,7 +1366,11 @@ impl<'a> Checker<'a> {
                 .find(|lowered| lowered.name == name && lowered.ty.is_a_view())
                 .map(|lowered| lowered.ty.clone())
                 .unwrap_or_else(|| Ty::from_ast(self.parsed, &option.ty));
-            frame.push(self.local_free(name, ty.erase(&parameters)));
+            frame.push(Local::free(
+                name,
+                ty.erase(&parameters),
+                self.a_new_binding(),
+            ));
         }
         // **So is a spread** ([ADR-296](../../docs/specification/adr/adr-296.md)
         // D5): `...args: Self::dsl` is the driver's one value holding what the
@@ -1458,7 +1378,11 @@ impl<'a> Checker<'a> {
         // frame, `return args` was `NK1117` in every driver. Its type is the
         // statement's, which this checker does not see, so it is not guessed.
         if let Some(spread) = spread {
-            let local = self.local_free(self.parsed.text(*spread).to_string(), Ty::Unknown);
+            let local = Local::free(
+                self.parsed.text(*spread).to_string(),
+                Ty::Unknown,
+                self.a_new_binding(),
+            );
             self.s.flow.unknown_bound.insert(local.id as usize as i64);
             frame.push(local);
         }
@@ -1506,8 +1430,13 @@ impl<'a> Checker<'a> {
         let outer_numbers = std::mem::take(&mut self.s.flow.open_numbers);
         let outer_chars = std::mem::take(&mut self.s.flow.open_chars);
         let outer_bytes = std::mem::take(&mut self.s.flow.high_bytes);
-        let outer_grown =
-            std::mem::replace(&mut self.s.flow.grown_text, grown_text(self.parsed, body));
+        let outer_grown = std::mem::replace(
+            &mut self.s.flow.grown_text,
+            nikaia_std::tools::check_function::check_function_grown_text(
+                &parsed_view_of(self.parsed),
+                body,
+            ),
+        );
         let tail = self.block(body);
         self.s.flow.grown_text = outer_grown;
         // **The tail hands back as a `return` does**, and a field of a lent
@@ -1655,7 +1584,19 @@ impl<'a> Checker<'a> {
                 value,
                 Some(Expr::If { .. } | Expr::Match { .. } | Expr::Block(..))
             ) && value.is_some_and(every_end_is_a_value_or_a_jump);
-            let how = value.and_then(|v| self.widened_slot(&tail, expected, Some(v), &span));
+            let how = value.and_then(|v| {
+                self.nikaia(|state, world, host| {
+                    check_overflow::check_widened_slot(
+                        state,
+                        world,
+                        host,
+                        &tail,
+                        expected,
+                        Some(v),
+                        &span,
+                    )
+                })
+            });
             if let Some(value) = value {
                 match how {
                     Some(Wrap::Constructor | Wrap::Conversion)
@@ -1669,14 +1610,15 @@ impl<'a> Checker<'a> {
                     _ => {}
                 }
             }
-            self.expect_kept(
+            self.s.expect_kept_asked(
+                self.world,
                 &tail,
                 expected,
                 value,
                 "the function returns it, and the caller keeps it after the call ends",
-                span,
+                &span,
                 "returns",
-                |found, want| {
+                &|found, want| {
                     format!(
                         "This function returns `{found}`, but it's declared to return `{want}`."
                     )
@@ -1826,21 +1768,6 @@ impl<'a> Checker<'a> {
     /// (Part III C.1).
     ///
     /// `null` is in neither, being a `T?` itself.
-    /// **What a slot is handed, and how it is wrapped**: [`wrap_for`], except
-    /// that a widening of an arithmetic expression is pushed to its operands
-    /// ([`Checker::widen_operands`]) and nothing is wrapped around it.
-    fn widened_slot(
-        &mut self,
-        found: &Ty,
-        want: &Ty,
-        value: Option<&Expr>,
-        span: &Span,
-    ) -> Option<Wrap> {
-        self.nikaia(|state, world, host| {
-            check_overflow::check_widened_slot(state, world, host, found, want, value, span)
-        })
-    }
-
     /// **A use asks the open numbers in a value for a type** (D2): a type
     /// standing beside it (`beside`), or an index, which takes any integer.
     fn number_asked(&mut self, value: &Expr, want: &Ty, at: &Span, beside: bool) {
@@ -1916,41 +1843,6 @@ impl<'a> Checker<'a> {
     }
 
     // --- the one shape every check has --------------------------------------
-
-    #[allow(clippy::too_many_arguments)]
-    fn expect_kept(
-        &mut self,
-        found: &Ty,
-        want: &Ty,
-        value: Option<&Expr>,
-        keeper: &str,
-        span: Span,
-        what: &str,
-        message: impl Fn(&str, &str) -> String,
-    ) {
-        self.s.expect_kept_asked(
-            self.world,
-            found,
-            want,
-            value,
-            keeper,
-            &span,
-            what,
-            &|hole, ty| message(hole, ty),
-        )
-    }
-
-    fn expect(
-        &mut self,
-        found: &Ty,
-        want: &Ty,
-        span: Span,
-        what: &str,
-        message: impl Fn(&str, &str) -> String,
-    ) {
-        self.s
-            .expect_type(self.world, found, want, &span, what, &message);
-    }
 
     /// **The signed values in unsigned slots, asked of the walk** (ADR-285
     /// D32, [`crate::bounds::proven`]): one proved `>= 0` where it stands is
@@ -2188,12 +2080,6 @@ impl<'a> Checker<'a> {
     fn a_new_binding(&mut self) -> i64 {
         self.s.a_new_binding()
     }
-
-    /// A binding that nothing here refuses a change to, with a number of its own.
-    fn local_free(&mut self, name: String, ty: Ty) -> Local {
-        let id = self.a_new_binding();
-        Local::free(name, ty, id)
-    }
 }
 
 /// **Whether this file declares a type by this name**
@@ -2204,43 +2090,6 @@ impl<'a> Checker<'a> {
 /// records what a type **promises**, and what is asked here is only that the
 /// word was written down: a private `enum` a neighbouring file declares is a
 /// head, whatever its contract says.
-/// **The names a body gives text of its own by growing them**: `s = s + "…"`,
-/// `s += "…"` or `s = f"…"`, anywhere in it (0.0.232). Syntactic, because it is
-/// asked at the `let`, before the assignment has been walked; and narrow for
-/// the same reason - `+` and an f-string can only hand back owned text, where a
-/// name or a call may hand back a view.
-fn grown_text(parsed: &Parsed, body: &Block) -> BTreeSet<String> {
-    fn walk(parsed: &Parsed, block: &Block, out: &mut BTreeSet<String>) {
-        for stmt in &block.stmts {
-            if let Stmt::Assign {
-                target: Expr::Variable(name, _),
-                op,
-                value,
-            } = &stmt.node
-            {
-                let grows = matches!(op, Some(BinaryOp::Add))
-                    || (op.is_none()
-                        && matches!(
-                            value,
-                            Expr::Binary {
-                                op: BinaryOp::Add,
-                                ..
-                            } | Expr::LitInterpolated { .. }
-                        ));
-                if grows {
-                    out.insert(parsed.text(*name).to_string());
-                }
-            }
-            crate::contracts::sync::visit_stmt_blocks(&stmt.node, &mut |inner| {
-                walk(parsed, inner, out)
-            });
-        }
-    }
-    let mut out = BTreeSet::new();
-    walk(parsed, body, &mut out);
-    out
-}
-
 /// What the checker reads of a parsed file, borrowed (`tools/parsed_view.nika`).
 fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_, '_, '_, '_, '_, '_> {
     ParsedView {
