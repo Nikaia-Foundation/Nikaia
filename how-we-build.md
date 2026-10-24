@@ -44,7 +44,7 @@ Click a tile for what the number counts, how it was taken, and what it does not 
 <div class="hwb-grid">
 <a class="hwb-tile" href="#share"><span class="hwb-num">69.4 %</span><span class="hwb-lbl">of the toolchain is written in Nikaia</span><span class="hwb-more">details</span></a>
 <a class="hwb-tile" href="#perline"><span class="hwb-num">143k &rarr; 71k</span><span class="hwb-lbl">context tokens per moved Rust line, long agents against restarted ones</span><span class="hwb-more">details</span></a>
-<a class="hwb-tile" href="#context"><span class="hwb-num">566-626k</span><span class="hwb-lbl">tokens of context at the end of a long agent; 71-78 % of its cost came after 300k</span><span class="hwb-more">details</span></a>
+<a class="hwb-tile" href="#context"><span class="hwb-num">566-626k</span><span class="hwb-lbl">First attempts, 11 October: agents without a limit ended at 566-626k tokens of context; 71-78 % of their cost came after 300k</span><span class="hwb-more">details</span></a>
 <a class="hwb-tile" href="#builder"><span class="hwb-num">52k &rarr; ~15k</span><span class="hwb-lbl">context at the start of a builder with six tools instead of about forty</span><span class="hwb-more">details</span></a>
 <a class="hwb-tile" href="#tests"><span class="hwb-num">267 &rarr; 1</span><span class="hwb-lbl">test binaries (16-20 MB each); now one, <code>--test it</code></span><span class="hwb-more">details</span></a>
 <a class="hwb-tile" href="#package"><span class="hwb-num">1 of 256</span><span class="hwb-lbl">objects changed on a one-file change; was one 7.4 MB unit</span><span class="hwb-more">details</span></a>
@@ -81,7 +81,7 @@ than the work that was moved.
 
 <div class="hwb-detail" id="context" markdown="1">
 
-### 566-626k tokens of context
+### First attempts, 11 October: agents without a limit
 
 Measured on the two long agents of 2026-10-11 (695 and 768 turns, 219 M and
 276 M tokens read): the context started near 49k, grew about 750 tokens a
@@ -90,6 +90,24 @@ the cost came after the context passed 300k. If the same work had been done
 by agents restarted every 120 turns it would cost about one third. That last
 figure is **computed, not confirmed**; the 71k column above is the first
 evidence for it.
+
+</div>
+
+<div class="hwb-detail" id="setup" markdown="1">
+
+### How the set-up changed
+
+**Not measured; the owner's account.** The first tries were Sonnet on medium
+effort doing everything in the main session, or leaving it to the session
+whether to start agents, and Opus on medium. The owner read that Opus on low
+effort performs better than Sonnet on medium, so the agents now run Opus on
+low. The main session now runs Sonnet 5.5 on low effort with the context
+window limited to 200,000 tokens, so it cannot pass the 300k mark any more.
+Builders get a limit of 100-150 turns and an agent type with six tools (about
+15k at the start, not yet re-measured).
+
+None of these model and effort choices was benchmarked. Today's measured
+value: not yet measured (a Runs row from `scripts/tokenspeed.py` will fill it).
 
 </div>
 
