@@ -1,0 +1,179 @@
+// crates/nikaia-std/src/tools/emit_fold.nika
+//
+// **The `fold` and `par_fold` of a grammar pattern**, moved from
+// `emit/mod.rs` (ADR-294, #125, #558, E10-2): the call, the step adapted where
+// the program's declarations say it changes the accumulator in place, and the
+// merge. An expression, a statement and the owner's type are written by the
+// host.
+
+/// Whether `expr` is the variable `root`.
+fn emit_is_variable(expr: ref Expr, root: winnow_grammar::Symbol) -> bool {
+    return match expr {
+        Expr::Variable(name, _) => name == root,
+        else => false,
+    }
+}
+
+/// Whether `target` is a field or an element of the name `root`, at any
+/// depth: `acc.lines`, `acc.rows[i].n`. The name itself is not a part.
+fn emit_a_part_of(target: ref Expr, root: winnow_grammar::Symbol) -> bool {
+    return match target {
+        Expr::Field { base, .. } => emit_is_variable(base, root) || emit_a_part_of(base, root),
+        Expr::Index { base, .. } => emit_is_variable(base, root) || emit_a_part_of(base, root),
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// How a fold's step or merge changes the accumulator in place, where its
+    /// result type says it does (ADR-372 D9): `1` takes the second argument by
+    /// value, `2` lent, `0` not in place.
+    fn emit_in_place_fold(ref self, part: ref Expr) -> i64 {
+        return self.facts.in_place_folds.get(id_of(part) as i64) ?? 0
+    }
+
+    pub fn emit_fold[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, spec: ref FoldSpec) sync throws {
+        let rule = emit_text(world, spec.rule)
+        let name = if spec.merge != null { "par_fold" } else { "fold" }
+        out.push(f"{name}({rule}, ")
+        // **`init` makes the accumulator** (#704 item 7): the backend calls
+        // it once per accumulator. A function's or a type's name, or a
+        // lambda, is that maker as written; any other expression is the
+        // starting value, and is handed over as a lambda that makes it.
+        let maker = match spec.init {
+            Expr::Variable(..) => true,
+            Expr::Path(..) => true,
+            Expr::Closure { .. } => true,
+            else => false,
+        }
+        if !maker {
+            out.push("|| ")
+        }
+        host.expr(walk, out, spec.init, 0, EmitFlow::plain(), EmitScope::plain())
+        out.push(", ")
+        self.emit_fold_step(world, walk, out, host, spec.step)
+        match spec.merge {
+            Some(merge) => {
+                out.push(", ")
+                self.emit_fold_merge(world, walk, out, host, merge)
+            },
+            else => {},
+        }
+        out.push(")")
+    }
+
+    /// A fold's step, adapted where the program's own declarations say it has
+    /// to be.
+    ///
+    /// ADR-296 D17 refused to infer this from the shape of the body, and was
+    /// right to: `acc.record(m)` and `acc.merged(m)` look identical. What
+    /// changed is that `impl` blocks are lowered now, so this is a lookup in
+    /// what the program declares - `record` takes `&mut self` and returns
+    /// nothing, so the accumulator is changed in place; a method that returns a
+    /// new accumulator is left exactly as written.
+    ///
+    /// A step whose last statement assigns to a part of the accumulator,
+    /// `acc.lines += 1`, hands back nothing either: it changes the
+    /// accumulator in place too (#704 item 7).
+    fn emit_fold_step[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, step: ref Expr) sync throws {
+        match step {
+            Expr::Closure { params, body, .. } => {
+                if params.len() == 2 && body.stmts.len() > 0 {
+                    let accumulator = params[0]
+                    let item = params[1]
+                    let mut on_accumulator = false
+                    let mut mutates = false
+                    match body.stmts[body.stmts.len() - 1].node {
+                        Stmt::Expr(last) => {
+                            match last {
+                                Expr::MethodCall { receiver, method, .. } => {
+                                    on_accumulator = emit_is_variable(receiver, accumulator)
+                                    match self.by_name.get(emit_text(world, method)) {
+                                        Some(found) => { mutates = found.mutates_in_place() },
+                                        else => {},
+                                    }
+                                },
+                                else => {},
+                            }
+                        },
+                        Stmt::Assign { target, .. } => {
+                            on_accumulator = emit_a_part_of(target, accumulator)
+                            mutates = true
+                        },
+                        else => {},
+                    }
+                    // **Changed in place, not threaded** (`winnow-grammar` ADR 24
+                    // §11): a step whose accumulator is written `&mut` is run by a
+                    // fold that never moves it. Handed in and back by value, an
+                    // accumulator that holds a table was copied in and out once per
+                    // item - 7 instructions a row of 1BRC. `&mut _` is all the
+                    // generator needs to pick that fold; the type is the init's.
+                    if on_accumulator && mutates {
+                        out.push(f"|{emit_text(world, accumulator)}: &mut _, {emit_text(world, item)}| {{ ")
+                        for stmt in body.stmts {
+                            host.stmt(walk, out, stmt.node, stmt.span, 0, EmitTail::Statement, EmitFlow::plain(), EmitScope::plain())
+                            out.push(" ")
+                        }
+                        out.push("}")
+                        return
+                    }
+                }
+            },
+            else => {},
+        }
+        // **Any other step that changes the accumulator in place** (ADR-372
+        // D9): its result type said so, and it is lent the accumulator.
+        if self.emit_in_place_fold(step) != 0 {
+            out.push("|__nk_acc: &mut _, __nk_x| { nikaia_std::par::in_place(__nk_acc, __nk_x, ")
+            host.expr(walk, out, step, 0, EmitFlow::plain(), EmitScope::plain())
+            out.push("); }")
+            return
+        }
+        host.expr(walk, out, step, 0, EmitFlow::plain(), EmitScope::plain())
+    }
+
+    /// A fold's merge. `Summary::merge` names a method, and the `impl` says
+    /// whether it mutates its subject and whether it takes the other by view.
+    fn emit_fold_merge[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, merge: ref Expr) sync throws {
+        match merge {
+            Expr::Path(segments, _) => {
+                if segments.len() == 2 {
+                    let owner = segments[0]
+                    let name = segments[1]
+                    let key = f"{emit_text(world, owner)}::{emit_text(world, name)}"
+                    match self.methods.get(key) {
+                        Some(method) => {
+                            if method.mutates_in_place() && method.args.len() == 1 {
+                                let by_view = if method.args[0].ty.is_view { "&" } else { "" }
+                                // The accumulator's type is annotated because the
+                                // path names it: without that, the backend's
+                                // `let merge = ..` leaves the closure with nothing
+                                // to infer from.
+                                let owner_type = host.ty_of_name(walk, owner)
+                                out.push(f"|mut a: {owner_type}, b| {{ a.{emit_text(world, name)}({by_view}b); a }}")
+                                return
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+        // **A declared function that changes its first argument in place**
+        // (ADR-372 D9): lent the accumulator, which its own signature types.
+        let form = self.emit_in_place_fold(merge)
+        let closure = match merge {
+            Expr::Closure { .. } => true,
+            else => false,
+        }
+        if form != 0 && !closure {
+            let second = if form == 2 { "&__nk_b" } else { "__nk_b" }
+            out.push(f"|mut __nk_a, __nk_b| {{ nikaia_std::par::in_place(&mut __nk_a, {second}, ")
+            host.expr(walk, out, merge, 0, EmitFlow::plain(), EmitScope::plain())
+            out.push("); __nk_a }")
+            return
+        }
+        host.expr(walk, out, merge, 0, EmitFlow::plain(), EmitScope::plain())
+    }
+}

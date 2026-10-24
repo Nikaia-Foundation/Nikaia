@@ -62,6 +62,13 @@ pub trait EmitHost {
     /// returns it.
     fn ty_named(ref self, mut walk: EmitWalk, ty: ref Type) -> String sync throws
 
+    /// `Emitter::stmt`: a statement, written to `out`.
+    fn stmt(ref self, mut walk: EmitWalk, mut out: EmitOut, stmt: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws
+
+    /// A type known by its name alone, as a grammar rule returns it
+    /// (`ty_filled` with named lifetimes).
+    fn ty_of_name(ref self, mut walk: EmitWalk, name: winnow_grammar::Symbol) -> String sync throws
+
     /// Whether the grammar being written is the copy over bytes (the pattern
     /// writer reads it).
     fn set_grammar_bytes(ref self, bytes: bool) sync

@@ -173,6 +173,7 @@ COMPILER_NIKA = {
     "emit_keeps.nika": "emit: the keeps a function declares and hands, tethered types and the fields of a struct of views (0.0.810)",
     "emit_entry.nika": "emit: the program's own main, the main the runtime starts and the types that hold one handle per buffer (0.0.811)",
     "emit_grammar.nika": "emit: the grammars, their copy over bytes, the options of a par_fold entry and each rule (E10-1)",
+    "emit_fold.nika": "emit: a fold and a par_fold of a grammar pattern, step and merge (E10-2)",
     "emit_host.nika": "emit: the host trait the emitter's core asks of the Rust side, and the first moved methods: a cast's operand, a bare range, an index (0.0.816)",
     "emit_core_types.nika": "emit: how a type is written, the tethered wrapper, the pointer an extern parameter takes and the words that depend on user parallelism (0.0.818)",
     "emit_core_below.nika": "emit: the small questions below the core: held `?.` receivers, resize fills, call options, what a catch guards, keeps, map keys, reflected reads (0.0.820)",

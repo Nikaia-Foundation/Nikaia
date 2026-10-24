@@ -1047,6 +1047,14 @@ mod emit_exprs_lowered {
 #[allow(unused_imports)]
 pub use emit_exprs_lowered::*;
 
+mod emit_fold_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_fold.rs");
+}
+#[allow(unused_imports)]
+pub use emit_fold_lowered::*;
+
 mod emit_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2206,6 +2214,7 @@ pub mod emit_exprs {
     #[allow(unused_imports)]
     pub use super::{emit_around, emit_around_held, emit_around_value};
 }
+pub mod emit_fold {}
 pub mod emit_grammar {}
 pub mod emit_host {
     #[allow(unused_imports)]

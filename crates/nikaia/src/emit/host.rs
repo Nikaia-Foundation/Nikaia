@@ -240,6 +240,51 @@ impl EmitHost for Emitter<'_> {
         Ok(written)
     }
 
+    fn stmt(
+        &self,
+        walk: &mut EmitWalk,
+        out: &mut Out,
+        stmt: &crate::ast::Stmt,
+        span: &crate::ast::Span,
+        depth: i64,
+        tail: Tail,
+        flow: EmitFlow,
+        scope: &EmitScope,
+    ) -> Crossing {
+        self.hosted(walk, || {
+            Emitter::stmt(
+                self,
+                out,
+                stmt,
+                span,
+                depth as usize,
+                tail,
+                Flow::from_emit(flow, scope),
+            )
+        })
+    }
+
+    fn ty_of_name(
+        &self,
+        walk: &mut EmitWalk,
+        name: winnow_grammar::Symbol,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let ty = crate::ast::Type {
+            name,
+            generics: Vec::new(),
+            is_view: false,
+            is_tuple: false,
+            is_nullable: false,
+            code: Box::new(None),
+            count: None,
+            is_mut: false,
+            is_slice: false,
+            either: false,
+            lasting: false,
+        };
+        self.ty_named(walk, &ty)
+    }
+
     fn set_grammar_bytes(&self, bytes: bool) {
         self.grammar_bytes.set(bytes);
     }
