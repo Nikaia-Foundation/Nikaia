@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1203] — 2026-10-24
+
+**`nikaia fmt`: the printer and its guard; a trailing `,` after parameters and arguments**
+- The parser accepts a trailing `,` after the last parameter, option and call argument (ADR-337 D1). `nikaia::fmt::format` prints a file in the one style of ADR-337 D1-D3 and writes nothing if the result does not parse, would lose or move a comment, or would change the tree (D4). The `nikaia fmt` command follows.
+
 ## [0.0.1202] — 2026-10-24
 
 **The repository's unsafe crates ship their reviewed ledgers**
