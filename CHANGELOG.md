@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1216] — 2026-10-24
+
+**`String::quoted()`; `panic(..)` works in tools; methods are matched by receiver type in keeps (#804, #805, #791)**
+- `s.quoted()` returns the text between double quotes, escaped as Rust's `{:?}` writes a string: `"` and `\` get a backslash, newline/tab/carriage return become `
+` `\t` `\r`, other control chars `\u{..}`, every other char (e.g. `ä`) stays; a std method with a contract entry, no new error code.
+- The tools lowering imports `nikaia_std::abort::panic` in its package preamble, so `panic(..)` in std's Nikaia sources compiles instead of E0423.
+- In the keeps analysis a method call on a parameter of a known type is resolved to that type's method, and own candidates with too few parameters are no longer asked; a same-named method in another tools struct no longer changes how a function's parameters lower; fmt.nika drops its `fmt_` method prefixes.
+
 ## [0.0.1215] — 2026-10-24
 
 **Check: the kept-function call, the findings order and the unsigned-slot verdicts are Nikaia (C7-a to C7-c, #125)**
