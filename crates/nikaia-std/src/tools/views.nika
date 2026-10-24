@@ -91,11 +91,12 @@ struct Unit {
     // names, in order, without the receiver.
     methods: collections::BTreeMap[String, Vec[String]],
     // `Owner::method::param` for each parameter a method keeps. Starts with
-    // what no walk can follow (a parameter that is not a view, any parameter
-    // of a method that takes a `mut` one) and grows to the least fixpoint.
+    // what no walk can follow (a parameter of a type that can hold a view
+    // without being one, any parameter of a method that takes a `mut` one) and grows to the least fixpoint.
     kept: collections::BTreeSet[String],
-    // `Owner::method::position` for each parameter a `ref self` method only
-    // reads (#813): a call on a local struct hands nothing on through it.
+    // `Owner::method::position` for each parameter a method taking `ref self`
+    // or `ref mut self` only reads (#813): a call on a local struct hands
+    // nothing on through it.
     readonly: collections::BTreeSet[String],
 }
 
@@ -122,9 +123,9 @@ fn method_table(asked: ref Asked, items: ref Vec[Spanned[Item]], mut unit: Unit)
                                     takes_mut = true
                                 }
                             }
-                            let reading = takes_a_view_of_itself(receiver) && !(receiver?.is_mut ?? false)
+                            let reading = takes_a_view_of_itself(receiver)
                             for i in 0..<args.len() {
-                                if takes_mut || !args[i].ty.is_view {
+                                if takes_mut || (!args[i].ty.is_view && brings_buffer(unit, asked, args[i].ty)) {
                                     unit.kept.insert(f"{key}::{params[i]}")
                                 }
                                 if reading && !args[i].mutable {
@@ -1033,15 +1034,34 @@ fn stores(unit: ref Unit, asked: ref Asked, expr: ref Expr, span: ref Span, own_
 
 // A carrier handed to a call on the subject, or on a field of it.
 fn handed_to(unit: ref Unit, asked: ref Asked, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span, mut here: Here) {
-    // `handed_over`: some argument holds the view. `held`: and the method on
-    // `self` keeps what it is handed there (#818).
+    let way = root(unit, asked, here, receiver)
+    // The method the call names, as the ledgers key it: on the subject, or on
+    // a field of it that is a view (a shared `ref` cannot be stored into).
+    let mut callee = ""
+    let mut named = false
+    match way {
+        Root::Subject => {
+            callee = f"{text_of(asked, here.subject) ?? ""}::{asked.names.resolve(method)}"
+            named = true
+        }
+        Root::SubjectField(_) => {
+            let field_ty = type_of(unit, asked, here, receiver)
+            let viewed = field_ty?.is_view ?? false
+            if viewed {
+                callee = f"{text_of(asked, field_ty) ?? ""}::{asked.names.resolve(method)}"
+                named = true
+            }
+        }
+        else => {}
+    }
+    // `handed_over`: some argument holds the view. `held`: and the method
+    // keeps what it is handed there (#818).
     let mut handed_over = false
     let mut held = false
-    let callee = f"{text_of(asked, here.subject) ?? ""}::{asked.names.resolve(method)}"
     for i in 0..<args.len() {
         if mentions(unit, asked, here, args[i]) {
             handed_over = true
-            if kept_by_callee(unit, asked, callee, i) {
+            if !named || kept_by_callee(unit, asked, callee, i) {
                 held = true
             }
         }
@@ -1052,23 +1072,19 @@ fn handed_to(unit: ref Unit, asked: ref Asked, receiver: ref Expr, method: winno
             held = true
         }
     }
-    if !handed_over {
+    if !handed_over || !held {
         return
     }
-    match root(unit, asked, here, receiver) {
+    match way {
         Root::SubjectField(field) => field_of_subject(unit, asked, field, span, here),
-        Root::Subject => {
-            if held {
-                subject_destination(unit, asked, span, here)
-            }
-        }
+        Root::Subject => subject_destination(unit, asked, span, here),
         else => {}
     }
 }
 
-// Whether the method `Owner::name` of the subject keeps its argument number
-// `at`: the unit's own methods by the fixpoint, another file's by the ledger,
-// and a method nothing describes keeps it.
+// Whether the method `Owner::name` keeps its argument number `at`: the
+// unit's own methods by the fixpoint, any other by its ledger's `keeps`, and a
+// method nothing describes keeps it.
 fn kept_by_callee(unit: ref Unit, asked: ref Asked, callee: ref String, at: i64) -> bool {
     let known = unit.methods[callee]?.clone()
     if known != null {
@@ -1078,7 +1094,7 @@ fn kept_by_callee(unit: ref Unit, asked: ref Asked, callee: ref String, at: i64)
         }
         return unit.kept.contains(f"{callee}::{params[at]}")
     }
-    let contract = asked.own.functions[callee] ?? return true
+    let contract = asked.own.functions[callee] ?? asked.library.functions[callee] ?? return true
     let signature = contract.signature?.clone() ?? return true
     let position = if signature.takes_a_receiver() { at + 1 } else { at }
     if position >= signature.params.len() {

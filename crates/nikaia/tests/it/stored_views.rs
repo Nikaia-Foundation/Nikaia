@@ -652,6 +652,12 @@ fn a_parameter_handed_to_a_method_on_self_is_kept_only_if_that_method_keeps_it()
     let rust = lowered(&format!("{head}{mutual}\nfn main() {{}}\n"));
     assert!(rust.contains("fn even(&self, e: &E, d: i64)"), "{rust}");
     assert!(rust.contains("fn odd(&self, e: &E, d: i64)"), "{rust}");
+    // A call on a shared `ref` field is no store: it cannot keep what it reads.
+    let field = "struct Names { v: Vec[i64] }\n\nimpl Names {\n    fn get(ref self, e: ref E) -> i64 { return self.v[e.k] }\n}\n\nstruct Body { names: ref Names, n: i64 }\n\nimpl Body {\n    fn seg(ref self, e: ref E) -> i64 { return self.names.get(e) }\n}\n";
+    let rust = lowered(&format!(
+        "struct E {{ k: i64 }}\n\n{field}\nfn main() {{}}\n"
+    ));
+    assert!(rust.contains("fn seg(&self, e: &E) -> i64"), "{rust}");
 }
 
 /// #813 and #818: a non-literal argument to a parameter a `ref self` method

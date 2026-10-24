@@ -57,9 +57,9 @@ pub(crate) fn method_table(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], u
                                 params.push(asked.names.resolve(arg.name).to_owned());
                                 if arg.mutable { takes_mut = true; }
                             }
-                            let reading = takes_a_view_of_itself((receiver).as_ref()) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
+                            let reading = takes_a_view_of_itself((receiver).as_ref());
                             for i in 0..args.len() as i64 {
-                                if takes_mut || !nikaia_std::index::get(&args, (i) as usize).ty.is_view { unit.kept.insert(format!("{}::{}", key, *nikaia_std::index::get(&params, (i) as usize))); }
+                                if takes_mut || !nikaia_std::index::get(&args, (i) as usize).ty.is_view && brings_buffer(&unit, asked, &nikaia_std::index::get(&args, (i) as usize).ty) { unit.kept.insert(format!("{}::{}", key, *nikaia_std::index::get(&params, (i) as usize))); }
                                 if reading && !nikaia_std::index::get(&args, (i) as usize).mutable { unit.readonly.insert(format!("{}::{}", key, i)); }
                             }
                             { let __nikaia_stored = params; nikaia_std::index::set(&mut unit.methods, key, __nikaia_stored); }
@@ -738,13 +738,30 @@ pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: 
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handed_to(unit: &Unit, asked: &Asked<'_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span, here: &mut Here) {
+    let way = root(unit, asked, &here, receiver);
+    let mut callee = String::from("");
+    let mut named = false;
+    match way {
+        Root::Subject => {
+            callee = format!("{}::{}", nikaia_std::index::or(text_of(asked, (here.subject).as_ref()), || "".into()), asked.names.resolve(method));
+            named = true;
+        },
+        Root::SubjectField(_) => {
+            let field_ty = type_of(unit, asked, &here, receiver);
+            let viewed = nikaia_std::index::or(field_ty.as_ref().map(|__nikaia_it| __nikaia_it.is_view), || false);
+            if viewed {
+                callee = format!("{}::{}", nikaia_std::index::or(text_of(asked, (field_ty).as_ref()), || "".into()), asked.names.resolve(method));
+                named = true;
+            }
+        },
+        _ => { },
+    }
     let mut handed_over = false;
     let mut held = false;
-    let callee = format!("{}::{}", nikaia_std::index::or(text_of(asked, (here.subject).as_ref()), || "".into()), asked.names.resolve(method));
     for i in 0..args.len() as i64 {
         if mentions(unit, asked, &here, nikaia_std::index::get(&args, nikaia_std::index::at(i))) {
             handed_over = true;
-            if kept_by_callee(unit, asked, &callee, i) { held = true; }
+            if !named || kept_by_callee(unit, asked, &callee, i) { held = true; }
         }
     }
     for setting in config.iter() {
@@ -753,10 +770,10 @@ pub(crate) fn handed_to(unit: &Unit, asked: &Asked<'_, '_, '_>, receiver: &Expr,
             held = true;
         }
     }
-    if !handed_over { return; }
-    match root(unit, asked, &here, receiver) {
+    if !handed_over || !held { return; }
+    match way {
         Root::SubjectField(ref field) => { field_of_subject(unit, asked, field, span, here); },
-        Root::Subject => { if held { subject_destination(unit, asked, span, here); } },
+        Root::Subject => { subject_destination(unit, asked, span, here); },
         _ => { },
     }
 }
@@ -771,7 +788,7 @@ pub(crate) fn kept_by_callee(unit: &Unit, asked: &Asked<'_, '_, '_>, callee: &st
         if at >= params.len() as i64 { return true; }
         return unit.kept.contains(&format!("{}::{}", callee, *nikaia_std::index::get(&params, nikaia_std::index::at(at))));
     }
-    let contract = match *nikaia_std::index::get(&asked.own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return true };
+    let contract = match *nikaia_std::index::get(&asked.own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&asked.library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return true } };
     let signature = match match contract.signature.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
