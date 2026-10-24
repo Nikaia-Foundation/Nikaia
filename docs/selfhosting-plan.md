@@ -442,3 +442,8 @@ C7-d done (90843776, `written_by` with `String::quoted`): **C-7 is finished**;
 research brief that orders it leaves first.
 Then: #806 built (c4b6d01a), E10-2 built (efbc784e); R-2 (`contracts/maps.rs`)
 and #807 running; #808 (a `match` arm's view of a `ref` path, ADR-282 D13) filed.
+R-2 built (e0003acd, `contracts/maps.rs` to `tools/maps.nika`); its defects
+filed as #809 (`v[i]?.clone()`), #810 (a matched scrutinee counted as kept),
+#811 (`'a` on every `ref` parameter of a method of a struct with a `ref` field;
+`maps.nika` passes `words` instead until it is fixed), #812 (`?? []` for a list
+view). Next slice: **R-3 `type_rules.rs`** (1,382 lines).
