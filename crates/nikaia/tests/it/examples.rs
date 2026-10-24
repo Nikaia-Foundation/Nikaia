@@ -42,18 +42,18 @@ const COVERED_ELSEWHERE: &[&str] = &["1brc.nika"];
 const DIRECTORIES_CHECKED_ELSEWHERE: &[(&str, &str)] = &[
     // The Rust-passthrough arm and the experiment ADR-303 D7 put there. Its
     // own test builds each program in it and checks more than the output.
-    ("foreign-runtime", "tests/foreign_runtime.rs"),
+    ("foreign-runtime", "tests/it/foreign_runtime.rs"),
     // A package has no output of its own; it is built by the program that
     // depends on it.
     (
         "http",
-        "tests/project.rs: the_http_package_serves_its_example",
+        "tests/it/project.rs: the_http_package_serves_its_example",
     ),
     // That program. It is a directory rather than a file because reaching a
     // package by a path needs a manifest.
     (
         "hello-http",
-        "tests/project.rs: the_http_package_serves_its_example",
+        "tests/it/project.rs: the_http_package_serves_its_example",
     ),
     // **The C boundary against a real library**
     // ([ADR-302](../../../docs/specification/adr/adr-302.md) step 5). It
@@ -62,21 +62,21 @@ const DIRECTORIES_CHECKED_ELSEWHERE: &[(&str, &str)] = &[
     // skip cannot be one this file asserts output for.
     (
         "sqlite",
-        "tests/foreign_pointers.rs: sqlite3_from_end_to_end",
+        "tests/it/foreign_pointers.rs: sqlite3_from_end_to_end",
     ),
     // **The other direction: a library C calls**
     // ([ADR-284](../../../docs/specification/adr/adr-284.md)). It has nothing
     // to run on its own; its C program is what runs, and that needs `cc`.
     (
         "c-library",
-        "tests/c_library.rs: the_example_builds_and_its_c_program_runs",
+        "tests/it/c_library.rs: the_example_builds_and_its_c_program_runs",
     ),
     // **Two `unsafe` crates through `use`, under the ledgers they ship**
     // (#788). Both functions exist only at `--cpu=x86-64-v3`, which an output
     // test cannot ask for, so its test runs it at that level.
     (
         "crate-ledger",
-        "tests/shipped_ledger.rs: the_crate_ledger_example_runs",
+        "tests/it/shipped_ledger.rs: the_crate_ledger_example_runs",
     ),
 ];
 

@@ -32,5 +32,5 @@ What crosses, in `src/main.nika` and `use.c`:
 * Every function returns a status, and its value comes back through the last
   parameter.
 
-`crates/nikaia/tests/c_library.rs` builds it in place under `--locked`,
+`crates/nikaia/tests/it/c_library.rs` builds it in place under `--locked`,
 compiles `use.c` against it, and checks that output.

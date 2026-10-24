@@ -58,7 +58,7 @@ crossed: a String is Send on tokio-rt-worker, called from main
 
 ## In `cargo test`
 
-`crates/nikaia/tests/foreign_runtime.rs`. One test runs on every build — the
+`crates/nikaia/tests/it/foreign_runtime.rs`. One test runs on every build — the
 one that needs neither Cargo nor the network, and which checks a *guarantee*
 rather than a finding: a foreign call has no ledger entry, so
 [ADR-292](../../docs/specification/adr/adr-292.md) D3 makes it order against
@@ -66,7 +66,7 @@ everything. The three that drive `cargo` are `#[ignore]`d, because the first run
 fetches twenty-six crates:
 
 ```sh
-cargo test --test foreign_runtime -- --ignored --nocapture
+cargo test --profile fast -p nikaia --test it -- foreign_runtime:: --ignored --nocapture
 ```
 
 **Not wired into CI**, and that is deliberate: those three need crates.io.

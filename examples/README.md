@@ -23,11 +23,11 @@ nikaia test --both-settings    # every output test, and calc's `test` blocks, at
 nikaia test --bless            # write the expectations from what the program did; review the diff
 ```
 
-`crates/nikaia/tests/examples.rs` runs `nikaia test --both-settings` in a copy of each.
+`crates/nikaia/tests/it/examples.rs` runs `nikaia test --both-settings` in a copy of each.
 
 | | what it is | runs |
 | :--- | :--- | :--- |
-| [`1brc.nika`](1brc.nika) | the One Billion Row Challenge: a frame, a parallel fold, a billion rows | ✅ `crates/nikaia/tests/one_brc.rs` |
+| [`1brc.nika`](1brc.nika) | the One Billion Row Challenge: a frame, a parallel fold, a billion rows | ✅ `crates/nikaia/tests/it/one_brc.rs` |
 | [`calc/`](calc/) | a four-function calculator: the grammar protocol at its smallest | ✅ `nikaia test`: its own `tests/` |
 | [`access-log/`](access-log/) | a web log summarised: several fields per line, a report at the end | ✅ `nikaia test`: its own `tests/` |
 | [`config/`](config/) | an INI file with comments: a grammar that defines its own whitespace | ✅ `nikaia test`: its own `tests/` |
@@ -41,10 +41,10 @@ nikaia test --bless            # write the expectations from what the program di
 | [`inventory/`](inventory/) | `report.nika` again, in **three files**: what a module boundary buys and costs | ✅ `nikaia test`: its own `tests/`, the file it writes included |
 | [`fortunes.nika`](fortunes.nika) | the TechEmpower benchmark: a SQL DSL and an HTML template DSL in one handler | ❌ needs G6 and G7 |
 | [`http/`](http/) | the `http` **package**: what a handler is given and gives back, and **the server** — one connection at a time, with the caps as options | ✅ through its consumer |
-| [`hello-http/`](hello-http/) | a **server**, and a program that reaches `http` **by a path**: one address and one function that decides | ✅ `crates/nikaia/tests/project.rs`, over a real socket |
-| [`sqlite/`](sqlite/) | a real **C library**, end to end: a buffer, two handles with their `cleanup`, an out-parameter and text the library owns | ✅ `crates/nikaia/tests/foreign_pointers.rs`, skipped where the machine has no `libsqlite3` |
-| [`c-library/`](c-library/) | the other direction: a **library C calls**, with a handle, text into the caller's buffer, an `enum` and a callback | ✅ `crates/nikaia/tests/c_library.rs`, with its C program |
-| [`crate-ledger/`](crate-ledger/) | two of the repository's `unsafe` crates, `crc32c` and `low_bits`, called through `use` under the **ledgers they ship** (ADR-290 D22), at `--cpu=x86-64-v3` | ✅ `crates/nikaia/tests/shipped_ledger.rs` |
+| [`hello-http/`](hello-http/) | a **server**, and a program that reaches `http` **by a path**: one address and one function that decides | ✅ `crates/nikaia/tests/it/project.rs`, over a real socket |
+| [`sqlite/`](sqlite/) | a real **C library**, end to end: a buffer, two handles with their `cleanup`, an out-parameter and text the library owns | ✅ `crates/nikaia/tests/it/foreign_pointers.rs`, skipped where the machine has no `libsqlite3` |
+| [`c-library/`](c-library/) | the other direction: a **library C calls**, with a handle, text into the caller's buffer, an `enum` and a callback | ✅ `crates/nikaia/tests/it/c_library.rs`, with its C program |
+| [`crate-ledger/`](crate-ledger/) | two of the repository's `unsafe` crates, `crc32c` and `low_bits`, called through `use` under the **ledgers they ship** (ADR-290 D22), at `--cpu=x86-64-v3` | ✅ `crates/nikaia/tests/it/shipped_ledger.rs` |
 
 Each of the twelve programs - eleven of them packages now - is compiled and run **at both
 settings**, and their output must be identical — that is the claim the switches rest on, and a test is where it belongs
@@ -120,7 +120,7 @@ not an example any more because it is a tool, and a copy of it here would be a s
 keep in step with the first. `crates/nikaia-std/tests/rust_signatures.rs` is what runs it.
 
 An example that is added has to be declared: either it runs and says what it prints, or it is
-specification-level and its gaps are here. `crates/nikaia/tests/examples.rs` fails on a file
+specification-level and its gaps are here. `crates/nikaia/tests/it/examples.rs` fails on a file
 that is neither.
 
 What the bootstrap compiler handles: functions and methods, `impl` blocks, `struct` and `use`
@@ -139,7 +139,7 @@ spec is the cheapest way to find out which parts of the spec are underspecified.
 example exposed are listed below; they read as a roadmap.
 
 `tests/samples/` holds smaller programs that only have to *parse* — one construct each, checked
-by `crates/nikaia/tests/samples.rs`. An example graduates the other way: when the compiler
+by `crates/nikaia/tests/it/samples.rs`. An example graduates the other way: when the compiler
 catches up with one, it stays here and gains a row in `RUNNABLE`, because what makes it worth
 having is that it is a whole program.
 
@@ -477,7 +477,7 @@ generates had no position at all.
 
 The same example found the bug beside it: `dsl … from …` emitted its own `?`, so a `catch`
 next to it was handed the value it was meant to inspect and nothing compiled. Both are pinned
-in `crates/nikaia/tests/grammar_lowering.rs`.
+in `crates/nikaia/tests/it/grammar_lowering.rs`.
 
 ### Open
 

@@ -16,7 +16,7 @@
 //! Run them with:
 //!
 //! ```text
-//! cargo test --test foreign_runtime -- --ignored --nocapture
+//! cargo test --profile fast -p nikaia --test it -- foreign_runtime:: --ignored --nocapture
 //! ```
 
 use std::path::{Path, PathBuf};
