@@ -451,3 +451,34 @@ fn a_dependency_with_a_main_raises_no_dead_code_warning() {
         said(&out)
     );
 }
+
+/// #823: a passing program's warnings are not blessed into `NAME.stderr`, and
+/// a program that fails in rustc is not a refusal.
+#[test]
+fn bless_writes_no_stderr_for_warnings_and_no_refusal_for_rustc_failures() {
+    let dir = a_project(
+        "bless-warnings",
+        &[(
+            "main.nika",
+            "pub fn one() -> i64 {\n    return 1\n}\n\nfn main() {\n}\n",
+        )],
+    );
+    let tests = dir.join("tests");
+    std::fs::create_dir_all(&tests).expect("tests");
+    std::fs::write(
+        tests.join("warns.nika"),
+        "fn keep(s: ref String) -> i64 sync {\n    return s.len()\n}\n\nfn main() {\n    println(f\"{keep(\"ab\")}\")\n}\n",
+    )
+    .expect("warns");
+    std::fs::write(tests.join("warns.stdout"), "").expect("stdout");
+    let blessed = nikaia(&["test", "--bless"], &dir);
+    assert!(blessed.status.success(), "{}", said(&blessed));
+    assert_eq!(
+        std::fs::read_to_string(tests.join("warns.stdout")).unwrap(),
+        "2\n"
+    );
+    assert!(
+        !tests.join("warns.stderr").exists(),
+        "warnings were blessed"
+    );
+}

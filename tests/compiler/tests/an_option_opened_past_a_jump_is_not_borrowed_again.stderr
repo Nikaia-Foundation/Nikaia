@@ -1,8 +1,0 @@
-warning[NK1261]: `ref` is redundant here: a parameter written `ref String?` says what `String?` already says.
-  --> tests/an_option_opened_past_a_jump_is_not_borrowed_again.nika:4:1
-   |
- 4 | fn lookup(opt: ref String?, m: ref collections::HashMap[String, i64]) -> i64 {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
-   = help: Write `String?` without `ref`.

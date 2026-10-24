@@ -4113,7 +4113,13 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
 
 /// Whether a stderr file holds a compiler's refusal.
 fn is_refusal(text: &[u8]) -> bool {
-    text.starts_with(b"error") || text.windows(6).any(|w| w == b"\nerror")
+    (text.starts_with(b"error[NK") || text.windows(9).any(|w| w == b"\nerror[NK"))
+        && !does_not_compile(text)
+}
+
+/// Whether the build failed in rustc: not a refusal by the Nikaia compiler.
+fn does_not_compile(text: &[u8]) -> bool {
+    text.windows(17).any(|w| w == b"could not compile")
 }
 
 /// **Build and run one test program** in a package of its own, in a directory
@@ -4159,13 +4165,18 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
     };
     let built = run("build", &own.0)?;
     if !built.status.success() {
-        let shown = relocate(&built.stderr);
+        let mut shown = relocate(&built.stderr);
+        let broken = !is_refusal(shown.as_bytes());
+        if broken {
+            shown = format!("the program does not compile (rustc failed, not a refusal):\n{shown}");
+        }
         return Ok(Outcome {
             ended_well: false,
-            passed: test
-                .stderr
-                .as_deref()
-                .is_some_and(|want| want == shown.as_bytes()),
+            passed: !broken
+                && test
+                    .stderr
+                    .as_deref()
+                    .is_some_and(|want| want == shown.as_bytes()),
             stdout: Vec::new(),
             stderr: shown,
             files: Vec::new(),
@@ -4200,6 +4211,9 @@ fn bless_program(test: &ProgramTest, outcomes: &[(String, Outcome)]) -> Result<B
         return Ok(Blessed::Refused("the settings disagree"));
     }
     let refused = !first.ended_well && is_refusal(first.stderr.as_bytes());
+    if !first.ended_well && !refused && first.stderr.starts_with("the program does not compile") {
+        return Ok(Blessed::Refused("the program does not compile"));
+    }
     if !first.ended_well && !refused {
         return Ok(Blessed::Refused("the program did not end successfully"));
     }
@@ -4213,7 +4227,7 @@ fn bless_program(test: &ProgramTest, outcomes: &[(String, Outcome)]) -> Result<B
     if !refused && (test.stdout.is_some() || !first.stdout.is_empty()) {
         write("stdout", &first.stdout)?;
     }
-    if refused || test.stderr.is_some() || !first.stderr.is_empty() {
+    if refused || test.stderr.is_some() {
         write("stderr", first.stderr.as_bytes())?;
     }
     Ok(Blessed::Written)
@@ -4622,6 +4636,17 @@ fn trace(invocation: &Invocation, verdict: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #823: only the Nikaia compiler's `error[NKxxxx]` is a refusal.
+    #[test]
+    fn a_rustc_failure_is_no_refusal() {
+        assert!(is_refusal(b"error[NK1103]: mismatched\n"));
+        assert!(!is_refusal(b"error[E0308]: mismatched\n"));
+        assert!(!is_refusal(
+            b"error[NK1103]: x\nerror: could not compile `p`\n"
+        ));
+        assert!(!is_refusal(b"warning: unused\n"));
+    }
 
     /// `--locked` names the entry a changed line belongs to.
     ///
