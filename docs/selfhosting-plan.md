@@ -461,3 +461,18 @@ view stored into a local struct as kept); #808, #809, #810 and R-3 running.
 because of another builder's half-done files (seen: `Build::Release` in
 `handed_over.rs`). Prove a change in a clean copy (a fresh worktree on the
 commit) before reporting it, and say which.
+R-3 chunk 1 built (f5504640, about 620 of 1,382 lines of `type_rules.rs` in
+`tools/type_rules.nika`); **chunk 2** (the in-place rewriter, about 760 lines)
+waits for #814 (`args[i]` to a `mut` parameter) and #816 (`let mut x = m[k] ??
+continue`). Also filed: #815 (`bytes[a..<b].text()`), #817 (`m["k"]?.` on a
+map). The reported `match b.stmts[i].node` move does not reproduce in a program
+on a binary with #806; the R-3 builder retries it before chunk 2. #809 built
+(4e5397df); #813 running.
+
+**Next slices, in order** (from `docs/briefs/r1-next-rust-slices.md`):
+R-4 the non-grammar leaves of `parser/mod.rs` (Trivia, `number_at`, the error
+helpers, about 600 lines, prefix `Pr`; needs nothing), then R-5 the free
+functions of `contracts/mod.rs` (lines about 931-1439, about 500), then R-3
+chunk 2 once #814 and #816 are built, then R-6 the `visit_*` walkers of
+`contracts/send.rs`/`sync.rs`, then `fold_bound.rs`, then `modules.rs`'s
+`Program` core.
