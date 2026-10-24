@@ -458,6 +458,26 @@ fn a_constructor_inside_a_borrowing_impl_keeps_the_subjects_lifetime() {
     );
 }
 
+/// **Only a parameter stored into the struct carries `'a`** (#811, Part I 6.7):
+/// a view-holding parameter the method only reads gets a lifetime of its own.
+#[test]
+fn a_read_only_parameter_of_a_borrowing_impl_has_its_own_lifetime() {
+    let rust = lowered(
+        "struct W { k: i64 }\n\
+         struct G { pub w: ref W }\n\
+         struct H { pub w: ref W }\n\
+         \n\
+         impl H {\n\
+         \x20   fn two(ref self, a: ref G) -> i64 { return a.w.k + self.w.k }\n\
+         \x20   fn st(ref mut self, b: ref W) { self.w = b }\n\
+         }\n\
+         \n\
+         fn main() { println(\"x\") }\n",
+    );
+    assert!(rust.contains("fn two(&self, a: &G<'_>)"), "{rust}");
+    assert!(rust.contains("fn st(&mut self, b: &'a W)"), "{rust}");
+}
+
 // --- what the callee's own column already answers ----------------------------
 
 /// **A call says which of its arguments its result may point into**, and a

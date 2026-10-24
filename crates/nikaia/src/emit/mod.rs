@@ -4111,6 +4111,10 @@ impl<'p> Emitter<'p> {
                 // **A struct parameter that carries a view parameter's buffer**
                 // is written over it: `s: &mut Summary<'a>, name: &'a str`.
                 (true, false) => lifetimes.over_the_input(),
+                // **A parameter of a method of a borrowing type that nothing
+                // stores into the struct** has a lifetime of its own, left to
+                // elision (Part I 6.7); `'a` is for what is stored (#811).
+                (false, _) if lifetimes == Lifetimes::Inner => Lifetimes::Elided,
                 (false, _) => lifetimes,
             }
         };
