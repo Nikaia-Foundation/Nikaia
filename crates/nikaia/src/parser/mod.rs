@@ -114,6 +114,12 @@ pub struct Trivia {
     /// Where the run of trivia that ends at `end` began, so a span that ends
     /// in it is cut back to the last token.
     trivia_start: usize,
+    /// **Every comment the whitespace skip read**, by where it starts, to
+    /// where it ends ([ADR-337](../../../docs/specification/adr/adr-337.md)
+    /// D2): what `nikaia fmt` puts back. A position is a fact about the
+    /// input, so a branch that loses and reads the same comment again writes
+    /// the same entry; a nested `/* … */` is dropped for the one around it.
+    comments: std::collections::BTreeMap<usize, usize>,
 }
 
 impl Trivia {
@@ -181,6 +187,7 @@ impl Trivia {
     /// begins with the third. `////` is an ordinary comment, as it is in every
     /// language that has both.
     fn comment(&mut self, at: std::ops::Range<usize>, body: &str) {
+        self.noted(at.clone());
         let line = match body.strip_prefix('/') {
             Some(rest) if !rest.starts_with('/') => rest,
             // **An ordinary comment neither adds to a run nor ends one.** It is
@@ -228,6 +235,31 @@ impl Trivia {
             true => Some(self.doc.clone()),
             false => None,
         }
+    }
+
+    /// Keep a comment's place, unless one around it is kept already, and
+    /// drop those it holds (a `/* … */` nested in this one).
+    fn noted(&mut self, at: std::ops::Range<usize>) {
+        if let Some((_, &end)) = self.comments.range(..=at.start).next_back()
+            && end >= at.end
+        {
+            return;
+        }
+        let inside: Vec<usize> = self
+            .comments
+            .range(at.start..at.end)
+            .map(|(&start, _)| start)
+            .collect();
+        for start in inside {
+            self.comments.remove(&start);
+        }
+        self.comments.insert(at.start, at.end);
+    }
+
+    /// A `/* … */` comment.
+    fn block_comment(&mut self, at: std::ops::Range<usize>) {
+        self.noted(at.clone());
+        self.ran(at, false);
     }
 
     /// Whether the token at this byte is the first thing on its line.
@@ -462,6 +494,11 @@ pub struct Parsed {
     /// A node the compiler built has none; who reports on it falls back to
     /// the enclosing statement's span.
     pub expr_spans: std::collections::BTreeMap<u32, ast::Span>,
+    /// **Every comment of the file, in order**, by the bytes it stands on
+    /// from its `//` or `/*` to its last character
+    /// ([ADR-337](../../../docs/specification/adr/adr-337.md) D2): beside the
+    /// tree and not in it, so nothing that lowers it sees one.
+    pub comments: Vec<ast::Span>,
     /// **The text this file was parsed from, kept only for the sweep of
     /// accepted programs** (#705): `None` unless `NIKAIA_DUMP_ACCEPTED` names a
     /// directory, where [`crate::check::check_against`] writes each source it
@@ -632,6 +669,7 @@ impl Parsed {
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
             expr_spans: self.expr_spans.clone(),
+            comments: self.comments.clone(),
             dumped_source: None,
         }
     }
@@ -673,6 +711,7 @@ impl Parsed {
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
             expr_spans: self.expr_spans.clone(),
+            comments: self.comments.clone(),
             dumped_source: None,
         }
     }
@@ -909,6 +948,10 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         .enumerate()
         .filter_map(|(at, span)| Some((at as u32 + spans_from, span?)))
         .collect();
+    let comments = std::mem::take(&mut stream.state.user_state.comments)
+        .into_iter()
+        .map(|(start, end)| ast::Span::from(start..end))
+        .collect();
     let aliases = nikaia_std::tools::parsed_tree::aliases_of(&program.items, &interner);
     let mut parsed = Parsed {
         program,
@@ -923,6 +966,7 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         kept_calls: Default::default(),
         next_id: std::sync::Mutex::new(after_ids),
         expr_spans,
+        comments,
         dumped_source: crate::check::accepted_dump_dir().map(|_| input.to_string()),
     };
     // ADR-347: a one-variant enum written by its type's name becomes the long
@@ -1046,7 +1090,7 @@ grammar! {
         // needs no help to say so: it is a lexical rule, so no implicit `WS`
         // runs between its characters and nothing here is ever asked.
         rule BLOCK_COMMENT # "block comment" @= "/*" => BLOCK_INNER* "*/"
-            -> { _state.user().ran(_span, false) }
+            -> { _state.user().block_comment(_span) }
 
         // One step inside a block comment: a nested comment, or one character
         // that is not the close. **Tried in that order**, which is the whole of
