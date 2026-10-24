@@ -90,6 +90,65 @@ pub fn check_walked_settle(mut state: CheckState) sync {
     check_walked_unknown_last(state)
     check_walked_articles(state)
     check_walked_method_facts(state)
+    // The order is the span's start; the sort is stable.
+    state.findings.sort_by_key(fn(f) { f.span.start })
+}
+
+/// **The call a kept function stands for** (`Parsed::kept_function_call`): the
+/// names of its parameters and the call itself, with ids of their own. The
+/// adapter caches it by name and arity.
+pub fn check_walked_kept_call(func: ref Expr, arity: i64, receiver: bool, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> (Vec[winnow_grammar::Symbol], Expr) sync {
+    let mut names: Vec[winnow_grammar::Symbol] = []
+    let mut args: Vec[Expr] = []
+    let mut at = 0
+    while at < arity {
+        let name = intern(f"__nikaia_arg{at}")
+        names.push(name)
+        args.push(Expr::Variable(name, fresh_id()))
+        at += 1
+    }
+    let call = match func {
+        Expr::Path(segments, _) => {
+            if receiver && args.len() > 0 {
+                let first = args.remove(0)
+                Expr::MethodCall { receiver: first, method: segments[segments.len() - 1], args: args, config: [], id: fresh_id() }
+            } else {
+                Expr::Call { func: Expr::Path(segments.clone(), fresh_id()), args: args, config: [], id: fresh_id() }
+            }
+        }
+        Expr::Variable(name, _) => Expr::Call { func: Expr::Variable(name, fresh_id()), args: args, config: [], id: fresh_id() }
+        // The adapter has refused anything else: a kept function is a name or a path.
+        else => Expr::Call { func: func.clone(), args: args, config: [], id: fresh_id() }
+    }
+    return (names, call)
+}
+
+/// **The signed values in unsigned slots, asked of the walk** (ADR-285 D32):
+/// one `proven` says is `>= 0` where it stands is taken as it is; one that is
+/// not is the slot's refusal, with the two ways to say it. `proven` answers
+/// for a set of nodes which of them are proved non-negative, given the facts
+/// (`bounds::proven`, until `bounds` moves).
+pub fn check_walked_unsigned_slots(mut state: CheckState, proven: fn(ref CheckFacts, ref collections::BTreeSet[i64]) -> collections::BTreeSet[i64] sync) sync {
+    let mut slots: Vec[CheckUnsignedSlot] = []
+    for (_, held) in state.flow.unsigned_slots.clone() {
+        for slot in held {
+            slots.push(slot.clone())
+        }
+    }
+    state.flow.unsigned_slots = collections::BTreeMap()
+    if slots.len() == 0 {
+        return
+    }
+    let mut nodes: collections::BTreeSet[i64] = collections::BTreeSet()
+    for slot in slots.clone() {
+        nodes.insert(slot.node)
+    }
+    let held = proven(state.facts, nodes)
+    for slot in slots {
+        if !held.contains(slot.node) {
+            state.findings.push(check_unsigned_slot_refused(slot))
+        }
+    }
 }
 
 /// **The unrolling report** (`--explain`): one line for each function that

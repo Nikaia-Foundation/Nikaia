@@ -2590,6 +2590,10 @@ pub fn explain(
                     library,
                     reads,
                     settings.unproved_claims != "warn",
+                    // **Red and green only on a terminal**, and never where
+                    // `NO_COLOR` is set (Part III, `--asserts`).
+                    std::env::var_os("NO_COLOR").is_none()
+                        && std::io::IsTerminal::is_terminal(&std::io::stdout()),
                 )
             );
         }

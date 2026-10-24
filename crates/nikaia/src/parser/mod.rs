@@ -565,43 +565,21 @@ impl Parsed {
         arity: usize,
         receiver: bool,
     ) -> (Vec<Symbol>, ast::Expr) {
+        assert!(
+            matches!(func, ast::Expr::Path(..) | ast::Expr::Variable(..)),
+            "a kept function is a name or a path, not {func:?}"
+        );
         let key = (self.kept_function_text(func), arity);
         let mut built = self.kept_calls.lock().expect("a kept call build panicked");
         built
             .entry(key)
             .or_insert_with(|| {
-                let names: Vec<Symbol> = (0..arity)
-                    .map(|at| self.interner.intern_string(&format!("__nikaia_arg{at}")))
-                    .collect();
-                let mut args: Vec<ast::Expr> = names
-                    .iter()
-                    .map(|n| ast::Expr::Variable(*n, ast::NodeId::fresh()))
-                    .collect();
-                let call = match func {
-                    ast::Expr::Path(segments, _) if receiver && !args.is_empty() => {
-                        ast::Expr::MethodCall {
-                            receiver: Box::new(args.remove(0)),
-                            method: *segments.last().expect("a path has a segment"),
-                            args,
-                            config: Vec::new(),
-                            id: ast::NodeId::fresh(),
-                        }
-                    }
-                    ast::Expr::Path(segments, _) => ast::Expr::Call {
-                        func: Box::new(ast::Expr::Path(segments.clone(), ast::NodeId::fresh())),
-                        args,
-                        config: Vec::new(),
-                        id: ast::NodeId::fresh(),
-                    },
-                    ast::Expr::Variable(name, _) => ast::Expr::Call {
-                        func: Box::new(ast::Expr::Variable(*name, ast::NodeId::fresh())),
-                        args,
-                        config: Vec::new(),
-                        id: ast::NodeId::fresh(),
-                    },
-                    other => unreachable!("a kept function is a name or a path, not {other:?}"),
-                };
-                (names, call)
+                nikaia_std::tools::check_walked::check_walked_kept_call(
+                    func,
+                    arity as i64,
+                    receiver,
+                    &|text| self.interner.intern_string(text),
+                )
             })
             .clone()
     }

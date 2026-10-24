@@ -39,9 +39,8 @@ use crate::contracts::{FieldContract, Ledger, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_crossings;
-use nikaia_std::tools::check_flow::{CheckConstant, CheckFlow, CheckUnsignedSlot as UnsignedSlot};
+use nikaia_std::tools::check_flow::{CheckConstant, CheckFlow};
 use nikaia_std::tools::check_items;
-use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_reports::CheckWall;
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
@@ -599,9 +598,8 @@ fn walked<'a>(
     let disagreeing = std::mem::take(&mut checker.s.arm_disagreements);
     checker.s.findings.extend(disagreeing.into_values());
     // The findings and method sets in their final form (`check_walked.nika`);
-    // the order is the span's, set here.
+    // the order is the span's.
     checker.nikaia(|state, _, _| check_walked::check_walked_settle(state));
-    checker.s.findings.sort_by_key(|f| f.span.at());
     finished(checker)
 }
 
@@ -673,22 +671,19 @@ fn finished(checker: Checker<'_>) -> Checked {
 /// arm written `=> { throw NotFound }` still has.
 impl Checker<'_> {}
 
-/// An integer type's name as a name that lives for the program.
-fn a_static_integer(name: &str) -> &'static str {
-    INTEGERS
-        .iter()
-        .copied()
-        .find(|n| *n == name)
-        .unwrap_or("i64")
-}
-
 /// **The integer types a program writes** (Part I 2.2), as the type names
 /// they are.
 const INTEGERS: [&str; 5] = ["u8", "u32", "u64", "i32", "i64"];
 
 /// **The lossless common type of two integer types** (`tools/check_widen.nika`).
 pub fn common_integer(a: &str, b: &str) -> Option<&'static str> {
-    check_widen::common_integer(a, b).map(|common| a_static_integer(&common))
+    check_widen::common_integer(a, b).map(|common| {
+        INTEGERS
+            .iter()
+            .copied()
+            .find(|n| *n == common)
+            .unwrap_or("i64")
+    })
 }
 
 /// The loops whose step can fail, for a caller that wants only those.
@@ -991,31 +986,23 @@ impl<'a> Checker<'a> {
     /// taken as it is; one that is not is the slot's refusal, with the two
     /// ways to say it.
     fn unsigned_slots_proved(&mut self, parsed: &Parsed) {
-        let slots: Vec<UnsignedSlot> = std::mem::take(&mut self.s.flow.unsigned_slots)
-            .into_values()
-            .flatten()
-            .collect();
-        if slots.is_empty() {
-            return;
-        }
-        let nodes: BTreeSet<i64> = slots.iter().map(|s| s.node).collect();
-        let proven = crate::bounds::proven(
-            parsed,
-            &crate::bounds::Sites::of(&self.s.facts),
-            &[self.world.own, self.world.library],
-            &nodes,
-            // What the checker accepts does not depend on an optimization
-            // (ADR-361 D10).
-            false,
-        );
-        for slot in slots {
-            if proven.nonnegative.contains(&((slot.node as usize) as i64)) {
-                continue;
-            }
-            self.s
-                .findings
-                .push(check_overflow::check_unsigned_slot_refused(&slot));
-        }
+        let (own, library) = (self.world.own, self.world.library);
+        self.nikaia(|state, _, _| {
+            check_walked::check_walked_unsigned_slots(state, &|facts, nodes| {
+                crate::bounds::proven(
+                    parsed,
+                    &crate::bounds::Sites::of(facts),
+                    &[own, library],
+                    nodes,
+                    // What the checker accepts does not depend on an optimization
+                    // (ADR-361 D10).
+                    false,
+                )
+                .nonnegative
+                .into_iter()
+                .collect()
+            })
+        });
     }
 
     // --- crossing a thread (ADR-005 §1 Group B, `NK25xx`) -------------------
@@ -1179,6 +1166,9 @@ impl Checker<'_> {}
 /// test's check, or refused (D6) - and how many of each, so that the number
 /// checked at run time can be watched.
 ///
+/// **Red and green only on a terminal**, and never where `NO_COLOR` is set
+/// (Part III, `--asserts`): the caller decides and passes `colour`.
+///
 /// **Checked as the build checks it**: with the program's other files and
 /// what the build may read and compile, so that a `comptime` a call computes
 /// and a call run for a claim (ADR-359 D7, D11) answer here as they did there.
@@ -1192,6 +1182,7 @@ pub fn claims_report(
     library: &Ledger,
     reads: &Reads,
     refuses: bool,
+    colour: bool,
 ) -> String {
     let checked = check_against(
         parsed,
@@ -1202,10 +1193,6 @@ pub fn claims_report(
         &Newly::new(),
         reads,
     );
-    // **Red and green only on a terminal**, and never where `NO_COLOR` is set
-    // (Part III, `--asserts`).
-    let colour = std::env::var_os("NO_COLOR").is_none()
-        && std::io::IsTerminal::is_terminal(&std::io::stdout());
     nikaia_std::tools::check_facts::check_claims_report(
         &checked.facts.claims,
         source,

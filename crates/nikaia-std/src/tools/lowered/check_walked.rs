@@ -61,6 +61,45 @@ pub fn check_walked_settle(state: &mut CheckState) {
     check_walked_unknown_last(state);
     check_walked_articles(state);
     check_walked_method_facts(state);
+    state.findings.sort_by_key(|f| { f.span.start });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> (Vec<winnow_grammar::Symbol>, Expr) {
+    let mut names: Vec<winnow_grammar::Symbol> = vec![];
+    let mut args: Vec<Expr> = vec![];
+    let mut at: i64 = 0;
+    while at < arity {
+        let name = intern(&format!("__nikaia_arg{}", at));
+        names.push(name);
+        args.push(Expr::Variable(name, fresh_id()));
+        at += 1;
+    }
+    let call = match func {
+        Expr::Path(segments, _) => {
+            if receiver && !args.is_empty() {
+                let first = args.remove(0);
+                Expr::MethodCall { receiver: Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1)), args, config: vec![], id: fresh_id() }
+            } else { Expr::Call { func: Box::new(Expr::Path(segments.to_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
+        },
+        Expr::Variable(name, _) => { let name = *name; Expr::Call { func: Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
+        _ => Expr::Call { func: Box::new(func.clone()), args, config: vec![], id: fresh_id() },
+    };
+    (names, call)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_walked_unsigned_slots(state: &mut CheckState, proven: &impl Fn(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
+    let mut slots: Vec<CheckUnsignedSlot> = vec![];
+    for (_, held) in state.flow.unsigned_slots.to_owned() { for slot in held.iter() { slots.push(slot.clone()); } }
+    state.flow.unsigned_slots = collections::BTreeMap::new();
+    if slots.is_empty() { return; }
+    let mut nodes: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    for slot in slots.to_owned() { nodes.insert(slot.node); }
+    let held = proven(&state.facts, &nodes);
+    for slot in slots.iter() { if !held.contains(&slot.node) { state.findings.push(check_unsigned_slot_refused(slot)); } }
 }
 
 pub fn check_walked_unrolling(walks_fields: &collections::BTreeMap<String, String>, unrolled: &collections::BTreeMap<(String, String), Vec<FieldContract>>) -> String {
