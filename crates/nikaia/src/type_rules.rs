@@ -28,84 +28,29 @@ use crate::ast::{
     Block, ConfigArg, Expr, FnArg, Item, NodeId, Receiver, Span, Spanned, Stmt, Type,
 };
 use crate::parser::Parsed;
+use nikaia_std::tools::type_rules::{self as tr, TrDeclared, TrMethods, TrRuled};
 
 /// The option that marks a rule's `assert` as given rather than claimed: a
 /// fact at a function's entry (ADR-369 D3). A name with spaces, which no
 /// program can write.
 pub const GIVEN: &str = "rule of the type";
 
-/// A struct of the file that states rules.
-struct Ruled {
-    fields: BTreeSet<String>,
-    /// Each rule's claim and its `message:`, as written.
-    rules: Vec<(Expr, Option<Expr>, Span)>,
-    /// The name a checked literal is bound to: the type's name, its first
-    /// letter small (`piece`), which is what a failure shows.
-    binding: Symbol,
-}
+type Ruled = TrRuled;
 
 /// Writes every rule of the file's structs out as its `assert`s; `NK1288`
 /// for a rule that is not one.
 pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
     let interner = parsed.interner.clone();
-    let mut ruled: BTreeMap<String, Ruled> = BTreeMap::new();
-    for item in &parsed.program.items {
-        let Item::Struct {
-            name,
-            fields,
-            rules,
-            generics,
-            ..
-        } = &item.node
-        else {
-            continue;
-        };
-        if rules.is_empty() {
-            continue;
-        }
-        let type_name = interner.resolve(*name).to_string();
-        let field_names: BTreeSet<String> = fields
-            .iter()
-            .map(|f| interner.resolve(f.name).to_string())
-            .collect();
-        let mut read = Vec::new();
-        for rule in rules {
-            let Some((claim, message)) = a_rule(&interner, &rule.node) else {
-                return Err(refused(
-                    rule.span,
-                    format!("A rule of `{type_name}` has to be an `assert`."),
-                    "Write it as `assert(claim)` or `assert(claim; message: \"…\")` after the fields.",
-                ));
-            };
-            if !generics.is_empty() {
-                return Err(refused(
-                    rule.span,
-                    format!("`{type_name}` is generic, and a generic struct states no rule yet."),
-                    "Check what the methods need with an `assert` in each of them.",
-                ));
-            }
-            let probe = Expr::Variable(*name, NodeId::fresh());
-            if on(&interner, claim, &probe, &field_names).is_none() {
-                return Err(refused(
-                    rule.span,
-                    format!(
-                        "A rule of `{type_name}` may read only its fields, paths and pure methods from them, `comptime` values and literals."
-                    ),
-                    "Compute anything else in a method, and state the rule over the fields it keeps.",
-                ));
-            }
-            read.push((claim.clone(), message.cloned(), rule.span));
-        }
-        let binding = binding_of(&interner, &type_name, &field_names);
-        ruled.insert(
-            type_name,
-            Ruled {
-                fields: field_names,
-                rules: read,
-                binding,
-            },
-        );
+    let found = tr::tr_collect(
+        &interner,
+        &|s| interner.intern_string(s),
+        &renew,
+        &parsed.program.items,
+    );
+    if let Some(refusal) = found.refusal {
+        return Err(refused(refusal.span, refusal.head, &refusal.help));
     }
+    let ruled = found.ruled;
     if ruled.is_empty() {
         return Ok(());
     }
@@ -115,35 +60,10 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
         .iter()
         .map(|(name, r)| (name.clone(), r.fields.clone()))
         .collect();
-    let mut changed = changed_outside(&interner, &fields, &mut items);
-    changed.extend(fails_changed(&interner, &ruled, &items));
+    let mut changed = tr::tr_changed_outside(&interner, &fields, &items);
+    changed.extend(tr::tr_fails_changed(&interner, &ruled, &items));
     // Each type's methods in this file, and of them those that change `self`.
-    let mut own: BTreeMap<String, Methods> = BTreeMap::new();
-    for item in &items {
-        let Item::Impl {
-            target, methods, ..
-        } = &item.node
-        else {
-            continue;
-        };
-        let entry = own
-            .entry(interner.resolve(target.name).to_string())
-            .or_default();
-        for method in methods {
-            if let Item::Fn {
-                name: Some(name),
-                receiver: Some(how),
-                ..
-            } = &method.node
-            {
-                let name = interner.resolve(*name).to_string();
-                if how.is_mut {
-                    entry.changing.insert(name.clone());
-                }
-                entry.all.insert(name);
-            }
-        }
-    }
+    let own = tr::tr_methods_of(&interner, &items);
     for item in &mut items {
         match &mut item.node {
             Item::Impl {
@@ -184,84 +104,6 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The name a checked literal of `type_name` is bound to: its first letter
-/// small (`piece`), which is what a failure shows.
-fn binding_of(interner: &InternerContext, type_name: &str, fields: &BTreeSet<String>) -> Symbol {
-    let mut small = type_name.to_string();
-    if let Some(first) = small.get(0..1) {
-        small = format!("{}{}", first.to_lowercase(), &small[1..]);
-    }
-    if fields.contains(&small) || small == type_name {
-        small = format!("{small}_value");
-    }
-    interner.intern_string(&small)
-}
-
-/// **The types a method can leave broken through a failure it passes on**:
-/// a method that changes its receiver and `throws` leaves at every call that
-/// fails, and a caller that catches the failure still holds the value, its
-/// rule maybe broken for a while. The rule is checked before each `return`
-/// and `throw` written, not before each call that may fail, so the rule of
-/// such a type is not a fact at an entry (D3): what is lost is a proof, never
-/// a check.
-fn fails_changed(
-    interner: &InternerContext,
-    ruled: &BTreeMap<String, Ruled>,
-    items: &[Spanned<Item>],
-) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    for item in items {
-        let Item::Impl {
-            target, methods, ..
-        } = &item.node
-        else {
-            continue;
-        };
-        let owner = interner.resolve(target.name).to_string();
-        if !ruled.contains_key(&owner) {
-            continue;
-        }
-        let fails = methods.iter().any(|m| {
-            matches!(
-                &m.node,
-                Item::Fn {
-                    receiver: Some(how),
-                    can_throw: true,
-                    ..
-                } if how.is_mut
-            )
-        });
-        if fails {
-            out.insert(owner);
-        }
-    }
-    out
-}
-
-/// The claim and the `message:` of `assert(claim; message: …)`.
-fn a_rule<'a>(interner: &InternerContext, rule: &'a Expr) -> Option<(&'a Expr, Option<&'a Expr>)> {
-    let Expr::Call {
-        func, args, config, ..
-    } = rule
-    else {
-        return None;
-    };
-    let Expr::Variable(called, _) = &**func else {
-        return None;
-    };
-    if interner.resolve(*called) != "assert" || args.len() != 1 {
-        return None;
-    }
-    let mut message = None;
-    for option in config {
-        if interner.resolve(option.name) != "message" {
-            return None;
-        }
-        message = Some(&option.value);
-    }
-    Some((&args[0], message))
-}
-
 fn refused(span: Span, head: String, help: &str) -> anyhow::Error {
     let finding = crate::check::Finding {
         severity: crate::check::Severity::Error,
@@ -280,104 +122,16 @@ fn refused(span: Span, head: String, help: &str) -> anyhow::Error {
     crate::diagnostics::refuse_finding(finding, format!("NK1288: {head} {help}"))
 }
 
-/// The claim with each field read through `base`, every node new; `None`
-/// where it reads something a rule may not.
-fn on(
-    interner: &InternerContext,
-    claim: &Expr,
-    base: &Expr,
-    fields: &BTreeSet<String>,
-) -> Option<Expr> {
-    let fresh = NodeId::fresh;
-    let again = |e: &Expr| on(interner, e, base, fields);
-    Some(match claim {
-        Expr::Variable(name, _) => {
-            if fields.contains(interner.resolve(*name)) {
-                Expr::Field {
-                    base: Box::new(renumbered(base)),
-                    name: *name,
-                    id: fresh(),
-                }
-            } else {
-                Expr::Variable(*name, fresh())
-            }
-        }
-        Expr::Path(segments, _) => Expr::Path(segments.clone(), fresh()),
-        Expr::LitInt {
-            value, negative, ..
-        } => Expr::LitInt {
-            value: *value,
-            negative: *negative,
-            id: fresh(),
-        },
-        Expr::LitBool(b, _) => Expr::LitBool(*b, fresh()),
-        Expr::LitChar(c, _) => Expr::LitChar(c.clone(), fresh()),
-        Expr::LitFloat(f, _) => Expr::LitFloat(f.clone(), fresh()),
-        Expr::LitNull(_) => Expr::LitNull(fresh()),
-        Expr::Binary {
-            op,
-            lhs,
-            rhs,
-            span,
-            grouped,
-            ..
-        } => Expr::Binary {
-            op: *op,
-            lhs: Box::new(again(lhs)?),
-            rhs: Box::new(again(rhs)?),
-            span: *span,
-            grouped: *grouped,
-            id: fresh(),
-        },
-        Expr::Unary { op, expr, .. } => Expr::Unary {
-            op: *op,
-            expr: Box::new(again(expr)?),
-            id: fresh(),
-        },
-        Expr::Field {
-            base: inner, name, ..
-        } => Expr::Field {
-            base: Box::new(again(inner)?),
-            name: *name,
-            id: fresh(),
-        },
-        Expr::MethodCall {
-            receiver,
-            method,
-            args,
-            config,
-            ..
-        } if config.is_empty() => Expr::MethodCall {
-            receiver: Box::new(again(receiver)?),
-            method: *method,
-            args: args.iter().map(again).collect::<Option<Vec<_>>>()?,
-            config: Vec::new(),
-            id: fresh(),
-        },
-        Expr::Cast { expr, ty, .. } => Expr::Cast {
-            expr: Box::new(again(expr)?),
-            ty: ty.clone(),
-            id: fresh(),
-        },
-        _ => return None,
-    })
+/// An expression copied with a new id.
+fn renew(e: &Expr) -> Expr {
+    let mut copy = e.clone();
+    crate::ast::set_id(&mut copy, NodeId::fresh());
+    copy
 }
 
 /// A base read once more: the same name or path, a node of its own.
 fn renumbered(base: &Expr) -> Expr {
-    match base {
-        Expr::Variable(name, _) => Expr::Variable(*name, NodeId::fresh()),
-        Expr::Field { base, name, .. } => Expr::Field {
-            base: Box::new(renumbered(base)),
-            name: *name,
-            id: NodeId::fresh(),
-        },
-        other => {
-            let mut copy = other.clone();
-            crate::ast::set_id(&mut copy, NodeId::fresh());
-            copy
-        }
-    }
+    tr::tr_renumbered(base, &renew)
 }
 
 /// `assert(rule over base; message: …)` for each rule of `ruled`, standing
@@ -390,12 +144,21 @@ fn asserts(
     span: Span,
     given: bool,
 ) -> Vec<Spanned<Stmt>> {
-    asserts_as(interner, ruled, type_name, base, span, given, !given)
+    tr::tr_asserts(
+        interner,
+        &|s| interner.intern_string(s),
+        &renew,
+        ruled,
+        type_name,
+        base,
+        &span,
+        given,
+    )
 }
 
 /// [`asserts`], given where `given` says so and with its `message:` where
-/// `said` does: a rule a method keeps ([`kept_by`]) is both, so that it is a
-/// check again where another file breaks the rule ([`drop_given_in`]).
+/// `said` does: a rule a method keeps ([`tr::tr_kept_by`]) is both, so that it
+/// is a check again where another file breaks the rule ([`drop_given_in`]).
 fn asserts_as(
     interner: &InternerContext,
     ruled: &Ruled,
@@ -405,56 +168,17 @@ fn asserts_as(
     given: bool,
     said: bool,
 ) -> Vec<Spanned<Stmt>> {
-    let mut out = Vec::new();
-    for (claim, message, _) in &ruled.rules {
-        let Some(condition) = on(interner, claim, base, &ruled.fields) else {
-            continue;
-        };
-        let mut config = Vec::new();
-        if given {
-            config.push(ConfigArg {
-                name: interner.intern_string(GIVEN),
-                value: Expr::LitStr {
-                    text: type_name.to_string(),
-                    id: NodeId::fresh(),
-                },
-            });
-        }
-        if said {
-            // **A failure names the type** (D2): its message is the rule's,
-            // after the type's name.
-            let said = match message {
-                None => Expr::LitStr {
-                    text: format!("the rule of `{type_name}`"),
-                    id: NodeId::fresh(),
-                },
-                Some(Expr::LitStr { text, .. }) => Expr::LitStr {
-                    text: format!("the rule of `{type_name}`: {text}"),
-                    id: NodeId::fresh(),
-                },
-                Some(said) => {
-                    let mut said = said.clone();
-                    crate::ast::set_id(&mut said, NodeId::fresh());
-                    said
-                }
-            };
-            config.push(ConfigArg {
-                name: interner.intern_string("message"),
-                value: said,
-            });
-        }
-        let call = Expr::Call {
-            func: Box::new(Expr::Variable(
-                interner.intern_string("assert"),
-                NodeId::fresh(),
-            )),
-            args: vec![condition],
-            config,
-            id: NodeId::fresh(),
-        };
-        out.push(Spanned::new(Stmt::Expr(call), span));
-    }
-    out
+    tr::tr_asserts_as(
+        interner,
+        &|s| interner.intern_string(s),
+        &renew,
+        ruled,
+        type_name,
+        base,
+        &span,
+        given,
+        said,
+    )
 }
 
 /// The name a type is written by: `Piece`, `ref Piece`, `mut Piece`.
@@ -462,20 +186,12 @@ fn named(interner: &InternerContext, ty: &Type) -> String {
     interner.resolve(ty.name).to_string()
 }
 
-/// A type's methods in the file: every one that takes `self`, and those that
-/// change it.
-#[derive(Default)]
-struct Methods {
-    all: BTreeSet<String>,
-    changing: BTreeSet<String>,
-}
-
 #[allow(clippy::too_many_arguments)]
 fn rewrite_fn(
     interner: &InternerContext,
     ruled: &BTreeMap<String, Ruled>,
     changed: &BTreeSet<String>,
-    own: &BTreeMap<String, Methods>,
+    own: &BTreeMap<String, TrMethods>,
     spans: &BTreeMap<u32, Span>,
     item: &mut Item,
     owner: Option<&str>,
@@ -496,7 +212,10 @@ fn rewrite_fn(
     check_literals(interner, ruled, spans, body, span);
     let self_name = interner.intern_string("self");
     let self_rules = owner.and_then(|o| ruled.get(o).map(|r| (o, r)));
-    let no_methods = Methods::default();
+    let no_methods = TrMethods {
+        all: BTreeSet::new(),
+        changing: BTreeSet::new(),
+    };
     let methods = owner.and_then(|o| own.get(o)).unwrap_or(&no_methods);
     // **A rule the method cannot break is not checked in it** ([`kept_by`]):
     // given at each point instead, with its message for where another file
@@ -506,24 +225,17 @@ fn rewrite_fn(
     if let (Some((type_name, rules)), Some(how)) = (self_rules, &receiver)
         && how.is_mut
     {
-        let mut keeps = Vec::new();
-        let mut checks = Vec::new();
-        for rule in &rules.rules {
-            if !changed.contains(type_name)
-                && kept_by(interner, &rule.0, &rules.fields, &methods.all, body)
-            {
-                keeps.push(rule.clone());
-            } else {
-                checks.push(rule.clone());
-            }
-        }
-        let part = |rules_of: Vec<(Expr, Option<Expr>, Span)>| Ruled {
-            fields: rules.fields.clone(),
-            rules: rules_of,
-            binding: rules.binding,
-        };
-        kept = Some(part(keeps));
-        checked = Some(part(checks));
+        let taken: Vec<bool> = rules
+            .rules
+            .iter()
+            .map(|rule| {
+                !changed.contains(type_name)
+                    && tr::tr_kept_by(interner, &rule.claim, &rules.fields, &methods.all, body)
+            })
+            .collect();
+        let others: Vec<bool> = taken.iter().map(|t| !t).collect();
+        kept = Some(tr::tr_part(rules, &taken));
+        checked = Some(tr::tr_part(rules, &others));
     }
     if let (Some((type_name, rules)), Some(_)) = (self_rules, &receiver)
         && !changed.contains(type_name)
@@ -782,114 +494,6 @@ fn nested_returns(
     }
 }
 
-/// The methods that only read the field they are called on: a call of one
-/// on a field from outside the type's methods leaves its rule as it was.
-const READERS: [&str; 12] = [
-    "len",
-    "is_empty",
-    "get",
-    "contains",
-    "contains_key",
-    "iter",
-    "clone",
-    "first",
-    "last",
-    "keys",
-    "values",
-    "text",
-];
-
-/// **The types whose fields this file may change outside their own
-/// methods**, where a rule is not checked after the change: a field of
-/// one written, set by a `with`, handed to a call or called a method on that
-/// may change it, anywhere but through `self` in the type's methods. Read
-/// by the field's name, whatever its owner, so a type it names is left out
-/// even where the change is another type's: the rule is then not a fact at
-/// an entry (D3), and what is lost is a proof, never a check.
-fn changed_outside(
-    interner: &InternerContext,
-    ruled: &BTreeMap<String, BTreeSet<String>>,
-    items: &mut [Spanned<Item>],
-) -> BTreeSet<String> {
-    let owners_of = |field: Symbol| -> Vec<String> {
-        let text = interner.resolve(field);
-        ruled
-            .iter()
-            .filter(|(_, fields)| fields.contains(text))
-            .map(|(name, _)| name.clone())
-            .collect()
-    };
-    let is_self = |e: &Expr| matches!(e, Expr::Variable(n, _) if interner.resolve(*n) == "self");
-    let changed = std::cell::RefCell::new(BTreeSet::new());
-    for item in items.iter_mut() {
-        let owner = match &item.node {
-            Item::Impl { target, .. } => Some(interner.resolve(target.name).to_string()),
-            _ => None,
-        };
-        crate::text_tiers::each_block(&mut item.node, &mut |block| {
-            crate::text_tiers::visit_block_mut(
-                block,
-                &mut |expr| match expr {
-                    Expr::With { fields, .. } => {
-                        for field in fields.iter() {
-                            changed.borrow_mut().extend(owners_of(field.name));
-                        }
-                    }
-                    Expr::MethodCall {
-                        receiver,
-                        method,
-                        args,
-                        ..
-                    } => {
-                        if let Expr::Field { base, name, .. } = &**receiver
-                            && !(is_self(base) && owner.is_some())
-                            && !READERS.contains(&interner.resolve(*method))
-                        {
-                            changed.borrow_mut().extend(owners_of(*name));
-                        }
-                        for arg in args.iter() {
-                            if let Expr::Field { base, name, .. } = arg
-                                && !(is_self(base) && owner.is_some())
-                            {
-                                changed.borrow_mut().extend(owners_of(*name));
-                            }
-                        }
-                    }
-                    Expr::Call { args, .. } => {
-                        for arg in args.iter() {
-                            if let Expr::Field { base, name, .. } = arg
-                                && !(is_self(base) && owner.is_some())
-                            {
-                                changed.borrow_mut().extend(owners_of(*name));
-                            }
-                        }
-                    }
-                    _ => {}
-                },
-                &mut |stmt, _| {
-                    let Stmt::Assign { target, .. } = stmt else {
-                        return;
-                    };
-                    let mut place = &*target;
-                    loop {
-                        match place {
-                            Expr::Field { base, name, .. } => {
-                                if !(is_self(base) && owner.is_some()) {
-                                    changed.borrow_mut().extend(owners_of(*name));
-                                }
-                                place = base;
-                            }
-                            Expr::Index { base, .. } => place = base,
-                            _ => break,
-                        }
-                    }
-                },
-            );
-        });
-    }
-    changed.into_inner()
-}
-
 /// **A package of several files keeps a rule as a fact only where no other
 /// file can break it** (D3). The rules are written out one file at a time
 /// ([`expand`]), so here a literal of a type another file declares is checked
@@ -906,9 +510,16 @@ fn changed_outside(
 /// rule is no fact anywhere in its package; what is lost is a proof, never a
 /// check.
 pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
-    let declared: Vec<BTreeMap<String, Declared>> = files
+    let declared: Vec<BTreeMap<String, TrDeclared>> = files
         .iter()
-        .map(|(file, source)| declared_rules(file, source))
+        .map(|(file, source)| {
+            tr::tr_declared_rules(&file.interner, &file.program.items, &|span| {
+                source
+                    .get(span.start as usize..span.end as usize)
+                    .unwrap_or_default()
+                    .to_string()
+            })
+        })
         .collect();
     if declared.iter().all(BTreeMap::is_empty) {
         return;
@@ -923,7 +534,7 @@ pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
         })
         .collect();
     for (at, (file, _)) in files.iter_mut().enumerate() {
-        let foreign: BTreeMap<String, &Declared> = declared
+        let foreign: BTreeMap<String, &TrDeclared> = declared
             .iter()
             .enumerate()
             .filter(|(other, _)| *other != at)
@@ -941,12 +552,16 @@ pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
             .iter()
             .filter_map(|(name, d)| Some((name.clone(), read_again(file, name, d)?)))
             .collect();
-        changed.extend(changed_outside(&interner, &fields, &mut file.program.items));
-        changed.extend(built_elsewhere(
+        changed.extend(tr::tr_changed_outside(
+            &interner,
+            &fields,
+            &file.program.items,
+        ));
+        changed.extend(tr::tr_built_elsewhere(
             &interner,
             &fields,
             &ruled,
-            &mut file.program.items,
+            &file.program.items,
         ));
         if ruled.is_empty() {
             continue;
@@ -988,142 +603,20 @@ pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
     }
 }
 
-/// A struct of a file that states rules, as another file reads it.
-struct Declared {
-    fields: BTreeSet<String>,
-    /// Each rule as written, `assert(…)`, to be read again in the file that
-    /// builds a literal of the type.
-    rules: Vec<String>,
-    /// A rule reads a `pub` field, or the type is `pub` and every field is
-    /// `pub` or has a default: another package can break the rule unchecked.
-    open: bool,
-}
-
-/// The structs of a file that state rules.
-fn declared_rules(parsed: &Parsed, source: &str) -> BTreeMap<String, Declared> {
-    let interner = &parsed.interner;
-    let mut out = BTreeMap::new();
-    for item in &parsed.program.items {
-        let Item::Struct {
-            name,
-            fields,
-            rules,
-            is_public,
-            ..
-        } = &item.node
-        else {
-            continue;
-        };
-        if rules.is_empty() {
-            continue;
-        }
-        let public: BTreeSet<String> = fields
-            .iter()
-            .filter(|f| f.is_public)
-            .map(|f| interner.resolve(f.name).to_string())
-            .collect();
-        let buildable = *is_public && fields.iter().all(|f| f.is_public || f.default.is_some());
-        let reads_public = rules.iter().any(|rule| {
-            a_rule(interner, &rule.node).is_none_or(|(claim, _)| reads(interner, claim, &public))
-        });
-        out.insert(
-            interner.resolve(*name).to_string(),
-            Declared {
-                fields: fields
-                    .iter()
-                    .map(|f| interner.resolve(f.name).to_string())
-                    .collect(),
-                rules: rules
-                    .iter()
-                    .map(|rule| {
-                        source
-                            .get(rule.span.start as usize..rule.span.end as usize)
-                            .unwrap_or_default()
-                            .to_string()
-                    })
-                    .collect(),
-                open: buildable || reads_public,
-            },
-        );
-    }
-    out
-}
-
-/// Whether `claim` reads one of `names` as a field.
-fn reads(interner: &InternerContext, claim: &Expr, names: &BTreeSet<String>) -> bool {
-    let again = |e: &Expr| reads(interner, e, names);
-    match claim {
-        Expr::Variable(name, _) => names.contains(interner.resolve(*name)),
-        Expr::Binary { lhs, rhs, .. } => again(lhs) || again(rhs),
-        Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => again(expr),
-        Expr::Field { base, .. } => again(base),
-        Expr::MethodCall { receiver, args, .. } => again(receiver) || args.iter().any(again),
-        Expr::Path(..)
-        | Expr::LitInt { .. }
-        | Expr::LitBool(..)
-        | Expr::LitChar(..)
-        | Expr::LitFloat(..)
-        | Expr::LitNull(_) => false,
-        _ => true,
-    }
-}
-
 /// A type's rules read again in `file`, with its words: `None` where one
 /// does not read as a rule, and a literal of the type is then not checked.
-fn read_again(file: &Parsed, type_name: &str, declared: &Declared) -> Option<Ruled> {
+fn read_again(file: &Parsed, type_name: &str, declared: &TrDeclared) -> Option<Ruled> {
     let interner = &file.interner;
     let mut rules = Vec::new();
     for text in &declared.rules {
         let rule = file.read_expression(text).ok()?;
-        let (claim, message) = a_rule(interner, &rule)?;
-        rules.push((claim.clone(), message.cloned(), Span::new(0, 0)));
+        rules.push(tr::tr_a_rule(interner, &rule, Span::new(0, 0))?);
     }
     Some(Ruled {
-        binding: binding_of(interner, type_name, &declared.fields),
+        binding: interner.intern_string(&tr::tr_binding_of(type_name, &declared.fields)),
         fields: declared.fields.clone(),
         rules,
     })
-}
-
-/// The types of `ruled` this file writes a method for that changes `self`,
-/// or builds a literal of without reading its rules again (`checked`):
-/// neither is checked here.
-fn built_elsewhere(
-    interner: &InternerContext,
-    ruled: &BTreeMap<String, BTreeSet<String>>,
-    checked: &BTreeMap<String, Ruled>,
-    items: &mut [Spanned<Item>],
-) -> BTreeSet<String> {
-    let found = std::cell::RefCell::new(BTreeSet::new());
-    for item in items.iter_mut() {
-        if let Item::Impl {
-            target, methods, ..
-        } = &item.node
-        {
-            let owner = interner.resolve(target.name).to_string();
-            let changes_self = methods
-                .iter()
-                .any(|m| matches!(&m.node, Item::Fn { receiver: Some(how), .. } if how.is_mut));
-            if changes_self && ruled.contains_key(&owner) {
-                found.borrow_mut().insert(owner);
-            }
-        }
-        crate::text_tiers::each_block(&mut item.node, &mut |block| {
-            crate::text_tiers::visit_block_mut(
-                block,
-                &mut |expr| {
-                    if let Expr::StructLit { name, .. } = expr {
-                        let type_name = interner.resolve(*name).to_string();
-                        if ruled.contains_key(&type_name) && !checked.contains_key(&type_name) {
-                            found.borrow_mut().insert(type_name);
-                        }
-                    }
-                },
-                &mut |_, _| {},
-            );
-        });
-    }
-    found.into_inner()
 }
 
 /// A function's entry without the facts of the rules of `changed`.
@@ -1141,115 +634,6 @@ fn is_self(interner: &InternerContext, expr: &Expr) -> bool {
 
 fn expr_id(expr: &Expr) -> u32 {
     crate::check::value_node(expr) as u32
-}
-
-/// **What a rule reads of each field**: `true` where only its length
-/// (`xs.len()`), `false` where anything more.
-fn rule_reads(
-    interner: &InternerContext,
-    claim: &Expr,
-    fields: &BTreeSet<String>,
-    out: &mut BTreeMap<String, bool>,
-) {
-    match claim {
-        Expr::MethodCall {
-            receiver,
-            method,
-            args,
-            ..
-        } => {
-            if let Expr::Variable(name, _) = &**receiver
-                && fields.contains(interner.resolve(*name))
-                && interner.resolve(*method) == "len"
-                && args.is_empty()
-            {
-                out.entry(interner.resolve(*name).to_string())
-                    .or_insert(true);
-                return;
-            }
-            rule_reads(interner, receiver, fields, out);
-            for arg in args {
-                rule_reads(interner, arg, fields, out);
-            }
-        }
-        Expr::Variable(name, _) if fields.contains(interner.resolve(*name)) => {
-            out.insert(interner.resolve(*name).to_string(), false);
-        }
-        Expr::Binary { lhs, rhs, .. } => {
-            rule_reads(interner, lhs, fields, out);
-            rule_reads(interner, rhs, fields, out);
-        }
-        Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => {
-            rule_reads(interner, expr, fields, out);
-        }
-        Expr::Field { base, .. } => rule_reads(interner, base, fields, out),
-        _ => {}
-    }
-}
-
-/// **A rule a method cannot break** (D2, proved by what the method does):
-/// every use of `self` in its body reads a field the rule does not read,
-/// counts one it reads only the length of (`self.xs.len()`) or indexes it
-/// (`self.xs[i]`, which keeps its length), or calls a method of the type,
-/// whose exits hold the rule. The rule then holds wherever the body stands as
-/// it held at the entry, and no point of it needs a check.
-fn kept_by(
-    interner: &InternerContext,
-    claim: &Expr,
-    fields: &BTreeSet<String>,
-    methods: &BTreeSet<String>,
-    body: &mut Block,
-) -> bool {
-    let mut reads = BTreeMap::new();
-    rule_reads(interner, claim, fields, &mut reads);
-    let field_of_self = |e: &Expr| match e {
-        Expr::Field { base, name, .. } if is_self(interner, base) => {
-            Some(interner.resolve(*name).to_string())
-        }
-        _ => None,
-    };
-    let mut seen = 0usize;
-    let mut allowed = 0usize;
-    crate::text_tiers::visit_block_mut(
-        body,
-        &mut |expr| match &*expr {
-            Expr::Variable(..) if is_self(interner, expr) => seen += 1,
-            Expr::Field { .. } => {
-                if let Some(name) = field_of_self(expr)
-                    && !reads.contains_key(&name)
-                {
-                    allowed += 1;
-                }
-            }
-            Expr::MethodCall {
-                receiver,
-                method,
-                args,
-                ..
-            } => {
-                let method = interner.resolve(*method);
-                if is_self(interner, receiver) && methods.contains(method) {
-                    allowed += 1;
-                } else if let Some(name) = field_of_self(receiver)
-                    && reads.contains_key(&name)
-                    && method == "len"
-                    && args.is_empty()
-                {
-                    allowed += 1;
-                }
-            }
-            Expr::Index { base, .. } => {
-                if let Some(name) = field_of_self(base)
-                    && reads.get(&name) == Some(&true)
-                {
-                    allowed += 1;
-                }
-            }
-            _ => {}
-        },
-        &mut |_, _| {},
-    );
-    seen == allowed
 }
 
 /// **After a call of a method of the type that changes `self`, the rule

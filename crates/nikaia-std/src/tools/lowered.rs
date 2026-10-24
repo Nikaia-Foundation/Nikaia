@@ -1751,6 +1751,14 @@ mod ty_lowered {
 #[allow(unused_imports)]
 pub use ty_lowered::*;
 
+mod type_rules_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/type_rules.rs");
+}
+#[allow(unused_imports)]
+pub use type_rules_lowered::*;
+
 mod types_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2564,6 +2572,10 @@ pub mod trust {
 pub mod ty {
     #[allow(unused_imports)]
     pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, parse, split_args, a_view_of, Provenance, Sync, Lock, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys};
+}
+pub mod type_rules {
+    #[allow(unused_imports)]
+    pub use super::{tr_given, TrRule, TrRuled, TrRefusal, TrFound, TrMethods, TrDeclared, tr_binding_of, tr_a_rule, tr_renumbered, tr_on, tr_asserts_as, tr_asserts, tr_part, tr_collect, tr_methods_of, tr_fails_changed, tr_changed_outside, tr_built_elsewhere, tr_reads, tr_kept_by, tr_declared_rules};
 }
 pub mod types {
     #[allow(unused_imports)]
