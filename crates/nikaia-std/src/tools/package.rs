@@ -36210,12 +36210,26 @@ impl EmitState {
             None => None,
         }, || vec![].into());
         walk.variant_counts = None;
+        let hoisted: Vec<i64> = nikaia_std::index::or(match walk.hoisted_args.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
+        walk.hoisted_args = None;
+        let mut lets = EmitOut::empty();
         let mut i: i64 = 0;
         for arg in args.iter() {
             if i > 0 { out.push(", "); }
-            self.emit_core_argument(world, walk, out, host, callee, arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?;
+            if hoisted.contains(nikaia_std::index::AsKey::as_key(&i)) {
+                let mut one = EmitOut::empty();
+                self.emit_core_argument(world, walk, &mut one, host, callee, arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?;
+                lets.push(&format!("let __nikaia_arg{} = ", i));
+                lets.append(one);
+                lets.push("; ");
+                out.push(&format!("__nikaia_arg{}", i));
+            } else { self.emit_core_argument(world, walk, out, host, callee, arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?; }
             i += 1;
         }
+        if !hoisted.is_empty() { walk.hoisted_lets = Some(lets); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -37332,6 +37346,68 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let hoisted = self.emit_call_hoisted(world, func, args);
+        if hoisted.is_empty() {
+            walk.hoisted_args = None;
+            self.emit_core_call_body(world, walk, out, host, func, args, config, depth, flow, scope)?;
+            return Ok(());
+        }
+        let mut inner = EmitOut::empty();
+        walk.hoisted_args = Some(hoisted);
+        walk.hoisted_lets = None;
+        self.emit_core_call_body(world, walk, &mut inner, host, func, args, config, depth, flow, scope)?;
+        walk.hoisted_args = None;
+        let lets: EmitOut = nikaia_std::index::or(match walk.hoisted_lets.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || EmitOut::empty());
+        walk.hoisted_lets = None;
+        if lets.buf == "" {
+            out.append(inner);
+            return Ok(());
+        }
+        out.push("({ ");
+        out.append(lets);
+        out.append(inner);
+        out.push(" })");
+        Ok(())
+    }
+    fn emit_call_hoisted(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, args: &[Expr]) -> Vec<i64> {
+        let callee = self.emit_call_callee(world, func);
+        let mut lent: Vec<bool> = vec![];
+        let mut at: i64 = 0;
+        for arg in args.iter() {
+            lent.push(self.facts.mut_args.contains(&node_key(arg)) || self.changes_at(&callee, at));
+            at += 1;
+        }
+        let mut last: i64 = -1;
+        let mut i: i64 = 0;
+        for arg in args.iter() {
+            if *nikaia_std::index::get(&lent, (i) as usize) {
+                let root = root_of(world.words, arg);
+                if root.is_some() {
+                    let name = nikaia_std::index::or(root, || "".into());
+                    let mut j: i64 = 0;
+                    for later in args.iter() {
+                        if j > i && j > last && made_in_the_call(later) && !emit_arg_is_closure(later) && emit_mentions(world, later, &name) { last = j; }
+                        j += 1;
+                    }
+                }
+            }
+            i += 1;
+        }
+        let mut hoisted: Vec<i64> = vec![];
+        let mut k: i64 = 0;
+        for arg in args.iter() {
+            if k <= last && made_in_the_call(arg) && !emit_arg_is_closure(arg) && !*nikaia_std::index::get(&lent, nikaia_std::index::at(k)) { hoisted.push(k); }
+            k += 1;
+        }
+        hoisted
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_core_call_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match func {
             Expr::Path(segments, _) => {
                 if segments.len() == 2 {
@@ -43184,6 +43260,8 @@ pub struct EmitWalk {
     pub code_parameter_runs: bool,
     pub held: collections::BTreeMap<i64, String>,
     pub boxed_args: Option<Vec<bool>>,
+    pub hoisted_args: Option<Vec<i64>>,
+    pub hoisted_lets: Option<EmitOut>,
     pub variant_counts: Option<Vec<Count>>,
     pub hull_count: Option<Count>,
     pub trusting: bool,
@@ -43192,7 +43270,7 @@ pub struct EmitWalk {
 }
 
 impl EmitWalk {
-    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false } }
+    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false } }
 }
 
 
@@ -57267,8 +57345,7 @@ fn prover_length_set(walk: &mut ProverWalk, stmt: &Stmt, list: &str, span: &Span
                 let old = walk.arena.var(&length);
                 let one = walk.arena.int(1);
                 let term = walk.arena.add(old, one);
-                let value = prover_pinned_old(walk, &length, term, &scope);
-                prover_assign_term(walk, &length, value, &span, scope);
+                ({ let __nikaia_arg2 = prover_pinned_old(walk, &length, term, &scope); prover_assign_term(walk, &length, __nikaia_arg2, &span, scope) });
                 return true;
             }
             if m == "clear" && args.is_empty() {

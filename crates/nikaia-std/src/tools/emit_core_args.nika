@@ -236,13 +236,30 @@ impl EmitState {
         walk.boxed_args = null
         let part_counts: Vec[Count] = (walk.variant_counts?.clone() ?? [])
         walk.variant_counts = null
+        // **An argument bound ahead of the call**: written as it would
+        // be in place, into the `let` the call is preceded by.
+        let hoisted: Vec[i64] = (walk.hoisted_args?.clone() ?? [])
+        walk.hoisted_args = null
+        let mut lets = EmitOut::empty()
         let mut i = 0
         for arg in args {
             if i > 0 {
                 out.push(", ")
             }
-            self.emit_core_argument(world, walk, out, host, callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+            if hoisted.contains(i) {
+                let mut one = EmitOut::empty()
+                self.emit_core_argument(world, walk, one, host, callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+                lets.push(f"let __nikaia_arg{i} = ")
+                lets.append(one)
+                lets.push("; ")
+                out.push(f"__nikaia_arg{i}")
+            } else {
+                self.emit_core_argument(world, walk, out, host, callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+            }
             i += 1
+        }
+        if hoisted.len() > 0 {
+            walk.hoisted_lets = lets
         }
     }
 

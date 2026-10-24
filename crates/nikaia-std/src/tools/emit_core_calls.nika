@@ -183,6 +183,78 @@ impl EmitState {
     /// no such thing, so the declaration decides: a name that is a struct is a
     /// call to the `new` its `impl` provides.
     pub fn emit_core_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **An argument that uses what an earlier one lends to a `mut`
+        // parameter is bound before the call**: Rust holds that
+        // `&mut` from the first argument to the call, so `f(w, g(w))` is
+        // `({ let a = g(&mut w); f(&mut w, a) })`. Every argument up to it
+        // that does something is bound too, in order.
+        let hoisted = self.emit_call_hoisted(world, func, args)
+        if hoisted.len() == 0 {
+            walk.hoisted_args = null
+            self.emit_core_call_body(world, walk, out, host, func, args, config, depth, flow, scope)
+            return
+        }
+        let mut inner = EmitOut::empty()
+        walk.hoisted_args = hoisted
+        walk.hoisted_lets = null
+        self.emit_core_call_body(world, walk, inner, host, func, args, config, depth, flow, scope)
+        walk.hoisted_args = null
+        let lets: EmitOut = (walk.hoisted_lets?.clone() ?? EmitOut::empty())
+        walk.hoisted_lets = null
+        if lets.buf == "" {
+            out.append(inner)
+            return
+        }
+        out.push("({ ")
+        out.append(lets)
+        out.append(inner)
+        out.push(" })")
+    }
+
+    /// The arguments of a call bound before it: none, unless one
+    /// after an argument lent to a `mut` parameter is made in the call and
+    /// uses the local that argument is rooted in. Then every argument up to
+    /// the last such one that is made in the call, is not code and is not
+    /// itself lent to a `mut` parameter.
+    fn emit_call_hoisted(ref self, world: ref EmitWorld, func: ref Expr, args: ref Vec[Expr]) -> Vec[i64] {
+        let callee = self.emit_call_callee(world, func)
+        let mut lent: Vec[bool] = []
+        let mut at = 0
+        for arg in args {
+            lent.push(self.facts.mut_args.contains(node_key(arg)) || self.changes_at(callee, at))
+            at += 1
+        }
+        let mut last = -1
+        let mut i = 0
+        for arg in args {
+            if lent[i] {
+                let root = root_of(world.words, arg)
+                if root != null {
+                    let name = root ?? ""
+                    let mut j = 0
+                    for later in args {
+                        if j > i && j > last && made_in_the_call(later) && !emit_arg_is_closure(later) && emit_mentions(world, later, name) {
+                            last = j
+                        }
+                        j += 1
+                    }
+                }
+            }
+            i += 1
+        }
+        let mut hoisted: Vec[i64] = []
+        let mut k = 0
+        for arg in args {
+            if k <= last && made_in_the_call(arg) && !emit_arg_is_closure(arg) && !lent[k] {
+                hoisted.push(k)
+            }
+            k += 1
+        }
+        return hoisted
+    }
+
+    /// The call itself, its arguments bound or not.
+    fn emit_core_call_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **`T::attribute(X)` on the type this copy is of** (ADR-331 D6): its own
         // attributes, as a field's are read.
         match func {

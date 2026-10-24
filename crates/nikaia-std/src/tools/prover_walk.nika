@@ -2138,8 +2138,7 @@ fn prover_length_set(mut walk: ProverWalk, stmt: ref Stmt, list: ref String, spa
                 let old = walk.arena.var(length)
                 let one = walk.arena.int(1)
                 let term = walk.arena.add(old, one)
-                let value = prover_pinned_old(walk, length, term, scope)
-                prover_assign_term(walk, length, value, span, scope)
+                prover_assign_term(walk, length, prover_pinned_old(walk, length, term, scope), span, scope)
                 return true
             }
             if m == "clear" && args.is_empty() {

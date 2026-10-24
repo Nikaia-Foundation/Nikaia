@@ -861,3 +861,38 @@ fn a_parameter_moved_into_a_let_mut_stays_owned() {
         |_| {},
     );
 }
+
+/// **An argument that uses what an earlier one lends to a `mut` parameter is
+/// bound before the call** (ADR-094 D3): `f(w, g(w, 1), 2)` lowered to
+/// `f(&mut w, g(&mut w, 1), 2)`, which `rustc` refused (`E0499`): the first
+/// `&mut` is held for the whole call. Every argument up to that one that does
+/// something is bound in order, so `trace` still runs first.
+#[test]
+fn a_mut_argument_used_again_in_a_later_argument() {
+    runs_in(
+        "mut-argument-used-again",
+        "struct W { n: i64 }\n\
+         fn g(mut w: W, x: i64) -> i64 {\n\
+         \x20   w.n = w.n * 10 + x\n\
+         \x20   return w.n\n\
+         }\n\
+         fn trace(x: i64) -> i64 {\n\
+         \x20   println(f\"trace {x}\")\n\
+         \x20   return x\n\
+         }\n\
+         fn f(a: i64, mut w: W, v: i64, s: i64) {\n\
+         \x20   w.n = w.n * 100 + a + v + s\n\
+         }\n\
+         fn h(mut w: W) {\n\
+         \x20   f(trace(1), w, g(w, 2), trace(3))\n\
+         }\n\
+         fn main() {\n\
+         \x20   let mut w = W { n: 0 }\n\
+         \x20   h(w)\n\
+         \x20   f(0, w, g(w, 4), 5)\n\
+         \x20   println(f\"{w.n}\")\n\
+         }\n",
+        "trace 1\ntrace 3\n208469\n",
+        |_| {},
+    );
+}
