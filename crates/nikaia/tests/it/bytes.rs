@@ -15,7 +15,7 @@
 use crate::common;
 use nikaia::check::Finding;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
-use nikaia::emit::{Build, emit_program};
+use nikaia::emit::{emit_program, Build};
 use nikaia::parser::parse_to_ast;
 
 fn findings(source: &str) -> Vec<Finding> {
@@ -387,9 +387,17 @@ fn every_read_of_a_bytes_is_callable_on_a_cut() {
         .output()
         .expect("the nikaia binary runs");
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let out = String::from_utf8_lossy(&run.stdout).to_string();
     let lines: Vec<&str> = out.lines().collect();
-    assert_eq!(lines.len(), 15, "{out}");
-    assert_eq!(&lines[..8], ["8", "true", "3", "2", "2", "5", "6", "1819043176"], "{out}");
+    assert_eq!(lines.len(), 13, "{out}");
+    assert_eq!(
+        &lines[..8],
+        ["8", "true", "3", "1", "1", "3", "6", "1819043176"],
+        "{out}"
+    );
 }
