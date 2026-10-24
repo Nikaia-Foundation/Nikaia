@@ -9,11 +9,11 @@ pub(crate) fn mp_text(words: &winnow_grammar::InternerContext, s: winnow_grammar
 
 pub(crate) fn mp_short(name: &str) -> String { nikaia_std::index::or(name.rsplit("::").next(), || "").to_owned() }
 
-pub(crate) fn mp_reads(name: String) -> bool { matches!(&*name, "len" | "is_empty" | "contains_key" | "contains" | "capacity" | "get" | "get_or" | "remove" | "clear" | "iter" | "keys" | "values") }
+pub(crate) fn mp_reads(name: &str) -> bool { matches!(name, "len" | "is_empty" | "contains_key" | "contains" | "capacity" | "get" | "get_or" | "remove" | "clear" | "iter" | "keys" | "values") }
 
-pub(crate) fn mp_adds(name: String) -> bool { matches!(&*name, "insert" | "entry" | "extend" | "push" | "add" | "append" | "get_or_insert") }
+pub(crate) fn mp_adds(name: &str) -> bool { matches!(name, "insert" | "entry" | "extend" | "push" | "add" | "append" | "get_or_insert") }
 
-pub(crate) fn mp_shapes(name: String) -> bool { matches!(&*name, "clone" | "len" | "to_string" | "trim" | "trim_start" | "trim_end" | "to_lowercase" | "to_uppercase" | "as_str" | "abs" | "min" | "max" | "pow") }
+pub(crate) fn mp_shapes(name: &str) -> bool { matches!(name, "clone" | "len" | "to_string" | "trim" | "trim_start" | "trim_end" | "to_lowercase" | "to_uppercase" | "as_str" | "abs" | "min" | "max" | "pow") }
 
 pub(crate) fn mp_is_map(name: &str) -> bool { matches!(&*(mp_short(name)), "HashMap" | "HashSet" | "TrustedMap" | "TrustedSet") }
 
@@ -298,7 +298,7 @@ impl MpBody {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); return mp_join(&self.deps(base, words), &self.deps(index, words)) },
             Expr::MethodCall { receiver, method, args, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                if !mp_shapes(words.resolve(method).to_owned()) { return mp_unknown(); }
+                if !mp_shapes(words.resolve(method)) { return mp_unknown(); }
                 let mut all = self.deps(receiver, words);
                 for a in args.iter() { all = mp_join(&all, &self.deps(a, words)); }
                 return all;
@@ -550,11 +550,11 @@ impl MpBody {
                 let name = mp_text(words, method);
                 let root = self.place(receiver, words);
                 if root.is_some() {
-                    if mp_adds(name.to_owned()) {
+                    if mp_adds(&name) {
                         let mut dep = mp_nothing();
                         for a in args.iter() { dep = mp_join(&dep, &self.deps(a, words)); }
                         self.add(nikaia_std::index::or(root, || 0), &dep);
-                    } else if !mp_reads(name.to_owned()) { self.doubt(); }
+                    } else if !mp_reads(&name) { self.doubt(); }
                 } else { self.field_or(receiver, words); }
                 for a in args.iter() { self.expr(a, words); }
                 for c in config.iter() { self.expr(&c.value, words); }

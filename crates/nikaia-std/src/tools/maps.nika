@@ -434,7 +434,7 @@ impl MpBody {
             Expr::SafeField { base, .. } => return self.deps(base, words),
             Expr::Index { base, index, .. } => return mp_join(self.deps(base, words), self.deps(index, words)),
             Expr::MethodCall { receiver, method, args, .. } => {
-                if !mp_shapes(words.resolve(method).clone()) {
+                if !mp_shapes(words.resolve(method)) {
                     return mp_unknown()
                 }
                 let mut all = self.deps(receiver, words)
@@ -771,13 +771,13 @@ impl MpBody {
                 let name = mp_text(words, method)
                 let root = self.place(receiver, words)
                 if root != null {
-                    if mp_adds(name.clone()) {
+                    if mp_adds(name) {
                         let mut dep = mp_nothing()
                         for a in args {
                             dep = mp_join(dep, self.deps(a, words))
                         }
                         self.add(root ?? 0, dep)
-                    } else if !mp_reads(name.clone()) {
+                    } else if !mp_reads(name) {
                         self.doubt()
                     }
                 } else {
