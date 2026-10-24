@@ -1,0 +1,116 @@
+// crates/nikaia-std/src/tools/check_walked.nika
+//
+// **What the checker does once the walk is over** (ADR-294, #125, #558, C-7,
+// U-d6): the findings put in their final form, the method sets the emitter
+// reads, and the unrolling report. Free functions over the state.
+
+use std::collections
+
+/// **`NK1245` comes after every other refusal** (ADR-286 D41): a type nothing
+/// can tell is most often what another refusal left behind, so where the file
+/// holds another error that error is the one said.
+fn check_walked_unknown_last(mut state: CheckState) sync {
+    let mut other_error = false
+    for f in state.findings.clone() {
+        match f.severity {
+            CheckSeverity::Error => {
+                if f.code != "NK1245" {
+                    other_error = true
+                }
+            }
+            else => {}
+        }
+    }
+    if !other_error {
+        return
+    }
+    let mut kept: Vec[CheckFinding] = []
+    for f in state.findings.clone() {
+        if f.code != "NK1245" {
+            kept.push(f)
+        }
+    }
+    state.findings = kept
+}
+
+/// **`a` or `an` by the word that follows** (#511), in every message, note,
+/// help and label of every finding.
+fn check_walked_articles(mut state: CheckState) sync {
+    let mut said: Vec[CheckFinding] = []
+    for f in state.findings.clone() {
+        let mut one = f
+        one.message = articles(one.message)
+        let mut notes: Vec[String] = []
+        for note in one.notes {
+            notes.push(articles(note))
+        }
+        one.notes = notes
+        let help_was: String? = one.help?.clone()
+        match help_was {
+            Some(help) => {
+                one.help = articles(help)
+            }
+            else => {}
+        }
+        let mut labels: Vec[CheckLabel] = []
+        for label in one.labels {
+            let mut l = label.clone()
+            l.text = articles(l.text)
+            labels.push(l)
+        }
+        one.labels = labels
+        said.push(one)
+    }
+    state.findings = said
+}
+
+/// **The method sets the emitter reads**: only the calls that provably fail,
+/// and only where the name is not also a call that does not; the same
+/// subtraction for what pauses; and a checked conversion is dropped where a
+/// widening one stands at the same place.
+fn check_walked_method_facts(mut state: CheckState) sync {
+    for at in state.flow.fallible_methods.clone() {
+        if !state.flow.opaque_methods.contains(at) {
+            state.facts.fallible_methods.insert(at)
+        }
+    }
+    for at in state.flow.pausing_methods.clone() {
+        if !state.flow.settled_methods.contains(at) {
+            state.facts.pausing_methods.insert(at)
+        }
+    }
+    for at in state.flow.widening_casts.clone() {
+        state.facts.narrowing_casts.remove(at)
+    }
+}
+
+/// The findings and the facts in their final form, but for the order of the
+/// findings, which the adapter sets.
+pub fn check_walked_settle(mut state: CheckState) sync {
+    check_walked_unknown_last(state)
+    check_walked_articles(state)
+    check_walked_method_facts(state)
+}
+
+/// **The unrolling report** (`--explain`): one line for each function that
+/// walks a parameter's fields, and one for each copy written.
+pub fn check_walked_unrolling(walks_fields: ref collections::BTreeMap[String, String], unrolled: ref collections::BTreeMap[(String, String), Vec[FieldContract]]) -> String {
+    let mut out: String = ""
+    for (function, parameter) in walks_fields {
+        let mut any = false
+        for ((written, on), fields) in unrolled {
+            if written != function {
+                continue
+            }
+            any = true
+            out.push_str(f"comptime: `{function}` unrolled over `{on}` as `{check_specialised(function, on)}`\n")
+            for field in fields {
+                out.push_str(f"    {field.name}: {field.ty.text()}\n")
+            }
+        }
+        if !any {
+            out.push_str(f"comptime: `{function}` walks `{parameter}::fields` and nothing calls it, so no copy is written\n")
+        }
+    }
+    return out
+}

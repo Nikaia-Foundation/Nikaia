@@ -829,6 +829,14 @@ mod check_walk_lowered {
 #[allow(unused_imports)]
 pub use check_walk_lowered::*;
 
+mod check_walked_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/check_walked.rs");
+}
+#[allow(unused_imports)]
+pub use check_walked_lowered::*;
+
 mod check_walks_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2100,6 +2108,10 @@ pub mod check_visit {
 pub mod check_walk {
     #[allow(unused_imports)]
     pub use super::{child_exprs_of, blocks_of_expr, blocks_of_stmt};
+}
+pub mod check_walked {
+    #[allow(unused_imports)]
+    pub use super::{check_walked_settle, check_walked_unrolling};
 }
 pub mod check_walks {
     #[allow(unused_imports)]

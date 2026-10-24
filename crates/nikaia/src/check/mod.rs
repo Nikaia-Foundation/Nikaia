@@ -48,6 +48,7 @@ pub use nikaia_std::tools::check_state::{
 };
 use nikaia_std::tools::check_state::{CheckState, CheckWorld};
 use nikaia_std::tools::check_texts::{self};
+use nikaia_std::tools::check_walked;
 use nikaia_std::tools::check_widen::{self};
 use nikaia_std::tools::parsed_view::ParsedView;
 
@@ -597,64 +598,10 @@ fn walked<'a>(
     // **Arms that disagree, where no position asked them** (#596).
     let disagreeing = std::mem::take(&mut checker.s.arm_disagreements);
     checker.s.findings.extend(disagreeing.into_values());
-    // **`NK1245` comes after every other refusal** (ADR-286 D41): a type
-    // nothing can tell is most often what another refusal left behind - a
-    // name never declared, a member a type does not have, a body with a jump
-    // that goes nowhere - and the value it would have made is then unknown
-    // wherever it is used, lines away. Where the file holds another error,
-    // that error is the one said; what is still unknown once it is fixed is
-    // said then.
-    if checker
-        .s
-        .findings
-        .iter()
-        .any(|f| f.severity == Severity::Error && f.code != "NK1245")
-    {
-        checker.s.findings.retain(|f| f.code != "NK1245");
-    }
+    // The findings and method sets in their final form (`check_walked.nika`);
+    // the order is the span's, set here.
+    checker.nikaia(|state, _, _| check_walked::check_walked_settle(state));
     checker.s.findings.sort_by_key(|f| f.span.at());
-    // **`a` or `an` by the word that follows** (#511): forty messages write
-    // `a `{ty}`` by hand, and the type is known only when they are said - `a
-    // `io::IoError``. Corrected once, here, by the rule `an` follows.
-    for finding in &mut checker.s.findings {
-        finding.message = articles(&finding.message);
-        for note in &mut finding.notes {
-            *note = articles(note);
-        }
-        if let Some(help) = &mut finding.help {
-            *help = articles(help);
-        }
-        for label in &mut finding.labels {
-            label.text = articles(&label.text);
-        }
-    }
-    // Only the calls that provably fail, and only where the name is not also a
-    // call that does not: the emitter writes a `?` for each of these, and a `?`
-    // on something that is not a failure is a `rustc` error about a file the
-    // author never wrote.
-    checker.s.facts.fallible_methods = checker
-        .s
-        .flow
-        .fallible_methods
-        .difference(&checker.s.flow.opaque_methods)
-        .cloned()
-        .collect();
-    // The same subtraction one column over: an `.await` on something that is not
-    // a future is the same kind of message about the same file nobody wrote.
-    checker.s.facts.pausing_methods = checker
-        .s
-        .flow
-        .pausing_methods
-        .difference(&checker.s.flow.settled_methods)
-        .cloned()
-        .collect();
-    // The same subtraction, for the same reason: a checked conversion written on
-    // a widening one does not compile.
-    let state = &mut *checker.s;
-    state
-        .facts
-        .narrowing_casts
-        .retain(|at, _| !state.flow.widening_casts.contains(at));
     finished(checker)
 }
 
@@ -789,35 +736,7 @@ pub fn unrolling_report(beside: &[&Parsed], own: &Ledger, reads: &Reads) -> Stri
         walks_fields.extend(found.walks_fields);
         unrolled.extend(found.unrolled);
     }
-    let mut found = CheckFacts::empty();
-    found.walks_fields = walks_fields;
-    found.unrolled = unrolled;
-    let mut out = String::new();
-    for (function, parameter) in &found.walks_fields {
-        let copies: Vec<(&String, &Vec<FieldContract>)> = found
-            .unrolled
-            .iter()
-            .filter(|((written, _), _)| written == function)
-            .map(|((_, on), fields)| (on, fields))
-            .collect();
-        if copies.is_empty() {
-            out.push_str(&format!(
-                "comptime: `{function}` walks `{parameter}::fields` and nothing calls it, \
-                 so no copy is written\n"
-            ));
-            continue;
-        }
-        for (on, fields) in copies {
-            out.push_str(&format!(
-                "comptime: `{function}` unrolled over `{on}` as `{}`\n",
-                specialised(function, on)
-            ));
-            for field in fields {
-                out.push_str(&format!("    {}: {}\n", field.name, field.ty.text()));
-            }
-        }
-    }
-    out
+    check_walked::check_walked_unrolling(&walks_fields, &unrolled)
 }
 
 /// Both halves of ADR-023 D8's propagation, against contracts the caller
@@ -1402,14 +1321,6 @@ pub fn refuse_assumes_in_std(checked: &mut Checked) {
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
 pub fn written(parsed: &Parsed, expr: &Expr) -> String {
     nikaia_std::tools::written::written_expression(&parsed.interner, expr)
-}
-
-/// Every `a` or `an` in front of a word in backticks, chosen by that word
-/// (`check_words::article`): `a `i64`` becomes `an `i64``, and `an `u8`` `a
-/// `u8``. Only the article directly before a backtick, so prose and code
-/// samples are left as they are.
-fn articles(text: &str) -> String {
-    nikaia_std::tools::check_words::articles(text)
 }
 
 /// Whether handing a value of this type out takes nothing away.
