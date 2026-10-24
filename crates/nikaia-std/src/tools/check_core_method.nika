@@ -854,7 +854,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // its attributes (ADR-304, ADR-331 D6).
     if type_name == "$Variant" {
         if name == "attribute" || name == "attributes" {
-            let read: String = host.an_attribute_read(state, args, span) ?? return Ty::Unknown
+            let read: String = check_attributes_an_attribute_read(state, world, args, span) ?? return Ty::Unknown
             return check_core_method_attribute(name, read)
         }
         for a in args {
@@ -873,7 +873,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // D2): the field's type on this unrolling, `?` on the generic walk.
     if type_name == "$Field" {
         if name == "attribute" || name == "attributes" {
-            let read: String = host.an_attribute_read(state, args, span) ?? return Ty::Unknown
+            let read: String = check_attributes_an_attribute_read(state, world, args, span) ?? return Ty::Unknown
             return check_core_method_attribute(name, read)
         }
         for a in args {

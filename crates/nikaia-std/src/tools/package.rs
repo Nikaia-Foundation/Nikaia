@@ -11946,6 +11946,542 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
 }
 
 
+// --- check_attributes.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckAttributesMark {
+    pub places: collections::BTreeSet<String>,
+    pub repeatable: bool,
+}
+
+fn check_attributes_mark_name() -> String { String::from("meta::Attribute") }
+
+fn check_attributes_inline_name() -> &'static str { "inline" }
+
+fn check_attributes_trait_fn() -> String { String::from("trait fn") }
+
+fn check_attributes_places() -> Vec<String> { vec!["field".to_owned(), "struct".to_owned(), "enum".to_owned(), "variant".to_owned(), "fn".to_owned(), "parameter".to_owned(), "trait".to_owned(), "impl".to_owned()] }
+
+fn check_attributes_places_text() -> String {
+    let mut text: String = String::from("");
+    for place in check_attributes_places() {
+        if text != "" { text = format!("{}, ", text); }
+        text = format!("{}`{}`", text, place);
+    }
+    text
+}
+
+fn check_attributes_place_or_field(place: &str) -> String {
+    if place == "" { return String::from("field"); }
+    place.to_owned()
+}
+
+fn check_attributes_same_word(left: &str, right: &str) -> bool {
+    let mut a: String = String::from("");
+    for c in left.chars() { a.push(c.to_ascii_lowercase()); }
+    let mut b: String = String::from("");
+    for c in right.chars() { b.push(c.to_ascii_lowercase()); }
+    a == b
+}
+
+fn check_attributes_place_word(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, arg: &Expr) -> String {
+    match arg {
+        Expr::Variable(word, _) => { let word = *word; return unit.text(word) },
+        Expr::Path(segments, _) => {
+            if segments.is_empty() { return String::from(""); }
+            let last = segments.len() as i64 - 1;
+            return unit.text(*nikaia_std::index::get(&segments, nikaia_std::index::at(last))).to_lowercase();
+        },
+        _ => return String::from(""),
+    }
+}
+
+fn check_attributes_mark_read(text: &str) -> CheckAttributesMark {
+    let mut places: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut word: String = String::from("");
+    let mut rest: String = String::from("");
+    let mut after = false;
+    for c in text.chars() {
+        if after {
+            rest.push(c);
+            continue;
+        }
+        if c == ',' || c == ';' {
+            let trimmed = word.trim();
+            if trimmed != "" { places.insert(trimmed.to_owned()); }
+            word = String::from("");
+            if c == ';' { after = true; }
+            continue;
+        }
+        word.push(c);
+    }
+    if !after {
+        let trimmed = word.trim();
+        if trimmed != "" { places.insert(trimmed.to_owned()); }
+    }
+    CheckAttributesMark { places, repeatable: rest.trim() == "repeatable" }
+}
+
+fn check_attributes_mark_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, mark: &Attribute) -> CheckAttributesMark {
+    let mut places: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let known = check_attributes_places();
+    for arg in mark.args.iter() {
+        let word = check_attributes_place_word(unit, arg);
+        if nikaia_std::list::contains(&known, &word) { places.insert(word); }
+    }
+    let mut repeatable = false;
+    for option in mark.config.iter() {
+        if unit.text(option.name) == "repeatable" {
+            match &option.value {
+                Expr::LitBool(true, _) => { repeatable = true; },
+                _ => { },
+            }
+        }
+    }
+    CheckAttributesMark { places, repeatable }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_marks_in(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, marks: &mut collections::BTreeMap<String, CheckAttributesMark>) {
+    let mark_name = check_attributes_mark_name();
+    for item in unit.items.iter() {
+        match &item.node {
+            Item::Struct { name, .. } => {
+                let name = *name;
+                for attribute in item.attributes.iter() {
+                    let written = unit.text(attribute.name);
+                    if unit.unaliased(&written) == mark_name {
+                        marks.insert(unit.text(name), check_attributes_mark_of(unit, attribute));
+                        break;
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_marks(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, CheckAttributesMark> {
+    let mut marks: collections::BTreeMap<String, CheckAttributesMark> = collections::BTreeMap::new();
+    for (key, contract) in world.library.types.iter() { if contract.mark != "" { marks.insert(key.to_owned(), check_attributes_mark_read(&contract.mark)); } }
+    for (key, contract) in world.own.types.iter() { if contract.mark != "" { marks.insert(key.to_owned(), check_attributes_mark_read(&contract.mark)); } }
+    check_attributes_marks_in(&world.here, &mut marks);
+    for unit in world.beside.iter() { check_attributes_marks_in(unit, &mut marks); }
+    marks
+}
+
+fn check_attributes_mark_for(marks: &collections::BTreeMap<String, CheckAttributesMark>, name: &str) -> Option<CheckAttributesMark> {
+    let mark = match marks.get(name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(mark.clone())
+}
+
+fn check_attributes_allows(marks: &collections::BTreeMap<String, CheckAttributesMark>, name: &str, place: &str) -> bool {
+    let mark = match marks.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    mark.places.contains(place)
+}
+
+fn check_attributes_repeats(marks: &collections::BTreeMap<String, CheckAttributesMark>, name: &str) -> bool {
+    let mark = match marks.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    mark.repeatable
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_attributes_all<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+    let marks = check_attributes_marks(world);
+    for item in world.here.items.iter() {
+        let place: String = match &item.node {
+            Item::Struct { .. } => String::from("struct"),
+            Item::Enum { .. } => String::from("enum"),
+            Item::Fn { .. } => String::from("fn"),
+            Item::Trait { .. } => String::from("trait"),
+            Item::Impl { .. } => String::from("impl"),
+            _ => String::from(""),
+        };
+        check_attributes_at(state, world, host, &item.attributes, &place, &marks);
+        match &item.node {
+            Item::Struct { fields, .. } => { for field in fields.iter() { check_attributes_at(state, world, host, &field.attributes, "field", &marks); } },
+            Item::Enum { variants, .. } => {
+                for variant in variants.iter() {
+                    check_attributes_at(state, world, host, &variant.attributes, "variant", &marks);
+                    match &variant.fields {
+                        VariantFields::Named(fields) => { for field in fields.iter() { check_attributes_at(state, world, host, &field.attributes, "field", &marks); } },
+                        _ => { },
+                    }
+                }
+            },
+            Item::Fn { args, .. } => { check_attributes_parameters(state, world, host, args, &marks); },
+            Item::Impl { methods, .. } => {
+                for method in methods.iter() {
+                    check_attributes_at(state, world, host, &method.attributes, "fn", &marks);
+                    match &method.node {
+                        Item::Fn { args, .. } => { check_attributes_parameters(state, world, host, args, &marks); },
+                        _ => { },
+                    }
+                }
+            },
+            Item::Trait { methods, .. } => {
+                for method in methods.iter() {
+                    check_attributes_at(state, world, host, &method.attributes, &check_attributes_trait_fn(), &marks);
+                    check_attributes_parameters(state, world, host, &method.node.args, &marks);
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_parameters<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[FnArg], marks: &collections::BTreeMap<String, CheckAttributesMark>) { for arg in args.iter() { check_attributes_at(state, world, host, &arg.attributes, "parameter", marks); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, attributes: &[Attribute], place: &str, marks: &collections::BTreeMap<String, CheckAttributesMark>) {
+    let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut inlines: i64 = 0;
+    let inline_name = check_attributes_inline_name();
+    let mark_name = check_attributes_mark_name();
+    let trait_fn = check_attributes_trait_fn();
+    for attribute in attributes.iter() {
+        let written = world.here.text(attribute.name);
+        let name = world.here.unaliased(&written);
+        if name == inline_name {
+            inlines += 1;
+            check_attributes_the_inline(state, world, attribute, place, inlines);
+            continue;
+        }
+        let mut here: String = place.to_owned();
+        if place == trait_fn { here = String::from("fn"); }
+        if name == mark_name {
+            check_attributes_the_mark(state, world, attribute, &here);
+            continue;
+        }
+        let declared = state.fields_of(world, &name);
+        if declared.is_none() {
+            check_attributes_nothing_declares(state, &name, &attribute.span);
+            continue;
+        }
+        let fields: Vec<FieldContract> = nikaia_std::index::or(declared, || vec![].into());
+        let mark = check_attributes_mark_for(marks, &name);
+        if !check_attributes_allows(marks, &name, &here) {
+            check_attributes_out_of_place(state, &name, &here, mark, &attribute.span);
+            continue;
+        }
+        let mut count: i64 = 1;
+        if seen.contains_key(&name) { count = nikaia_std::index::or(seen.get(&name), || 0) + 1; }
+        seen.insert(name.to_owned(), count);
+        if count == 2 && !check_attributes_repeats(marks, &name) { check_attributes_written_twice(state, &name, &attribute.span); }
+        check_attributes_arguments(state, world, host, &name, &fields, attribute);
+    }
+}
+
+fn check_attributes_inline_refusal(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute) -> Option<String> {
+    let bare = attribute.config.is_empty();
+    if attribute.args.is_empty() && bare { return None; }
+    if attribute.args.len() == 1 && bare {
+        match nikaia_std::index::get(&attribute.args, 0) {
+            Expr::Variable(word, _) => {
+                let word = *word;
+                let spelled = world.here.text(word);
+                if spelled == "always" || spelled == "never" { return None; }
+                return Some(format!("`@inline` takes `always` or `never`, and `{}` is neither.", spelled));
+            },
+            _ => { return Some("`@inline` takes `always` or `never`, and this is neither.".to_owned()); },
+        }
+    }
+    Some("`@inline` takes one word at most: `always` or `never`.".to_owned())
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_the_inline(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute, place: &str, count: i64) {
+    if place != "fn" {
+        let mut message: String = format!("`@inline` stands before a function or a method, and this is a `{}`.", place);
+        let mut note: String = String::from("It asks that a function's body be copied to where it is called.");
+        let mut help: String = String::from("Move it before a `fn`, or remove it.");
+        if place == check_attributes_trait_fn() {
+            message = String::from("`@inline` stands before a function with a body, and a trait's method declares none.");
+            note = String::from("What is inlined is a body: the one each `impl` writes.");
+            help = String::from("Write `@inline` before the method in the `impl`.");
+        }
+        if place == "" { message = String::from("`@inline` stands before a function or a method, and this is neither."); }
+        state.findings.push(check_refusal("NK1235", &attribute.span, message, vec![note], Some(help)));
+        return;
+    }
+    if count == 2 { state.findings.push(check_refusal("NK1236", &attribute.span, "`@inline` stands twice before one function.".to_owned(), vec!["A function is inlined, always inlined or never: one of them.".to_owned()], Some("Remove one.".to_owned()))); }
+    let refused = check_attributes_inline_refusal(world, attribute);
+    if refused.is_some() {
+        let message = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
+        state.findings.push(check_refusal("NK1293", &attribute.span, message, vec!["`@inline` asks, `@inline(always)` insists, `@inline(never)` forbids.".to_owned()], Some("Write `@inline`, `@inline(always)` or `@inline(never)`.".to_owned())));
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_the_mark(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute, place: &str) {
+    if place != "struct" {
+        let mark_name = check_attributes_mark_name();
+        check_attributes_out_of_place(state, &mark_name, place, None, &attribute.span);
+        return;
+    }
+    if attribute.args.is_empty() { state.findings.push(check_refusal("NK1101", &attribute.span, "`@meta::Attribute` names where the attribute may stand, and this names no place.".to_owned(), vec![format!("The places are {}.", check_attributes_places_text())], Some("Write `@meta::Attribute(field)`.".to_owned()))); }
+    let known = check_attributes_places();
+    for arg in attribute.args.iter() {
+        let word = check_attributes_place_word(&world.here, arg);
+        if !nikaia_std::list::contains(&known, &word) {
+            let mut message: String = format!("`@meta::Attribute` takes places, and `{}` is not one.", word);
+            if word == "" { message = String::from("`@meta::Attribute` takes places, and this is not one."); }
+            state.findings.push(check_refusal("NK1102", &attribute.span, message, vec![format!("The places are {}.", check_attributes_places_text())], Some("Name a place by its word alone: `field`.".to_owned())));
+        }
+    }
+    for option in attribute.config.iter() {
+        let option_name = world.here.text(option.name);
+        if option_name != "repeatable" {
+            state.findings.push(check_refusal("NK1109", &attribute.span, format!("`@meta::Attribute` has no option called `{}`.", option_name), vec!["Its one option is `repeatable: bool`.".to_owned()], Some("Write `repeatable: true`, or leave it out.".to_owned())));
+            continue;
+        }
+        let is_bool = matches!(option.value, Expr::LitBool(_, _));
+        if !is_bool { state.findings.push(check_refusal("NK1102", &attribute.span, "`repeatable` is `true` or `false`.".to_owned(), vec![], Some("Write `repeatable: true`.".to_owned()))); }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, fields: &[FieldContract], attribute: &Attribute) {
+    let mut required: Vec<FieldContract> = vec![];
+    let mut options: Vec<FieldContract> = vec![];
+    for field in fields.iter() { if field.default == "" { required.push(field.clone()); } else { options.push(field.clone()); } }
+    if (attribute.args.len() as i64) != required.len() as i64 {
+        let mut wanted: String = String::from("");
+        for field in required.iter() {
+            if wanted != "" { wanted = format!("{}, ", wanted); }
+            wanted = format!("{}`{}`", wanted, field.name);
+        }
+        let mut plural: &'static str = "s";
+        if required.len() == 1 { plural = ""; }
+        let mut note: String = format!("They are the fields without a default, in the order `{}` declares them: {}.", name, wanted);
+        if required.is_empty() { note = format!("Every field of `{}` has a default, so each is named after the `;`.", name); }
+        state.findings.push(check_refusal("NK1101", &attribute.span, format!("`@{}` takes {} argument{} before the `;`, and this gives {}.", name, required.len() as i64, plural, attribute.args.len() as i64), vec![note], Some("Give one value for each, by position.".to_owned())));
+    }
+    let mut at: i64 = 0;
+    while at < required.len() as i64 && at < attribute.args.len() as i64 {
+        check_attributes_argument(state, world, host, name, nikaia_std::index::get(&required, nikaia_std::index::at(at)), nikaia_std::index::get(&attribute.args, nikaia_std::index::at(at)), &attribute.span);
+        at += 1;
+    }
+    for option in attribute.config.iter() {
+        let option_name = world.here.text(option.name);
+        let mut found: i64 = -1;
+        let mut index: i64 = 0;
+        while index < options.len() as i64 {
+            if nikaia_std::index::get(&options, nikaia_std::index::at(index)).name == option_name {
+                found = index;
+                break;
+            }
+            index += 1;
+        }
+        if found >= 0 {
+            check_attributes_argument(state, world, host, name, nikaia_std::index::get(&options, nikaia_std::index::at(found)), &option.value, &attribute.span);
+            continue;
+        }
+        let mut known: String = String::from("");
+        for field in options.iter() {
+            if known != "" { known = format!("{}, ", known); }
+            known = format!("{}`{}`", known, field.name);
+        }
+        let mut positional = false;
+        for field in required.iter() { if field.name == option_name { positional = true; } }
+        let mut note: String = format!("Its options are {}.", known);
+        let mut help: String = String::from("Name one of its options, or leave it out.");
+        if positional {
+            note = format!("`{}` has no default, so it is given by position, before the `;`.", option_name);
+            help = format!("Move `{}`'s value before the `;`.", option_name);
+        } else if options.is_empty() { note = format!("No field of `{}` has a default, so it takes no options.", name); }
+        state.findings.push(check_refusal("NK1109", &attribute.span, format!("`@{}` has no option called `{}`.", name, option_name), vec![note], Some(help)));
+    }
+}
+
+fn check_attributes_is_null(arg: &Expr) -> bool { matches!(arg, Expr::LitNull(_)) }
+
+fn check_attributes_is_text(arg: &Expr) -> bool { matches!(arg, Expr::LitStr { .. }) }
+
+fn check_attributes_names_string(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == "String",
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, owner: &str, field: &FieldContract, arg: &Expr, span: &Span) {
+    match arg {
+        Expr::Variable(word, _) => {
+            let word = *word;
+            let variants: Vec<String> = nikaia_std::index::or(check_attributes_variants_of_type(&state, world, &field.ty), || vec![].into());
+            let spelled = world.here.text(word);
+            for variant in variants.iter() { if check_attributes_same_word(variant, &spelled) { return; } }
+        },
+        _ => { },
+    }
+    let nullable = matches!(field.ty, Ty::Nullable(_));
+    let mut want: Ty = field.ty.clone();
+    match &field.ty {
+        Ty::Nullable(inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            if !check_attributes_is_null(arg) { want = inner.clone(); }
+        },
+        _ => { },
+    }
+    if check_attributes_is_null(arg) && nullable { return; }
+    if check_attributes_is_text(arg) && check_attributes_names_string(&want) { return; }
+    if !a_literal(arg) {
+        let label = format!("{}.{}", owner, field.name);
+        host.computed_attribute(state, &label, &want, arg, span);
+        return;
+    }
+    let found = check_core_expr(state, world, host, arg, span);
+    let field_name = field.name.to_owned();
+    let kind = check_attributes_literal_misfit(arg, &want);
+    if kind.is_some() {
+        let said = match kind { Some(__nikaia_value) => __nikaia_value, None => return };
+        let wanted = want.text();
+        state.findings.push(check_refusal("NK1102", span, format!("`@{}`'s `{}` is `{}`, and this gives {}.", owner, field_name, wanted, said), vec![], Some(format!("Give `{}` a `{}`.", field_name, wanted))));
+        return;
+    }
+    state.expect_type(world, &found, &want, span, "argument", &|found_text, wanted_text| { format!("`@{}`'s `{}` is `{}`, and this gives `{}`.", owner, field_name, wanted_text, found_text) });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_attributes_an_attribute_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], span: &Span) -> Option<String> {
+    let mut written: String = String::from("");
+    let mut one = false;
+    if args.len() == 1 {
+        match nikaia_std::index::get(&args, 0) {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                written = world.here.text(name);
+                one = true;
+            },
+            Expr::Path(segments, _) => {
+                for segment in segments.iter() {
+                    let segment = *segment;
+                    if written != "" { written = format!("{}::", written); }
+                    written = format!("{}{}", written, world.here.text(segment));
+                }
+                one = true;
+            },
+            _ => { },
+        }
+    }
+    if !one {
+        state.findings.push(check_refusal("NK1101", span, "`.attribute(X)` takes one type, the attribute to read.".to_owned(), vec![], Some("Write `field.attribute(json::Name)`.".to_owned())));
+        return None;
+    }
+    let name = world.here.unaliased(&written);
+    if state.fields_of(world, &name).is_none() {
+        check_attributes_nothing_declares(state, &name, span);
+        return None;
+    }
+    let marks = check_attributes_marks(world);
+    if !marks.contains_key(&name) {
+        check_attributes_out_of_place(state, &name, "field", None, span);
+        return None;
+    }
+    Some(name)
+}
+
+fn check_attributes_names_of(contract: &TypeContract) -> Option<Vec<String>> {
+    if contract.variants.is_empty() { return None; }
+    let mut names: Vec<String> = vec![];
+    for variant in contract.variants.iter() { names.push(variant.name.to_owned()); }
+    Some(names)
+}
+
+fn check_attributes_variants_of_type(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<Vec<String>> {
+    let name: &str = match ty {
+        Ty::Named { name, .. } => name,
+        _ => return None,
+    };
+    if state.enums.contains_key(name) {
+        let set = match state.enums.get(name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let mut names: Vec<String> = vec![];
+        for variant in set.iter() { names.push(variant.to_owned()); }
+        return Some(names);
+    }
+    let own = world.own.types.get(name);
+    if own.is_some() { return check_attributes_names_of(match own { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    let suffix = format!("::{}", name);
+    for (key, contract) in world.library.types.iter() { if key == name || key.ends_with(&suffix) { return check_attributes_names_of(contract); } }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_nothing_declares(state: &mut CheckState, name: &str, span: &Span) { state.findings.push(check_refusal("NK1135", span, format!("There's no struct called `{}`.", name), vec!["An attribute is a value of a struct that `@meta::Attribute` marks, declared here or in a package you use.".to_owned()], Some("Declare the struct, or fix the name.".to_owned()))); }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_out_of_place(state: &mut CheckState, name: &str, place: &str, mark: Option<CheckAttributesMark>, span: &Span) {
+    let mut here: String = format!("a `{}`", place);
+    if place == "" { here = String::from("this declaration"); }
+    let mark_name = check_attributes_mark_name();
+    if name == mark_name {
+        state.findings.push(check_refusal("NK1235", span, format!("`@{}` marks a struct, and this is {}.", mark_name, here), vec!["It makes the struct after it an attribute.".to_owned()], Some("Move it before a `struct`.".to_owned())));
+        return;
+    }
+    if mark.is_none() {
+        state.findings.push(check_refusal("NK1235", span, format!("`{}` is not an attribute: `@{}` does not mark it.", name, mark_name), vec!["An attribute is a struct marked with `@meta::Attribute(…)`, naming where it may stand.".to_owned()], Some(format!("Write `@meta::Attribute({})` before `struct {}`.", check_attributes_place_or_field(place), name))));
+        return;
+    }
+    let known = match mark { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut named: String = String::from("");
+    for p in known.places.iter() {
+        if named != "" { named = format!("{}, ", named); }
+        named = format!("{}`{}`", named, p);
+    }
+    let mut help: String = format!("Add `{}` to its `@meta::Attribute(…)`, or remove it here.", place);
+    if place == "" { help = String::from("Remove it."); }
+    state.findings.push(check_refusal("NK1235", span, format!("`@{}` may not stand before {}.", name, here), vec![format!("Its mark names {}.", named)], Some(help)));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_attributes_written_twice(state: &mut CheckState, name: &str, span: &Span) { state.findings.push(check_refusal("NK1236", span, format!("`@{}` stands twice before one declaration.", name), vec![format!("An attribute stands once unless its mark says `repeatable: true`, and `{}`'s does not.", name)], Some(format!("Remove one, or write `@meta::Attribute(…; repeatable: true)` before `struct {}`.", name)))); }
+
+fn check_attributes_whole(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" }
+
+fn check_attributes_misfit_named(literal: &Expr, name: &str, plain: bool) -> Option<String> {
+    let float = name == "f32" || name == "f64";
+    let whole = check_attributes_whole(name);
+    let known = whole || float || name == "bool" || name == "String" || name == "str";
+    if !known || !plain { return None; }
+    let number = whole || float;
+    let inner: &Expr = match literal {
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); expr },
+        other => other,
+    };
+    match inner {
+        Expr::LitInt { .. } if !number => Some("a whole number".to_owned()),
+        Expr::LitFloat(_, _) if !float => Some("a number with a fraction".to_owned()),
+        Expr::LitBool(_, _) if name != "bool" => Some("a `bool`".to_owned()),
+        Expr::LitStr { .. } if name != "String" && name != "str" => Some("text".to_owned()),
+        _ => None,
+    }
+}
+
+pub fn check_attributes_literal_misfit(literal: &Expr, want: &Ty) -> Option<String> {
+    match want {
+        Ty::Named { name, args, .. } => check_attributes_misfit_named(literal, name, args.is_empty()),
+        _ => None,
+    }
+}
+
+
 // --- check_binds.nika ---
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15198,7 +15734,7 @@ fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &Chec
 pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let member = check_core_call_attribute_member(&state, world, func);
     if member != "" {
-        let read: String = match host.an_attribute_read(state, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        let read: String = match check_attributes_an_attribute_read(state, world, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         if member == "attribute" { return Ty::Nullable(Box::new(check_core_call_named(&read))); }
         return Ty::Named { name: "Vec".to_owned(), args: vec![check_core_call_named(&read)], view: false };
     }
@@ -18800,7 +19336,7 @@ fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckW
     };
     if type_name == "$Variant" {
         if name == "attribute" || name == "attributes" {
-            let read: String = match host.an_attribute_read(state, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+            let read: String = match check_attributes_an_attribute_read(state, world, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
             return check_core_method_attribute(&name, &read);
         }
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
@@ -18813,7 +19349,7 @@ fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckW
     }
     if type_name == "$Field" {
         if name == "attribute" || name == "attributes" {
-            let read: String = match host.an_attribute_read(state, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+            let read: String = match check_attributes_an_attribute_read(state, world, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
             return check_core_method_attribute(&name, &read);
         }
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
@@ -24149,7 +24685,7 @@ pub trait CheckHost {
     fn declared(&self, state: &mut CheckState, ty: &Type, span: &Span) -> Ty;
     fn payload_of(&self, ty: &str, variant: &str) -> Option<Vec<Ty>>;
     fn float_text(&self, number: f64) -> String;
-    fn an_attribute_read(&self, state: &mut CheckState, args: &[Expr], span: &Span) -> Option<String>;
+    fn computed_attribute(&self, state: &mut CheckState, name: &str, ty: &Ty, value: &Expr, span: &Span);
 }
 
 fn host_known(local: &CheckLocal) -> Option<BuildValue> {
@@ -72189,6 +72725,10 @@ pub mod check_arm_leaves {
 pub mod check_arms {
     #[allow(unused_imports)]
     pub use super::{CheckArm, arms_that_disagree};
+}
+pub mod check_attributes {
+    #[allow(unused_imports)]
+    pub use super::{CheckAttributesMark, check_attributes_all, check_attributes_an_attribute_read, check_attributes_literal_misfit};
 }
 pub mod check_binds {
     #[allow(unused_imports)]

@@ -38,6 +38,7 @@ use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
+use nikaia_std::tools::check_attributes;
 use nikaia_std::tools::check_consts;
 use nikaia_std::tools::check_core_args;
 use nikaia_std::tools::check_core_comptime;
@@ -1168,7 +1169,9 @@ impl<'a> Checker<'a> {
         self.types_that_contain_themselves();
         // **Attributes** (ADR-331), before the bodies: they are about the
         // declarations.
-        self.attributes();
+        self.nikaia(|state, world, host| {
+            check_attributes::check_attributes_all(state, world, host)
+        });
         for item in &self.parsed.program.items {
             match &item.node {
                 // Walked by `item_constants` above, in a frame that stays.
@@ -2046,7 +2049,8 @@ impl<'a> Checker<'a> {
         {
             return;
         }
-        if let Some(kind) = attributes::literal_misfit(&default.value, &want) {
+        if let Some(kind) = check_attributes::check_attributes_literal_misfit(&default.value, &want)
+        {
             self.s.findings.push(Finding {
                 code: "NK1166".to_string(),
                 severity: Severity::Error,

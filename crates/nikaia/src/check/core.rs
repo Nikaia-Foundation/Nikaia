@@ -294,13 +294,17 @@ impl CheckHost for Core<'_, '_> {
         self.h.float_text(number)
     }
 
-    fn an_attribute_read(
+    fn computed_attribute(
         &self,
         state: &mut CheckState,
-        args: &[Expr],
+        name: &str,
+        ty: &Ty,
+        value: &Expr,
         span: &Span,
-    ) -> Option<String> {
-        self.hosted(state, |checker| checker.an_attribute_read(args, span))
+    ) {
+        self.hosted(state, |checker| {
+            checker.computed_value(name, ty, value, *span, Computing::Attribute)
+        })
     }
 
     fn an_escape_nothing_names(

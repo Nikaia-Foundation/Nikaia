@@ -407,13 +407,15 @@ impl CheckHost for Host<'_> {
         format!("{number:?}")
     }
 
-    fn an_attribute_read(
+    fn computed_attribute(
         &self,
         _state: &mut CheckState,
-        _args: &[Expr],
+        _name: &str,
+        _ty: &Ty,
+        _value: &Expr,
         _span: &Span,
-    ) -> Option<String> {
-        unreachable!("`an_attribute_read` is asked of the core's host, not of the services")
+    ) {
+        unreachable!("`computed_attribute` is asked of the core's host, not of the services")
     }
 
     fn an_escape_nothing_names(

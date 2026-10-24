@@ -116,9 +116,10 @@ pub trait CheckHost {
     fn payload_of(ref self, ty: ref String, variant: ref String) -> Vec[Ty]? sync
     /// A finite float as the language below writes it.
     fn float_text(ref self, number: f64) -> String sync
-    /// **`field.attribute(X)`'s `X`** (U-c4): one type, an attribute, or
-    /// `null` where it is refused.
-    fn an_attribute_read(ref self, mut state: CheckState, args: ref Vec[Expr], span: ref Span) -> String? sync
+    /// **An attribute's argument that is not a literal** (U-d2): computed at
+    /// build time, as an option's default is. Rust's until `computed_value`
+    /// moves (U-d3).
+    fn computed_attribute(ref self, mut state: CheckState, name: ref String, ty: ref Ty, value: ref Expr, span: ref Span) sync
 }
 
 /// What the build worked out a local is: the whole value, or the integer the

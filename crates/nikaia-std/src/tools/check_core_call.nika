@@ -775,7 +775,7 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
     // (ADR-331 D6): `X` is a type, not a value, and is not walked as one.
     let member = check_core_call_attribute_member(state, world, func)
     if member != "" {
-        let read: String = host.an_attribute_read(state, args, span) ?? return Ty::Unknown
+        let read: String = check_attributes_an_attribute_read(state, world, args, span) ?? return Ty::Unknown
         if member == "attribute" {
             return Ty::Nullable(check_core_call_named(read))
         }
