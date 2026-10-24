@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1198] — 2026-10-24
+
+**An argument that reuses a mut argument's local is bound before the call**
+- Lowering: a call such as `f(w, g(w, 1), 2)`, where a later argument computed in the call mentions the local lent to a `mut` parameter, binds that argument (and every earlier computed one, in order) to a `let` before the call, so the generated Rust no longer fails with E0499. Method receivers (`w.m(g(w))`) are not covered yet.
+
 ## [0.0.1197] — 2026-10-24
 
 **The prover follows the length of a mut list**
