@@ -149,8 +149,9 @@ pub(crate) enum MpRes {
     Not,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct MpBody {
+#[derive(Debug, Clone)]
+pub(crate) struct MpBody<'a> {
+    pub(crate) words: &'a winnow_grammar::InternerContext,
     pub(crate) params: collections::BTreeSet<String>,
     pub(crate) roots: collections::BTreeMap<String, Vec<(String, i64)>>,
     pub(crate) root_name: Vec<String>,
@@ -161,7 +162,7 @@ pub(crate) struct MpBody {
     pub(crate) result: Vec<(String, i64)>,
 }
 
-impl MpBody {
+impl<'a> MpBody<'a> {
     pub(crate) fn find(&mut self, start: i64) -> i64 {
         let mut at = start;
         while *nikaia_std::index::get(&self.parent, nikaia_std::index::at(at)) != at {
@@ -188,29 +189,29 @@ impl MpBody {
         let joined = mp_join(nikaia_std::index::get(&self.adds, nikaia_std::index::at(root)), dep);
         { let __nikaia_stored = joined; nikaia_std::index::set(&mut self.adds, nikaia_std::index::at(root), __nikaia_stored); }
     }
-    pub(crate) fn locate(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) -> Option<(String, String)> {
+    pub(crate) fn locate(&mut self, e: &Expr) -> Option<(String, String)> {
         match e {
             Expr::Variable(n, _) => {
                 let n = *n;
-                return Some((mp_text(words, n), "".to_owned()));
+                return Some((mp_text(self.words, n), "".to_owned()));
             },
             Expr::Field { base, name, .. } => {
                 let base = nikaia_std::boxed::open(base); let name = *name;
-                let (var, path) = match self.locate(base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                return Some((var, format!("{}.{}", path, mp_text(words, name))));
+                let (var, path) = match self.locate(base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                return Some((var, format!("{}.{}", path, mp_text(self.words, name))));
             },
             Expr::Index { base, index, .. } => {
                 let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-                let found = self.locate(base, words);
+                let found = self.locate(base);
                 if found.is_none() { return None; }
-                self.expr(index, words);
+                self.expr(index);
                 return std::convert::identity(found);
             },
             _ => return None,
         }
     }
-    pub(crate) fn classify(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) -> MpRes {
-        let (var, path) = match self.locate(e, words) { Some(__nikaia_value) => __nikaia_value, None => return MpRes::Not };
+    pub(crate) fn classify(&mut self, e: &Expr) -> MpRes {
+        let (var, path) = match self.locate(e) { Some(__nikaia_value) => __nikaia_value, None => return MpRes::Not };
         let held = match match *nikaia_std::index::get(&self.roots, &var) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -225,29 +226,29 @@ impl MpBody {
         if under { return MpRes::Part; }
         MpRes::Not
     }
-    pub(crate) fn place(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    pub(crate) fn place(&mut self, e: &Expr) -> Option<i64> {
         match e {
             Expr::Index { base, index, .. } => {
                 let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-                let root = match self.place(base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let dep = self.deps(index, words);
+                let root = match self.place(base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let dep = self.deps(index);
                 self.add(root, &dep);
-                self.expr(index, words);
+                self.expr(index);
                 return Some(root);
             },
-            Expr::Variable(..) => return self.place_named(e, words),
-            Expr::Field { .. } => return self.place_named(e, words),
+            Expr::Variable(..) => return self.place_named(e),
+            Expr::Field { .. } => return self.place_named(e),
             _ => return None,
         }
     }
-    pub(crate) fn place_named(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) -> Option<i64> {
-        match self.classify(e, words) {
+    pub(crate) fn place_named(&mut self, e: &Expr) -> Option<i64> {
+        match self.classify(e) {
             MpRes::Map(id) => Some(id),
             _ => None,
         }
     }
-    pub(crate) fn roots_of(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) -> Option<Vec<i64>> {
-        let (var, path) = match self.locate(e, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    pub(crate) fn roots_of(&mut self, e: &Expr) -> Option<Vec<i64>> {
+        let (var, path) = match self.locate(e) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let held = match match *nikaia_std::index::get(&self.roots, &var) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -261,25 +262,25 @@ impl MpBody {
         if found.is_empty() { return None; }
         Some(found)
     }
-    pub(crate) fn map_made(&self, e: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+    pub(crate) fn map_made(&self, e: &Expr) -> bool {
         match e {
             Expr::Call { func, args, .. } => {
                 let func = nikaia_std::boxed::open(func);
                 if !args.is_empty() { return false; }
                 return match func {
-                    Expr::Path(segments, _) => self.ends_in_a_map(segments, words),
-                    Expr::Variable(one, _) => { let one = *one; mp_made_name(words.resolve(one)) },
+                    Expr::Path(segments, _) => self.ends_in_a_map(segments),
+                    Expr::Variable(one, _) => { let one = *one; mp_made_name(self.words.resolve(one)) },
                     _ => false,
                 };
             },
             _ => return false,
         }
     }
-    pub(crate) fn ends_in_a_map(&self, segments: &[winnow_grammar::Symbol], words: &winnow_grammar::InternerContext) -> bool {
+    pub(crate) fn ends_in_a_map(&self, segments: &'a Vec<winnow_grammar::Symbol>) -> bool {
         if segments.is_empty() { return false; }
-        mp_made_name(words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))))
+        mp_made_name(self.words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))))
     }
-    pub(crate) fn deps(&self, e: &Expr, words: &winnow_grammar::InternerContext) -> MpDep {
+    pub(crate) fn deps(&self, e: &Expr) -> MpDep {
         match e {
             Expr::LitInt { .. } => return mp_nothing(),
             Expr::LitStr { .. } => return mp_nothing(),
@@ -289,32 +290,32 @@ impl MpBody {
             Expr::LitNull(_) => return mp_nothing(),
             Expr::Variable(n, _) => {
                 let n = *n;
-                let name = mp_text(words, n);
+                let name = mp_text(self.words, n);
                 if self.params.contains(&name) || self.locals.contains_key(&name) { return mp_named(name); }
                 return mp_unknown();
             },
-            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return self.deps(base, words) },
-            Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return self.deps(base, words) },
-            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); return mp_join(&self.deps(base, words), &self.deps(index, words)) },
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return self.deps(base) },
+            Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return self.deps(base) },
+            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); return mp_join(&self.deps(base), &self.deps(index)) },
             Expr::MethodCall { receiver, method, args, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                if !mp_shapes(words.resolve(method)) { return mp_unknown(); }
-                let mut all = self.deps(receiver, words);
-                for a in args.iter() { all = mp_join(&all, &self.deps(a, words)); }
+                if !mp_shapes(self.words.resolve(method)) { return mp_unknown(); }
+                let mut all = self.deps(receiver);
+                for a in args.iter() { all = mp_join(&all, &self.deps(a)); }
                 return all;
             },
-            Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); return mp_join(&self.deps(lhs, words), &self.deps(rhs, words)) },
-            Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); return mp_join(&self.deps(value, words), &self.deps(fallback, words)) },
-            Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return self.deps(expr, words) },
-            Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return self.deps(expr, words) },
-            Expr::Tuple(items, _) => return self.deps_all(items, words),
-            Expr::ListLit { items, .. } => return self.deps_all(items, words),
-            Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); return mp_join(&self.deps(value, words), &self.deps(count, words)) },
+            Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); return mp_join(&self.deps(lhs), &self.deps(rhs)) },
+            Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); return mp_join(&self.deps(value), &self.deps(fallback)) },
+            Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return self.deps(expr) },
+            Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return self.deps(expr) },
+            Expr::Tuple(items, _) => return self.deps_all(items),
+            Expr::ListLit { items, .. } => return self.deps_all(items),
+            Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); return mp_join(&self.deps(value), &self.deps(count)) },
             Expr::LitInterpolated { parts, .. } => {
                 let mut all = mp_nothing();
                 for p in parts.iter() {
                     match p {
-                        FPart::Hole { expr, .. } => { all = mp_join(&all, &self.deps(expr, words)); },
+                        FPart::Hole { expr, .. } => { all = mp_join(&all, &self.deps(expr)); },
                         _ => { },
                     }
                 }
@@ -323,9 +324,9 @@ impl MpBody {
             _ => return mp_unknown(),
         }
     }
-    pub(crate) fn deps_all(&self, items: &[Expr], words: &winnow_grammar::InternerContext) -> MpDep {
+    pub(crate) fn deps_all(&self, items: &[Expr]) -> MpDep {
         let mut all = mp_nothing();
-        for a in items.iter() { all = mp_join(&all, &self.deps(a, words)); }
+        for a in items.iter() { all = mp_join(&all, &self.deps(a)); }
         all
     }
     pub(crate) fn set_local(&mut self, name: String, dep: &MpDep) {
@@ -339,84 +340,84 @@ impl MpBody {
         }, || mp_nothing().into());
         self.locals.insert(name, mp_join(&before, dep));
     }
-    pub(crate) fn block(&mut self, block: &Block, tail_is_the_result: bool, words: &winnow_grammar::InternerContext) {
+    pub(crate) fn block(&mut self, block: &Block, tail_is_the_result: bool) {
         let last = block.stmts.len() as i64 - 1;
         let mut at: i64 = 0;
         for stmt in block.stmts.iter() {
-            self.stmt(&stmt.node, tail_is_the_result && at == last, words);
+            self.stmt(&stmt.node, tail_is_the_result && at == last);
             at = at + 1;
         }
     }
-    pub(crate) fn stmt(&mut self, stmt: &Stmt, is_the_result: bool, words: &winnow_grammar::InternerContext) {
+    pub(crate) fn stmt(&mut self, stmt: &Stmt, is_the_result: bool) {
         match stmt {
             Stmt::Let { names, value, .. } => {
-                if names.len() == 1 && self.map_made(value, words) {
-                    let name = mp_text(words, *nikaia_std::index::get(&names, 0));
+                if names.len() == 1 && self.map_made(value) {
+                    let name = mp_text(self.words, *nikaia_std::index::get(&names, 0));
                     if self.params.contains(&name) || self.roots.contains_key(&name) { self.doubt(); } else {
                         let root = self.new_root("".to_owned());
                         self.roots.insert(name, vec![("".to_owned(), root)]);
                     }
                     return;
                 }
-                let dep = self.deps(value, words);
-                self.expr(value, words);
+                let dep = self.deps(value);
+                self.expr(value);
                 for n in names.iter() {
                     let n = *n;
-                    self.set_local(mp_text(words, n), &dep);
+                    self.set_local(mp_text(self.words, n), &dep);
                 }
             },
             Stmt::Assign { target, value, .. } => {
                 match target {
                     Expr::Variable(n, _) => {
                         let n = *n;
-                        if !self.roots.contains_key(&mp_text(words, n)) {
-                            let dep = self.deps(value, words);
-                            self.expr(value, words);
-                            self.set_local(mp_text(words, n), &dep);
-                        } else { self.assign_whole(target, value, words); }
+                        if !self.roots.contains_key(&mp_text(self.words, n)) {
+                            let dep = self.deps(value);
+                            self.expr(value);
+                            self.set_local(mp_text(self.words, n), &dep);
+                        } else { self.assign_whole(target, value); }
                     },
                     Expr::Index { .. } => {
-                        if self.place(target, words).is_none() { self.expr(target, words); }
-                        self.expr(value, words);
+                        if self.place(target).is_none() { self.expr(target); }
+                        self.expr(value);
                     },
-                    _ => { self.assign_whole(target, value, words); },
+                    _ => { self.assign_whole(target, value); },
                 }
             },
             Stmt::For { bindings, iter, body, .. } => {
-                let dep = self.iterated(iter, words);
+                let dep = self.iterated(iter);
                 for b in bindings.iter() {
                     let b = *b;
-                    self.set_local(mp_text(words, b), &dep);
+                    self.set_local(mp_text(self.words, b), &dep);
                 }
-                self.block(body, false, words);
+                self.block(body, false);
             },
             Stmt::While { cond, body } => {
-                self.expr(cond, words);
-                self.block(body, false, words);
+                self.expr(cond);
+                self.block(body, false);
             },
-            Stmt::Return(value) => { self.returned_maybe((value).as_ref(), words); },
-            Stmt::Expr(e) => { if is_the_result { self.returned(e, words); } else { self.expr(e, words); } },
+            Stmt::Return(value) => { self.returned_maybe((value).as_ref()); },
+            Stmt::Expr(e) => { if is_the_result { self.returned(e); } else { self.expr(e); } },
             Stmt::Break => { },
             Stmt::Continue => { },
             Stmt::Comptime { .. } => { self.doubt(); },
         }
     }
-    pub(crate) fn assign_whole(&mut self, target: &Expr, value: &Expr, words: &winnow_grammar::InternerContext) {
-        let kind = self.classify(target, words);
+    pub(crate) fn assign_whole(&mut self, target: &Expr, value: &Expr) {
+        let kind = self.classify(target);
         let is_not = matches!(kind, MpRes::Not);
-        if !is_not && !self.map_made(value, words) { self.doubt(); }
-        self.expr(value, words);
+        if !is_not && !self.map_made(value) { self.doubt(); }
+        self.expr(value);
     }
-    pub(crate) fn returned_maybe(&mut self, value: Option<&Expr>, words: &winnow_grammar::InternerContext) { self.returned(match value { Some(__nikaia_value) => __nikaia_value, None => return }, words); }
-    pub(crate) fn iterated(&mut self, iter: &Expr, words: &winnow_grammar::InternerContext) -> MpDep {
+    pub(crate) fn returned_maybe(&mut self, value: Option<&Expr>) { self.returned(match value { Some(__nikaia_value) => __nikaia_value, None => return }); }
+    pub(crate) fn iterated(&mut self, iter: &Expr) -> MpDep {
         let mut walked: Option<i64> = None;
         match iter {
             Expr::MethodCall { receiver, method, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                let m = mp_text(words, method);
-                if m == "keys" || m == "values" || m == "iter" { walked = self.place(receiver, words); } else { walked = self.place(iter, words); }
+                let m = mp_text(self.words, method);
+                if m == "keys" || m == "values" || m == "iter" { walked = self.place(receiver); } else { walked = self.place(iter); }
             },
-            _ => { walked = self.place(iter, words); },
+            _ => { walked = self.place(iter); },
         }
         if walked.is_some() {
             let root = nikaia_std::index::or(walked, || 0);
@@ -424,16 +425,16 @@ impl MpBody {
             if !name.is_empty() { return mp_named(name); }
             return mp_unknown();
         }
-        let dep = self.deps(iter, words);
-        self.expr(iter, words);
+        let dep = self.deps(iter);
+        self.expr(iter);
         dep
     }
-    pub(crate) fn returned(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) {
+    pub(crate) fn returned(&mut self, e: &Expr) {
         if self.result.is_empty() {
-            self.expr(e, words);
+            self.expr(e);
             return;
         }
-        self.flows(e, "".to_owned(), words);
+        self.flows(e, "".to_owned());
     }
     pub(crate) fn targets_of(&self, under: String) -> Vec<i64> {
         let below = format!("{}.", under);
@@ -445,29 +446,29 @@ impl MpBody {
         targets
     }
     pub(crate) fn join_all(&mut self, from: &[i64], targets: &[i64]) { if (from.len() as i64) == targets.len() as i64 { for i in 0..from.len() as i64 { self.union(*nikaia_std::index::get(&from, (i) as usize), *nikaia_std::index::get(&targets, (i) as usize)); } } else { self.doubt(); } }
-    pub(crate) fn flows(&mut self, e: &Expr, under: String, words: &winnow_grammar::InternerContext) {
+    pub(crate) fn flows(&mut self, e: &Expr, under: String) {
         let targets = self.targets_of(under.to_owned());
         if targets.is_empty() {
-            self.expr(e, words);
+            self.expr(e);
             return;
         }
-        if self.map_made(e, words) { return; }
+        if self.map_made(e) { return; }
         match e {
-            Expr::Variable(..) => { self.flow_from(e, &targets, words); },
-            Expr::Field { .. } => { self.flow_from(e, &targets, words); },
-            Expr::Index { .. } => { self.flow_from(e, &targets, words); },
+            Expr::Variable(..) => { self.flow_from(e, &targets); },
+            Expr::Field { .. } => { self.flow_from(e, &targets); },
+            Expr::Index { .. } => { self.flow_from(e, &targets); },
             Expr::MethodCall { receiver, method, args, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                if args.is_empty() && mp_text(words, method) == "clone" { self.flow_from(receiver, &targets, words); } else {
-                    self.expr(e, words);
+                if args.is_empty() && mp_text(self.words, method) == "clone" { self.flow_from(receiver, &targets); } else {
+                    self.expr(e);
                     self.doubt();
                 }
             },
             Expr::StructLit { fields, .. } => {
                 for f in fields.iter() {
-                    let field = mp_text(words, f.name);
+                    let field = mp_text(self.words, f.name);
                     let part = format!("{}.{}", under, field);
-                    if f.value.is_some() { self.flows_in((f.value).as_ref(), part, words); } else {
+                    if f.value.is_some() { self.flows_in((f.value).as_ref(), part); } else {
                         let held = match *nikaia_std::index::get(&self.roots, &field) {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
                             None => None,
@@ -491,17 +492,17 @@ impl MpBody {
             Expr::If { .. } => { self.doubt(); },
             Expr::Tuple(..) => { self.doubt(); },
             _ => {
-                self.expr(e, words);
+                self.expr(e);
                 self.doubt();
             },
         }
     }
-    pub(crate) fn flows_in(&mut self, v: Option<&Expr>, under: String, words: &winnow_grammar::InternerContext) { self.flows(match v { Some(__nikaia_value) => __nikaia_value, None => return }, under, words); }
-    pub(crate) fn flow_from(&mut self, e: &Expr, targets: &[i64], words: &winnow_grammar::InternerContext) {
-        let from = self.roots_of(e, words);
+    pub(crate) fn flows_in(&mut self, v: Option<&Expr>, under: String) { self.flows(match v { Some(__nikaia_value) => __nikaia_value, None => return }, under); }
+    pub(crate) fn flow_from(&mut self, e: &Expr, targets: &[i64]) {
+        let from = self.roots_of(e);
         if from.is_none() { self.doubt(); } else { self.join_all(&nikaia_std::index::or(from, || vec![].into()), targets); }
     }
-    pub(crate) fn expr(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) {
+    pub(crate) fn expr(&mut self, e: &Expr) {
         match e {
             Expr::LitInt { .. } => { },
             Expr::LitStr { .. } => { },
@@ -514,126 +515,126 @@ impl MpBody {
             Expr::Continue(_) => { },
             Expr::Variable(n, _) => {
                 let n = *n;
-                if self.roots.contains_key(&mp_text(words, n)) { self.doubt(); }
+                if self.roots.contains_key(&mp_text(self.words, n)) { self.doubt(); }
             },
             Expr::LitInterpolated { parts, .. } => {
                 for p in parts.iter() {
                     match p {
-                        FPart::Hole { expr, .. } => { self.expr(expr, words); },
+                        FPart::Hole { expr, .. } => { self.expr(expr); },
                         _ => { },
                     }
                 }
             },
-            Expr::Tuple(items, _) => { for i in items.iter() { self.expr(i, words); } },
-            Expr::ListLit { items, .. } => { for i in items.iter() { self.expr(i, words); } },
+            Expr::Tuple(items, _) => { for i in items.iter() { self.expr(i); } },
+            Expr::ListLit { items, .. } => { for i in items.iter() { self.expr(i); } },
             Expr::ListRepeat { value, count, .. } => {
                 let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
-                self.expr(value, words);
-                self.expr(count, words);
+                self.expr(value);
+                self.expr(count);
             },
-            Expr::Block(b, _) => { self.block(b, false, words); },
-            Expr::Unsafe(b, _) => { self.block(b, false, words); },
+            Expr::Block(b, _) => { self.block(b, false); },
+            Expr::Unsafe(b, _) => { self.block(b, false); },
             Expr::If { cond, then_branch, else_branch, .. } => {
                 let cond = nikaia_std::boxed::open(cond);
-                self.expr(cond, words);
-                self.block(then_branch, false, words);
-                self.block_maybe((else_branch).as_ref(), words);
+                self.expr(cond);
+                self.block(then_branch, false);
+                self.block_maybe((else_branch).as_ref());
             },
             Expr::Call { func, args, config, .. } => {
                 let func = nikaia_std::boxed::open(func);
-                self.expr(func, words);
-                for a in args.iter() { self.expr(a, words); }
-                for c in config.iter() { self.expr(&c.value, words); }
+                self.expr(func);
+                for a in args.iter() { self.expr(a); }
+                for c in config.iter() { self.expr(&c.value); }
             },
             Expr::MethodCall { receiver, method, args, config, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                let name = mp_text(words, method);
-                let root = self.place(receiver, words);
+                let name = mp_text(self.words, method);
+                let root = self.place(receiver);
                 if root.is_some() {
                     if mp_adds(&name) {
                         let mut dep = mp_nothing();
-                        for a in args.iter() { dep = mp_join(&dep, &self.deps(a, words)); }
+                        for a in args.iter() { dep = mp_join(&dep, &self.deps(a)); }
                         self.add(nikaia_std::index::or(root, || 0), &dep);
                     } else if !mp_reads(&name) { self.doubt(); }
-                } else { self.field_or(receiver, words); }
-                for a in args.iter() { self.expr(a, words); }
-                for c in config.iter() { self.expr(&c.value, words); }
+                } else { self.field_or(receiver); }
+                for a in args.iter() { self.expr(a); }
+                for c in config.iter() { self.expr(&c.value); }
             },
             Expr::Index { base, index, .. } => {
                 let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-                if self.place(base, words).is_some() { self.expr(index, words); } else { self.field_or(e, words); }
+                if self.place(base).is_some() { self.expr(index); } else { self.field_or(e); }
             },
-            Expr::Field { .. } => { self.field_or(e, words); },
-            Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); self.expr(base, words); },
+            Expr::Field { .. } => { self.field_or(e); },
+            Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); self.expr(base); },
             Expr::Binary { op, lhs, rhs, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
                 let equal = matches!(op, BinaryOp::Eq | BinaryOp::Ne);
                 if !equal {
-                    self.expr(lhs, words);
-                    self.expr(rhs, words);
+                    self.expr(lhs);
+                    self.expr(rhs);
                     return;
                 }
-                let left = self.roots_of(lhs, words);
-                let right = self.roots_of(rhs, words);
+                let left = self.roots_of(lhs);
+                let right = self.roots_of(rhs);
                 if left.is_some() && right.is_some() {
                     let a = nikaia_std::index::or(left, || vec![].into());
                     let b = nikaia_std::index::or(right, || vec![].into());
                     if (a.len() as i64) == b.len() as i64 { for i in 0..a.len() as i64 { self.union(*nikaia_std::index::get(&a, nikaia_std::index::at(i)), *nikaia_std::index::get(&b, nikaia_std::index::at(i))); } } else { self.doubt(); }
                 } else if left.is_some() {
-                    if !self.map_made(rhs, words) { self.doubt(); }
-                    self.expr(rhs, words);
+                    if !self.map_made(rhs) { self.doubt(); }
+                    self.expr(rhs);
                 } else if right.is_some() {
-                    if !self.map_made(lhs, words) { self.doubt(); }
-                    self.expr(lhs, words);
+                    if !self.map_made(lhs) { self.doubt(); }
+                    self.expr(lhs);
                 } else {
-                    self.expr(lhs, words);
-                    self.expr(rhs, words);
+                    self.expr(lhs);
+                    self.expr(rhs);
                 }
             },
-            Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.expr(expr, words); },
-            Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.expr(expr, words); },
-            Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner, words); },
-            Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner, words); },
+            Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.expr(expr); },
+            Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.expr(expr); },
+            Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
+            Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
             Expr::Coalesce { value, fallback, .. } => {
                 let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
-                self.expr(value, words);
-                self.expr(fallback, words);
+                self.expr(value);
+                self.expr(fallback);
             },
             Expr::Range { start, end, .. } => {
                 let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
-                self.expr(start, words);
-                self.expr(end, words);
+                self.expr(start);
+                self.expr(end);
             },
-            Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); self.returned_maybe((value).as_ref(), words); },
-            Expr::StructLit { fields, .. } => { for f in fields.iter() { if f.value.is_some() { self.expr_maybe((f.value).as_ref(), words); } else if self.roots.contains_key(&mp_text(words, f.name)) { self.doubt(); } } },
+            Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); self.returned_maybe((value).as_ref()); },
+            Expr::StructLit { fields, .. } => { for f in fields.iter() { if f.value.is_some() { self.expr_maybe((f.value).as_ref()); } else if self.roots.contains_key(&mp_text(self.words, f.name)) { self.doubt(); } } },
             _ => { self.doubt(); },
         }
     }
-    pub(crate) fn expr_maybe(&mut self, value: Option<&Expr>, words: &winnow_grammar::InternerContext) { self.expr(match value { Some(__nikaia_value) => __nikaia_value, None => return }, words); }
-    pub(crate) fn block_maybe(&mut self, block: Option<&Block>, words: &winnow_grammar::InternerContext) { self.block(match block { Some(__nikaia_value) => __nikaia_value, None => return }, false, words); }
-    pub(crate) fn field_or(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) {
+    pub(crate) fn expr_maybe(&mut self, value: Option<&Expr>) { self.expr(match value { Some(__nikaia_value) => __nikaia_value, None => return }); }
+    pub(crate) fn block_maybe(&mut self, block: Option<&Block>) { self.block(match block { Some(__nikaia_value) => __nikaia_value, None => return }, false); }
+    pub(crate) fn field_or(&mut self, e: &Expr) {
         match e {
-            Expr::Field { .. } => { self.field_or_place(e, words); },
-            Expr::Index { .. } => { self.field_or_place(e, words); },
-            Expr::Variable(..) => { self.field_or_place(e, words); },
-            _ => { self.expr(e, words); },
+            Expr::Field { .. } => { self.field_or_place(e); },
+            Expr::Index { .. } => { self.field_or_place(e); },
+            Expr::Variable(..) => { self.field_or_place(e); },
+            _ => { self.expr(e); },
         }
     }
-    pub(crate) fn field_or_place(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) {
-        match self.classify(e, words) {
-            MpRes::Not => { if mp_root_is_expr(e) { self.expr_base(e, words); } },
+    pub(crate) fn field_or_place(&mut self, e: &Expr) {
+        match self.classify(e) {
+            MpRes::Not => { if mp_root_is_expr(e) { self.expr_base(e); } },
             _ => { self.doubt(); },
         }
     }
-    pub(crate) fn expr_base(&mut self, e: &Expr, words: &winnow_grammar::InternerContext) {
+    pub(crate) fn expr_base(&mut self, e: &Expr) {
         match e {
-            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.expr_base(base, words); },
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.expr_base(base); },
             Expr::Index { base, index, .. } => {
                 let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-                self.expr_base(base, words);
-                self.expr(index, words);
+                self.expr_base(base);
+                self.expr(index);
             },
-            _ => { self.expr(e, words); },
+            _ => { self.expr(e); },
         }
     }
     pub(crate) fn resolve(&self, dep: &MpDep) -> Option<collections::BTreeSet<String>> {
@@ -725,7 +726,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
     if positions.is_empty() { return None; }
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for p in params.iter() { names.insert(p.name.to_owned()); }
-    let mut b = MpBody { params: names, roots: collections::BTreeMap::new(), root_name: vec![], parent: vec![], adds: vec![], all_keyed: g.nested, locals: collections::BTreeMap::new(), result: vec![] };
+    let mut b = MpBody { words: *nikaia_std::index::get(&held.words, nikaia_std::index::at(unit)), params: names, roots: collections::BTreeMap::new(), root_name: vec![], parent: vec![], adds: vec![], all_keyed: g.nested, locals: collections::BTreeMap::new(), result: vec![] };
     for p in positions.iter() {
         if p.owner == mp_result() {
             let id = b.new_root("".to_owned());
@@ -740,7 +741,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
             b.roots.insert(p.owner.to_owned(), held);
         }
     }
-    if read_body { b.block(body, ret.is_some(), *nikaia_std::index::get(&held.words, nikaia_std::index::at(unit))); } else { b.doubt(); }
+    if read_body { b.block(body, ret.is_some()); } else { b.doubt(); }
     let exact = !b.all_keyed;
     let mut how: collections::BTreeMap<i64, MpHow> = collections::BTreeMap::new();
     for id in 0..b.parent.len() as i64 {

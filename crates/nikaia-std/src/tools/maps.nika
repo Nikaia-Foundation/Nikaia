@@ -254,6 +254,8 @@ enum MpRes {
 }
 
 struct MpBody {
+    /// The words the unit's names are made of.
+    words: ref winnow_grammar::InternerContext,
     /// The parameters, by name.
     params: collections::BTreeSet[String],
     /// The maps a name holds: the way down to each, and its root. A parameter
@@ -309,21 +311,21 @@ impl MpBody {
 
     /// The variable and the way down of a chain of fields (an index on the way
     /// is the same position: a position is per type, not per element).
-    fn locate(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) -> (String, String)? {
+    fn locate(ref mut self, e: ref Expr) -> (String, String)? {
         match e {
             Expr::Variable(n, _) => {
-                return (mp_text(words, n), "".clone())
+                return (mp_text(self.words, n), "".clone())
             },
             Expr::Field { base, name, .. } => {
-                let (var, path) = self.locate(base, words) ?? return null
-                return (var, f"{path}.{mp_text(words, name)}")
+                let (var, path) = self.locate(base) ?? return null
+                return (var, f"{path}.{mp_text(self.words, name)}")
             },
             Expr::Index { base, index, .. } => {
-                let found = self.locate(base, words)
+                let found = self.locate(base)
                 if found == null {
                     return null
                 }
-                self.expr(index, words)
+                self.expr(index)
                 return found
             },
             else => return null,
@@ -331,8 +333,8 @@ impl MpBody {
     }
 
     /// What a place is, without the keys an index adds.
-    fn classify(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) -> MpRes {
-        let (var, path) = self.locate(e, words) ?? return MpRes::Not
+    fn classify(ref mut self, e: ref Expr) -> MpRes {
+        let (var, path) = self.locate(e) ?? return MpRes::Not
         let held = self.roots[var]?.clone() ?? return MpRes::Not
         for (p, id) in held {
             if p == path {
@@ -353,31 +355,31 @@ impl MpBody {
     }
 
     /// The map a place names, with the keys it reads on the way down.
-    fn place(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) -> i64? {
+    fn place(ref mut self, e: ref Expr) -> i64? {
         match e {
             Expr::Index { base, index, .. } => {
-                let root = self.place(base, words) ?? return null
-                let dep = self.deps(index, words)
+                let root = self.place(base) ?? return null
+                let dep = self.deps(index)
                 self.add(root, dep)
-                self.expr(index, words)
+                self.expr(index)
                 return root
             },
-            Expr::Variable(..) => return self.place_named(e, words),
-            Expr::Field { .. } => return self.place_named(e, words),
+            Expr::Variable(..) => return self.place_named(e),
+            Expr::Field { .. } => return self.place_named(e),
             else => return null,
         }
     }
 
-    fn place_named(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) -> i64? {
-        return match self.classify(e, words) {
+    fn place_named(ref mut self, e: ref Expr) -> i64? {
+        return match self.classify(e) {
             MpRes::Map(id) => id,
             else => null,
         }
     }
 
     /// The roots a value-place stands for, in position order.
-    fn roots_of(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) -> Vec[i64]? {
-        let (var, path) = self.locate(e, words) ?? return null
+    fn roots_of(ref mut self, e: ref Expr) -> Vec[i64]? {
+        let (var, path) = self.locate(e) ?? return null
         let held = self.roots[var]?.clone() ?? return null
         let below = f"{path}."
         let mut found: Vec[i64] = []
@@ -392,15 +394,15 @@ impl MpBody {
         return found
     }
 
-    fn map_made(ref self, e: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    fn map_made(ref self, e: ref Expr) -> bool {
         match e {
             Expr::Call { func, args, .. } => {
                 if !args.is_empty() {
                     return false
                 }
                 return match func {
-                    Expr::Path(segments, _) => self.ends_in_a_map(segments, words),
-                    Expr::Variable(one, _) => mp_made_name(words.resolve(one)),
+                    Expr::Path(segments, _) => self.ends_in_a_map(segments),
+                    Expr::Variable(one, _) => mp_made_name(self.words.resolve(one)),
                     else => false,
                 }
             },
@@ -408,14 +410,14 @@ impl MpBody {
         }
     }
 
-    fn ends_in_a_map(ref self, segments: ref Vec[winnow_grammar::Symbol], words: ref winnow_grammar::InternerContext) -> bool {
+    fn ends_in_a_map(ref self, segments: ref Vec[winnow_grammar::Symbol]) -> bool {
         if segments.is_empty() {
             return false
         }
-        return mp_made_name(words.resolve(segments[segments.len() - 1]))
+        return mp_made_name(self.words.resolve(segments[segments.len() - 1]))
     }
 
-    fn deps(ref self, e: ref Expr, words: ref winnow_grammar::InternerContext) -> MpDep {
+    fn deps(ref self, e: ref Expr) -> MpDep {
         match e {
             Expr::LitInt { .. } => return mp_nothing(),
             Expr::LitStr { .. } => return mp_nothing(),
@@ -424,38 +426,38 @@ impl MpBody {
             Expr::LitFloat(..) => return mp_nothing(),
             Expr::LitNull(_) => return mp_nothing(),
             Expr::Variable(n, _) => {
-                let name = mp_text(words, n)
+                let name = mp_text(self.words, n)
                 if self.params.contains(name) || self.locals.contains_key(name) {
                     return mp_named(name)
                 }
                 return mp_unknown()
             },
-            Expr::Field { base, .. } => return self.deps(base, words),
-            Expr::SafeField { base, .. } => return self.deps(base, words),
-            Expr::Index { base, index, .. } => return mp_join(self.deps(base, words), self.deps(index, words)),
+            Expr::Field { base, .. } => return self.deps(base),
+            Expr::SafeField { base, .. } => return self.deps(base),
+            Expr::Index { base, index, .. } => return mp_join(self.deps(base), self.deps(index)),
             Expr::MethodCall { receiver, method, args, .. } => {
-                if !mp_shapes(words.resolve(method)) {
+                if !mp_shapes(self.words.resolve(method)) {
                     return mp_unknown()
                 }
-                let mut all = self.deps(receiver, words)
+                let mut all = self.deps(receiver)
                 for a in args {
-                    all = mp_join(all, self.deps(a, words))
+                    all = mp_join(all, self.deps(a))
                 }
                 return all
             },
-            Expr::Binary { lhs, rhs, .. } => return mp_join(self.deps(lhs, words), self.deps(rhs, words)),
-            Expr::Coalesce { value, fallback, .. } => return mp_join(self.deps(value, words), self.deps(fallback, words)),
-            Expr::Unary { expr, .. } => return self.deps(expr, words),
-            Expr::Cast { expr, .. } => return self.deps(expr, words),
-            Expr::Tuple(items, _) => return self.deps_all(items, words),
-            Expr::ListLit { items, .. } => return self.deps_all(items, words),
-            Expr::ListRepeat { value, count, .. } => return mp_join(self.deps(value, words), self.deps(count, words)),
+            Expr::Binary { lhs, rhs, .. } => return mp_join(self.deps(lhs), self.deps(rhs)),
+            Expr::Coalesce { value, fallback, .. } => return mp_join(self.deps(value), self.deps(fallback)),
+            Expr::Unary { expr, .. } => return self.deps(expr),
+            Expr::Cast { expr, .. } => return self.deps(expr),
+            Expr::Tuple(items, _) => return self.deps_all(items),
+            Expr::ListLit { items, .. } => return self.deps_all(items),
+            Expr::ListRepeat { value, count, .. } => return mp_join(self.deps(value), self.deps(count)),
             Expr::LitInterpolated { parts, .. } => {
                 let mut all = mp_nothing()
                 for p in parts {
                     match p {
                         FPart::Hole { expr, .. } => {
-                            all = mp_join(all, self.deps(expr, words))
+                            all = mp_join(all, self.deps(expr))
                         },
                         else => {},
                     }
@@ -466,10 +468,10 @@ impl MpBody {
         }
     }
 
-    fn deps_all(ref self, items: ref Vec[Expr], words: ref winnow_grammar::InternerContext) -> MpDep {
+    fn deps_all(ref self, items: ref Vec[Expr]) -> MpDep {
         let mut all = mp_nothing()
         for a in items {
-            all = mp_join(all, self.deps(a, words))
+            all = mp_join(all, self.deps(a))
         }
         return all
     }
@@ -484,20 +486,20 @@ impl MpBody {
         self.locals.insert(name, mp_join(before, dep))
     }
 
-    fn block(ref mut self, block: ref Block, tail_is_the_result: bool, words: ref winnow_grammar::InternerContext) {
+    fn block(ref mut self, block: ref Block, tail_is_the_result: bool) {
         let last = block.stmts.len() - 1
         let mut at = 0
         for stmt in block.stmts {
-            self.stmt(stmt.node, tail_is_the_result && at == last, words)
+            self.stmt(stmt.node, tail_is_the_result && at == last)
             at = at + 1
         }
     }
 
-    fn stmt(ref mut self, stmt: ref Stmt, is_the_result: bool, words: ref winnow_grammar::InternerContext) {
+    fn stmt(ref mut self, stmt: ref Stmt, is_the_result: bool) {
         match stmt {
             Stmt::Let { names, value, .. } => {
-                if names.len() == 1 && self.map_made(value, words) {
-                    let name = mp_text(words, names[0])
+                if names.len() == 1 && self.map_made(value) {
+                    let name = mp_text(self.words, names[0])
                     if self.params.contains(name) || self.roots.contains_key(name) {
                         self.doubt()
                     } else {
@@ -506,52 +508,52 @@ impl MpBody {
                     }
                     return
                 }
-                let dep = self.deps(value, words)
-                self.expr(value, words)
+                let dep = self.deps(value)
+                self.expr(value)
                 for n in names {
-                    self.set_local(mp_text(words, n), dep)
+                    self.set_local(mp_text(self.words, n), dep)
                 }
             },
             Stmt::Assign { target, value, .. } => {
                 match target {
                     Expr::Variable(n, _) => {
-                        if !self.roots.contains_key(mp_text(words, n)) {
-                            let dep = self.deps(value, words)
-                            self.expr(value, words)
-                            self.set_local(mp_text(words, n), dep)
+                        if !self.roots.contains_key(mp_text(self.words, n)) {
+                            let dep = self.deps(value)
+                            self.expr(value)
+                            self.set_local(mp_text(self.words, n), dep)
                         } else {
-                            self.assign_whole(target, value, words)
+                            self.assign_whole(target, value)
                         }
                     },
                     Expr::Index { .. } => {
-                        if self.place(target, words) == null {
-                            self.expr(target, words)
+                        if self.place(target) == null {
+                            self.expr(target)
                         }
-                        self.expr(value, words)
+                        self.expr(value)
                     },
                     // A whole map assigned, or a field that holds one.
-                    else => self.assign_whole(target, value, words),
+                    else => self.assign_whole(target, value),
                 }
             },
             Stmt::For { bindings, iter, body, .. } => {
-                let dep = self.iterated(iter, words)
+                let dep = self.iterated(iter)
                 for b in bindings {
-                    self.set_local(mp_text(words, b), dep)
+                    self.set_local(mp_text(self.words, b), dep)
                 }
-                self.block(body, false, words)
+                self.block(body, false)
             },
             Stmt::While { cond, body } => {
-                self.expr(cond, words)
-                self.block(body, false, words)
+                self.expr(cond)
+                self.block(body, false)
             },
             Stmt::Return(value) => {
-                self.returned_maybe(value, words)
+                self.returned_maybe(value)
             },
             Stmt::Expr(e) => {
                 if is_the_result {
-                    self.returned(e, words)
+                    self.returned(e)
                 } else {
-                    self.expr(e, words)
+                    self.expr(e)
                 }
             },
             Stmt::Break => {},
@@ -560,37 +562,37 @@ impl MpBody {
         }
     }
 
-    fn assign_whole(ref mut self, target: ref Expr, value: ref Expr, words: ref winnow_grammar::InternerContext) {
-        let kind = self.classify(target, words)
+    fn assign_whole(ref mut self, target: ref Expr, value: ref Expr) {
+        let kind = self.classify(target)
         let is_not = match kind {
             MpRes::Not => true,
             else => false,
         }
-        if !is_not && !self.map_made(value, words) {
+        if !is_not && !self.map_made(value) {
             self.doubt()
         }
-        self.expr(value, words)
+        self.expr(value)
     }
 
-    fn returned_maybe(ref mut self, value: ref Expr?, words: ref winnow_grammar::InternerContext) {
-        self.returned(value ?? return, words)
+    fn returned_maybe(ref mut self, value: ref Expr?) {
+        self.returned(value ?? return)
     }
 
     /// What a `for` binds: the keys of a map it walks, or what the iterable
     /// is made of.
-    fn iterated(ref mut self, iter: ref Expr, words: ref winnow_grammar::InternerContext) -> MpDep {
+    fn iterated(ref mut self, iter: ref Expr) -> MpDep {
         let mut walked: i64? = null
         match iter {
             Expr::MethodCall { receiver, method, .. } => {
-                let m = mp_text(words, method)
+                let m = mp_text(self.words, method)
                 if m == "keys" || m == "values" || m == "iter" {
-                    walked = self.place(receiver, words)
+                    walked = self.place(receiver)
                 } else {
-                    walked = self.place(iter, words)
+                    walked = self.place(iter)
                 }
             },
             else => {
-                walked = self.place(iter, words)
+                walked = self.place(iter)
             },
         }
         if walked != null {
@@ -601,18 +603,18 @@ impl MpBody {
             }
             return mp_unknown()
         }
-        let dep = self.deps(iter, words)
-        self.expr(iter, words)
+        let dep = self.deps(iter)
+        self.expr(iter)
         return dep
     }
 
     /// A value that becomes the function's result, or a part of it.
-    fn returned(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) {
+    fn returned(ref mut self, e: ref Expr) {
         if self.result.is_empty() {
-            self.expr(e, words)
+            self.expr(e)
             return
         }
-        self.flows(e, "".clone(), words)
+        self.flows(e, "".clone())
     }
 
     /// The result's roots at or below `under`.
@@ -637,34 +639,34 @@ impl MpBody {
         }
     }
 
-    fn flows(ref mut self, e: ref Expr, under: String, words: ref winnow_grammar::InternerContext) {
+    fn flows(ref mut self, e: ref Expr, under: String) {
         let targets = self.targets_of(under.clone())
         if targets.is_empty() {
             // A part of the result that holds no map.
-            self.expr(e, words)
+            self.expr(e)
             return
         }
-        if self.map_made(e, words) {
+        if self.map_made(e) {
             return
         }
         match e {
-            Expr::Variable(..) => self.flow_from(e, targets, words),
-            Expr::Field { .. } => self.flow_from(e, targets, words),
-            Expr::Index { .. } => self.flow_from(e, targets, words),
+            Expr::Variable(..) => self.flow_from(e, targets),
+            Expr::Field { .. } => self.flow_from(e, targets),
+            Expr::Index { .. } => self.flow_from(e, targets),
             Expr::MethodCall { receiver, method, args, .. } => {
-                if args.is_empty() && mp_text(words, method) == "clone" {
-                    self.flow_from(receiver, targets, words)
+                if args.is_empty() && mp_text(self.words, method) == "clone" {
+                    self.flow_from(receiver, targets)
                 } else {
-                    self.expr(e, words)
+                    self.expr(e)
                     self.doubt()
                 }
             },
             Expr::StructLit { fields, .. } => {
                 for f in fields {
-                    let field = mp_text(words, f.name)
+                    let field = mp_text(self.words, f.name)
                     let part = f"{under}.{field}"
                     if f.value != null {
-                        self.flows_in(f.value, part, words)
+                        self.flows_in(f.value, part)
                     } else {
                         let held = self.roots[field]?.clone()
                         let ours = self.targets_of(part.clone())
@@ -692,19 +694,19 @@ impl MpBody {
             Expr::If { .. } => self.doubt(),
             Expr::Tuple(..) => self.doubt(),
             else => {
-                self.expr(e, words)
+                self.expr(e)
                 self.doubt()
             },
         }
     }
 
-    fn flows_in(ref mut self, v: ref Expr?, under: String, words: ref winnow_grammar::InternerContext) {
-        self.flows(v ?? return, under, words)
+    fn flows_in(ref mut self, v: ref Expr?, under: String) {
+        self.flows(v ?? return, under)
     }
 
     /// A value-place whose maps flow into the result's.
-    fn flow_from(ref mut self, e: ref Expr, targets: ref Vec[i64], words: ref winnow_grammar::InternerContext) {
-        let from = self.roots_of(e, words)
+    fn flow_from(ref mut self, e: ref Expr, targets: ref Vec[i64]) {
+        let from = self.roots_of(e)
         if from == null {
             self.doubt()
         } else {
@@ -712,7 +714,7 @@ impl MpBody {
         }
     }
 
-    fn expr(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) {
+    fn expr(ref mut self, e: ref Expr) {
         match e {
             Expr::LitInt { .. } => {},
             Expr::LitStr { .. } => {},
@@ -725,81 +727,81 @@ impl MpBody {
             Expr::Continue(_) => {},
             Expr::Variable(n, _) => {
                 // A map used as a value: it goes somewhere unseen.
-                if self.roots.contains_key(mp_text(words, n)) {
+                if self.roots.contains_key(mp_text(self.words, n)) {
                     self.doubt()
                 }
             },
             Expr::LitInterpolated { parts, .. } => {
                 for p in parts {
                     match p {
-                        FPart::Hole { expr, .. } => self.expr(expr, words),
+                        FPart::Hole { expr, .. } => self.expr(expr),
                         else => {},
                     }
                 }
             },
             Expr::Tuple(items, _) => {
                 for i in items {
-                    self.expr(i, words)
+                    self.expr(i)
                 }
             },
             Expr::ListLit { items, .. } => {
                 for i in items {
-                    self.expr(i, words)
+                    self.expr(i)
                 }
             },
             Expr::ListRepeat { value, count, .. } => {
-                self.expr(value, words)
-                self.expr(count, words)
+                self.expr(value)
+                self.expr(count)
             },
-            Expr::Block(b, _) => self.block(b, false, words),
-            Expr::Unsafe(b, _) => self.block(b, false, words),
+            Expr::Block(b, _) => self.block(b, false),
+            Expr::Unsafe(b, _) => self.block(b, false),
             Expr::If { cond, then_branch, else_branch, .. } => {
-                self.expr(cond, words)
-                self.block(then_branch, false, words)
-                self.block_maybe(else_branch, words)
+                self.expr(cond)
+                self.block(then_branch, false)
+                self.block_maybe(else_branch)
             },
             Expr::Call { func, args, config, .. } => {
-                self.expr(func, words)
+                self.expr(func)
                 for a in args {
-                    self.expr(a, words)
+                    self.expr(a)
                 }
                 for c in config {
-                    self.expr(c.value, words)
+                    self.expr(c.value)
                 }
             },
             Expr::MethodCall { receiver, method, args, config, .. } => {
-                let name = mp_text(words, method)
-                let root = self.place(receiver, words)
+                let name = mp_text(self.words, method)
+                let root = self.place(receiver)
                 if root != null {
                     if mp_adds(name) {
                         let mut dep = mp_nothing()
                         for a in args {
-                            dep = mp_join(dep, self.deps(a, words))
+                            dep = mp_join(dep, self.deps(a))
                         }
                         self.add(root ?? 0, dep)
                     } else if !mp_reads(name) {
                         self.doubt()
                     }
                 } else {
-                    self.field_or(receiver, words)
+                    self.field_or(receiver)
                 }
                 for a in args {
-                    self.expr(a, words)
+                    self.expr(a)
                 }
                 for c in config {
-                    self.expr(c.value, words)
+                    self.expr(c.value)
                 }
             },
             // A lookup, `m[k]`: reads the map and hands back a value.
             Expr::Index { base, index, .. } => {
-                if self.place(base, words) != null {
-                    self.expr(index, words)
+                if self.place(base) != null {
+                    self.expr(index)
                 } else {
-                    self.field_or(e, words)
+                    self.field_or(e)
                 }
             },
-            Expr::Field { .. } => self.field_or(e, words),
-            Expr::SafeField { base, .. } => self.expr(base, words),
+            Expr::Field { .. } => self.field_or(e),
+            Expr::SafeField { base, .. } => self.expr(base),
             Expr::Binary { op, lhs, rhs, .. } => {
                 let equal = match op {
                     BinaryOp::Eq => true,
@@ -807,12 +809,12 @@ impl MpBody {
                     else => false,
                 }
                 if !equal {
-                    self.expr(lhs, words)
-                    self.expr(rhs, words)
+                    self.expr(lhs)
+                    self.expr(rhs)
                     return
                 }
-                let left = self.roots_of(lhs, words)
-                let right = self.roots_of(rhs, words)
+                let left = self.roots_of(lhs)
+                let right = self.roots_of(rhs)
                 if left != null && right != null {
                     let a = left ?? []
                     let b = right ?? []
@@ -824,38 +826,38 @@ impl MpBody {
                         self.doubt()
                     }
                 } else if left != null {
-                    if !self.map_made(rhs, words) {
+                    if !self.map_made(rhs) {
                         self.doubt()
                     }
-                    self.expr(rhs, words)
+                    self.expr(rhs)
                 } else if right != null {
-                    if !self.map_made(lhs, words) {
+                    if !self.map_made(lhs) {
                         self.doubt()
                     }
-                    self.expr(lhs, words)
+                    self.expr(lhs)
                 } else {
-                    self.expr(lhs, words)
-                    self.expr(rhs, words)
+                    self.expr(lhs)
+                    self.expr(rhs)
                 }
             },
-            Expr::Unary { expr, .. } => self.expr(expr, words),
-            Expr::Cast { expr, .. } => self.expr(expr, words),
-            Expr::Try(inner, _) => self.expr(inner, words),
-            Expr::Throw(inner, _) => self.expr(inner, words),
+            Expr::Unary { expr, .. } => self.expr(expr),
+            Expr::Cast { expr, .. } => self.expr(expr),
+            Expr::Try(inner, _) => self.expr(inner),
+            Expr::Throw(inner, _) => self.expr(inner),
             Expr::Coalesce { value, fallback, .. } => {
-                self.expr(value, words)
-                self.expr(fallback, words)
+                self.expr(value)
+                self.expr(fallback)
             },
             Expr::Range { start, end, .. } => {
-                self.expr(start, words)
-                self.expr(end, words)
+                self.expr(start)
+                self.expr(end)
             },
-            Expr::Return(value, _) => self.returned_maybe(value, words),
+            Expr::Return(value, _) => self.returned_maybe(value),
             Expr::StructLit { fields, .. } => {
                 for f in fields {
                     if f.value != null {
-                        self.expr_maybe(f.value, words)
-                    } else if self.roots.contains_key(mp_text(words, f.name)) {
+                        self.expr_maybe(f.value)
+                    } else if self.roots.contains_key(mp_text(self.words, f.name)) {
                         self.doubt()
                     }
                 }
@@ -866,47 +868,47 @@ impl MpBody {
         }
     }
 
-    fn expr_maybe(ref mut self, value: ref Expr?, words: ref winnow_grammar::InternerContext) {
-        self.expr(value ?? return, words)
+    fn expr_maybe(ref mut self, value: ref Expr?) {
+        self.expr(value ?? return)
     }
 
-    fn block_maybe(ref mut self, block: ref Block?, words: ref winnow_grammar::InternerContext) {
-        self.block(block ?? return, false, words)
+    fn block_maybe(ref mut self, block: ref Block?) {
+        self.block(block ?? return, false)
     }
 
     /// A field or an index read as a value: a map or a part of a parameter
     /// that holds some goes somewhere unseen; any other field is a value.
-    fn field_or(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) {
+    fn field_or(ref mut self, e: ref Expr) {
         match e {
-            Expr::Field { .. } => self.field_or_place(e, words),
-            Expr::Index { .. } => self.field_or_place(e, words),
-            Expr::Variable(..) => self.field_or_place(e, words),
-            else => self.expr(e, words),
+            Expr::Field { .. } => self.field_or_place(e),
+            Expr::Index { .. } => self.field_or_place(e),
+            Expr::Variable(..) => self.field_or_place(e),
+            else => self.expr(e),
         }
     }
 
-    fn field_or_place(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) {
-        match self.classify(e, words) {
+    fn field_or_place(ref mut self, e: ref Expr) {
+        match self.classify(e) {
             MpRes::Not => {
                 // A field of a parameter that holds no map, or a chain that
                 // does not start at a name: the parts that are expressions
                 // have been visited by `locate`.
                 if mp_root_is_expr(e) {
-                    self.expr_base(e, words)
+                    self.expr_base(e)
                 }
             },
             else => self.doubt(),
         }
     }
 
-    fn expr_base(ref mut self, e: ref Expr, words: ref winnow_grammar::InternerContext) {
+    fn expr_base(ref mut self, e: ref Expr) {
         match e {
-            Expr::Field { base, .. } => self.expr_base(base, words),
+            Expr::Field { base, .. } => self.expr_base(base),
             Expr::Index { base, index, .. } => {
-                self.expr_base(base, words)
-                self.expr(index, words)
+                self.expr_base(base)
+                self.expr(index)
             },
-            else => self.expr(e, words),
+            else => self.expr(e),
         }
     }
 
@@ -1038,7 +1040,7 @@ fn mp_lines(held: ref MpHeld, structs: ref collections::BTreeMap[String, MpStruc
     for p in params {
         names.insert(p.name.clone())
     }
-    let mut b = MpBody { params: names, roots: collections::BTreeMap(), root_name: [], parent: [], adds: [], all_keyed: g.nested, locals: collections::BTreeMap(), result: [] }
+    let mut b = MpBody { words: held.words[unit], params: names, roots: collections::BTreeMap(), root_name: [], parent: [], adds: [], all_keyed: g.nested, locals: collections::BTreeMap(), result: [] }
     // One root per position: the ids are the positions' numbers.
     for p in positions {
         if p.owner == mp_result() {
@@ -1052,7 +1054,7 @@ fn mp_lines(held: ref MpHeld, structs: ref collections::BTreeMap[String, MpStruc
         }
     }
     if read_body {
-        b.block(body, ret != null, held.words[unit])
+        b.block(body, ret != null)
     } else {
         // A signature alone (a trait's): nothing is known of what goes in.
         b.doubt()
