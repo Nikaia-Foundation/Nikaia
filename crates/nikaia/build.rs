@@ -121,10 +121,19 @@ fn compiler_fingerprint() -> String {
     collect(&manifest.join("../nikaia-logic/src"), &mut inputs);
     collect(&manifest.join("../nikaia-std/src/tools"), &mut inputs);
     inputs.push(manifest.join("../nikaia-std/std.contracts"));
+    inputs.push(manifest.join("../../Cargo.lock"));
     inputs.sort();
 
     let mut hasher = Sha256::new();
     hasher.update(env!("CARGO_PKG_VERSION").as_bytes());
+    // The rustc that builds the emitter also decides what it can emit.
+    let rustc = std::process::Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()))
+        .arg("--version")
+        .output()
+        .map(|o| o.stdout)
+        .unwrap_or_default();
+    hasher.update((rustc.len() as u64).to_le_bytes());
+    hasher.update(&rustc);
     for path in &inputs {
         println!("cargo:rerun-if-changed={}", path.display());
         let Ok(bytes) = std::fs::read(path) else {
@@ -154,7 +163,10 @@ fn collect(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         let path = entry.path();
         if path.is_dir() {
             collect(&path, out);
-        } else if path.extension().is_some_and(|e| e == "rs") {
+        } else if path
+            .extension()
+            .is_some_and(|e| e == "rs" || e == "nika" || e == "contracts")
+        {
             out.push(path);
         }
     }

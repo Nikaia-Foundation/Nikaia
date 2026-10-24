@@ -1332,12 +1332,12 @@ struct LoweredBefore {
     compiler: Option<String>,
 }
 
-/// **Which compiler wrote an entry** (#667): the language version, not the
-/// binary's bytes. A rebuild of the same sources, in any checkout, then keeps
-/// every entry; a change to the lowering raises the version (CLAUDE.md), which
-/// starts the cache afresh. `NIKAIA_LOWER_CACHE_SALT` in the environment
+/// **Which compiler wrote an entry** (#667, #801): the fingerprint of the
+/// compiler's sources, `.nika` files, `std` ledgers, rustc and `Cargo.lock`
+/// (`build.rs`), not the binary's bytes. A rebuild of the same sources, in any
+/// checkout, keeps every entry; a change to the lowering misses once. `NIKAIA_LOWER_CACHE_SALT` in the environment
 /// separates entries by hand while a lowering is being worked on.
-const COMPILER_IDENTITY: &str = concat!("nikaia-", env!("CARGO_PKG_VERSION"));
+const COMPILER_IDENTITY: &str = env!("NIKAIA_COMPILER");
 
 /// The file in an entry's directory that holds what was lowered.
 const LOWERED: &str = "lowered.rs";
@@ -1439,6 +1439,55 @@ mod tests {
             LoweredBefore::open().compiler
         );
         assert!(!COMPILER_IDENTITY.contains('/'));
+    }
+
+    /// #801: what a file's cache entry follows in a two-file package.
+    #[test]
+    fn the_per_file_cache_follows_the_interface() {
+        let dir = std::env::temp_dir().join(format!("nika-iface-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (a, b) = (dir.join("ifa.nika"), dir.join("ifb.nika"));
+        let cache = LoweredBefore {
+            root: dir.join("cache"),
+            compiler: Some("iface-test".into()),
+        };
+        std::fs::write(&b, "fn ifb_two(x: i64) -> i64 sync { ifa_one(x) + 2 }\n").unwrap();
+        let mut run = |a_text: &str| -> usize {
+            std::fs::write(&a, a_text).unwrap();
+            let mut reused = 0;
+            lower_tools_files_cached(
+                &[a.clone(), b.clone()],
+                tools_build(),
+                Some(1),
+                &cache,
+                &mut reused,
+            )
+            .unwrap();
+            reused
+        };
+        assert_eq!(run("fn ifa_one(x: i64) -> i64 sync { x + 1 }\n"), 0);
+        assert_eq!(
+            run("fn ifa_one(x: i64) -> i64 sync { x + 1 }\n"),
+            2,
+            "unchanged"
+        );
+        assert_eq!(
+            run("fn ifa_one(x: i64) -> i64 sync { x + 3 }\n"),
+            1,
+            "a body change lowers A only"
+        );
+        assert_eq!(
+            run("fn ifa_one(x: i64) -> i64 sync { x + 3 }\nfn ifa_new() -> i64 sync { 0 }\n"),
+            0,
+            "a signature change lowers both"
+        );
+        assert_eq!(
+            run("fn ifa_one(x: i64) -> i64 sync { x }\nfn ifa_new() -> i64 sync { 0 }\n"),
+            0,
+            "a change to the inferred contract lowers both"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The default sysroot is the checkout, and `std` is in it. This is the
