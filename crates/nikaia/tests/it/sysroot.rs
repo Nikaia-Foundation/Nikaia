@@ -540,3 +540,22 @@ fn lower_std_caches_each_file_of_a_package() {
     assert_eq!(lower("cold2").1, wider);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// #805: `panic("..")` in a tools source lowers to a call that resolves, the
+/// package preamble importing `nikaia_std::abort::panic`.
+#[test]
+fn tools_panic_resolves_to_the_abort_entry() {
+    let dir = std::env::temp_dir().join("nikaia-tools-panic-805");
+    std::fs::create_dir_all(&dir).expect("dir");
+    std::fs::write(
+        dir.join("p.nika"),
+        "pub fn p805_fail() -> i64 {\n    panic(\"x\")\n}\n",
+    )
+    .expect("write");
+    let rust = sysroot::lower_tools_at(&dir, Default::default())
+        .expect("it lowers")
+        .inlined();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(rust.contains("use nikaia_std::abort::panic;"), "{rust}");
+    assert!(rust.contains("panic(\"x\")"), "{rust}");
+}

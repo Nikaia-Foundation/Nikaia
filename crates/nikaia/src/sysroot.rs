@@ -758,6 +758,7 @@ fn lower_tools_files_cached(
         rust.push_str("use winnow_grammar::grammar;\n");
     }
     rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n");
+    rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::abort::panic;\n");
     imports.sort();
     for import in imports {
         rust.push_str("#[allow(unused_imports)]\n");

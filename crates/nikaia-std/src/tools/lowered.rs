@@ -5,6 +5,8 @@ use winnow_grammar::grammar;
 #[allow(unused_imports)]
 pub use nikaia_std::error::Full;
 #[allow(unused_imports)]
+pub use nikaia_std::abort::panic;
+#[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::fs;
