@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1205] — 2026-10-24
+
+**tools: attributes check moved (U-d2); lower-std caches each file of a package (#667, #125)**
+- check/attributes.rs moved into tools/check_attributes.nika (U-d2): the Rust file shrank from 714 to about 80 lines; CheckHost::computed_attribute stays until computed_value moves (U-d3).
+- lower-std: on a miss each file of the tools and runtime packages is cached on its own. Key: compiler binary hash, provenance, inferred own ledger, every file's text without bodies and plain // comment lines, and the file's own text. A body or comment change re-lowers one file; a signature or ledger change re-lowers all. Output is byte-identical to a cold run; refusals are never cached. Counts (callgrind): cold 181 G, one body changed 60 G, unchanged 1.3 G.
+- Left open: a key without package.rs (#667 step 2) is unsound across self-hosting generations; the first run after each rebuild still misses fully.
+
 ## [0.0.1204] — 2026-10-24
 
 **`nikaia fmt` formats a package, `--check` reports**
