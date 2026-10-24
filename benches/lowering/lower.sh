@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # What lowering costs (#727): (a) a cold `nikaia lower-std` of the tools
-# package, its phases (NIKAIA_LOWER_TIMES) and a check that `package.rs` comes
+# package, its phases (NIKAIA_LOWER_TIMES) and a check that `lowered.rs` and `lowered/` come
 # out byte for byte as committed; (b) callgrind's instruction count (Ir) of a
 # cold `nikaia lower` of one mid-size real source.
 #
@@ -22,8 +22,8 @@ if [ "$what" = all ] || [ "$what" = std ]; then
     rm -rf "$work/cache" && mkdir -p "$work/cache"
     echo "== (a) cold lower-std, phases"
     NIKAIA_CACHE_DIR="$work/cache" NIKAIA_LOWER_TIMES=1 "$nikaia" lower-std
-    git -C "$root" diff --exit-code --stat crates/nikaia-std/src/tools/package.rs \
-        && echo "package.rs: identical"
+    git -C "$root" diff --exit-code --stat crates/nikaia-std/src/tools/lowered.rs crates/nikaia-std/src/tools/lowered \
+        && echo "lowered: identical"
 fi
 
 if [ "$what" = all ] || [ "$what" = count ]; then

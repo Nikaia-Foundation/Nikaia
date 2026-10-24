@@ -7,7 +7,7 @@
 //
 // This is the text half of `std::http1` (0.0.248). It reaches `std` the way
 // ADR-290 D16 says Nikaia reaches Rust: lowered ahead of time by
-// `nikaia lower-std` into the `package.rs` beside this file, `include!`d as
+// `nikaia lower-std` into the `lowered.rs` beside this file (and `lowered/http1.rs`), `include!`d as
 // `nikaia_std::runtime::http1`, and called from `src/http1.rs`. What stayed Rust
 // is the **bytes**: the buffer a socket fills, where the head ends, and
 // whether it is text - the grammar reads text, and deciding that some bytes

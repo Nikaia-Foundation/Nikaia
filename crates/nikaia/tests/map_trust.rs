@@ -323,7 +323,9 @@ fn tools_lowered(name: &str, files: &[(&str, &str)]) -> String {
     for (file, contents) in files {
         std::fs::write(dir.join(file), contents).expect("write the file");
     }
-    let rust = nikaia::sysroot::lower_tools_at(&dir, Default::default()).expect("it lowers");
+    let rust = nikaia::sysroot::lower_tools_at(&dir, Default::default())
+        .expect("it lowers")
+        .inlined();
     let _ = std::fs::remove_dir_all(&dir);
     rust
 }
@@ -778,10 +780,13 @@ fn the_real_tools_package_lowers_the_same_read_backwards() {
         .filter(|path| path.extension().is_some_and(|e| e == "nika"))
         .collect();
     paths.sort();
-    let forward = nikaia::sysroot::lower_tools_files(&paths, Default::default()).expect("forward");
+    let forward = nikaia::sysroot::lower_tools_files(&paths, Default::default())
+        .expect("forward")
+        .to_string();
     paths.reverse();
-    let backward =
-        nikaia::sysroot::lower_tools_files(&paths, Default::default()).expect("backward");
+    let backward = nikaia::sysroot::lower_tools_files(&paths, Default::default())
+        .expect("backward")
+        .to_string();
     assert!(sections(&forward) == sections(&backward));
 }
 
@@ -793,7 +798,9 @@ fn tools_lowered_in_order(name: &str, files: &[(&str, &str)]) -> String {
         std::fs::write(dir.join(file), contents).expect("write the file");
         paths.push(dir.join(file));
     }
-    let rust = nikaia::sysroot::lower_tools_files(&paths, Default::default()).expect("it lowers");
+    let rust = nikaia::sysroot::lower_tools_files(&paths, Default::default())
+        .expect("it lowers")
+        .inlined();
     let _ = std::fs::remove_dir_all(&dir);
     rust
 }

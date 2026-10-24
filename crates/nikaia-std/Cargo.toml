@@ -21,7 +21,7 @@ reentrancy-check = []
 trace = ["winnow-grammar/trace"]
 # **The compiler's Nikaia** (`src/tools`, ADR-294) is compiled only where this is
 # on, and only `crates/nikaia` turns it on (#723): a program's `std` is built
-# without it, so it neither compiles the 3.5 MB of `tools/package.rs` nor is
+# without it, so it neither compiles the 3.5 MB of `tools/lowered/` nor is
 # rebuilt when a `tools/*.nika` changes. What `std` itself runs is in
 # `src/runtime` and always compiled.
 compiler = []

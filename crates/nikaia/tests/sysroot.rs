@@ -50,15 +50,15 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
     for package in [tools, sysroot.runtime_dir()] {
         let expected = sysroot::lower_tools(&package).expect("the toolchain's Nikaia lowers");
         let at = sysroot::tools_lowered_path(&package);
-        let committed = std::fs::read_to_string(&at)
-            .unwrap_or_else(|e| panic!("{} is not committed: {e}", at.display()));
-        assert_eq!(
-            committed,
-            expected,
-            "{} has drifted from what this compiler lowers {} to. \
+        let drifted = expected.drift(&package);
+        assert!(
+            drifted.is_empty(),
+            "{:?} in {} has drifted from what this compiler lowers {} to ({}). \
              Run `cargo run -p nikaia -- lower-std` and commit the result.",
-            at.display(),
+            drifted,
             package.display(),
+            package.display(),
+            at.display(),
         );
     }
 
@@ -107,11 +107,12 @@ fn stds_nikaia_half_lowers_the_same_at_both_switches() {
     // which is correct at one thread too.
     for package in [sysroot.tools_dir(), sysroot.runtime_dir()] {
         let at = sysroot::tools_lowered_path(&package);
-        assert_eq!(
-            std::fs::read_to_string(&at)
-                .unwrap_or_else(|e| panic!("{} is not committed: {e}", at.display())),
-            sysroot::lower_tools_at(&package, concurrent).expect("the package lowers at `yes`"),
-            "{} is not the package lowered at `user_parallelism = yes` (ADR-363 D1).",
+        let drifted = sysroot::lower_tools_at(&package, concurrent)
+            .expect("the package lowers at `yes`")
+            .drift(&package);
+        assert!(
+            drifted.is_empty(),
+            "{drifted:?} of {} is not the package lowered at `user_parallelism = yes` (ADR-363 D1).",
             at.display(),
         );
     }
@@ -323,7 +324,7 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
         std::fs::write(&module, source).expect("write the module");
         match dir {
             // **The tools are lowered as their package** (ADR-294).
-            "tools" => sysroot::lower_tools(&at),
+            "tools" => sysroot::lower_tools(&at).map(|package| package.to_string()),
             _ => sysroot::lower_std_module(&module),
         }
     };
@@ -440,12 +441,10 @@ fn the_tools_lower_the_same_on_one_thread_as_on_every_core() {
         .expect("the toolchain's Nikaia modules");
     let one = sysroot::lower_tools_files_on(&paths, sysroot::tools_build(), Some(1))
         .expect("the toolchain's Nikaia lowers on one thread");
-    let at = sysroot::tools_lowered_path(&sysroot.tools_dir());
-    let committed = std::fs::read_to_string(&at).expect("the committed package");
+    let drifted = one.drift(&sysroot.tools_dir());
     assert!(
-        one == committed,
-        "{} is not what one thread lowers the package to",
-        at.display()
+        drifted.is_empty(),
+        "{drifted:?} is not what one thread lowers the package to",
     );
 }
 
@@ -511,14 +510,11 @@ fn lower_std_caches_each_file_of_a_package() {
                     .ok()
             })
             .unwrap_or_else(|| panic!("no count in {said}"));
-        (
-            reused,
-            std::fs::read_to_string(tools.join("package.rs")).expect("the package"),
-        )
+        (reused, sysroot::Package::committed(&tools))
     };
     let (none, first) = lower("warm");
     assert_eq!(none, 0, "a cold cache lowers every file");
-    std::fs::write(tools.join("package.rs"), "stale").expect("spoil the package");
+    std::fs::write(tools.join("lowered.rs"), "stale").expect("spoil the package");
     let (all, again) = lower("warm");
     assert_eq!(
         (all, &again),

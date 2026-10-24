@@ -108,13 +108,13 @@ pub mod text {
 }
 
 /// **`std`'s own Nikaia, which every program runs** (#723): one package in
-/// `src/runtime`, lowered by `nikaia lower-std` into its `package.rs` the way
+/// `src/runtime`, lowered by `nikaia lower-std` into its `lowered.rs` (one file per `.nika` beside it) the way
 /// the tools are, and kept apart from them because a program compiles this
 /// half and never the compiler's. Unpublished: `std.contracts` does not list
 /// it, and `std`'s Rust (`http1.rs`) is its only caller.
 #[doc(hidden)]
 pub mod runtime {
-    include!("runtime/package.rs");
+    include!("runtime/lowered.rs");
 
     /// The text tiers' conversions, which a lowered `String` local reassigned
     /// from a view calls (`rest = rest.strip_prefix(..).into_either()`): a
@@ -260,7 +260,7 @@ pub mod runtime {
 /// only `crates/nikaia` turns it on, so a program's `std` does not compile it.
 #[cfg(feature = "compiler")]
 pub mod tools {
-    // **One package, one file** ([ADR-294](../../../docs/specification/adr/adr-294.md)):
+    // **One package** ([ADR-294](../../../docs/specification/adr/adr-294.md)):
     // every `.nika` in `src/tools` shares one namespace, as the files of a
     // package do, and `nikaia lower-std` lowers them into `package.rs`. At its
     // end stands one module per file - `tools::ty`, `tools::ledger` - naming
@@ -268,7 +268,7 @@ pub mod tools {
     // in. What follows the `include!` is the Rust that Nikaia cannot say, by
     // the file it serves; `sysroot::HAND_WRITTEN` puts its names in that
     // file's module.
-    include!("tools/package.rs");
+    include!("tools/lowered.rs");
 
     /// The text tiers' conversions, which a lowered `String` local reassigned
     /// from a view calls (`rest = rest.strip_prefix(..).into_either()`): a
