@@ -26,6 +26,10 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Wait in one call.** Run a build or a test in the foreground with a long
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.
+* **Never run the full suite.** Only the tests your change touches; CI runs
+  the rest on every push to `develop`. Measure (callgrind, counts) only when
+  your order has a *Measure* line, and then on one file or a small program,
+  never on a whole `lower-std` or a test run.
 * **Few builds: finish first, then build once.** Build and test with
   `--profile fast` (`cargo build --profile fast -p nikaia`, `cargo test
   --profile fast -p nikaia --test a --test b`, binary `target/fast/nikaia`):

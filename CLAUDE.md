@@ -266,8 +266,9 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   `target/release/nikaia` lowers the main checkout's sources and rewrites its
   `package.rs`. Use the worktree's own binary. A layout change breaks tests keyed on an address by allocator
   luck. Never `str.replace('', ...)` in an edit script (an empty-slice replace
-  corrupted `emit/mod.rs` once). A full test run takes about 45 minutes: batch
-  the edits and run the touched tests in between.
+  corrupted `emit/mod.rs` once). Never run the full suite locally (about 45
+  minutes here): CI runs it on every push to `develop`; run the touched tests
+  and batch the edits in between (docs/long-jobs.md, #794).
 * **Agents: few, one per large module, none on a file another one edits.**
   Splitting one file into slices costs more in conflicts and repeated context
   than it saves. Leaves first: a consumer moved before its dependencies finds
