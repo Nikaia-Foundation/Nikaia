@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1212] — 2026-10-24
+
+**The lowering cache is keyed by the compiler's source fingerprint, not by the package version (#801)**
+- Changes to emit_*/check_* code, .nika tools, ledgers, rustc and Cargo.lock now start the cache afresh; build.rs now also hashes .nika and .contracts.
+
+## [0.0.1211] — 2026-10-24
+
+**self-hosting: the checker's function walk, grammar action walk and growing-text scan are Nikaia (U-d4)**
+- check_function.nika holds the checker's function walk, the grammar action walk and the growing-text scan.
+
 ## [0.0.1210] — 2026-10-24
 
 **Proofs resting on an assume are marked in the reports (ADR-381 D6)**
