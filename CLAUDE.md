@@ -209,6 +209,14 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * f-string braces are `{{` `}}`; a plain string takes braces literally;
   * a function parameter is `fn(ref X) -> T sync`; a `Span` that arrives by
     reference is copied as `Span { start: s.start, end: s.end }`.
+  * `view_of` resolves to `signature::view_of`, not `check_types::view_of_type`:
+    a false `NK1104` (*returns `ref String`, but declared `ref String`*) means
+    the wrong one was called;
+  * a nested `Some(FactWrap::Widen(x))` pattern leaves `x` untyped and counts
+    as an unanswered method call (`sequences::`, ceiling 17): bind
+    `how ?? ...` first and match the plain enum;
+  * a reserved word (`grammar`, `throws`) as a parameter name gives
+    *Expected `)`* (#799): rename it.
 * **Lowered types:** `String` is `&str` where a view suffices and `String`
   where it is owned (the compiler decides, ADR-282 D2), `ref T` is `&T`, `Vec[String]` is
   `Vec<String>` (a `ref` one a slice), `String?` is `Option<String>`. Most Rust
