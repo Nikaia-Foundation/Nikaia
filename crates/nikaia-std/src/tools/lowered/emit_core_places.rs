@@ -59,6 +59,12 @@ impl EmitState {
         if compound && conversion { return ("(".to_owned(), ").into()".to_owned()); }
         emit_around_held(&held)
     }
+    pub(crate) fn a_list_read(&self, node: &Expr) -> bool {
+        match node {
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.facts.list_indices.contains(&node_key(base)) },
+            _ => false,
+        }
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
@@ -69,7 +75,7 @@ impl EmitState {
         out.push("match ");
         let name = nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_owned();
         if walk.held.contains_key(&node_key(receiver)) { out.push(&name); } else if lent == "" && emit_place_an_index(receiver) {
-            out.push("&");
+            if self.a_list_read(receiver) { out.push("&"); }
             host.expr(walk, out, receiver, depth, flow, scope)?;
         } else { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; }
         out.push(&lent);

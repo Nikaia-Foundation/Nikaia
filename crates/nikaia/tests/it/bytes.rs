@@ -346,3 +346,50 @@ fn a_bytes_is_read_as_a_run_of_bytes() {
         String::from_utf8_lossy(&run.stderr)
     );
 }
+
+/// Every read of a `Bytes` is callable on a cut `b[a..<b]` of a `ref Bytes`
+/// (#815): the cut is a run of bytes and is read as the whole is.
+#[test]
+fn every_read_of_a_bytes_is_callable_on_a_cut() {
+    let dir = common::scratch_dir("bytes-cut-reads");
+    let source = "use std::bytes\n\
+         \n\
+         fn reads(b: ref Bytes) throws {\n\
+         \x20   println(b[1..<9].len())\n\
+         \x20   println(b[1..<1].is_empty())\n\
+         \x20   println(b[1..<4].text().len())\n\
+         \x20   println(b[1..<9].find(108) ?? -1)\n\
+         \x20   println(b[1..<9].find(bytes::ByteSet([108])) ?? -1)\n\
+         \x20   let mut hits = 0\n\
+         \x20   for p in b[1..<9].find_all(bytes::ByteSet([108])) { hits += p }\n\
+         \x20   println(hits)\n\
+         \x20   let mut sizes = 0\n\
+         \x20   for p in b[1..<9].split(bytes::ByteSet([108])) { sizes += p.len() }\n\
+         \x20   println(sizes)\n\
+         \x20   println(b[0..<8].u32_le(0))\n\
+         \x20   println(b[0..<8].u32_be(1))\n\
+         \x20   println(b[0..<8].u64_le(0) % 1000)\n\
+         \x20   println(b[0..<8].u64_be(0) % 1000)\n\
+         \x20   println(b[1..<9].clone().len())\n\
+         \x20   let lens: Vec[i64] = b[1..<9].par_pieces('\\n'; piece: 3).map(fn(p) { p.len() }).collect()\n\
+         \x20   println(lens.len())\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let b = \"hello\\nworld\\n\".bytes.clone()\n\
+         \x20   reads(b) catch { println(\"failed\") }\n\
+         }\n";
+    std::fs::write(dir.join("main.nika"), source).expect("the source");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .arg("run")
+        .arg("main.nika")
+        .output()
+        .expect("the nikaia binary runs");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let out = String::from_utf8_lossy(&run.stdout).to_string();
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines.len(), 15, "{out}");
+    assert_eq!(&lines[..8], ["8", "true", "3", "2", "2", "5", "6", "1819043176"], "{out}");
+}

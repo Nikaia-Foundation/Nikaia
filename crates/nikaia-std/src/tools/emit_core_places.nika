@@ -108,6 +108,15 @@ impl EmitState {
         return emit_around_held(held)
     }
 
+    /// Whether a read through the brackets is a sequence's (the checker
+    /// records the base of each such read), not a map's.
+    fn a_list_read(ref self, node: ref Expr) -> bool {
+        return match node {
+            Expr::Index { base, .. } => self.facts.list_indices.contains(node_key(base)),
+            else => false,
+        }
+    }
+
     /// A `?.` after a method (Part I 3.5 onto a **method**, ADR-278): the call
     /// happens only where there is something to call it on.
     ///
@@ -135,8 +144,12 @@ impl EmitState {
             // and a `Some(it)` over that moves the element out of the list
             // (E0507). `&*` borrows what the read finds, so the `match` binds a
             // reference and the call goes through it. A map's read answers a
-            // `Found`, which `*` turns into the option and `&` lends.
-            out.push("&")
+            // `Found`, which `*` turns into the option of a reference (#817):
+            // that is `Copy`, and lending it once more would bind a `&&T`,
+            // whose clone is the `&T`. So only a sequence's read is lent.
+            if self.a_list_read(receiver) {
+                out.push("&")
+            }
             host.expr(walk, out, receiver, depth, flow, scope)
         } else {
             self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
