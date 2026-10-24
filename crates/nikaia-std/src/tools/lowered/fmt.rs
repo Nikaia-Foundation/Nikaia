@@ -260,7 +260,7 @@ pub(crate) fn fmt_joins(before: &[FmtToken], line: &[FmtToken]) -> bool {
     let last = (*nikaia_std::index::get(&before, nikaia_std::index::at(before.len() as i64 - 1))).clone();
     if last.kind == FmtKind::Comment || last.multi { return false; }
     let first = (*nikaia_std::index::get(&line, 0)).clone();
-    if first.kind == FmtKind::Open && first.text == "{" { return fmt_head(nikaia_std::index::get(&before, 0).text.to_owned()); }
+    if first.kind == FmtKind::Open && first.text == "{" { return fmt_head(&nikaia_std::index::get(&before, 0).text.to_owned()); }
     if first.text == "else" && first.kind == FmtKind::Word {
         let arm = line.len() > 1 && nikaia_std::index::get(&line, 1).text == "=>";
         return !arm && last.kind == FmtKind::Close && last.text == "}";
@@ -270,7 +270,7 @@ pub(crate) fn fmt_joins(before: &[FmtToken], line: &[FmtToken]) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn fmt_head(word: String) -> bool { matches!(&*word, "fn" | "pub" | "if" | "else" | "for" | "while" | "loop" | "match" | "struct" | "enum" | "impl" | "trait" | "grammar" | "rule" | "entry" | "test" | "select" | "overlap" | "seq" | "extern" | "unsafe" | "async" | "mod" | "bench" | "frame" | "describe" | "}") }
+pub(crate) fn fmt_head(word: &str) -> bool { matches!(word, "fn" | "pub" | "if" | "else" | "for" | "while" | "loop" | "match" | "struct" | "enum" | "impl" | "trait" | "grammar" | "rule" | "entry" | "test" | "select" | "overlap" | "seq" | "extern" | "unsafe" | "async" | "mod" | "bench" | "frame" | "describe" | "}") }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -410,11 +410,11 @@ pub(crate) fn fmt_partner(toks: &[FmtToken], k: i64) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn fmt_operator_ends(text: String) -> bool { matches!(&*text, "=" | "+" | "-" | "*" | "/" | "%" | "&&" | "||" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "??" | "->" | "=>" | "|" | "&" | "^" | ".." | "..<" | "..=" | "+=" | "-=" | "*=" | "/=" | "%=" | "@=" | "." | "?.") }
+pub(crate) fn fmt_operator_ends(text: &str) -> bool { matches!(text, "=" | "+" | "-" | "*" | "/" | "%" | "&&" | "||" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "??" | "->" | "=>" | "|" | "&" | "^" | ".." | "..<" | "..=" | "+=" | "-=" | "*=" | "/=" | "%=" | "@=" | "." | "?.") }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn fmt_operator_starts(text: String) -> bool { matches!(&*text, "." | "?." | "??" | "+" | "-" | "*" | "/" | "%" | "&&" | "||" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "->" | "=>" | "|" | "&" | "^" | ".." | "..<" | "..=" | "=") }
+pub(crate) fn fmt_operator_starts(text: &str) -> bool { matches!(text, "." | "?." | "??" | "+" | "-" | "*" | "/" | "%" | "&&" | "||" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "->" | "=>" | "|" | "&" | "^" | ".." | "..<" | "..=" | "=") }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -428,7 +428,7 @@ pub(crate) fn fmt_looseness(toks: &[FmtToken], k: i64) -> i64 {
     }
     let before = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k - 1))).clone();
     let operand = before.kind == FmtKind::Text || before.kind == FmtKind::Close || before.kind == FmtKind::Word;
-    if !operand || fmt_leads(before.text) { return 0; }
+    if !operand || fmt_leads(&before.text) { return 0; }
     match &*t.text {
         "||" => 1,
         "&&" => 2,
@@ -442,7 +442,7 @@ pub(crate) fn fmt_looseness(toks: &[FmtToken], k: i64) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn fmt_leads(word: String) -> bool { matches!(&*word, "return" | "throw" | "in" | "if" | "while" | "match" | "else" | "break" | "yield") }
+pub(crate) fn fmt_leads(word: &str) -> bool { matches!(word, "return" | "throw" | "in" | "if" | "while" | "match" | "else" | "break" | "yield") }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FmtFrame {
@@ -508,7 +508,7 @@ impl FmtPrinter {
         }
         if self.hanging { return inner + 1; }
         let after_item = self.tail == "," || self.tail == "" || self.tail == ";" || self.tail_kind == FmtKind::Open;
-        if first.kind == FmtKind::Punct && fmt_operator_starts(first.text) && !after_item { return inner + 1; }
+        if first.kind == FmtKind::Punct && fmt_operator_starts(&first.text) && !after_item { return inner + 1; }
         inner
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -550,7 +550,7 @@ impl FmtPrinter {
             }
         }
         let glob = end.text == "*" && last > 0 && nikaia_std::index::get(&line.toks, nikaia_std::index::at(last - 1)).text == "::";
-        self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(end.text.to_owned()) && !glob;
+        self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(&end.text.to_owned()) && !glob;
         self.tail = end.text.to_owned();
         self.tail_kind = end.kind;
         self.write(&FmtLine { toks, blank: line.blank }, indent);
