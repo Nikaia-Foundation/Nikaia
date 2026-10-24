@@ -1,0 +1,38 @@
+// A `T?` parameter, by value and as a view, and a `match` of text literals
+// over a `ref String`, also in a guard
+// (kept as the path that runs).
+struct Ty { name: String }
+
+fn show(t: Ty?) -> String sync {
+    let v = t ?? return "none".clone()
+    return v.name.clone()
+}
+
+fn show_r(t: ref Ty?) -> String sync {
+    let v = t ?? return "none".clone()
+    return v.name.clone()
+}
+
+fn kind(name: ref String) -> String sync {
+    let k = match name {
+        "i32" | "i64" => "int",
+        "f64" => "float",
+        else => "other",
+    }
+    return k.clone()
+}
+
+fn guarded(name: ref String, n: i64) -> String sync {
+    let r = match n {
+        _x if (match name { "i32" | "i64" => true, else => false }) => "int",
+        else => "no",
+    }
+    return r.clone()
+}
+
+fn main() {
+    let x: Ty? = Ty { name: "b" }
+    let s: String = "i64"
+    let u: String = "u8"
+    println(f"{show(Ty { name: "a" })} {show(null)} {show_r(x)} {kind(s)} {kind(u)} {guarded(s, 1)}")
+}

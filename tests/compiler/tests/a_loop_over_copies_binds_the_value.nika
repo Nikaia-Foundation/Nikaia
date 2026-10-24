@@ -1,0 +1,20 @@
+// A loop over a `ref Vec[T]` of a type that copies by declaration binds
+// the value, as a loop over numbers does.
+use std::collections
+
+struct P { x: i64, y: i64 }
+
+fn count(points: ref Vec[P]) -> i64 sync {
+    let mut m: collections::BTreeMap[i64, P] = collections::BTreeMap()
+    let mut at = 0
+    for p in points {
+        m[at] = p
+        at += 1
+    }
+    return m.len()
+}
+
+fn main() {
+    let points: Vec[P] = [P { x: 1, y: 2 }, P { x: 3, y: 4 }]
+    println(f"{count(points)} {points[1].y}")
+}

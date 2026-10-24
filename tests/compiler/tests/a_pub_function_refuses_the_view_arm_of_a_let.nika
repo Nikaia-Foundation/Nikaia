@@ -1,0 +1,13 @@
+// #562: the same through a `let` in a `pub` function stays refused.
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+pub fn h(s: ref String, c: bool) -> String {
+    let y = if c { s } else { int_text(1) }
+    return y
+}
+
+fn main() {
+    println(h("a", true))
+}

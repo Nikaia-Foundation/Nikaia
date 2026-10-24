@@ -1,0 +1,47 @@
+// #574: `x ?? BinaryOp::Add` for an `x: ref BinaryOp?`, with a struct variant as the fallback.
+enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Pow(i64),
+}
+
+enum Shape {
+    Square(i64),
+    Rect { w: i64, h: i64 },
+}
+
+
+fn name(op: ref BinaryOp) -> String {
+    match op {
+        BinaryOp::Add => "add".clone()
+        BinaryOp::Sub => "sub".clone()
+        BinaryOp::Mul => "mul".clone()
+        BinaryOp::Pow(_) => "pow".clone()
+    }
+}
+
+fn pick(x: ref BinaryOp?) -> String {
+    let op = x ?? BinaryOp::Add
+    return name(op)
+}
+
+fn pick_const(x: ref BinaryOp?) -> String {
+    let op = x ?? BinaryOp::Mul
+    return name(op)
+}
+
+fn area(s: ref Shape?) -> i64 {
+    let shape = s ?? Shape::Rect { w: 2, h: 3 }
+    match shape {
+        Shape::Square(n) => n * n
+        Shape::Rect { w, h } => w * h
+    }
+}
+
+fn main() {
+    let some: BinaryOp? = BinaryOp::Sub
+    let none: BinaryOp? = null
+    let shape: Shape? = null
+    println(f"{pick(some)} {pick(none)} {pick_const(none)} {area(shape)}")
+}

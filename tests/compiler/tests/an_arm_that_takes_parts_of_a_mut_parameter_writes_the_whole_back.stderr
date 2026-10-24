@@ -1,0 +1,49 @@
+warning: Unused variable: `x`.
+   --> tests/an_arm_that_takes_parts_of_a_mut_parameter_writes_the_whole_back.nika:13:5
+    |
+ 13 |     match e {
+    |     ^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `n`.
+   --> tests/an_arm_that_takes_parts_of_a_mut_parameter_writes_the_whole_back.nika:27:5
+    |
+ 27 |     match e {
+    |     ^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `a`.
+   --> tests/an_arm_that_takes_parts_of_a_mut_parameter_writes_the_whole_back.nika:41:5
+    |
+ 41 |     match e {
+    |     ^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `b`.
+   --> tests/an_arm_that_takes_parts_of_a_mut_parameter_writes_the_whole_back.nika:41:5
+    |
+ 41 |     match e {
+    |     ^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `x`.
+   --> tests/an_arm_that_takes_parts_of_a_mut_parameter_writes_the_whole_back.nika:41:5
+    |
+ 41 |     match e {
+    |     ^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `n`.
+   --> tests/an_arm_that_takes_parts_of_a_mut_parameter_writes_the_whole_back.nika:54:5
+    |
+ 54 |     match h.root {
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `b`.
+   --> tests/an_arm_that_takes_parts_of_a_mut_parameter_writes_the_whole_back.nika:54:5
+    |
+ 54 |     match h.root {
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.

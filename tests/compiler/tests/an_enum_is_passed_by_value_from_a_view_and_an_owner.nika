@@ -1,0 +1,50 @@
+// #569: a `Copy` and a non-`Copy` enum handed on from a `ref` binding and an owned one (no longer reproduces; kept as the test).
+enum Op {
+    Add,
+    Sub,
+}
+
+enum Tree {
+    Leaf(i64),
+    Node(Op, Tree, Tree),
+}
+
+fn apply(op: Op, a: i64, b: i64) -> i64 {
+    match op {
+        Op::Add => a + b
+        Op::Sub => a - b
+    }
+}
+
+fn describe(op: Op) -> String {
+    match op {
+        Op::Add => "add".clone()
+        Op::Sub => "sub".clone()
+    }
+}
+
+fn eval(t: ref Tree) -> i64 {
+    match t {
+        Tree::Leaf(n) => n
+        Tree::Node(op, l, r) => apply(op, eval(l), eval(r))
+    }
+}
+
+fn names(ops: ref Vec[Op]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for op in ops {
+        out.push(describe(op))
+    }
+    return out
+}
+
+fn first(ops: ref Vec[Op]) -> String {
+    let op = ops[0]
+    return describe(op)
+}
+
+fn main() {
+    let t = Tree::Node(Op::Add, Tree::Leaf(2), Tree::Node(Op::Sub, Tree::Leaf(9), Tree::Leaf(4)))
+    let ops = [Op::Add, Op::Sub]
+    println(f"{eval(t)} {names(ops).len()} {first(ops)}")
+}

@@ -1,0 +1,28 @@
+// **A map's read past a jump, handed to a `ref` parameter, is the view it
+// already is**: `written_of(m[k] ?? continue)` over a map of a struct passes
+// what `index::get` opened, to a function and to a function value alike (it
+// wrote `&` before the `match`, and rustc refused `&&E`).
+use std::collections
+
+struct E { n: i64 }
+fn written_of(e: ref E) -> String {
+    return f"<{e.n}>"
+}
+fn through(m: ref collections::BTreeMap[String, E], keys: ref Vec[String], shown: fn(ref E) -> String sync) -> String {
+    let mut out: String = ""
+    for k in keys {
+        out.push_str(shown(m[k] ?? continue))
+    }
+    return out
+}
+fn main() {
+    let mut m: collections::BTreeMap[String, E] = collections::BTreeMap()
+    m["a"] = E { n: 1 }
+    m["c"] = E { n: 3 }
+    let keys: Vec[String] = ["a", "b", "c"]
+    let mut out: String = ""
+    for k in keys {
+        out.push_str(written_of(m[k] ?? continue))
+    }
+    println(f"{out} {through(m, keys, written_of)}")
+}

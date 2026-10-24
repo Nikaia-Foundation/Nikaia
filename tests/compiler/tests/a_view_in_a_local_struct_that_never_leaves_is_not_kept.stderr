@@ -1,0 +1,8 @@
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+  --> tests/a_view_in_a_local_struct_that_never_leaves_is_not_kept.nika:8:1
+   |
+ 8 | fn two(s: ref String, c: bool) -> i64 {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+   = help: Write `String` without `ref`.

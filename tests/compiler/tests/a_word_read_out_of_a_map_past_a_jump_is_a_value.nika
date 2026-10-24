@@ -1,0 +1,22 @@
+// **A map's read of a word past a jump is the word**: `let other = b[word] ??
+// return false` over a map of an enum of bare variants binds a `Tier`, as
+// `let other: Tier = …` does, and hands it to a parameter that takes one
+// (it was `&Tier`, rustc E0308).
+use std::collections
+
+enum Tier { Low, High }
+fn tier_word(tier: Tier) -> String {
+    return match tier {
+        Tier::Low => "low",
+        Tier::High => "high",
+    }
+}
+fn same(b: ref collections::BTreeMap[String, Tier], word: ref String) -> String {
+    let other = b[word] ?? return "none"
+    return tier_word(other)
+}
+fn main() {
+    let mut m: collections::BTreeMap[String, Tier] = collections::BTreeMap()
+    m["x"] = Tier::High
+    println(f"{same(m, "x")} {same(m, "y")}")
+}

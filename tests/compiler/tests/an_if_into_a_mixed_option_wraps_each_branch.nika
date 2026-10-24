@@ -1,0 +1,47 @@
+// #562: `if` / `else if` / `else` feeds the same positions.
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn by_return(s: ref String, n: i64) -> String? {
+    return if n == 0 {
+        s
+    } else if n == 1 {
+        int_text(n)
+    } else {
+        null
+    }
+}
+
+fn by_tail(s: ref String, n: i64) -> String? {
+    if n == 0 {
+        s
+    } else if n == 1 {
+        int_text(n)
+    } else {
+        null
+    }
+}
+
+fn by_let(s: ref String, n: i64) -> String? {
+    let r = if n == 0 {
+        s
+    } else if n == 1 {
+        int_text(n)
+    } else {
+        null
+    }
+    return r
+}
+
+fn plain(s: ref String, n: i64) -> String {
+    return if n == 0 { s } else { int_text(n) }
+}
+
+fn main() {
+    for n in 0..<3 {
+        println(f"{by_return("hi", n) ?? "none"} {by_tail("hi", n) ?? "none"} {by_let("hi", n) ?? "none"}")
+    }
+    println(plain("hi", 0))
+    println(plain("hi", 4))
+}

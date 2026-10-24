@@ -1,0 +1,14 @@
+warning: Variant `Pow` is never constructed.
+  --> tests/a_value_beside_a_view_of_an_option_is_lent_with_it.nika:2:1
+   |
+ 2 | enum BinaryOp {
+   | ^^^^^^^^^^^^^^^
+   |
+   = note: `BinaryOp` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis.
+warning: Variant `Square` is never constructed.
+  --> tests/a_value_beside_a_view_of_an_option_is_lent_with_it.nika:9:1
+   |
+ 9 | enum Shape {
+   | ^^^^^^^^^^^^
+   |
+   = note: `Shape` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis.

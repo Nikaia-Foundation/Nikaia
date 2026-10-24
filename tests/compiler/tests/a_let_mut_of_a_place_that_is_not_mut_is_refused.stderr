@@ -1,0 +1,12 @@
+error[NK1138]: You're changing the parameter `m`, but it wasn't declared as mutable.
+   --> tests/a_let_mut_of_a_place_that_is_not_mut_is_refused.nika:10:21
+    |
+  8 | fn add(m: collections::HashMap[String, Entry], keys: ref Vec[String]) {
+    |        - declared here without `mut`
+    ...
+ 10 |         let mut x = m[k] ?? continue
+    |                     ^ a mutable view of the entry is taken here
+    |
+    = note: A parameter declared `mut m` is changed in place, so the caller sees the change too.
+    = help: Write `mut m` in the parameter list. If the caller's value should stay as it was, change a copy instead: `let mut m_own = m`.
+1 type error

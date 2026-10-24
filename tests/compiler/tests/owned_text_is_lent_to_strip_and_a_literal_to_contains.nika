@@ -1,0 +1,14 @@
+// Owned text is lent to `strip_prefix` and `strip_suffix` as to
+// `starts_with`, and a literal asked of a list of text is a view of text
+// (both reached `rustc` unlent in `tools/*.nika`).
+fn main() {
+    let name: String = "now"
+    let prefix = f"from({name}::"
+    let error: String = "from(now::f)"
+    let rest: String = (error.strip_prefix(prefix) ?? "").clone()
+    let tail = f")"
+    let param: String = (rest.strip_suffix(tail) ?? "").clone()
+    let named: Vec[String] = [name.clone(), "?".clone()]
+    let found = named.contains("?")
+    println(f"{param} {found}")
+}

@@ -1,0 +1,33 @@
+// #572: a struct variant holding an enum, matched twice through a `ref` parameter (no longer reproduces; kept as the test).
+enum Kind {
+    Num(i64),
+    Neg,
+}
+
+enum Term {
+    Atom { kind: Kind, name: String },
+    Group { inner: Kind, count: i64 },
+}
+
+fn show(t: ref Term) -> String {
+    match t {
+        Term::Atom { kind, name } => {
+            match kind {
+                Kind::Num(n) => f"{name}={n}"
+                Kind::Neg => f"-{name}"
+            }
+        }
+        Term::Group { inner, count } => {
+            match inner {
+                Kind::Num(n) => f"g{count}:{n}"
+                Kind::Neg => f"g{count}"
+            }
+        }
+    }
+}
+
+fn main() {
+    let a = Term::Atom { kind: Kind::Num(3), name: "x" }
+    let b = Term::Group { inner: Kind::Neg, count: 2 }
+    println(f"{show(a)} {show(b)}")
+}

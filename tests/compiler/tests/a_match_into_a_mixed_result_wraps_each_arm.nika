@@ -1,0 +1,35 @@
+// #562: a mixed text position fed by a `match` wraps each arm on its own.
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn plain(s: ref String, n: i64) -> String {
+    return match n {
+        0 => s,
+        else => int_text(n),
+    }
+}
+
+fn tail_plain(s: ref String, n: i64) -> String {
+    match n {
+        0 => { s },
+        else => { int_text(n) },
+    }
+}
+
+fn nested(s: ref String, n: i64) -> String {
+    return match n {
+        0 => s,
+        else => if n > 5 { int_text(n) } else { s },
+    }
+}
+
+fn main() {
+    println(plain("hi", 0))
+    println(plain("hi", 5))
+    println(tail_plain("hi", 0))
+    println(tail_plain("hi", 6))
+    println(nested("hi", 0))
+    println(nested("hi", 9))
+    println(nested("hi", 3))
+}

@@ -1,0 +1,19 @@
+// #816: the same over a list whose elements are options.
+use std::collections
+
+struct Entry {
+    names: Vec[String],
+}
+
+fn add(mut v: Vec[Entry?], at: i64) {
+    let mut x = v[at] ?? return
+    x.names.push("n".clone())
+}
+
+fn main() {
+    let mut v: Vec[Entry?] = [Entry { names: [] }, null]
+    add(v, 0)
+    add(v, 1)
+    let n = v[0]?.names?.len() ?? 0
+    println(n)
+}

@@ -1,0 +1,25 @@
+// #565: the lowered tools package allows the two rustc lints that valid
+// Nikaia trips (`let mut s = init` then branches that always assign `s`, and
+// a `while true { … return … }` then a `return`). Measured once by adding both
+// shapes to a tools file and running `cargo check -p nikaia-std`: two
+// warnings without the attribute, none with it.
+fn bare(lines: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for line in lines {
+        let mut rest: String = line.clone()
+        let mut again = true
+        while again {
+            again = false
+            if rest.starts_with(">") {
+                rest = rest.strip_prefix(">") ?? ""
+                again = true
+            }
+        }
+        out.push(rest.clone())
+    }
+    return out
+}
+fn main() {
+    let v: Vec[String] = [">>a", "b"]
+    println(f"{bare(v).join(",")}")
+}

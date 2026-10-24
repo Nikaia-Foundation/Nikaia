@@ -1,0 +1,25 @@
+// #562: the same into a mixed field and a mixed parameter.
+struct Row { text: String }
+
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn same(x: String) -> String {
+    return x
+}
+
+fn keep(s: ref String, n: i64) -> Row {
+    return Row { text: if n == 0 { s } else { int_text(n) } }
+}
+
+fn arg(s: ref String, n: i64) -> String {
+    return same(if n == 0 { s } else { int_text(n) })
+}
+
+fn main() {
+    println(keep("hi", 0).text)
+    println(keep("hi", 7).text)
+    println(arg("hi", 0))
+    println(arg("hi", 12))
+}

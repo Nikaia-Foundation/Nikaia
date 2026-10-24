@@ -1,0 +1,35 @@
+// #570: `v[v.len() - 1] = x` and `+=`, on a list, a list of lists and a field.
+struct Holder {
+    items: Vec[i64],
+}
+
+fn last_set(mut v: Vec[i64], x: i64) {
+    v[v.len() - 1] = x
+}
+
+fn last_add(mut v: Vec[i64]) {
+    v[v.len() - 1] += 1
+}
+
+fn nested(mut vv: Vec[Vec[i64]]) {
+    vv[vv.len() - 1][0] = 9
+    vv[0][vv[0].len() - 1] += 2
+}
+
+fn field(mut h: Holder) {
+    h.items[h.items.len() - 1] = 7
+}
+
+fn main() {
+    let mut v: Vec[i64] = [1, 2, 3]
+    last_set(v, 8)
+    last_add(v)
+    let mut vv: Vec[Vec[i64]] = [[1, 2], [3, 4]]
+    nested(vv)
+    let mut h = Holder { items: [5, 6] }
+    field(h)
+    let mut w: Vec[i64] = [1, 2, 3]
+    w[w.len() - 1] = 5
+    w[w.len() - 1] += 1
+    println(f"{v[2]} {vv[1][0]} {vv[0][1]} {h.items[1]} {w[2]}")
+}

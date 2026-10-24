@@ -1,0 +1,122 @@
+// #578: a `bool` bound by a `match` inside another `match` on a reference is
+// read as the value, as #567 reads a number: used as a condition, negated and
+// returned, through a box, a field, an index, a loop and a `mut` parameter.
+enum F {
+    On(bool, i64),
+    Wrap(F),
+    Hold(S),
+    Many(Vec[F]),
+    Off,
+}
+
+struct S {
+    f: F,
+    n: i64,
+}
+
+fn boxed(f: ref F) -> bool {
+    return match f {
+        F::Wrap(inner) => match inner {
+            F::On(flag, _) => {
+                if flag { !flag } else { true }
+            }
+            else => false,
+        },
+        else => false,
+    }
+}
+
+fn negated(f: ref F) -> bool {
+    return match f {
+        F::Wrap(inner) => match inner {
+            F::On(flag, _) => !flag,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+fn field(f: ref F) -> bool {
+    match f {
+        F::Hold(h) => {
+            match h.f {
+                F::On(flag, n) if flag => { return flag && n > 0 }
+                F::On(flag, _) => { return !flag }
+                else => {}
+            }
+        }
+        else => {}
+    }
+    return false
+}
+
+fn listed(f: ref F) -> i64 {
+    let mut seen = 0
+    match f {
+        F::Many(list) => {
+            for one in list {
+                match one {
+                    F::On(flag, n) => { if !flag { seen += n } }
+                    else => {}
+                }
+            }
+            match list[0] {
+                F::On(flag, _) => { if flag { seen += 100 } }
+                else => {}
+            }
+        }
+        else => {}
+    }
+    return seen
+}
+
+fn both(f: ref F, g: ref F) -> bool {
+    return match f {
+        F::On(x, _) => match g {
+            F::On(flag, _) => x == flag,
+            else => !x,
+        },
+        else => false,
+    }
+}
+
+fn counted(mut s: S, g: ref F) -> bool {
+    return match g {
+        F::Wrap(inner) => match inner {
+            F::On(flag, _) => {
+                if !flag { s.n += 1 }
+                flag
+            }
+            else => false,
+        },
+        else => false,
+    }
+}
+
+impl S {
+    fn inside(ref self) -> bool {
+        match self.f {
+            F::Wrap(inner) => {
+                match inner {
+                    F::On(flag, _) => {
+                        if !flag { return false }
+                        return flag
+                    }
+                    else => {}
+                }
+            }
+            else => {}
+        }
+        return false
+    }
+}
+
+fn main() {
+    let on = F::Wrap(F::On(true, 3))
+    let off = F::Wrap(F::On(false, 3))
+    let held = F::Hold(S { f: F::On(true, 2), n: 0 })
+    let many = F::Many([F::On(true, 1), F::On(false, 2), F::On(false, 4)])
+    let mut s = S { f: F::Wrap(F::On(true, 1)), n: 0 }
+    let kept = counted(s, off)
+    println(f"{boxed(on)} {boxed(off)} {negated(on)} {field(held)} {listed(many)} {both(F::On(true, 0), F::On(true, 0))} {kept} {s.n} {s.inside()}")
+}

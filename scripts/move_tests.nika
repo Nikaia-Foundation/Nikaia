@@ -1,0 +1,111 @@
+// Moves the program-level tests of a Rust test file into a Nikaia test package
+// (#821 step 3): each `#[test]` whose body is one `printed(..)` or `refused(..)`
+// call with a raw-string program and nothing about the lowered Rust becomes
+// `DIR/NAME.nika` (its doc comment first, as `//`) beside an empty `NAME.stdout`
+// (`NAME.stderr` for a refusal), which `nikaia test --bless` fills. The moved
+// tests are cut out of the Rust file.
+//
+//     nikaia run scripts/move_tests.nika -- RUST_FILE DIR
+
+use std::cli
+use std::fs
+
+fn block_end(lines: ref Vec[ref String], from: i64) -> i64 {
+    let mut j = from
+    let mut closed = false
+    while j < lines.len() {
+        if lines[j] == "    );" { closed = true }
+        if closed && lines[j] == "}" { return j }
+        j += 1
+    }
+    return lines.len() - 1
+}
+
+// The index of the first line of the test whose `#[test]` is at `at`: its doc
+// comment, and the blank line before.
+fn block_start(lines: ref Vec[ref String], at: i64) -> i64 {
+    let mut s = at
+    while s > 0 && lines[s - 1].starts_with("///") { s -= 1 }
+    if s > 0 && lines[s - 1] == "" { s -= 1 }
+    return s
+}
+
+fn is_movable(body: ref Vec[String]) -> bool {
+    let mut literals = 0
+    for line in body {
+        if line.contains("rust") || line.contains("Command") || line.contains("lower_tools") || line.contains("printed_and_lowered") || line.contains("scratch_dir") {
+            return false
+        }
+        if line.trim() == "r#\"" { literals += 1 }
+    }
+    return literals == 1
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let rust_path = args[1].clone()
+    let dir = args[2].clone()
+    let text = fs::read_to_string(rust_path.clone(), fs::Root::Anywhere)
+    let lines: Vec[String] = text.split("\n").collect()
+    let mut kept: Vec[String] = []
+    let mut i = 0
+    let mut moved = 0
+    while i < lines.len() {
+        if lines[i] != "#[test]" || i + 1 >= lines.len() {
+            kept.push(lines[i].clone())
+            i += 1
+            continue
+        }
+        let end = block_end(lines, i)
+        let first = block_start(lines, i)
+        let mut body: Vec[String] = []
+        let mut k = i
+        while k <= end {
+            body.push(lines[k].clone())
+            k += 1
+        }
+        let header = lines[i + 1].clone()
+        let name = (header.strip_prefix("fn ") ?? "").split("(").next() ?? ""
+        let refusal = text_has(body, "= refused(")
+        if !is_movable(body) || name == "" || !(refusal || text_has(body, "= printed(")) {
+            kept.push(lines[i].clone())
+            i += 1
+            continue
+        }
+        // The kept part so far holds the doc comment and blank line of this test.
+        let mut docs: Vec[String] = []
+        let mut d = first
+        while d < i {
+            if lines[d].starts_with("///") { docs.push(lines[d].replace("///", "//")) }
+            d += 1
+        }
+        let mut out: Vec[String] = docs
+        let mut inside = false
+        for line in body {
+            if line.trim() == "\"#," { inside = false }
+            if inside { out.push(line.clone()) }
+            if line.trim() == "r#\"" { inside = true }
+        }
+        fs::write(f"{dir}/{name}.nika", fs::Root::Anywhere, out.join("\n") + "\n")
+        let ext = if refusal { "stderr" } else { "stdout" }
+        fs::write(f"{dir}/{name}.{ext}", fs::Root::Anywhere, "")
+        // Drop the doc comment and blank line already kept.
+        let mut drop = i - first
+        while drop > 0 {
+            kept.pop()
+            drop -= 1
+        }
+        moved += 1
+        i = end + 1
+    }
+    fs::write(rust_path, fs::Root::Anywhere, kept.join("\n"))
+    println(f"moved {moved}")
+}
+
+fn text_has(body: ref Vec[String], needle: String) -> bool {
+    for line in body {
+        if line.contains(needle.clone()) { return true }
+    }
+    return false
+}

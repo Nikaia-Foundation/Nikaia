@@ -1,0 +1,53 @@
+// #562: an annotated `let` is a position; the pass writes `.into_either()` on
+// its initializer, and an `if` or a `match` there is wrapped arm by arm.
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn opt(n: i64) -> String? {
+    if n > 0 {
+        return f"{n}"
+    }
+    return null
+}
+
+fn annotated(s: ref String, c: bool) -> i64 {
+    let y: String = if c { s } else { int_text(7) }
+    return y.len()
+}
+
+fn by_match(s: ref String, n: i64) -> i64 {
+    let y: String = match n {
+        0 => s,
+        else => int_text(n),
+    }
+    return y.len()
+}
+
+fn maybe(s: ref String, n: i64) -> i64 {
+    let y: String? = match n {
+        0 => s,
+        1 => int_text(100),
+        else => null,
+    }
+    return (y ?? "none").len()
+}
+
+fn maybe_if(s: ref String, n: i64) -> i64 {
+    let y: String? = if n == 0 { s } else if n == 1 { int_text(100) } else { null }
+    return (y ?? "none").len()
+}
+
+fn maybe_call(s: ref String, n: i64) -> i64 {
+    let y: String? = if n == 0 { s } else { opt(n - 1) }
+    return (y ?? "none").len()
+}
+
+fn main() {
+    let a = "hi".clone()
+    println(f"{annotated(a, true)} {annotated(a, false)}")
+    println(f"{by_match(a, 0)} {by_match(a, 12)}")
+    println(f"{maybe(a, 0)} {maybe(a, 1)} {maybe(a, 2)}")
+    println(f"{maybe_if(a, 0)} {maybe_if(a, 1)} {maybe_if(a, 2)}")
+    println(f"{maybe_call(a, 0)} {maybe_call(a, 1)} {maybe_call(a, 3)}")
+}

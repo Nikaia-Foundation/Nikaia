@@ -1,0 +1,13 @@
+// The same off a list that is not `mut` is the checker's refusal.
+struct Expr {
+    n: i64,
+}
+fn bump(mut e: Expr) {
+    e.n += 1
+}
+fn main() {
+    let args: Vec[Expr] = [Expr { n: 1 }]
+    let i = 0
+    bump(args[i])
+    print(args[0].n)
+}

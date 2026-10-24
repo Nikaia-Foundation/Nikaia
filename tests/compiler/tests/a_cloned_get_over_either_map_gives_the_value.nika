@@ -1,0 +1,21 @@
+// `get(k)?.clone() ?? d` over a `BTreeMap` of a struct and a `HashMap` of
+// text clones the value, not the reference.
+use std::collections
+
+struct Ty { name: String }
+
+fn lookup(m: ref collections::BTreeMap[String, Ty], k: ref String) -> Ty sync {
+    return m.get(k)?.clone() ?? Ty { name: "unknown" }
+}
+
+fn lookup_h(m: ref collections::HashMap[String, String], k: ref String) -> String sync {
+    return m.get(k)?.clone() ?? "none"
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    m["a"] = Ty { name: "A" }
+    let mut h: collections::HashMap[String, String] = collections::HashMap()
+    h["x"] = "X"
+    println(f"{lookup(m, "a").name} {lookup(m, "b").name} {lookup_h(h, "x")} {lookup_h(h, "y")}")
+}

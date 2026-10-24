@@ -1,0 +1,64 @@
+// #567: a `match` over a `let` over a place, over a field and through a nested `match` binds a number as the number.
+enum V {
+    Case(i64, i64),
+    Pair(V, i64),
+    Nothing,
+}
+
+struct H {
+    kind: V,
+    list: Vec[i64],
+}
+
+impl H {
+    fn one(ref self) -> i64 {
+        match self.kind {
+            V::Case(a, b) => self.list[a] + b * 2
+            else => 0
+        }
+    }
+
+    fn two(ref self, vs: ref Vec[V]) -> i64 {
+        let mut t = 0
+        for v in vs {
+            match v {
+                V::Case(a, b) => { t += self.list[a] + b }
+                V::Pair(inner, k) => {
+                    match inner {
+                        V::Case(c, d) => { t += self.list[c] + d + k }
+                        else => {}
+                    }
+                }
+                V::Nothing => {}
+            }
+        }
+        return t
+    }
+}
+
+fn three(vs: ref Vec[V], list: ref Vec[i64]) -> i64 {
+    let v = vs[0]
+    match v {
+        V::Case(a, b) => list[a] + b
+        else => 0
+    }
+}
+
+
+fn five(h: ref H) -> i64 {
+    match h.kind {
+        V::Pair(inner, k) => {
+            match inner {
+                V::Case(c, d) => h.list[c] + d + k
+                else => 0
+            }
+        }
+        else => 0
+    }
+}
+
+fn main() {
+    let h = H { kind: V::Case(1, 5), list: [10, 20, 30] }
+    let vs = [V::Case(1, 5), V::Pair(V::Case(2, 1), 4)]
+    println(f"{h.one()} {h.two(vs)} {three(vs, h.list)} {five(h)}")
+}

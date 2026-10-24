@@ -1,0 +1,7 @@
+warning: Variant `Nothing` is never constructed.
+  --> tests/a_number_bound_under_a_reference_is_a_number.nika:2:1
+   |
+ 2 | enum V {
+   | ^^^^^^^^
+   |
+   = note: `V` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis.

@@ -1,0 +1,40 @@
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/an_annotated_mixed_let_fed_by_a_choice_wraps_each_arm.nika:14:1
+    |
+ 14 | fn annotated(s: ref String, c: bool) -> i64 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/an_annotated_mixed_let_fed_by_a_choice_wraps_each_arm.nika:19:1
+    |
+ 19 | fn by_match(s: ref String, n: i64) -> i64 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/an_annotated_mixed_let_fed_by_a_choice_wraps_each_arm.nika:27:1
+    |
+ 27 | fn maybe(s: ref String, n: i64) -> i64 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/an_annotated_mixed_let_fed_by_a_choice_wraps_each_arm.nika:36:1
+    |
+ 36 | fn maybe_if(s: ref String, n: i64) -> i64 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/an_annotated_mixed_let_fed_by_a_choice_wraps_each_arm.nika:41:1
+    |
+ 41 | fn maybe_call(s: ref String, n: i64) -> i64 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.

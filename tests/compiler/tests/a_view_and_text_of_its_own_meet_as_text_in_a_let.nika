@@ -1,0 +1,15 @@
+// #562: `ref String` and `String` arms meet as text; the position they flow
+// into decides the representation.
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn h(s: ref String, c: bool) -> String {
+    let y = if c { s } else { int_text(1) }
+    return y
+}
+
+fn main() {
+    println(h("a", true))
+    println(h("a", false))
+}

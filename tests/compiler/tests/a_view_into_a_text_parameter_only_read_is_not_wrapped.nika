@@ -1,0 +1,10 @@
+// A view into a text parameter that is only read is not wrapped in `either(..)`.
+fn size(x: String) -> i64 {
+    return x.len()
+}
+
+fn main() {
+    let owned = "abc".clone()
+    let s = owned[..<(owned.find("c") ?? return)]
+    println(f"{size(s) + size(owned)}")
+}

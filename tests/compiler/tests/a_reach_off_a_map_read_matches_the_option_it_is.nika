@@ -1,0 +1,16 @@
+// #817: `m["k"]?.clone()` on a map matched on `&*get(..)`, a `&Option<&T>`,
+// whose arm bound a `&&T` and cloned the `&T` (E0308). A map's read is the
+// option of a reference already and is matched as it is.
+use std::collections
+fn look(m: ref collections::HashMap[String, String], k: String) -> String? {
+    return m[k]?.clone()
+}
+fn main() {
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    m["k"] = "vv"
+    println(look(m, "k") ?? "none")
+    println(look(m, "q") ?? "none")
+    let a = m["k"]?.clone()
+    println(a ?? "none")
+    println(f"{m["k"]?.len() ?? 0} {m["z"]?.len() ?? 0}")
+}

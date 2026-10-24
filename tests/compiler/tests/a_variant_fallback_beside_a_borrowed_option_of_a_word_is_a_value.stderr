@@ -1,0 +1,7 @@
+warning: Variant `Sub` is never constructed.
+  --> tests/a_variant_fallback_beside_a_borrowed_option_of_a_word_is_a_value.nika:5:1
+   |
+ 5 | enum BinaryOp { Add, Sub, Mul }
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `BinaryOp` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis.

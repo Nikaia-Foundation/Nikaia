@@ -1,0 +1,7 @@
+warning: Variant `Off` is never constructed.
+  --> tests/a_bool_bound_in_a_nested_match_is_a_bool.nika:4:1
+   |
+ 4 | enum F {
+   | ^^^^^^^^
+   |
+   = note: `F` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis.

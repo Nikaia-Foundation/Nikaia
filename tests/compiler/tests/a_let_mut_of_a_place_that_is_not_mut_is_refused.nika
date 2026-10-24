@@ -1,0 +1,18 @@
+// #816: a place that is not `mut` has no mutable view.
+use std::collections
+
+struct Entry {
+    names: Vec[String],
+}
+
+fn add(m: collections::HashMap[String, Entry], keys: ref Vec[String]) {
+    for k in keys {
+        let mut x = m[k] ?? continue
+        x.names.push("n".clone())
+    }
+}
+
+fn main() {
+    let mut m: collections::HashMap[String, Entry] = collections::HashMap()
+    add(m, ["a".clone()])
+}

@@ -1,0 +1,8 @@
+// The same off a list of lists, and off a list of numbers.
+fn main() {
+    let d: Vec[Vec[String?]] = [["x", null], [null, "yz"]]
+    println(d[1][1]?.clone() ?? "none")
+    println(f"{d[0][1]?.len() ?? 7}")
+    let n: Vec[i64?] = [5, null]
+    println(f"{n[0]?.abs() ?? 0} {n[1]?.abs() ?? 0}")
+}

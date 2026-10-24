@@ -1,0 +1,25 @@
+// #571: `let n = opt ?? return` then `m.get(n)`, `contains_key(n)` and `n.len()` for `ref String?` and `String?` (no longer reproduces; kept as the test).
+use std::collections
+
+fn lookup(opt: ref String?, m: ref collections::HashMap[String, i64]) -> i64 {
+    let n = opt ?? return 0
+    let a = m.get(n) ?? 0
+    let b = if m.contains_key(n) { 1 } else { 0 }
+    return a + b + n.len()
+}
+
+fn lookup_owned(opt: String?, m: ref collections::HashMap[String, i64]) -> i64 {
+    let n = opt ?? return 0
+    let a = m.get(n) ?? 0
+    let b = if m.contains_key(n) { 1 } else { 0 }
+    return a + b + n.len()
+}
+
+fn main() {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m["ab"] = 5
+    let some: String? = "ab"
+    let none: String? = null
+    let other: String? = "ab"
+    println(f"{lookup(some, m)} {lookup(none, m)} {lookup_owned(other, m)}")
+}

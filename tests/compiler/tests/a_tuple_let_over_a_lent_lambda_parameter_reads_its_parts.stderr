@@ -1,0 +1,28 @@
+warning: Unused variable: `name`.
+   --> tests/a_tuple_let_over_a_lent_lambda_parameter_reads_its_parts.nika:40:9
+    |
+ 40 |         let (name, v) = pair
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `name`.
+   --> tests/a_tuple_let_over_a_lent_lambda_parameter_reads_its_parts.nika:37:9
+    |
+ 37 |         let (name, v) = pair
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `v`.
+   --> tests/a_tuple_let_over_a_lent_lambda_parameter_reads_its_parts.nika:26:9
+    |
+ 26 |         let (name, v) = pair
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: If this is intentional, prefix it with an underscore.
+warning: Unused variable: `name`.
+  --> tests/a_tuple_let_over_a_lent_lambda_parameter_reads_its_parts.nika:8:9
+   |
+ 8 |         let (name, v) = pair
+   |         ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: If this is intentional, prefix it with an underscore.

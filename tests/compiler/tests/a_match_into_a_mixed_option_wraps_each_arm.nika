@@ -1,0 +1,36 @@
+// #562: the same into a `String?`, with a `null` arm, in the three forms a
+// value reaches the result in.
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn by_return(s: ref String, n: i64) -> String? {
+    return match n {
+        0 => s,
+        1 => int_text(n),
+        else => null,
+    }
+}
+
+fn by_tail(s: ref String, n: i64) -> String? {
+    match n {
+        0 => s,
+        1 => int_text(n),
+        else => null,
+    }
+}
+
+fn by_let(s: ref String, n: i64) -> String? {
+    let r = match n {
+        0 => s,
+        1 => int_text(n),
+        else => null,
+    }
+    return r
+}
+
+fn main() {
+    for n in 0..<3 {
+        println(f"{by_return("hi", n) ?? "none"} {by_tail("hi", n) ?? "none"} {by_let("hi", n) ?? "none"}")
+    }
+}

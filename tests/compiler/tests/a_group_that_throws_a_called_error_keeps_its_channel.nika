@@ -1,0 +1,42 @@
+// #568: mutually recursive `throws` functions, one throwing `make_error(x)` (no longer reproduces; kept as the test).
+enum Fault {
+    Odd { at: i64 },
+    Deep(i64),
+}
+
+impl Error for Fault {
+    fn message(ref self) -> String {
+        match self {
+            Fault::Odd { at } => f"odd {at}"
+            Fault::Deep(n) => f"deep {n}"
+        }
+    }
+}
+
+fn make_error(x: i64) -> Fault {
+    return Fault::Odd { at: x }
+}
+
+fn even(x: i64) -> i64 throws {
+    if x == 0 {
+        return 0
+    }
+    if x == 7 {
+        throw make_error(x)
+    }
+    return odd(x - 1)
+}
+
+fn odd(x: i64) -> i64 throws {
+    if x == 0 {
+        throw Fault::Deep(x)
+    }
+    return even(x - 1)
+}
+
+fn main() {
+    let r = even(4) catch { -1 }
+    let q = odd(8) catch { -2 }
+    let z = even(7) catch { -3 }
+    println(f"{r} {q} {z}")
+}

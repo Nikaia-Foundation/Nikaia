@@ -1,0 +1,22 @@
+// #816: `let mut x = m[k] ?? continue` on a `mut` map is a mutable view of
+// the entry, so a change through `x` reaches `m`.
+use std::collections
+
+struct Entry {
+    names: Vec[String],
+}
+
+fn add(mut m: collections::HashMap[String, Entry], keys: ref Vec[String]) {
+    for k in keys {
+        let mut x = m[k] ?? continue
+        x.names.push("n".clone())
+    }
+}
+
+fn main() {
+    let mut m: collections::HashMap[String, Entry] = collections::HashMap()
+    m["a"] = Entry { names: [] }
+    add(m, ["a".clone(), "missing".clone()])
+    let e = m["a"] ?? return
+    println(e.names.len())
+}

@@ -1,0 +1,34 @@
+// #566: `return ("text", n)` for a `(String, i64)`, a tail, a struct field, a list element and a nested tuple (no longer reproduces; kept as the test).
+struct Row {
+    name: String,
+    n: i64,
+}
+
+fn pair(n: i64) -> (String, i64) {
+    return ("text", n)
+}
+
+fn tail(n: i64) -> (String, i64) {
+    ("tail", n)
+}
+
+fn built(n: i64) -> Row {
+    return Row { name: "row", n: n }
+}
+
+fn rows(n: i64) -> Vec[(String, i64)] {
+    return [("a", n), ("b", n + 1)]
+}
+
+fn nested(n: i64) -> ((String, i64), String) {
+    return (("deep", n), "outer")
+}
+
+fn main() {
+    let (s, n) = pair(1)
+    let (t, m) = tail(2)
+    let r = built(3)
+    let xs = rows(4)
+    let q = nested(5)
+    println(f"{s}{n} {t}{m} {r.name}{r.n} {xs.len()} {q.0.0}{q.0.1}{q.1}")
+}
