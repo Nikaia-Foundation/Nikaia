@@ -476,17 +476,85 @@ pub fn lower_tools_files_on(
     build: crate::emit::Build,
     threads: Option<usize>,
 ) -> Result<String> {
+    lower_tools_files_cached(paths, build, threads, &LoweredBefore::none(), &mut 0)
+}
+
+/// **The source with every body taken out** (#667): what another file of the
+/// package can see of this one - its names, signatures, types and constants.
+/// The ranges are the statements' extent, so a comment between two statements
+/// goes with them and a comment outside a body stays.
+fn without_bodies(source: &str, parsed: &crate::parser::Parsed) -> String {
+    fn bodies(item: &crate::ast::Spanned<crate::ast::Item>, cut: &mut Vec<(usize, usize)>) {
+        let block = match &item.node {
+            crate::ast::Item::Fn { body, .. } => body,
+            crate::ast::Item::Test { body, .. } | crate::ast::Item::Bench { body, .. } => body,
+            crate::ast::Item::Impl { methods, .. } => {
+                methods.iter().for_each(|m| bodies(m, cut));
+                return;
+            }
+            _ => return,
+        };
+        if let (Some(first), Some(last)) = (block.stmts.first(), block.stmts.last()) {
+            cut.push((first.span.start as usize, last.span.end as usize));
+        }
+    }
+    let mut cut: Vec<(usize, usize)> = Vec::new();
+    parsed
+        .program
+        .items
+        .iter()
+        .for_each(|i| bodies(i, &mut cut));
+    cut.sort();
+    let mut kept = String::new();
+    let mut at = 0;
+    for (start, end) in cut {
+        if start < at
+            || end > source.len()
+            || !source.is_char_boundary(start)
+            || !source.is_char_boundary(end)
+        {
+            // Not a range this can trust: the whole text is the interface.
+            return source.to_string();
+        }
+        kept.push_str(&source[at..start]);
+        at = end;
+    }
+    kept.push_str(&source[at..]);
+    // A line that is only a comment says nothing to another file (a `///`
+    // line is a doc and stays).
+    kept.lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            !line.starts_with("//") || line.starts_with("///")
+        })
+        .flat_map(|line| [line, "\n"])
+        .collect()
+}
+
+/// The same with the per-file cache of [`LoweredBefore`]: `reused` counts the
+/// files taken from it. A file's key is its own text and the package's
+/// interface - the others' signatures, the ledger and the trust it is checked
+/// against - and not the others' bodies, so a body change lowers one file and
+/// a signature change (or a change the ledger shows) lowers all.
+fn lower_tools_files_cached(
+    paths: &[PathBuf],
+    build: crate::emit::Build,
+    threads: Option<usize>,
+    cache: &LoweredBefore,
+    reused: &mut usize,
+) -> Result<String> {
     let mut timer = Phases::from_env();
     let mut parsed: Vec<crate::parser::Parsed> = Vec::new();
     let mut sizes: Vec<usize> = Vec::new();
+    let mut texts: Vec<String> = Vec::new();
     for path in paths {
         let source =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         sizes.push(source.len());
-        parsed.push(
-            crate::parser::parse_to_ast(&source)
-                .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?,
-        );
+        let one = crate::parser::parse_to_ast(&source)
+            .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+        texts.push(source);
+        parsed.push(one);
     }
     timer.lap("parse");
     // **One package, one namespace** (ADR-286 D1), as a project's files are.
@@ -522,15 +590,52 @@ pub fn lower_tools_files_on(
         crate::contracts::trust::analyse_package_checked(&units, &library, &checked).provenance;
     drop(checked);
     timer.lap("trust");
+    // **The package's interface**, the same for every file of it.
+    let interface: Option<String> = cache.compiler.as_ref().map(|compiler| {
+        let mut read: Vec<u8> = Vec::new();
+        let mut part = |bytes: &[u8]| {
+            read.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+            read.extend_from_slice(bytes);
+        };
+        part(b"nikaia-lower-file-v1");
+        part(compiler.as_bytes());
+        part(format!("{build:?}{provenance:?}{facts_reusable}").as_bytes());
+        part(format!("{own:?}").as_bytes());
+        for (path, (text, one)) in paths.iter().zip(texts.iter().zip(&parsed)) {
+            part(path.file_name().unwrap_or_default().as_encoded_bytes());
+            part(without_bodies(text, one).as_bytes());
+        }
+        cache::sha256_hex(&read)
+    });
+    let file_key = |at: usize| -> Option<String> {
+        let mut read = interface.clone()?.into_bytes();
+        let name = paths[at].file_name()?.as_encoded_bytes();
+        read.extend_from_slice(&(name.len() as u64).to_le_bytes());
+        read.extend_from_slice(name);
+        read.extend_from_slice(texts[at].as_bytes());
+        Some(cache::sha256_hex(&read))
+    };
 
     // **Each file checked and lowered on its own, on every core** (#667): a
     // file's lowering reads the package (`beside`, `own`, `provenance`) and
     // nothing another file's lowering writes, so the files are independent;
     // the sections still follow `paths`, and the first refusal reported is
     // the first in file order, as it was one file after the other.
-    let lower_one = |at: usize| -> (Result<String>, std::time::Duration, std::time::Duration) {
+    let lower_one = |at: usize| -> (
+        Result<(String, bool)>,
+        std::time::Duration,
+        std::time::Duration,
+    ) {
         let started = std::time::Instant::now();
         let (path, unit) = (&paths[at], &parsed[at]);
+        let key = file_key(at);
+        if let Some(rust) = cache.get(key.as_deref()) {
+            return (
+                Ok((rust, true)),
+                started.elapsed(),
+                std::time::Duration::ZERO,
+            );
+        }
         let beside: Vec<&crate::parser::Parsed> = parsed
             .iter()
             .enumerate()
@@ -567,7 +672,10 @@ pub fn lower_tools_files_on(
         let lowered = crate::emit::emit_std_items_against_at(
             unit, &beside, &own, &described, build, provenance, facts,
         )
-        .map(|lowered| lowered.rust)
+        .map(|lowered| {
+            cache.put(key.as_deref(), &lowered.rust);
+            (lowered.rust, false)
+        })
         .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()));
         (lowered, checking, started.elapsed() - checking)
     };
@@ -583,7 +691,8 @@ pub fn lower_tools_files_on(
     let mut grammar = false;
     for ((path, unit), (lowered, checking, emitting)) in paths.iter().zip(&parsed).zip(results) {
         timer.file(path, checking, emitting);
-        let lowered = lowered?;
+        let (lowered, was_cached) = lowered?;
+        *reused += usize::from(was_cached);
         // **One preamble for the package**: a `use std::…` is the file's
         // import of a `std` module, and one namespace imports it once.
         let mut body = String::new();
@@ -865,16 +974,26 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
         if !package.is_dir() {
             continue;
         }
-        // **Keyed on every file of the package**: each file is checked and
-        // lowered against all the others (`beside`, the package's ledger, its
-        // trust), so a change in any of them may change any section.
+        // **Keyed per file** (#667): see `lower_tools_files_cached`.
         let paths = tools_sources(&package)?;
-        let key = cache.key("tools", &paths);
-        let rust = match cache.get(key.as_deref()) {
-            Some(rust) => rust,
+        // **Nothing changed**: the whole package is one entry, so a run that
+        // changes nothing reads no file twice and checks nothing.
+        let whole = cache.key("tools", &paths);
+        let rust = match cache.get(whole.as_deref()) {
+            Some(rust) => {
+                eprintln!("lower-std: {}: unchanged", package.display());
+                rust
+            }
             None => {
-                let rust = lower_tools_files(&paths, tools_build())?;
-                cache.put(key.as_deref(), &rust);
+                let mut reused = 0;
+                let rust =
+                    lower_tools_files_cached(&paths, tools_build(), None, &cache, &mut reused)?;
+                eprintln!(
+                    "lower-std: {}: {reused} of {} files from the cache",
+                    package.display(),
+                    paths.len()
+                );
+                cache.put(whole.as_deref(), &rust);
                 rust
             }
         };
@@ -910,6 +1029,14 @@ struct LoweredBefore {
 const LOWERED: &str = "lowered.rs";
 
 impl LoweredBefore {
+    /// No cache: nothing is read and nothing is written.
+    fn none() -> LoweredBefore {
+        LoweredBefore {
+            root: PathBuf::new(),
+            compiler: None,
+        }
+    }
+
     fn open() -> LoweredBefore {
         let compiler = std::env::current_exe()
             .and_then(std::fs::read)
@@ -942,13 +1069,14 @@ impl LoweredBefore {
 
     fn get(&self, key: Option<&str>) -> Option<String> {
         let entry = self.root.join(key?);
+        self.compiler.as_ref()?;
         let rust = std::fs::read_to_string(entry.join(LOWERED)).ok()?;
         cache::use_entry(&entry);
         Some(rust)
     }
 
     fn put(&self, key: Option<&str>, rust: &str) {
-        let Some(key) = key else {
+        let (Some(key), Some(_)) = (key, &self.compiler) else {
             return;
         };
         let entry = self.root.join(key);

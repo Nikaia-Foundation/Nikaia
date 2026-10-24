@@ -181,7 +181,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   binary takes about 18 s instead of 70 s (a fifth of the CPU), a test binary
   relinks in under a second, and the tests run as fast as at release. A first
   `fast` build is about 2 minutes. `cargo build --profile fast -p nikaia`, then
-  `target/fast/nikaia lower-std` (seconds; it lowers the checkout the binary
+  `target/fast/nikaia lower-std` (cold 181 G instructions, one body changed 60 G, unchanged 1.3 G; it lowers the checkout the binary
   was built in). Keep the Rust compiling until the binary exists: loop on
   `cargo check --release -p nikaia --message-format short` (under a minute);
   build once at the end. Run the touched tests as one `cargo test --profile

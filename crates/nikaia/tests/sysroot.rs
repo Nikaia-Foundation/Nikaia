@@ -470,58 +470,77 @@ fn the_first_refused_file_is_the_one_reported_on_every_core() {
     assert!(!said.contains("b_second"), "{said}");
 }
 
-/// **`lower-std` takes what it lowered before from the cache, and only
-/// that** (#667): nothing changed is the same bytes again without lowering;
-/// a changed file is a new key, so the package is lowered again.
+/// **Each file of a package is cached on its own** (#667): nothing changed
+/// lowers no file; a body change lowers that file only, to the bytes a cold
+/// run writes; a signature change lowers every file.
 #[test]
-fn lower_std_takes_an_unchanged_lowering_from_the_cache() {
-    let root = std::env::temp_dir().join(format!("nikaia-lower-cache-{}", std::process::id()));
+fn lower_std_caches_each_file_of_a_package() {
+    let root = std::env::temp_dir().join(format!("nikaia-lower-files-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let tools = root.join("nikaia-std").join("src").join("tools");
     std::fs::create_dir_all(&tools).expect("a sysroot to lower");
-    let cache = root.join("cache");
-    std::fs::write(tools.join("one.nika"), "pub fn one() -> i64 { return 1 }\n").expect("one");
-    std::fs::write(
-        tools.join("two.nika"),
-        "pub fn two() -> i64 { return one() + 1 }\n",
-    )
-    .expect("two");
-    let lower = || {
+    let write = |name: &str, text: &str| std::fs::write(tools.join(name), text).expect(name);
+    write("one.nika", "pub fn one() -> i64 { return 1 }\n");
+    write(
+        "two.nika",
+        "pub fn two() -> i64 {\n    return one() + 1\n}\n",
+    );
+    write("three.nika", "pub fn three() -> i64 { return 3 }\n");
+    // Lowers with the cache at `dir`; the files taken from it, and the bytes.
+    let lower = |dir: &str| {
         let out = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
             .arg("lower-std")
             .arg("--sysroot")
             .arg(&root)
-            .env("NIKAIA_CACHE_DIR", &cache)
+            .env("NIKAIA_CACHE_DIR", root.join(dir))
             .output()
             .expect("nikaia runs");
-        assert!(
-            out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        std::fs::read_to_string(tools.join("package.rs")).expect("the package is written")
-    };
-    let entries = || {
-        std::fs::read_dir(cache.join("lower-std"))
-            .map(|dir| {
-                dir.filter(|e| e.as_ref().is_ok_and(|e| e.path().is_dir()))
-                    .count()
+        let said = String::from_utf8_lossy(&out.stderr).to_string();
+        assert!(out.status.success(), "{said}");
+        let reused = said
+            .lines()
+            .find_map(|l| {
+                if l.ends_with(": unchanged") {
+                    return Some(usize::MAX);
+                }
+                l.split(": ")
+                    .nth(2)?
+                    .split(" of ")
+                    .next()?
+                    .parse::<usize>()
+                    .ok()
             })
-            .unwrap_or(0)
+            .unwrap_or_else(|| panic!("no count in {said}"));
+        (
+            reused,
+            std::fs::read_to_string(tools.join("package.rs")).expect("the package"),
+        )
     };
-    let first = lower();
-    assert!(first.contains("pub fn two"), "{first}");
-    assert_eq!(entries(), 1, "the first lowering is kept");
+    let (none, first) = lower("warm");
+    assert_eq!(none, 0, "a cold cache lowers every file");
     std::fs::write(tools.join("package.rs"), "stale").expect("spoil the package");
-    assert_eq!(lower(), first, "the same sources, the same bytes");
-    assert_eq!(entries(), 1, "and no second entry");
-    std::fs::write(
-        tools.join("two.nika"),
-        "pub fn two() -> i64 { return one() + 2 }\n",
-    )
-    .expect("change two");
-    let changed = lower();
-    assert_ne!(changed, first, "a changed file is lowered again");
-    assert_eq!(entries(), 2);
+    let (all, again) = lower("warm");
+    assert_eq!(
+        (all, &again),
+        (usize::MAX, &first),
+        "nothing changed: the whole package from one entry"
+    );
+
+    write(
+        "two.nika",
+        "pub fn two() -> i64 {\n    return one() + 2\n}\n",
+    );
+    let (reused, body) = lower("warm");
+    assert_eq!(reused, 2, "a body change lowers that file only");
+    assert_ne!(body, first);
+    assert_eq!(lower("cold").1, body, "and the bytes are a cold run's");
+
+    write(
+        "three.nika",
+        "pub fn three() -> i64 { return 3 }\npub fn four() -> i64 { return 4 }\n",
+    );
+    let (reused, wider) = lower("warm");
+    assert_eq!(reused, 0, "a new signature lowers every file");
+    assert_eq!(lower("cold2").1, wider);
     let _ = std::fs::remove_dir_all(&root);
 }
