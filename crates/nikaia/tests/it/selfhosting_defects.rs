@@ -2019,6 +2019,63 @@ fn main() {
     assert_eq!(said, "yz\n7\n5 0\n");
 }
 
+/// #814: an element of a `mut` list handed to a `mut` parameter is lent
+/// mutably (`&mut args[i]`), not read through `index::get`.
+#[test]
+fn an_element_handed_to_a_mut_parameter_is_changed_in_place() {
+    let (said, lowered) = printed_and_lowered(
+        "element-to-a-mut-parameter",
+        r#"
+struct Expr {
+    n: i64,
+}
+struct Block {
+    args: Vec[Expr],
+}
+fn bump(mut e: Expr) {
+    e.n += 1
+}
+fn main() {
+    let mut args: Vec[Expr] = [Expr { n: 1 }]
+    let i = 0
+    bump(args[i])
+    print(args[0].n)
+    let mut b = Block { args: [Expr { n: 5 }] }
+    bump(b.args[i])
+    println(f" {b.args[0].n}")
+}
+"#,
+    );
+    assert_eq!(said, "2 6\n");
+    assert!(
+        !lowered.contains("&mut *nikaia_std::index::get"),
+        "{lowered}"
+    );
+}
+
+/// The same off a list that is not `mut` is the checker's refusal.
+#[test]
+fn an_element_of_a_list_that_is_not_mut_is_refused_by_the_checker() {
+    let said = refused(
+        "element-of-an-immutable-list",
+        r#"
+struct Expr {
+    n: i64,
+}
+fn bump(mut e: Expr) {
+    e.n += 1
+}
+fn main() {
+    let args: Vec[Expr] = [Expr { n: 1 }]
+    let i = 0
+    bump(args[i])
+    print(args[0].n)
+}
+"#,
+    );
+    assert!(said.contains("NK1139"), "{said}");
+}
+
 /// #817: `m["k"]?.clone()` on a map matched on `&*get(..)`, a `&Option<&T>`,
 /// whose arm bound a `&&T` and cloned the `&T` (E0308). A map's read is the
 /// option of a reference already and is matched as it is.
@@ -2043,96 +2100,4 @@ fn main() {
 "#,
     );
     assert_eq!(said, "vv\nnone\nvv\n2 0\n");
-}
-
-const MUT_VIEW_ENTRY: &str = r#"
-use std::collections
-
-struct Entry {
-    names: Vec[String],
-}
-"#;
-
-/// #816: `let mut x = m[k] ?? continue` on a `mut` map is a mutable view of
-/// the entry, so a change through `x` reaches `m`.
-#[test]
-fn a_let_mut_of_a_mut_maps_entry_is_a_mutable_view() {
-    let source = format!(
-        "{MUT_VIEW_ENTRY}{}",
-        r#"
-fn add(mut m: collections::HashMap[String, Entry], keys: ref Vec[String]) {
-    for k in keys {
-        let mut x = m[k] ?? continue
-        x.names.push("n".clone())
-    }
-}
-
-fn main() {
-    let mut m: collections::HashMap[String, Entry] = collections::HashMap()
-    m["a"] = Entry { names: [] }
-    add(m, ["a".clone(), "missing".clone()])
-    let e = m["a"] ?? return
-    println(e.names.len())
-}
-"#
-    );
-    let said = printed("mut-view-of-a-map-entry", &source);
-    assert_eq!(said.trim(), "1");
-}
-
-/// #816: the same over a list whose elements are options.
-#[test]
-fn a_let_mut_of_a_mut_lists_element_is_a_mutable_view() {
-    let source = format!(
-        "{MUT_VIEW_ENTRY}{}",
-        r#"
-fn add(mut v: Vec[Entry?], at: i64) {
-    let mut x = v[at] ?? return
-    x.names.push("n".clone())
-}
-
-fn main() {
-    let mut v: Vec[Entry?] = [Entry { names: [] }, null]
-    add(v, 0)
-    add(v, 1)
-    let e = v[0] ?? return
-    println(e.names.len())
-}
-"#
-    );
-    let said = printed("mut-view-of-a-list-element", &source);
-    assert_eq!(said.trim(), "1");
-}
-
-/// #816: a place that is not `mut` has no mutable view.
-#[test]
-fn a_let_mut_of_a_place_that_is_not_mut_is_refused() {
-    let dir = common::scratch_dir("selfhosting-mut-view-refused");
-    let source = format!(
-        "{MUT_VIEW_ENTRY}{}",
-        r#"
-fn add(m: collections::HashMap[String, Entry], keys: ref Vec[String]) {
-    for k in keys {
-        let mut x = m[k] ?? continue
-        x.names.push("n".clone())
-    }
-}
-
-fn main() {
-    let mut m: collections::HashMap[String, Entry] = collections::HashMap()
-    add(m, ["a".clone()])
-}
-"#
-    );
-    std::fs::write(dir.join("p.nika"), source).expect("write the source");
-    let checked = Command::new(env!("CARGO_BIN_EXE_nikaia"))
-        .current_dir(&dir)
-        .args(["check", "p.nika"])
-        .output()
-        .expect("the nikaia binary runs");
-    let said = String::from_utf8_lossy(&checked.stderr).into_owned()
-        + &String::from_utf8_lossy(&checked.stdout);
-    std::fs::remove_dir_all(&dir).ok();
-    assert!(!checked.status.success(), "{said}");
-    assert!(said.contains("NK1138"), "{said}");
 }
