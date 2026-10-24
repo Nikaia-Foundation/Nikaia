@@ -148,10 +148,10 @@ pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &Chec
             state.scope.pop();
             match &alt.action {
                 Some(action) => {
-                    check_function_action(state, world, host, &action, (expected).as_ref(), frame);
+                    check_function_action(state, world, host, action, (expected).as_ref(), frame);
                     state.inside_an_action = outer_action;
                 },
-                _ => { state.inside_an_action = outer_action; },
+                None => { state.inside_an_action = outer_action; },
             }
         }
         state.current = outer_current;
@@ -210,8 +210,8 @@ pub(crate) fn check_function_tail_hands_nothing(block: &Block) -> bool {
 pub(crate) fn check_function_end_hands_nothing(expr: &Expr) -> bool {
     match expr {
         Expr::If { then_branch, else_branch, .. } => match else_branch {
-            Some(other) => check_function_tail_hands_nothing(then_branch) || check_function_tail_hands_nothing(&other),
-            _ => true,
+            Some(other) => check_function_tail_hands_nothing(then_branch) || check_function_tail_hands_nothing(other),
+            None => true,
         },
         Expr::Block(block, _) => check_function_tail_hands_nothing(block),
         _ => false,
@@ -235,8 +235,8 @@ pub(crate) fn check_function_every_end_is_a_value(expr: &Expr) -> bool {
         Expr::If { then_branch, else_branch, .. } => {
             if !check_function_tail_is_a_value(then_branch) { return false; }
             return match else_branch {
-                Some(other) => check_function_tail_is_a_value(&other),
-                _ => false,
+                Some(other) => check_function_tail_is_a_value(other),
+                None => false,
             };
         },
         Expr::Match { arms, .. } => {
@@ -324,7 +324,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
             state.flow.unknown_bound.insert(local.id);
             frame.push(local);
         },
-        _ => { },
+        None => { },
     }
     frame
 }
@@ -433,7 +433,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     let mut own_name = "new".to_owned();
     match name {
         Some(sym) => { own_name = world.words.resolve(sym).to_owned(); },
-        _ => { },
+        None => { },
     }
     let key = if target.is_some() {
         format!("{}::{}", nikaia_std::index::or(match target.as_ref() {
@@ -477,8 +477,8 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     let frame = check_function_frame(state, world, host, receiver, args, config, spread, &target, &key, &parameters);
     let mut expected: Option<Ty> = None;
     match ret_type {
-        Some(written) => { expected = Some(host.type_of(&written).erase(&parameters)); },
-        _ => { },
+        Some(written) => { expected = Some(host.type_of(written).erase(&parameters)); },
+        None => { },
     }
     let outer: Option<Ty> = match state.expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -538,14 +538,14 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     for (_, held) in lists.iter() { state.an_empty_list_with_no_element_type(&held.0, &held.1); }
     let ends = !a_body_never_ends(body);
     match expected {
-        Some(want) => {
-            check_function_hands_nothing(state, body, &want, at, is_extern, ends);
+        Some(ref want) => {
+            check_function_hands_nothing(state, body, want, at, is_extern, ends);
             match tail_span {
-                Some(span) => { if ends { check_function_tail_checks(state, world, host, body, &want, tail, tail_lent, tail_view, &span); } },
-                _ => { },
+                Some(span) => { if ends { check_function_tail_checks(state, world, host, body, want, tail, tail_lent, tail_view, &span); } },
+                None => { },
             }
         },
-        _ => { },
+        None => { },
     }
     state.a_sequence_was_walked_twice();
     state.a_part_left_out();

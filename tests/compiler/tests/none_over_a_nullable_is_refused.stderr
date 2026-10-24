@@ -1,0 +1,9 @@
+error[NK2705]: `None` is not a pattern of `o`, an `i64?`.
+  --> tests/none_over_a_nullable_is_refused.nika:3:5
+   |
+ 3 |     return match o {
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = note: A `T?` has no `None`: its nothing is written `null`.
+   = help: Write `null => …`.
+1 other error

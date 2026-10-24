@@ -27,18 +27,18 @@ fn run(purpose: &str, call: &str, extra: &str) -> String {
 
 #[test]
 fn a_match_over_a_part_of_a_let_bound_element_borrows() {
-    let f = "fn first_action(rule: ref Rule, i: i64) -> String {\n    let alt = rule.alts[i]\n    return match alt.action {\n        Some(a) => a.clone(),\n        else => \"none\",\n    }\n}\n";
+    let f = "fn first_action(rule: ref Rule, i: i64) -> String {\n    let alt = rule.alts[i]\n    return match alt.action {\n        a => a.clone(),\n        null => \"none\",\n    }\n}\n";
     assert_eq!(run("let", "first_action(r, 0)", f), "go");
 }
 
 #[test]
 fn a_match_over_a_part_of_an_indexed_element_borrows() {
-    let f = "fn first_action(rule: ref Rule, i: i64) -> String {\n    return match rule.alts[i].action {\n        Some(a) => a.clone(),\n        else => \"none\",\n    }\n}\n";
+    let f = "fn first_action(rule: ref Rule, i: i64) -> String {\n    return match rule.alts[i].action {\n        a => a.clone(),\n        null => \"none\",\n    }\n}\n";
     assert_eq!(run("direct", "first_action(r, 0)", f), "go");
 }
 
 #[test]
 fn a_match_over_an_owned_local_still_moves() {
-    let f = "fn take(text: String) -> String {\n    let own = Alt { action: text }\n    return match own.action {\n        Some(a) => a,\n        else => \"none\",\n    }\n}\n";
+    let f = "fn take(text: String) -> String {\n    let own = Alt { action: text }\n    return match own.action {\n        a => a,\n        null => \"none\",\n    }\n}\n";
     assert_eq!(run("owned", "take(\"go\".clone())", f), "go");
 }

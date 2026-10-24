@@ -189,11 +189,11 @@ pub fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref Ch
             check_defaults_folds_in(state, world, host, gram, alt.pattern.node, alt.pattern.span)
             state.scope.pop()
             match alt.action {
-                Some(action) => {
+                action => {
                     check_function_action(state, world, host, action, expected, frame)
                     state.inside_an_action = outer_action
                 },
-                else => {
+                null => {
                     state.inside_an_action = outer_action
                 },
             }
@@ -261,8 +261,8 @@ fn check_function_tail_hands_nothing(block: ref Block) -> bool {
 fn check_function_end_hands_nothing(expr: ref Expr) -> bool {
     return match expr {
         Expr::If { then_branch, else_branch, .. } => match else_branch {
-            Some(other) => check_function_tail_hands_nothing(then_branch) || check_function_tail_hands_nothing(other),
-            else => true,
+            other => check_function_tail_hands_nothing(then_branch) || check_function_tail_hands_nothing(other),
+            null => true,
         },
         Expr::Block(block, _) => check_function_tail_hands_nothing(block),
         else => false,
@@ -293,8 +293,8 @@ fn check_function_every_end_is_a_value(expr: ref Expr) -> bool {
                 return false
             }
             return match else_branch {
-                Some(other) => check_function_tail_is_a_value(other),
-                else => false,
+                other => check_function_tail_is_a_value(other),
+                null => false,
             }
         },
         Expr::Match { arms, .. } => {
@@ -394,13 +394,13 @@ fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWor
         frame.push(CheckLocal::free(name, ty.erase(parameters), id))
     }
     match spread {
-        Some(sym) => {
+        sym => {
             let id = state.a_new_binding()
             let local = CheckLocal::free(world.words.resolve(sym).clone(), Ty::Unknown, id)
             state.flow.unknown_bound.insert(local.id)
             frame.push(local)
         },
-        else => {},
+        null => {},
     }
     return frame
 }
@@ -538,10 +538,10 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     // included, which a caller reaches as `Type::new`.
     let mut own_name = "new".clone()
     match name {
-        Some(sym) => {
+        sym => {
             own_name = world.words.resolve(sym).clone()
         },
-        else => {},
+        null => {},
     }
     let key = if target != null { f"{target?.clone() ?? ""}::{own_name}" } else { own_name.clone() }
     // What `sync(f)` names is code the call runs (ADR-288 D31).
@@ -584,10 +584,10 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
 
     let mut expected: Ty? = null
     match ret_type {
-        Some(written) => {
+        written => {
             expected = host.type_of(written).erase(parameters)
         },
-        else => {},
+        null => {},
     }
     let outer: Ty? = state.expected?.clone()
     state.expected = expected?.clone()
@@ -657,18 +657,18 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     // body cannot get there (ADR-276).
     let ends = !a_body_never_ends(body)
     match expected {
-        Some(want) => {
+        want => {
             check_function_hands_nothing(state, body, want, at, is_extern, ends)
             match tail_span {
-                Some(span) => {
+                span => {
                     if ends {
                         check_function_tail_checks(state, world, host, body, want, tail, tail_lent, tail_view, span)
                     }
                 },
-                else => {},
+                null => {},
             }
         },
-        else => {},
+        null => {},
     }
 
     // NK2101, once the whole body has been seen: what comes after a `spawn`

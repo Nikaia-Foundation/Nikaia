@@ -1,0 +1,11 @@
+// #825, ADR-352 D5: `Some(x)` beside `else` was accepted as an unknown variant.
+fn pick(o: i64?) -> i64 {
+    return match o {
+        Some(x) => x + 1,
+        else => 0,
+    }
+}
+
+fn main() {
+    println(pick(3))
+}

@@ -116,8 +116,8 @@ impl EmitState {
         let mut types: collections::BTreeMap<String, String> = collections::BTreeMap::new();
         for rule in def.rules.iter() {
             match &rule.ret_type {
-                Some(ty) => { types.insert(emit_text(world, rule.name), host.ty_named(walk, &ty)?); },
-                _ => { },
+                Some(ty) => { types.insert(emit_text(world, rule.name), host.ty_named(walk, ty)?); },
+                None => { },
             }
         }
         walk.grammar_rule_types = types;
@@ -148,19 +148,19 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_grammar_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, bytes: bool) -> Result<(), Box<dyn std::error::Error>> {
         match &rule.frame {
-            Some(frame) => { out.push(&format!("        {}\n", frame_attribute(&frame))); },
-            _ => { },
+            Some(frame) => { out.push(&format!("        {}\n", frame_attribute(frame))); },
+            None => { },
         }
         let vis = if rule.is_entry { "pub " } else { "" };
         let mut ret = String::from("");
         match &rule.ret_type {
-            Some(ty) => { ret = format!(" -> {}", host.ty_named(walk, &ty)?); },
-            _ => { },
+            Some(ty) => { ret = format!(" -> {}", host.ty_named(walk, ty)?); },
+            None => { },
         }
         let mut label = String::from("");
         match &rule.label {
-            Some(text) => { label = format!(" # {}", rust_string(&text)); },
-            _ => { },
+            Some(text) => { label = format!(" # {}", rust_string(text)); },
+            None => { },
         }
         out.push(&format!("        {}rule {}{}{} =\n", vis, emit_text(world, rule.name), ret, label));
         for i in 0..rule.alts.len() as i64 {
@@ -177,11 +177,11 @@ impl EmitState {
                         out.push("{ ");
                         for name in as_bytes.iter() { out.push(&format!("let {} = {}.as_bytes(); ", name, name)); }
                     }
-                    self.emit_core_block(world, walk, out, host, &action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return)?;
+                    self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return)?;
                     if !as_bytes.is_empty() { out.push(" }"); }
                     out.push("\n");
                 },
-                _ => {
+                None => {
                     if rule.ret_type.is_some() {
                         out.push(&format!("          {}folded:", separator));
                         host.pattern(walk, out, &alt.pattern)?;

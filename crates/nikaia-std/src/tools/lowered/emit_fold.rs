@@ -32,9 +32,9 @@ impl EmitState {
         match &spec.merge {
             Some(merge) => {
                 out.push(", ");
-                self.emit_fold_merge(world, walk, out, host, &merge)?;
+                self.emit_fold_merge(world, walk, out, host, merge)?;
             },
-            _ => { },
+            None => { },
         }
         out.push(")");
         Ok(())

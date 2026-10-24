@@ -5126,6 +5126,13 @@ pub fn rs2nika_lint_line(code: ref String, params: ref Vec[String]) -> Vec[Strin
             out.push("D1: `p with {..}` on a by-value parameter writes `..p` of a `&T`; on a parameter write the struct literal in full")
         }
     }
+    let arm: String = code.trim_start().clone()
+    if arm.starts_with("Some(") && (arm.contains(") =>") || arm.contains(") if ")) {
+        out.push("NK2704: `Some(x) =>` is not a pattern of a `T?`; write `x =>`, with `null =>` beside it (ADR-352 D5)")
+    }
+    if arm.starts_with("None =>") || arm.starts_with("None if ") {
+        out.push("NK2705: `None =>` is not a pattern of a `T?`; write `null =>` (ADR-352 D5)")
+    }
     if code.contains(".to_owned()") {
         out.push("NK1189: `.to_owned()` is `.clone()`")
     }

@@ -32,8 +32,8 @@ pub(crate) fn check_walked_articles(state: &mut CheckState) {
             None => None,
         };
         match help_was {
-            Some(help) => { one.help = Some(articles(&help)); },
-            _ => { },
+            Some(ref help) => { one.help = Some(articles(help)); },
+            None => { },
         }
         let mut labels: Vec<CheckLabel> = vec![];
         for label in one.labels.iter() {

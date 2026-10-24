@@ -153,8 +153,8 @@ impl EmitState {
         let mut types: collections::BTreeMap[String, String] = collections::BTreeMap()
         for rule in def.rules {
             match rule.ret_type {
-                Some(ty) => types.insert(emit_text(world, rule.name), host.ty_named(walk, ty)),
-                else => {},
+                ty => types.insert(emit_text(world, rule.name), host.ty_named(walk, ty)),
+                null => {},
             }
         }
         walk.grammar_rule_types = types
@@ -196,23 +196,23 @@ impl EmitState {
 
     fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, bytes: bool) sync throws {
         match rule.frame {
-            Some(frame) => out.push(f"        {frame_attribute(frame)}\n"),
-            else => {},
+            frame => out.push(f"        {frame_attribute(frame)}\n"),
+            null => {},
         }
         // An entry is a `pub` rule to the backend: one function per entry
         // (ADR-296 D25).
         let vis = if rule.is_entry { "pub " } else { "" }
         let mut ret = ""
         match rule.ret_type {
-            Some(ty) => { ret = f" -> {host.ty_named(walk, ty)}" },
-            else => {},
+            ty => { ret = f" -> {host.ty_named(walk, ty)}" },
+            null => {},
         }
         // The label sits between the return type and the `=`, in both
         // languages: `rule expr -> Expr # "expression" = ...`.
         let mut label = ""
         match rule.label {
-            Some(text) => { label = f" # {rust_string(text)}" },
-            else => {},
+            text => { label = f" # {rust_string(text)}" },
+            null => {},
         }
         out.push(f"        {vis}rule {emit_text(world, rule.name)}{ret}{label} =\n")
 
@@ -220,7 +220,7 @@ impl EmitState {
             let alt = rule.alts[i]
             let separator = if i == 0 { "  " } else { "| " }
             match alt.action {
-                Some(action) => {
+                action => {
                     out.push(f"          {separator}")
                     host.pattern(walk, out, alt.pattern)
                     out.push("\n            -> ")
@@ -246,7 +246,7 @@ impl EmitState {
                     }
                     out.push("\n")
                 },
-                else => {
+                null => {
                     // The one body that needs no action: a `par_fold` is the
                     // whole rule (ADR-296 D10), so the value of the rule is
                     // the value of the fold. The binding the backend wants is

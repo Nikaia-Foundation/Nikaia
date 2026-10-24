@@ -764,38 +764,46 @@ pub(crate) fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_,
     bound
 }
 
-pub(crate) fn bind_some_payload(pattern: &MatchPattern, scrutinee: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
+pub(crate) fn bind_some_payload(pattern: &MatchPattern, scrutinee: &Expr, null_arm: bool, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
     if kinds.either || kinds.owned && (kinds.view || kinds.still) { return None; }
     match pattern {
         MatchPattern::Tuple { path, parts } => {
             if path.len() != 1 || parts.len() != 1 || joined_segments(path, ask.names) != "Some" { return None; }
-            let place = match place_of(scrutinee, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            if !plain_string(ask.names, &place.ty) || !place.ty.is_nullable { return None; }
-            let base = match scrutinee {
-                Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
-                _ => return None,
-            };
-            if !lent_root(base, ask, walk) { return None; }
-            match nikaia_std::index::get(&parts, 0) {
-                MatchPattern::Path(named) => {
-                    if named.len() != 1 || names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) { return None; }
-                    if kinds.still {
-                        let mut local = plain_local(still_kinds());
-                        local.from = Some(seen(&place.owner, &no_path(), walk));
-                        let word = match local.from.as_ref() {
-                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                            None => None,
-                        };
-                        bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
-                        return word;
-                    }
-                    let mut local = plain_local(owned_kinds());
-                    local.lent = true;
-                    bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
-                    return None;
-                },
-                _ => return None,
+            return bind_payload_name(nikaia_std::index::get(&parts, 0), scrutinee, kinds, ask, walk);
+        },
+        MatchPattern::Path(_) => {
+            if !null_arm { return None; }
+            return bind_payload_name(pattern, scrutinee, kinds, ask, walk);
+        },
+        _ => return None,
+    }
+}
+
+pub(crate) fn bind_payload_name(part: &MatchPattern, scrutinee: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
+    let place = match place_of(scrutinee, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !plain_string(ask.names, &place.ty) || !place.ty.is_nullable { return None; }
+    let base = match scrutinee {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
+        _ => return None,
+    };
+    if !lent_root(base, ask, walk) { return None; }
+    match part {
+        MatchPattern::Path(named) => {
+            if named.len() != 1 || names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) { return None; }
+            if kinds.still {
+                let mut local = plain_local(still_kinds());
+                local.from = Some(seen(&place.owner, &no_path(), walk));
+                let word = match local.from.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+                bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
+                return word;
             }
+            let mut local = plain_local(owned_kinds());
+            local.lent = true;
+            bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
+            return None;
         },
         _ => return None,
     }
@@ -2405,7 +2413,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut T
                 open_tier_scope(walk);
                 let mut bound = bind_static_payloads(&arm.pattern, ask, walk);
                 bind_tuple_parts(&arm.pattern, &scrutinee, ask, walk);
-                let some_from = bind_some_payload(&arm.pattern, value, &scrutinee, ask, walk);
+                let some_from = bind_some_payload(&arm.pattern, value, shapes_has_a_null_arm(arms), &scrutinee, ask, walk);
                 if some_from.is_some() { bound = true; }
                 if arm.guard.is_some() {
                     let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };

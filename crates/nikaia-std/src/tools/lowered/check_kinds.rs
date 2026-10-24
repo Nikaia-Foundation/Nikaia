@@ -88,7 +88,34 @@ pub(crate) fn kind_names_a_value_of_the_inner(pattern: &MatchPattern) -> bool {
     }
 }
 
-pub(crate) fn kind_a_number_name(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64" }
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn kind_some_or_none(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<&'static str> {
+    match pattern {
+        MatchPattern::Tuple { path, .. } => { if path.len() == 1 && world.words.resolve(*nikaia_std::index::get(&path, 0)) == "Some" { return Some("Some"); } },
+        MatchPattern::Path(path) => { if path.len() == 1 && world.words.resolve(*nikaia_std::index::get(&path, 0)) == "None" { return Some("None"); } },
+        MatchPattern::Or(alternatives) => {
+            for alternative in alternatives.iter() {
+                let found = kind_some_or_none(world, alternative);
+                if found.is_some() { return std::convert::identity(found); }
+            }
+        },
+        _ => { },
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn kind_some_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> String {
+    match pattern {
+        MatchPattern::Tuple { parts, .. } => { if parts.len() == 1 { return written_pattern(world.words, nikaia_std::index::get(&parts, 0)); } },
+        _ => { },
+    }
+    String::from("value")
+}
+
+pub fn kind_a_number_name(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64" }
 
 pub(crate) fn kind_of_a_literal(literal: &Expr) -> Option<String> {
     match literal {
@@ -288,6 +315,30 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_some_or_none_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
+        match on {
+            Ty::Nullable(_) => { },
+            _ => { return false; },
+        }
+        let written = written_expression(world.words, value);
+        let mut some_seen = false;
+        let mut none_seen = false;
+        for arm in arms.iter() {
+            let which = match kind_some_or_none(world, &arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if which == "Some" && !some_seen {
+                some_seen = true;
+                let bound = kind_some_binding(world, &arm.pattern);
+                self.findings.push(check_refusal("NK2704", span, format!("`Some({})` is not a pattern of `{}`, a `{}`.", bound, written, on.text()), vec!["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.".to_owned()], Some(format!("Write the name alone: `{} => …`, with `null => …` beside it.", bound))));
+            }
+            if which == "None" && !none_seen {
+                none_seen = true;
+                self.findings.push(check_refusal("NK2705", span, format!("`None` is not a pattern of `{}`, a `{}`.", written, on.text()), vec!["A `T?` has no `None`: its nothing is written `null`.".to_owned()], Some(String::from("Write `null => …`."))));
+            }
+        }
+        some_seen || none_seen
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let inner = match on {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
@@ -295,6 +346,7 @@ impl CheckState {
         };
         if shapes_has_a_null_arm(arms) { return; }
         for arm in arms.iter() {
+            if kind_some_or_none(world, &arm.pattern).is_some() { continue; }
             if kind_names_a_value_of_the_inner(&arm.pattern) {
                 let written = written_expression(world.words, value);
                 let variant = match &arm.pattern {

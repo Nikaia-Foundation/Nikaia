@@ -1,0 +1,27 @@
+// #825, ADR-352 D5: over a type of the program's own, `Some` and `None` are
+// that type's variants, and a `T?` takes its value by name and its nothing as `null`.
+enum Maybe {
+    Some(i64),
+    None,
+}
+
+fn show(m: Maybe) -> i64 {
+    return match m {
+        Maybe::Some(x) => x,
+        Maybe::None => -1,
+    }
+}
+
+fn pick(o: i64?) -> i64 {
+    return match o {
+        null => 0,
+        n => n + 1,
+    }
+}
+
+fn main() {
+    println(show(Maybe::Some(4)))
+    println(show(Maybe::None))
+    println(pick(3))
+    println(pick(null))
+}

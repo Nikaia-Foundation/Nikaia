@@ -1575,7 +1575,7 @@ fn a_result_bound_over_a_lent_option_field_points_into_the_parameter() {
     let l = ledger(
         "struct Rule { action: String? }\n\
          pub fn action_of(rule: ref Rule, other: ref String) -> String {\n\
-         \x20   return match rule.action { Some(a) => a, else => \"none\" }\n\
+         \x20   return match rule.action { a => a, null => \"none\" }\n\
          }\n\
          fn main() { let r = Rule { action: f\"go{1}\" }\n    println(action_of(r, \"x\")) }",
     );

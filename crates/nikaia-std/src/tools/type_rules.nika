@@ -214,13 +214,13 @@ pub fn tr_asserts_as(words: ref winnow_grammar::InternerContext, intern: fn(ref 
             // after the type's name.
             let mut shown = Expr::LitStr { text: f"the rule of `{type_name}`", id: node_id::NodeId::fresh() }
             match rule.message {
-                Some(own) => {
+                own => {
                     shown = match own {
                         Expr::LitStr { text, .. } => Expr::LitStr { text: f"the rule of `{type_name}`: {text}", id: node_id::NodeId::fresh() },
                         else => renew(own),
                     }
                 },
-                else => {},
+                null => {},
             }
             config.push(ConfigArg { name: intern("message".clone()), value: shown })
         }
@@ -503,8 +503,8 @@ fn tr_in_expr(expr: ref Expr, targets: bool) -> Vec[ref Expr] {
             out.extend(tr_in_expr(cond, targets))
             out.extend(tr_in_block(then_branch, targets))
             match else_branch {
-                Some(other) => out.extend(tr_in_block(other, targets)),
-                else => {},
+                other => out.extend(tr_in_block(other, targets)),
+                null => {},
             }
         },
         Expr::Match { value, arms, .. } => {

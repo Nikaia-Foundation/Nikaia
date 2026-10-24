@@ -159,7 +159,7 @@ pub fn tr_asserts_as(words: &winnow_grammar::InternerContext, intern: &impl Fn(&
                         _ => renew(own),
                     };
                 },
-                _ => { },
+                None => { },
             }
             config.push(ConfigArg { name: intern(&"message".to_owned()), value: shown });
         }
@@ -399,8 +399,8 @@ pub(crate) fn tr_in_expr(expr: &Expr, targets: bool) -> Vec<&Expr> {
             out.extend(tr_in_expr(cond, targets));
             out.extend(tr_in_block(then_branch, targets));
             match else_branch {
-                Some(other) => { out.extend(tr_in_block(&other, targets)); },
-                _ => { },
+                Some(other) => { out.extend(tr_in_block(other, targets)); },
+                None => { },
             }
         },
         Expr::Match { value, arms, .. } => {

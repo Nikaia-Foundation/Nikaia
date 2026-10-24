@@ -47,10 +47,10 @@ fn check_walked_articles(mut state: CheckState) sync {
         one.notes = notes
         let help_was: String? = one.help?.clone()
         match help_was {
-            Some(help) => {
+            help => {
                 one.help = articles(help)
             }
-            else => {}
+            null => {}
         }
         let mut labels: Vec[CheckLabel] = []
         for label in one.labels {

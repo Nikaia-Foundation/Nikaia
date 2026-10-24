@@ -40,8 +40,21 @@ pub(crate) fn check_core_flow_a_list(pattern: &MatchPattern) -> bool { matches!(
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_inside(ty: &Ty) -> Ty {
     match ty {
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_core_flow_copied(inner) },
         _ => ty.clone(),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_copied(inner: &Ty) -> Ty {
+    match inner {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if view && (name == "bool" || name == "char" || kind_a_number_name(name)) { return Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false }; }
+            return inner.clone();
+        },
+        _ => inner.clone(),
     }
 }
 
@@ -654,7 +667,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     state.stamped_condition = outer_condition;
     state.a_match_over_several_error_types(world, value, arms, span);
     let over = check_core_flow_caught(&state, world, &on, value);
-    state.a_match_that_misses_a_case(world, &over, arms, span);
+    if !state.a_some_or_none_over_a_nullable(world, &over, value, arms, span) { state.a_match_that_misses_a_case(world, &over, arms, span); }
     state.a_variant_matched_on_a_nullable(world, &over, value, arms, span);
     state.a_null_arm_on_a_plain_value(world, &over, value, arms, span);
     state.a_pattern_of_another_type(world, &over, value, arms, span);

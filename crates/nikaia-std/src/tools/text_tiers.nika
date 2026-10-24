@@ -1115,7 +1115,7 @@ fn bind_static_payloads(pattern: ref MatchPattern, ask: ref TierAsk, mut walk: T
 /// #808): where the position holds views only it is a view of static text,
 /// else a view of the lent text. The word of the position is returned for
 /// the first, so that a text of its own beside it demotes the position.
-fn bind_some_payload(pattern: ref MatchPattern, scrutinee: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+fn bind_some_payload(pattern: ref MatchPattern, scrutinee: ref Expr, null_arm: bool, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> String? {
     if kinds.either || (kinds.owned && (kinds.view || kinds.still)) {
         return null
     }
@@ -1124,36 +1124,49 @@ fn bind_some_payload(pattern: ref MatchPattern, scrutinee: ref Expr, kinds: ref 
             if path.len() != 1 || parts.len() != 1 || joined_segments(path, ask.names) != "Some" {
                 return null
             }
-            let place = place_of(scrutinee, ask, walk) ?? return null
-            if !plain_string(ask.names, place.ty) || !place.ty.is_nullable {
+            return bind_payload_name(parts[0], scrutinee, kinds, ask, walk)
+        }
+        // **A bare name beside a `null` arm** binds the `T` (ADR-352 D1), as
+        // `Some(a)` did.
+        MatchPattern::Path(_) => {
+            if !null_arm {
                 return null
             }
-            let base = match scrutinee {
-                Expr::Field { base, .. } => base,
-                else => return null,
-            }
-            if !lent_root(base, ask, walk) {
+            return bind_payload_name(pattern, scrutinee, kinds, ask, walk)
+        }
+        else => return null,
+    }
+}
+
+/// The name a `T?` match binds to its `T`, over a place a `ref` parameter lends.
+fn bind_payload_name(part: ref MatchPattern, scrutinee: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+    let place = place_of(scrutinee, ask, walk) ?? return null
+    if !plain_string(ask.names, place.ty) || !place.ty.is_nullable {
+        return null
+    }
+    let base = match scrutinee {
+        Expr::Field { base, .. } => base,
+        else => return null,
+    }
+    if !lent_root(base, ask, walk) {
+        return null
+    }
+    match part {
+        MatchPattern::Path(named) => {
+            if named.len() != 1 || names_a_type(ask.names.resolve(named[0])) {
                 return null
             }
-            match parts[0] {
-                MatchPattern::Path(named) => {
-                    if named.len() != 1 || names_a_type(ask.names.resolve(named[0])) {
-                        return null
-                    }
-                    if kinds.still {
-                        let mut local = plain_local(still_kinds())
-                        local.from = seen(place.owner, no_path(), walk)
-                        let word = local.from?.clone()
-                        bind_tier_local(ask.names.resolve(named[0]).clone(), local, walk)
-                        return word
-                    }
-                    let mut local = plain_local(owned_kinds())
-                    local.lent = true
-                    bind_tier_local(ask.names.resolve(named[0]).clone(), local, walk)
-                    return null
-                }
-                else => return null,
+            if kinds.still {
+                let mut local = plain_local(still_kinds())
+                local.from = seen(place.owner, no_path(), walk)
+                let word = local.from?.clone()
+                bind_tier_local(ask.names.resolve(named[0]).clone(), local, walk)
+                return word
             }
+            let mut local = plain_local(owned_kinds())
+            local.lent = true
+            bind_tier_local(ask.names.resolve(named[0]).clone(), local, walk)
+            return null
         }
         else => return null,
     }
@@ -3218,7 +3231,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                 open_tier_scope(walk)
                 let mut bound = bind_static_payloads(arm.pattern, ask, walk)
                 bind_tuple_parts(arm.pattern, scrutinee, ask, walk)
-                let some_from = bind_some_payload(arm.pattern, value, scrutinee, ask, walk)
+                let some_from = bind_some_payload(arm.pattern, value, shapes_has_a_null_arm(arms), scrutinee, ask, walk)
                 if some_from != null {
                     bound = true
                 }

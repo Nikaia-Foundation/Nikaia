@@ -116,8 +116,49 @@ fn kind_names_a_value_of_the_inner(pattern: ref MatchPattern) -> bool {
     }
 }
 
+/// `Some` for the pattern `Some(x)` and `None` for the pattern `None`, one
+/// segment each (ADR-352 D5); a path of two or more is an enum's variant.
+fn kind_some_or_none(world: ref CheckWorld, pattern: ref MatchPattern) -> String? sync {
+    match pattern {
+        MatchPattern::Tuple { path, .. } => {
+            if path.len() == 1 && world.words.resolve(path[0]) == "Some" {
+                return "Some"
+            }
+        },
+        MatchPattern::Path(path) => {
+            if path.len() == 1 && world.words.resolve(path[0]) == "None" {
+                return "None"
+            }
+        },
+        MatchPattern::Or(alternatives) => {
+            for alternative in alternatives {
+                let found = kind_some_or_none(world, alternative)
+                if found != null {
+                    return found
+                }
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+/// What `Some(x)` binds, written as the help names it: `x`, or `value` when
+/// the part is not a plain name.
+fn kind_some_binding(world: ref CheckWorld, pattern: ref MatchPattern) -> String sync {
+    match pattern {
+        MatchPattern::Tuple { parts, .. } => {
+            if parts.len() == 1 {
+                return written_pattern(world.words, parts[0])
+            }
+        },
+        else => {},
+    }
+    return "value"
+}
+
 /// The numbers' type names.
-fn kind_a_number_name(name: ref String) -> bool {
+pub fn kind_a_number_name(name: ref String) -> bool {
     return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64"
 }
 
@@ -378,6 +419,33 @@ impl CheckState {
         return self.enums.contains_key(owner) && owner != kind
     }
 
+    /// **`NK2704` and `NK2705`: `Some(x)` and `None` over a `T?`** (ADR-352
+    /// D5). A `T?` has no constructors: its nothing is `null`, its value the
+    /// `T` itself. Only a `T?` subject is asked, so a type of the program's
+    /// own with a variant called `Some` or `None` keeps its meaning.
+    pub fn a_some_or_none_over_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> bool sync {
+        match on {
+            Ty::Nullable(_) => {},
+            else => return false,
+        }
+        let written = written_expression(world.words, value)
+        let mut some_seen = false
+        let mut none_seen = false
+        for arm in arms {
+            let which = kind_some_or_none(world, arm.pattern) ?? continue
+            if which == "Some" && !some_seen {
+                some_seen = true
+                let bound = kind_some_binding(world, arm.pattern)
+                self.findings.push(check_refusal("NK2704", span, f"`Some({bound})` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.".clone()], f"Write the name alone: `{bound} => …`, with `null => …` beside it."))
+            }
+            if which == "None" && !none_seen {
+                none_seen = true
+                self.findings.push(check_refusal("NK2705", span, f"`None` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `None`: its nothing is written `null`.".clone()], "Write `null => …`."))
+            }
+        }
+        return some_seen || none_seen
+    }
+
     /// **`NK1205`: a variant or a literal matched on a `T?`** (issue #180,
     /// #704): a pattern of `W`
     /// says nothing about the nothing. The way out is to say what `null` stands
@@ -393,6 +461,9 @@ impl CheckState {
             return
         }
         for arm in arms {
+            if kind_some_or_none(world, arm.pattern) != null {
+                continue
+            }
             if kind_names_a_value_of_the_inner(arm.pattern) {
                 let written = written_expression(world.words, value)
                 let variant = match arm.pattern {

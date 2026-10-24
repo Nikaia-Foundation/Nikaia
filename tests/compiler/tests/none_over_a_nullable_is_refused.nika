@@ -1,0 +1,11 @@
+// #825, ADR-352 D5: `None` is `null` in Nikaia.
+fn pick(o: i64?) -> i64 {
+    return match o {
+        None => 0,
+        else => 1,
+    }
+}
+
+fn main() {
+    println(pick(3))
+}

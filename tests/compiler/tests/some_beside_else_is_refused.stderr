@@ -1,0 +1,9 @@
+error[NK2704]: `Some(x)` is not a pattern of `o`, an `i64?`.
+  --> tests/some_beside_else_is_refused.nika:3:5
+   |
+ 3 |     return match o {
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = note: A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.
+   = help: Write the name alone: `x => …`, with `null => …` beside it.
+1 other error

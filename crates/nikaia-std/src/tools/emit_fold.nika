@@ -53,11 +53,11 @@ impl EmitState {
         out.push(", ")
         self.emit_fold_step(world, walk, out, host, spec.step)
         match spec.merge {
-            Some(merge) => {
+            merge => {
                 out.push(", ")
                 self.emit_fold_merge(world, walk, out, host, merge)
             },
-            else => {},
+            null => {},
         }
         out.push(")")
     }

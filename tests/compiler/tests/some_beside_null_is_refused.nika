@@ -1,0 +1,11 @@
+// #825, ADR-352 D5: `Some(x)` is not a pattern of a `T?`, beside `null` too.
+fn pick(o: i64?) -> i64 {
+    return match o {
+        null => 0,
+        Some(x) => x + 1,
+    }
+}
+
+fn main() {
+    println(pick(3))
+}

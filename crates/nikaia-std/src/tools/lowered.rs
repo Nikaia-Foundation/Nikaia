@@ -2052,7 +2052,7 @@ pub mod check_items {
 }
 pub mod check_kinds {
     #[allow(unused_imports)]
-    pub use super::{CheckRaised};
+    pub use super::{CheckRaised, kind_a_number_name};
 }
 pub mod check_lambdas {}
 pub mod check_literals {
