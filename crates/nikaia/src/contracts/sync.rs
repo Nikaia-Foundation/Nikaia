@@ -286,271 +286,33 @@ pub(crate) fn visit_stmt(parsed: &Parsed, stmt: &Stmt, f: &mut impl FnMut(&Expr)
 }
 
 pub(crate) fn visit_stmt_blocks<'a>(stmt: &'a Stmt, f: &mut impl FnMut(&'a Block)) {
-    match stmt {
-        Stmt::For { body, .. } | Stmt::While { body, .. } => f(body),
-        Stmt::Let { value, .. } | Stmt::Comptime { value, .. } | Stmt::Expr(value) => {
-            visit_expr_blocks(value, f)
-        }
-        Stmt::Assign { target, value, .. } => {
-            visit_expr_blocks(target, f);
-            visit_expr_blocks(value, f);
-        }
-        Stmt::Return(Some(value)) => visit_expr_blocks(value, f),
-        Stmt::Return(None) | Stmt::Break | Stmt::Continue => {}
-    }
+    nikaia_std::tools::check_visit::check_visit_stmt_blocks(stmt)
+        .into_iter()
+        .for_each(f);
 }
 
 /// Every block an expression holds, including the body of a lambda passed as
-/// an argument.
-///
-/// A trailing lambda runs *during* the call it is given to - `.and_modify fn {
-/// … }` is not deferred - so what it calls, the function around it calls. The
-/// one shape that is different is `spawn`, whose body runs later and elsewhere;
-/// it is a detached context (Part I, 5.4) and is not walked here.
+/// an argument (the walk is `tools/check_visit.nika`'s; `spawn` is not walked).
 pub(crate) fn visit_expr_blocks<'a>(expr: &'a Expr, f: &mut impl FnMut(&'a Block)) {
-    match expr {
-        // An `unsafe` block is part of the function that writes it
-        // ([ADR-302](../../../docs/specification/adr/adr-302.md) D3): it makes
-        // no boundary of its own, so what it calls, the function calls.
-        Expr::Block(block, _)
-        | Expr::Unsafe(block, _)
-        | Expr::Overlap(block, _)
-        | Expr::Closure { body: block, .. } => {
-            f(block);
-            return;
-        }
-        Expr::Spawn { .. } => return,
-        Expr::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            f(then_branch);
-            if let Some(block) = else_branch {
-                f(block);
-            }
-        }
-        Expr::TryCatch { handler, .. } => f(handler),
-        // A `select` arm's body runs in this function once its value won.
-        Expr::Select(arms, _) => arms.iter().for_each(|arm| f(&arm.body)),
-        _ => {}
-    }
-    // **Through every expression that holds others** (#494): a block under
-    // `+`, a cast, `??` or a field is the function's as much as one under a
-    // call, and a call in it was invisible to `sync`, `touches`, `throws` and
-    // the build-time rule - `n * 2 + unsafe { abs(-1) } as i64` ran C while
-    // the program was built.
-    for child in child_exprs(expr) {
-        visit_expr_blocks(child, f);
-    }
+    nikaia_std::tools::check_visit::check_visit_expr_blocks(expr)
+        .into_iter()
+        .for_each(f);
 }
 
-/// The expressions an expression holds directly, outside its blocks: what
-/// [`visit_expr`] descends into, and [`visit_expr_blocks`] looks for blocks
-/// in. A `spawn` holds none here, being a detached context (Part I, 5.4).
-pub(crate) fn child_exprs(expr: &Expr) -> Vec<&Expr> {
-    let mut out: Vec<&Expr> = Vec::new();
-    match expr {
-        Expr::Call {
-            func, args, config, ..
-        } => {
-            out.push(func);
-            out.extend(args.iter());
-            out.extend(config.iter().map(|c| &c.value));
-        }
-        Expr::MethodCall {
-            receiver,
-            args,
-            config,
-            ..
-        }
-        | Expr::SafeMethod {
-            receiver,
-            args,
-            config,
-            ..
-        } => {
-            out.push(receiver);
-            out.extend(args.iter());
-            out.extend(config.iter().map(|c| &c.value));
-        }
-        Expr::Binary { lhs, rhs, .. } => {
-            out.push(lhs);
-            out.push(rhs);
-        }
-        Expr::Unary { expr, .. }
-        | Expr::Try(expr, _)
-        | Expr::Throw(expr, _)
-        | Expr::Cast { expr, .. } => out.push(expr),
-        Expr::Field { base, .. } | Expr::SafeField { base, .. } => out.push(base),
-        Expr::Index { base, index, .. } => {
-            out.push(base);
-            out.push(index);
-        }
-        Expr::Range { start, end, .. } => {
-            out.push(start);
-            out.push(end);
-        }
-        Expr::Tuple(parts, _) => out.extend(parts.iter()),
-        Expr::Coalesce {
-            value, fallback, ..
-        } => {
-            out.push(value);
-            out.push(fallback);
-        }
-        Expr::TryCatch { expr, .. } => out.push(expr),
-        Expr::If { cond, .. } => out.push(cond),
-        Expr::Match { value, arms, .. } => {
-            out.push(value);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    out.push(guard);
-                }
-                out.push(&arm.body);
-            }
-        }
-        Expr::StructLit { fields, .. } => {
-            out.extend(fields.iter().filter_map(|field| field.value.as_ref()));
-        }
-        Expr::ListLit { items, .. } => out.extend(items.iter()),
-        Expr::ListRepeat { value, count, .. } => {
-            out.push(value);
-            out.push(count);
-        }
-        Expr::With { base, fields, .. } => {
-            out.push(base);
-            out.extend(fields.iter().filter_map(|field| field.value.as_ref()));
-        }
-        Expr::Return(value, _) => {
-            if let Some(value) = &**value {
-                out.push(value);
-            }
-        }
-        Expr::Select(arms, _) => out.extend(arms.iter().map(|arm| &arm.value)),
-        _ => {}
-    }
-    out
-}
-
-/// Every expression inside one, excluding the bodies of nested blocks.
+/// Every expression inside one, excluding the bodies of nested blocks. The
+/// holes of a literal are visited right after it (`tools/check_visit.nika`
+/// walks the tree, only the parser can read a literal's holes).
 pub(crate) fn visit_expr(parsed: &Parsed, expr: &Expr, f: &mut impl FnMut(&Expr)) {
     f(expr);
-
-    // **A hole is a call like any other.** Its expression is parsed out of the
-    // literal on the way to the emitter, so until this walk existed a call
-    // inside `"{io::read_to_string()}"` was invisible here - and `sync` is
-    // *inferred* from what a body calls (ADR-288), so the function came out of
-    // the ledger claiming it cannot pause. ADR-288 D2 and ADR-010 D1 name that
-    // direction the dangerous one.
-    for hole in crate::emit::literal_expressions(parsed, expr) {
-        visit_expr(parsed, &hole, f);
+    // **A hole is a call like any other** (ADR-288 D2, ADR-010 D1): `sync` is
+    // inferred from what a body calls, so a call inside `"{io::read()}"` must
+    // be seen.
+    if nikaia_std::tools::check_visit::check_visit_has_holes(expr) {
+        for hole in crate::emit::literal_expressions(parsed, expr) {
+            visit_expr(parsed, &hole, f);
+        }
     }
-
-    match expr {
-        // What stands after a `;` is an expression too, and one that can
-        // pause. `sync` is *inferred* from what a body calls (ADR-288), so a
-        // call this walk does not reach is a function claiming it cannot pause
-        // - the fail-open direction ADR-288 D2 names as the dangerous one. A
-        // DSL's deferred parameters stand there (ADR-296 D5).
-        Expr::Call {
-            func, args, config, ..
-        } => {
-            visit_expr(parsed, func, f);
-            args.iter().for_each(|a| visit_expr(parsed, a, f));
-            config.iter().for_each(|c| visit_expr(parsed, &c.value, f));
-        }
-        Expr::MethodCall {
-            receiver,
-            args,
-            config,
-            ..
-        }
-        | Expr::SafeMethod {
-            receiver,
-            args,
-            config,
-            ..
-        } => {
-            visit_expr(parsed, receiver, f);
-            args.iter().for_each(|a| visit_expr(parsed, a, f));
-            config.iter().for_each(|c| visit_expr(parsed, &c.value, f));
-        }
-        Expr::Binary { lhs, rhs, .. } => {
-            visit_expr(parsed, lhs, f);
-            visit_expr(parsed, rhs, f);
-        }
-        // **`throw` holds an expression, and it was not walked** — so every
-        // derived column was blind to whatever built the error.
-        // `throw wrap(io::read())` left its function looking `sync`, and it is
-        // this walk that says otherwise. Found by `keeps`
-        // ([ADR-094](../../../docs/specification/adr/adr-094.md) D2) reading a
-        // parameter as lent because the `throw` that stores it was invisible;
-        // the same hole was `sync`'s, `throws`' and `touches`'.
-        Expr::Unary { expr, .. }
-        | Expr::Try(expr, _)
-        | Expr::Throw(expr, _)
-        | Expr::Cast { expr, .. } => visit_expr(parsed, expr, f),
-        Expr::Field { base, .. } | Expr::SafeField { base, .. } => visit_expr(parsed, base, f),
-        Expr::Index { base, index, .. } => {
-            visit_expr(parsed, base, f);
-            visit_expr(parsed, index, f);
-        }
-        Expr::Range { start, end, .. } => {
-            visit_expr(parsed, start, f);
-            visit_expr(parsed, end, f);
-        }
-        Expr::Tuple(parts, _) => parts.iter().for_each(|p| visit_expr(parsed, p, f)),
-        Expr::Coalesce {
-            value, fallback, ..
-        } => {
-            visit_expr(parsed, value, f);
-            visit_expr(parsed, fallback, f);
-        }
-        Expr::TryCatch { expr, .. } => visit_expr(parsed, expr, f),
-        Expr::If { cond, .. } => visit_expr(parsed, cond, f),
-        // **An arm is an expression of this function** (issue #171
-        // issue #171): `R::A => slow()` is a call, and only an arm that is a block
-        // reached `visit_expr_blocks`. `pick` came out of the ledger `sync`
-        // while its lowering awaited `slow()`, which `rustc` refused - the
-        // fail-open direction ADR-288 D2 names, for `throws`, `touches` and
-        // `keeps` as much as for `sync`. A guard runs too.
-        Expr::Match { value, arms, .. } => {
-            visit_expr(parsed, value, f);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    visit_expr(parsed, guard, f);
-                }
-                visit_expr(parsed, &arm.body, f);
-            }
-        }
-        Expr::StructLit { fields, .. } => fields
-            .iter()
-            .filter_map(|field| field.value.as_ref())
-            .for_each(|value| visit_expr(parsed, value, f)),
-        // **And the four other places a value is computed** that the walk
-        // passed by, for the same reason: a list's items, the copy a `with`
-        // is made of and its fields, what a `return` hands back where it is an
-        // expression (ADR-276), and what each arm of a `select` starts.
-        Expr::ListLit { items, .. } => items.iter().for_each(|item| visit_expr(parsed, item, f)),
-        Expr::ListRepeat { value, count, .. } => {
-            visit_expr(parsed, value, f);
-            visit_expr(parsed, count, f);
-        }
-        Expr::With { base, fields, .. } => {
-            visit_expr(parsed, base, f);
-            fields
-                .iter()
-                .filter_map(|field| field.value.as_ref())
-                .for_each(|value| visit_expr(parsed, value, f));
-        }
-        Expr::Return(value, _) => {
-            if let Some(value) = &**value {
-                visit_expr(parsed, value, f);
-            }
-        }
-        Expr::Select(arms, _) => arms
-            .iter()
-            .for_each(|arm| visit_expr(parsed, &arm.value, f)),
-        _ => {}
+    for child in nikaia_std::tools::check_visit::check_visit_children(expr) {
+        visit_expr(parsed, child, f);
     }
 }
