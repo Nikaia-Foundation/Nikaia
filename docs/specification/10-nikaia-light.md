@@ -1608,6 +1608,13 @@ The standard library provides types for groups of values.
     names.sort()                                  // by name
     names.sort_by_key fn (name) { -(report[name]?.hits ?? 0) }   // then by hits, descending
     ```
+    `xs.is_sorted()` says whether every element is at most the next in their
+    natural order, and it holds after `xs.sort()`. `xs.binary_search(x)` looks
+    for `x` by halving and **requires `xs.is_sorted()`** (Part III 14.2, a
+    property): a call where the order is not shown is refused (`NK1300`), so a
+    list whose order cannot be shown is checked once where it arrives
+    (`return … if !xs.is_sorted()`) or vouched for with
+    `unsafe { assume(xs.is_sorted()) }` (Part III 14.2).
     **A chain runs element by element** ([ADR-342](adr/adr-342.md)). A list's
     `map` hands back a list, but where its result goes straight into the next
     step - another `map`, `iter()`, a `for`, `len()` - no list is built between
