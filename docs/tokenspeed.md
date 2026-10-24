@@ -151,3 +151,12 @@ code lines. The agents table of this snapshot (the per-commit table is
 * **Waste measured:** two hours of idle agents after an interruption, seven
   red CI runs from a date mismatch (fixed, `scripts/bump.py` now sets it),
   version collisions on most rebases (`bump.py rebase-fix`).
+
+## Runs
+
+One row per agent, from `scripts/tokenspeed.py --short AGENTS_DIR` after it
+ends, with the builder's rs2nika line.
+
+| date | agent | module | turns | context M | Rust lines moved | tokens per moved line | rs2nika |
+| :--- | :--- | :--- | ---: | ---: | ---: | ---: | :--- |
+| 2026-10-24 | a312a5 | fmt (#101 step 4) | 38 | 1.2 | 0 | - | - |

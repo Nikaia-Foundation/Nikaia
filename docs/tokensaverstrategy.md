@@ -14,6 +14,63 @@ is not the output but the **prefix every turn re-reads**.
 | What fills the context | tool results 630-770 KB, thinking 520-555 KB, tool calls (inline scripts) 410-440 KB |
 | Short Opus planning agents | 72-159 turns, about 100-130 k, 7-21 M in all |
 
+## What to measure: tokens per moved line, guarded by turns
+
+* **The result is judged by tokens per moved line**: context tokens read
+  divided by the Rust code lines the agent's commits removed
+  (`scripts/tokenspeed.py`, the `scripts/self_hosting.py` line rule). Measured
+  so far: long agents 143 k, restarted ones 71 k, a clean slice 37-54 k, an
+  entangled one 88-164 k. The target is **below 50 k**. A slice that moves no
+  Rust (a compiler fix, a plan) is not given a figure; its value shows in the
+  slices after it.
+* **Turns are the guard, not the measure.** Every turn re-reads the whole
+  context, which grows about 1 k per turn, so the cost grows with the square
+  of the turns: the last third of a long agent is more than half its cost.
+  An agent can count its turns but cannot see its context, so its limit is
+  set in turns (about 120, `.claude/agents/builder.md`); the supervisor, who
+  can see the transcript, checks the context (about 200 k).
+* **The measurement is cheap for the supervisor.** After each agent ends,
+  `scripts/tokenspeed.py --short AGENTS_DIR` prints one Markdown row (the
+  latest agent, counted only over the commits of its window); the supervisor
+  appends it to the *Runs* table in `docs/tokenspeed.md` with the agent's
+  rs2nika line. The full tables are drawn only for a dated snapshot.
+
+## Chain: research agent, then builder
+
+The supervisor's own context is the most expensive one: it lives the whole
+session. So it does not read the plan, the call graph or the draft itself.
+
+1. A **research agent** (`builder` type, told not to edit or commit) reads the
+   plan's section (`docs/selfhosting-plan.md`), the call graph
+   (`scripts/c6/cg.py`) and the rs2nika draft of the slice, and writes a
+   **brief of at most 80 lines** to a file in the scratchpad: the functions in
+   order, the callees not yet in Nikaia, the draft's path, the defects it
+   expects. It reports the path and five lines.
+2. The **builder** gets the path to the brief and the steps, nothing else.
+3. The supervisor reads only the two reports.
+
+## The rs2nika draft is the default
+
+Every move of a Rust function starts from the draft of
+`crates/rs2nika/convert` (`rs2nika --profile check|emit F.rs`), never from an
+empty file. The builder reports in one line how much of it it kept
+(`rs2nika: kept N of M lines; fixed by hand: ...`), and the supervisor
+records it in the *Runs* row. A pattern the builder fixes by hand more than
+once becomes a rule of the converter (`--rules`) or a `--lint` check, in its
+own commit.
+
+## Compiler defects first
+
+A lowering or checker defect that a slice meets is fixed in the compiler, in
+its own commit or by its own agent, **before** the slice goes on (owner's
+direction: no workaround). A builder that meets one stops and reports it with
+a probe; it does not route around it, which costs more turns than the fix.
+
+## No parallelism for now
+
+One builder at a time (owner's direction, 2026-10-24): first see what the
+rules above bring in the *Runs* table, then decide on more agents at once.
+
 ## Rules
 
 * **One agent, one slice, at most 100-150 turns.** It builds, tests, pushes,
@@ -69,9 +126,11 @@ tools, the limits above in its prompt); a task names one or two steps of a
 * Watch each running agent's transcript (turns, context); past about 150
   turns or 200 k tokens tell it to push what is verified and report.
 
-* At most 3 agents, one per module, none on a file another one edits; give
-  each its own worktree (a shared checkout lets one agent switch the branch
-  under the other).
+* One builder at a time for now (above). When more run again: one per module,
+  none on a file another one edits, each in its own worktree (a shared
+  checkout lets one agent switch the branch under the other).
+* After each agent: `scripts/tokenspeed.py --short`, one row into
+  `docs/tokenspeed.md`.
 * Uncommitted files in a worktree belong to its agent; a stopped agent cannot
   be resumed, so a fresh one starts with `git status` and `git diff`.
 * Version, `CHANGELOG.md` and badges collide between agents: tell each to

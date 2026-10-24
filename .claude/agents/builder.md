@@ -11,6 +11,15 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Your task names one or two steps.** Build them, run the touched tests,
   commit only your files, push fast-forward to `develop`, report, end. Do not
   start a further step the task did not name.
+* **If the task names a brief file, read it first**; it replaces reading the
+  plan, the call graph and the issue yourself. A research task (no edits, no
+  commit) writes such a brief, at most 80 lines, and reports its path.
+* **A move starts from the rs2nika draft** (`crates/rs2nika/convert`, see
+  `CLAUDE.md`), not from an empty file. Report in one line:
+  `rs2nika: kept N of M lines; fixed by hand: ...`.
+* **A compiler defect stops the slice.** Do not work around it in the moved
+  code: fix it in the compiler as its own commit if the task allows, else stop
+  and report it with a probe of a few lines.
 * **At about 120 turns, or when your context passes about 200k tokens**,
   stop starting new work: commit and push what is verified, and report what
   is left, so a fresh agent can take it from the repository.
