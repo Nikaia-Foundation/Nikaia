@@ -1,6 +1,6 @@
 ---
 layout: home
-title: No async, no await
+title: Every function can be async
 description: >-
   Code that waits looks like any other code.
 ---
@@ -13,7 +13,7 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/easy/#async" | relative_url }}">Easy to understand</a></p>
-    <h1 class="home-heading">No <code>async</code>, no <code>await</code></h1>
+    <h1 class="home-heading">Every function can be <code>async</code></h1>
     <div class="limit-class">
         <dl class="limit-steps">
           <dt>The problem</dt>
@@ -21,11 +21,11 @@ description: >-
           <dt>An example</dt>
           <dd>Read two files and add up their sizes. Reading a file waits for the disk.</dd>
           <dt>What Nikaia checks</dt>
-          <dd>Any function can run asynchronously without you writing it: a call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. There is no <code>async</code>/<code>await</code> colouring, so a function that waits never forces its callers to change. That is decided and stable.</dd>
+          <dd>Every function in Nikaia can run asynchronously, without being marked: a call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. Being asynchronous does not colour a function, so it never forces its callers to change. That is decided and stable.</dd>
           <dt>The limit</dt>
           <dd>Every function may pause unless it says otherwise. A function marked <code>sync</code> never pauses and may call only other <code>sync</code> functions, which is how you say that a piece of code must not wait.</dd>
           <dt>Still open</dt>
-          <dd>How tasks are orchestrated is being worked out: the exact forms are being examined: today's <code>overlap</code> and <code>par_iter</code>, and forms like <code>thread::scope</code> and <code>par</code>. Under discussion are <code>let async</code> and other forms, aiming for a syntax that is familiar, safe and expressive, and so more uniform. The example below uses today's <code>overlap</code>.</dd>
+          <dd>How tasks are orchestrated is being worked out. The exact forms are being examined: today's <code>overlap</code> and <code>par_iter</code>, and forms like <code>thread::scope</code> and <code>par</code>. Under discussion are <code>let async</code> and other forms, aiming for a syntax that is familiar, safe and expressive, and so more uniform. The example below uses today's <code>overlap</code>.</dd>
         </dl>
 
         <details class="limit-details home-code markdown-body" open>

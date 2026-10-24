@@ -42,7 +42,7 @@ how to spread work over several cores. You write what should happen, and the com
 how.
 
 * **An `assert` is checked by the compiler**, as a contract every caller must meet.
-* **No `async` or `await`.** A call that waits pauses its function; the program goes on.
+* **Every function can be async, without colouring.** A call that waits pauses its function; the program goes on.
 * **Races, unchecked missing values and unhandled errors are refused** at compile time.
 * **No garbage collector and no `free`.** Memory is released at a point you can see.
 * **One core or many is one line** in `nikaia.toml`; the code stays the same.
