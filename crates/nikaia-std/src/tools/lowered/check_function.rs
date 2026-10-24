@@ -184,3 +184,383 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
     state.expected = outer;
 }
 
+pub(crate) fn check_function_first_span(body: &Block) -> Span {
+    if body.stmts.is_empty() { return Span::nowhere(); }
+    let first = nikaia_std::index::get(&body.stmts, 0).span;
+    Span { start: first.start, end: first.end }
+}
+
+pub(crate) fn check_function_last_span(body: &Block) -> Option<Span> {
+    if body.stmts.is_empty() { return None; }
+    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).span;
+    Some(Span { start: last.start, end: last.end })
+}
+
+pub(crate) fn check_function_is_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+
+pub(crate) fn check_function_tail_hands_nothing(block: &Block) -> bool {
+    if block.stmts.is_empty() { return false; }
+    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    match last.node {
+        Stmt::Expr(ref value) => check_function_end_hands_nothing(value),
+        _ => false,
+    }
+}
+
+pub(crate) fn check_function_end_hands_nothing(expr: &Expr) -> bool {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => match else_branch {
+            Some(other) => check_function_tail_hands_nothing(then_branch) || check_function_tail_hands_nothing(&other),
+            _ => true,
+        },
+        Expr::Block(block, _) => check_function_tail_hands_nothing(block),
+        _ => false,
+    }
+}
+
+pub(crate) fn check_function_tail_is_a_value(block: &Block) -> bool {
+    if block.stmts.is_empty() { return false; }
+    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    match last.node {
+        Stmt::Expr(ref value) => check_function_every_end_is_a_value(value),
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        _ => false,
+    }
+}
+
+pub(crate) fn check_function_every_end_is_a_value(expr: &Expr) -> bool {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            if !check_function_tail_is_a_value(then_branch) { return false; }
+            return match else_branch {
+                Some(other) => check_function_tail_is_a_value(&other),
+                _ => false,
+            };
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() { if !check_function_every_end_is_a_value(&arm.body) { return false; } }
+            return true;
+        },
+        Expr::Block(block, _) => { return check_function_tail_is_a_value(block); },
+        _ => { return true; },
+    }
+}
+
+pub(crate) fn check_function_is_branching(expr: &Expr) -> bool {
+    match expr {
+        Expr::If { .. } => check_function_every_end_is_a_value(expr),
+        Expr::Match { .. } => check_function_every_end_is_a_value(expr),
+        Expr::Block(_, _) => check_function_every_end_is_a_value(expr),
+        _ => false,
+    }
+}
+
+pub(crate) fn check_function_lends(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
+    let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    lends_in_own(&contract, at, &vec![world.library])
+}
+
+pub(crate) fn check_function_keeps(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<String> {
+    let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    contract.keeps.to_owned()
+}
+
+pub(crate) fn check_function_options_lowered(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<ConfigContract> {
+    let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    lowered_options(&contract)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, target: &Option<String>, key: &str, parameters: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+    let mut frame: Vec<CheckLocal> = vec![];
+    let mut offset: i64 = 0;
+    if receiver.is_some() {
+        offset = 1;
+        let mut ty = Ty::Unknown;
+        if target.is_some() {
+            ty = Ty::Named { name: nikaia_std::index::or(match target.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into()), args: state.subject_arguments.to_owned(), view: nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) };
+        }
+        let id = state.a_new_binding();
+        frame.push(CheckLocal::free("self".to_owned(), ty, id));
+    }
+    let mut at: i64 = 0;
+    for arg in args.iter() {
+        let name = world.words.resolve(arg.name).to_owned();
+        state.nameable(&name, &arg.span, "a parameter");
+        let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable;
+        let mut ty = Ty::Unknown;
+        if plain_text && check_function_lends(world, key, at + offset) {
+            let mut viewed = arg.ty.clone();
+            viewed.is_view = true;
+            ty = host.declared(state, &viewed, &arg.span);
+        } else { ty = host.declared(state, &arg.ty, &arg.span); }
+        let id = state.a_new_binding();
+        let mut local = CheckLocal::free(name, ty.erase(parameters), id);
+        if !arg.mutable { local.immutable = Some(CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter }); }
+        local.changing = arg.mutable;
+        frame.push(local);
+        at += 1;
+    }
+    for option in config.iter() { check_defaults_a_computed_default(state, world, host, option); }
+    let lowered = check_function_options_lowered(world, key);
+    for option in config.iter() {
+        let name = world.words.resolve(option.name).to_owned();
+        let mut ty = host.type_of(&option.ty);
+        for one in lowered.iter() { if one.name == name && one.ty.is_a_view() { ty = one.ty.clone(); } }
+        let id = state.a_new_binding();
+        frame.push(CheckLocal::free(name, ty.erase(parameters), id));
+    }
+    match spread {
+        Some(sym) => {
+            let id = state.a_new_binding();
+            let local = CheckLocal::free(world.words.resolve(sym).to_owned(), Ty::Unknown, id);
+            state.flow.unknown_bound.insert(local.id);
+            frame.push(local);
+        },
+        _ => { },
+    }
+    frame
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, expected: Option<&Ty>, tail: &Ty) -> (bool, bool) {
+    let mut tail_lent = false;
+    let mut tail_view = false;
+    if expected.is_none() || body.stmts.is_empty() { return (false, false); }
+    let want = nikaia_std::index::or(match expected {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    }, || Ty::Unknown);
+    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+    let at = Span { start: last.span.start, end: last.span.end };
+    match last.node {
+        Stmt::Expr(ref value) => {
+            if !a_body_never_ends(body) {
+                let mut plain = false;
+                match tail {
+                    Ty::Named { name, args, view } => {
+                        let view = *view;
+                        plain = name == "String" && args.is_empty() && !view;
+                    },
+                    _ => { },
+                }
+                tail_lent = state.hands_back_a_view_of_the_subject(world, value) || state.flow.expected_either && plain && state.a_place_of_a_lent_parameter(world, value);
+                if !tail_lent {
+                    check_core_a_field_of_a_borrowed_subject(state, world, host, value, &at, "handed back");
+                    check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, &at);
+                }
+                tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(&want));
+            }
+            state.number_asked(world, value, &want, &at, true);
+        },
+        _ => { },
+    }
+    (tail_lent, tail_view)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, expected: &Ty, tail: Ty, lending: bool, tail_view: bool, span: &Span) {
+    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+    let nullable = check_function_is_nullable(expected);
+    let mut shown = tail;
+    if lending || tail_view { shown = view_of_type(&shown); }
+    match last.node {
+        Stmt::Expr(ref value) => {
+            if lending && nullable { state.facts.lent_reads.insert(id_of(value) as i64); } else if lending { state.facts.lent_returns.insert(span.start as i64); }
+            if !lending {
+                let mut result: Option<Ty> = state.text_literal(world, expected, value, true);
+                if result.is_none() { result = state.tuple_literal(world, &shown, expected, value); }
+                if result.is_none() { result = number_where_no_number_is(expected, value); }
+                shown = nikaia_std::index::or(result, || shown.into());
+            }
+            let branches = check_function_is_branching(value);
+            let how = check_widened_slot(state, world, host, &shown, expected, Some(value), span);
+            let wrap: FactWrap = nikaia_std::index::or(how, || FactWrap::Path);
+            let node = id_of(value) as i64;
+            match wrap {
+                FactWrap::Constructor => { if branches && nullable { state.some_at_the_tails(value); } else { state.facts.wrapped.insert(node, FactWrap::Constructor); } },
+                FactWrap::Conversion => { if branches && nullable { state.some_at_the_tails(value); } },
+                FactWrap::Widen(ref into) => { state.facts.wrapped.insert(node, FactWrap::Widen(into.to_owned())); },
+                FactWrap::Unsigned(ref into) => { state.facts.wrapped.insert(node, FactWrap::Unsigned(into.to_owned())); },
+                _ => { },
+            }
+            state.expect_kept_asked(world, &shown, expected, Some(value), "the function returns it, and the caller keeps it after the call ends", span, "returns", &|found, want| { format!("This function returns `{}`, but it's declared to return `{}`.", found, want) });
+        },
+        _ => { state.expect_kept_asked(world, &shown, expected, None, "the function returns it, and the caller keeps it after the call ends", span, "returns", &|found, want| { format!("This function returns `{}`, but it's declared to return `{}`.", found, want) }); },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_function_hands_nothing(state: &mut CheckState, body: &Block, expected: &Ty, at: &Span, is_extern: bool, ends: bool) {
+    let want = expected.text();
+    if body.stmts.is_empty() && !is_extern { state.findings.push(check_refusal("NK1104", at, format!("This function returns `()`, but it's declared to return `{}`.", want), vec!["Its body is empty, so it hands nothing back.".to_owned()], Some(format!("Write the `{}` it returns as the body's last expression, or remove `-> {}`.", want, want)))); }
+    if !body.stmts.is_empty() && ends {
+        let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+        match last.node {
+            Stmt::Expr(ref value) => { if check_function_end_hands_nothing(value) { state.findings.push(check_refusal("NK1104", &last.span, format!("This function returns `()` where this `if` is not taken, but it's declared to return `{}`.", want), vec!["An `if` without `else` hands nothing back when its condition is false, and nothing comes after it.".to_owned()], Some(format!("Add an `else` that hands back a `{}`, or a `return` after the `if`.", want)))); } },
+            _ => { },
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: &Option<String>) {
+    match item {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, .. } => {
+            let can_throw = *can_throw; let is_extern = *is_extern; let is_sync = *is_sync; let name = *name; let spread = *spread;
+            check_function_fn(state, world, host, name, generics, (receiver).as_ref(), args, config, spread, (ret_type).as_ref(), body, can_throw, is_sync, sync_by, is_extern, at, &target);
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, ret_type: Option<&Type>, body: &Block, can_throw: bool, is_sync: bool, sync_by: &[winnow_grammar::Symbol], is_extern: bool, at: &Span, target: &Option<String>) {
+    let mut own_name = "new".to_owned();
+    match name {
+        Some(sym) => { own_name = world.words.resolve(sym).to_owned(); },
+        _ => { },
+    }
+    let key = if target.is_some() {
+        format!("{}::{}", nikaia_std::index::or(match target.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()), own_name)
+    } else { own_name.to_owned() };
+    if !sync_by.is_empty() {
+        let first = check_function_first_span(body);
+        for named in sync_by.iter() {
+            let named = *named;
+            state.a_lambda_the_promise_names(world, &key, &world.words.resolve(named).to_owned(), args, &first);
+        }
+    }
+    if !body.stmts.is_empty() { state.nameable(&own_name, &nikaia_std::index::get(&body.stmts, 0).span, "a function"); }
+    let outer_current: Option<String> = match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.current = Some(key.to_owned());
+    let outer_sync: Option<String> = match state.inside_a_sync_function.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if is_sync { state.inside_a_sync_function = Some(key.to_owned()); } else { state.inside_a_sync_function = None; }
+    let mut declared: collections::BTreeMap<String, Vec<String>> = state.enclosing.to_owned();
+    for g in generics.iter() {
+        let mut bounds: Vec<String> = vec![];
+        for b in g.bounds.iter() {
+            let b = *b;
+            bounds.push(world.words.resolve(b).to_owned());
+        }
+        declared.insert(world.words.resolve(g.name).to_owned(), bounds);
+    }
+    let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
+    parameters.insert("Self".to_owned());
+    let outer_declared = state.type_parameters.to_owned();
+    state.type_parameters = declared;
+    let outer_borrowing = state.borrowing_self;
+    state.borrowing_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
+    let frame = check_function_frame(state, world, host, receiver, args, config, spread, &target, &key, &parameters);
+    let mut expected: Option<Ty> = None;
+    match ret_type {
+        Some(written) => { expected = Some(host.type_of(&written).erase(&parameters)); },
+        _ => { },
+    }
+    let outer: Option<Ty> = match state.expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.expected = match expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let outer_either = state.flow.expected_either;
+    state.flow.expected_either = nikaia_std::index::or(ret_type.as_ref().map(|__nikaia_it| __nikaia_it.either), || false);
+    let outer_throwing = state.flow.throwing;
+    state.flow.throwing = can_throw;
+    let keeps: Vec<String> = check_function_keeps(world, &key);
+    for arg in args.iter() {
+        let named = world.words.resolve(arg.name).to_owned();
+        if nikaia_std::list::contains(&keeps, &named) {
+            for local in frame.iter() {
+                if local.name == named {
+                    check_crossings_a_value_with_a_cleanup_dying(state, world, &named, &local.ty, &arg.span);
+                    break;
+                }
+            }
+        }
+    }
+    let mut run_code: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for local in frame.iter() {
+        match &local.ty {
+            Ty::Fn { .. } => { if !keeps.contains(&local.name) { run_code.insert(local.name.to_owned()); } },
+            _ => { },
+        }
+    }
+    let outer_run_code = state.run_code.to_owned();
+    state.run_code = run_code;
+    state.scope.push(frame);
+    let tail_span = check_function_last_span(body);
+    let outer_lists = state.flow.empty_lists.to_owned();
+    state.flow.empty_lists = collections::BTreeMap::new();
+    let outer_numbers = state.flow.open_numbers.to_owned();
+    state.flow.open_numbers = collections::BTreeMap::new();
+    let outer_chars = state.flow.open_chars.to_owned();
+    state.flow.open_chars = collections::BTreeMap::new();
+    let outer_bytes = state.flow.high_bytes.to_owned();
+    state.flow.high_bytes = collections::BTreeMap::new();
+    let outer_grown = state.flow.grown_text.to_owned();
+    state.flow.grown_text = check_function_grown_text(&world.here, body);
+    let tail = check_core_block(state, world, host, body);
+    state.flow.grown_text = outer_grown;
+    let (tail_lent, tail_view) = check_function_handed_back(state, world, host, body, (expected).as_ref(), &tail);
+    state.numbers_typed_by_their_uses();
+    state.flow.open_numbers = outer_numbers;
+    state.flow.open_chars = outer_chars;
+    state.flow.high_bytes = outer_bytes;
+    state.scope.pop();
+    let lists = state.flow.empty_lists.to_owned();
+    state.flow.empty_lists = outer_lists;
+    for (_, held) in lists.iter() { state.an_empty_list_with_no_element_type(&held.0, &held.1); }
+    let ends = !a_body_never_ends(body);
+    match expected {
+        Some(want) => {
+            check_function_hands_nothing(state, body, &want, at, is_extern, ends);
+            match tail_span {
+                Some(span) => { if ends { check_function_tail_checks(state, world, host, body, &want, tail, tail_lent, tail_view, &span); } },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    state.a_sequence_was_walked_twice();
+    state.a_part_left_out();
+    state.data_handed_over_is_used_again();
+    state.reads_on_paths.clear();
+    state.flow.read_index = collections::BTreeMap::new();
+    state.lent_lets = collections::BTreeSet::new();
+    state.a_task_took_what_is_used_again();
+    state.expected = outer;
+    state.flow.expected_either = outer_either;
+    state.flow.throwing = outer_throwing;
+    state.type_parameters = outer_declared;
+    state.borrowing_self = outer_borrowing;
+    state.current = outer_current;
+    state.inside_a_sync_function = outer_sync;
+    state.run_code = outer_run_code;
+}
+

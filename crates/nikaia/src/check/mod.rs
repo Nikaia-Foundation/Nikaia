@@ -32,14 +32,13 @@ use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::assets::Reads;
-use crate::ast::{self, Block, Expr, Item, Span, Stmt, UnaryOp};
+use crate::ast::{self, Block, Expr, Item, Span, UnaryOp};
 use crate::build_time;
 use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_attributes;
-use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_stmt;
 use nikaia_std::tools::check_crossings;
 use nikaia_std::tools::check_defaults;
@@ -52,10 +51,7 @@ use nikaia_std::tools::check_reports::CheckWall;
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
-use nikaia_std::tools::check_state::{
-    CheckImmutable as Immutable, CheckKind as Kind, CheckLocal as Local, CheckState, CheckWorld,
-    a_body_never_ends,
-};
+use nikaia_std::tools::check_state::{CheckState, CheckWorld};
 use nikaia_std::tools::check_texts::{self};
 use nikaia_std::tools::check_widen::{self};
 use nikaia_std::tools::parsed_view::ParsedView;
@@ -1174,482 +1170,16 @@ impl<'a> Checker<'a> {
     }
 
     fn function(&mut self, item: &Item, at: &Span, target: Option<&str>) {
-        let Item::Fn {
-            name,
-            generics,
-            receiver,
-            args,
-            config,
-            spread,
-            ret_type,
-            body,
-            can_throw: throws,
-            is_sync,
-            sync_by,
-            is_extern,
-            ..
-        } = item
-        else {
-            return;
-        };
-
-        // The same key the ledger uses, arrived at the same way - the anonymous
-        // constructor of Kap 4.2 included, which a caller reaches as
-        // `Type::new`. Two spellings of one name would silently drop every
-        // method call in a constructor.
-        let own_name = match name {
-            Some(name) => self.parsed.text(*name).to_string(),
-            None => "new".to_string(),
-        };
-        // A function's own name, for the reason the struct's is asked: `fn self`
-        // cannot parse and `fn crate` can (ADR-298 D11). The span is the body's
-        // first statement where there is one, which is the nearest this walk has
-        // - a declaration with a span of its own is `FnArg`'s and not the item's.
-        // **What `sync(f)` names is code the call runs**
-        // ([ADR-288](../../docs/specification/adr/adr-288.md) D31).
-        if !sync_by.is_empty() {
-            let key = match target {
-                Some(target) => format!("{target}::{own_name}"),
-                None => own_name.clone(),
-            };
-            let at = body.stmts.first().map_or(Span::nowhere(), |s| s.span);
-            for named in sync_by {
-                let named = self.parsed.text(*named).to_string();
-                self.s
-                    .a_lambda_the_promise_names(self.world, &key, &named, args, &at);
-            }
-        }
-        if let Some(span) = body.stmts.first().map(|s| s.span) {
-            self.s.nameable(&own_name.clone(), &span, "a function");
-        }
-        let key = match target {
-            Some(target) => format!("{target}::{own_name}"),
-            None => own_name,
-        };
-        let outer_current = self.s.current.replace(key);
-        let current_name = self.s.current.clone().unwrap_or_default();
-        let outer_sync = match is_sync {
-            true => self.s.inside_a_sync_function.replace(current_name),
-            false => self.s.inside_a_sync_function.take(),
-        };
-
-        // **Inside its own body a type parameter is a type**
-        // ([ADR-295](../../docs/specification/adr/adr-295.md) D1). `T` is not a
-        // hole here: the caller picked it, this body did not, and a body that
-        // put an `i64` where its caller's `T` is wanted would be wrong. So the
-        // name stays a name and `fits` compares it, which is what lets `NK1126`
-        // below say that nothing describes what a `T` can do. Only at a *call*
-        // is it a variable (`bindings`), and that is the whole of the split.
-        let mut declared: BTreeMap<String, Vec<String>> = self.s.enclosing.clone();
-        declared.extend(generics.iter().map(|g| {
-            (
-                self.parsed.text(g.name).to_string(),
-                g.bounds
-                    .iter()
-                    .map(|b| self.parsed.text(*b).to_string())
-                    .collect(),
+        self.nikaia(|state, world, host| {
+            nikaia_std::tools::check_function::check_function_function(
+                state,
+                world,
+                host,
+                item,
+                at,
+                &target.map(str::to_string),
             )
-        }));
-        // `Self` stands for the type the `impl` is on, and nothing here
-        // resolves it. Unlike `T` it is bound by no call site either, so it
-        // stays erased: a comparison against it could only be a false positive.
-        let parameters: BTreeSet<String> = ["Self".to_string()].into_iter().collect();
-        let outer_declared = std::mem::replace(&mut self.s.type_parameters, declared);
-
-        let outer_borrowing = std::mem::replace(
-            &mut self.s.borrowing_self,
-            receiver.as_ref().is_some_and(|r| r.is_ref),
-        );
-
-        let mut frame: Vec<Local> = Vec::new();
-        if let Some(receiver) = receiver {
-            // With the `impl` head's arguments (`subject_arguments`): `self`
-            // inside `impl Holder[T]` is a `Holder[T]` and not a bare `Holder`,
-            // so `self.value` binds the declaration's `T` and reaches the body
-            // as a type rather than as `?`.
-            let ty = match target {
-                Some(target) => Ty::Named {
-                    name: target.to_string(),
-                    args: self.s.subject_arguments.clone(),
-                    view: receiver.is_ref,
-                },
-                None => Ty::Unknown,
-            };
-            frame.push(Local::free("self".to_string(), ty, self.a_new_binding()));
-        }
-        // **A `String` the body only reads is a view of text here**, as it is
-        // below (ADR-282 D2, D5, #654): bound as one written `ref String`, so
-        // that handing it on lends it as it is rather than writing a `&` the
-        // written view does not get. The same answer the emitter's declaration
-        // reads (`lends_in_own`), and for a lent option `lowered_options`.
-        let own_contract = self
-            .s
-            .current
-            .as_ref()
-            .and_then(|key| self.world.own.functions.get(key))
-            .cloned();
-        let offset = usize::from(receiver.is_some());
-        for (at, arg) in args.iter().enumerate() {
-            let name = self.parsed.text(arg.name).to_string();
-            self.s.nameable(&name, &arg.span, "a parameter");
-            let plain_text = self.parsed.text(arg.ty.name) == "String"
-                && arg.ty.generics.is_empty()
-                && !arg.ty.is_view
-                && !arg.ty.is_nullable
-                && !arg.ty.is_slice
-                && !arg.mutable;
-            let lent_text = plain_text
-                && own_contract.as_ref().is_some_and(|contract| {
-                    crate::contracts::keeps::lends_in_own(
-                        contract,
-                        at + offset,
-                        &[self.world.library],
-                    )
-                });
-            let ty = if lent_text {
-                let mut viewed = arg.ty.clone();
-                viewed.is_view = true;
-                self.declared(&viewed, &arg.span)
-            } else {
-                self.declared(&arg.ty, &arg.span)
-            };
-            frame.push(Local {
-                written_mut: false,
-                id: self.a_new_binding(),
-                literal: None,
-                name,
-                ty: ty.erase(&parameters),
-                constant: None,
-                // A parameter is not a `for` binding: what a call lends is the
-                // caller's business, and a cast over one needs no deref.
-                lent: false,
-                built: None,
-                // **D3**: without the word, a body that changes this parameter
-                // is `NK1138`.
-                empty_list: None,
-                open_number: None,
-                immutable: (!arg.mutable).then_some(Immutable {
-                    at: arg.span,
-                    kind: Kind::Parameter,
-                }),
-                // **D3's third state, on the binding**: this name is a `&mut T`
-                // already, so a call that lends it writes nothing.
-                changing: arg.mutable,
-            });
-        }
-        // **An option is a parameter** (Part I 5.1): it stands after the `;`,
-        // it is named at the call rather than passed by position, and it has a
-        // default - and none of that changes that the body may use it. It was
-        // missing from this frame, which nothing noticed while an undeclared
-        // name was only refused in statement position: measured on
-        // `examples/tally/src/main.nika`, whose `f"{lines}{separator}{blank}"` names one.
-        // **A default that is not a literal is computed where the function is
-        // declared** (ADR-318 D1, D7): refused here, with a `comptime`'s codes
-        // and the option's name, where it cannot be.
-        for option in config {
-            self.nikaia(|state, world, host| {
-                check_defaults::check_defaults_a_computed_default(state, world, host, option)
-            });
-        }
-        let lowered_options = own_contract
-            .as_ref()
-            .map(nikaia_std::tools::lends::lowered_options)
-            .unwrap_or_default();
-        for option in config {
-            let name = self.parsed.text(option.name).to_string();
-            // Not `declared`: an option has no span of its own, and a
-            // caret on the wrong line is worse than no message. Its default
-            // is a literal (Part I 5.1), so a hull cannot stand here anyway.
-            // A lent one is the view it is below, as a parameter is.
-            let ty = lowered_options
-                .iter()
-                .find(|lowered| lowered.name == name && lowered.ty.is_a_view())
-                .map(|lowered| lowered.ty.clone())
-                .unwrap_or_else(|| Ty::from_ast(self.parsed, &option.ty));
-            frame.push(Local::free(
-                name,
-                ty.erase(&parameters),
-                self.a_new_binding(),
-            ));
-        }
-        // **So is a spread** ([ADR-296](../../docs/specification/adr/adr-296.md)
-        // D5): `...args: Self::dsl` is the driver's one value holding what the
-        // statement left open, and its body hands it on. Missing from this
-        // frame, `return args` was `NK1117` in every driver. Its type is the
-        // statement's, which this checker does not see, so it is not guessed.
-        if let Some(spread) = spread {
-            let local = Local::free(
-                self.parsed.text(*spread).to_string(),
-                Ty::Unknown,
-                self.a_new_binding(),
-            );
-            self.s.flow.unknown_bound.insert(local.id as usize as i64);
-            frame.push(local);
-        }
-
-        let expected = ret_type
-            .as_ref()
-            .map(|t| Ty::from_ast(self.parsed, t).erase(&parameters));
-        let outer = std::mem::replace(&mut self.s.expected, expected.clone());
-        let outer_either = std::mem::replace(
-            &mut self.s.flow.expected_either,
-            ret_type.as_ref().is_some_and(|t| t.either),
-        );
-        let outer_throwing = std::mem::replace(&mut self.s.flow.throwing, *throws);
-
-        let keeps: Vec<String> = self
-            .s
-            .current
-            .as_ref()
-            .and_then(|key| self.world.own.functions.get(key))
-            .map(|contract| contract.keeps.clone())
-            .unwrap_or_default();
-        // **A parameter the function keeps dies in it**, unless it is handed
-        // on, as a value bound by a `let` does (ADR-297 D2).
-        for arg in args {
-            let name = self.parsed.text(arg.name).to_string();
-            let kept = keeps.contains(&name).then(|| {
-                frame
-                    .iter()
-                    .find(|local| local.name == name)
-                    .map(|local| local.ty.clone())
-            });
-            if let Some(Some(ty)) = kept {
-                self.a_value_with_a_cleanup_dying(&name, &ty, &arg.span);
-            }
-        }
-        let run_code: BTreeSet<String> = frame
-            .iter()
-            .filter(|local| matches!(local.ty, Ty::Fn { .. }) && !keeps.contains(&local.name))
-            .map(|local| local.name.clone())
-            .collect();
-        let outer_run_code = std::mem::replace(&mut self.s.run_code, run_code);
-        self.s.scope.push(frame);
-        let tail_span = body.stmts.last().map(|s| s.span);
-        let outer_lists = std::mem::take(&mut self.s.flow.empty_lists);
-        let outer_numbers = std::mem::take(&mut self.s.flow.open_numbers);
-        let outer_chars = std::mem::take(&mut self.s.flow.open_chars);
-        let outer_bytes = std::mem::take(&mut self.s.flow.high_bytes);
-        let outer_grown = std::mem::replace(
-            &mut self.s.flow.grown_text,
-            nikaia_std::tools::check_function::check_function_grown_text(
-                &parsed_view_of(self.parsed),
-                body,
-            ),
-        );
-        let tail = self.block(body);
-        self.s.flow.grown_text = outer_grown;
-        // **The tail hands back as a `return` does**, and a field of a lent
-        // place is refused there too (`NK1131`, #576). Read against the scope
-        // still standing, as the numbers below are. **Whether it lends** is
-        // read here too, while its names are bound: a place of a borrowed
-        // parameter going into a result both kinds flow into is lent into it,
-        // whole or as an arm (ADR-282 D13, D15, #738).
-        let mut tail_lent = false;
-        let mut tail_view = false;
-        if expected.is_some()
-            && !a_body_never_ends(body)
-            && let Some(Stmt::Expr(value)) = body.stmts.last().map(|s| &s.node)
-            && let Some(at) = tail_span
-        {
-            tail_lent = self.s.hands_back_a_view_of_the_subject(self.world, value)
-                || (self.s.flow.expected_either
-                    && matches!(&tail, Ty::Named { name, args, view: false } if name == "String" && args.is_empty())
-                    && self.s.a_place_of_a_lent_parameter(self.world, value));
-            if !tail_lent {
-                self.a_field_of_a_borrowed_subject(value, &at, "handed back");
-                self.a_field_of_a_lent_place_handed_back(value, &at);
-            }
-            let nullable = matches!(expected, Some(Ty::Nullable(_)));
-            tail_view = self.s.lent_arms_handed_back(self.world, value, nullable);
-        }
-        // **A body's numbers, typed by their uses** once all of them have been
-        // seen ([ADR-285](../../docs/specification/adr/adr-285.md) D24) - the
-        // tail's included, which is read against the scope still standing.
-        if let (Some(expected), Some(Stmt::Expr(value))) =
-            (&expected, body.stmts.last().map(|s| &s.node))
-        {
-            let at = body.stmts.last().map_or(Span::nowhere(), |s| s.span);
-            self.number_asked(value, expected, &at, true);
-        }
-        self.numbers_typed_by_their_uses();
-        self.s.flow.open_numbers = outer_numbers;
-        self.s.flow.open_chars = outer_chars;
-        self.s.flow.high_bytes = outer_bytes;
-        self.s.scope.pop();
-
-        // **`NK1153`, once the whole body has been seen**
-        // ([ADR-135](../../docs/specification/adr/adr-135.md) D2), for
-        // `NK2101`'s reason one page down: the use that gives an empty list its
-        // element type stands *after* the `let`, and a single pass reaches a
-        // later statement later.
-        for (name, at) in std::mem::replace(&mut self.s.flow.empty_lists, outer_lists).into_values()
-        {
-            self.s.an_empty_list_with_no_element_type(&name, &at);
-        }
-
-        // The last expression of a body is what the function hands back, so it
-        // answers to the declared type exactly as a `return` does - unless the
-        // body **cannot get there**
-        // ([ADR-276](../../../docs/specification/adr/adr-276.md)).
-        let ends = !a_body_never_ends(body);
-        // **An empty body hands back nothing** (#704): `fn me(ref self) -> Row
-        // { }` is told as a body whose last statement is not a value is.
-        if let Some(expected) = &expected
-            && body.stmts.is_empty()
-            && !is_extern
-        {
-            let want = expected.text();
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                code: "NK1104".to_string(),
-                span: *at,
-                message: format!("This function returns `()`, but it's declared to return `{want}`."),
-                notes: vec!["Its body is empty, so it hands nothing back.".to_string()],
-                help: Some(format!("Write the `{want}` it returns as the body's last expression, or remove `-> {want}`.")),
-                labels: Vec::new(),
-            });
-        }
-        // **An `if` without `else` as the last statement hands nothing back
-        // where it is not taken** (#704): `fn f(x: i64) -> i64 { if x > 0 {
-        // return 1 } }` falls off its end on the other path.
-        if let (Some(expected), Some(at)) = (&expected, tail_span.filter(|_| ends))
-            && let Some(Stmt::Expr(value)) = body.stmts.last().map(|s| &s.node)
-            && an_end_that_hands_nothing(value)
-        {
-            let want = expected.text();
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                code: "NK1104".to_string(),
-                span: at,
-                message: format!(
-                    "This function returns `()` where this `if` is not taken, but it's declared to return `{want}`."
-                ),
-                notes: vec![
-                    "An `if` without `else` hands nothing back when its condition is false, and nothing comes after it.".to_string(),
-                ],
-                help: Some(format!(
-                    "Add an `else` that hands back a `{want}`, or a `return` after the `if`."
-                )),
-                labels: Vec::new(),
-            });
-        }
-        if let (Some(expected), Some(span)) = (&expected, tail_span.filter(|_| ends)) {
-            // **A tail is a `return` written without the word**, so it owes the
-            // same `&`: `fn text(ref self) -> ref String { self.text }` and the
-            // `return` form are one program, and one of the two answering
-            // differently would be a spelling that decides a refusal.
-            let lending = tail_lent;
-            // Into a `T?` the `&` goes inside the `Some` the tail is put into,
-            // where the place itself is written (#738).
-            if let Some(Stmt::Expr(value)) = body.stmts.last().map(|s| &s.node)
-                && lending
-                && matches!(expected, Ty::Nullable(_))
-            {
-                self.s.facts.lent_reads.insert(value_node(value));
-            } else if lending {
-                self.s.facts.lent_returns.insert(span.at() as i64);
-            }
-            let tail = match lending || tail_view {
-                true => view_of(&tail),
-                false => tail,
-            };
-            // **And the tail is a use**, as `return` is (ADR-282 D4).
-            let tail = match body.stmts.last().map(|s| &s.node) {
-                Some(Stmt::Expr(value)) if !lending => self
-                    .text_literal(expected, value, true)
-                    .or_else(|| self.tuple_literal(&tail, expected, value))
-                    // **A number where no number goes, an integer where a
-                    // float does**, as a `return` says it (#471, #703).
-                    .or_else(|| {
-                        nikaia_std::tools::check_widen::number_where_no_number_is(expected, value)
-                    })
-                    .unwrap_or(tail),
-                _ => tail,
-            };
-            let value = match body.stmts.last().map(|s| &s.node) {
-                Some(Stmt::Expr(value)) => Some(value),
-                _ => None,
-            };
-            // **A tail widens as a `return` does** (ADR-285 D32).
-            // **And into an unsigned type where the walk shows it is not
-            // negative** (D32): the slot's own question, asked here too.
-            // **A plain tail stands where a `T?` is returned**, as a plain
-            // `return` value does (ADR-278): it is put into `Some`.
-            // **An `if` or a `match` is put into `Some` at each end**, as an
-            // arm beside a `null` is: the tail is lowered as a statement, so a
-            // wrap around the whole would not be written. Numbers its uses
-            // have not typed yet (`?`) are plain too.
-            let branches = matches!(
-                value,
-                Some(Expr::If { .. } | Expr::Match { .. } | Expr::Block(..))
-            ) && value.is_some_and(every_end_is_a_value_or_a_jump);
-            let how = value.and_then(|v| {
-                self.nikaia(|state, world, host| {
-                    check_overflow::check_widened_slot(
-                        state,
-                        world,
-                        host,
-                        &tail,
-                        expected,
-                        Some(v),
-                        &span,
-                    )
-                })
-            });
-            if let Some(value) = value {
-                match how {
-                    Some(Wrap::Constructor | Wrap::Conversion)
-                        if branches && matches!(expected, Ty::Nullable(_)) =>
-                    {
-                        self.s.some_at_the_tails(value)
-                    }
-                    Some(how @ (Wrap::Widen(_) | Wrap::Unsigned(_) | Wrap::Constructor)) => {
-                        self.s.facts.wrapped.insert(value_node(value), how);
-                    }
-                    _ => {}
-                }
-            }
-            self.s.expect_kept_asked(
-                self.world,
-                &tail,
-                expected,
-                value,
-                "the function returns it, and the caller keeps it after the call ends",
-                &span,
-                "returns",
-                &|found, want| {
-                    format!(
-                        "This function returns `{found}`, but it's declared to return `{want}`."
-                    )
-                },
-            );
-        }
-
-        // **`NK2101`, once the whole body has been seen.** The question is what
-        // comes *after* a `spawn`, and a single pass reaches a later statement
-        // later - so it is asked here rather than at the `spawn`.
-        // **`NK2702` first, because it borrows what the next one takes**
-        // ([ADR-105](../../docs/specification/adr/adr-105.md) D2). A second walk
-        // is a later statement and a single pass reaches one later, so both
-        // questions are asked here; `a_task_took_what_is_used_again` empties
-        // `read_at`, and this one reads it.
-        self.s.a_sequence_was_walked_twice();
-        self.s.a_part_left_out();
-        self.s.data_handed_over_is_used_again();
-        self.s.reads_on_paths.clear();
-        self.s.flow.read_index.clear();
-        self.s.lent_lets.clear();
-        self.s.a_task_took_what_is_used_again();
-
-        self.s.expected = outer;
-        self.s.flow.expected_either = outer_either;
-        self.s.flow.throwing = outer_throwing;
-        self.s.type_parameters = outer_declared;
-        self.s.borrowing_self = outer_borrowing;
-        self.s.current = outer_current;
-        self.s.inside_a_sync_function = outer_sync;
-        self.s.run_code = outer_run_code;
+        });
     }
 
     /// **A type that holds itself holds itself through a box the compiler
@@ -1696,82 +1226,6 @@ impl<'a> Checker<'a> {
     fn a_trait_nothing_declares(&mut self, written: &str, span: &Span) {
         self.s
             .a_trait_nothing_declares(&self.world.here, self.world, written, span)
-    }
-
-    /// **A value with a cleanup dies in this function**, a kept parameter's
-    /// (`tools/check_crossings.nika`, U-d1).
-    fn a_value_with_a_cleanup_dying(&mut self, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
-        self.nikaia(|state, world, _| {
-            check_crossings::check_crossings_a_value_with_a_cleanup_dying(
-                state, world, name, ty, span,
-            )
-        })
-    }
-
-    fn a_field_of_a_borrowed_subject(&mut self, value: &Expr, span: &Span, what: &str) {
-        self.nikaia(|state, world, host| {
-            check_core_leaves::check_core_a_field_of_a_borrowed_subject(
-                state, world, host, value, span, what,
-            )
-        })
-    }
-
-    /// **`NK1131` for a place that is lent here and is not `self`**
-    /// ([ADR-083](../../docs/specification/adr/adr-083.md), #576): a field of a
-    /// `ref` parameter, of a `for` binding over a list or of a `let` over a
-    /// place, handed back by value. `return l.ty` out of a `Local` the loop lent
-    /// passed the check, and the language below said *cannot move out of `l.ty`
-    /// which is behind a shared reference* about a file nobody wrote.
-    ///
-    /// **Only where the value is handed back**: a field passed to a call or
-    /// bound to a name is `NK2106`'s, which says the same about what keeps it.
-    /// **And not where the function declares a view**, which is what a field of
-    /// a lent place is the answer to (D1's third position).
-    fn a_field_of_a_lent_place_handed_back(&mut self, value: &Expr, span: &Span) {
-        self.nikaia(|state, world, host| {
-            check_core_leaves::check_core_a_field_of_a_lent_place_handed_back(
-                state, world, host, value, span,
-            )
-        })
-    }
-
-    /// Part I 2.3: record where the emitter has to write the `Some(…)`.
-    ///
-    /// A type is non-nullable unless it says otherwise, so a plain `T` standing
-    /// where a `T?` is wanted is the one widening this language has - `let mut
-    /// m: &str? = null` and then `m = "World"`. `Ty::fits` allows it; the
-    /// language below needs the constructor written, and this is where the
-    /// emitter is told.
-    ///
-    /// **Which of the two**, and the answer used to be *"one, or nothing"*
-    /// ([ADR-278](../../../docs/specification/adr/adr-278.md)).
-    ///
-    /// The constructor may only be written where the value is known **not** to
-    /// be a `T?` already, because wrapping one that is would make an
-    /// `Option<Option<T>>`. Two ways it can be known, and a type is only the
-    /// first:
-    ///
-    /// * its type says so — anything this checker worked out that is not a
-    ///   `T?`; or
-    /// * **it is a literal**, which no literal ever is. That second one is not
-    ///   a convenience: a number has no type of its own on purpose (Part I 2.4,
-    ///   so that `add(3)` is right wherever the parameter is numeric), so
-    ///   `return 42` against a declared `i64?` answers `Unknown` and the type
-    ///   alone would leave the commonest case in the section unwrapped.
-    ///
-    /// **And everything else takes the conversion**, which is what changed:
-    /// `value.into()` is correct whether the value is a `T` or already a `T?`,
-    /// so a type this checker could not work out stops being a position it has
-    /// to stay silent about. It used to be left alone — right about the risk,
-    /// and the program then failed in the language below with `rustc`'s *"try
-    /// wrapping the expression in `Some`"* about a form Nikaia does not have
-    /// (Part III C.1).
-    ///
-    /// `null` is in neither, being a `T?` itself.
-    /// **A use asks the open numbers in a value for a type** (D2): a type
-    /// standing beside it (`beside`), or an index, which takes any integer.
-    fn number_asked(&mut self, value: &Expr, want: &Ty, at: &Span, beside: bool) {
-        self.s.number_asked(self.world, value, want, at, beside);
     }
 
     /// **Every open number of a body, decided** once the body has been walked
@@ -1926,18 +1380,6 @@ impl<'a> Checker<'a> {
     fn an_extern_enum(&mut self, item: &Item, span: &Span) {
         self.s.an_extern_enum(self.world, item, span);
     }
-
-    /// A tuple of text literals where a tuple with text is wanted
-    /// (`tools/check_texts.nika`).
-    fn tuple_literal(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        self.s.tuple_literal(self.world, found, want, value)
-    }
-
-    /// A text literal where `String` is wanted, built as text of its own
-    /// (`tools/check_texts.nika`).
-    fn text_literal(&mut self, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
-        self.s.text_literal(self.world, want, value, owned)
-    }
 }
 
 impl<'a> Checker<'a> {
@@ -2074,12 +1516,6 @@ impl<'a> Checker<'a> {
     }
 
     // --- looking things up ---------------------------------------------------
-
-    /// A number no other binding gets, for [`Local::id`]: the state's own
-    /// counter, the one the Nikaia side takes from (`tools/check_state.nika`).
-    fn a_new_binding(&mut self) -> i64 {
-        self.s.a_new_binding()
-    }
 }
 
 /// **Whether this file declares a type by this name**
@@ -2100,17 +1536,6 @@ fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_, '_, '_, '_, '_, '_> {
         spans: &parsed.expr_spans,
         viewed_arms: &parsed.viewed_arms,
     }
-}
-
-/// `&x`, as far as Stage 0 can say.
-///
-/// A view of a `String` is a `&str`, because that is what the language below
-/// does at a call and what a Nikaia programmer means by writing it. A view of
-/// anything with type arguments is not stated: `&Vec[T]` and `&[T]` are the
-/// same expression there, and picking one would report an error that is not
-/// there.
-fn view_of(inner: &Ty) -> Ty {
-    nikaia_std::tools::check_types::view_of_type(inner)
 }
 
 /// The type several parts of a program own at once (Part I 6.2).
@@ -2201,61 +1626,6 @@ pub fn char_literal(written: &str) -> String {
 
 pub fn byte_literal(written: &str) -> String {
     nikaia_std::tools::check_texts::check_byte_literal(written)
-}
-
-/// **What a table about an expression is keyed on**: the id the parser gave the
-/// node ([ADR-340](../../docs/specification/adr/adr-340.md) D4), which a clone
-/// keeps and an address does not.
-/// Whether an `if` at the end of a body has a path that hands nothing back: an
-/// `if` without `else`, at the end of the chain or of one of its branches.
-fn an_end_that_hands_nothing(expr: &Expr) -> bool {
-    fn tail_hands_nothing(block: &crate::ast::Block) -> bool {
-        matches!(block.stmts.last().map(|s| &s.node), Some(Stmt::Expr(value)) if an_end_that_hands_nothing(value))
-    }
-    match expr {
-        Expr::If {
-            then_branch,
-            else_branch,
-            ..
-        } => match else_branch {
-            None => true,
-            Some(other) => tail_hands_nothing(then_branch) || tail_hands_nothing(other),
-        },
-        Expr::Block(block, _) => tail_hands_nothing(block),
-        _ => false,
-    }
-}
-
-/// Whether every end of an `if`, a `match` or a block is a value, so that it
-/// can be put into `Some`: an end that jumps away (`return`, `break`,
-/// `continue`, `throw`) or a block that ends in a statement is none.
-/// Whether every end of an `if`, a `match` or a block is a value or a jump
-/// (`return`, `break`, `continue`, `throw`): a jumping end leaves with its own
-/// value and is left bare, the value ends are put into `Some` (#657).
-fn every_end_is_a_value_or_a_jump(expr: &Expr) -> bool {
-    fn tail_is_a_value(block: &crate::ast::Block) -> bool {
-        match block.stmts.last().map(|s| &s.node) {
-            Some(Stmt::Expr(value)) => every_end_is_a_value_or_a_jump(value),
-            Some(Stmt::Return(_) | Stmt::Break | Stmt::Continue) => true,
-            _ => false,
-        }
-    }
-    match expr {
-        Expr::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            tail_is_a_value(then_branch)
-                && else_branch.is_some()
-                && else_branch.iter().all(tail_is_a_value)
-        }
-        Expr::Match { arms, .. } => arms
-            .iter()
-            .all(|arm| every_end_is_a_value_or_a_jump(&arm.body)),
-        Expr::Block(block, _) => tail_is_a_value(block),
-        _ => true,
-    }
 }
 
 pub fn value_node(expr: &Expr) -> i64 {

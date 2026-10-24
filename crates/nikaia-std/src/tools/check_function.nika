@@ -217,3 +217,476 @@ fn check_function_action[H: CheckHost](mut state: CheckState, world: ref CheckWo
     }
     state.expected = outer
 }
+
+/// The span of a body's first statement, or nowhere.
+fn check_function_first_span(body: ref Block) -> Span {
+    if body.stmts.len() == 0 {
+        return Span::nowhere()
+    }
+    let first = body.stmts[0].span
+    return Span { start: first.start, end: first.end }
+}
+
+/// The span of a body's last statement, if it has one.
+fn check_function_last_span(body: ref Block) -> Span? {
+    if body.stmts.len() == 0 {
+        return null
+    }
+    let last = body.stmts[body.stmts.len() - 1].span
+    return Span { start: last.start, end: last.end }
+}
+
+fn check_function_is_nullable(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
+/// Whether the last statement of a block is an `if` that hands nothing back
+/// where it is not taken.
+fn check_function_tail_hands_nothing(block: ref Block) -> bool {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    let last = block.stmts[block.stmts.len() - 1]
+    return match last.node {
+        Stmt::Expr(value) => check_function_end_hands_nothing(value),
+        else => false,
+    }
+}
+
+/// Whether an `if` at the end of a body has a path that hands nothing back: an
+/// `if` without `else`, at the end of the chain or of one of its branches.
+fn check_function_end_hands_nothing(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::If { then_branch, else_branch, .. } => match else_branch {
+            Some(other) => check_function_tail_hands_nothing(then_branch) || check_function_tail_hands_nothing(other),
+            else => true,
+        },
+        Expr::Block(block, _) => check_function_tail_hands_nothing(block),
+        else => false,
+    }
+}
+
+fn check_function_tail_is_a_value(block: ref Block) -> bool {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    let last = block.stmts[block.stmts.len() - 1]
+    return match last.node {
+        Stmt::Expr(value) => check_function_every_end_is_a_value(value),
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        else => false,
+    }
+}
+
+/// Whether every end of an `if`, a `match` or a block is a value or a jump
+/// (`return`, `break`, `continue`, `throw`): a jumping end leaves with its own
+/// value and is left bare, the value ends are put into `Some` (#657).
+fn check_function_every_end_is_a_value(expr: ref Expr) -> bool {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            if !check_function_tail_is_a_value(then_branch) {
+                return false
+            }
+            return match else_branch {
+                Some(other) => check_function_tail_is_a_value(other),
+                else => false,
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                if !check_function_every_end_is_a_value(arm.body) {
+                    return false
+                }
+            }
+            return true
+        },
+        Expr::Block(block, _) => {
+            return check_function_tail_is_a_value(block)
+        },
+        else => {
+            return true
+        },
+    }
+}
+
+fn check_function_is_branching(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::If { .. } => check_function_every_end_is_a_value(expr),
+        Expr::Match { .. } => check_function_every_end_is_a_value(expr),
+        Expr::Block(_, _) => check_function_every_end_is_a_value(expr),
+        else => false,
+    }
+}
+
+fn check_function_lends(world: ref CheckWorld, key: ref String, at: i64) -> bool {
+    let contract = world.own.functions.get(key) ?? return false
+    return lends_in_own(contract, at, [world.library])
+}
+
+fn check_function_keeps(world: ref CheckWorld, key: ref String) -> Vec[String] {
+    let contract = world.own.functions.get(key) ?? return []
+    return contract.keeps.clone()
+}
+
+fn check_function_options_lowered(world: ref CheckWorld, key: ref String) -> Vec[ConfigContract] {
+    let contract = world.own.functions.get(key) ?? return []
+    return lowered_options(contract)
+}
+
+/// **What a function binds before its body is walked**: `self`, the parameters,
+/// the options after the `;` and a spread (ADR-296 D5), each as a local of its
+/// own. A `String` the body only reads is a view of text here, as it is below
+/// (ADR-282 D2, D5, #654).
+fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, receiver: ref Receiver?, args: ref Vec[FnArg], config: ref Vec[ConfigParam], spread: winnow_grammar::Symbol?, target: String?, key: ref String, parameters: ref collections::BTreeSet[String]) -> Vec[CheckLocal] sync {
+    let mut frame: Vec[CheckLocal] = []
+    let mut offset = 0
+    if receiver != null {
+        offset = 1
+        let mut ty = Ty::Unknown
+        if target != null {
+            ty = Ty::Named { name: target?.clone() ?? "", args: state.subject_arguments.clone(), view: receiver?.is_ref ?? false }
+        }
+        let id = state.a_new_binding()
+        frame.push(CheckLocal::free("self".clone(), ty, id))
+    }
+    let mut at = 0
+    for arg in args {
+        let name = world.words.resolve(arg.name).clone()
+        state.nameable(name, arg.span, "a parameter")
+        let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.len() == 0 && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable
+        let mut ty = Ty::Unknown
+        if plain_text && check_function_lends(world, key, at + offset) {
+            let mut viewed = arg.ty.clone()
+            viewed.is_view = true
+            ty = host.declared(state, viewed, arg.span)
+        } else {
+            ty = host.declared(state, arg.ty, arg.span)
+        }
+        let id = state.a_new_binding()
+        let mut local = CheckLocal::free(name, ty.erase(parameters), id)
+        if !arg.mutable {
+            local.immutable = CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter }
+        }
+        local.changing = arg.mutable
+        frame.push(local)
+        at += 1
+    }
+    // A default that is not a literal is computed where the function is
+    // declared (ADR-318 D1, D7).
+    for option in config {
+        check_defaults_a_computed_default(state, world, host, option)
+    }
+    let lowered = check_function_options_lowered(world, key)
+    for option in config {
+        let name = world.words.resolve(option.name).clone()
+        let mut ty = host.type_of(option.ty)
+        for one in lowered {
+            if one.name == name && one.ty.is_a_view() {
+                ty = one.ty.clone()
+            }
+        }
+        let id = state.a_new_binding()
+        frame.push(CheckLocal::free(name, ty.erase(parameters), id))
+    }
+    match spread {
+        Some(sym) => {
+            let id = state.a_new_binding()
+            let local = CheckLocal::free(world.words.resolve(sym).clone(), Ty::Unknown, id)
+            state.flow.unknown_bound.insert(local.id)
+            frame.push(local)
+        },
+        else => {},
+    }
+    return frame
+}
+
+/// **The tail hands back as a `return` does**: whether it lends, and whether
+/// its arms do (NK1131, #576; ADR-282 D13, D15, #738), read against the scope
+/// still standing. Then the body's numbers are asked for the declared type.
+fn check_function_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, body: ref Block, expected: ref Ty?, tail: ref Ty) -> (bool, bool) sync {
+    let mut tail_lent = false
+    let mut tail_view = false
+    if expected == null || body.stmts.len() == 0 {
+        return (false, false)
+    }
+    let want = expected?.clone() ?? Ty::Unknown
+    let last = body.stmts[body.stmts.len() - 1]
+    let at = Span { start: last.span.start, end: last.span.end }
+    match last.node {
+        Stmt::Expr(value) => {
+            if !a_body_never_ends(body) {
+                let mut plain = false
+                match tail {
+                    Ty::Named { name, args, view } => {
+                        plain = name == "String" && args.len() == 0 && !view
+                    },
+                    else => {},
+                }
+                tail_lent = state.hands_back_a_view_of_the_subject(world, value) || (state.flow.expected_either && plain && state.a_place_of_a_lent_parameter(world, value))
+                if !tail_lent {
+                    check_core_a_field_of_a_borrowed_subject(state, world, host, value, at, "handed back")
+                    check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, at)
+                }
+                tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(want))
+            }
+            // A body's numbers, typed by their uses once all of them have
+            // been seen (ADR-285 D24): the tail's included.
+            state.number_asked(world, value, want, at, true)
+        },
+        else => {},
+    }
+    return (tail_lent, tail_view)
+}
+
+/// **A tail is a `return` written without the word** (ADR-282 D4, ADR-285
+/// D32, ADR-278): it owes the same `&`, the same widening, the same `Some`.
+fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, body: ref Block, expected: ref Ty, tail: Ty, lending: bool, tail_view: bool, span: ref Span) sync {
+    let last = body.stmts[body.stmts.len() - 1]
+    let nullable = check_function_is_nullable(expected)
+    let mut shown = tail
+    if lending || tail_view {
+        shown = view_of_type(shown)
+    }
+    match last.node {
+        Stmt::Expr(value) => {
+            if lending && nullable {
+                state.facts.lent_reads.insert(id_of(value) as i64)
+            } else if lending {
+                state.facts.lent_returns.insert(span.start as i64)
+            }
+            if !lending {
+                let mut result: Ty? = state.text_literal(world, expected, value, true)
+                if result == null {
+                    result = state.tuple_literal(world, shown, expected, value)
+                }
+                if result == null {
+                    result = number_where_no_number_is(expected, value)
+                }
+                shown = result ?? shown
+            }
+            let branches = check_function_is_branching(value)
+            let how = check_widened_slot(state, world, host, shown, expected, value, span)
+            let wrap: FactWrap = how ?? FactWrap::Path
+            let node = id_of(value) as i64
+            match wrap {
+                FactWrap::Constructor => {
+                    if branches && nullable {
+                        state.some_at_the_tails(value)
+                    } else {
+                        state.facts.wrapped.insert(node, FactWrap::Constructor)
+                    }
+                },
+                FactWrap::Conversion => {
+                    if branches && nullable {
+                        state.some_at_the_tails(value)
+                    }
+                },
+                FactWrap::Widen(into) => {
+                    state.facts.wrapped.insert(node, FactWrap::Widen(into.clone()))
+                },
+                FactWrap::Unsigned(into) => {
+                    state.facts.wrapped.insert(node, FactWrap::Unsigned(into.clone()))
+                },
+                else => {},
+            }
+            state.expect_kept_asked(world, shown, expected, value, "the function returns it, and the caller keeps it after the call ends", span, "returns", fn(found, want) { f"This function returns `{found}`, but it's declared to return `{want}`." })
+        },
+        else => {
+            state.expect_kept_asked(world, shown, expected, null, "the function returns it, and the caller keeps it after the call ends", span, "returns", fn(found, want) { f"This function returns `{found}`, but it's declared to return `{want}`." })
+        },
+    }
+}
+
+/// **NK1104: a body that does not hand back what it declares** (#704): an
+/// empty body, and an `if` without `else` as the last statement.
+fn check_function_hands_nothing(mut state: CheckState, body: ref Block, expected: ref Ty, at: ref Span, is_extern: bool, ends: bool) sync {
+    let want = expected.text()
+    if body.stmts.len() == 0 && !is_extern {
+        state.findings.push(check_refusal("NK1104", at, f"This function returns `()`, but it's declared to return `{want}`.", ["Its body is empty, so it hands nothing back.".clone()], f"Write the `{want}` it returns as the body's last expression, or remove `-> {want}`."))
+    }
+    if body.stmts.len() > 0 && ends {
+        let last = body.stmts[body.stmts.len() - 1]
+        match last.node {
+            Stmt::Expr(value) => {
+                if check_function_end_hands_nothing(value) {
+                    state.findings.push(check_refusal("NK1104", last.span, f"This function returns `()` where this `if` is not taken, but it's declared to return `{want}`.", ["An `if` without `else` hands nothing back when its condition is false, and nothing comes after it.".clone()], f"Add an `else` that hands back a `{want}`, or a `return` after the `if`."))
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// **A function, checked**: its frame, its body, what the body hands back,
+/// and the questions that can only be asked once the whole body has been seen.
+pub fn check_function_function[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, item: ref Item, at: ref Span, target: String?) sync {
+    match item {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, .. } => {
+            check_function_fn(state, world, host, name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, at, target)
+        },
+        else => {},
+    }
+}
+
+fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: winnow_grammar::Symbol?, generics: ref Vec[GenericParam], receiver: ref Receiver?, args: ref Vec[FnArg], config: ref Vec[ConfigParam], spread: winnow_grammar::Symbol?, ret_type: ref Type?, body: ref Block, can_throw: bool, is_sync: bool, sync_by: ref Vec[winnow_grammar::Symbol], is_extern: bool, at: ref Span, target: String?) sync {
+    // The same key the ledger uses, the anonymous constructor of Kap 4.2
+    // included, which a caller reaches as `Type::new`.
+    let mut own_name = "new".clone()
+    match name {
+        Some(sym) => {
+            own_name = world.words.resolve(sym).clone()
+        },
+        else => {},
+    }
+    let key = if target != null { f"{target?.clone() ?? ""}::{own_name}" } else { own_name.clone() }
+    // What `sync(f)` names is code the call runs (ADR-288 D31).
+    if sync_by.len() > 0 {
+        let first = check_function_first_span(body)
+        for named in sync_by {
+            state.a_lambda_the_promise_names(world, key, world.words.resolve(named).clone(), args, first)
+        }
+    }
+    if body.stmts.len() > 0 {
+        state.nameable(own_name, body.stmts[0].span, "a function")
+    }
+    let outer_current: String? = state.current?.clone()
+    state.current = key.clone()
+    let outer_sync: String? = state.inside_a_sync_function?.clone()
+    if is_sync {
+        state.inside_a_sync_function = key.clone()
+    } else {
+        state.inside_a_sync_function = null
+    }
+
+    // Inside its own body a type parameter is a type (ADR-295 D1): the name
+    // stays a name, `Self` stays erased.
+    let mut declared: collections::BTreeMap[String, Vec[String]] = state.enclosing.clone()
+    for g in generics {
+        let mut bounds: Vec[String] = []
+        for b in g.bounds {
+            bounds.push(world.words.resolve(b).clone())
+        }
+        declared.insert(world.words.resolve(g.name).clone(), bounds)
+    }
+    let mut parameters: collections::BTreeSet[String] = collections::BTreeSet()
+    parameters.insert("Self".clone())
+    let outer_declared = state.type_parameters.clone()
+    state.type_parameters = declared
+    let outer_borrowing = state.borrowing_self
+    state.borrowing_self = receiver?.is_ref ?? false
+
+    let frame = check_function_frame(state, world, host, receiver, args, config, spread, target, key, parameters)
+
+    let mut expected: Ty? = null
+    match ret_type {
+        Some(written) => {
+            expected = host.type_of(written).erase(parameters)
+        },
+        else => {},
+    }
+    let outer: Ty? = state.expected?.clone()
+    state.expected = expected?.clone()
+    let outer_either = state.flow.expected_either
+    state.flow.expected_either = ret_type?.either ?? false
+    let outer_throwing = state.flow.throwing
+    state.flow.throwing = can_throw
+
+    let keeps: Vec[String] = check_function_keeps(world, key)
+    // A parameter the function keeps dies in it, unless it is handed on, as a
+    // value bound by a `let` does (ADR-297 D2).
+    for arg in args {
+        let named = world.words.resolve(arg.name).clone()
+        if keeps.contains(named) {
+            for local in frame {
+                if local.name == named {
+                    check_crossings_a_value_with_a_cleanup_dying(state, world, named, local.ty, arg.span)
+                    break
+                }
+            }
+        }
+    }
+    let mut run_code: collections::BTreeSet[String] = collections::BTreeSet()
+    for local in frame {
+        match local.ty {
+            Ty::Fn { .. } => {
+                if !keeps.contains(local.name) {
+                    run_code.insert(local.name.clone())
+                }
+            },
+            else => {},
+        }
+    }
+    let outer_run_code = state.run_code.clone()
+    state.run_code = run_code
+    state.scope.push(frame)
+    let tail_span = check_function_last_span(body)
+    let outer_lists = state.flow.empty_lists.clone()
+    state.flow.empty_lists = collections::BTreeMap()
+    let outer_numbers = state.flow.open_numbers.clone()
+    state.flow.open_numbers = collections::BTreeMap()
+    let outer_chars = state.flow.open_chars.clone()
+    state.flow.open_chars = collections::BTreeMap()
+    let outer_bytes = state.flow.high_bytes.clone()
+    state.flow.high_bytes = collections::BTreeMap()
+    let outer_grown = state.flow.grown_text.clone()
+    state.flow.grown_text = check_function_grown_text(world.here, body)
+    let tail = check_core_block(state, world, host, body)
+    state.flow.grown_text = outer_grown
+    let (tail_lent, tail_view) = check_function_handed_back(state, world, host, body, expected, tail)
+    state.numbers_typed_by_their_uses()
+    state.flow.open_numbers = outer_numbers
+    state.flow.open_chars = outer_chars
+    state.flow.high_bytes = outer_bytes
+    state.scope.pop()
+
+    // NK1153, once the whole body has been seen (ADR-135 D2): the use that
+    // gives an empty list its element type stands after the `let`.
+    let lists = state.flow.empty_lists.clone()
+    state.flow.empty_lists = outer_lists
+    for (_, held) in lists {
+        state.an_empty_list_with_no_element_type(held.0, held.1)
+    }
+
+    // The last expression of a body is what the function hands back, so it
+    // answers to the declared type exactly as a `return` does - unless the
+    // body cannot get there (ADR-276).
+    let ends = !a_body_never_ends(body)
+    match expected {
+        Some(want) => {
+            check_function_hands_nothing(state, body, want, at, is_extern, ends)
+            match tail_span {
+                Some(span) => {
+                    if ends {
+                        check_function_tail_checks(state, world, host, body, want, tail, tail_lent, tail_view, span)
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+
+    // NK2101, once the whole body has been seen: what comes after a `spawn`
+    // is a later statement, and a single pass reaches one later.
+    state.a_sequence_was_walked_twice()
+    state.a_part_left_out()
+    state.data_handed_over_is_used_again()
+    state.reads_on_paths.clear()
+    state.flow.read_index = collections::BTreeMap()
+    state.lent_lets = collections::BTreeSet()
+    state.a_task_took_what_is_used_again()
+
+    state.expected = outer
+    state.flow.expected_either = outer_either
+    state.flow.throwing = outer_throwing
+    state.type_parameters = outer_declared
+    state.borrowing_self = outer_borrowing
+    state.current = outer_current
+    state.inside_a_sync_function = outer_sync
+    state.run_code = outer_run_code
+}
