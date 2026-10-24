@@ -1,0 +1,1900 @@
+// crates/nikaia-std/src/tools/fold_bound.nika
+//
+// **A fold over a grammar's input takes no more steps than the input has room
+// for; its counters are proved from that** (ADR-367), moved from the
+// compiler's `fold_bound` (ADR-294, #125). The Rust module stays as the
+// adapter: it hands over the parsed unit and the solver's answer.
+//
+// Three parts, each a decision of the record:
+//
+//   * `fb_least_width` (D1): the fewest bytes any match of a rule takes, read
+//     from the grammar. A fold's step consumes at least `max(w, 1)` of them.
+//   * `fb_most_steps` (D2): the input's length is a fact when the fold starts
+//     (every input a grammar reads today); a stream would have none.
+//   * `fb_invariant_checked` (D3): the invariant `|f| <= k * steps + k0 *
+//     pieces` of a counter, proved by the solver before it is used.
+//
+// **No 128-bit numbers.** Nikaia has none. A counter's growth `k` is a `u64`
+// and is poisoned (`null`) where it overflows that; the invariant is only
+// asked for a `k` below 2^63 (as the Rust did), so a `k` that needed more than
+// 64 bits was refused either way. A bound `k * steps + k0 * pieces` is a
+// `checked` `u64` and a bound past `u64` fits no type, as it did not before.
+
+use std::collections
+
+/// A width never counts past this: every length is below 2^60, so a width of
+/// 2^62 and one of 2^63 both give no step.
+fn fb_cap() -> u64 {
+    return 4611686018427387904
+}
+
+/// `a + b`, held at `fb_cap`.
+fn fb_add(a: u64, b: u64) -> u64 {
+    let sum = a.checked_add(b) ?? fb_cap()
+    return sum.min(fb_cap())
+}
+
+/// The bytes of a character in UTF-8.
+fn fb_utf8_len(code: i64) -> u64 {
+    if code < 128 {
+        return 1
+    }
+    if code < 2048 {
+        return 2
+    }
+    if code < 65536 {
+        return 3
+    }
+    return 4
+}
+
+/// The bytes a literal written in the source matches: an escape is one byte,
+/// a `\u{…}` at least one, which only ever counts fewer than it matches.
+pub fn fb_literal_bytes(written: ref String) -> u64 {
+    let chars: Vec[scalar] = written.chars().collect()
+    let mut bytes: u64 = 0
+    let mut i = 0
+    while i < chars.len() {
+        let c = chars[i]
+        i += 1
+        if c != '\\' {
+            bytes += fb_utf8_len(c as i64)
+            continue
+        }
+        bytes += 1
+        if i < chars.len() {
+            let next = chars[i]
+            i += 1
+            if next == 'u' {
+                while i < chars.len() {
+                    let d = chars[i]
+                    i += 1
+                    if d == '}' {
+                        break
+                    }
+                }
+            }
+        }
+    }
+    return bytes
+}
+
+/// What the walk asks of the compiler around it: the expressions written in
+/// the holes of a literal (only the parser reads them), and the solver.
+pub trait FbHost {
+    /// The expressions of the holes of a literal.
+    fn literal_holes(ref self, literal: ref Expr) -> Vec[Expr] sync
+    /// The goal under the facts, proved or not.
+    fn ask(ref self, arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> bool sync
+}
+
+/// A parsed unit: the program, and the words its names are interned in.
+pub struct FbSource {
+    pub program: ref Program,
+    pub words: ref winnow_grammar::InternerContext,
+}
+
+/// What D1 reads of one grammar: its rules by name, and the widths found.
+struct FbWidths {
+    rules: collections::BTreeMap[String, ref GrammarRule],
+    known: collections::BTreeMap[String, u64],
+    open: collections::BTreeSet[String],
+}
+
+impl FbWidths {
+    fn rule(ref mut self, words: ref winnow_grammar::InternerContext, name: String, boundary: u64) -> u64 {
+        let found = self.known.get(name)
+        if found != null {
+            return found ?? 0
+        }
+        // **A rule that reaches itself is taken at nothing for the recursive
+        // call** (D1): it can only make the width smaller.
+        if self.open.contains(name) {
+            return 0
+        }
+        self.open.insert(name.clone())
+        let held = self.rules.get(name)
+        if held == null {
+            self.open.remove(name)
+            return 0
+        }
+        let rule = held ?? return 0
+        let mut w: u64 = 0
+        let mut first = true
+        for alt in rule.alts {
+            let here = self.pattern(words, alt.pattern.node, boundary)
+            if first || here < w {
+                w = here
+            }
+            first = false
+        }
+        self.open.remove(name)
+        // Only a width found with nothing open is the rule's own: one found
+        // inside a cycle took a recursive call at nothing on the way.
+        if self.open.is_empty() {
+            self.known.insert(name.clone(), w)
+        }
+        return w
+    }
+
+    fn pattern(ref mut self, words: ref winnow_grammar::InternerContext, pattern: ref Pattern, boundary: u64) -> u64 {
+        match pattern {
+            Pattern::Literal(text) => return fb_literal_bytes(text),
+            Pattern::Seq(parts) => {
+                let mut sum: u64 = 0
+                for p in parts {
+                    sum = fb_add(sum, self.pattern(words, p.node, boundary))
+                }
+                return sum
+            },
+            Pattern::Choice(branches) => {
+                let mut least: u64 = 0
+                let mut first = true
+                for p in branches {
+                    let here = self.pattern(words, p.node, boundary)
+                    if first || here < least {
+                        least = here
+                    }
+                    first = false
+                }
+                return least
+            },
+            Pattern::Bind { pat, .. } => return self.pattern(words, pat.node, boundary),
+            Pattern::Group(pat) => return self.pattern(words, pat.node, boundary),
+            Pattern::Repeat { pat, rep } => {
+                let times: u64 = match rep {
+                    Repeat::Star => 0,
+                    Repeat::Optional => 0,
+                    Repeat::Plus => 1,
+                    Repeat::Exactly(m) => m as u64,
+                    Repeat::AtLeast(m) => m as u64,
+                    Repeat::Between(m, _) => m as u64,
+                }
+                if times == 0 {
+                    return 0
+                }
+                return (self.pattern(words, pat.node, boundary).checked_mul(times)) ?? fb_cap()
+            },
+            Pattern::Cut => return 0,
+            Pattern::Fold(_) => return 0,
+            Pattern::Ref { name, args, .. } => {
+                let called = words.resolve(name).clone()
+                if self.rules.contains_key(called) {
+                    return self.rule(words, called, boundary)
+                }
+                // A class matches one character, which takes at least a byte.
+                if args.len() == 0 {
+                    if called == "digit" || called == "hex_digit" || called == "any" || called == "char" || called == "alpha1" || called == "multispace1" {
+                        return 1
+                    }
+                    if called == "frame_end" {
+                        return boundary
+                    }
+                }
+                // What `p` takes, read as a number or as bytes.
+                if args.len() >= 1 && (called == "dec" || called == "bytes") {
+                    return self.pattern(words, args[0].node, boundary)
+                }
+                // Any other built-in may match nothing, as far as D1 reads
+                // it: counting less is never wrong.
+                return 0
+            },
+        }
+    }
+}
+
+/// **The least width of `rule` in `grammar`** (ADR-367 D1): the fewest bytes
+/// any match of it takes. A `frame_end` inside it is the boundary of the
+/// rule's own `@frame`, and nothing where it has none. `null` where the
+/// grammar or the rule is not in the program.
+pub fn fb_least_width(source: ref FbSource, named: String, rule: String) -> u64? {
+    for item in source.program.items {
+        match item.node {
+            Item::Grammar(g) => {
+                if source.words.resolve(g.name) == named {
+                    return fb_rule_width(source, g, rule)
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+/// `fb_least_width` of a rule of a grammar at hand.
+pub fn fb_rule_width(source: ref FbSource, def: ref GrammarDef, rule: String) -> u64? {
+    let mut rules: collections::BTreeMap[String, ref GrammarRule] = collections::BTreeMap()
+    for r in def.rules {
+        rules.insert(source.words.resolve(r.name).clone(), r)
+    }
+    let element = rules.get(rule) ?? return null
+    let mut boundary: u64 = 0
+    let written = element.frame?.boundary
+    if written != null {
+        boundary = fb_literal_bytes(written ?? return null)
+    }
+    let mut widths = FbWidths { rules: rules, known: collections::BTreeMap(), open: collections::BTreeSet() }
+    return widths.rule(source.words, rule.clone(), boundary)
+}
+
+// ---------------------------------------------------------------------------
+// D2: the input's extent
+// ---------------------------------------------------------------------------
+
+/// **The most steps a fold over an input of known extent takes** (D1, D2):
+/// `len / max(w, 1)` with `len` below 2^60 (the length of every text and every
+/// `Bytes`, Part III `optimization`).
+pub fn fb_most_steps(width: u64) -> u64 {
+    let bound: u64 = 1152921504606846976
+    return (bound - 1) / width.max(1)
+}
+
+// ---------------------------------------------------------------------------
+// D3: the invariant, asked of the solver
+// ---------------------------------------------------------------------------
+
+/// `k * steps + k0 * pieces`, the most a counter reaches.
+fn fb_bound_term(mut a: TermArena, k: i64, k0: i64, steps: i64, pieces: i64) -> i64 {
+    let k = a.int(k)
+    let k0 = a.int(k0)
+    let grown = a.mul(k, steps)
+    let started = a.mul(k0, pieces)
+    return a.add(grown, started)
+}
+
+/// `-bound <= x <= bound`.
+fn fb_invariant_term(mut a: TermArena, k: i64, k0: i64, x: i64, steps: i64, pieces: i64) -> i64 {
+    let bound = fb_bound_term(a, k, k0, steps, pieces)
+    let below = a.neg(bound)
+    let low = a.le(below, x)
+    let high = a.le(x, bound)
+    return a.and([low, high])
+}
+
+/// **Is the invariant of a counter that grows by at most `k` a step from `k0`
+/// kept** (ADR-361 D4)? Three obligations: it holds at the start, one step
+/// keeps it, and, where the fold has a merge, the merge of two partial results
+/// keeps it. `ask` is the solver: the goal under the facts, proved or not.
+pub fn fb_invariant_checked[H: FbHost](host: ref H, k: u64, k0: u64, merged: bool) -> bool {
+    let limit: u64 = 9223372036854775807
+    if k > limit || k0 > limit {
+        return false
+    }
+    let k = k as i64
+    let k0 = k0 as i64
+    let mut a = TermArena::empty()
+    let f = a.var("f")
+    let low = a.int(0 - k0)
+    let high = a.int(k0)
+    let facts = [a.le(low, f), a.le(f, high)]
+    let none = a.int(0)
+    let one = a.int(1)
+    let goal = fb_invariant_term(a, k, k0, f, none, one)
+    if !host.ask(a, facts, goal) {
+        return false
+    }
+    let mut a = TermArena::empty()
+    let f = a.var("f")
+    let d = a.var("d")
+    let s = a.var("steps")
+    let p = a.var("pieces")
+    let held = fb_invariant_term(a, k, k0, f, s, p)
+    let zero = a.int(0)
+    let low = a.int(0 - k)
+    let high = a.int(k)
+    let one = a.int(1)
+    let facts = [held, a.ge(s, zero), a.ge(p, zero), a.le(low, d), a.le(d, high)]
+    let after = a.add(f, d)
+    let next = a.add(s, one)
+    let goal = fb_invariant_term(a, k, k0, after, next, p)
+    if !host.ask(a, facts, goal) {
+        return false
+    }
+    if !merged {
+        return true
+    }
+    // The merge leaves the sum of both fields, or one of them.
+    for kept in [-1, 0, 1] {
+        let mut a = TermArena::empty()
+        let fa = a.var("f_a")
+        let sa = a.var("steps_a")
+        let pa = a.var("pieces_a")
+        let fb = a.var("f_b")
+        let sb = a.var("steps_b")
+        let pb = a.var("pieces_b")
+        let zero = a.int(0)
+        let mut facts = [fb_invariant_term(a, k, k0, fa, sa, pa), fb_invariant_term(a, k, k0, fb, sb, pb)]
+        for ghost in [sa, sb, pa, pb] {
+            facts.push(a.ge(ghost, zero))
+        }
+        let value = if kept < 0 { a.add(fa, fb) } else if kept == 0 { fa } else { fb }
+        let steps = a.add(sa, sb)
+        let pieces = a.add(pa, pb)
+        let goal = fb_invariant_term(a, k, k0, value, steps, pieces)
+        if !host.ask(a, facts, goal) {
+            return false
+        }
+    }
+    return true
+}
+
+/// The folds a rule's pattern holds, in the order they stand.
+pub fn fb_folds(pattern: ref Pattern) -> Vec[ref FoldSpec] {
+    let mut out: Vec[ref FoldSpec] = []
+    match pattern {
+        Pattern::Fold(spec) => out.push(spec),
+        Pattern::Seq(parts) => {
+            for p in parts {
+                out.extend(fb_folds(p.node))
+            }
+        },
+        Pattern::Choice(parts) => {
+            for p in parts {
+                out.extend(fb_folds(p.node))
+            }
+        },
+        Pattern::Bind { pat, .. } => out.extend(fb_folds(pat.node)),
+        Pattern::Group(pat) => out.extend(fb_folds(pat.node)),
+        Pattern::Repeat { pat, .. } => out.extend(fb_folds(pat.node)),
+        Pattern::Ref { args, .. } => {
+            for p in args {
+                out.extend(fb_folds(p.node))
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+// ---------------------------------------------------------------------------
+// D3: growth per step - what the program says
+// ---------------------------------------------------------------------------
+
+/// A type as D3 reads it: the last segment of its name and its arguments.
+pub struct FbTy {
+    pub name: String,
+    pub args: Vec[FbTy],
+}
+
+impl FbTy {
+    fn of(words: ref winnow_grammar::InternerContext, ty: ref Type) -> FbTy {
+        let written = words.resolve(ty.name).clone()
+        let mut args: Vec[FbTy] = []
+        for g in ty.generics {
+            args.push(FbTy::of(words, g))
+        }
+        return FbTy { name: (written.rsplit("::").next() ?? "").clone(), args: args }
+    }
+
+    fn named(name: String) -> FbTy {
+        return FbTy { name: name, args: [] }
+    }
+
+    fn is_map(ref self) -> bool {
+        return (self.name == "HashMap" || self.name == "BTreeMap") && self.args.len() == 2
+    }
+}
+
+/// The room a whole-number type has: how far below zero (as a magnitude) and
+/// how far above.
+struct FbRange {
+    below: u64,
+    above: u64,
+}
+
+fn fb_range(ty: String) -> FbRange? {
+    let small: u64 = 2147483648
+    let big: u64 = 9223372036854775808
+    let top: u64 = 18446744073709551615
+    let wide: u64 = 4294967295
+    if ty == "i8" {
+        return FbRange { below: 128, above: 127 }
+    }
+    if ty == "i16" {
+        return FbRange { below: 32768, above: 32767 }
+    }
+    if ty == "i32" {
+        return FbRange { below: small, above: small - 1 }
+    }
+    if ty == "i64" || ty == "isize" {
+        return FbRange { below: big, above: big - 1 }
+    }
+    if ty == "u8" {
+        return FbRange { below: 0, above: 255 }
+    }
+    if ty == "u16" {
+        return FbRange { below: 0, above: 65535 }
+    }
+    if ty == "u32" {
+        return FbRange { below: 0, above: wide }
+    }
+    if ty == "u64" || ty == "usize" {
+        return FbRange { below: 0, above: top }
+    }
+    return null
+}
+
+fn fb_is_whole(ty: String) -> bool {
+    return fb_range(ty) != null
+}
+
+/// A literal amount: its size and whether it is below zero.
+struct FbAmount {
+    amount: u64,
+    negative: bool,
+}
+
+fn fb_literal_amount(value: ref Expr) -> FbAmount? {
+    match value {
+        Expr::LitInt { value, negative, .. } => return FbAmount { amount: value, negative: negative },
+        Expr::Unary { op, expr, .. } => {
+            if op == UnaryOp::Neg {
+                match expr {
+                    Expr::LitInt { value, .. } => return FbAmount { amount: value, negative: true },
+                    else => return null,
+                }
+            }
+            return null
+        },
+        else => return null,
+    }
+}
+
+fn fb_field_name(words: ref winnow_grammar::InternerContext, target: ref Expr) -> String? {
+    return match target {
+        Expr::Field { name, .. } => words.resolve(name).clone(),
+        Expr::SafeField { name, .. } => words.resolve(name).clone(),
+        else => null,
+    }
+}
+
+fn fb_named(words: ref winnow_grammar::InternerContext, expr: ref Expr, name: String) -> bool {
+    return match expr {
+        Expr::Variable(v, _) => words.resolve(v) == name,
+        else => false,
+    }
+}
+
+/// The key of a method of a type in the index.
+fn fb_key(owner: String, name: String) -> String {
+    return f"{owner}::{name}"
+}
+
+/// The blocks an expression holds, not the bodies of lambdas: the walk meets a
+/// lambda's body when it reaches the lambda, with what the call it is given
+/// to says about it.
+fn fb_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
+    let mut out: Vec[ref Block] = []
+    match expr {
+        Expr::Closure { .. } => return out,
+        Expr::Spawn { .. } => return out,
+        else => {},
+    }
+    match expr {
+        Expr::Block(block, _) => {
+            out.push(block)
+            return out
+        },
+        Expr::Unsafe(block, _) => {
+            out.push(block)
+            return out
+        },
+        Expr::Overlap(block, _) => {
+            out.push(block)
+            return out
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            out.push(then_branch)
+            if else_branch != null {
+                out.push(else_branch ?? return out)
+            }
+        },
+        Expr::TryCatch { handler, .. } => out.push(handler),
+        Expr::Select(arms, _) => {
+            for arm in arms {
+                out.extend(check_visit_block_one(arm.body))
+            }
+        },
+        else => {},
+    }
+    for child in check_visit_children(expr) {
+        out.extend(fb_expr_blocks(child))
+    }
+    return out
+}
+
+/// The blocks a statement holds, but a loop's body and the bodies of lambdas.
+fn fb_stmt_blocks(stmt: ref Stmt) -> Vec[ref Block] {
+    let mut out: Vec[ref Block] = []
+    match stmt {
+        Stmt::Let { value, .. } => out.extend(fb_expr_blocks(value)),
+        Stmt::Comptime { value, .. } => out.extend(fb_expr_blocks(value)),
+        Stmt::Expr(value) => out.extend(fb_expr_blocks(value)),
+        Stmt::Assign { target, value, .. } => {
+            out.extend(fb_expr_blocks(target))
+            out.extend(fb_expr_blocks(value))
+        },
+        Stmt::Return(value) => {
+            if value != null {
+                out.extend(fb_expr_blocks(value ?? return out))
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+/// A field of a struct.
+struct FbField {
+    name: String,
+    ty: FbTy,
+    default: ref Expr?,
+}
+
+/// A function or method of the program, by where it starts.
+struct FbFn {
+    args: ref Vec[FnArg],
+    body: ref Block,
+    has_receiver: bool,
+    owner: FbTy?,
+}
+
+/// What the walk looks up: the structs, the functions and who can reach whom.
+pub struct FbIndex {
+    words: ref winnow_grammar::InternerContext,
+    structs: collections::BTreeMap[String, Vec[FbField]],
+    methods: collections::BTreeMap[String, Vec[i64]],
+    impls: collections::BTreeSet[String],
+    by_name: collections::BTreeMap[String, Vec[i64]],
+    free: collections::BTreeMap[String, i64],
+    fns: collections::BTreeMap[i64, FbFn],
+    reached_by: collections::BTreeMap[String, collections::BTreeSet[i64]],
+    implicit: collections::BTreeSet[i64],
+}
+
+fn fb_text_opt(words: ref winnow_grammar::InternerContext, sym: winnow_grammar::Symbol?) -> String {
+    let held = sym ?? return ""
+    return words.resolve(held).clone()
+}
+
+/// Whether every callee takes the argument at `i` by value or shared.
+fn fb_kept_by(ix: ref FbIndex, callees: ref Vec[i64], i: i64) -> bool {
+    if callees.len() == 0 {
+        return false
+    }
+    for at in callees {
+        let fun = ix.fns.get(at) ?? return false
+        if i >= fun.args.len() {
+            return false
+        }
+        if fun.args[i].mutable {
+            return false
+        }
+    }
+    return true
+}
+
+fn fb_vec_of(m: ref collections::BTreeMap[String, Vec[i64]], key: ref String) -> Vec[i64] {
+    return m.get(key)?.clone() ?? []
+}
+
+impl FbIndex {
+    fn text(ref self, sym: winnow_grammar::Symbol) -> String {
+        return self.words.resolve(sym).clone()
+    }
+
+    fn reach(ref mut self, name: String, at: i64) {
+        if !self.reached_by.contains_key(name) {
+            self.reached_by.insert(name.clone(), collections::BTreeSet())
+        }
+        let mut set = self.reached_by[name] ?? return
+        set.insert(at)
+    }
+
+    fn of(source: ref FbSource) -> FbIndex {
+        let words = source.words
+        let mut ix = FbIndex { words: words, structs: collections::BTreeMap(), methods: collections::BTreeMap(), impls: collections::BTreeSet(), by_name: collections::BTreeMap(), free: collections::BTreeMap(), fns: collections::BTreeMap(), reached_by: collections::BTreeMap(), implicit: collections::BTreeSet() }
+        for item in source.program.items {
+            match item.node {
+                Item::Struct { name, fields, .. } => {
+                    let mut list: Vec[FbField] = []
+                    for f in fields {
+                        list.push(FbField { name: words.resolve(f.name).clone(), ty: FbTy::of(words, f.ty), default: f.default?.value })
+                    }
+                    ix.structs.insert(words.resolve(name).clone(), list)
+                },
+                Item::Fn { name, receiver, args, body, .. } => {
+                    let held = name ?? continue
+                    let at = item.span.start as i64
+                    let called = words.resolve(held).clone()
+                    ix.free.insert(called.clone(), at)
+                    ix.reach(called, at)
+                    ix.fns.insert(at, FbFn { args: args, body: body, has_receiver: receiver != null, owner: null })
+                },
+                Item::Impl { trait_name, target, methods } => {
+                    let owner = FbTy::of(words, target)
+                    ix.impls.insert(owner.name.clone())
+                    for method in methods {
+                        match method.node {
+                            Item::Fn { name, receiver, args, body, .. } => {
+                                let at = method.span.start as i64
+                                let called = fb_text_opt(words, name)
+                                let key = fb_key(owner.name.clone(), called.clone())
+                                let mut here = fb_vec_of(ix.methods, key)
+                                here.push(at)
+                                ix.methods.insert(key, here)
+                                let mut reached = owner.name.clone()
+                                if !called.is_empty() {
+                                    let mut named = fb_vec_of(ix.by_name, called)
+                                    named.push(at)
+                                    ix.by_name.insert(called.clone(), named)
+                                    reached = called.clone()
+                                }
+                                ix.reach(reached, at)
+                                if trait_name != null {
+                                    ix.implicit.insert(at)
+                                }
+                                ix.fns.insert(at, FbFn { args: args, body: body, has_receiver: receiver != null, owner: owner.clone() })
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+        return ix
+    }
+
+    /// The whole-number fields of a struct, with what each starts at.
+    fn whole_fields(ref self, name: String) -> Vec[ref FbField] {
+        let mut out: Vec[ref FbField] = []
+        let held = self.structs.get(name)
+        if held == null {
+            return out
+        }
+        let fields = held ?? return out
+        for f in fields {
+            if f.ty.args.len() == 0 && fb_is_whole(f.ty.name.clone()) {
+                out.push(f)
+            }
+        }
+        return out
+    }
+
+    fn field_type(ref self, of: ref FbTy, field: String) -> FbTy? {
+        let held = self.structs.get(of.name) ?? return null
+        for f in held {
+            if f.name == field {
+                return f.ty.clone()
+            }
+        }
+        return null
+    }
+
+    fn methods_of(ref self, ty: ref FbTy?, method: String) -> Vec[i64] {
+        if ty == null {
+            return fb_vec_of(self.by_name, method)
+        }
+        let t = ty ?? return []
+        if self.impls.contains(t.name) {
+            return fb_vec_of(self.methods, fb_key(t.name.clone(), method))
+        }
+        return []
+    }
+
+    fn callees(ref self, func: ref Expr) -> Vec[i64] {
+        match func {
+            Expr::Variable(name, _) => {
+                let written = self.text(name)
+                if self.impls.contains(written) || self.structs.contains_key(written) {
+                    return fb_vec_of(self.methods, fb_key(written.clone(), ""))
+                }
+                let at = self.free.get(written)
+                if at == null {
+                    return []
+                }
+                return [at ?? 0]
+            },
+            Expr::Path(segments, _) => {
+                if segments.len() < 2 {
+                    return []
+                }
+                let ty = self.text(segments[segments.len() - 2])
+                let name = self.text(segments[segments.len() - 1])
+                return fb_vec_of(self.methods, fb_key(ty, name))
+            },
+            else => return [],
+        }
+    }
+
+
+}
+
+// ---------------------------------------------------------------------------
+// D3: the walk of a region, what it grows and what it gives up
+// ---------------------------------------------------------------------------
+
+/// What a lambda handed to a method is called with.
+struct FbLambda {
+    once: bool,
+    bound: Vec[FbBound],
+}
+
+struct FbBound {
+    name: String,
+    ty: FbTy,
+}
+
+/// The walk of the functions a fold's `init`, `step` and `merge` reach: the
+/// growth of each whole-number field (`k`), the fields given up (`dead`), the
+/// places each field is written at (`sites`).
+struct FbWalk {
+    k: collections::BTreeMap[String, u64],
+    dead: collections::BTreeSet[String],
+    lowered: collections::BTreeSet[String],
+    sites: collections::BTreeMap[String, Vec[i64]],
+    stack: Vec[i64],
+    reached: collections::BTreeSet[i64],
+    broken: bool,
+    lambdas: collections::BTreeMap[i64, FbLambda],
+    called: collections::BTreeSet[i64],
+}
+
+fn fb_new_walk() -> FbWalk {
+    return FbWalk { k: collections::BTreeMap(), dead: collections::BTreeSet(), lowered: collections::BTreeSet(), sites: collections::BTreeMap(), stack: [], reached: collections::BTreeSet(), broken: false, lambdas: collections::BTreeMap(), called: collections::BTreeSet() }
+}
+
+fn fb_new_merge() -> FbMerge {
+    return FbMerge { sites: collections::BTreeMap(), bad: collections::BTreeSet(), reached: collections::BTreeSet(), broken: false, stack: [] }
+}
+
+/// The inner expression of a `ref x`, else the expression.
+fn fb_refs(list: ref Vec[Expr]) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for e in list {
+        out.push(e)
+    }
+    return out
+}
+
+fn fb_unref(expr: ref Expr) -> ref Expr {
+    match expr {
+        Expr::Unary { op, expr: inner, .. } => {
+            if op == UnaryOp::Ref {
+                return inner
+            }
+            return expr
+        },
+        else => return expr,
+    }
+}
+
+fn fb_acc_name(words: ref winnow_grammar::InternerContext, init: ref Expr) -> String? {
+    match init {
+        Expr::Variable(name, _) => return words.resolve(name).clone(),
+        Expr::StructLit { name, .. } => return words.resolve(name).clone(),
+        Expr::Call { func, args, .. } => {
+            if args.len() != 0 {
+                return null
+            }
+            match func {
+                Expr::Variable(name, _) => return words.resolve(name).clone(),
+                else => return null,
+            }
+        },
+        else => return null,
+    }
+}
+
+impl FbWalk {
+    /// Every field the walk has met, given up or not.
+    fn touched(ref self) -> collections::BTreeSet[String] {
+        let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+        for (name, _) in self.k {
+            out.insert(name.clone())
+        }
+        for name in self.dead {
+            out.insert(name.clone())
+        }
+        return out
+    }
+
+    fn poison(ref mut self, field: String) {
+        self.dead.insert(field)
+    }
+
+    fn grow(ref mut self, field: String, amount: u64, negative: bool) {
+        if negative && amount > 0 {
+            self.lowered.insert(field.clone())
+        }
+        if self.dead.contains(field) {
+            return
+        }
+        let before = self.k.get(field) ?? 0
+        let after = before.checked_add(amount)
+        if after == null {
+            self.dead.insert(field)
+            return
+        }
+        self.k.insert(field, after ?? 0)
+    }
+
+    fn function[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, at: i64, looped: bool) {
+        if self.stack.contains(at) {
+            self.broken = true
+            return
+        }
+        let fun = ix.fns.get(at) ?? return
+        self.reached.insert(at)
+        self.stack.push(at)
+        let mut env: collections::BTreeMap[String, FbTy] = collections::BTreeMap()
+        if fun.has_receiver && fun.owner != null {
+            env.insert("self".clone(), (fun.owner ?? return).clone())
+        }
+        for arg in fun.args {
+            env.insert(ix.text(arg.name), FbTy::of(ix.words, arg.ty))
+        }
+        self.block(host, ix, fun.body, env, looped)
+        self.stack.pop()
+    }
+
+    fn type_of(ref self, ix: ref FbIndex, expr: ref Expr, env: ref collections::BTreeMap[String, FbTy]) -> FbTy? {
+        match expr {
+            Expr::Variable(name, _) => return env.get(ix.text(name))?.clone(),
+            Expr::Field { base, name, .. } => {
+                let held = self.type_of(ix, base, env) ?? return null
+                return ix.field_type(held, ix.text(name))
+            },
+            Expr::Unary { op, expr, .. } => {
+                if op == UnaryOp::Ref {
+                    return self.type_of(ix, expr, env)
+                }
+                return null
+            },
+            Expr::StructLit { name, .. } => return FbTy::named(ix.text(name)),
+            Expr::Call { func, .. } => {
+                match func {
+                    Expr::Variable(name, _) => {
+                        if ix.structs.contains_key(ix.text(name)) {
+                            return FbTy::named(ix.text(name))
+                        }
+                        return null
+                    },
+                    else => return null,
+                }
+            },
+            else => return null,
+        }
+    }
+
+    /// The value type of the map an `entry(..)` chain reaches.
+    fn entry_value(ref self, ix: ref FbIndex, expr: ref Expr, env: ref collections::BTreeMap[String, FbTy]) -> FbTy? {
+        match expr {
+            Expr::MethodCall { receiver, method, .. } => {
+                let name = ix.text(method)
+                if name == "entry" {
+                    let map = self.type_of(ix, receiver, env) ?? return null
+                    if map.is_map() {
+                        return map.args[1].clone()
+                    }
+                    return null
+                }
+                if name == "and_modify" || name == "or_insert" || name == "or_insert_with" || name == "or_default" {
+                    return self.entry_value(ix, receiver, env)
+                }
+                return null
+            },
+            else => return null,
+        }
+    }
+
+    fn block[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, block: ref Block, env: ref collections::BTreeMap[String, FbTy], looped: bool) {
+        let mut inner = env.clone()
+        for stmt in block.stmts {
+            inner = self.stmt(host, ix, stmt, inner, looped)
+        }
+    }
+
+    fn stmt[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, stmt: ref Spanned[Stmt], env: ref collections::BTreeMap[String, FbTy], looped: bool) -> collections::BTreeMap[String, FbTy] {
+        let mut env = env.clone()
+        let mut here = looped
+        match stmt.node {
+            Stmt::While { .. } => { here = true },
+            else => {},
+        }
+        match stmt.node {
+            Stmt::Assign { target, op, value } => {
+                let mut kind: i64 = 0
+                if op != null {
+                    kind = 3
+                    let o = op ?? return env
+                    if o == BinaryOp::Add {
+                        kind = 1
+                    }
+                    if o == BinaryOp::Sub {
+                        kind = 2
+                    }
+                }
+                self.write(ix, target, kind, value, stmt.span.start as i64, here)
+            },
+            else => {},
+        }
+        let shown = env.clone()
+        for e in check_visit_stmt(stmt.node) {
+            self.expr(host, ix, e, shown, here)
+            self.holes_of(host, ix, e, shown, here)
+        }
+        match stmt.node {
+            Stmt::Let { names, ty, value, .. } => {
+                for name in names {
+                    env.remove(ix.text(name))
+                }
+                if names.len() == 1 {
+                    let mut found: FbTy? = null
+                    if ty != null {
+                        found = FbTy::of(ix.words, ty ?? return env)
+                    } else {
+                        found = self.type_of(ix, value, env)
+                    }
+                    if found != null {
+                        env.insert(ix.text(names[0]), found ?? return env)
+                    }
+                }
+            },
+            Stmt::For { bindings, .. } => {
+                for name in bindings {
+                    env.remove(ix.text(name))
+                }
+            },
+            else => {},
+        }
+        let after = env.clone()
+        match stmt.node {
+            Stmt::For { body, .. } => self.block(host, ix, body, after, true),
+            Stmt::While { body, .. } => self.block(host, ix, body, after, true),
+            else => {
+                for b in fb_stmt_blocks(stmt.node) {
+                    self.block(host, ix, b, after, here)
+                }
+            },
+        }
+        return env
+    }
+
+    /// An expression met on its own (a fold's `init`).
+    fn expression[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, expr: ref Expr, env: ref collections::BTreeMap[String, FbTy], looped: bool) {
+        for e in check_visit_preorder(expr) {
+            self.expr(host, ix, e, env, looped)
+            self.holes_of(host, ix, e, env, looped)
+        }
+        for b in fb_expr_blocks(expr) {
+            self.block(host, ix, b, env, looped)
+        }
+    }
+
+    /// The expressions written in the holes of a literal, and in theirs.
+    fn holes_of[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, literal: ref Expr, env: ref collections::BTreeMap[String, FbTy], looped: bool) {
+        if check_visit_has_holes(literal) {
+            for hole in host.literal_holes(literal) {
+                for inner in check_visit_preorder(hole) {
+                    self.expr(host, ix, inner, env, looped)
+                    self.holes_of(host, ix, inner, env, looped)
+                }
+            }
+        }
+    }
+
+    /// A write to a field: `x.f += 3` outside a loop grows it, anything else
+    /// gives it up.
+    fn write(ref mut self, ix: ref FbIndex, target: ref Expr, kind: i64, value: ref Expr, at: i64, looped: bool) {
+        let field = fb_field_name(ix.words, target) ?? return
+        let amount = fb_literal_amount(value)
+        if (kind == 1 || kind == 2) && amount != null && !looped {
+            let stated = amount ?? return
+            {
+                let lowers = stated.negative != (kind == 2)
+                self.grow(field.clone(), stated.amount, lowers)
+                match target {
+                    Expr::Field { base, .. } => {
+                        match base {
+                            Expr::Variable(..) => {
+                                let mut here = fb_vec_of(self.sites, field)
+                                here.push(at)
+                                self.sites.insert(field.clone(), here)
+                            },
+                            else => {},
+                        }
+                    },
+                    else => {},
+                }
+                return
+            }
+        }
+        self.poison(field)
+    }
+
+    /// A field handed to a call that may change it is given up.
+    fn arguments(ref mut self, ix: ref FbIndex, args: ref Vec[Expr], callees: ref Vec[i64]) {
+        for i in 0..<args.len() {
+            let name = fb_field_name(ix.words, args[i]) ?? continue
+            if !fb_kept_by(ix, callees, i) {
+                self.poison(name)
+            }
+        }
+    }
+
+    fn expr[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, expr: ref Expr, env: ref collections::BTreeMap[String, FbTy], looped: bool) {
+        match expr {
+            Expr::MethodCall { receiver, method, args, .. } => self.method(host, ix, expr, receiver, method, args, env, looped),
+            Expr::SafeMethod { receiver, method, args, .. } => self.method(host, ix, expr, receiver, method, args, env, looped),
+            Expr::Call { func, args, .. } => {
+                self.called.insert(node_key(func))
+                let callees = ix.callees(func)
+                self.arguments(ix, args, callees)
+                for at in callees {
+                    self.function(host, ix, at, looped)
+                }
+            },
+            Expr::Variable(name, _) => {
+                if self.called.contains(node_key(expr)) {
+                    return
+                }
+                if env.contains_key(ix.text(name)) {
+                    return
+                }
+                for at in ix.callees(expr) {
+                    self.function(host, ix, at, true)
+                }
+            },
+            Expr::Path(..) => {
+                if self.called.contains(node_key(expr)) {
+                    return
+                }
+                for at in ix.callees(expr) {
+                    self.function(host, ix, at, true)
+                }
+            },
+            Expr::Closure { body, .. } => {
+                let at = node_key(expr)
+                let mut once = false
+                let mut inner = env.clone()
+                let held = self.lambdas.get(at)
+                if held != null {
+                    let lambda = held ?? return
+                    once = lambda.once
+                    for b in lambda.bound {
+                        inner.insert(b.name.clone(), b.ty.clone())
+                    }
+                    self.lambdas.remove(at)
+                }
+                self.block(host, ix, body, inner, looped || !once)
+            },
+            Expr::StructLit { name, fields, .. } => {
+                let mut ty = ix.text(name)
+                if ty == "Self" {
+                    ty = ""
+                    let own = env.get("self".clone())
+                    if own != null {
+                        ty = (own ?? return).name.clone()
+                    }
+                }
+                for field in ix.whole_fields(ty) {
+                    let mut amount: FbAmount? = null
+                    let mut written = false
+                    for init in fields {
+                        if ix.text(init.name) == field.name {
+                            written = true
+                            if init.value != null {
+                                amount = fb_literal_amount(init.value ?? return)
+                            }
+                        }
+                    }
+                    if !written && field.default != null {
+                        amount = fb_literal_amount(field.default ?? return)
+                    }
+                    if amount != null && !looped {
+                        let stated = amount ?? return
+                        self.grow(field.name.clone(), stated.amount, stated.negative)
+                    } else {
+                        self.poison(field.name.clone())
+                    }
+                }
+            },
+            Expr::With { fields, .. } => {
+                for f in fields {
+                    self.poison(ix.text(f.name))
+                }
+            },
+            Expr::Unary { op, expr, .. } => {
+                if op == UnaryOp::Ref {
+                    let name = fb_field_name(ix.words, expr)
+                    if name != null {
+                        self.poison(name ?? return)
+                    }
+                }
+            },
+            Expr::Spawn { .. } => { self.broken = true },
+            else => {},
+        }
+    }
+
+    /// A method call: the lambdas it is given are noted, then it is followed.
+    fn method[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, call: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], env: ref collections::BTreeMap[String, FbTy], looped: bool) {
+        let name = ix.text(method)
+        let once = name == "and_modify" || name == "or_insert_with" || name == "or_insert_with_key"
+        for arg in args {
+            match arg {
+                Expr::Closure { params, .. } => {
+                    let at = node_key(arg)
+                    let mut bound: Vec[FbBound] = []
+                    if name == "and_modify" && params.len() == 1 {
+                        let value = self.entry_value(ix, call, env)
+                        if value != null {
+                            bound.push(FbBound { name: ix.text(params[0]), ty: value ?? return })
+                        }
+                    }
+                    if !self.lambdas.contains_key(at) {
+                        self.lambdas.insert(at, FbLambda { once: once, bound: bound })
+                    }
+                },
+                else => {},
+            }
+        }
+        let callees = ix.methods_of(self.type_of(ix, receiver, env), name)
+        self.arguments(ix, args, callees)
+        for at in callees {
+            self.function(host, ix, at, looped)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// D3: the merge
+// ---------------------------------------------------------------------------
+
+/// What the walk of a merge found.
+struct FbMerge {
+    sites: collections::BTreeMap[String, Vec[i64]],
+    bad: collections::BTreeSet[String],
+    reached: collections::BTreeSet[i64],
+    broken: bool,
+    stack: Vec[i64],
+}
+
+impl FbMerge {
+    fn function[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, at: i64) {
+        if self.stack.contains(at) {
+            self.broken = true
+            return
+        }
+        let fun = ix.fns.get(at) ?? return
+        if !fun.has_receiver || fun.owner == null || fun.args.len() != 1 {
+            self.broken = true
+            return
+        }
+        let owner = (fun.owner ?? return).clone()
+        self.reached.insert(at)
+        self.stack.push(at)
+        let other = ix.text(fun.args[0].name)
+        let mut summed: collections::BTreeSet[String] = collections::BTreeSet()
+        for stmt in fun.body.stmts {
+            let mut rebinds = false
+            match stmt.node {
+                Stmt::Assign { target, .. } => {
+                    match target {
+                        Expr::Variable(name, _) => {
+                            let written = ix.text(name)
+                            rebinds = written == other || written == "self"
+                        },
+                        else => {},
+                    }
+                },
+                Stmt::Let { names, .. } => {
+                    for n in names {
+                        let written = ix.text(n)
+                        if written == other || written == "self" {
+                            rebinds = true
+                        }
+                    }
+                },
+                Stmt::For { bindings, .. } => {
+                    for n in bindings {
+                        let written = ix.text(n)
+                        if written == other || written == "self" {
+                            rebinds = true
+                        }
+                    }
+                },
+                else => {},
+            }
+            if rebinds {
+                self.broken = true
+            }
+            let field = self.sum_of_both(ix, stmt.node, other.clone())
+            if field != null {
+                let name = field ?? continue
+                if summed.contains(name) {
+                    self.bad.insert(name.clone())
+                }
+                summed.insert(name.clone())
+                let mut here = fb_vec_of(self.sites, name)
+                here.push(stmt.span.start as i64)
+                self.sites.insert(name, here)
+                continue
+            }
+            if self.entry_wise(host, ix, stmt.node, owner, other.clone()) {
+                continue
+            }
+            let mut walk = fb_new_walk()
+            let mut env: collections::BTreeMap[String, FbTy] = collections::BTreeMap()
+            env.insert("self".clone(), owner.clone())
+            env.insert(other.clone(), FbTy::of(ix.words, fun.args[0].ty))
+            walk.stmt(host, ix, stmt, env, false)
+            for name in walk.touched() {
+                self.bad.insert(name)
+            }
+            for r in walk.reached {
+                self.reached.insert(r)
+            }
+            if walk.broken {
+                self.broken = true
+            }
+        }
+        self.stack.pop()
+    }
+
+    /// `self.f += other.f`.
+    fn sum_of_both(ref self, ix: ref FbIndex, stmt: ref Stmt, other: String) -> String? {
+        match stmt {
+            Stmt::Assign { target, op, value } => {
+                if op == null {
+                    return null
+                }
+                if (op ?? return null) != BinaryOp::Add {
+                    return null
+                }
+                match target {
+                    Expr::Field { base: into, name, .. } => {
+                        match value {
+                            Expr::Field { base: from, name: read, .. } => {
+                                let field = ix.text(name)
+                                if fb_named(ix.words, into, "self".clone()) && fb_named(ix.words, from, other) && ix.text(read) == field {
+                                    return field
+                                }
+                                return null
+                            },
+                            else => return null,
+                        }
+                    },
+                    else => return null,
+                }
+            },
+            else => return null,
+        }
+    }
+
+    /// `for (key, value) in other.m.drain() { self.n.entry(key)
+    /// .and_modify fn (into) { into.merge(ref value) }.or_insert(value) }`.
+    fn entry_wise[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, stmt: ref Stmt, owner: ref FbTy, other: String) -> bool {
+        match stmt {
+            Stmt::For { bindings, iter, body, .. } => {
+                if bindings.len() != 2 || body.stmts.len() != 1 {
+                    return false
+                }
+                let key = ix.text(bindings[0])
+                let value = ix.text(bindings[1])
+                let mut source = iter
+                match iter {
+                    Expr::MethodCall { receiver, method, args, .. } => {
+                        let name = ix.text(method)
+                        if args.len() == 0 && (name == "drain" || name == "into_iter") {
+                            source = receiver
+                        }
+                    },
+                    else => {},
+                }
+                match source {
+                    Expr::Field { base, name, .. } => {
+                        if !fb_named(ix.words, base, other) {
+                            return false
+                        }
+                        let held = ix.field_type(owner, ix.text(name)) ?? return false
+                        if !held.is_map() {
+                            return false
+                        }
+                    },
+                    else => return false,
+                }
+                return self.chain(host, ix, body.stmts[0].node, owner, key, value)
+            },
+            else => return false,
+        }
+    }
+
+    fn chain[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, stmt: ref Stmt, owner: ref FbTy, key: String, value: String) -> bool {
+        match stmt {
+            Stmt::Expr(first) => {
+                let mut cur = first
+                let mut modify: Vec[ref Expr] = []
+                let mut inserted = false
+                let mut target: ref Expr? = null
+                while target == null {
+                    match cur {
+                        Expr::MethodCall { receiver, method, args, .. } => {
+                            let name = ix.text(method)
+                            if name == "and_modify" && modify.len() == 0 && args.len() == 1 {
+                                match args[0] {
+                                    Expr::Closure { params, .. } => {
+                                        if params.len() != 1 {
+                                            return false
+                                        }
+                                        modify.push(cur)
+                                    },
+                                    else => return false,
+                                }
+                            } else if name == "or_insert" && !inserted && args.len() == 1 && fb_named(ix.words, args[0], value.clone()) {
+                                inserted = true
+                            } else if name == "entry" && args.len() == 1 && fb_named(ix.words, args[0], key.clone()) {
+                                target = receiver
+                            } else {
+                                return false
+                            }
+                            cur = receiver
+                        },
+                        else => return false,
+                    }
+                }
+                let into_field = target ?? return false
+                match into_field {
+                    Expr::Field { base, name, .. } => {
+                        let map = ix.field_type(owner, ix.text(name)) ?? return false
+                        if !map.is_map() || !fb_named(ix.words, base, "self".clone()) {
+                            return false
+                        }
+                        if modify.len() == 0 {
+                            return true
+                        }
+                        return self.modified(host, ix, modify[0], map, value)
+                    },
+                    else => return false,
+                }
+            },
+            else => return false,
+        }
+    }
+
+    fn modified[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, call: ref Expr, map: ref FbTy, value: String) -> bool {
+        match call {
+            Expr::MethodCall { args, .. } => {
+                match args[0] {
+                    Expr::Closure { params, body, .. } => return self.merged(host, ix, ix.text(params[0]), body, map, value),
+                    else => return false,
+                }
+            },
+            else => return false,
+        }
+    }
+
+    fn merged[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, into: String, body: ref Block, map: ref FbTy, value: String) -> bool {
+        if body.stmts.len() != 1 {
+            return false
+        }
+        match body.stmts[0].node {
+            Stmt::Expr(call) => {
+                match call {
+                    Expr::MethodCall { receiver, method, args, .. } => {
+                        if args.len() != 1 {
+                            return false
+                        }
+                        let handed = fb_unref(args[0])
+                        if !fb_named(ix.words, receiver, into) || !fb_named(ix.words, handed, value) {
+                            return false
+                        }
+                        let inner = map.args[1].clone()
+                        let callees = ix.methods_of(inner, ix.text(method))
+                        if callees.len() != 1 {
+                            return false
+                        }
+                        self.function(host, ix, callees[0])
+                        return true
+                    },
+                    else => return false,
+                }
+            },
+            else => return false,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// D3: who holds a piece of code
+// ---------------------------------------------------------------------------
+
+/// An owner as a number: a function by where it starts, `-1` for what is
+/// elsewhere, `-2 - at` for the fold of the rule starting at `at`.
+fn fb_fold_owner(at: i64) -> i64 {
+    return -2 - at
+}
+
+pub struct FbUses {
+    names: collections::BTreeMap[i64, collections::BTreeSet[String]],
+    touches: collections::BTreeMap[String, collections::BTreeSet[i64]],
+}
+
+impl FbUses {
+    fn touch(ref mut self, field: String, owner: i64) {
+        if !self.touches.contains_key(field) {
+            self.touches.insert(field.clone(), collections::BTreeSet())
+        }
+        let mut set = self.touches[field] ?? return
+        set.insert(owner)
+    }
+
+    fn name(ref mut self, owner: i64, text: String) {
+        if !self.names.contains_key(owner) {
+            self.names.insert(owner, collections::BTreeSet())
+        }
+        let mut set = self.names[owner] ?? return
+        set.insert(text)
+    }
+
+    fn pattern[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, pattern: ref Pattern, owner: i64) {
+        match pattern {
+            Pattern::Seq(parts) => {
+                for p in parts {
+                    self.pattern(host, ix, p.node, owner)
+                }
+            },
+            Pattern::Choice(parts) => {
+                for p in parts {
+                    self.pattern(host, ix, p.node, owner)
+                }
+            },
+            Pattern::Bind { pat, .. } => self.pattern(host, ix, pat.node, owner),
+            Pattern::Group(pat) => self.pattern(host, ix, pat.node, owner),
+            Pattern::Repeat { pat, .. } => self.pattern(host, ix, pat.node, owner),
+            Pattern::Ref { args, .. } => {
+                for p in args {
+                    self.pattern(host, ix, p.node, owner)
+                }
+            },
+            Pattern::Fold(spec) => {
+                self.expression(host, ix, spec.init, owner)
+                self.expression(host, ix, spec.step, owner)
+                if spec.merge != null {
+                    self.expression(host, ix, spec.merge ?? return, owner)
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn block[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, block: ref Block, owner: i64) {
+        for stmt in block.stmts {
+            match stmt.node {
+                Stmt::Assign { target, .. } => {
+                    let name = fb_field_name(ix.words, target)
+                    if name != null {
+                        self.touch(name ?? return, owner)
+                    }
+                },
+                else => {},
+            }
+            for e in check_visit_stmt(stmt.node) {
+                self.expr(host, ix, e, owner)
+                self.holes_of(host, ix, e, owner)
+            }
+            for b in check_visit_stmt_blocks(stmt.node) {
+                self.block(host, ix, b, owner)
+            }
+        }
+    }
+
+    fn holes_of[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, literal: ref Expr, owner: i64) {
+        if check_visit_has_holes(literal) {
+            for hole in host.literal_holes(literal) {
+                for inner in check_visit_preorder(hole) {
+                    self.expr(host, ix, inner, owner)
+                    self.holes_of(host, ix, inner, owner)
+                }
+                for b in check_visit_expr_blocks(hole) {
+                    self.block(host, ix, b, owner)
+                }
+            }
+        }
+    }
+
+    fn expression[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, expr: ref Expr, owner: i64) {
+        for e in check_visit_preorder(expr) {
+            self.expr(host, ix, e, owner)
+            self.holes_of(host, ix, e, owner)
+        }
+        for b in check_visit_expr_blocks(expr) {
+            self.block(host, ix, b, owner)
+        }
+    }
+
+    fn expr[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, expr: ref Expr, owner: i64) {
+        let mut handed: Vec[ref Expr] = []
+        let mut callees: Vec[i64] = []
+        match expr {
+            Expr::MethodCall { method, args, .. } => {
+                self.name(owner, ix.text(method))
+                handed = fb_refs(args)
+                callees = fb_vec_of(ix.by_name, ix.text(method))
+            },
+            Expr::SafeMethod { method, args, .. } => {
+                self.name(owner, ix.text(method))
+                handed = fb_refs(args)
+                callees = fb_vec_of(ix.by_name, ix.text(method))
+            },
+            Expr::Call { func, args, .. } => {
+                handed = fb_refs(args)
+                callees = ix.callees(func)
+            },
+            Expr::Variable(name, _) => self.name(owner, ix.text(name)),
+            Expr::Path(segments, _) => {
+                for s in segments {
+                    self.name(owner, ix.text(s))
+                }
+            },
+            Expr::StructLit { name, .. } => {
+                let written = ix.text(name)
+                for f in ix.whole_fields(written.clone()) {
+                    self.touch(f.name.clone(), owner)
+                }
+                if written == "Self" {
+                    for (_, fields) in ix.structs {
+                        for f in fields {
+                            if fb_is_whole(f.ty.name.clone()) {
+                                self.touch(f.name.clone(), owner)
+                            }
+                        }
+                    }
+                }
+            },
+            Expr::With { fields, .. } => {
+                for f in fields {
+                    self.touch(ix.text(f.name), owner)
+                }
+            },
+            Expr::Unary { op, expr: inner, .. } => {
+                if op == UnaryOp::Ref {
+                    let name = fb_field_name(ix.words, inner)
+                    if name != null {
+                        self.touch(name ?? return, owner)
+                    }
+                }
+            },
+            Expr::Closure { body, .. } => self.block(host, ix, body, owner),
+            Expr::Spawn { body, .. } => self.expression(host, ix, body, owner),
+            else => {},
+        }
+        for i in 0..<handed.len() {
+            let name = fb_field_name(ix.words, handed[i]) ?? continue
+            if !fb_kept_by(ix, callees, i) {
+                self.touch(name, owner)
+            }
+        }
+    }
+}
+
+pub fn fb_uses[H: FbHost](host: ref H, ix: ref FbIndex, source: ref FbSource) -> FbUses {
+    let mut uses = FbUses { names: collections::BTreeMap(), touches: collections::BTreeMap() }
+    for item in source.program.items {
+        let at = item.span.start as i64
+        match item.node {
+            Item::Fn { body, .. } => uses.block(host, ix, body, at),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { body, .. } => uses.block(host, ix, body, method.span.start as i64),
+                        else => {},
+                    }
+                }
+            },
+            Item::Test { body, .. } => uses.block(host, ix, body, -1),
+            Item::Bench { body, .. } => uses.block(host, ix, body, -1),
+            Item::Comptime { value, .. } => uses.expression(host, ix, value, -1),
+            Item::Struct { fields, .. } => {
+                for f in fields {
+                    if f.default != null {
+                        uses.expression(host, ix, (f.default ?? continue).value, -1)
+                    }
+                }
+            },
+            Item::Grammar(g) => {
+                for rule in g.rules {
+                    for alt in rule.alts {
+                        uses.pattern(host, ix, alt.pattern.node, fb_fold_owner(rule.span.start as i64))
+                        if alt.action != null {
+                            uses.block(host, ix, alt.action ?? continue, -1)
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return uses
+}
+
+/// Whether a method of a whole number's own `impl` changes it in place, where
+/// no write shows it: then nothing is proved.
+pub fn fb_whole_changes_itself(source: ref FbSource) -> bool {
+    for item in source.program.items {
+        match item.node {
+            Item::Impl { target, methods, .. } => {
+                if fb_is_whole(FbTy::of(source.words, target).name) {
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { receiver, args, .. } => {
+                                if receiver != null && (receiver ?? continue).is_mut {
+                                    return true
+                                }
+                                for a in args {
+                                    if a.mutable {
+                                        return true
+                                    }
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// D3 for one fold
+// ---------------------------------------------------------------------------
+
+fn fb_is_param(expr: ref Expr, param: winnow_grammar::Symbol) -> bool {
+    return match expr {
+        Expr::Variable(v, _) => v == param,
+        else => false,
+    }
+}
+
+/// The method a merge lambda `fn (a, b) { a.m(b) }` calls.
+fn fb_merge_callees(ix: ref FbIndex, merging: ref Expr, acc: ref FbTy) -> Vec[i64] {
+    match merging {
+        Expr::Path(..) => return ix.callees(merging),
+        Expr::Closure { params, body, .. } => {
+            if params.len() != 2 || body.stmts.len() != 1 {
+                return []
+            }
+            match body.stmts[0].node {
+                Stmt::Expr(call) => {
+                    match call {
+                        Expr::MethodCall { receiver, method, args, .. } => {
+                            if !fb_is_param(receiver, params[0]) || args.len() != 1 {
+                                return []
+                            }
+                            let handed = fb_unref(args[0])
+                            if fb_is_param(handed, params[1]) {
+                                return ix.methods_of(acc.clone(), ix.text(method))
+                            }
+                            return []
+                        },
+                        else => return [],
+                    }
+                },
+                else => return [],
+            }
+        },
+        else => return [],
+    }
+}
+
+/// The counters of one fold that D3 proves, as the statements' first bytes.
+/// `known` is whether the input is held whole before the parse (D2);
+/// `arithmetic` is the checker's table of the `+`, `-` and `*` by their
+/// statements' first bytes, with the whole-number type of both sides.
+pub fn fb_fold_counters[H: FbHost](host: ref H, ix: ref FbIndex, uses: ref FbUses, source: ref FbSource, def: ref GrammarDef, rule_at: i64, spec: ref FoldSpec, known: bool, arithmetic: ref collections::BTreeMap[i64, String]) -> Vec[i64] {
+    let none: Vec[i64] = []
+    let words = ix.words
+    let width = fb_rule_width(source, def, words.resolve(spec.rule).clone()) ?? return none
+    if !known {
+        return none
+    }
+    let steps = fb_most_steps(width)
+    let acc_name = fb_acc_name(words, spec.init) ?? return none
+    if !ix.structs.contains_key(acc_name) {
+        return none
+    }
+    let acc = FbTy::named(acc_name.clone())
+    let mut init = fb_new_walk()
+    match spec.init {
+        Expr::Variable(..) => {
+            let mut starts: Vec[i64] = []
+            for at in fb_vec_of(ix.methods, fb_key(acc.name.clone(), "".clone())) {
+                let fun = ix.fns.get(at) ?? continue
+                if fun.args.len() == 0 {
+                    starts.push(at)
+                }
+            }
+            if starts.len() == 0 {
+                return none
+            }
+            for at in starts {
+                init.function(host, ix, at, false)
+            }
+        },
+        else => {
+            let env: collections::BTreeMap[String, FbTy] = collections::BTreeMap()
+            init.expression(host, ix, spec.init, env, false)
+        },
+    }
+    let mut step = fb_new_walk()
+    match spec.step {
+        Expr::Closure { params, body, .. } => {
+            if params.len() != 2 {
+                return none
+            }
+            let mut env: collections::BTreeMap[String, FbTy] = collections::BTreeMap()
+            env.insert(ix.text(params[0]), acc.clone())
+            step.block(host, ix, body, env, false)
+        },
+        Expr::Path(..) => {
+            let callees = ix.callees(spec.step)
+            if callees.len() == 0 {
+                return none
+            }
+            for at in callees {
+                step.function(host, ix, at, false)
+            }
+        },
+        else => return none,
+    }
+    let mut merge = fb_new_merge()
+    if spec.merge != null {
+        let callees = fb_merge_callees(ix, spec.merge ?? return none, acc)
+        if callees.len() != 1 {
+            return none
+        }
+        merge.function(host, ix, callees[0])
+    }
+    if init.broken || step.broken || merge.broken {
+        return none
+    }
+    let mut region: collections::BTreeSet[i64] = collections::BTreeSet()
+    for at in init.reached {
+        region.insert(at)
+    }
+    for at in step.reached {
+        region.insert(at)
+    }
+    for at in merge.reached {
+        region.insert(at)
+    }
+    let me = fb_fold_owner(rule_at)
+    let mut outside: collections::BTreeSet[i64] = collections::BTreeSet()
+    let mut queue: Vec[String] = []
+    for at in region {
+        if ix.implicit.contains(at) {
+            outside.insert(at)
+            for n in uses.names.get(at)?.clone() ?? collections::BTreeSet() {
+                queue.push(n)
+            }
+        }
+    }
+    for (owner, names) in uses.names {
+        let inside = if owner >= 0 { region.contains(owner) } else { owner == me }
+        if !inside {
+            for n in names {
+                queue.push(n.clone())
+            }
+        }
+    }
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    while queue.len() > 0 {
+        let name = queue.pop() ?? break
+        if seen.contains(name) {
+            continue
+        }
+        seen.insert(name.clone())
+        let reached = ix.reached_by.get(name)?.clone() ?? collections::BTreeSet()
+        for at in reached {
+            if region.contains(at) && !outside.contains(at) {
+                outside.insert(at)
+                for n in uses.names.get(at)?.clone() ?? collections::BTreeSet() {
+                    queue.push(n)
+                }
+            }
+        }
+    }
+    let mut fields: collections::BTreeSet[String] = collections::BTreeSet()
+    for (f, _) in step.sites {
+        fields.insert(f.clone())
+    }
+    for (f, _) in merge.sites {
+        fields.insert(f.clone())
+    }
+    for (f, _) in init.sites {
+        fields.insert(f.clone())
+    }
+    let mut out: Vec[i64] = []
+    for field in fields {
+        if step.dead.contains(field) || init.dead.contains(field) {
+            continue
+        }
+        let k = step.k.get(field) ?? 0
+        let k0 = init.k.get(field) ?? 0
+        if spec.parallel && k0 > 0 {
+            continue
+        }
+        if merge.bad.contains(field) {
+            continue
+        }
+        let owners = uses.touches.get(field)?.clone() ?? collections::BTreeSet()
+        let mut alone = true
+        for owner in owners {
+            let only = if owner >= 0 { region.contains(owner) && !outside.contains(owner) } else { owner == me }
+            if !only {
+                alone = false
+            }
+        }
+        if !alone {
+            continue
+        }
+        if !fb_invariant_checked(host, k, k0, spec.merge != null) {
+            continue
+        }
+        let lowered = step.lowered.contains(field) || init.lowered.contains(field)
+        let mut pieces: u64 = 1
+        if spec.parallel {
+            pieces = 0
+        }
+        let grown = k.checked_mul(steps) ?? continue
+        let bound = grown.checked_add(k0 * pieces) ?? continue
+        let mut sites: Vec[i64] = []
+        sites.extend(fb_vec_of(step.sites, field))
+        sites.extend(fb_vec_of(merge.sites, field))
+        sites.extend(fb_vec_of(init.sites, field))
+        for site in sites {
+            let ty = arithmetic.get(site) ?? continue
+            let room = fb_range(ty.clone()) ?? continue
+            let mut fits = bound <= room.above
+            if room.below == 0 {
+                fits = fits && !lowered
+            } else {
+                fits = fits && bound <= room.below
+            }
+            if fits {
+                out.push(site)
+            }
+        }
+    }
+    return out
+}
+
+/// What the walks look up in a program.
+pub fn fb_index(source: ref FbSource) -> FbIndex {
+    return FbIndex::of(source)
+}

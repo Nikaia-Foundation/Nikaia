@@ -1223,6 +1223,14 @@ mod fold_lowered {
 #[allow(unused_imports)]
 pub use fold_lowered::*;
 
+mod fold_bound_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/fold_bound.rs");
+}
+#[allow(unused_imports)]
+pub use fold_bound_lowered::*;
+
 mod foreign_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2324,6 +2332,10 @@ pub mod fmt {
 pub mod fold {
     #[allow(unused_imports)]
     pub use super::{Constant, Folded, fits, integer_fits, constant_of, written_in_literals, shifts_literals, wants_widening};
+}
+pub mod fold_bound {
+    #[allow(unused_imports)]
+    pub use super::{fb_literal_bytes, FbHost, FbSource, fb_least_width, fb_rule_width, fb_most_steps, fb_invariant_checked, fb_folds, FbTy, FbIndex, FbUses, fb_uses, fb_whole_changes_itself, fb_fold_counters, fb_index};
 }
 pub mod foreign {
     #[allow(unused_imports)]
