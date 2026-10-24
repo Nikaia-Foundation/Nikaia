@@ -1,0 +1,115 @@
+// crates/nikaia-std/src/tools/ledger_defaults.nika
+//
+// **What the ledger writes beyond an item's signature**, moved from the
+// compiler's `contracts` module (ADR-294, #125, R-5): the value of one
+// attribute (ADR-331 D6, D8) and the options whose default is an expression to
+// evaluate (ADR-318 D1). What stays Rust is what asks the workshop (a callback)
+// and the three writes into the ledger behind `let mut x = m[k] ?? continue`,
+// which lowers to a shared borrow until #816 is built (`attribute_values`'s
+// apply loop, `default_slot`, `write_result_sources`).
+
+/// The type contract a name reaches: this package's, or a dependency's by the
+/// name the program writes.
+fn ld_type_named(ledger: ref Ledger, library: ref Ledger, name: ref String) -> TypeContract? {
+    let direct = ledger.types[name]
+    if direct != null {
+        return direct?.clone()
+    }
+    let suffix = f"::{name}"
+    for (key, contract) in library.types {
+        if key == name || key.ends_with(suffix) {
+            return contract.clone()
+        }
+    }
+    return null
+}
+
+/// The variant of the named `enum` that the word names, whole case aside.
+fn ld_variant_named(ledger: ref Ledger, library: ref Ledger, name: ref String, word: ref String) -> String? {
+    let held = ld_type_named(ledger, library, name) ?? return null
+    for variant in held.variants {
+        if check_attributes_same_word(variant.name, word) {
+            return variant.name.clone()
+        }
+    }
+    return null
+}
+
+/// An attribute's argument as a literal: a literal's own text, a variant of the
+/// field's `enum` by its name alone (D3) or whole, or the value anything else
+/// computes to at build time, as an option's default does (D1).
+fn ld_argument_text(ledger: ref Ledger, library: ref Ledger, words: ref winnow_grammar::InternerContext, ty: ref Ty, argument: ref Expr, computed: fn(ref Ty, ref Expr) -> String? sync) -> String? {
+    if a_literal(argument) {
+        return default_text(argument)
+    }
+    match argument {
+        Expr::Variable(word, _) => {
+            match ty {
+                Ty::Named { name, .. } => {
+                    let spelled = words.resolve(word).clone()
+                    let variant = ld_variant_named(ledger, library, name, spelled)
+                    if variant != null {
+                        let shown = variant ?? ""
+                        return f"{name}::{shown}"
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return computed(ty, argument)
+}
+
+/// One attribute as `Name { value: "createdAt", case: Case::Camel }`. `name` is
+/// the attribute's type with any alias resolved.
+pub fn attribute_value(ledger: ref Ledger, library: ref Ledger, words: ref winnow_grammar::InternerContext, name: ref String, attribute: ref Attribute, computed: fn(ref Ty, ref Expr) -> String? sync) -> String? {
+    let found = ld_type_named(ledger, library, name) ?? return null
+    let mut position = 0
+    let mut written: Vec[String] = []
+    for field in found.fields {
+        let mut value: String = ""
+        if field.default.is_empty() {
+            if position >= attribute.args.len() {
+                return null
+            }
+            value = ld_argument_text(ledger, library, words, field.ty, attribute.args[position], computed) ?? return null
+            position += 1
+        } else {
+            let mut given = -1
+            let mut at = 0
+            for option in attribute.config {
+                if given < 0 && words.resolve(option.name) == field.name {
+                    given = at
+                }
+                at += 1
+            }
+            if given >= 0 {
+                value = ld_argument_text(ledger, library, words, field.ty, attribute.config[given].value, computed) ?? return null
+            } else {
+                value = field.default.clone()
+            }
+        }
+        written.push(f"{field.name}: {value}")
+    }
+    let joined = written.join(", ")
+    return f"{name} {{ {joined} }}"
+}
+
+/// The places of `item`'s options whose default is an expression to evaluate.
+pub fn computed_options(item: ref Item) -> Vec[i64] {
+    let mut places: Vec[i64] = []
+    match item {
+        Item::Fn { config, .. } => {
+            let mut at = 0
+            for option in config {
+                if !a_literal(option.default) {
+                    places.push(at)
+                }
+                at += 1
+            }
+        },
+        else => {},
+    }
+    return places
+}

@@ -1287,6 +1287,14 @@ mod ledger_lowered {
 #[allow(unused_imports)]
 pub use ledger_lowered::*;
 
+mod ledger_defaults_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/ledger_defaults.rs");
+}
+#[allow(unused_imports)]
+pub use ledger_defaults_lowered::*;
+
 mod ledger_items_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2348,6 +2356,10 @@ pub mod leaves {
 pub mod ledger {
     #[allow(unused_imports)]
     pub use super::{LedgerLine, Refused, LedgerText, LedgerValue, unquote, list, read, touch_of, held_of, class_of, variant_of, signature_of, Spelling, SignatureText, spelled_signature, Spelled, spell};
+}
+pub mod ledger_defaults {
+    #[allow(unused_imports)]
+    pub use super::{attribute_value, computed_options};
 }
 pub mod ledger_items {
     #[allow(unused_imports)]

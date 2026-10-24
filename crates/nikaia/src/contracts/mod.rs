@@ -1140,18 +1140,17 @@ fn computed_defaults<'a>(
     let Item::Fn { config, .. } = item else {
         return;
     };
-    for (at, option) in config.iter().enumerate() {
-        if !a_literal(&option.default) {
-            into.push(Computed {
-                key: key.to_string(),
-                at,
-                parsed,
-                default: &option.default,
-                option: parsed.text(option.name).to_string(),
-                ty: &option.ty,
-                field: false,
-            });
-        }
+    for at in nikaia_std::tools::ledger_defaults::computed_options(item) {
+        let option = &config[at as usize];
+        into.push(Computed {
+            key: key.to_string(),
+            at: at as usize,
+            parsed,
+            default: &option.default,
+            option: parsed.text(option.name).to_string(),
+            ty: &option.ty,
+            field: false,
+        });
     }
 }
 
@@ -1176,7 +1175,25 @@ fn attribute_values(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
                 if named == crate::check::attributes::MARK {
                     return None;
                 }
-                attribute_value(ledger, library, units, parsed, &named, attribute)
+                // In Nikaia (`tools/ledger_defaults.nika`, ADR-294, #125); the
+                // workshop that computes a non-literal argument stays here.
+                nikaia_std::tools::ledger_defaults::attribute_value(
+                    ledger,
+                    library,
+                    &parsed.interner,
+                    &named,
+                    attribute,
+                    &|ty: &ty::Ty, argument: &Expr| {
+                        computed_literal(
+                            units,
+                            parsed,
+                            "an attribute's argument",
+                            argument,
+                            ty,
+                            library,
+                        )
+                    },
+                )
             })
             .collect()
     };
@@ -1223,91 +1240,6 @@ fn attribute_values(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
             held.push(text);
         }
     }
-}
-
-/// The type contract a name reaches: this package's, or a dependency's by
-/// the name the program writes.
-fn type_named<'l>(ledger: &'l Ledger, library: &'l Ledger, name: &str) -> Option<&'l TypeContract> {
-    let suffix = format!("::{name}");
-    ledger.types.get(name).or_else(|| {
-        library
-            .types
-            .iter()
-            .find(|(key, _)| *key == name || key.ends_with(&suffix))
-            .map(|(_, c)| c)
-    })
-}
-
-/// One attribute as `Name { value: "createdAt", case: Case::Camel }`.
-fn attribute_value(
-    ledger: &Ledger,
-    library: &Ledger,
-    units: &[&Parsed],
-    parsed: &Parsed,
-    name: &str,
-    attribute: &crate::ast::Attribute,
-) -> Option<String> {
-    let fields = &type_named(ledger, library, name)?.fields;
-    let mut positional = attribute.args.iter();
-    let mut written = Vec::with_capacity(fields.len());
-    for field in fields {
-        let value = match field.default.is_empty() {
-            true => argument_text(
-                ledger,
-                library,
-                units,
-                parsed,
-                &field.ty,
-                positional.next()?,
-            )?,
-            false => match attribute
-                .config
-                .iter()
-                .find(|option| parsed.text(option.name) == field.name)
-            {
-                Some(option) => {
-                    argument_text(ledger, library, units, parsed, &field.ty, &option.value)?
-                }
-                None => field.default.clone(),
-            },
-        };
-        written.push(format!("{}: {value}", field.name));
-    }
-    Some(format!("{name} {{ {} }}", written.join(", ")))
-}
-
-/// An attribute's argument as a literal: a literal's own text, a variant of
-/// the field's `enum` by its name alone (D3) or whole, or the value anything
-/// else computes to at build time, as an option's default does (D1).
-fn argument_text(
-    ledger: &Ledger,
-    library: &Ledger,
-    units: &[&Parsed],
-    parsed: &Parsed,
-    ty: &ty::Ty,
-    argument: &Expr,
-) -> Option<String> {
-    if a_literal(argument) {
-        return Some(nikaia_std::tools::declared::default_text(argument));
-    }
-    if let Expr::Variable(word, _) = argument
-        && let ty::Ty::Named { name, .. } = ty
-        && let Some(variant) = type_named(ledger, library, name).and_then(|c| {
-            c.variants
-                .iter()
-                .find(|v| v.name.eq_ignore_ascii_case(parsed.text(*word)))
-        })
-    {
-        return Some(format!("{name}::{}", variant.name));
-    }
-    computed_literal(
-        units,
-        parsed,
-        "an attribute's argument",
-        argument,
-        ty,
-        library,
-    )
 }
 
 /// A literal, as the grammar once required a default to be: its text is the
