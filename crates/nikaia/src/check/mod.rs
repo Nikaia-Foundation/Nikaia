@@ -807,21 +807,6 @@ fn propagation(
     checked.facts
 }
 
-/// **The name of one specialised copy** — `describe__User`
-/// ([ADR-304](../../docs/specification/adr/adr-304.md) D6).
-///
-/// `pub(crate)` because the emitter writes the same name at the call and at the
-/// definition, and two spellings of one name is the defect that arrangement
-/// exists to prevent. A double underscore because a `.nika` name may hold one
-/// and this is not a name a program can collide with by accident: `describe__User`
-/// would have to be **written** to clash, and `NK1148` catches that.
-///
-/// **A dependency's type is named by its path**, `lib::User`, and `::` has no
-/// place in a function's name below: `describe__lib__User`.
-pub(crate) fn specialised(function: &str, on: &str) -> String {
-    nikaia_std::tools::check_core_pilot::check_specialised(function, on)
-}
-
 /// The value as the author wrote it, where this compiler can say so: a literal,
 /// a name, a negation, and an ellipsis for the rest. `CheckHost::written`.
 pub(super) fn written_by(parsed: &Parsed, value: &Expr) -> String {

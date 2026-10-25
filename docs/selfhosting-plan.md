@@ -485,3 +485,7 @@ E10-3 built: `function_body` is in `tools/emit_function_body.nika` (`emit_functi
 host gained `block_plain`, `known_nonnegative`, `insert_after_first_brace` and
 `insert_before_last_brace` (`OutText` stays Rust until `std` has `String::insert_str`). Dead in Rust
 now: `never_returns`, `jumps`, `a_tail_that_enters_a_grammar`, `PANIC`, `ARM_VALUE`. Next: E10-4 `function`.
+
+E10-4 switched: `Emitter::function` is a thin adapter over `emit_function`
+(`tools/emit_function.nika`); 1326 Rust lines removed (the body and 16 items it alone used,
+`check::specialised` among them), `lower-std` output unchanged. Next: E11.
