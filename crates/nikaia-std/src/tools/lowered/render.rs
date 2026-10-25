@@ -85,7 +85,7 @@ pub fn rendered_in(shown: &Shown, path: &str, lines: &[&str]) -> String {
             out.push(' ');
             out.push_str(&right_aligned(&format!("{}", one.line), gutter));
             out.push_str(" | ");
-            out.push_str(&line_of(lines, one.line).trim_end());
+            out.push_str(&line_of(lines, one.line).trim_end().to_string());
             out.push('\n');
             shown_line = one.line;
         }
@@ -96,7 +96,7 @@ pub fn rendered_in(shown: &Shown, path: &str, lines: &[&str]) -> String {
         marked.push_str(&mark.repeat(nikaia_std::count::of(one.width)));
         marked.push(' ');
         marked.push_str(&one.label.text);
-        out.push_str(&marked.trim_end());
+        out.push_str(&marked.trim_end().to_string());
         out.push('\n');
     }
     out.push_str(&bar);
