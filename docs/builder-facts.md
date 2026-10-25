@@ -35,6 +35,10 @@ the same dirty lock file). Read once; the brief adds only what is specific.
 * Syntax gaps of `tools/*.nika`: the list in `CLAUDE.md`, *Moving Rust into
   Nikaia*; `crates/rs2nika/convert --lint F.nika` flags the known ones.
 
+* Guard tests (`range_spelling`, `shipped_ledger`, the std ledger in
+  `contracts`) scan the whole repository: a script's `a..b` or a new
+  `unsafe fn` fails them. They are in the gate (builder.md) for that reason.
+
 ## Commands, exactly
 
 The cycle, clippy beside the tests, the report and `commit.nika`:

@@ -35,6 +35,14 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Wait in one call.** Run a build or a test in the foreground with a long
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.
+* **The gate, before every commit (#852).** Besides the touched tests, always
+  run the guard set: `cargo test --profile fast -p nikaia --test it --
+  range_spelling:: shipped_ledger:: contracts::every_std_module
+  dependency_ledger::` (repository-wide scans no NK code leads to: they kept
+  `develop` red for runs 1902-1915). A change to `check/`, `emit/`,
+  `tools/check_*.nika` or `tools/emit_*.nika` also runs `target/fast/nikaia test
+  --both-settings --project tests/compiler`. Report `Gate: green` or `Gate: red
+  <tests>`; on red do not commit, report `Needs: fix`.
 * **Never run the full suite.** Only the tests your change touches; CI runs
   the rest on every push to `develop`. Measure (callgrind, counts) only when
   your order has a *Measure* line, and then on one file or a small program,
