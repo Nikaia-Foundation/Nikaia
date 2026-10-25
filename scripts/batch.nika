@@ -1,0 +1,86 @@
+// The batch order and cut rule as a program, so the main session does not
+// read reports itself.
+//
+//     nikaia run scripts/batch.nika -- DIR
+//     nikaia run scripts/batch.nika -- DIR --tokens BRIEF TOKENS CALLS
+//
+// `DIR/batch.txt` names the briefs in order, one per line. For each brief in
+// order: no report (`BRIEF.report.md` or `BRIEF` without `.md` + `.report.md`)
+// prints `NEXT <abs path of brief>`; a report whose `Result:` is not `done`,
+// `Pushed:` is `rejected` or `none`, or `Found:`/`Deviation:` is not `none`
+// prints `CUT <brief>: <line>`; all done prints `BATCH DONE` and the count of
+// `Changelog:` lines that are not `none`. `--tokens` appends
+// `BRIEF TOKENS CALLS` to `DIR/tokens.txt`.
+
+use std::cli
+use std::fs
+use std::process
+
+// Same reader as release.nika (a `use` of another script file is not possible).
+fn batch_field(text: String, key: String) -> String {
+    for line in text.split("\n") {
+        if line.starts_with(key.clone()) {
+            return (line.strip_prefix(key.clone()) ?? "").trim().clone()
+        }
+    }
+    return ""
+}
+
+fn batch_report_path(dir: String, brief: String) -> String throws {
+    let a = f"{dir}/{brief}.report.md"
+    if fs::exists(a.clone(), fs::Root::Anywhere) { return a }
+    let stem = brief.trim_end_matches(".md").clone()
+    let b = f"{dir}/{stem}.report.md"
+    if fs::exists(b.clone(), fs::Root::Anywhere) { return b }
+    return ""
+}
+
+fn batch_cut(text: String) -> String {
+    let result = batch_field(text.clone(), "Result:")
+    let pushed = batch_field(text.clone(), "Pushed:")
+    let found = batch_field(text.clone(), "Found:")
+    let deviation = batch_field(text, "Deviation:")
+    if result != "done" { return f"Result: {result}" }
+    if pushed == "rejected" || pushed == "none" || pushed == "" { return f"Pushed: {pushed}" }
+    if found != "none" { return f"Found: {found}" }
+    if deviation != "none" { return f"Deviation: {deviation}" }
+    return ""
+}
+
+fn batch_run(dir: String) -> String throws {
+    let order = fs::read_to_string(f"{dir}/batch.txt", fs::Root::Anywhere)
+    let mut changelogs = 0
+    for raw in order.split("\n") {
+        let brief = raw.trim().clone()
+        if brief == "" { continue }
+        let path = batch_report_path(dir.clone(), brief.clone())
+        if path == "" {
+            let abs = process::run("realpath", [f"{dir}/{brief}"])
+            return f"NEXT {abs.stdout.trim()}"
+        }
+        let text = fs::read_to_string(path, fs::Root::Anywhere)
+        let why = batch_cut(text.clone())
+        if why != "" { return f"CUT {brief}: {why}" }
+        if batch_field(text, "Changelog:") != "none" { changelogs += 1 }
+    }
+    return f"BATCH DONE\nChangelog lines: {changelogs}"
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    if args.len() < 2 {
+        println("usage: nikaia run scripts/batch.nika -- DIR [--tokens BRIEF TOKENS CALLS]")
+        process::exit(2)
+    }
+    let dir = args[1].clone()
+    if args.len() >= 6 && args[2] == "--tokens" {
+        let file = f"{dir}/tokens.txt"
+        let mut old: String = ""
+        if fs::exists(file.clone(), fs::Root::Anywhere) { old = fs::read_to_string(file.clone(), fs::Root::Anywhere) }
+        fs::write(file, fs::Root::Anywhere, old + f"{args[3]} {args[4]} {args[5]}\n")
+        println(f"tokens: {args[3]} {args[4]} {args[5]}")
+        return
+    }
+    println(batch_run(dir))
+}

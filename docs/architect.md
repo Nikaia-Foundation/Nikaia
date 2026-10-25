@@ -96,6 +96,9 @@ What the architect hands the main session for a builder, in this form:
 
 ## The main session's duties
 
+* **Batch watch.** After each hand-back run `nikaia run scripts/batch.nika -- DIR`
+  and start what `NEXT` names; `CUT` goes to the architect; `--tokens BRIEF TOKENS CALLS`
+  records the harness figures in `DIR/tokens.txt`.
 * **Cost watch.** Look at each agent's size. A builder past about 120 turns or
   200k context is told to push what is verified and end. An architect past about
   80 turns or 150k context ends the same way. Restart with a fresh agent; never
