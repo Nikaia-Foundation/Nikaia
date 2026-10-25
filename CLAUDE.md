@@ -53,7 +53,7 @@
   older pending one, so most commits never got an answer.) `promote` skips a
   commit `main` already contains, so runs finishing out of order are safe. A
   docs-only push skips the build and test jobs (`scripts/ci-changes.sh`).
-* **The supervisor checks every 20 minutes that CI on `develop` is green.**
+* **The supervisor checks CI on `develop` with `nikaia run scripts/release.nika -- --loop 20 DIR` in the background, or `scripts/status.nika` by hand.**
   A red run is fixed forward at once (a fix-forward builder), because `main`
   and everything that hangs on it (the website, `promote`) stands still while
   `develop` is red.

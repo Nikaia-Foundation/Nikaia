@@ -7,7 +7,9 @@
 // `Part: #N`. Refuses when a listed file is unchanged or when a staged file is
 // not listed. Adds exactly the listed files, commits with the subject,
 // `Changelog:`, `Fixes #N` / `Part of #N` and the lines under `Attribution:` at
-// the end of the brief (`<brief>.md`, the report's name without `.report.md`),
+// the end of the brief (`<brief>.md`, the report's name without `.report.md`;
+// without them `Co-Authored-By: Claude <Model: field, default Sonnet 5.5>` and the
+// last `Claude-Session:` trailer on develop),
 // pushes `origin develop` fast-forward only (no rebase), writes `Pushed: <sha>`
 // into the report and prints `committed <sha8> pushed|rejected`. A rejected
 // push prints `PUSH REJECTED <sha>` first. `--dry-run` prints the message only.
@@ -39,18 +41,34 @@ fn commit_attribution(brief: String) -> String {
     return out.join("\n").trim().clone()
 }
 
-fn commit_message(report: String, brief: String) -> String {
+// The `Claude-Session:` line of the last commit on develop that has one.
+fn commit_session() -> String throws {
+    let body = commit_git(["log", "-1", "--grep=^Claude-Session:", "--format=%B", "develop"])
+    for line in body.split("\n") {
+        if line.starts_with("Claude-Session:") { return line.trim().clone() }
+    }
+    return ""
+}
+
+fn commit_message(report: String, brief: String) -> String throws {
     let mut msg = commit_field(report.clone(), "Commit:")
     let changelog = commit_field(report.clone(), "Changelog:")
     if changelog != "" && changelog != "none" { msg = msg + f"\n\nChangelog: {changelog}" }
     let fixes = commit_field(report.clone(), "Fixes:")
-    let part = commit_field(report, "Part:")
+    let part = commit_field(report.clone(), "Part:")
     if fixes != "" {
         msg = msg + f"\n\nFixes {fixes}"
     } else if part != "" {
         msg = msg + f"\n\nPart of {part}"
     }
-    let who = commit_attribution(brief)
+    let mut who = commit_attribution(brief)
+    if who == "" {
+        let mut model = commit_field(report, "Model:")
+        if model == "" { model = "Sonnet 5.5" }
+        who = f"Co-Authored-By: Claude {model} <noreply@anthropic.com>"
+        let session = commit_session()
+        if session != "" { who = who + "\n" + session }
+    }
     if who != "" { msg = msg + f"\n\n{who}" }
     return msg
 }

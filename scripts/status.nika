@@ -1,0 +1,83 @@
+// The state of the batch in at most three lines, read-only.
+//
+//     nikaia run scripts/status.nika -- DIR
+//
+//     CI <sha8> <state> [failed jobs]
+//     NEXT <brief> | CUT <brief>: <line> | BATCH DONE
+//     BUMP pending: <n> entries | none
+//
+// The batch line is `scripts/batch.nika`'s output (run as a program: a script
+// cannot `use` another). Each line is at most 160 characters.
+
+use std::cli
+use std::fs
+use std::process
+
+fn status_cap(line: String) -> String throws {
+    if line.len() <= 160 { return line }
+    return line.bytes[0..157].text() + "..."
+}
+
+fn status_field(text: String, key: String) -> String {
+    for line in text.split("\n") {
+        if line.starts_with(key.clone()) {
+            return (line.strip_prefix(key.clone()) ?? "").trim().clone()
+        }
+    }
+    return ""
+}
+
+fn status_ci() -> String throws {
+    let runs = process::run("gh", ["api", "repos/:owner/:repo/actions/runs?branch=develop&per_page=10", "--jq", ".workflow_runs[] | [.head_sha[0:8], .status, (.conclusion // \"none\"), (.id|tostring)] | join(\" \")"])
+    if !runs.ok { return "CI unknown" }
+    let lines = runs.stdout.trim().split("\n").collect()
+    if lines.len() == 0 || lines[0] == "" { return "CI unknown" }
+    let parts = lines[0].split(" ").collect()
+    if parts.len() < 4 { return "CI unknown" }
+    let sha = parts[0].clone()
+    let mut state = parts[1].clone()
+    if state == "completed" { state = parts[2].clone() }
+    if state != "failure" { return f"CI {sha} {state}" }
+    let jobs = process::run("gh", ["api", f"repos/:owner/:repo/actions/runs/{parts[3]}/jobs", "--jq", ".jobs[] | select(.conclusion == \"failure\") | .name"])
+    let names = jobs.stdout.trim().split("\n").collect().join(",")
+    return f"CI {sha} failure {names}"
+}
+
+fn status_batch(dir: String) -> String throws {
+    for exe in ["target/fast/nikaia", "target/release/nikaia"] {
+        if !fs::exists(exe, fs::Root::Anywhere) { continue }
+        let out = process::run(exe, ["run", "scripts/batch.nika", "--", dir.clone()])
+        if out.ok { return out.stdout.trim().split("\n").collect()[0].clone() }
+    }
+    return "BATCH unknown (no target/fast/nikaia)"
+}
+
+// Done reports with a Changelog line that released.txt does not name.
+fn status_bump(dir: String) -> String throws {
+    let mut released: String = ""
+    if fs::exists(f"{dir}/released.txt", fs::Root::Anywhere) { released = fs::read_to_string(f"{dir}/released.txt", fs::Root::Anywhere) }
+    let listed = process::run("ls", [dir.clone()])
+    let mut pending = 0
+    for name in listed.stdout.split("\n") {
+        if !name.ends_with(".report.md") { continue }
+        if released.contains(name.clone()) { continue }
+        let text = fs::read_to_string(f"{dir}/{name}", fs::Root::Anywhere)
+        let changelog = status_field(text.clone(), "Changelog:")
+        if status_field(text, "Result:") == "done" && changelog != "" && changelog != "none" { pending += 1 }
+    }
+    if pending == 0 { return "BUMP none" }
+    return f"BUMP pending: {pending} entries"
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    if args.len() < 2 {
+        println("usage: nikaia run scripts/status.nika -- DIR")
+        process::exit(2)
+    }
+    let dir = args[1].clone()
+    println(status_cap(status_ci()))
+    println(status_cap(status_batch(dir.clone())))
+    println(status_cap(status_bump(dir)))
+}

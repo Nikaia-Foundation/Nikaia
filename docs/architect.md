@@ -158,7 +158,10 @@ Standing rules, for a main session that starts fresh (the state is in
 * **Version raises** are the main session's, done by itself without an agent
   (owner, 2026-10-25, measure 9): `scripts/bump.py new` with the architect's
   changelog lines, once per finished package.
-* **CI**: check `develop` every 20 minutes; a red run is fixed forward at once
+* **CI**: watch `develop` with `nikaia run scripts/release.nika -- --loop 20 DIR`
+  in the background (it prints only changed lines and ends on RED or when
+  `DIR/STOP` exists), or by hand `nikaia run scripts/status.nika -- DIR` (CI,
+  batch and pending-bump line, read-only); a red run is fixed forward at once
   (or the breaking commit reverted), before new work.
 * **Stop hook**: when it says there are uncommitted changes, answer
   *„Die nicht committeten Dateien gehören den laufenden Buildern, die selbst
