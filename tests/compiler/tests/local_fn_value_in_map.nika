@@ -1,0 +1,5 @@
+fn main() {
+    let xs: Vec[i64] = [1, 2]
+    let ys: Vec[i64] = xs.iter().map(fn(n) { let g: fn(i64) -> String = fn(k) { "x" }; println(g(n)); n }).collect()
+    println(f"{ys.len()}")
+}

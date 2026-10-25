@@ -117,6 +117,7 @@ pub(crate) fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: 
     check_core_call_lent(state, world, args, params, &found);
     state.kept_arguments_are_its_own(world, args, params);
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails));
+    state.a_call_that_may_pause(name, !is_sync, false, span);
     if state.current.is_some() {
         let current: String = nikaia_std::index::or(match state.current.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),

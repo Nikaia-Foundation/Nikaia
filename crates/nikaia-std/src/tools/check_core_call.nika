@@ -177,6 +177,9 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
     check_core_call_lent(state, world, args, params, found)
     state.kept_arguments_are_its_own(world, args, params)
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails))
+    // **A call through a function value that may pause pauses** (#831): the
+    // lambda around it pauses too, as it does around a named call.
+    state.a_call_that_may_pause(name, !is_sync, false, span)
     if state.current != null {
         let current: String = state.current?.clone() ?? ""
         // **A call through a name fails with what the name was given**
