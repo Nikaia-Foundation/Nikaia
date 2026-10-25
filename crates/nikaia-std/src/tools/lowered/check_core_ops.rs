@@ -740,7 +740,9 @@ pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &
     let outer_inside = state.inside_a_door;
     state.inside_a_door = false;
     let saved = state.enter_boundary("task");
-    let value = check_core_block(state, world, host, body);
+    let outer = check_core_lambda_enter(state);
+    let walked = check_core_block(state, world, host, body);
+    let value = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
     state.leave_boundary(&saved);
     state.scope.pop();
     state.inside_a_door = outer_inside;

@@ -1,0 +1,25 @@
+// A `return` belongs to the nearest function-like body (#830): one in a
+// nested lambda is not the outer lambda's result.
+fn name(g: fn(i64) -> String, k: i64) -> String {
+    return g(k)
+}
+
+fn main() {
+    let xs: Vec[i64] = [1, 7]
+    let ys = xs.iter().map(fn(n) {
+        let s = name(fn(k) {
+            if k > 3 {
+                return "pos"
+            }
+            "neg"
+        }, n)
+        println(s)
+        if n > 5 {
+            return n * 2
+        }
+        n + 1
+    }).collect()
+    for y in ys {
+        println(f"{y}")
+    }
+}

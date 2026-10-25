@@ -1,0 +1,21 @@
+// A `return` belongs to the nearest function-like body (#830): one in a
+// `spawn`'s task is the task's, not the enclosing lambda's result.
+fn main() {
+    let xs: Vec[i64] = [1, 7]
+    let ys = xs.iter().map(fn(n) {
+        let h = spawn fn {
+            if n > 100 {
+                return "big"
+            }
+            "small"
+        }
+        h.detach()
+        if n > 5 {
+            return n * 2
+        }
+        n + 1
+    }).collect()
+    for y in ys {
+        println(f"{y}")
+    }
+}

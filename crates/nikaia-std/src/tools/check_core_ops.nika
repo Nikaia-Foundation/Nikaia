@@ -1075,7 +1075,10 @@ fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     state.inside_a_door = false
     // A task's body is an `async` block below (ADR-055 §6).
     let saved = state.enter_boundary("task")
-    let value = check_core_block(state, world, host, body)
+    // A `return` in the task is the task's, not an enclosing lambda's (#830).
+    let outer = check_core_lambda_enter(state)
+    let walked = check_core_block(state, world, host, body)
+    let value = check_core_lambda_leave(state, outer, walked, body)
     state.leave_boundary(saved)
     state.scope.pop()
     state.inside_a_door = outer_inside
