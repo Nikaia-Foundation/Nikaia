@@ -11,6 +11,11 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Your task names one or two steps.** Build them, run the touched tests,
   commit only your files, push fast-forward to `develop`, report, end. Do not
   start a further step the task did not name.
+* **The report file has exactly the brief's fields** (`Result:`, `Pushed:`,
+  `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, ...), one line
+  each, no prose: `scripts/release.nika` parses them. A test added for a fix
+  is run once against the unfixed compiler (stash the fix) and the report
+  says it failed there.
 * **If the task names a brief file, read it first**; it replaces reading the
   plan, the call graph and the issue yourself. A research task (no edits, no
   commit) writes such a brief, at most 80 lines, and reports its path.
