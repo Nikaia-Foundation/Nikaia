@@ -1,0 +1,14 @@
+// A field read through a `ref` parameter, assigned to a name that holds text
+// of its own, is still a part of the loan handed over (#839).
+struct Holder { name: String }
+
+fn kept(h: ref Holder) -> i64 {
+    let mut x: String = f"n{1}"
+    x = h.name
+    return x.len()
+}
+
+fn main() {
+    let h = Holder { name: f"ab{1}" }
+    println(f"{kept(h)}")
+}

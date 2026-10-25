@@ -374,7 +374,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         element_view = check_core_stmt_element_view(&state, world, value, &found, &want);
     }
     let bytes_view = !mutable && names.len() == 1 && shape.is_empty() && state.a_text_bytes_view(world, value);
-    if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if any_named && !bytes_view {
+    if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if any_named && !bytes_view && !(ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && state.a_lent_text_place(world, value, &found)) {
         let to = format!("bound to `{}` by a `let`", bound_names.join("`, `"));
         state.hands_over(world, value, &found, &to, span);
     }
@@ -716,8 +716,11 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     }
     state.assigned_followed(world, target, op, value);
     if op.is_none() {
-        let to: String = if check_core_stmt_an_index(target) { "written into a container".to_owned() } else { "assigned to another name".to_owned() };
-        state.hands_over(world, value, &found, &to, span);
+        let lent = check_core_stmt_a_name(target) && into.is_a_view() && state.lent_views_assigned(world, value, &found);
+        if lent { found = Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true }; } else {
+            let to: String = if check_core_stmt_an_index(target) { "written into a container".to_owned() } else { "assigned to another name".to_owned() };
+            state.hands_over(world, value, &found, &to, span);
+        }
     }
     let written = host.written(value);
     state.a_write_that_skips_the_door(world, target, &into, &written, span);

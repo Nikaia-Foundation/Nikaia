@@ -301,7 +301,7 @@ impl ProverState {
                         let length = length_of(words.resolve(name));
                         if scope.ints.contains(&length) {
                             let known = arena.var(&length);
-                            given_by.insert(length_of(&param), known);
+                            given_by.insert(length_of(param), known);
                         }
                     },
                     _ => { },
@@ -402,7 +402,7 @@ pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[
                 let length = length_of(words.resolve(name));
                 if scope.ints.contains(&length) {
                     let known = arena.var(&length);
-                    args_given.insert(length_of(&param), known);
+                    args_given.insert(length_of(param), known);
                 }
             },
             _ => { },

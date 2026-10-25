@@ -172,7 +172,7 @@ impl CheckState {
     /// goes into decides what it is (ADR-282 D14). The name is bound as the
     /// view it may be (ADR-282 D22, D25).
     pub fn views_meet_owned_text(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
-        return self.choice_of_views_and_text(world, value, false)
+        return self.choice_of_views_and_text(world, value, false, false)
     }
 
     /// **A `let` over arms that are a `String` read through a borrowed
@@ -180,10 +180,33 @@ impl CheckState {
     /// h.name` is; beside literals and views the whole is a view, beside text
     /// of its own it is mixed. Null where no arm is such a read.
     pub fn lent_arms_bound(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
-        return self.choice_of_views_and_text(world, value, true)
+        if self.a_lent_text_place(world, value, a_string_type()) {
+            // **A plain `let` over such a read is a view of it** (Part I 6.5,
+            // #839); the `let` over a place lends it.
+            return Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
+        }
+        return self.choice_of_views_and_text(world, value, true, false)
     }
 
-    fn choice_of_views_and_text(ref mut self, world: ref CheckWorld, value: ref Expr, only_lent: bool) -> Ty? sync {
+    /// **An assignment of a `String` read through a borrowed parameter, or of
+    /// arms that are such reads, literals and views, to a name that holds a
+    /// view** (ADR-282 D13, #839): the reads are lent. False where anything
+    /// else flows in (text of its own keeps the hand-over).
+    pub fn lent_views_assigned(ref mut self, world: ref CheckWorld, value: ref Expr, found: ref Ty) -> bool sync {
+        if self.a_lent_text_place(world, value, found) {
+            self.facts.lent_reads.insert(node_key(value))
+            return true
+        }
+        return self.choice_of_views_and_text(world, value, true, true) != null
+    }
+
+    /// Whether a value is a `String` field or element read through a `ref`
+    /// parameter (`found` is what it came to), not a choice.
+    pub fn a_lent_text_place(ref self, world: ref CheckWorld, value: ref Expr, found: ref Ty) -> bool sync {
+        return !is_a_choice(value) && found == a_string_type() && self.a_place_of_a_lent_parameter(world, value)
+    }
+
+    fn choice_of_views_and_text(ref mut self, world: ref CheckWorld, value: ref Expr, only_lent: bool, views_only: bool) -> Ty? sync {
         if !is_a_choice(value) {
             return null
         }
@@ -219,6 +242,9 @@ impl CheckState {
             }
         }
         if lent.len() == 0 && (only_lent || views == 0 || owned == 0) {
+            return null
+        }
+        if views_only && (owned > 0 || absent) {
             return null
         }
         for node in self.choice_nodes(world, value) {

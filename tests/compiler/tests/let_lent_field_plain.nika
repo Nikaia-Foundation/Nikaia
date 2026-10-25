@@ -1,0 +1,38 @@
+// A plain `let` over a field read through a `ref` parameter is a view of it
+// (Part I 6.5, #839), and so is an assignment of one, or of arms that are such
+// reads and literals, to a name that holds a view (ADR-282 D13).
+struct Holder { name: String }
+
+fn label(h: ref Holder) -> i64 {
+    let x = h.name
+    return x.len()
+}
+
+fn assigned(h: ref Holder, c: bool) -> i64 {
+    let mut x = "none"
+    if c {
+        x = h.name
+    }
+    return x.len()
+}
+
+fn chosen(h: ref Holder, c: bool, d: bool) -> i64 {
+    let mut x = "none"
+    if d {
+        x = if c { h.name } else { "other" }
+    }
+    return x.len()
+}
+
+fn mixed(h: ref Holder, c: bool) -> i64 {
+    let x = if c { h.name } else { f"n{1}{2}" }
+    return x.len()
+}
+
+fn main() {
+    let h = Holder { name: f"ab{1}" }
+    println(f"{label(h)} {assigned(h, true)} {assigned(h, false)}")
+    println(f"{chosen(h, true, true)} {chosen(h, false, true)} {chosen(h, true, false)}")
+    println(f"{mixed(h, true)} {mixed(h, false)}")
+    println(h.name)
+}

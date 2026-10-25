@@ -491,7 +491,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let bytes_view = !mutable && names.len() == 1 && shape.len() == 0 && state.a_text_bytes_view(world, value)
     if seen_through || element_view == 1 {
         check_core_stmt_lent_let(state, world, names, span)
-    } else if any_named && !bytes_view {
+    } else if any_named && !bytes_view && !(ty == null && !mutable && names.len() == 1 && shape.len() == 0 && state.a_lent_text_place(world, value, found)) {
+        // A plain `let` over a `String` read through a `ref` parameter is a
+        // view of it (Part I 6.5, #839), bound so below.
         let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
         state.hands_over(world, value, found, to, span)
     }
@@ -966,8 +968,15 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     state.assigned_followed(world, target, op, value)
     // **What is assigned is given to the place** (ADR-293 D29).
     if op == null {
-        let to: String = if check_core_stmt_an_index(target) { "written into a container".clone() } else { "assigned to another name".clone() }
-        state.hands_over(world, value, found, to, span)
+        // **Into a name that holds a view, a read through a `ref` parameter
+        // is lent** (ADR-282 D13, #839).
+        let lent = check_core_stmt_a_name(target) && into.is_a_view() && state.lent_views_assigned(world, value, found)
+        if lent {
+            found = Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
+        } else {
+            let to: String = if check_core_stmt_an_index(target) { "written into a container".clone() } else { "assigned to another name".clone() }
+            state.hands_over(world, value, found, to, span)
+        }
     }
     // **A write to shared mutable state goes through a door** (ADR-281).
     let written = host.written(value)

@@ -118,13 +118,28 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn views_meet_owned_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> { self.choice_of_views_and_text(world, value, false) }
+    pub fn views_meet_owned_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> { self.choice_of_views_and_text(world, value, false, false) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn lent_arms_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> { self.choice_of_views_and_text(world, value, true) }
+    pub fn lent_arms_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> {
+        if self.a_lent_text_place(world, value, &a_string_type()) { return Some(Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true }); }
+        self.choice_of_views_and_text(world, value, true, false)
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn choice_of_views_and_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, only_lent: bool) -> Option<Ty> {
+    pub fn lent_views_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, found: &Ty) -> bool {
+        if self.a_lent_text_place(world, value, found) {
+            self.facts.lent_reads.insert(node_key(value));
+            return true;
+        }
+        self.choice_of_views_and_text(world, value, true, true).is_some()
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lent_text_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, found: &Ty) -> bool { !is_a_choice(value) && *found == a_string_type() && self.a_place_of_a_lent_parameter(world, value) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn choice_of_views_and_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, only_lent: bool, views_only: bool) -> Option<Ty> {
         if !is_a_choice(value) { return None; }
         let text = a_string_type();
         let maybe_text = Ty::Nullable(Box::new(a_string_type()));
@@ -148,6 +163,7 @@ impl CheckState {
             } else { return None; }
         }
         if lent.is_empty() && (only_lent || views == 0 || owned == 0) { return None; }
+        if views_only && (owned > 0 || absent) { return None; }
         for node in self.choice_nodes(world, value) { self.arm_disagreements.remove(&node); }
         for node in lent.iter() {
             let node = nikaia_std::num::value(node);

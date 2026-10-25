@@ -1,0 +1,10 @@
+error[NK2106]: `h.name` is assigned to another name, but `h` is only borrowed here.
+  --> tests/let_lent_field_kept.nika:7:5
+   |
+ 7 |     x = h.name
+   |     ^^^^^^^^^^
+   |
+   = note: `h` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.
+   = note: Nikaia never makes a copy behind your back.
+   = help: Hand over a copy: `h.name.clone()`.
+
