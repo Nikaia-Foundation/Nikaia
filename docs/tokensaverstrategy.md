@@ -101,7 +101,7 @@ rules above bring in the *Runs* table, then decide on more agents at once.
   fraction of one long build agent). It returns a decision and ordered steps;
   builders get those steps, not the research.
 * **Builds are shared.** Delete `target/release/nikaia-scratch` after each test run;
-  keep `target/nikaia-project-tests` unless it is above 1 GB or the disk has
+  keep `target/nikaia-project-tests` unless it is above 2 GB or the disk has
   under 3 GB free; no two full test runs
   at once (disk, and the same machine).
 * **Check the cost while it runs.** The orchestrator looks at an agent's

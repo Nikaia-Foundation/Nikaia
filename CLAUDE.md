@@ -285,7 +285,8 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   whole session (no command output at all). Delete `target/` of a worktree you
   no longer use and `target/release/nikaia-scratch` before and after a test run;
   keep `target/nikaia-project-tests` (the warm `std` build of the emitted
-  programs) unless it is above 1 GB or the disk has under 3 GB free (`df`), and run `cargo test --no-fail-fast` (it stops at
+  programs) unless it is above 2 GB or the disk has under 3 GB free (`df`; the
+  check is in `.claude/agents/builder.md`), and run `cargo test --no-fail-fast` (it stops at
   the first failing binary otherwise).
 * **Moving a resolver or a map loop:** never compare a contract by address
   (`std::ptr::eq`): a resolver that returns an owned value breaks it silently.

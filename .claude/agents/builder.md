@@ -65,6 +65,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   Run it with `target/fast/nikaia test --both-settings --project tests/compiler` (no `it`
   rebuild). A new `#[test]` in `crates/nikaia/tests/it/` only where the check
   needs the compiler's Rust API or the lowered text.
+* **Last step, always:** `d=target/nikaia-project-tests; [ -d $d ] && [ $(du -sm $d | cut -f1) -gt 2048 -o $(df -m --output=avail / | tail -1) -lt 3072 ] && rm -rf $d; du -sh $d 2>/dev/null; df -h / | tail -1`
+  and report both figures.
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
