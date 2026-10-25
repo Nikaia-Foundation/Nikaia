@@ -282,9 +282,10 @@ Rules from the sessions that moved the most; they save tokens, not just time.
 * **The disk is shared and small.** It ran out twice mid-test and once for the
   whole session (no command output at all). Delete `target/` of a worktree you
   no longer use and `target/release/nikaia-scratch` before and after a test run;
-  keep `target/nikaia-project-tests` (the warm `std` build of the emitted
-  programs) unless it is above 2 GB or the disk has under 3 GB free (`df`; the
-  check is in `.claude/agents/builder.md`), and run `cargo test --no-fail-fast` (it stops at
+  keep `target/nikaia-project-tests`: it is the tests' Nikaia cache
+  (`NIKAIA_CACHE_DIR`), and the compiler prunes it itself after each build,
+  least recently used entry first, to `NIKAIA_CACHE_LIMIT` (set `2G`);
+  delete it only when the disk has under 3 GB free, and run `cargo test --no-fail-fast` (it stops at
   the first failing binary otherwise).
 * **Moving a resolver or a map loop:** never compare a contract by address
   (`std::ptr::eq`): a resolver that returns an owned value breaks it silently.
