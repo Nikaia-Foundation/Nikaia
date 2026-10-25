@@ -55,7 +55,7 @@ impl Row {{
 }}
 
 fn main() {{
-    let r = Row {{ name: "a".to_string(), count: 1 }}
+    let r = Row {{ name: "a".clone(), count: 1 }}
     println(f"{{{call}}}")
 }}
 "#

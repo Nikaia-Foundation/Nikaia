@@ -387,8 +387,7 @@ fn a_copy_has_one_word() {
 
 /// **The text form of text is the text itself** (ADR-282 D8): a view stays a
 /// view and a literal a literal, so nothing is copied and nothing is written
-/// below - and a view put where text of its own is kept is refused naming
-/// `.clone()`, as it is without the `.to_string()`.
+/// below, also where it is kept in a field.
 #[test]
 fn the_text_form_of_text_is_the_text() {
     let rust = lowered(
@@ -409,15 +408,9 @@ fn the_text_form_of_text_is_the_text() {
          \x20   println(p.name)\n\
          }\n",
     );
-    assert_eq!(refused.len(), 1, "{refused:#?}");
-    assert!(
-        refused[0]
-            .help
-            .as_deref()
-            .unwrap_or_default()
-            .contains(".clone()"),
-        "{refused:#?}"
-    );
+    // A literal's text form is the literal: kept in a field it makes the
+    // field a `&'static str`, so nothing is refused.
+    assert!(refused.is_empty(), "{refused:#?}");
 }
 
 /// **A name bound again is a new binding** (0.0.230). Two loops that each bind
