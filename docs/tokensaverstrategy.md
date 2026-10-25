@@ -100,8 +100,9 @@ rules above bring in the *Runs* table, then decide on more agents at once.
   question and a page limit** (the plans of 2026-10-11 cost 7-21 M each, a
   fraction of one long build agent). It returns a decision and ordered steps;
   builders get those steps, not the research.
-* **Builds are shared.** Delete `target/nikaia-project-tests` and
-  `target/release/nikaia-scratch` after each test run; no two full test runs
+* **Builds are shared.** Delete `target/release/nikaia-scratch` after each test run;
+  keep `target/nikaia-project-tests` unless it is above 1 GB or the disk has
+  under 3 GB free; no two full test runs
   at once (disk, and the same machine).
 * **Check the cost while it runs.** The orchestrator looks at an agent's
   transcript size: past about 150 turns or 250 k context the agent is told to

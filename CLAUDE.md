@@ -283,8 +283,9 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   open ones are GitHub issues.
 * **The disk is shared and small.** It ran out twice mid-test and once for the
   whole session (no command output at all). Delete `target/` of a worktree you
-  no longer use, `target/nikaia-project-tests` and `target/release/nikaia-scratch`
-  before and after a test run, and run `cargo test --no-fail-fast` (it stops at
+  no longer use and `target/release/nikaia-scratch` before and after a test run;
+  keep `target/nikaia-project-tests` (the warm `std` build of the emitted
+  programs) unless it is above 1 GB or the disk has under 3 GB free (`df`), and run `cargo test --no-fail-fast` (it stops at
   the first failing binary otherwise).
 * **Moving a resolver or a map loop:** never compare a contract by address
   (`std::ptr::eq`): a resolver that returns an owned value breaks it silently.
