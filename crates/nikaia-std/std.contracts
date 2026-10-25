@@ -4945,7 +4945,7 @@ pub = true
 [type."process::Output"]
 pub = true
 crosses = true
-fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: String", "pub elapsed: time::Duration", "pub user_time: time::Duration", "pub system_time: time::Duration", "pub max_rss_kib: i64?"]
+fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: String", "pub elapsed: time::Duration", "pub user_time: time::Duration", "pub system_time: time::Duration", "pub max_rss_kib: i64?", "pub timed_out: bool"]
 
 # **`args: Vec[String]`, handed over**, and not `?`: an empty list has no
 # element type of its own, and a parameter that names none left `run("pwd", [])`
@@ -4980,7 +4980,7 @@ pub = true
 throws = ["io::IoError"]
 provenance = "untrusted"
 keeps = ["args"]
-signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false) -> process::Output"
+signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null) -> process::Output"
 
 # Throw `process::Exit::Code(code)`, with `code` from 0 to 255: a fatal error
 # (ADR-345), which a `catch` takes only in an arm naming it. At the end of

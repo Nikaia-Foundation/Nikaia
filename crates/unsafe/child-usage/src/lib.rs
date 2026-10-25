@@ -47,6 +47,28 @@ pub fn wait(mut child: Child) -> io::Result<Waited> {
     waited(child)
 }
 
+/// End the child `pid` and every process in its group with SIGKILL (the child
+/// must have been started as its own group leader). Where the platform is not
+/// Unix, `taskkill /T /F`. Errors are ignored: the group may be gone already.
+#[cfg(unix)]
+pub fn kill_group(pid: u32) {
+    if let Ok(pid) = libc::pid_t::try_from(pid) {
+        // SAFETY: `kill` takes two integers; a negative pid names the group
+        // led by `pid` (README, third row).
+        unsafe {
+            libc::kill(-pid, libc::SIGKILL);
+        }
+    }
+}
+
+/// See the Unix version.
+#[cfg(not(unix))]
+pub fn kill_group(pid: u32) {
+    let _ = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .output();
+}
+
 #[cfg(unix)]
 fn waited(child: Child) -> io::Result<Waited> {
     use std::os::unix::process::ExitStatusExt;

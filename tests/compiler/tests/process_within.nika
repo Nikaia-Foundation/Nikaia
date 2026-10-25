@@ -1,0 +1,15 @@
+// #847 step 1, ADR-243 D9: `process::run(...; within: ...)` ends a program that
+// runs too long, and its whole process group on Unix.
+use std::process
+
+fn main() throws {
+    let slow = process::run("sh", ["-c", "sleep 5"]; within: 200.millis())
+    println(f"timed_out={slow.timed_out} ok={slow.ok} code={slow.code}")
+    let quick = process::run("sh", ["-c", "echo hi"]; within: 10.seconds())
+    println(f"timed_out={quick.timed_out} ok={quick.ok} stdout={quick.stdout.trim()}")
+    let group = process::run("sh", ["-c", "sleep 5 & sleep 5; echo never"]; within: 200.millis())
+    println(f"timed_out={group.timed_out} stdout={group.stdout.trim()}")
+    println(group.elapsed.in_nanos() < 3000000000)
+    let plain = process::run("sh", ["-c", "echo plain"])
+    println(f"timed_out={plain.timed_out} ok={plain.ok}")
+}

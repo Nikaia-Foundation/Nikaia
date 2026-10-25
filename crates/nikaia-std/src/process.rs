@@ -59,6 +59,8 @@ pub struct Output {
     /// On Linux never below the caller's own high-water mark before the start
     /// (ADR-368 D3).
     pub max_rss_kib: Option<i64>,
+    /// Whether `within` ran out and the program was ended (ADR-243 D9).
+    pub timed_out: bool,
 }
 
 /// What the thread beside the task hands back: the two streams' bytes, and
@@ -68,6 +70,7 @@ struct Ran {
     stderr: Vec<u8>,
     waited: child_usage::Waited,
     elapsed: Duration,
+    timed_out: bool,
 }
 
 /// Start the program, read both pipes to their end - standard error on a
@@ -78,11 +81,17 @@ fn started(
     args: &[String],
     dir: &str,
     environment: Option<Vec<(OsString, OsString)>>,
+    within: Option<Duration>,
 ) -> std::io::Result<Ran> {
     let started = Instant::now();
     let mut command = Command::new(program);
     if let Some(environment) = environment {
         command.env_clear().envs(environment);
+    }
+    #[cfg(unix)]
+    if within.is_some() {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
     }
     let mut child = command
         .args(args)
@@ -91,6 +100,19 @@ fn started(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
+    let expired = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let watchdog = within.map(|limit| {
+        let (done, wake) = std::sync::mpsc::channel::<()>();
+        let pid = child.id();
+        let expired = expired.clone();
+        let thread = std::thread::spawn(move || {
+            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = wake.recv_timeout(limit) {
+                expired.store(true, std::sync::atomic::Ordering::SeqCst);
+                child_usage::kill_group(pid);
+            }
+        });
+        (done, thread)
+    });
     let mut errors = child.stderr.take();
     let beside = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
         let mut bytes = Vec::new();
@@ -109,12 +131,17 @@ fn started(
         .unwrap_or_else(|_| Err(std::io::Error::other("reading standard error panicked")));
     let waited = child_usage::wait(child)?;
     let elapsed = started.elapsed();
+    if let Some((done, thread)) = watchdog {
+        drop(done);
+        let _ = thread.join();
+    }
     read?;
     Ok(Ran {
         stdout,
         stderr: stderr?,
         waited,
         elapsed,
+        timed_out: expired.load(std::sync::atomic::Ordering::SeqCst),
     })
 }
 
@@ -136,6 +163,7 @@ pub async fn run(
     env: Vec<(String, String)>,
     env_remove: Vec<String>,
     env_clear: bool,
+    within: Option<Duration>,
 ) -> Result<Output, IoError> {
     let invalid = invalid_entries(&env, &env_remove);
     if !invalid.is_empty() {
@@ -163,7 +191,7 @@ pub async fn run(
         )
     });
     let dir = dir.to_string();
-    let finished = crate::rt::io::beside(move || started(&found, &args, &dir, environment))
+    let finished = crate::rt::io::beside(move || started(&found, &args, &dir, environment, within))
         .await
         .map_err(|e| IoError::of(e, &named))?;
     let stdout = String::from_utf8(finished.stdout)
@@ -180,6 +208,7 @@ pub async fn run(
         user_time: finished.waited.user_time,
         system_time: finished.waited.system_time,
         max_rss_kib: finished.waited.max_rss_kib,
+        timed_out: finished.timed_out,
     })
 }
 

@@ -35,6 +35,7 @@ child is waited for with the standard library, both times are zero and
 | :--- | :--- | :--- |
 | `wait` (Unix) | `core::mem::zeroed::<libc::rusage>()` | `struct rusage` is integers and `timeval`s of integers; all-zero is a valid value of each |
 | `wait` (Unix) | `libc::wait4(pid, &mut status, 0, &mut usage)` | both pointers are to locals that live across the call and have the types `wait4` writes; `pid` is the id of a child this process spawned and has not waited for, since the `Child` is owned here and the standard library waits only through it |
+| `kill_group` (Unix) | `libc::kill(-pid, libc::SIGKILL)` | two integers, no pointer; a negative pid names the group the child leads, and a stale pid at worst fails with `ESRCH` |
 
 ## How it is checked
 
