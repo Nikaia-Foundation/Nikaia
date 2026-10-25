@@ -811,6 +811,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // **`m.get(k)` reads the map as `m[k]` does** (#297).
     if name == "get" && check_core_method_a_map(on) {
         state.flow.read_a_map = true
+        state.facts.map_gets.insert(id_of(expr) as i64)
     }
     // **A receiver the method only reads is lent** (ADR-279 D5).
     let coalesced = match receiver {

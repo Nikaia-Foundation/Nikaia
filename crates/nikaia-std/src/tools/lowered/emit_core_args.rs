@@ -251,7 +251,7 @@ impl EmitState {
             has_how = how != "";
         }
         if has_how {
-            let a_map_read = self.emit_arg_a_map_read(arg) || self.facts.flat_reads.contains(&node);
+            let a_map_read = self.emit_arg_a_map_read(arg) || self.facts.flat_reads.contains(&node) || self.facts.map_gets.contains(&node);
             if a_map_read { if how == ".as_deref()" { how = String::from(".map(String::as_str)"); } else { how = String::from(""); } }
         }
         if before == "Some(" {

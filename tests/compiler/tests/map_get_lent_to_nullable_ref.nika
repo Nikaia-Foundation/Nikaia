@@ -1,0 +1,18 @@
+// `m.get(k)` handed to a `ref T?` parameter is an `Option<&T>` below
+// already: nothing more is opened (E11-4a).
+use std::collections
+
+struct Wrap {
+    n: i64,
+}
+
+fn size(how: ref Wrap?) -> i64 {
+    let w = how ?? return -1
+    return w.n
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[i64, Wrap] = collections::BTreeMap()
+    m.insert(1, Wrap { n: 5 })
+    println(f"{size(m.get(1))} {size(m.get(2))}")
+}

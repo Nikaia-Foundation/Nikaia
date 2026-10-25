@@ -606,7 +606,10 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         check_core_places_array_length(state, id_of(receiver) as i64, &on);
         if state.elements_take_space(&on) { state.facts.sized_lengths.insert(id_of(receiver) as i64); }
     }
-    if name == "get" && check_core_method_a_map(&on) { state.flow.read_a_map = true; }
+    if name == "get" && check_core_method_a_map(&on) {
+        state.flow.read_a_map = true;
+        state.facts.map_gets.insert(id_of(expr) as i64);
+    }
     let coalesced = matches!(receiver, Expr::Coalesce { .. });
     if coalesced && state.only_reads_its_receiver(world, &name) { state.a_pending_coalesce_is_lent(receiver); }
     let bare = args.is_empty() && config.is_empty();

@@ -167,6 +167,9 @@ pub struct CheckFacts {
     pub lent_map_fallbacks: collections::BTreeSet[i64],
     pub optional_fallbacks: collections::BTreeSet[i64],
     pub flat_reads: collections::BTreeSet[i64],
+    /// **`m.get(k)` on a map**, by the call: an `Option<&T>` below already,
+    /// so a nullable view it is lent to opens nothing.
+    pub map_gets: collections::BTreeSet[i64],
     pub copied_reads: collections::BTreeSet[i64],
     pub text_in_lists: collections::BTreeSet[i64],
     pub owned_patterns: collections::BTreeSet[i64],
@@ -422,6 +425,7 @@ impl CheckFacts {
             text_view_fallbacks: collections::BTreeSet(),
             text_owned_fallbacks: collections::BTreeSet(),
             lent_map_fallbacks: collections::BTreeSet(),
+            map_gets: collections::BTreeSet(),
             optional_fallbacks: collections::BTreeSet(),
             flat_reads: collections::BTreeSet(),
             copied_reads: collections::BTreeSet(),

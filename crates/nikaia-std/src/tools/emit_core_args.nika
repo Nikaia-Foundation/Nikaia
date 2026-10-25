@@ -383,7 +383,7 @@ impl EmitState {
         // **A map's read is that option already**: `index::get` answers an
         // `Option<&T>`, so nothing is opened, and text is read as `str`.
         if has_how {
-            let a_map_read = self.emit_arg_a_map_read(arg) || self.facts.flat_reads.contains(node)
+            let a_map_read = self.emit_arg_a_map_read(arg) || self.facts.flat_reads.contains(node) || self.facts.map_gets.contains(node)
             if a_map_read {
                 if how == ".as_deref()" {
                     how = ".map(String::as_str)"
