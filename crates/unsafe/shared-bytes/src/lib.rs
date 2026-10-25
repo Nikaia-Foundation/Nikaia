@@ -175,6 +175,31 @@ impl PartialEq for Shared {
 
 impl Eq for Shared {}
 
+/// Equal to a cut by content (#764): `Bytes == b[i..<j]`, either order.
+impl PartialEq<[u8]> for Shared {
+    fn eq(&self, other: &[u8]) -> bool {
+        self.as_slice() == other
+    }
+}
+
+impl PartialEq<&[u8]> for Shared {
+    fn eq(&self, other: &&[u8]) -> bool {
+        self.as_slice() == *other
+    }
+}
+
+impl PartialEq<Shared> for [u8] {
+    fn eq(&self, other: &Shared) -> bool {
+        self == other.as_slice()
+    }
+}
+
+impl PartialEq<Shared> for &[u8] {
+    fn eq(&self, other: &Shared) -> bool {
+        *self == other.as_slice()
+    }
+}
+
 impl PartialOrd for Shared {
     fn partial_cmp(&self, other: &Shared) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))

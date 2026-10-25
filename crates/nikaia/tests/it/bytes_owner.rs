@@ -173,3 +173,26 @@ fn a_kept_ref_bytes_is_lowered_with_its_owner() {
         "{rust}"
     );
 }
+
+/// An owned `Bytes` compares with a cut, in either order, and with another
+/// owned `Bytes`, by content (#764).
+#[test]
+fn an_owned_bytes_compares_with_a_cut() {
+    let out = printed(
+        "bytes-owner-eq-cut",
+        "fn main() {\n\
+         \x20   let mut v: Vec[u8] = []\n\
+         \x20   v.push('a')\n\
+         \x20   let a = Bytes(v)\n\
+         \x20   let mut w: Vec[u8] = []\n\
+         \x20   w.push('a')\n\
+         \x20   w.push('b')\n\
+         \x20   let b = Bytes(w)\n\
+         \x20   let mut x: Vec[u8] = []\n\
+         \x20   x.push('a')\n\
+         \x20   let c = Bytes(x)\n\
+         \x20   println(f\"{a == b[0..<1]} {b[0..<1] == a} {a == c} {a == b} {a == b[1..<2]}\")\n\
+         }\n",
+    );
+    assert_eq!(out, "true true true false false");
+}
