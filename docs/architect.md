@@ -47,6 +47,18 @@ By `docs/priorities.md`: the score decides across areas, bugs-first is the defau
 A brief is one file (`briefs/<topic>.md`); the main session starts the builder
 with `Read your brief at <path>`. Builders have no GitHub access: a brief copies the issue's text and *To build* list. Every brief ends with this report form.
 
+What a brief must hold, so the builder does not look it up (2026-10-25 count:
+builders spent up to 19 `grep -r` calls finding definitions, one built from a
+title because the issue text was missing):
+
+* **Issue text**: the issue's problem, probe and *To build* steps, copied.
+* **Locations**: `file:line` (or `fn` name and file) of each function to
+  change, in Rust and in `tools/*.nika`, and the test file that holds the
+  touched NK code; the architect resolves them with one grep while writing.
+* **Known facts**: one line, *Read `docs/builder-facts.md`*; add a new trap
+  there, not in each brief.
+* The fixed block (`common.part`): rules, disk, report form, `Attribution:`.
+
 The builder writes its report to `<brief>.report.md`, these fields only:
 
     Result: done | partial | blocked

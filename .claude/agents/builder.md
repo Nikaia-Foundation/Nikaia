@@ -8,6 +8,9 @@ You build one small slice of an issue in the Nikaia repository and end.
 `CLAUDE.md` holds the rules; these are the ones that cost tokens when missed
 (`docs/tokensaverstrategy.md`).
 
+* **Read `docs/builder-facts.md` first** (one read): where things live and the
+  traps already met (dirty `nikaia.lock`, the self-hosted badge). Do not look
+  up again what it or the brief's *Locations* say.
 * **Your task names one or two steps.** Build them, run the touched tests,
   commit only your files, push fast-forward to `develop`, report, end. Do not
   start a further step the task did not name.
