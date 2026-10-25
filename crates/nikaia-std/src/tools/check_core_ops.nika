@@ -496,14 +496,27 @@ pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref Che
     if !op.is_comparison() && !check_core_ops_logical(op) {
         common = state.two_number_types(op, lhs, left, rhs, right, at)
     }
+    // **Beside two integer types, neither side's literals take the other's
+    // type** (D32, #763, #777): the narrower side is widened as a whole and
+    // keeps its own, the wider one already has the common type.
+    let ask_left = common == null
+    let ask_right = common == null
     if !check_core_ops_logical(op) {
-        check_core_ops_literal_beside(state, op, lhs, right, false)
-        check_core_ops_literal_beside(state, op, rhs, left, true)
+        if ask_left {
+            check_core_ops_literal_beside(state, op, lhs, right, false)
+        }
+        if ask_right {
+            check_core_ops_literal_beside(state, op, rhs, left, true)
+        }
     }
     // **An operation is a use of the numbers on both sides** (ADR-285 D23, D24).
     if !check_core_ops_logical(op) && !check_core_ops_shift(op) {
-        state.number_asked(world, lhs, right, at, true)
-        state.number_asked(world, rhs, left, at, true)
+        if ask_left {
+            state.number_asked(world, lhs, right, at, true)
+        }
+        if ask_right {
+            state.number_asked(world, rhs, left, at, true)
+        }
         let mut both: Vec[i64] = state.open_numbers_in(world, lhs)
         let more: Vec[i64] = state.open_numbers_in(world, rhs)
         for n in more {

@@ -319,13 +319,15 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
     if !check_core_ops_logical(op) && !check_core_ops_shift(op) { state.an_integer_beside_a_float(world, lhs, &left, rhs, &right, at); }
     let mut common: Option<String> = None;
     if !op.is_comparison() && !check_core_ops_logical(op) { common = state.two_number_types(op, lhs, &left, rhs, &right, at); }
+    let ask_left = common.is_none();
+    let ask_right = common.is_none();
     if !check_core_ops_logical(op) {
-        check_core_ops_literal_beside(state, op, lhs, &right, false);
-        check_core_ops_literal_beside(state, op, rhs, &left, true);
+        if ask_left { check_core_ops_literal_beside(state, op, lhs, &right, false); }
+        if ask_right { check_core_ops_literal_beside(state, op, rhs, &left, true); }
     }
     if !check_core_ops_logical(op) && !check_core_ops_shift(op) {
-        state.number_asked(world, lhs, &right, at, true);
-        state.number_asked(world, rhs, &left, at, true);
+        if ask_left { state.number_asked(world, lhs, &right, at, true); }
+        if ask_right { state.number_asked(world, rhs, &left, at, true); }
         let mut both: Vec<i64> = state.open_numbers_in(world, lhs);
         let more: Vec<i64> = state.open_numbers_in(world, rhs);
         for n in more.iter() {

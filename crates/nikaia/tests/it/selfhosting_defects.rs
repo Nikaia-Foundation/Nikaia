@@ -494,3 +494,18 @@ fn main() {
     assert_eq!(said, "yes\n");
     assert!(lowered.contains("(s).copied()"), "{lowered}");
 }
+
+/// #777, #763: a literal beside two integer types takes their common type,
+/// not the narrower side's, which is widened (ADR-285 D32).
+#[test]
+fn a_literal_beside_a_widened_integer_takes_the_common_type() {
+    let (printed, _) = printed_and_lowered(
+        "literal-common-type",
+        "comptime M: i64 = 15\n\nfn main() {\n    let h: u32 = 0xABCD\n    \
+         let a = (h & (M - 1)) as i64\n    let b = h & M\n    let c = (M - 1) | h\n    \
+         let e = h ^ (M + 1)\n    let s: i64 = 5\n    let d: u32 = 3\n    \
+         let p = s + 4 + (d >> 1)\n    let w: u64 = 7\n    let x = w + (d + 1)\n    \
+         println(f\"{a} {b} {c} {e} {p} {x}\")\n}\n",
+    );
+    assert_eq!(printed.trim(), "12 13 43983 43997 10 11");
+}
