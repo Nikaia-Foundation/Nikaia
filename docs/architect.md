@@ -44,8 +44,17 @@ By `docs/priorities.md`: the score decides across areas, bugs-first is the defau
 
 ## Briefs and reports
 
-A brief is one file (`briefs/<topic>.md`); the main session starts the builder
-with `Read your brief at <path>`. Builders have no GitHub access: a brief copies the issue's text and *To build* list. Every brief ends with this report form.
+A brief is one file (`briefs/<topic>.md`); `scripts/agent.nika` starts the agent
+with `Read your brief at <path>`. A brief starts with this frontmatter (all
+keys optional; defaults `builder`, `sonnet`, 120, 20):
+
+    ---
+    agent: builder
+    model: sonnet
+    max_turns: 100
+    budget_usd: 20
+    ---
+ Builders have no GitHub access: a brief copies the issue's text and *To build* list. Every brief ends with this report form.
 
 *Locations* are resolved with `nikaia run scripts/where.nika -- NAME...` (definitions, callers, tests of an `NK` code), not by `grep -r`.
 
@@ -73,6 +82,7 @@ The builder writes its report to exactly `<full brief path>.report.md`, beside t
     Found: none | <one sentence, issue number if filed>
     Needs: none | <NK code, owner decision, help from main session>
     Changelog: none | <one sentence for the version heading>
+    Owner: none | <one question for the owner>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
     Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
@@ -156,7 +166,7 @@ What the architect hands the main session for a builder, in this form:
 ## The main session's cycle
 
 1. `nikaia run scripts/cycle.nika -- DIR` (`--apply` raises the version, `--done N` clears an OWNER line). Nothing else is checked.
-2. `NEXT <brief>`: `nikaia run scripts/agent.nika -- <brief>` with `run_in_background`, not the Agent tool (agent, model, turns and budget from the brief's frontmatter). It records tokens and cost itself; its one line is `done <sha8> report <path> cost <usd> turns <n>`. An `ESCALATE` file in DIR or exit 2 is read like a failed builder (step 4).
+2. `NEXT <brief> <agent> <model> <turns> <budget>`: run `nikaia run scripts/agent.nika -- <brief>` as is with `run_in_background`, not the Agent tool (the frontmatter decides model and limits; the extra fields only show what it will use). It records tokens and cost itself; its one line is `done <sha8> report <path> cost <usd> turns <n>`. An `ESCALATE` file in DIR or exit 2 is read like a failed builder (step 4).
 3. A builder's one-line answer (`--tokens` is already done by `agent.nika`): back to 1. Read nothing else.
 4. `CUT`, `RED`, `BLOCKED`, `BATCH DONE`, or an owner message: start a fresh architect with that line, the token figures and the owner's words verbatim.
 5. `BUMP pending` and CI green: `cycle.nika --apply` .

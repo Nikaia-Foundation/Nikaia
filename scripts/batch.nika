@@ -6,7 +6,10 @@
 //
 // `DIR/batch.txt` names the briefs in order, one per line. For each brief in
 // order: no report (`BRIEF.report.md` or `BRIEF` without `.md` + `.report.md`)
-// prints `NEXT <abs path of brief>`; a report whose `Result:` is not `done`,
+// prints `NEXT <abs path of brief> <agent> <model> <turns> <budget>` (the
+// brief's frontmatter through `agent.nika --info`, defaults for a brief
+// without); a report whose `Owner:` is neither empty nor `none` prints
+// `OWNER <brief>: <text>`; a report whose `Result:` is not `done`,
 // `Pushed:` is `rejected` or `none`, or `Found:`/`Deviation:` is not `none`
 // prints `CUT <brief>: <line>`; all done prints `BATCH DONE` and the count of
 // `Changelog:` lines that are not `none`. `--tokens` appends
@@ -24,6 +27,19 @@ fn batch_field(text: String, key: String) -> String {
         }
     }
     return ""
+}
+
+// `agent model turns budget` of a brief, from `agent.nika --info`.
+fn batch_info(abs: String) -> String throws {
+    for exe in ["target/fast/nikaia", "target/release/nikaia"] {
+        if fs::exists(exe, fs::Root::Anywhere) {
+            let out = process::run(exe, ["run", "scripts/agent.nika", "--", "--info", abs.clone()])
+            let line = out.stdout.trim().clone()
+            if out.ok && line.split(" ").collect().len() == 4 { return line }
+            return "builder sonnet 120 20".to_string()
+        }
+    }
+    return "builder sonnet 120 20".to_string()
 }
 
 fn batch_report_path(dir: String, brief: String) -> String throws {
@@ -56,9 +72,12 @@ fn batch_run(dir: String) -> String throws {
         let path = batch_report_path(dir.clone(), brief.clone())
         if path == "" {
             let abs = process::run("realpath", [f"{dir}/{brief}"])
-            return f"NEXT {abs.stdout.trim()}"
+            let path_abs = abs.stdout.trim().clone()
+            return f"NEXT {path_abs} {batch_info(path_abs.clone())}"
         }
         let text = fs::read_to_string(path, fs::Root::Anywhere)
+        let question = batch_field(text.clone(), "Owner:")
+        if question != "" && question != "none" { return f"OWNER {brief}: {question}" }
         let why = batch_cut(text.clone())
         if why != "" { return f"CUT {brief}: {why}" }
         if batch_field(text, "Changelog:") != "none" { changelogs += 1 }

@@ -1,0 +1,7 @@
+with frontmatter: NEXT T/a.md architect opus 7 5
+without frontmatter, report without Owner: NEXT T/p.md builder sonnet 120 20
+Owner none: NEXT T/p.md builder sonnet 120 20
+Owner question: OWNER a.md: opus or sonnet?
+cycle: OWNER a.md: opus or sonnet?
+question file: a.md: opus or sonnet?
+cycle again: OWNER second: a.md: opus or sonnet?

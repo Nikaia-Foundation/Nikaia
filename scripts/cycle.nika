@@ -3,10 +3,13 @@
 //     nikaia run scripts/cycle.nika -- DIR [--apply] [--done N]
 //
 //     CI <sha8> green|red|running|unknown
-//     NEXT <brief> | CUT <brief>: <line> -> ARCHITECT | BATCH DONE
+//     NEXT <abs brief> <agent> <model> <turns> <budget> | CUT <brief>: <line> -> ARCHITECT | BATCH DONE
 //     RED <sha8> <jobs> -> ARCHITECT          (only when the tip is red)
 //     BUMP pending <n> changelog lines | BUMP <version> pushed | NO BUMP: <why>
 //     OWNER <n> open: <first line>            (DIR/owner.txt, one per line)
+//     OWNER <brief>: <question>               (a report's `Owner:`; first one
+//                                              is written to DIR/QUESTION)
+//     OWNER second: <brief>: <question>       (DIR/QUESTION exists: stop)
 //
 // The lines come from `status.nika` (CI, batch, pending bump), which runs
 // `batch.nika`; `--apply` runs `release.nika` when CI is green and the batch
@@ -117,7 +120,15 @@ fn main() throws {
     println(ci.clone())
     let red = cycle_red(lines[0].clone())
     if red != "" { println(cycle_cap(red)) }
-    let batch = lines[1].clone()
+    let mut batch = lines[1].clone()
+    if batch.starts_with("OWNER ") {
+        let q = (batch.strip_prefix("OWNER ") ?? "").clone()
+        if fs::exists(f"{dir}/QUESTION", fs::Root::Anywhere) {
+            batch = f"OWNER second: {q}"
+        } else {
+            fs::write(f"{dir}/QUESTION", fs::Root::Anywhere, q.clone() + "\n")
+        }
+    }
     if batch.starts_with("CUT") { println(cycle_cap(batch.clone() + " -> ARCHITECT")) } else { println(cycle_cap(batch.clone())) }
     let mut bump = cycle_bump(lines[2].clone())
     if apply && ci.ends_with("green") && !batch.starts_with("NEXT") && bump != "" {

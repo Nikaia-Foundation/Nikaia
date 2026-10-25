@@ -1,0 +1,49 @@
+// #847 step 3: batch.nika and cycle.nika pass a brief's frontmatter on in
+// `NEXT`, and a report's `Owner:` becomes an OWNER line and DIR/QUESTION.
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/batch.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/batch.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn pick(out: String, tmp: String) -> String {
+    let mut kept: Vec[String] = []
+    for l in out.split("\n") {
+        if l.starts_with("NEXT") || l.starts_with("OWNER") || l.starts_with("CUT") { kept.push(l.replace(tmp.clone(), "T")) }
+    }
+    return kept.join(" | ")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = process::run("realpath", [f"{repo}/target/fast/nikaia"]).stdout.trim().clone()
+    fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "---\nagent: architect\nmodel: opus\nmax_turns: 7\nbudget_usd: 5\n---\nbody\n")
+    fs::write(f"{tmp}/p.md", fs::Root::Anywhere, "no frontmatter\n")
+    fs::write(f"{tmp}/batch.txt", fs::Root::Anywhere, "a.md\np.md\n")
+    let first = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())
+    println(f"with frontmatter: {pick(first.stdout.clone(), tmp.clone())}")
+    let report = "Result: done\nPushed: abc\nFound: none\nDeviation: none\nChangelog: none\n"
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, report)
+    let second = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())
+    println(f"without frontmatter, report without Owner: {pick(second.stdout.clone(), tmp.clone())}")
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, report + "Owner: none\n")
+    let third = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())
+    println(f"Owner none: {pick(third.stdout.clone(), tmp.clone())}")
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, report + "Owner: opus or sonnet?\n")
+    let ask = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())
+    println(f"Owner question: {pick(ask.stdout.clone(), tmp.clone())}")
+    let one = process::run(nikaia.clone(), ["run", "scripts/cycle.nika", "--", tmp.clone()]; dir: repo.clone())
+    println(f"cycle: {pick(one.stdout.clone(), tmp.clone())}")
+    println(f"question file: {fs::read_to_string(f"{tmp}/QUESTION", fs::Root::Anywhere).trim()}")
+    let two = process::run(nikaia.clone(), ["run", "scripts/cycle.nika", "--", tmp.clone()]; dir: repo.clone())
+    println(f"cycle again: {pick(two.stdout.clone(), tmp.clone())}")
+    process::run("rm", ["-rf", tmp])
+}

@@ -3,10 +3,14 @@
 use std::fs
 use std::process
 
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
 fn root() -> String throws {
     let here = process::run("pwd", []).stdout.trim().clone()
     if fs::exists(f"{here}/scripts/agent.nika", fs::Root::Anywhere) { return here }
-    return process::run("realpath", [f"{here}/../.."]).stdout.trim().clone()
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/agent.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
 fn main() throws {

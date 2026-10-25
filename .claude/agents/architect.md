@@ -38,7 +38,7 @@ holds the repository rules; `docs/tokensaverstrategy.md` the cost rules.
   that apply; disk rule (delete own clone's `target/`, report GB freed, at most two clones
   with `target/`); `NIKAIA_CACHE_LIMIT=2G`; turn limit (60-120); report at most 15 lines;
   files not to touch (other agents' uncommitted files in the main checkout); commit/push rules.
-* The main session starts the builder with only `Read your brief at <path>`.
+* Every brief starts with the frontmatter `agent`, `model`, `max_turns`, `budget_usd` (between `---` lines; see `docs/architect.md`, *Briefs and reports*). The cycle's `NEXT <brief> <agent> <model> <turns> <budget>` is run as is with `nikaia run scripts/agent.nika -- <brief>`. A question for the owner goes into the report's `Owner:` line.
 * Hand-back: brief path; one-line start order (agent type, model, why); a section
   "Needs from the main session / owner" (other agent types, owner decisions, support; or "nothing").
 * No separate review agent unless asked for there; QA (Sonnet low, runs the suite like CI) stays a pilot.
