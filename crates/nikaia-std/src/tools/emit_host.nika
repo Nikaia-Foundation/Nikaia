@@ -112,6 +112,30 @@ pub trait EmitHost {
     /// value (ADR-283 D12, D15); `null` where the plan holds none. A set cannot
     /// be walked in Nikaia.
     fn held_buffers(ref self, walk: ref EmitWalk, function: ref String, statement: i64, root: ref String) -> Vec[(i64, Vec[i64])]? sync
+
+    /// The seed table at the start of a function (E10-4).
+    fn seeds_begin(ref self, written: ref Item, owner_target: String?, owner_declared: bool) -> EmitSeedsBegin sync
+
+    /// The seed table at the end of its signature.
+    fn seeds_end(ref self, seeded: bool, base: i64) -> EmitSeedsEnd sync
+
+    /// A type as written, with the seeds' hidden parameters in.
+    fn seeded(ref self, written: String) -> String sync
+
+    /// The lifetimes of a result of several view fields (ADR-353 D1).
+    fn split_lifetimes(ref self, ty: ref Type, returns: ref String, sources: ref Vec[String]) -> EmitSplit? sync
+
+    /// The `#[inline..]` the program wrote, if any.
+    fn inline_written(ref self, attributes: ref Vec[Attribute]) -> String? sync
+
+    /// The parameters of the program's own `main`.
+    fn set_main_params(ref self, params: ref Vec[String]) sync
+
+    /// Whether a call is a step of a build-time run.
+    fn counts_steps(ref self) -> bool sync
+
+    /// Whether the program leaves the memory of what dies to the system.
+    fn skip_free_at_exit(ref self) -> bool sync
 }
 
 impl EmitState {

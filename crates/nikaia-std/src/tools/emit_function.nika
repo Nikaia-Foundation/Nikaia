@@ -1,0 +1,1006 @@
+// crates/nikaia-std/src/tools/emit_function.nika
+//
+// **A function or a method**, moved from `emit/mod.rs` (ADR-294, #125, #558,
+// E10-4): its signature - the lifetimes of every parameter and of the result,
+// the failure channel, the hidden map parameters, the unchecked entry - and
+// the call of the body (`emit_function_body`). What the Rust side keeps are
+// the seed table and its place (`seeds_begin`, `seeds_finish`, `seeded`), the
+// split of a result's lifetimes over several parameters, the `@inline` attribute and
+// the parameters of the program's own `main`.
+//
+// The ledger is read through `emit_fn_*` helpers that take the function's key,
+// so no contract is held across a call.
+use std::collections
+
+/// What the seed table says at the start of a function (ADR-010 D9): where its
+/// hidden type parameters begin, whether it declares any, and whether the
+/// `impl` it stands in already does.
+pub struct EmitSeedsBegin {
+    pub base: i64,
+    pub seeded: bool,
+    pub in_seeded_impl: bool,
+}
+
+/// What the seed table says at the end of the signature: how many hidden
+/// parameters the function declared and what they are called.
+pub struct EmitSeedsEnd {
+    pub hidden: i64,
+    pub declared: Vec[String],
+}
+
+/// A result of several view fields: each source parameter's own lifetime and
+/// the result's lifetime arguments (ADR-353 D1).
+pub struct EmitSplit {
+    pub own: Vec[EmitPair],
+    pub fields: Vec[String],
+}
+
+/// What `emit_how` reads about the signature being written; owned, so it can
+/// be passed on.
+pub struct EmitSig {
+    pub key: String,
+    pub lifetimes: EmitLifetimes,
+    pub has_kept: bool,
+    pub kept: EmitLifetimes,
+    pub stores: Vec[EmitPair],
+    pub inner_views: winnow_grammar::Symbol?,
+    pub carries_input: collections::BTreeSet[String],
+    pub source_kept: bool,
+    pub source_name: winnow_grammar::Symbol?,
+}
+
+/// `<'a, T>`, or nothing at all where there is nothing to declare.
+fn emit_angled(parts: ref Vec[String]) -> String {
+    if parts.is_empty() {
+        return ""
+    }
+    return f"<{parts.join(", ")}>"
+}
+
+/// `text` with the lifetime `from` written `to`, where it stands as a whole
+/// name.
+fn emit_renamed_lifetime(text: ref String, from: ref String, to: ref String) -> String {
+    let parts = text.split(from).collect()
+    let mut out: String = ""
+    let mut first = true
+    for part in parts {
+        if first {
+            out.push_str(part)
+            first = false
+        } else {
+            let c = part.chars().next() ?? ' '
+            if c.is_alphanumeric() || c == '_' {
+                out.push_str(from)
+            } else {
+                out.push_str(to)
+            }
+            out.push_str(part)
+        }
+    }
+    return out
+}
+
+fn emit_same_symbol(one: winnow_grammar::Symbol?, other: winnow_grammar::Symbol) -> bool {
+    return match one {
+        symbol => symbol == other,
+        null => false,
+    }
+}
+
+fn emit_store_source(stores: ref Vec[EmitPair], name: ref String) -> bool {
+    for each in stores {
+        if each.second == name {
+            return true
+        }
+    }
+    return false
+}
+
+fn emit_store_place(stores: ref Vec[EmitPair], name: ref String) -> bool {
+    for each in stores {
+        if each.first == name {
+            return true
+        }
+    }
+    return false
+}
+
+fn emit_is_elided(lifetimes: EmitLifetimes) -> bool {
+    return match lifetimes {
+        EmitLifetimes::Elided => true,
+        else => false,
+    }
+}
+
+fn emit_is_inner(lifetimes: EmitLifetimes) -> bool {
+    return match lifetimes {
+        EmitLifetimes::Inner => true,
+        else => false,
+    }
+}
+
+fn emit_is_kept(lifetimes: EmitLifetimes) -> bool {
+    return match lifetimes {
+        EmitLifetimes::Kept => true,
+        else => false,
+    }
+}
+
+/// The signature line: visibility, `async`, name, declared parameters, the
+/// parameters and the result.
+fn emit_fn_signature(vis: ref String, pausing: ref String, name: ref String, declared: ref Vec[String], params: ref Vec[String], ret: ref String) -> String {
+    return f"{vis}{pausing}fn {name}{emit_angled(declared)}({params.join(", ")}){ret} "
+}
+
+impl EmitState {
+    fn emit_fn_changes(ref self, key: ref String, name: ref String) -> bool {
+        let c = self.own_contracts.functions.get(key) ?? return false
+        let signature = c.signature ?? return false
+        return signature.mutable.contains(name)
+    }
+
+    fn emit_fn_lends(ref self, world: ref EmitWorld, key: ref String, at: i64) -> bool {
+        let c = self.own_contracts.functions.get(key) ?? return false
+        return emit_arg_lends_own(c, at, world.library, self.described)
+    }
+
+    /// Whether the written type of the contract's parameter `at` is a view.
+    fn emit_fn_written_as_view(ref self, key: ref String, at: i64) -> bool {
+        let c = self.own_contracts.functions.get(key) ?? return false
+        let signature = c.signature ?? return false
+        if at < 0 || at >= signature.params.len() {
+            return false
+        }
+        return signature.params[at].1.is_a_view()
+    }
+
+    /// Whether the contract has the function keep `name`.
+    fn emit_fn_keeps(ref self, key: ref String, name: ref String) -> bool {
+        let c = self.own_contracts.functions.get(key) ?? return false
+        return c.keeps.contains(name)
+    }
+
+    fn emit_fn_lent_option(ref self, key: ref String, at: i64) -> bool {
+        let c = self.own_contracts.functions.get(key) ?? return false
+        let signature = c.signature ?? return false
+        if at < 0 || at >= signature.config.len() {
+            return false
+        }
+        return lends_option(c, signature.config[at])
+    }
+
+    fn emit_fn_keeps_bytes(ref self, key: ref String, at: i64) -> bool {
+        let c = self.own_contracts.functions.get(key) ?? return false
+        return keeps_its_bytes(c, at)
+    }
+
+    fn emit_fn_stores(ref self, key: ref String) -> Vec[String] {
+        let c = self.own_contracts.functions.get(key) ?? return []
+        return c.stores.clone()
+    }
+
+    fn emit_fn_borrows(ref self, key: ref String) -> Vec[String]? {
+        let c = self.own_contracts.functions.get(key) ?? return null
+        return c.borrows.clone()
+    }
+
+    fn emit_fn_returns(ref self, key: ref String) -> String? {
+        let c = self.own_contracts.functions.get(key) ?? return null
+        return c.returns.clone()
+    }
+
+    /// Whether the trait's declaration of this method is not `sync`.
+    fn emit_fn_declared_pausing(ref self, key: ref String) -> bool {
+        let c = self.own_contracts.functions.get(key) ?? return false
+        return !c.sync_claim.is_sync()
+    }
+
+    /// **A parameter lowered as a view** (ADR-283 D24): one the body changes,
+    /// or one it only reads. `at` counts the arguments, not the receiver.
+    fn emit_fn_lowered_as_a_view(ref self, world: ref EmitWorld, key: ref String, receiver: i64, at: i64, arg: ref FnArg) -> bool {
+        if self.carries_a_view(world, arg.ty) {
+            return true
+        }
+        return self.emit_fn_changes(key, emit_text(world, arg.name)) || self.emit_fn_lends(world, key, at + receiver)
+    }
+
+    /// A type written at one position, with the count the ledger gives it and
+    /// the hidden map parameters in.
+    fn emit_fn_ty[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type, lifetimes: EmitLifetimes, key: ref String, value: ref String) -> String sync {
+        let crossings = host.crossings_are_possible()
+        let count = self.count_at(crossings, key, value)
+        let written = self.emit_core_ty_counted(world, walk, crossings, host.overlaps_user_code(), ty, lifetimes, count)
+        return host.seeded(written)
+    }
+
+    /// **How a parameter's lifetimes are written** in this signature.
+    fn emit_how(ref self, sig: ref EmitSig, name: winnow_grammar::Symbol, text: ref String, viewed: bool, read_only: bool) -> EmitLifetimes {
+        if emit_store_place(sig.stores, text) || (emit_store_source(sig.stores, text) && viewed) {
+            return EmitLifetimes::Named
+        }
+        if sig.has_kept && self.tethered_position(sig.key, text) {
+            return sig.kept.clone()
+        }
+        if sig.has_kept && sig.source_kept && emit_same_symbol(sig.source_name, name) {
+            return sig.kept.clone()
+        }
+        if emit_same_symbol(sig.inner_views, name) {
+            return EmitLifetimes::Named
+        }
+        if sig.carries_input.contains(text) {
+            if viewed {
+                return sig.lifetimes.of_the_input()
+            }
+            return sig.lifetimes.over_the_input()
+        }
+        if emit_is_inner(sig.lifetimes) && read_only {
+            return EmitLifetimes::Elided
+        }
+        return sig.lifetimes.clone()
+    }
+
+    /// A function or a method, with its signature and body.
+    pub fn emit_function[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item], depth: i64, lifetimes: EmitLifetimes, carries_input: ref collections::BTreeSet[String], owner_target: String?, owner_declared_by: String?, owner_bridged: bool?) sync throws {
+        match written.node {
+            Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
+                let throws_ = can_throw
+                let has_owner = owner_target != null
+                let target: String = owner_target?.clone() ?? ""
+                let declared_by: String = owner_declared_by?.clone() ?? ""
+                let has_declared_by = owner_declared_by != null
+                let is_bridged = owner_bridged != null
+                // **A trait's method answers the trait's declaration** (#732):
+                // its result is not widened to `'static`.
+                let answers_a_trait = has_owner && has_declared_by && !is_bridged
+                let pad = "    ".repeat(depth)
+                if is_sync {
+                    out.push(f"// sync (Part II, 12.1): pure CPU, cannot pause. Checked before\n{pad}// this was written - see `contracts::sync`.\n{pad}")
+                }
+
+                // The key the ledger records this function under.
+                let own_name: String = match name {
+                    each => emit_text(world, each),
+                    null => "new".clone(),
+                }
+                let key: String = if has_owner { f"{target}::{own_name}" } else { own_name.clone() }
+
+                // **A function that stands alone** (ADR-010 D9).
+                let standalone = !has_owner && !is_public && generics.is_empty() && name != null
+                let begun = host.seeds_begin(written.node, owner_target?.clone(), has_declared_by)
+                let recv: i64 = if receiver != null { 1 } else { 0 }
+                let mut params: Vec[String] = []
+                if receiver != null {
+                    let is_ref = receiver?.is_ref ?? false
+                    let is_mut = receiver?.is_mut ?? false
+                    if is_ref && is_mut {
+                        params.push("&mut self".clone())
+                    } else if is_ref {
+                        params.push("&self".clone())
+                    } else {
+                        params.push("self".clone())
+                    }
+                }
+                let kept = self.kept_lifetimes(key, lifetimes)
+                let has_kept = kept != null
+                let kept_lt: EmitLifetimes = kept ?? EmitLifetimes::Elided
+                let input_empty = carries_input.is_empty()
+
+                // **A view handed back out of a parameter that holds views**
+                // (ADR-282 D20).
+                let mut inner_views: winnow_grammar::Symbol? = null
+                if emit_is_elided(lifetimes) && receiver == null && !has_kept {
+                    match ret_type {
+                        ty => {
+                            if self.carries_a_view(world, ty) && input_empty {
+                                let mut carrying: Vec[i64] = []
+                                let mut at = 0
+                                for each in args {
+                                    if self.carries_a_view(world, each.ty) {
+                                        carrying.push(at)
+                                    }
+                                    at += 1
+                                }
+                                if carrying.len() == 1 {
+                                    let one = carrying[0]
+                                    let lent = self.emit_fn_lends(world, key, one) && !self.emit_fn_written_as_view(key, one)
+                                    if !args[one].ty.is_view && !args[one].ty.either && lent {
+                                        inner_views = args[one].name
+                                    }
+                                }
+                            }
+                        },
+                        null => {},
+                    }
+                }
+
+                // **A view of a parameter kept in another parameter's place**
+                // (ADR-283 D27): `v:s` in the ledger's `stores`. Only a place
+                // whose type is written with the lifetime.
+                let mut stores: Vec[EmitPair] = []
+                if emit_is_elided(lifetimes) {
+                    for entry in self.emit_fn_stores(key) {
+                        match entry.split_once(":") {
+                            pair => {
+                                let stored = pair.0.clone()
+                                let source = pair.1.clone()
+                                if !carries_input.contains(source) {
+                                    for each in args {
+                                        if emit_text(world, each.name) == stored {
+                                            let spelled = self.emit_fn_ty(world, walk, host, each.ty, EmitLifetimes::Named, key, stored)
+                                            if spelled.contains("'a") {
+                                                stores.push(EmitPair { first: stored.clone(), second: source.clone() })
+                                            }
+                                            break
+                                        }
+                                    }
+                                }
+                            },
+                            null => {},
+                        }
+                    }
+                }
+
+                // **A result points into one parameter, and the signature says
+                // which** (ADR-283 D25).
+                let mut result_is_a_view = false
+                match ret_type {
+                    ty => {
+                        result_is_a_view = emit_text(world, ty.name) != "Self::dsl" && self.carries_a_view(world, ty)
+                    },
+                    null => {},
+                }
+                let plain_signature = (emit_is_elided(lifetimes) || emit_is_inner(lifetimes)) && inner_views == null && input_empty && result_is_a_view
+                let result_borrows = self.emit_fn_borrows(key)
+                let has_borrows = result_borrows != null
+                let named: Vec[String] = result_borrows ?? []
+                let mut lowered_views = 0
+                let mut index = 0
+                for each in args {
+                    if self.emit_fn_lowered_as_a_view(world, key, recv, index, each) {
+                        lowered_views += 1
+                    }
+                    index += 1
+                }
+                let mut source_at: i64? = null
+                if has_borrows && plain_signature && named.len() == 1 && named[0] != "self" {
+                    let mut found: i64? = null
+                    for k in 0..<args.len() {
+                        if found == null && emit_text(world, args[k].name) == named[0] {
+                            found = k
+                        }
+                    }
+                    let at = found ?? -1
+                    if at >= 0 && self.emit_fn_lowered_as_a_view(world, key, recv, at, args[at]) {
+                        // A parameter that holds views of its own has two
+                        // lifetimes, which elision cannot choose between.
+                        let loan = args[at].ty.is_view || self.emit_fn_lends(world, key, at + recv)
+                        let mut inside = false
+                        for g in args[at].ty.generics {
+                            if self.carries_a_view(world, g) {
+                                inside = true
+                            }
+                        }
+                        if receiver != null || lowered_views > 1 || has_kept || (loan && self.carries_a_view(world, args[at].ty) && (self.borrows(world, args[at].ty.name) || inside)) {
+                            source_at = at
+                        }
+                    }
+                }
+                // **A value holding views of several parameters at once**
+                // (ADR-352).
+                let mut several_at: Vec[i64] = []
+                let receiver_is_shared = receiver == null || ((receiver?.is_ref ?? false) && !(receiver?.is_mut ?? false))
+                if has_borrows && plain_signature && named.len() >= 2 && receiver_is_shared && !has_kept && source_at == null {
+                    let mut wanted: Vec[String] = []
+                    for each in named {
+                        if receiver == null || each != "self" {
+                            wanted.push(each.clone())
+                        }
+                    }
+                    let mut found: Vec[i64] = []
+                    for each in wanted {
+                        let mut position: i64? = null
+                        for k in 0..<args.len() {
+                            if position == null && emit_text(world, args[k].name) == each {
+                                position = k
+                            }
+                        }
+                        let at = position ?? -1
+                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, key, recv, at, args[at]) && !self.borrows(world, args[at].ty.name) && args[at].ty.generics.is_empty() {
+                            found.push(at)
+                        }
+                    }
+                    if found.len() == wanted.len() {
+                        several_at = found
+                    }
+                }
+                if receiver != null && !several_at.is_empty() && named.contains("self") && params[0] == "&self" {
+                    params[0] = "&'r self".clone()
+                }
+                // **An option is a parameter too**: a view among them is the
+                // source where the body hands it back.
+                let mut source_option: i64? = null
+                if has_borrows && plain_signature && named.len() == 1 && source_at == null {
+                    for k in 0..<config.len() {
+                        if source_option == null && emit_text(world, config[k].name) == named[0] && (self.carries_a_view(world, config[k].ty) || self.emit_fn_lent_option(key, k)) {
+                            source_option = k
+                        }
+                    }
+                }
+                // **What the parameter's views point into, not the parameter.**
+                let mut source_nested = false
+                if source_at != null {
+                    let at = source_at ?? 0
+                    if self.carries_a_view(world, args[at].ty) && self.borrows(world, args[at].ty.name) && args[at].ty.generics.is_empty() {
+                        match ret_type {
+                            each => {
+                                source_nested = each.name != args[at].ty.name
+                            },
+                            null => {},
+                        }
+                    }
+                }
+                let mut source_name: winnow_grammar::Symbol? = null
+                if source_at != null {
+                    source_name = args[source_at ?? 0].name
+                } else if !several_at.is_empty() {
+                    source_name = args[several_at[0]].name
+                } else if source_option != null {
+                    source_name = config[source_option ?? 0].name
+                }
+                // **Tied to the keep** where a way out hands back a view of a
+                // buffer the body made (D23) as well: one lifetime over both.
+                let source_kept = source_name != null && has_kept && self.tethered_position(key, "<result>")
+                let shared = source_name != null && !source_kept
+                // **No parameter at all**: the literal outlives everything.
+                let mut nothing_borrowed = false
+                if emit_is_elided(lifetimes) && plain_signature && !has_kept && has_borrows && named.is_empty() {
+                    match ret_type {
+                        ty => {
+                            if holds_view(ty) {
+                                let mut any_view = receiver != null || lowered_views > 0
+                                for each in args {
+                                    if self.carries_a_view(world, each.ty) {
+                                        any_view = true
+                                    }
+                                }
+                                nothing_borrowed = any_view
+                            }
+                        },
+                        null => {},
+                    }
+                }
+                let sig = EmitSig { key: key.clone(), lifetimes: lifetimes, has_kept: has_kept, kept: kept_lt, stores: stores.clone(), inner_views: inner_views, carries_input: carries_input.clone(), source_kept: source_kept, source_name: source_name }
+
+                // **`xs: Array[T]` is an array of any length, and the call says
+                // which** (ADR-184 D3): a `const` parameter per position.
+                let mut lengths: Vec[String] = []
+                let mut open: Vec[String] = []
+                let mut at = 0
+                for each in args {
+                    let any = !each.ty.is_view && !each.ty.is_slice && each.ty.count == null && each.ty.generics.len() == 1 && emit_text(world, each.ty.name) == "Array"
+                    if any {
+                        lengths.push(f"__NIKAIA_N{at}")
+                        open.push(f"const __NIKAIA_N{at}: usize")
+                    } else {
+                        lengths.push("".clone())
+                    }
+                    at += 1
+                }
+
+                let mut either_first: Vec[String] = []
+                let mut k = 0
+                for each in args {
+                    let is_source = (source_at ?? -1) == k || several_at.contains(k)
+                    let pname = emit_text(world, each.name)
+                    let at = k + recv
+                    let written_as_a_view = self.emit_fn_written_as_view(key, at)
+                    let changes = self.emit_fn_changes(key, pname)
+                    let lifted = is_source && shared && !source_nested
+                    let mut reference: String = ""
+                    if changes {
+                        if lifted {
+                            reference = "&'r mut "
+                        } else if is_source && source_kept {
+                            reference = "&'k mut "
+                        } else {
+                            reference = "&mut "
+                        }
+                    } else if self.emit_fn_lends(world, key, at) && !written_as_a_view {
+                        if !is_source && emit_store_source(stores, pname) {
+                            reference = "&'a "
+                        } else if lifted {
+                            reference = "&'r "
+                        } else if is_source && source_kept {
+                            reference = "&'k "
+                        } else {
+                            reference = "&"
+                        }
+                    }
+                    let read_only = changes || self.emit_fn_lends(world, key, at)
+                    let how = self.emit_how(sig, each.name, pname, each.ty.is_view, read_only)
+                    let mut spelled: String = ""
+                    if lengths[k] != "" {
+                        // **An array of any length is written with the length
+                        // this signature declares for it** (ADR-184 D3).
+                        let mut element: String = "u8"
+                        if each.ty.generics.len() > 0 {
+                            element = self.emit_fn_ty(world, walk, host, each.ty.generics[0], how, key, pname)
+                        }
+                        spelled = f"[{element}; {lengths[k]}]"
+                    } else {
+                        // **Run is the absence of `keeps`** (ADR-277 D11).
+                        let runs = !self.emit_fn_keeps(key, pname)
+                        let held = walk.code_parameter_runs
+                        walk.code_parameter_runs = runs
+                        let inside = walk.in_parameter
+                        walk.in_parameter = true
+                        let mut position = how
+                        if is_source && shared {
+                            if source_nested {
+                                position = EmitLifetimes::Within
+                            } else {
+                                position = EmitLifetimes::Shared
+                            }
+                        }
+                        let fast = standalone && self.fast_slots.contains(f"p:{own_name}:{k}")
+                        let outer = walk.trusting
+                        walk.trusting = fast
+                        spelled = self.emit_fn_ty(world, walk, host, each.ty, position, key, pname)
+                        walk.trusting = outer
+                        walk.in_parameter = inside
+                        walk.code_parameter_runs = held
+                    }
+                    // **A `String` the body only reads is a `&str`**
+                    // (ADR-282 D5), a list a slice, a `Bytes` a `&[u8]`
+                    // (ADR-320 D11).
+                    let type_name = emit_text(world, each.ty.name)
+                    let plain_text = type_name == "String" && each.ty.generics.is_empty() && (!each.ty.is_view || each.ty.either) && !each.ty.is_nullable && !each.ty.is_slice
+                    let plain_list = type_name == "Vec" && each.ty.generics.len() == 1 && !each.ty.is_nullable && !each.ty.is_slice && spelled.ends_with(">")
+                    let plain_bytes = type_name == "Bytes" && each.ty.generics.is_empty() && !each.ty.is_nullable && !each.ty.is_slice
+                    let by_four = reference == "&" || reference == "&'r " || reference == "&'k " || reference == "&'a "
+                    let by_three = reference == "&" || reference == "&'r " || reference == "&'k "
+                    if by_four && plain_bytes {
+                        spelled = "[u8]".clone()
+                    } else if by_four && plain_text {
+                        spelled = "str".clone()
+                    } else if by_three && plain_list && spelled.starts_with("Vec<") {
+                        let inner = (spelled.strip_prefix("Vec<") ?? "").strip_suffix(">") ?? ""
+                        spelled = f"[{inner}]"
+                    } else if reference == "" && plain_list && spelled.starts_with("&Vec<") {
+                        let inner = (spelled.strip_prefix("&Vec<") ?? "").strip_suffix(">") ?? ""
+                        spelled = f"&[{inner}]"
+                    }
+                    // **A `ref Bytes` the body keeps takes the `Bytes` with its
+                    // owner** (ADR-373 D1, D4).
+                    if plain_bytes && receiver == null && self.emit_fn_keeps_bytes(key, at) {
+                        let stripped = spelled.strip_suffix("[u8]")
+                        match stripped {
+                            lead => {
+                                if lead.starts_with("&") {
+                                    spelled = f"{lead}Bytes"
+                                }
+                            },
+                            null => {},
+                        }
+                    }
+                    let local = emit_local_name(self.facts.comptime_names, pname)
+                    // **A published parameter both kinds of text flow into takes
+                    // whatever hands over as either** (ADR-282 D23).
+                    if is_public && each.ty.either && each.ty.generics.is_empty() && reference == "" {
+                        let mut by: String = "IntoEither"
+                        let mut into: String = "into_either"
+                        if each.ty.is_nullable {
+                            by = "IntoEitherMaybe"
+                            into = "into_either_maybe"
+                        }
+                        either_first.push(f"let {local} = {local}.{into}();")
+                        params.push(f"{local}: impl nikaia_std::either_text::{by}<Either = nikaia_std::either_text::EitherText<'e>>")
+                    } else {
+                        params.push(f"{local}: {reference}{spelled}")
+                    }
+                    k += 1
+                }
+                // Kap 5.1: an option becomes an ordinary parameter here.
+                let mut j = 0
+                for each in config {
+                    let pname = emit_text(world, each.name)
+                    let mut position = self.emit_how(sig, each.name, pname, false, false)
+                    if (source_option ?? -1) == j && shared {
+                        position = EmitLifetimes::Shared
+                    }
+                    let mut option_ty = each.ty.clone()
+                    if self.emit_fn_lent_option(key, j) {
+                        option_ty.is_view = true
+                    }
+                    let local = emit_local_name(self.facts.comptime_names, pname)
+                    let spelled = self.emit_fn_ty(world, walk, host, option_ty, position, key, pname)
+                    params.push(f"{local}: {spelled}")
+                    j += 1
+                }
+                // ADR-296 D5: `...args: Self::dsl` is the one parameter whose
+                // type the call site decides.
+                let mut has_dsl = false
+                match spread {
+                    each => {
+                        params.push(f"{emit_text(world, each)}: NikaiaDsl")
+                        has_dsl = true
+                    },
+                    null => {},
+                }
+                // **The keep, last**, because every call writes it last.
+                if has_kept {
+                    params.push(f"__keep: {kept_lt.reference()}nikaia_std::tether::Keep")
+                }
+
+                // **`fn hand[T](x: T)` is `fn hand<T>(x: T)`** (ADR-295 D3), a
+                // copy has no type parameter left (ADR-304 D6), and a length a
+                // parameter left open is a `const` parameter (ADR-184 D3).
+                let mut declared: Vec[String] = []
+                if walk.specialising != null {
+                    if has_dsl {
+                        declared.push("NikaiaDsl".clone())
+                    }
+                    for each in open {
+                        declared.push(each.clone())
+                    }
+                } else {
+                    for each in generics {
+                        declared.push(emit_bounded(world, each))
+                    }
+                    if has_dsl {
+                        declared.push("NikaiaDsl".clone())
+                    }
+                    for each in open {
+                        declared.push(each.clone())
+                    }
+                }
+                if has_kept && emit_is_kept(kept_lt) {
+                    declared.insert(0, "'k".clone())
+                }
+                // **The buffer a struct parameter carries is named on the
+                // function** where no `impl` names it already.
+                if emit_is_elided(lifetimes) && (!input_empty || inner_views != null || !stores.is_empty()) {
+                    declared.insert(0, "'a".clone())
+                }
+                if shared {
+                    declared.insert(0, "'r".clone())
+                }
+                // The lifetime a published parameter's `EitherText` is of.
+                if !either_first.is_empty() {
+                    declared.insert(0, "'e".clone())
+                }
+                walk.either_prelude = either_first.clone()
+
+                // Kap 7.1: `throws` becomes a `Result` over the failure channel.
+                let mut returned: String = ""
+                match ret_type {
+                    ty => {
+                        if emit_text(world, ty.name) == "Self::dsl" {
+                            if !has_dsl {
+                                // **The body's first statement**, the nearest
+                                // place this walk has.
+                                let message = "`Self::dsl` stands for the function's `...args: Self::dsl` parameters, but this function has none."
+                                if body.stmts.len() > 0 {
+                                    throw EmitRefused { message: message.clone(), at: body.stmts[0].span.start }
+                                }
+                                throw EmitRefused { message: message.clone(), at: null }
+                            }
+                            returned = "NikaiaDsl"
+                        } else {
+                            // **A parameter lowered as a view counts too**
+                            // (ADR-283 D24): a view handed back through it
+                            // borrows from the caller's argument.
+                            let mut borrows_from_something = receiver != null
+                            let mut index = 0
+                            for each in args {
+                                if self.carries_a_view(world, each.ty) || self.emit_fn_lowered_as_a_view(world, key, recv, index, each) {
+                                    borrows_from_something = true
+                                }
+                                index += 1
+                            }
+                            let widens = emit_is_elided(lifetimes) && !answers_a_trait && self.carries_a_view(world, ty) && (!borrows_from_something || nothing_borrowed)
+                            let mut lifetimes_of_args = false
+                            for each in args {
+                                if self.carries_a_view(world, each.ty) && !(each.ty.either && each.ty.generics.is_empty()) {
+                                    lifetimes_of_args = true
+                                }
+                            }
+                            let mut result: EmitLifetimes = lifetimes
+                            if has_kept && self.tethered_position(key, "<result>") {
+                                result = kept_lt
+                            } else if shared {
+                                result = EmitLifetimes::Shared
+                            } else if widens {
+                                result = EmitLifetimes::Static
+                            } else if inner_views != null {
+                                result = EmitLifetimes::Named
+                            } else if emit_is_elided(lifetimes) && receiver == null && !walk.either_prelude.is_empty() && !lifetimes_of_args {
+                                // **A published parameter's `'e` is the one
+                                // lifetime there is** (ADR-282 D23).
+                                result = EmitLifetimes::Each
+                            }
+                            let fast = standalone && self.fast_slots.contains(f"r:{own_name}")
+                            let outer = walk.trusting
+                            walk.trusting = fast
+                            returned = self.emit_fn_ty(world, walk, host, ty, result, key, "<result>")
+                            walk.trusting = outer
+                        }
+                    },
+                    null => {
+                        returned = "()"
+                    },
+                }
+                // **The failure channel** (ADR-280 D1). A method that implements
+                // a trait keeps the box.
+                let mut channel: String = "Box<dyn std::error::Error>"
+                if !has_declared_by {
+                    let mut borrows_any = receiver != null
+                    for each in args {
+                        if self.carries_a_view(world, each.ty) {
+                            borrows_any = true
+                        }
+                    }
+                    let static_lifetimes = EmitLifetimes::Static
+                    channel = self.error_channel(world, key, emit_is_elided(lifetimes), lifetimes.params(), static_lifetimes.params(), borrows_any)
+                }
+                // **One lifetime per parameter a view field points into**
+                // (ADR-353 D1).
+                let returns_text = self.emit_fn_returns(key)
+                if shared && !source_nested && several_at.len() >= 2 && returns_text != null {
+                    let mut sources: Vec[String] = []
+                    for each in several_at {
+                        sources.push(emit_text(world, args[each].name))
+                    }
+                    let mut split: EmitSplit? = null
+                    match ret_type {
+                        ty => {
+                            split = host.split_lifetimes(ty, returns_text ?? "", sources)
+                        },
+                        null => {},
+                    }
+                    match split {
+                        found => {
+                            for each in found.own {
+                                let head = f"{emit_local_name(self.facts.comptime_names, each.first)}: "
+                                let mut p = 0
+                                let mut done = false
+                                for existing in params {
+                                    if !done && existing.starts_with(head) {
+                                        done = true
+                                    }
+                                    if !done {
+                                        p += 1
+                                    }
+                                }
+                                if done {
+                                    params[p] = emit_renamed_lifetime(params[p], "'r", each.second)
+                                }
+                            }
+                            match ret_type {
+                                t => {
+                                    let escaped_type = escaped_name(emit_text(world, t.name))
+                                    let before = f"{escaped_type}<{self.lifetime_args(emit_text(world, t.name), "'r")}>"
+                                    let after = f"{escaped_type}<{found.fields.join(", ")}>"
+                                    returned = returned.replacen(before, after, 1)
+                                },
+                                null => {},
+                            }
+                            let mut at = 0
+                            let mut q = 0
+                            for each in declared {
+                                if each == "'r" && at == 0 {
+                                    at = q + 1
+                                }
+                                q += 1
+                            }
+                            let mut offset = 0
+                            for each in found.own {
+                                if each.second != "'r" {
+                                    declared.insert(at + offset, each.second.clone())
+                                    offset += 1
+                                }
+                            }
+                        },
+                        null => {},
+                    }
+                }
+                let mut ret: String = ""
+                if throws_ {
+                    ret = f" -> Result<{returned}, {channel}>"
+                } else if ret_type != null {
+                    ret = f" -> {returned}"
+                }
+
+                let ended = host.seeds_end(begun.seeded, begun.base)
+                for each in ended.declared {
+                    declared.push(each.clone())
+                }
+                // A map made in a body whose positions are parameters is made
+                // with the hasher the parameter holds.
+                let outer_unpinned = walk.unpinned
+                walk.unpinned = ended.hidden > 0 || begun.in_seeded_impl
+                let mut vis: String = ""
+                if (owner_bridged ?? false) || is_public {
+                    vis = "pub "
+                }
+                // ADR-303 D4: `fn main` is the runtime's, and the program's own
+                // entry point is called from inside it.
+                let mut emitted: String = escaped_name(own_name)
+                if depth == 0 && own_name == "main" && self.user_main(world) != null {
+                    emitted = "__nikaia_main"
+                }
+                // **One copy per type this was used with** (ADR-304 D6).
+                let mut copy = false
+                match walk.specialising {
+                    pair => {
+                        emitted = check_specialised(emitted, pair.second)
+                        copy = true
+                    },
+                    null => {},
+                }
+                if emitted == "__nikaia_main" {
+                    host.set_main_params(params)
+                }
+
+                // ADR-055 D1: a function that can pause is an `async fn`. A
+                // trait's declaration is the wider claim (ADR-288 D25), and a
+                // function written `sync(f)` is the `async fn` its body is
+                // (ADR-288 D30, D31).
+                let mut declared_pausing = false
+                if has_declared_by && !is_bridged {
+                    declared_pausing = self.emit_fn_declared_pausing(f"{declared_by}::{own_name}")
+                }
+                let mut pausing: String = ""
+                if call_pauses(self.own_contracts, key) || declared_pausing || self.lambda_decides(key) {
+                    pausing = "async "
+                }
+                // **A name this compiler chose is not one the program wrote.**
+                if walk.specialising != null {
+                    out.push("#[allow(non_snake_case)]\n")
+                    out.push(pad)
+                }
+                // **A function takes the parameters the program wrote** (#459).
+                if args.len() + recv > 7 {
+                    out.push("#[allow(clippy::too_many_arguments)]\n")
+                    out.push(pad)
+                }
+                // **What a fold's step calls runs once per item** (#433, #695),
+                // and what the program wrote wins (ADR-370 D1-D2).
+                let written_hint: String? = host.inline_written(written.attributes)
+                let mut hint: String? = written_hint?.clone()
+                if hint == null && self.fold_callees.contains(own_name) {
+                    hint = "#[inline(always)]".clone()
+                }
+                match hint {
+                    text => {
+                        out.push(text)
+                        out.push("\n")
+                        out.push(pad)
+                    },
+                    null => {},
+                }
+                // **A function with a precondition has two entries** (ADR-269
+                // D20): `f` checks it and calls `f__unchecked`, which is the
+                // body. A copy made per type checks at the top of its body.
+                let checks: Vec[PreconditionCheck] = self.facts.entries.get(key)?.clone() ?? []
+                let mut check_lines: String = ""
+                for each in checks {
+                    check_lines.push_str(emit_call_failed_check(each))
+                }
+                let mut pending: String? = null
+                if !checks.is_empty() && !copy {
+                    out.push("#[allow(non_snake_case)]\n")
+                    out.push(pad)
+                    out.push(emit_fn_signature(vis, pausing, f"{emitted}__unchecked", declared, params, ret))
+                    // The checked entry is written after the body, below, and
+                    // carries the written hint too: a call from elsewhere
+                    // reaches it first.
+                    let mut hint_line: String = ""
+                    match written_hint {
+                        text => {
+                            hint_line = f"{pad}{text}\n"
+                        },
+                        null => {},
+                    }
+                    let mut call: String = emitted.clone()
+                    if receiver != null {
+                        call = f"self.{emitted}"
+                    } else if has_owner {
+                        call = f"Self::{emitted}"
+                    }
+                    let mut names: Vec[String] = []
+                    for each in params {
+                        if !each.ends_with("self") {
+                            let head = (each.split(":").next() ?? "").trim()
+                            names.push((head.strip_prefix("mut ") ?? head).clone())
+                        }
+                    }
+                    let mut entry: String = f"{pad}#[allow(dead_code)]\n{hint_line}{pad}"
+                    entry.push_str(emit_fn_signature(vis, pausing, emitted, declared, params, ret))
+                    entry.push_str("{ ")
+                    entry.push_str(check_lines)
+                    entry.push_str(call)
+                    entry.push_str("__unchecked(")
+                    entry.push_str(names.join(", "))
+                    entry.push_str(")")
+                    if pausing != "" {
+                        entry.push_str(".await")
+                    }
+                    entry.push_str(" }\n")
+                    pending = entry
+                } else if !checks.is_empty() {
+                    out.push(emit_fn_signature(vis, pausing, emitted, declared, params, ret))
+                    out.push("{ ")
+                    out.push(check_lines)
+                    pending = "}".clone()
+                } else {
+                    out.push(emit_fn_signature(vis, pausing, emitted, declared, params, ret))
+                }
+                // **The parameters a call has to await** (ADR-277 D11): those
+                // whose type is code and does not say `sync`.
+                let mut awaited: Vec[winnow_grammar::Symbol] = []
+                for each in args {
+                    match each.ty.code {
+                        code => {
+                            if !code.is_sync {
+                                awaited.push(each.name)
+                            }
+                        },
+                        null => {},
+                    }
+                }
+                let returns_value = ret_type != null
+                let settle = self.facts.settle_fns.get(key)
+                match settle {
+                    // **A body where a value with a cleanup may die ends at a
+                    // settle point** (ADR-297 D2): the body runs to its end as a
+                    // block of its own, and what died in it is settled before the
+                    // function hands its value back.
+                    failing => {
+                        let mut inner = EmitOut::empty()
+                        self.emit_function_body(world, walk, inner, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
+                        let mut settle_fn: String = "nikaia_std::cleanup::settle_with"
+                        let mut rest: String = "_, _"
+                        if failing {
+                            settle_fn = "nikaia_std::cleanup::settle_after"
+                            rest = "_, _, _"
+                        }
+                        let kind = emit_settle_kind(host.overlaps_user_code())
+                        out.push(f"{{ {settle_fn}::<{kind}, {rest}>(async ")
+                        out.append(inner)
+                        // A cleanup's failure is raised where the settle point
+                        // is (ADR-280 D29).
+                        if failing {
+                            let origin = key.rsplit("::").next() ?? ""
+                            out.push(f", &{rust_string(origin)}).await }}")
+                        } else {
+                            out.push(").await }")
+                        }
+                    },
+                    null => {
+                        self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
+                    },
+                }
+                walk.unpinned = outer_unpinned
+                // The checked entry after the unchecked one's body, or the brace
+                // that closes a copy's checks around its body.
+                match pending {
+                    closing => {
+                        if closing == "}" {
+                            out.push(" }\n")
+                        } else {
+                            out.push("\n")
+                            out.push(closing)
+                        }
+                    },
+                    null => {
+                        out.push("\n")
+                    },
+                }
+            },
+            else => {
+                throw EmitRefused { message: "not a function".clone(), at: null }
+            },
+        }
+    }
+}

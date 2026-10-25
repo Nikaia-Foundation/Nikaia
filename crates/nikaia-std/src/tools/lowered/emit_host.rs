@@ -28,6 +28,14 @@ pub trait EmitHost {
     fn parallelism(&self) -> String;
     fn written(&self, expr: &Expr) -> String;
     fn held_buffers(&self, walk: &EmitWalk, function: &str, statement: i64, root: &str) -> Option<Vec<(i64, Vec<i64>)>>;
+    fn seeds_begin(&self, written: &Item, owner_target: Option<String>, owner_declared: bool) -> EmitSeedsBegin;
+    fn seeds_end(&self, seeded: bool, base: i64) -> EmitSeedsEnd;
+    fn seeded(&self, written: String) -> String;
+    fn split_lifetimes(&self, ty: &Type, returns: &str, sources: &[String]) -> Option<EmitSplit>;
+    fn inline_written(&self, attributes: &[Attribute]) -> Option<String>;
+    fn set_main_params(&self, params: &[String]);
+    fn counts_steps(&self) -> bool;
+    fn skip_free_at_exit(&self) -> bool;
 }
 
 impl EmitState {

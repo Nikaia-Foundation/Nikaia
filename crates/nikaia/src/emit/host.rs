@@ -19,9 +19,10 @@
 //! same `Refused` the Rust side raises, with its position.
 
 use anyhow::Result;
+use nikaia_std::tools::emit_function::{EmitSeedsBegin, EmitSeedsEnd, EmitSplit};
 use nikaia_std::tools::emit_host::EmitHost;
 use nikaia_std::tools::emit_kinds::{EmitFlow, EmitRefused, EmitScope};
-use nikaia_std::tools::emit_state::EmitWalk;
+use nikaia_std::tools::emit_state::{EmitPair, EmitWalk};
 
 use super::{Emitter, Flow, Out, Tail};
 use crate::ast::{Block, Expr};
@@ -457,5 +458,118 @@ impl EmitHost for Emitter<'_> {
         let mut names = Vec::new();
         names_in(self, expr, &mut names);
         names
+    }
+
+    fn seeds_begin(
+        &self,
+        written: &crate::ast::Item,
+        owner_target: Option<String>,
+        owner_declared: bool,
+    ) -> EmitSeedsBegin {
+        let crate::ast::Item::Fn {
+            name,
+            args,
+            ret_type,
+            is_public,
+            ..
+        } = written
+        else {
+            return EmitSeedsBegin {
+                base: 0,
+                seeded: false,
+                in_seeded_impl: false,
+            };
+        };
+        let in_seeded_impl = self.place.borrow().within();
+        let base = match (&owner_target, in_seeded_impl) {
+            (Some(o), true) => self.seeds.arity(o),
+            _ => 0,
+        };
+        // **A signature of a barrier** (ADR-010 D9).
+        let barrier = (owner_target.is_some() && owner_declared)
+            || (!owner_declared && name.is_some_and(|n| self.seeds.is_fixed(self.text(n))));
+        self.floor.set(barrier);
+        let seeded = !self.seeds.is_empty()
+            && !barrier
+            && name.is_some()
+            && !owner_declared
+            && args
+                .iter()
+                .map(|a| &a.ty)
+                .chain(ret_type.iter())
+                .any(|t| match *is_public {
+                    true => self.seeds.positions(self.parsed, t) > 0,
+                    false => self.seeds.mentions_a_struct(self.parsed, t),
+                });
+        if seeded {
+            let shape = match (*is_public, name) {
+                (true, Some(n)) => {
+                    let key = match &owner_target {
+                        Some(o) => format!("{}::{}", o, self.text(*n)),
+                        None => self.text(*n).to_string(),
+                    };
+                    self.seeds.shape(&key).cloned()
+                }
+                _ => None,
+            };
+            match shape {
+                Some(shape) => self.place.borrow_mut().declare_fn(base, shape),
+                None => self.place.borrow_mut().declare(base),
+            }
+        }
+        EmitSeedsBegin {
+            base: base as i64,
+            seeded,
+            in_seeded_impl,
+        }
+    }
+
+    fn seeds_end(&self, seeded: bool, base: i64) -> EmitSeedsEnd {
+        self.floor.set(false);
+        let base = base as usize;
+        let hidden = match seeded {
+            true => self.place.borrow_mut().finish(base),
+            false => 0,
+        };
+        EmitSeedsEnd {
+            hidden: hidden as i64,
+            declared: super::seeds::Seeds::declared(base, hidden, false),
+        }
+    }
+
+    fn seeded(&self, written: String) -> String {
+        Emitter::seeded(self, written)
+    }
+
+    fn split_lifetimes(
+        &self,
+        ty: &crate::ast::Type,
+        returns: &str,
+        sources: &[String],
+    ) -> Option<EmitSplit> {
+        let (own, fields) = Emitter::split_lifetimes(self, Some(ty), Some(returns), sources)?;
+        Some(EmitSplit {
+            own: own
+                .into_iter()
+                .map(|(first, second)| EmitPair { first, second })
+                .collect(),
+            fields,
+        })
+    }
+
+    fn inline_written(&self, attributes: &[crate::ast::Attribute]) -> Option<String> {
+        crate::check::attributes::inline_written(self.parsed, attributes).map(str::to_string)
+    }
+
+    fn set_main_params(&self, params: &[String]) {
+        *self.main_params.borrow_mut() = params.to_vec();
+    }
+
+    fn counts_steps(&self) -> bool {
+        self.build.counts_steps
+    }
+
+    fn skip_free_at_exit(&self) -> bool {
+        self.build.skip_free_at_exit
     }
 }
