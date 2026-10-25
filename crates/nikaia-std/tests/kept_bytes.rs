@@ -73,3 +73,38 @@ fn a_bytes_and_a_mapping_are_kept_without_a_copy() {
     drop(mapped);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// What a keeping method does (#842): `Holder::put` stores a clone in `self`,
+/// as the lowering of `fn put(ref mut self, b: ref Bytes)` writes it.
+struct Holder {
+    body: Bytes,
+}
+
+impl Holder {
+    fn put(&mut self, b: &Bytes) {
+        self.body = b.clone();
+    }
+}
+
+#[test]
+fn a_method_keeps_a_bytes_and_a_mapping_without_a_copy() {
+    let dir = std::env::temp_dir().join(format!("nikaia-kept-method-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("scratch");
+    std::fs::write(dir.join("big"), vec![b'x'; SIZE]).expect("write");
+    let root = nikaia_std::fs::Root::Dir(dir.clone());
+    let own = Bytes::from(vec![b'y'; SIZE]);
+    let mapped = nikaia_std::rt::exec::block_on(nikaia_std::fs::map("big", &root)).expect("maps");
+    let mut h = Holder {
+        body: Bytes::from(Vec::new()),
+    };
+    h.put(&kept(&own));
+    assert_eq!(h.body.as_ptr(), own.as_ptr());
+    h.put(&kept(&mapped));
+    assert_eq!(h.body.as_ptr(), mapped.deref().as_ptr());
+    let text = "z".repeat(SIZE);
+    h.put(&kept(&text.as_bytes()));
+    assert_ne!(h.body.as_ptr(), text.as_ptr());
+    assert_eq!(h.body.len(), SIZE);
+    drop(mapped);
+    std::fs::remove_dir_all(&dir).ok();
+}

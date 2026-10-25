@@ -130,6 +130,9 @@ pub struct CheckFacts {
     /// the bounds walk reads the entry's `ensures` and `ensures_each`
     /// (ADR-314 D3, ADR-375 D5).
     pub std_receivers: collections::BTreeMap[i64, String],
+    /// **The method a call resolves to by its receiver's type** (#842), by the
+    /// receiver's node, as the ledger keys it (`Holder::put`).
+    pub method_callees: collections::BTreeMap[i64, String],
     /// **A vector's load, read as the cut it reads** (ADR-377 D3), by the
     /// node of the called path: the bytes it reads, or minus the most a
     /// `Lanes` reads on any CPU level where its count is the build's.
@@ -403,6 +406,7 @@ impl CheckFacts {
             arithmetic: collections::BTreeMap(),
             shifts: collections::BTreeMap(),
             std_receivers: collections::BTreeMap(),
+            method_callees: collections::BTreeMap(),
             simd_loads: collections::BTreeMap(),
             negations: collections::BTreeMap(),
             copied_slots: collections::BTreeSet(),

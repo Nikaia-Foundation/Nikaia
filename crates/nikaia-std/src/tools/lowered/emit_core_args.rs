@@ -104,21 +104,18 @@ impl EmitState {
         if signature.takes_a_receiver() { return false; }
         emit_arg_lends_own(&contract, i, world.library, &self.described)
     }
-    pub(crate) fn emit_arg_keeps_bytes(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> bool {
+    pub(crate) fn emit_arg_keeps_bytes(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, method_callee: Option<&str>, i: i64) -> bool {
+        if method_callee.is_some() {
+            let key = match method_callee { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if self.own_contracts.functions.contains_key(key) {
+                let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                return emit_takes_self(&c) && keeps_its_bytes(&c, i + 1);
+            }
+            let c = match world.library.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            return emit_takes_self(&c) && keeps_its_bytes(&c, i + 1);
+        }
         if self.own_contracts.functions.contains_key(callee) { return keeps_its_bytes(match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
-        if world.library.functions.contains_key(callee) { return keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
-        let mut seen = false;
-        for key in method_keys(&self.own_methods, callee) {
-            let c = match self.own_contracts.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-            if !emit_takes_self(&c) || !keeps_its_bytes(&c, i + 1) { return false; }
-            seen = true;
-        }
-        for key in method_keys(&self.library_methods, callee) {
-            let c = match world.library.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-            if !emit_takes_self(&c) || !keeps_its_bytes(&c, i + 1) { return false; }
-            seen = true;
-        }
-        seen
+        keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i)
     }
     pub(crate) fn emit_arg_opening(&self, callee: &str, i: i64) -> String {
         if self.own_contracts.functions.contains_key(callee) {
@@ -162,6 +159,11 @@ impl EmitState {
             None => None,
         }, || vec![].into());
         walk.boxed_args = None;
+        let method_callee: Option<String> = match walk.method_callee.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        walk.method_callee = None;
         let part_counts: Vec<Count> = nikaia_std::index::or(match walk.variant_counts.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -178,12 +180,12 @@ impl EmitState {
             if i > 0 { out.push(", "); }
             if hoisted.contains(nikaia_std::index::AsKey::as_key(&i)) {
                 let mut one = EmitOut::empty();
-                self.emit_core_argument(world, walk, &mut one, host, callee, arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?;
+                self.emit_core_argument(world, walk, &mut one, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?;
                 lets.push(&format!("let __nikaia_arg{} = ", i));
                 lets.append(one);
                 lets.push("; ");
                 out.push(&format!("__nikaia_arg{}", i));
-            } else { self.emit_core_argument(world, walk, out, host, callee, arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?; }
+            } else { self.emit_core_argument(world, walk, out, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?; }
             i += 1;
         }
         if !hoisted.is_empty() { walk.hoisted_lets = Some(lets); }
@@ -192,7 +194,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, arg: &Expr, i: i64, boxed_mask: &[bool], part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, method_callee: Option<&str>, arg: &Expr, i: i64, boxed_mask: &[bool], part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if i < part_counts.len() as i64 { walk.hull_count = Some(*nikaia_std::index::get(&part_counts, nikaia_std::index::at(i))); } else { walk.hull_count = None; }
         let scalar = nikaia_std::index::or(self.facts.char_patterns.get(&node_key(arg)), || "");
         if scalar != "" {
@@ -240,7 +242,7 @@ impl EmitState {
         let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
         out.push(&before);
         if either { out.push("nikaia_std::either_text::either("); }
-        let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, i);
+        let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i);
         if keeps_bytes { out.push("&*nikaia_std::bytes::kept("); }
         let mut how: String = String::from("");
         let mut has_how = false;

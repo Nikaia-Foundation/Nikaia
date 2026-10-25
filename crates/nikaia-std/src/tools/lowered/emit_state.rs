@@ -92,6 +92,7 @@ pub struct EmitWalk {
     pub code_parameter_runs: bool,
     pub held: collections::BTreeMap<i64, String>,
     pub boxed_args: Option<Vec<bool>>,
+    pub method_callee: Option<String>,
     pub hoisted_args: Option<Vec<i64>>,
     pub hoisted_lets: Option<EmitOut>,
     pub variant_counts: Option<Vec<Count>>,
@@ -102,6 +103,6 @@ pub struct EmitWalk {
 }
 
 impl EmitWalk {
-    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_bytes: false, grammar_raw: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false } }
+    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_bytes: false, grammar_raw: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, method_callee: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false } }
 }
 

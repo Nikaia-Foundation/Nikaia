@@ -1,0 +1,30 @@
+// #842: a method call's callee is the method its receiver's type resolves to,
+// not every method of that name. `Keeper::put` keeps its `ref Bytes` (a
+// `&Bytes`, each argument handed over with its owner), `Reader::put` only
+// reads it (a run of bytes): both take a `Bytes` and a text's bytes.
+struct Keeper { body: Bytes }
+struct Reader { seen: i64 }
+
+impl Keeper {
+    fn put(ref mut self, b: ref Bytes) { self.body = b.clone() }
+}
+
+impl Reader {
+    fn put(ref mut self, b: ref Bytes) { self.seen += b.len() }
+}
+
+fn main() {
+    let mut v: Vec[u8] = []
+    v.push(65)
+    v.push(10)
+    let own = Bytes(v)
+    let s = "x\ny\n"
+    let mut k = Keeper { body: own.clone() }
+    let mut r = Reader { seen: 0 }
+    k.put(own)
+    r.put(own)
+    let a = k.body.len()
+    k.put(s.bytes)
+    r.put(s.bytes)
+    println(f"{a} {k.body.len()} {r.seen}")
+}

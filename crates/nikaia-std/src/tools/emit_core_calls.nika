@@ -1130,6 +1130,7 @@ impl EmitState {
         // each value with a handle on every buffer it points into - as many as the
         // keeper's widest value needs, so that every element is one type (D15).
         self.emit_call_hold(world, walk, host, receiver, scope, flow)
+        walk.method_callee = self.facts.method_callees[on_node]?.clone()
         self.emit_core_args(world, walk, out, host, name, args, takes, depth, flow, scope)
         walk.hold_args = null
         // **And a method that takes a keep is given one** (D2).

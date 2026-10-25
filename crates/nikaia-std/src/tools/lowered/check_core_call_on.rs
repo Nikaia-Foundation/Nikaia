@@ -551,6 +551,7 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, key: &str, contract: &FnContract, span: &Span) -> Ty {
     let node = id_of(receiver) as i64;
+    state.facts.method_callees.insert(node, key.to_owned());
     let mut known_text = false;
     if key == "fs::Path::to_text" {
         known_text = state.flow.receiver_from_text;

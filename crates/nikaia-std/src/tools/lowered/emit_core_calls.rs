@@ -749,6 +749,10 @@ impl EmitState {
         if kind == 0 { out.push("("); }
         let takes = self.takes_a_handle(world, &name);
         self.emit_call_hold(world, walk, host, receiver, scope, flow);
+        walk.method_callee = match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
         self.emit_core_args(world, walk, out, host, &name, args, &takes, depth, flow, scope)?;
         walk.hold_args = None;
         let keeping = keeping_method_key(&self.own_contracts, &self.own_methods, (emit_call_owner(&scope.function)).as_deref(), emit_call_on_self(world, receiver), &name);

@@ -705,6 +705,7 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
 /// signature the receiver binds, and typed.
 fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: ref Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], entry: ref String, key: ref String, contract: ref FnContract, span: ref Span) -> Ty sync {
     let node = id_of(receiver) as i64
+    state.facts.method_callees.insert(node, key.clone())
     // **`to_text` on a name made from text cannot fail** (ADR-319 D5).
     let mut known_text = false
     if key == "fs::Path::to_text" {

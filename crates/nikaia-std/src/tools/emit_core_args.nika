@@ -169,31 +169,23 @@ impl EmitState {
 
     /// Whether `callee` takes its parameter `i` as a `Bytes` with its owner
     /// (ADR-373 D1, D4): a `ref Bytes` it keeps, lowered to `&Bytes`.
-    fn emit_arg_keeps_bytes(ref self, world: ref EmitWorld, callee: ref String, i: i64) -> bool {
+    fn emit_arg_keeps_bytes(ref self, world: ref EmitWorld, callee: ref String, method_callee: ref String?, i: i64) -> bool {
+        // **A method is the one its receiver's type resolves to** (#842):
+        // `self` is position 0. A call the checker resolved to no method (a
+        // closure in a field) is never wrapped.
+        if method_callee != null {
+            let key = method_callee ?? return false
+            if self.own_contracts.functions.contains_key(key) {
+                let c = self.own_contracts.functions.get(key) ?? return false
+                return emit_takes_self(c) && keeps_its_bytes(c, i + 1)
+            }
+            let c = world.library.functions.get(key) ?? return false
+            return emit_takes_self(c) && keeps_its_bytes(c, i + 1)
+        }
         if self.own_contracts.functions.contains_key(callee) {
             return keeps_its_bytes(self.own_contracts.functions.get(callee) ?? return false, i)
         }
-        if world.library.functions.contains_key(callee) {
-            return keeps_its_bytes(world.library.functions.get(callee) ?? return false, i)
-        }
-        // **A method** (#756): `callee` is its name, `self` is position 0, and
-        // every method of that name must agree.
-        let mut seen = false
-        for key in method_keys(self.own_methods, callee) {
-            let c = self.own_contracts.functions.get(key) ?? return false
-            if !emit_takes_self(c) || !keeps_its_bytes(c, i + 1) {
-                return false
-            }
-            seen = true
-        }
-        for key in method_keys(self.library_methods, callee) {
-            let c = world.library.functions.get(key) ?? return false
-            if !emit_takes_self(c) || !keeps_its_bytes(c, i + 1) {
-                return false
-            }
-            seen = true
-        }
-        return seen
+        return keeps_its_bytes(world.library.functions.get(callee) ?? return false, i)
     }
 
     /// The opening a lent view gets inside the option a nullable parameter is:
@@ -264,6 +256,8 @@ impl EmitState {
         // inside one of these arguments does not see it.
         let boxed_mask: Vec[bool] = (walk.boxed_args?.clone() ?? [])
         walk.boxed_args = null
+        let method_callee: String? = walk.method_callee?.clone()
+        walk.method_callee = null
         let part_counts: Vec[Count] = (walk.variant_counts?.clone() ?? [])
         walk.variant_counts = null
         // **An argument bound ahead of the call**: written as it would
@@ -278,13 +272,13 @@ impl EmitState {
             }
             if hoisted.contains(i) {
                 let mut one = EmitOut::empty()
-                self.emit_core_argument(world, walk, one, host, callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+                self.emit_core_argument(world, walk, one, host, callee, method_callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
                 lets.push(f"let __nikaia_arg{i} = ")
                 lets.append(one)
                 lets.push("; ")
                 out.push(f"__nikaia_arg{i}")
             } else {
-                self.emit_core_argument(world, walk, out, host, callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+                self.emit_core_argument(world, walk, out, host, callee, method_callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
             }
             i += 1
         }
@@ -294,7 +288,7 @@ impl EmitState {
     }
 
     /// One argument.
-    fn emit_core_argument[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, arg: ref Expr, i: i64, boxed_mask: ref Vec[bool], part_counts: ref Vec[Count], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_argument[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, method_callee: ref String?, arg: ref Expr, i: i64, boxed_mask: ref Vec[bool], part_counts: ref Vec[Count], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if i < part_counts.len() {
             walk.hull_count = part_counts[i]
         } else {
@@ -375,7 +369,7 @@ impl EmitState {
         // **A `Bytes` kept by the callee is handed over with its owner**
         // (ADR-373 D1, D4): a `Bytes` as it is, a mapping's at a count, and a
         // run of bytes - a text's, a cut - copied into one.
-        let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, i)
+        let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i)
         if keeps_bytes {
             out.push("&*nikaia_std::bytes::kept(")
         }
