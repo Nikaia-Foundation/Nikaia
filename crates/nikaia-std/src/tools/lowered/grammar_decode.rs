@@ -141,7 +141,7 @@ pub(crate) fn gr_shaped(tag: &str, at: &mut GrCursor, char_of: &impl Fn(i64) -> 
         let variant = at.word();
         let payload = gr_items(at, char_of);
         Some(BuildValue::Variant { ty, variant, payload })
-    } else if tag == "s" { Some(BuildValue::Text(at.quoted(char_of))) } else if tag == "l" { Some(BuildValue::List(gr_items(at, char_of))) } else if tag == "t" {
+    } else if tag == "s" { Some(BuildValue::Text(at.quoted(char_of))) } else if tag == "l" { Some(BuildValue::List(gr_items(at, char_of))) } else if tag == "p" { Some(BuildValue::Tuple(gr_items(at, char_of))) } else if tag == "t" {
         let name = at.word();
         let mut fields: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
         loop {

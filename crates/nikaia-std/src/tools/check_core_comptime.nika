@@ -89,7 +89,22 @@ fn check_core_comptime_value_below(world: ref CheckWorld, found: ref Ty, evaluat
             return f"[{ty}; {items.len()}]"
         },
         BuildValue::Text(_) => { return "&str".clone() },
-        BuildValue::Tuple(_) => { return null },
+        BuildValue::Tuple(parts) => {
+            let declared: Vec[Ty] = match found {
+                Ty::Tuple(each) => each.clone(),
+                else => [],
+            }
+            let mut each: Vec[String] = []
+            let mut at = 0
+            for part in parts {
+                let part_found: Ty = (nth_type(declared, at) ?? Ty::Unknown).clone()
+                let one: BuildValue? = part.clone()
+                let held = check_core_comptime_value_below(world, part_found, one) ?? return null
+                each.push(held)
+                at = at + 1
+            }
+            return tuple_spelled(each)
+        },
         BuildValue::Struct { name, .. } => { return name.clone() },
         BuildValue::Variant { ty, .. } => { return ty.clone() },
         BuildValue::Constant { constructor, .. } => { return constructed(constructor) },

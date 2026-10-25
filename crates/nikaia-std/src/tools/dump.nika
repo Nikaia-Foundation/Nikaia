@@ -18,7 +18,7 @@
 // that cannot cross named.
 //
 // The form is s-expressions, one per shape a build-time value has: `(i 42)`,
-// `(f 1.5)`, `(b true)`, `(s "…")`, `(l …)`, `(t Name (field …) …)` and
+// `(f 1.5)`, `(b true)`, `(s "…")`, `(l …)`, `(p …)` for a tuple, `(t Name (field …) …)` and
 // `(v Ty Variant …)`.
 
 use std::collections
@@ -81,11 +81,33 @@ pub fn dump(shapes: ref Shapes, ty: ref Ty, expr: ref String, depth: i64, mut ou
             true => dump_run(shapes, item, expr, depth, out),
             false => uncrossable(ty, NO_FORM),
         },
+        Ty::Tuple(parts) => match parts.len() > 0 {
+            true => dump_tuple(shapes, parts, expr, depth, out),
+            false => uncrossable(ty, NO_FORM),
+        },
         else => uncrossable(ty, NO_FORM),
     }
 }
 
-comptime NO_FORM: ref String = "a `const` holds an integer, a `bool`, text, a list of those and a `struct` whose fields are those"
+// **A tuple, part by part, as `(p …)`** (Part II 10.2: a pair may be held).
+// The parts are read by position, which is how Rust names them.
+fn dump_tuple(shapes: ref Shapes, parts: ref Vec[Ty], expr: ref String, depth: i64, mut out: String) -> Uncrossable? {
+    let pad = "    ".repeat(depth)
+    out.push_str(f"{pad}out.push_str(\"(p\");\n")
+    let mut at = 0
+    while at < parts.len() {
+        out.push_str(f"{pad}out.push(' ');\n")
+        let refused = dump(shapes, parts[at], f"{expr}.{at}", depth + 1, out)
+        if refused != null {
+            return refused
+        }
+        at += 1
+    }
+    out.push_str(f"{pad}out.push(')');\n")
+    return null
+}
+
+comptime NO_FORM: ref String = "a `const` holds an integer, a `bool`, text, a list of those, a tuple of those and a `struct` whose fields are those"
 
 fn text_view(expr: ref String, depth: i64, mut out: String) -> Uncrossable? {
     let pad = "    ".repeat(depth)

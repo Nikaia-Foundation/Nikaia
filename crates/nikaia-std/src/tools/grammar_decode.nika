@@ -206,6 +206,8 @@ fn gr_shaped(tag: ref String, mut at: GrCursor, char_of: fn(i64) -> scalar? sync
         return BuildValue::Text(at.quoted(char_of))
     } else if tag == "l" {
         return BuildValue::List(gr_items(at, char_of))
+    } else if tag == "p" {
+        return BuildValue::Tuple(gr_items(at, char_of))
     } else if tag == "t" {
         let name = at.word()
         let mut fields: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()

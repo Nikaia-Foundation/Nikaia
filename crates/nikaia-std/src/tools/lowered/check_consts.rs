@@ -17,7 +17,14 @@ pub fn rust_value(value: &BuildValue, float_text: &impl Fn(f64) -> String) -> Op
             return Some(String::from("false"));
         },
         BuildValue::Text(text) => return Some(format!("\"{}\"", as_a_literal(text))),
-        BuildValue::Tuple(_) => return None,
+        BuildValue::Tuple(parts) => {
+            let mut written: Vec<String> = vec![];
+            for held in parts.iter() {
+                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(text);
+            }
+            return Some(tuple_spelled(&written));
+        },
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
             let mut written: Vec<String> = vec![];
@@ -71,7 +78,15 @@ pub fn rust_array_type(items: &[BuildValue]) -> Option<String> {
                 let held = match rust_array_type(inner) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 format!("[{}; {}]", held, inner.len() as i64)
             },
-            BuildValue::Tuple(_) => return None,
+            BuildValue::Tuple(parts) => {
+                let mut each: Vec<String> = vec![];
+                for part in parts.iter() {
+                    let one: Vec<BuildValue> = vec![part.clone()];
+                    let held = match rust_array_type(&one) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    each.push(held);
+                }
+                tuple_spelled(&each)
+            },
             BuildValue::Constant { constructor, .. } => match constructed(constructor) { Some(__nikaia_value) => __nikaia_value, None => return None },
         };
         if !seen {
@@ -286,6 +301,13 @@ pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn tuple_spelled(parts: &[String]) -> String {
+    if parts.len() == 1 { return format!("({},)", *nikaia_std::index::get(&parts, 0)); }
+    format!("({})", parts.join(", "))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, want: Option<&Ty>, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> Option<String> {
     if want.is_none() { return rust_value(value, float_text); }
     let wanted: Ty = nikaia_std::index::or(want.as_ref(), || &Ty::Unknown).clone();
@@ -328,6 +350,21 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
                 at = at + 1;
             }
             return Some(format!("{}::{}({})", ty, variant, written.join(", ")));
+        },
+        BuildValue::Tuple(parts) => {
+            let declared: Vec<Ty> = match wanted {
+                Ty::Tuple(ref each) => each.to_owned(),
+                _ => vec![],
+            };
+            let mut written: Vec<String> = vec![];
+            let mut at: i64 = 0;
+            for held in parts.iter() {
+                let part_want = nth_type(&declared, at);
+                let text = match written_below(state, world, held, (part_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(text);
+                at = at + 1;
+            }
+            return Some(tuple_spelled(&written));
         },
         _ => return rust_value(value, float_text),
     }

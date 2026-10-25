@@ -1,0 +1,5 @@
+comptime P = nested()
+fn nested() -> ((i64, String), Vec[u8]) { ((3, "drei"), [4, 5]) }
+fn main() {
+    println(f"{P.0.0} {P.0.1} {P.1.len()}")
+}

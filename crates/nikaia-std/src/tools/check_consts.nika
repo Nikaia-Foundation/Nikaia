@@ -9,8 +9,7 @@ use std::collections
 
 /// **A build-time value, spelled as Rust writes one** - for the shapes a
 /// `const` can hold. Nothing where one cannot be written down, which sends the
-/// caller to `NK1127`: a struct is only as writable as its fields, and a tuple
-/// has no `const` form of its own (ADR-311 D9). `float_text` writes a finite
+/// caller to `NK1127`: a struct or a tuple is only as writable as its parts. `float_text` writes a finite
 /// float as the language below does; a float that is not finite has no literal.
 pub fn rust_value(value: ref BuildValue, float_text: fn(f64) -> String sync) -> String? sync {
     match value {
@@ -28,7 +27,14 @@ pub fn rust_value(value: ref BuildValue, float_text: fn(f64) -> String sync) -> 
             return "false"
         },
         BuildValue::Text(text) => return f"\"{as_a_literal(text)}\"",
-        BuildValue::Tuple(_) => return null,
+        BuildValue::Tuple(parts) => {
+            let mut written: Vec[String] = []
+            for held in parts {
+                let text = rust_value(held, float_text) ?? return null
+                written.push(text)
+            }
+            return tuple_spelled(written)
+        },
         BuildValue::Variant { ty, variant, payload } => {
             if payload.len() == 0 {
                 return f"{ty}::{variant}"
@@ -92,7 +98,15 @@ pub fn rust_array_type(items: ref Vec[BuildValue]) -> String? sync {
                 let held = rust_array_type(inner) ?? return null
                 f"[{held}; {inner.len()}]"
             },
-            BuildValue::Tuple(_) => return null,
+            BuildValue::Tuple(parts) => {
+                let mut each: Vec[String] = []
+                for part in parts {
+                    let one: Vec[BuildValue] = [part.clone()]
+                    let held = rust_array_type(one) ?? return null
+                    each.push(held)
+                }
+                tuple_spelled(each)
+            },
             // **A `std` type's constructor names it** (ADR-318 D5).
             BuildValue::Constant { constructor, .. } => constructed(constructor) ?? return null,
         }
@@ -391,6 +405,15 @@ pub fn unwritable_in(state: ref CheckState, world: ref CheckWorld, value: ref Bu
 /// **A computed value written against the type its declaration states**, so
 /// a `&[T]` inside a row gets its `&` (ADR-179 D2). Without a declaration it
 /// is `rust_value`.
+/// **A tuple as Rust spells one**, a value or a type: `(a, b)`, and `(a,)`
+/// for one part.
+pub fn tuple_spelled(parts: ref Vec[String]) -> String sync {
+    if parts.len() == 1 {
+        return f"({parts[0]},)"
+    }
+    return f"({parts.join(", ")})"
+}
+
 pub fn written_below(state: ref CheckState, world: ref CheckWorld, value: ref BuildValue, want: ref Ty?, payloads: fn(ref String, ref String) -> Vec[Ty]? sync, float_text: fn(f64) -> String sync) -> String? sync {
     if want == null {
         return rust_value(value, float_text)
@@ -440,6 +463,22 @@ pub fn written_below(state: ref CheckState, world: ref CheckWorld, value: ref Bu
                 at = at + 1
             }
             return f"{ty}::{variant}({written.join(", ")})"
+        },
+        // **A tuple, each part against the part the declaration names.**
+        BuildValue::Tuple(parts) => {
+            let declared: Vec[Ty] = match wanted {
+                Ty::Tuple(each) => each.clone(),
+                else => [],
+            }
+            let mut written: Vec[String] = []
+            let mut at = 0
+            for held in parts {
+                let part_want = nth_type(declared, at)
+                let text = written_below(state, world, held, part_want, payloads, float_text) ?? return null
+                written.push(text)
+                at = at + 1
+            }
+            return tuple_spelled(written)
         },
         else => return rust_value(value, float_text),
     }

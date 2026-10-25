@@ -638,8 +638,16 @@ fn computed(
     let Some(lowered) = lowered else {
         return not_here(NOT_LOWERED);
     };
-    let Ok(dump) = crate::grammar_run::dumper(&units[here], ty) else {
-        return not_here("Its type can't be handed back from the program that computes it");
+    let dump = match crate::grammar_run::dumper(&units[here], ty) {
+        Ok(dump) => dump,
+        Err(Wall::NoCrossedForm { ty, because }) => {
+            return Computed::NotHere(format!(
+                "Its type `{ty}` can't be handed back from the program that computes it: {because}"
+            ));
+        }
+        Err(_) => {
+            return not_here("Its type can't be handed back from the program that computes it");
+        }
     };
     let Some(program) = with_driver(&lowered, &dump, bounds) else {
         return not_here(NOT_LOWERED);

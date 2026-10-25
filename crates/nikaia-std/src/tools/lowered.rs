@@ -1952,7 +1952,7 @@ pub mod check_compare {
 }
 pub mod check_consts {
     #[allow(unused_imports)]
-    pub use super::{rust_value, rust_array_type, CheckCrossing, CheckTable, unwritable_in, written_below};
+    pub use super::{rust_value, rust_array_type, CheckCrossing, CheckTable, unwritable_in, tuple_spelled, written_below};
 }
 pub mod check_copies {
     #[allow(unused_imports)]

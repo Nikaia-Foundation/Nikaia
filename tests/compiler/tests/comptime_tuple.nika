@@ -1,0 +1,4 @@
+comptime P = pair()
+comptime Q: (u64, i64) = (3, -4)
+fn pair() -> (u64, i64) { (1, -2) }
+fn main() { println(f"{P.0} {P.1} {Q.0} {Q.1}") }

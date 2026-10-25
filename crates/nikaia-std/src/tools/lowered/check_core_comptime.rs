@@ -60,7 +60,22 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
             return Some(format!("[{}; {}]", ty, items.len() as i64));
         },
         BuildValue::Text(_) => { return Some("&str".to_owned()); },
-        BuildValue::Tuple(_) => { return None; },
+        BuildValue::Tuple(parts) => {
+            let declared: Vec<Ty> = match found {
+                Ty::Tuple(each) => each.to_owned(),
+                _ => vec![],
+            };
+            let mut each: Vec<String> = vec![];
+            let mut at: i64 = 0;
+            for part in parts.iter() {
+                let part_found: Ty = nikaia_std::index::or(nth_type(&declared, at), || Ty::Unknown).clone();
+                let one: Option<BuildValue> = Some(part.clone());
+                let held = match check_core_comptime_value_below(world, &part_found, (one).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                each.push(held);
+                at = at + 1;
+            }
+            return Some(tuple_spelled(&each));
+        },
         BuildValue::Struct { name, .. } => { return Some(name.to_owned()); },
         BuildValue::Variant { ty, .. } => { return Some(ty.to_owned()); },
         BuildValue::Constant { constructor, .. } => { return constructed(constructor); },

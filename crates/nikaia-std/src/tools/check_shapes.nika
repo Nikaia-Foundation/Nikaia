@@ -133,6 +133,7 @@ pub fn rust_constant_type(library: ref Ledger, ty: ref Ty) -> String? sync {
     return match ty {
         Ty::Named { name, args, view } => a_named_constant_type(library, name, args, view),
         Ty::Pointed { item, slice, mutable } => if slice && !mutable { wrapped_constant(library, item, "&[", "]") } else { null },
+        Ty::Tuple(parts) => tuple_constant_type(library, parts),
         else => null,
     }
 }
@@ -166,6 +167,19 @@ fn a_named_constant_type(library: ref Ledger, name: ref String, args: ref Vec[Ty
         }
     }
     return null
+}
+
+// **A tuple is a `const` where each of its parts is one.**
+fn tuple_constant_type(library: ref Ledger, parts: ref Vec[Ty]) -> String? sync {
+    if parts.len() == 0 {
+        return null
+    }
+    let mut each: Vec[String] = []
+    for part in parts {
+        let held = rust_constant_type(library, part) ?? return null
+        each.push(held)
+    }
+    return tuple_spelled(each)
 }
 
 fn wrapped_constant(library: ref Ledger, inner: ref Ty, open: ref String, close: ref String) -> String? sync {

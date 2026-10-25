@@ -41,11 +41,29 @@ pub fn dump(shapes: &Shapes, ty: &Ty, expr: &str, depth: i64, out: &mut String) 
             true => dump_run(shapes, item, expr, depth, out),
             false => uncrossable(ty, NO_FORM),
         } },
+        Ty::Tuple(parts) => match !parts.is_empty() {
+            true => dump_tuple(shapes, parts, expr, depth, out),
+            false => uncrossable(ty, NO_FORM),
+        },
         _ => uncrossable(ty, NO_FORM),
     }
 }
 
-pub(crate) const NO_FORM: &str = "a `const` holds an integer, a `bool`, text, a list of those and a `struct` whose fields are those";
+pub(crate) fn dump_tuple(shapes: &Shapes, parts: &[Ty], expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
+    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    out.push_str(&format!("{}out.push_str(\"(p\");\n", pad));
+    let mut at: i64 = 0;
+    while ((at) as usize) < parts.len() {
+        out.push_str(&format!("{}out.push(' ');\n", pad));
+        let refused = dump(shapes, nikaia_std::index::get(&parts, (at) as usize), &format!("{}.{}", expr, at), depth + 1, out);
+        if refused.is_some() { return std::convert::identity(refused); }
+        at += 1;
+    }
+    out.push_str(&format!("{}out.push(')');\n", pad));
+    None
+}
+
+pub(crate) const NO_FORM: &str = "a `const` holds an integer, a `bool`, text, a list of those, a tuple of those and a `struct` whose fields are those";
 
 pub(crate) fn text_view(expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
     let pad = "    ".repeat(nikaia_std::count::of(depth));

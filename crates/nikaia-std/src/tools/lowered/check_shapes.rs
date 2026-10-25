@@ -73,6 +73,7 @@ pub fn rust_constant_type(library: &Ledger, ty: &Ty) -> Option<String> {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; a_named_constant_type(library, name, args, view) },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { wrapped_constant(library, item, "&[", "]") } else { None } },
+        Ty::Tuple(parts) => tuple_constant_type(library, parts),
         _ => None,
     }
 }
@@ -97,6 +98,18 @@ pub(crate) fn a_named_constant_type(library: &Ledger, name: &str, args: &[Ty], v
         };
     }
     None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tuple_constant_type(library: &Ledger, parts: &[Ty]) -> Option<String> {
+    if parts.is_empty() { return None; }
+    let mut each: Vec<String> = vec![];
+    for part in parts.iter() {
+        let held = match rust_constant_type(library, part) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        each.push(held);
+    }
+    Some(tuple_spelled(&each))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
