@@ -552,6 +552,29 @@ impl EmitHost for Emitter<'_> {
         *self.main_params.borrow_mut() = params.to_vec();
     }
 
+    fn main_params(&self) -> Vec<String> {
+        self.main_params.borrow().clone()
+    }
+
+    fn refuse_unwritten_item(&self, written: &crate::ast::Spanned<crate::ast::Item>) -> Crossing {
+        use crate::ast::Item;
+        match &written.node {
+            Item::Grammar(_)
+            | Item::Enum { .. }
+            | Item::Struct { .. }
+            | Item::Fn { .. }
+            | Item::Impl { .. }
+            | Item::Trait { .. }
+            | Item::Import { .. }
+            | Item::Comptime { .. }
+            | Item::Extern { .. } => Ok(()),
+            other => Err(self.stash(crate::diagnostics::refuse_at(
+                written.span.at(),
+                format!("The compiler can't translate this item yet: {other:?}"),
+            ))),
+        }
+    }
+
     fn counts_steps(&self) -> bool {
         self.build.counts_steps
     }

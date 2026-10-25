@@ -254,24 +254,6 @@ impl Build {
     pub fn overlaps_operations(self) -> bool {
         self.target.has_runtime()
     }
-
-    /// The build's settings as the core asks about them, all plain values
-    /// (`tools/emit_kinds.nika`).
-    // The first caller is the type unit (U1a), which reads these in Nikaia.
-    #[allow(dead_code)]
-    pub(crate) fn for_emit(self) -> nikaia_std::tools::emit_kinds::EmitBuild {
-        nikaia_std::tools::emit_kinds::EmitBuild {
-            overlaps_user_code: self.overlaps_user_code(),
-            user_parallelism: self.user_parallelism == UserParallelism::Yes,
-            crossings_are_possible: self.crossings_are_possible(),
-            counts_steps: self.counts_steps,
-            parallelism: self.parallelism().to_string(),
-            reentrancy: self.reentrancy_check == ReentrancyCheck::Yes,
-            leaves_values: self.leaves_values,
-            called_from_c: self.called_from_c,
-            has_runtime: self.overlaps_operations(),
-        }
-    }
 }
 
 impl Target {
@@ -705,20 +687,6 @@ pub fn emit_program_with_trust(
     Emitter::new(parsed, build, provenance).program()
 }
 
-/// **`std`'s own Nikaia half**, which is the one program that must not import
-/// the prelude: it *is* the prelude ([ADR-014](../../../docs/specification/adr/adr-014.md)
-/// D1, [ADR-002](../../../docs/specification/adr/adr-002.md) D4).
-///
-/// Every other program gets `pub use nikaia_std::prelude::*;` whether or not it
-/// asked, because what a program uses is not a list this emitter keeps and a name
-/// the prelude provides has to resolve. `std` is where that stops being true, and
-/// it is one program rather than a class - so it says so here rather than being
-/// detected.
-pub fn emit_std(parsed: &Parsed) -> Result<Lowered> {
-    let own = crate::contracts::Ledger::infer_package(&[parsed], std_ledger());
-    emit_std_against(parsed, &[], &own, &crate::contracts::Ledger::blank())
-}
-
 /// The same, for a module that reads Rust it was handed described: a tool of
 /// `nikaia-std`'s, whose tree names are `winnow_grammar::Symbol`s
 /// ([ADR-294](../../docs/specification/adr/adr-294.md) D9.3).
@@ -755,29 +723,6 @@ pub fn emit_std_against(
     .program()
 }
 
-/// [`emit_std_against`]'s items and nothing else, for one file of the
-/// toolchain's package (ADR-294): the package writes one preamble for all of
-/// them.
-pub fn emit_std_items_against(
-    parsed: &Parsed,
-    beside: &[&Parsed],
-    own: &crate::contracts::Ledger,
-    described: &crate::contracts::Ledger,
-) -> Result<Lowered> {
-    let build = Build {
-        target: Target::X86_64Linux,
-        ..Build::default()
-    };
-    let mut library = std_ledger().clone();
-    library.types.extend(described.types.clone());
-    library.functions.extend(described.functions.clone());
-    let package: Vec<&Parsed> = std::iter::once(parsed)
-        .chain(beside.iter().copied())
-        .collect();
-    let provenance = crate::contracts::trust::analyse_package(&package, &library).provenance;
-    emit_std_items_against_at(parsed, beside, own, described, build, provenance, None)
-}
-
 /// The same at a given build, for the test that holds the package to lowering
 /// the same at both settings of `user_parallelism` (ADR-002 D4).
 pub fn emit_std_items_against_at(
@@ -805,34 +750,6 @@ pub fn emit_std_items_against_at(
     )
     .for_std()
     .items_only()
-}
-
-/// A module's items, with no preamble and no `mod` around them.
-///
-/// The driver writes the preamble once for the whole program and the `mod`
-/// header itself, because only it knows what the program is made of
-/// (`modules::collect`).
-///
-/// `contracts` are the **program's**, not this file's: a call to
-/// `page::render(entries, total)` fills in Kap 5.1's defaults from the
-/// declaration, and the declaration is in another file.
-pub fn emit_module_body(
-    parsed: &Parsed,
-    build: Build,
-    provenance: crate::contracts::Provenance,
-    contracts: &crate::contracts::Ledger,
-) -> Result<Lowered> {
-    emit_module_body_at(
-        parsed,
-        &[],
-        build,
-        provenance,
-        contracts,
-        &crate::contracts::Ledger::blank(),
-        false,
-        &Reads::none(),
-        None,
-    )
 }
 
 /// The same, saying whether these items are the crate root's.
@@ -874,14 +791,6 @@ pub fn emit_module_body_at(
     )
     .for_entry(entry)
     .items_only()
-}
-
-/// **Whether a package has `pub` items with map positions** (ADR-010 D9): the
-/// ones a program that uses it fills with its own hasher, and so the ones whose
-/// body must be as trusted as the program that fills them.
-pub fn holds_map_positions(package: &[&Parsed]) -> bool {
-    let seeds = seeds::Seeds::read(package);
-    !seeds.is_empty() || seeds.trait_maps()
 }
 
 /// **The names a call must not hand a fast map to** (ADR-010 D9, barriers):
@@ -1186,41 +1095,6 @@ struct Emitter<'p> {
 /// What an `impl` says about a method. Enough to adapt a `&mut self` method to
 /// the monoid a `par_fold` needs, and never more than the declaration states.
 use nikaia_std::tools::emit_kinds::EmitMethod as Method;
-
-/// The name a Nikaia program gives its entry point.
-const MAIN: &str = "main";
-
-/// **The allocator of a program built with `skip-free-at-exit:on`**: the
-/// system's, with a free that it skips once `main` has ended
-/// ([ADR-348](../../docs/specification/adr/adr-348.md) D1). Written here and
-/// not in `std`, which has no `unsafe` (ADR-218).
-const ALLOCATOR: &str = "
-struct NikaiaHeap;
-// SAFETY: every call is the system allocator's; a free that is skipped leaves
-// the block allocated until the process ends, which is always sound.
-unsafe impl std::alloc::GlobalAlloc for NikaiaHeap {
-    #[inline]
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        unsafe { std::alloc::GlobalAlloc::alloc(&std::alloc::System, layout) }
-    }
-    #[inline]
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&std::alloc::System, layout) }
-    }
-    #[inline]
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        if nikaia_std::rt::exit::frees() {
-            unsafe { std::alloc::GlobalAlloc::dealloc(&std::alloc::System, ptr, layout) }
-        }
-    }
-    #[inline]
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
-        unsafe { std::alloc::GlobalAlloc::realloc(&std::alloc::System, ptr, layout, size) }
-    }
-}
-#[global_allocator]
-static NIKAIA_HEAP: NikaiaHeap = NikaiaHeap;
-";
 
 /// **The functions of this file the build calls** (#446): what a `comptime`
 /// and an option's default call, and what those call in turn.
@@ -2126,17 +2000,6 @@ impl<'p> Emitter<'p> {
         }
     }
 
-    /// The name of a function whose body walks a type's fields, where this item
-    /// is one ([ADR-304](../../docs/specification/adr/adr-304.md) D6).
-    ///
-    /// Read off the **checker's** answer rather than off the body, which is
-    /// this emitter's rule everywhere: what a type is, and therefore which
-    /// functions were instantiated with what, is the checker's
-    /// ([ADR-288](../../docs/specification/adr/adr-288.md)).
-    fn walks_a_shape(&self, item: &Item) -> Option<String> {
-        self.s.walks_a_shape(&self.world, item)
-    }
-
     /// The fields a `for` over `T::fields` walks, where this is one
     /// ([ADR-304](../../docs/specification/adr/adr-304.md) D6).
     ///
@@ -2149,218 +2012,25 @@ impl<'p> Emitter<'p> {
             .unrolls_here(&self.world, &pair.first, &pair.second, iter)
     }
 
-    /// The type parameter a shape walk stands on — the `T` of
-    /// `fn describe[T: Struct](value: T)`.
-    ///
-    /// The **first** one, which is what the checker bound: a second parameter
-    /// beside it is an ordinary generic and keeps its place in the signature.
-    fn walked_parameter(&self, item: &Item) -> String {
-        self.s.walked_parameter(&self.world, item).to_string()
-    }
-
     /// A module's items and nothing else - no preamble, no `mod` header.
     fn items_only(&self) -> Result<Lowered> {
-        let mut out = Out::empty();
-        self.shadow_types(&mut out);
-        self.write_error_sums(&mut out);
-        for item in &self.parsed.program.items {
-            // **One copy per type it was used with, and no generic original**
-            // ([ADR-304](../../docs/specification/adr/adr-304.md) D6): the
-            // generic body holds a loop over a shape, which has no form in the
-            // language below. It is **unrolled**, which is
-            // [ADR-304](../../docs/specification/adr/adr-304.md) D5's *one loop*
-            // arrived at rather than added - `T::fields` is known while the
-            // program is built, so there is no run-time reading to rule out.
-            if let Some(name) = self.walks_a_shape(&item.node) {
-                let copies: Vec<String> = self
-                    .s
-                    .facts
-                    .unrolled
-                    .keys()
-                    .filter(|(written, _)| *written == name)
-                    .map(|(_, on)| on.clone())
-                    .collect();
-                for on in copies {
-                    let walked = self.walked_parameter(&item.node);
-                    self.walking(|w| {
-                        w.specialising = Some(EmitPair {
-                            first: walked,
-                            second: on,
-                        })
-                    });
-                    let st = out.mark();
-                    let written = self.item(&mut out, item);
-                    self.walking(|w| w.specialising = None);
-                    written?;
-                    out.record(&item.span, st);
-                    out.push("\n");
-                }
-                continue;
-            }
-            // **One copy per type it was used with, and no generic original**
-            // ([ADR-304](../../docs/specification/adr/adr-304.md) D6): the
-            // generic body holds a loop over a shape, which has no form in the
-            // language below. It is **unrolled**, which is
-            // [ADR-304](../../docs/specification/adr/adr-304.md) D5's *one
-            // loop* arrived at rather than added — `T::fields` is known while
-            // the program is built, so there is no run-time reading to rule
-            // out.
-            if let Some(name) = self.walks_a_shape(&item.node) {
-                let copies: Vec<String> = self
-                    .s
-                    .facts
-                    .unrolled
-                    .keys()
-                    .filter(|(written, _)| *written == name)
-                    .map(|(_, on)| on.clone())
-                    .collect();
-                for on in copies {
-                    let walked = self.walked_parameter(&item.node);
-                    self.walking(|w| {
-                        w.specialising = Some(EmitPair {
-                            first: walked,
-                            second: on,
-                        })
-                    });
-                    let st = out.mark();
-                    let written = self.item(&mut out, item);
-                    self.walking(|w| w.specialising = None);
-                    written?;
-                    out.record(&item.span, st);
-                    out.push("\n");
-                }
-                continue;
-            }
-            {
-                let st = out.mark();
-                self.item(&mut out, item)?;
-                out.record(&item.span, st);
-            }
-            out.push("\n");
-        }
-        self.tether_wrappers(&mut out);
-        self.entry_point(&mut out);
-        Ok(Lowered {
-            rust: out.buf,
-            map: SourceMap::from_entries(out.entries),
-            published: self.s.facts.published.clone(),
-        })
+        self.unit(false)
     }
 
     fn program(&self) -> Result<Lowered> {
+        self.unit(true)
+    }
+
+    /// The unit's text (`tools/emit_program.nika`), with the source map; a
+    /// whole program that carries `main` ends with an empty abort table.
+    fn unit(&self, whole: bool) -> Result<Lowered> {
         let mut out = Out::empty();
-        out.push("// Generated by the Nikaia bootstrap compiler (Stage 0).\n");
-        out.push("// Edit the .nika source, not this file.\n\n");
-
-        if self
-            .parsed
-            .program
-            .items
-            .iter()
-            .any(|i| matches!(i.node, Item::Grammar(_)))
-        {
-            out.push("use winnow_grammar::grammar;\n");
-        }
-        if self.uses_driver() {
-            out.push("use winnow_grammar::rt::Parallelism;\n");
-            out.push("use winnow_grammar::ParseContext;\n");
-        }
-        // Always, except in `std` itself, which is the prelude - see
-        // [`emit_std`] and [`Needs::preamble`], the copy of this that a program
-        // of several files uses.
-        if !self.s.is_std {
-            out.push("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n");
-        }
-        if self.s.fails {
-            // Kap 7.1: `error.full()` is a method on whatever a `catch` bound, so
-            // the trait has to be in scope even in a program that imports no `std`
-            // module of its own - `throw` needs `std` whether or not the source
-            // mentions it.
-            out.push("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n");
-        }
-        out.push("\n");
-
-        self.shadow_types(&mut out);
-        self.write_error_sums(&mut out);
-
-        for item in &self.parsed.program.items {
-            // **One copy per type it was used with, and no generic original**
-            // ([ADR-304](../../docs/specification/adr/adr-304.md) D6): the
-            // generic body holds a loop over a shape, which has no form in the
-            // language below. It is **unrolled**, which is
-            // [ADR-304](../../docs/specification/adr/adr-304.md) D5's *one loop*
-            // arrived at rather than added - `T::fields` is known while the
-            // program is built, so there is no run-time reading to rule out.
-            if let Some(name) = self.walks_a_shape(&item.node) {
-                let copies: Vec<String> = self
-                    .s
-                    .facts
-                    .unrolled
-                    .keys()
-                    .filter(|(written, _)| *written == name)
-                    .map(|(_, on)| on.clone())
-                    .collect();
-                for on in copies {
-                    let walked = self.walked_parameter(&item.node);
-                    self.walking(|w| {
-                        w.specialising = Some(EmitPair {
-                            first: walked,
-                            second: on,
-                        })
-                    });
-                    let st = out.mark();
-                    let written = self.item(&mut out, item);
-                    self.walking(|w| w.specialising = None);
-                    written?;
-                    out.record(&item.span, st);
-                    out.push("\n");
-                }
-                continue;
-            }
-            // **One copy per type it was used with, and no generic original**
-            // ([ADR-304](../../docs/specification/adr/adr-304.md) D6): the
-            // generic body holds a loop over a shape, which has no form in the
-            // language below. It is **unrolled**, which is
-            // [ADR-304](../../docs/specification/adr/adr-304.md) D5's *one
-            // loop* arrived at rather than added — `T::fields` is known while
-            // the program is built, so there is no run-time reading to rule
-            // out.
-            if let Some(name) = self.walks_a_shape(&item.node) {
-                let copies: Vec<String> = self
-                    .s
-                    .facts
-                    .unrolled
-                    .keys()
-                    .filter(|(written, _)| *written == name)
-                    .map(|(_, on)| on.clone())
-                    .collect();
-                for on in copies {
-                    let walked = self.walked_parameter(&item.node);
-                    self.walking(|w| {
-                        w.specialising = Some(EmitPair {
-                            first: walked,
-                            second: on,
-                        })
-                    });
-                    let st = out.mark();
-                    let written = self.item(&mut out, item);
-                    self.walking(|w| w.specialising = None);
-                    written?;
-                    out.record(&item.span, st);
-                    out.push("\n");
-                }
-                continue;
-            }
-            {
-                let st = out.mark();
-                self.item(&mut out, item)?;
-                out.record(&item.span, st);
-            }
-            out.push("\n");
-        }
-        self.tether_wrappers(&mut out);
-        self.entry_point(&mut out);
-        if self.user_main().is_some() {
+        let crossed = self.nikaia(|walk| {
+            self.s
+                .emit_program(&self.world, walk, &mut out, self, whole)
+        });
+        self.crossed(crossed)?;
+        if whole && self.user_main().is_some() {
             // **An empty table, and the reason it is empty.** `fn main` installs
             // the hook that reads it (ADR-300 D10), so the name has to be defined
             // or the program does not compile - and a table needs the *file* each
@@ -2377,7 +2047,6 @@ impl<'p> Emitter<'p> {
                 "\n// ADR-300 D9: no table - this program was emitted without its file name.\nconst {ABORT_TABLE}: &[nikaia_std::abort::Site] = &[];\n"
             ));
         }
-
         Ok(Lowered {
             rust: out.buf,
             map: SourceMap::from_entries(out.entries),
@@ -2397,133 +2066,7 @@ impl<'p> Emitter<'p> {
         self.s.user_main(&self.world)
     }
 
-    /// The `fn main` Rust runs: ADR-303 D4, as five lines of generated code.
-    ///
-    /// The runtime is started *before* the program's first statement and
-    /// drained after its last, so an operation inside the program costs no
-    /// thread start and no thread wake-up - which is
-    /// [ADR-292](../../../docs/specification/adr/adr-292.md)'s finding
-    /// read the other way round.
-    ///
-    /// What starts is what
-    /// [ADR-037](../../../docs/specification/adr/adr-037.md) D2 allows, and
-    /// the *compiler* is what knows which: `user_parallelism` is a build
-    /// switch, so it is written into this call rather than read from the
-    /// operator's runtime configuration file (ADR-303 D5 has four settings and
-    /// this is not one of them).
-    fn entry_point(&self, out: &mut Out) {
-        let concurrent = matches!(self.build.user_parallelism, UserParallelism::Yes);
-        let channel = self.error_channel(MAIN, Lifetimes::Elided, false);
-        // **`main`'s parameters as its definition spells them**
-        // ([ADR-360](../../docs/specification/adr/adr-360.md) D1): the words
-        // are read into locals that own them, and a parameter the body only
-        // reads (`&[T]`, `&str`) is lent from its local: `passing` writes the
-        // argument, `{}` standing for the local.
-        let mut types: Vec<String> = Vec::new();
-        let mut passing: Vec<String> = Vec::new();
-        for param in self.main_params.borrow().iter() {
-            let ty = param.split_once(": ").map_or("_", |(_, ty)| ty);
-            let (owned, pass) = match ty {
-                "&str" => ("String".to_string(), "&{}"),
-                "Option<&str>" => ("Option<String>".to_string(), "{}.as_deref()"),
-                _ => match ty.strip_prefix("&[").and_then(|t| t.strip_suffix(']')) {
-                    Some(element) => (format!("Vec<{element}>"), "&{}"),
-                    // Any other view the body only reads, `&Option<String>`
-                    // for an unused `String?` among them (#703), is lent
-                    // from the local that owns the word.
-                    None => match ty.strip_prefix('&').filter(|t| !t.starts_with("mut ")) {
-                        Some(held) => (held.to_string(), "&{}"),
-                        None => (ty.trim_start_matches("&mut ").to_string(), "{}"),
-                    },
-                },
-            };
-            types.push(owned);
-            passing.push(pass.to_string());
-        }
-        let entry = self
-            .s
-            .entry_point(&self.world, concurrent, &channel, &types, &passing);
-        if entry.is_empty() {
-            return;
-        }
-        out.push(&entry);
-        // **The program's allocator is the system's**, with a free that
-        // `skip-free-at-exit:on` skips once `main` has ended
-        // ([ADR-348](../../docs/specification/adr/adr-348.md) D1).
-        if self.build.skip_free_at_exit {
-            out.push(ALLOCATOR);
-        }
-    }
-
-    /// Whether any grammar entry in the program reaches a **parallel** rule,
-    /// which is what decides whether the piece driver's names are in the
-    /// preamble.
-    ///
-    /// The entry is a call now ([ADR-296](../../docs/specification/adr/adr-296.md)
-    /// D1), so the rule is the one the program **named** rather than the one
-    /// this file used to pick. Found by being wrong: the lowering was right and
-    /// the preamble was not, and `rustc` answered *"use of undeclared type
-    /// `ParseContext`"* about the generated file.
-    fn uses_driver(&self) -> bool {
-        self.s.uses_driver(&self.world)
-    }
-
-    /// One item of the unit (`tools/emit_item.nika`). An item this lowering
-    /// does not write is refused here, naming its tree.
-    fn item(&self, out: &mut Out, written: &Spanned<Item>) -> Result<()> {
-        match &written.node {
-            Item::Grammar(_)
-            | Item::Enum { .. }
-            | Item::Struct { .. }
-            | Item::Fn { .. }
-            | Item::Impl { .. }
-            | Item::Trait { .. }
-            | Item::Import { .. }
-            | Item::Comptime { .. }
-            | Item::Extern { .. } => {}
-            other => {
-                return Err(refused_at!(
-                    written.span.at(),
-                    "The compiler can't translate this item yet: {other:?}"
-                ));
-            }
-        }
-        let crossed = self.nikaia(|walk| self.s.emit_item(&self.world, walk, out, self, written));
-        self.crossed(crossed)
-    }
-
     // --- Types ---
-
-    /// The shadow type of every deferred-parameter DSL in this unit
-    /// (ADR-296 D5).
-    ///
-    /// One struct per parameter list, a field per `:name`, and **generic in
-    /// every field**: nothing in `… WHERE id = :id …` says what `:id` is, so
-    /// the type comes from the argument at the call site and is monomorphised
-    /// there. Inventing `i32` here is exactly the guess ADR-296 D17 forbids an
-    /// emitter to make.
-    ///
-    /// A plain struct, passed by value: D5 asks for the parameters on the
-    /// stack, and a struct of the caller's own values is what that is.
-    fn shadow_types(&self, out: &mut Out) {
-        for (name, parameters) in crate::dsl::shadow_types(self.parsed) {
-            let generics: Vec<String> = (0..parameters.len()).map(|i| format!("P{i}")).collect();
-            let fields: Vec<String> = parameters
-                .iter()
-                .zip(&generics)
-                .map(|(field, ty)| format!("    pub {field}: {ty},"))
-                .collect();
-            out.push(&format!(
-                "// ADR-296 D5: the parameters of a `dsl … {{ … }} eod` statement, \
-                 as a type.\n\
-                 #[derive(Debug, Clone, Copy, PartialEq)]\n\
-                 #[allow(non_camel_case_types, dead_code)]\n\
-                 pub struct {name}<{}> {{\n{}\n}}\n\n",
-                generics.join(", "),
-                fields.join("\n"),
-            ));
-        }
-    }
 
     /// A `dsl … { … } eod` body: the `html` template compiled here (ADR-017),
     /// or a statement whose holes the call site fills (ADR-296 D5).
@@ -5328,34 +4871,6 @@ impl<'p> Emitter<'p> {
         Some((own, fields))
     }
 
-    /// The type a function's failures travel in.
-    ///
-    /// `borrows` is the same question the result position asks
-    /// ([ADR-283](../../docs/specification/adr/adr-283.md) D7): an error that
-    /// carries a view — `ConfigError::NotFound(path)`, Part I 7.1's own — is a
-    /// type with a lifetime, and a function with nothing to borrow from can
-    /// only write `'static` for it.
-    fn error_channel(&self, key: &str, lifetimes: Lifetimes, borrows: bool) -> String {
-        self.s.error_channel(
-            &self.world,
-            key,
-            lifetimes == Lifetimes::Elided,
-            &lifetimes.params(),
-            &Lifetimes::Static.params(),
-            borrows,
-        )
-    }
-
-    /// The generated sums, written into the file
-    /// ([ADR-280](../../docs/specification/adr/adr-280.md) D15).
-    ///
-    /// One `enum` per distinct set, the `From` each member needs so that a `?`
-    /// converts on its own, and `Display`/`Error` so that the sum can still go
-    /// into the opaque channel where a caller has one.
-    fn write_error_sums(&self, out: &mut Out) {
-        self.s.write_error_sums(&self.world, out)
-    }
-
     /// A `match`: the arms as Rust's own, a `match` that only answers `true` or
     /// `false` as a `matches!`, and one over the error a `catch` binds, where that
     /// travels in a sum, taken apart by member (ADR-280 D17).
@@ -6192,15 +5707,6 @@ impl Emitter<'_> {
         })
     }
 
-    /// The handle types, at the end of the unit.
-    fn tether_wrappers(&self, out: &mut Out) {
-        for wrapper in self.walk(|w| w.wrappers.clone()) {
-            out.push("\n");
-            out.push(&wrapper);
-        }
-        self.held_structs(out);
-    }
-
     /// `kept[i]`, where `kept` holds structs of views one handle per buffer:
     /// the keeper and the index, for a write through the handle (ADR-283 D17).
     fn held_element<'e>(&self, flow: Flow<'_>, element: &'e Expr) -> Option<(&'e Expr, &'e Expr)> {
@@ -6228,18 +5734,6 @@ impl Emitter<'_> {
             self.s
                 .reads_through_handle(&self.world, w, flow.function, expr)
         })
-    }
-
-    /// **What `tether` needs to hold a struct of views**, once per struct, at
-    /// the end of a unit that holds any
-    /// ([ADR-283](../../docs/specification/adr/adr-283.md) D14, D16): the struct
-    /// over any lifetime (`Views`, whose `shorten` compiles only where the
-    /// struct is covariant), each of its views found again in the keeps
-    /// (`Rebase`, one call per field that holds a view), and the value put
-    /// into a `Holding` (`Hold`). Written by the compiler, and none of it
-    /// `unsafe`.
-    fn held_structs(&self, out: &mut Out) {
-        out.push(&self.s.held_structs(&self.world));
     }
 }
 

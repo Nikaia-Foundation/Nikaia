@@ -524,3 +524,13 @@ E11-2 switched: `pattern`, `pattern_body`, `patterns` and the `fold` adapter are
 bytes/raw flags moved from `Emitter` cells into `EmitWalk`, the host lost `pattern` and
 `set_grammar_bytes`; 168 Rust lines removed (with `LIST_RULE`, `repeat_suffix`). `lower-std`
 output unchanged beyond the four files of the slice. Next: E11-3 (`program`).
+
+E11-3 switched: `program` and `items_only` are one adapter `unit` over `emit_program`
+(`tools/emit_program.nika`, 229 lines: preamble, shadow types, unrolled copies, handle types,
+`entry_point`, the allocator text); Rust keeps the source map, the empty abort table and the
+refusal naming an unwritten item's tree (host `refuse_unwritten_item`; the host also gained
+`main_params`). 519 Rust lines removed, with the dead `emit_std`, `emit_std_items_against`,
+`emit_module_body`, `holds_map_positions`, `BuildFlags::for_emit` and the now uncalled
+`item`, `error_channel`, `write_error_sums`, `walks_a_shape`, `walked_parameter`,
+`uses_driver`, `held_structs`, `MAIN`, `ALLOCATOR`. `lower-std` output unchanged beyond the
+slice's files. Next: E11-4 (the core).

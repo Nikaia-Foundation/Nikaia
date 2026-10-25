@@ -32,6 +32,8 @@ pub trait EmitHost {
     fn split_lifetimes(&self, ty: &Type, returns: &str, sources: &[String]) -> Option<EmitSplit>;
     fn inline_written(&self, attributes: &[Attribute]) -> Option<String>;
     fn set_main_params(&self, params: &[String]);
+    fn main_params(&self) -> Vec<String>;
+    fn refuse_unwritten_item(&self, written: &Spanned<Item>) -> Result<(), Box<dyn std::error::Error>>;
     fn counts_steps(&self) -> bool;
     fn skip_free_at_exit(&self) -> bool;
     fn seeds_arity(&self, name: &str) -> i64;

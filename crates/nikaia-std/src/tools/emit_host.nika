@@ -124,6 +124,12 @@ pub trait EmitHost {
     /// The parameters of the program's own `main`.
     fn set_main_params(ref self, params: ref Vec[String]) sync
 
+    /// The parameters `set_main_params` was given.
+    fn main_params(ref self) -> Vec[String] sync
+
+    /// Refuses an item this lowering does not write, naming its tree.
+    fn refuse_unwritten_item(ref self, written: ref Spanned[Item]) sync throws
+
     /// Whether a call is a step of a build-time run.
     fn counts_steps(ref self) -> bool sync
 
