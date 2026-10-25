@@ -38,6 +38,10 @@ It raises it to `high` for one task only when the owner asks for it.
    order is the repair (compiler defect first, `CLAUDE.md`'s *Fix, do not work
    around*), then the step that was blocked.
 
+## Choosing the topic
+
+By `docs/priorities.md`: bands first (bugs, self-hosting, CI, rs2nika), the score within a band; every brief names its score terms in 2-3 lines.
+
 ## The work order
 
 What the architect hands the main session for a builder, in this form:
