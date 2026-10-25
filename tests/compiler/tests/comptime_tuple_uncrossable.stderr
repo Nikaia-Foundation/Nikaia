@@ -4,6 +4,6 @@ error[NK1127]: `P` can't be computed while the program is built.
  1 | comptime P = odd()
    | ^^^^^^^^^^^^^^^^^^
    |
-   = note: Its type `scalar` can't be handed back from the program that computes it: `scalar` isn't declared in this program with fields, and the value is built into the program field by field.
+   = note: Its type `scalar` can't be handed back from the program that computes it: a `scalar` has no written form there yet; compute its code as a `u32` instead.
    = help: Write `let P = …` to compute it while the program runs.
 1 type error

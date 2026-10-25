@@ -1,0 +1,3 @@
+comptime C: scalar = pick()
+fn pick() -> scalar { 'x' }
+fn main() { println(f"{C}") }

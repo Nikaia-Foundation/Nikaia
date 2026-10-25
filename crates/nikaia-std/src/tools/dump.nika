@@ -157,6 +157,9 @@ fn dump_named(shapes: ref Shapes, ty: ref Ty, name: ref String, args: ref Vec[Ty
     if shapes.enums.contains_key(name) {
         return dump_variants(shapes, ty, name, expr, depth, out)
     }
+    if name == "scalar" || name == "char" {
+        return uncrossable(ty, f"a `{name}` has no written form there yet; compute its code as a `u32` instead")
+    }
     return dump_fields(shapes, ty, name, expr, depth, out)
 }
 

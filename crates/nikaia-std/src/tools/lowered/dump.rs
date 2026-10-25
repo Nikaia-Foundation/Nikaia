@@ -101,6 +101,7 @@ pub(crate) fn dump_named(shapes: &Shapes, ty: &Ty, name: &str, args: &[Ty], expr
         return None;
     }
     if shapes.enums.contains_key(name) { return dump_variants(shapes, ty, name, expr, depth, out); }
+    if name == "scalar" || name == "char" { return uncrossable(ty, &format!("a `{}` has no written form there yet; compute its code as a `u32` instead", name)); }
     dump_fields(shapes, ty, name, expr, depth, out)
 }
 
