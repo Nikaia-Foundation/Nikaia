@@ -756,6 +756,16 @@ fn a_character_literal_is_a_byte_only_when_it_is_ascii() {
     assert!(help.contains("\"é\".bytes"), "{help}");
 }
 
+/// #773: a `'é'` in the arms of an `if` handed to a `u8` is refused with
+/// `NK1212`, as one written there directly is.
+#[test]
+fn a_non_ascii_character_in_an_if_arm_into_a_byte_is_refused() {
+    let found = findings(
+        "fn main() {\n    let b = true\n    let e: u8 = if b { 'é' } else { 'a' }\n    println(f\"{e}\")\n}\n",
+    );
+    assert!(found.iter().any(|f| f.code == "NK1212"), "{found:#?}");
+}
+
 /// The errors a source raises, by code.
 fn codes(source: &str) -> Vec<String> {
     findings(source)

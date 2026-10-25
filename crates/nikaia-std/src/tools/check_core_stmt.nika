@@ -930,6 +930,14 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     if op != null {
         check_core_a_compound_write_to_a_map_slot(state, world, host, target, span)
     }
+    // **`text += x` appends a text** (#760): whether `x` is a view or owned,
+    // it goes in as a `str`.
+    if op != null && is_text_type(into.unseen()) {
+        let o: ref BinaryOp = op ?? return check_core_stmt_unit()
+        if check_core_ops_add(o.clone()) {
+            let added = state.facts.appended_texts.insert(span.start as i64)
+        }
+    }
     // **`x += a` over two integer types is `x = x + a`** (ADR-285 D32).
     if op != null && !check_core_stmt_a_shift(op) {
         let o: ref BinaryOp = op ?? return check_core_stmt_unit()

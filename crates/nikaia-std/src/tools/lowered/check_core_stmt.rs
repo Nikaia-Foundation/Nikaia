@@ -683,6 +683,10 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     let written = host.written(value);
     state.a_write_that_skips_the_door(world, target, &into, &written, span);
     if op.is_some() { check_core_a_compound_write_to_a_map_slot(state, world, host, target, span); }
+    if op.is_some() && is_text_type(&into.unseen()) {
+        let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
+        if check_core_ops_add(o.clone()) { let added = state.facts.appended_texts.insert(span.start as i64); }
+    }
     if op.is_some() && !check_core_stmt_a_shift(op) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if !state.an_integer_beside_a_float(world, target, &into, value, &found, span) { state.a_compound_over_two_integer_types(world, o.clone(), target, &into, value, &found, span); }

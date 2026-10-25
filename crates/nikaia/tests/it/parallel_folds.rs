@@ -230,7 +230,7 @@ fn report(b: ref Bytes, piece: i64) {
 fn main() {
     let mut text = ""
     for i in 0..<5000 {
-        text.push_str(f"station{i % 37};{i % 90}.{i % 10}\n")
+        text += f"station{i % 37};{i % 90}.{i % 10}\n"
     }
     let ended = text.clone()
     text += "unterminated"

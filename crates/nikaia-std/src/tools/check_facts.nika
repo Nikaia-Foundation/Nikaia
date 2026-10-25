@@ -235,6 +235,8 @@ pub struct CheckFacts {
     pub pausing_methods: collections::BTreeSet[i64],
     pub nullable_sites: collections::BTreeMap[i64, FactWrap],
     pub concatenations: collections::BTreeSet[i64],
+    /// `text += x` on a text place (#760): the right side goes as a `str`.
+    pub appended_texts: collections::BTreeSet[i64],
     pub path_comparisons: collections::BTreeSet[i64],
     pub mixed_comparisons: collections::BTreeMap[i64, bool],
     pub path_holes: collections::BTreeMap[i64, Vec[bool]],
@@ -449,6 +451,7 @@ impl CheckFacts {
             pausing_methods: collections::BTreeSet(),
             nullable_sites: collections::BTreeMap(),
             concatenations: collections::BTreeSet(),
+            appended_texts: collections::BTreeSet(),
             path_comparisons: collections::BTreeSet(),
             mixed_comparisons: collections::BTreeMap(),
             path_holes: collections::BTreeMap(),

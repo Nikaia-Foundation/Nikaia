@@ -6269,8 +6269,18 @@ impl<'p> Emitter<'p> {
                         own_view = true;
                     }
                 }
+                // **`text += x` appends a `str`** (#760): an owned
+                // right side is lent, a view taken as it is.
+                let appended =
+                    op.is_some() && self.s.facts.appended_texts.contains(&(span.at() as i64));
+                if appended {
+                    out.push("::core::convert::AsRef::<str>::as_ref(&");
+                }
                 if !own_view {
                     self.expr(out, value, depth, flow)?;
+                }
+                if appended {
+                    out.push(")");
                 }
                 out.push(&after);
                 if reput.is_some() {

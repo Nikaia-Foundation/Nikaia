@@ -524,3 +524,42 @@ fn a_character_in_the_arms_of_an_if_handed_to_a_byte_is_a_byte() {
     );
     assert_eq!(printed.trim(), "97 99 101 120 121");
 }
+
+/// #760: `text += x` on a `let mut text = ""` appends a `str`, whether `x`
+/// is an f-string, a literal, an owned `String` or a parameter; in a loop too.
+#[test]
+fn appending_to_a_text_local_takes_any_text() {
+    let (said, _) = printed_and_lowered(
+        "text-append",
+        r#"fn add(t: String, r: String) -> String {
+    let mut s = t.clone()
+    s += r
+    s += "!"
+    return s
+}
+fn main() {
+    let mut text = ""
+    for i in 0..<3 {
+        text += f"a{i}\n"
+    }
+    let other = "zz".clone()
+    text += "lit"
+    text += other
+    text.push_str("p")
+    println(add(text, "q"))
+}
+"#,
+    );
+    assert_eq!(said, "a0\na1\na2\nlitzzpq!\n");
+}
+
+/// #760, the issue's program.
+#[test]
+fn an_f_string_appended_in_a_loop_prints_each_line() {
+    let (said, _) = printed_and_lowered(
+        "text-append-loop",
+        "fn main() {\n    let mut text = \"\"\n    for i in 0..<3 {\n        \
+         text += f\"a{i}\\n\"\n    }\n    print(text)\n}\n",
+    );
+    assert_eq!(said, "a0\na1\na2\n");
+}
