@@ -144,7 +144,11 @@ jobs:
       - name: Build the tests
         run: cargo test --workspace --release --no-run
 
+      # The accepted-programs sweep (#705) runs here when this job runs: it
+      # ends earlier than `bootstrap_compiler`, which then skips the sweep.
       - name: Test
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: |
           set -o pipefail
           cargo test --workspace --release --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/test.log"
@@ -154,6 +158,11 @@ jobs:
         run: |
           grep -E '^test .* FAILED' "$RUNNER_TEMP/test.log" | sed 's/^/::error::/' || true
           awk '/^failures:$/{f=1;next} /^test result/{f=0} f&&/^    /{print "::error::failed: "$1}' "$RUNNER_TEMP/test.log" | sort -u | head -50 || true
+
+      - name: Accepted-programs sweep (accepted-sweep)
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
+        run: "cargo test --release -p nikaia --test it accepted_sweep:: -- --ignored"
 
       - name: Test the unsafe crates
         run: |
@@ -360,6 +369,7 @@ jobs:
       # lowered and checked by `rustc --emit=metadata`, in batches. A refusal
       # not on the test's allow-list fails, and so does an entry that compiles.
       - name: Accepted-programs sweep (accepted-sweep)
+        if: needs.changes.outputs.arm64 != 'true'
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: "cargo test --release -p nikaia --test it accepted_sweep:: -- --ignored"
