@@ -1,4 +1,10 @@
+struct Holder { sep: String }
+
 fn pieces(line: String, sep: String) {
+    for p in line.split(sep) { println(p) }
+}
+
+fn lent(line: String, sep: ref String) {
     for p in line.split(sep) { println(p) }
 }
 
@@ -12,4 +18,7 @@ fn main() {
     let (head, tail) = line.split_once(sep.clone()) ?? ("", "")
     println(head)
     println(tail)
+    let h = Holder { sep: "," }
+    lent("c,d", h.sep)
+    for p in "e,f".split(h.sep) { println(p) }
 }
