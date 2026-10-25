@@ -41,30 +41,24 @@ Such an issue is closed by hand with the commit named, not briefed.
 Two or three lines: `S=<grade> (why), O=<M tokens> (why), C=<M tokens> (from
 which past run), area`; on a departure from bugs-first, the figures.
 
-## Current score (2026-10-25, after d9d3f921)
+## Current score (2026-10-25, after a2f40f98)
 
-| Ticket | S | O (M) | C (M) | Order |
-| :--- | :--- | :--- | :--- | :--- |
-| #837 | done 02c9b5f5 | | | |
-| #753, #780, #838, #744 | done 761a7b93, 2f4775ef, f719c5ee, 153cf532 | | | |
-| #839, #582, #747 step 1 | done c7becda0, d25f0fd6, d995ae5a | | | |
-| #840, E10-4 switch, native tool (partial) | done e2854552, ad9e07b3, 087ce275 | | | |
-| #841, #747 step 2, E11-1 | done 9d2f86c6, ae4bbb9d, 2f571550 | | | |
-| #756 | done 9f8d71d9 | | | |
-| #842, native count, E11-2, release script | done 21da4394, a334c6b6 (v3 saves 0.7 %, dropped), bfcace65, 08ca0fd1 | | | |
-| E11-3 `program` | done 27d33ed0 | | | |
-| #843 tier walk: `to_string()` of a view (restated, `ready`) | 3 | 0.3 | 3 | batch 1 |
-| #844 `Array[String, N]` of literals refused (D44 checked: gone) | 3 | 0.2 | 3 | batch 1b |
-| `scripts/cycle.nika`, one call per main-session cycle (owner) | 1 | 2 | 2 | batch 2 |
-| E11-4a expression core of `emit` | 2 | 1 | 20 | batch 3 |
-| E11-4b statements and blocks, then 4c | 2 | 1 | 20 | after 4a |
-| #753 --cpu dropped under RUSTFLAGS (owner: native builds) | 3 | 1 | 4 | 1 |
-| #780 ByteSet in a variable, 115 vs 32 a row at v3 | 3 | 0.5 | 10 | 2 |
-| #838 | 2 | 0.5 | 3 | 3 |
-| #744 let over field/literal arms, rustc refuses | 3 | 1 | 8 | 4 |
-| #582 map through a function value, E0308 | 3 | 0.5 | 10 | 5 |
-| #747 step 1 NK1104 after NK1131 | 2 | 0.3 | 3 | 6 |
-| E10-4 adapter switch (emit_function.nika built, not called from Rust) | 2 | 2 | 15 | 9 |
-| #778/#775 audit (look built, not closed) | 1 | 0.5 | 3 | 7 |
-| optional native compiler build + CI CPU count (owner) | 1 | ? | 5 | 8 |
-| #825 | built (3573f202, 4b13ffa7), closed by hand | | | |
+Figures that decide: the last four `check` moves cost 8.3-14.9 k tokens per
+moved Rust line (`docs/tokenspeed.md`, target 50 k), so a slice of 1000 lines
+costs about 10-15 M; E11-4a moved 1212 lines in one run. Rust left in
+`crates/nikaia/src`: 25 555 lines (75.9 % of the toolchain is Nikaia);
+`emit/mod.rs` 4605, `check/mod.rs` 1309. Per ticket a compiler bug still
+scores higher (S 3 at C 3 M against S 2 at C 15 M), so self-hosting does **not**
+go before bugs; it runs in its own lane beside the bug lane and never waits
+(CLAUDE.md default: one bug builder, one self-hosting builder). The pause rule
+does not fire: the last slices found one defect each and fixed it in the run.
+
+| Ticket | S | O (M) | C (M) | Score | Lane, order |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| #851 `.trim().to_string()` stays `ref String` (hit in a tool) | 3 | 0.5 | 3 | 10.2 | bugs 1 |
+| #853 NK1301 literal `.to_string()` (owner) | 2 | 0.3 | 4 | 5.1 | bugs 2 |
+| #848 `m.get(k) ?? (tuple)` with text | 3 | 0.3 | 5 | 6.1 | bugs 3 |
+| #854 E11-4b statements and blocks (`emit/mod.rs` 2222-3720, about 1500) | 2 | 1 | 15 | 1.4 | self-hosting 1 |
+| #855 E11-4c host callbacks go + E11-5 template tables, `view_slots` (about 450) | 2 | 1 | 6 | 3.5 | self-hosting 2 (after #854) |
+| C-7 rest, `check/mod.rs` (#584): research brief first | 2 | 1 | 15 | 1.4 | self-hosting 3 |
+| `emit/seeds.rs` (951) | 2 | 0.5 | 10 | 2.1 | self-hosting 4 |
