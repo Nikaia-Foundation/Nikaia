@@ -1,0 +1,24 @@
+// A local of type `fn(A) -> R` handed to a parameter of the same type (#832):
+// a lambda that does not pause, one that pauses, and a named function.
+
+use std::time
+
+fn twice(f: fn(i64) -> String, n: i64) -> String { f"{f(n)}{f(n)}" }
+
+fn named(k: i64) -> String { f"n{k}" }
+
+fn pauses(k: i64) -> String {
+    time::sleep(1.millis())
+    let s = f"p{k}"
+    s
+}
+
+fn main() {
+    let g: fn(i64) -> String = fn(k) { f"y{k}" }
+    println(twice(g, 1))
+    let h: fn(i64) -> String = fn(k) { pauses(k) }
+    println(twice(h, 2))
+    let m: fn(i64) -> String = named
+    println(twice(m, 3))
+    println(twice(named, 4))
+}

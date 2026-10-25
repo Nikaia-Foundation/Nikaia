@@ -155,11 +155,13 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let runs = check_core_args_runs(callee, at)
     let mut found_fn = false
     let mut found_throws = false
+    let mut found_sync = false
     let mut arity = 0
     match found {
-        Ty::Fn { params, can_throw, .. } => {
+        Ty::Fn { params, can_throw, is_sync, .. } => {
             found_fn = true
             found_throws = can_throw
+            found_sync = is_sync
             arity = params.len() as i64
         }
         else => {}
@@ -187,6 +189,12 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     // closure it holds; a declared function named here is passed as it is.
     if declared_here && wants_fn && found_fn && runs && !check_core_args_a_run_parameter(state, world, arg) && !named {
         state.facts.kept_args.insert(id_of(arg) as i64)
+        // **One that pauses, run by a parameter that may pause** (#832): the
+        // value is a `dyn Fn` returning a boxed future and the parameter an
+        // `AsyncFn`, so an `async` closure awaits it.
+        if wants_pausing_fn && !found_sync {
+            state.facts.kept_args_run_async.insert(id_of(arg) as i64, arity)
+        }
     }
     // **A function of this program, named where the callee keeps the value**,
     // is the closure that calls it, as a lambda handed there is (ADR-277 D11,

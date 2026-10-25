@@ -335,6 +335,16 @@ impl EmitState {
             out.push(&format!(").hold([{}]) }}", joined));
             return Ok(());
         }
+        let kept_arity = nikaia_std::index::or(self.facts.kept_args_run_async.get(&node), || -1);
+        if kept_arity >= 0 {
+            let mut names: Vec<String> = vec![];
+            for n in 0..kept_arity { names.push(format!("__nikaia_a{}", n)); }
+            let joined = names.join(", ");
+            out.push(&format!("&async |{}| (*", joined));
+            host.expr(walk, out, arg, depth, inside, scope)?;
+            out.push(&format!(")({}).await", joined));
+            return Ok(());
+        }
         if self.facts.kept_args.contains(&node) { out.push("&*"); }
         if self.facts.copied_args.contains(&node) {
             out.push("*");

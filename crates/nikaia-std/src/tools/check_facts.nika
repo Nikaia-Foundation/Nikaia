@@ -210,6 +210,9 @@ pub struct CheckFacts {
     pub field_calls: collections::BTreeMap[i64, bool],
     pub kept_calls: collections::BTreeMap[i64, (bool, bool)],
     pub kept_args: collections::BTreeSet[i64],
+    /// A kept value that pauses, handed to a parameter that may pause (#832):
+    /// the argument and the arity of its type.
+    pub kept_args_run_async: collections::BTreeMap[i64, i64],
     pub kept_functions: collections::BTreeMap[i64, (bool, bool, i64)],
     pub fallible_methods: collections::BTreeSet[i64],
     pub future_lambdas: collections::BTreeSet[i64],
@@ -443,6 +446,7 @@ impl CheckFacts {
             field_calls: collections::BTreeMap(),
             kept_calls: collections::BTreeMap(),
             kept_args: collections::BTreeSet(),
+            kept_args_run_async: collections::BTreeMap(),
             kept_functions: collections::BTreeMap(),
             fallible_methods: collections::BTreeSet(),
             future_lambdas: collections::BTreeSet(),

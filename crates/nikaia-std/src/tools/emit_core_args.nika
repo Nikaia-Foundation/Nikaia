@@ -570,6 +570,20 @@ impl EmitState {
         }
         // A kept value handed to a parameter that only runs it: the closure it
         // holds.
+        // One that pauses, run by a parameter that may pause (#832): an
+        // `async` closure that awaits the future the value returns.
+        let kept_arity = self.facts.kept_args_run_async.get(node) ?? -1
+        if kept_arity >= 0 {
+            let mut names: Vec[String] = []
+            for n in 0..<kept_arity {
+                names.push(f"__nikaia_a{n}")
+            }
+            let joined = names.join(", ")
+            out.push(f"&async |{joined}| (*")
+            host.expr(walk, out, arg, depth, inside, scope)
+            out.push(f")({joined}).await")
+            return
+        }
         if self.facts.kept_args.contains(node) {
             out.push("&*")
         }
