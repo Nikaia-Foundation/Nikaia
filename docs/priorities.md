@@ -41,15 +41,18 @@ Such an issue is closed by hand with the commit named, not briefed.
 Two or three lines: `S=<grade> (why), O=<M tokens> (why), C=<M tokens> (from
 which past run), area`; on a departure from bugs-first, the figures.
 
-## Current score (2026-10-25, after 80f767a3)
+## Current score (2026-10-25, after 087ce275)
 
 | Ticket | S | O (M) | C (M) | Order |
 | :--- | :--- | :--- | :--- | :--- |
 | #837 | done 02c9b5f5 | | | |
 | #753, #780, #838, #744 | done 761a7b93, 2f4775ef, f719c5ee, 153cf532 | | | |
 | #839, #582, #747 step 1 | done c7becda0, d25f0fd6, d995ae5a | | | |
-| #840 mixed assignment NK1105 instead of EitherText | 2 | 0.3 | 4 | next batch 1 |
-| E10-4 switch (brief e10-4-switch.md) | 2 | 2 | 15 | next batch 3 |
+| #840, E10-4 switch, native tool (partial) | done e2854552, ad9e07b3, 087ce275 | | | |
+| #841 EitherText through if/match arms | 2 | 0.3 | 3 | batch 1 |
+| #747 step 2 unused Keep in package.rs | 1 | 0.2 | 3 | batch 2 |
+| E11-1 emit plan + first leaf slice | 2 | 2 | 15 | batch 3 |
+| native count with x86-64-v3 (valgrind SIGILL on AVX-512) | 1 | 0.5 | 2 | after batch |
 | #753 --cpu dropped under RUSTFLAGS (owner: native builds) | 3 | 1 | 4 | 1 |
 | #780 ByteSet in a variable, 115 vs 32 a row at v3 | 3 | 0.5 | 10 | 2 |
 | #838 | 2 | 0.5 | 3 | 3 |
