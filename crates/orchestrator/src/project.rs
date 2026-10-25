@@ -346,6 +346,9 @@ pub struct Cargo {
     /// Each one handed to Cargo as `--config`: what the compiler itself sets
     /// in Cargo's configuration, such as the CPU level's `rustflags`.
     pub config: Vec<String>,
+    /// Removed from the child's environment: `RUSTFLAGS` where `env` carries
+    /// `CARGO_ENCODED_RUSTFLAGS` in its place (#753).
+    pub unset: Vec<String>,
 }
 
 /// **Refuse an old toolchain in this compiler's words**
@@ -477,6 +480,9 @@ impl Cargo {
             command.arg("--").args(after);
         }
         command.env("RUSTC_WORKSPACE_WRAPPER", &self.wrapper);
+        for name in &self.unset {
+            command.env_remove(name);
+        }
         for (name, value) in &self.env {
             command.env(name, value);
         }
@@ -518,6 +524,9 @@ impl Cargo {
         command.arg("--message-format=json");
         command.args(args);
         command.env("RUSTC_WORKSPACE_WRAPPER", &self.wrapper);
+        for name in &self.unset {
+            command.env_remove(name);
+        }
         for (name, value) in &self.env {
             command.env(name, value);
         }

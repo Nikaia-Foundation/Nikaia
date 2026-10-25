@@ -442,6 +442,24 @@ impl Settings {
         }
     }
 
+    /// **`--cpu` against the user's `RUSTFLAGS`** (#753, ADR-002 D6, Part III
+    /// 13.3). Cargo ignores the `rustflags` of `cpu_config` when `RUSTFLAGS` or
+    /// `CARGO_ENCODED_RUSTFLAGS` is set, so then the child gets
+    /// `CARGO_ENCODED_RUSTFLAGS`: the user's flags, then `-C target-cpu=L` last
+    /// (the level wins, the flags still apply). `None` where nothing is needed.
+    pub fn cpu_rustflags(&self) -> Result<Option<String>> {
+        if self.cpu.is_none() {
+            return Ok(None);
+        }
+        let encoded = std::env::var("CARGO_ENCODED_RUSTFLAGS").ok();
+        let plain = std::env::var("RUSTFLAGS").ok();
+        Ok(encoded_with_cpu(
+            encoded.as_deref(),
+            plain.as_deref(),
+            &self.cpu_key()?,
+        ))
+    }
+
     pub fn optimize(&mut self, flags: &[String]) -> Result<()> {
         if flags.is_empty() {
             return Ok(());
@@ -3265,6 +3283,13 @@ impl Project {
             env.push((READS_VAR.to_string(), list.into_os_string()));
         }
 
+        let rustflags = match self.settings.cpu_rustflags()? {
+            Some(flags) => {
+                env.push(("CARGO_ENCODED_RUSTFLAGS".to_string(), flags.into()));
+                true
+            }
+            None => false,
+        };
         let cargo = Cargo {
             manifest,
             // **The compiled-`std` cache** (ADR-002 D4). Cargo builds into a
@@ -3294,6 +3319,11 @@ impl Project {
             wrapper: std::env::current_exe().context("finding this compiler's own path")?,
             env,
             config: self.settings.cpu_config(),
+            unset: if rustflags {
+                vec!["RUSTFLAGS".to_string()]
+            } else {
+                Vec::new()
+            },
         };
 
         // **`build` first, always, and its diagnostics read rather than
@@ -4635,8 +4665,44 @@ fn trace(invocation: &Invocation, verdict: &str) {
     }
 }
 
+/// The user's flags (`CARGO_ENCODED_RUSTFLAGS` first, as Cargo reads them,
+/// else `RUSTFLAGS` split on whitespace) followed by `-C target-cpu=CPU`,
+/// joined with `\x1f`; `None` when neither variable is set (#753).
+fn encoded_with_cpu(encoded: Option<&str>, plain: Option<&str>, cpu: &str) -> Option<String> {
+    let mut flags: Vec<String> = match (encoded, plain) {
+        (Some(e), _) => e
+            .split('\x1f')
+            .filter(|f| !f.is_empty())
+            .map(String::from)
+            .collect(),
+        (None, Some(p)) => p.split_whitespace().map(String::from).collect(),
+        (None, None) => return None,
+    };
+    flags.push("-C".to_string());
+    flags.push(format!("target-cpu={cpu}"));
+    Some(flags.join("\x1f"))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cpu_comes_after_the_users_rustflags() {
+        use super::encoded_with_cpu as e;
+        assert_eq!(e(None, None, "x86-64-v3"), None);
+        assert_eq!(
+            e(None, Some(" -C  overflow-checks=off "), "x86-64-v3").unwrap(),
+            "-C\x1foverflow-checks=off\x1f-C\x1ftarget-cpu=x86-64-v3"
+        );
+        assert_eq!(
+            e(Some("-C\x1ftarget-cpu=x86-64"), Some("-g"), "x86-64-v3").unwrap(),
+            "-C\x1ftarget-cpu=x86-64\x1f-C\x1ftarget-cpu=x86-64-v3"
+        );
+        assert_eq!(
+            e(Some(""), None, "znver4").unwrap(),
+            "-C\x1ftarget-cpu=znver4"
+        );
+    }
+
     use super::*;
 
     /// #823: only the Nikaia compiler's `error[NKxxxx]` is a refusal.
