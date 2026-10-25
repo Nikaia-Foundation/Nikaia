@@ -1509,6 +1509,14 @@ Some modules are available, or behave restrictively, depending on the target and
   runs as the same user with the same rights and reach, and it is not a
   sandbox; a program that needs a variable to start (`SystemRoot` on
   Windows) does not get it back.
+  **A deadline** (ADR-243 D9): `within: time::Duration? = null` bounds the
+  run. At the deadline the program and everything it started are killed and
+  `run` hands back its `Output` with `timed_out` `true`, `code` `-1` and `ok`
+  `false`; `stdout` and `stderr` hold what was written until then. Without
+  `within`, `timed_out` is `false`. On Unix such a program runs in a process
+  group of its own, which `SIGKILL` ends as a whole; a program that leaves the
+  group is not reached, and a terminal's interrupt does not reach the group.
+  On Windows the program itself is killed.
   `process::exit(code)` throws `process::Exit(code)`, a fatal error
   (Part I 7.1), with `code` an `i64` from `0` to `255`; it never returns a
   value, and a function that calls it says `throws`
