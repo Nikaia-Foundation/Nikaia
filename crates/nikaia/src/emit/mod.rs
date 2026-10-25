@@ -2133,13 +2133,6 @@ impl<'p> Emitter<'p> {
             .write(&written, &mut place, self.s.trusted_input && !floor)
     }
 
-    /// The queues a settle point drains: at `user_parallelism = yes` only the
-    /// one whose work may cross threads, so the settle point may too
-    /// (ADR-297 D2).
-    fn settle_kind(&self) -> String {
-        nikaia_std::tools::emit_core_types::emit_settle_kind(self.build.overlaps_user_code())
-    }
-
     // --- Statements and expressions ---
 
     /// `if c { … } else { … }`, where `tail` says what the whole thing is in
@@ -2248,7 +2241,8 @@ impl<'p> Emitter<'p> {
         self.crossed(crossed)
     }
 
-    /// The same, with one line written before the statements.
+    /// The same, with one line written before the statements:
+    /// `emit_stmt_block_opening_with` (`tools/emit_stmt.nika`).
     ///
     /// One caller: a `for` whose step can fail opens its body by unwrapping the
     /// step (ADR-025 D7). It is a parameter rather than a wrapping block
@@ -2263,54 +2257,24 @@ impl<'p> Emitter<'p> {
         tail: Tail,
         opening: Option<&str>,
     ) -> Result<()> {
-        // **A block where a value with a cleanup dies is settled where it
-        // ends** ([ADR-297](../../docs/specification/adr/adr-297.md) D2): the
-        // value dies at its closing brace and parks its cleanup, and the
-        // settle point right after runs it. Not inside a closure that cannot
-        // pause - there the function's own settle point runs it.
-        let settles = block
-            .stmts
-            .iter()
-            .filter_map(|stmt| {
-                self.s
-                    .facts
-                    .settle_lets
-                    .get(&(stmt.span.at() as i64))
-                    .copied()
-            })
-            .reduce(|a, b| a || b);
-        // **A failure is never settled away**: where a cleanup that can fail
-        // has no channel to fail into here - a lambda's body, a branch that is
-        // not wrapped, a guarded half - the value stays parked for the next
-        // settle point out, which has one (ADR-297 D4).
-        let propagates = flow.throws && !flow.caught;
-        if let Some(fails) = settles
-            && !flow.in_lambda
-            && (!fails || propagates)
-        {
-            let inner = {
-                let mut inner_buf = Out::empty();
-                let inner = &mut inner_buf;
-                self.block_plain(inner, block, depth, flow, tail, opening)?;
-                inner_buf
-            };
-            let kind = self.settle_kind();
-            let settle = match fails {
-                true => format!(
-                    "nikaia_std::cleanup::settle_at::<{kind}>(&{:?}).await?",
-                    flow.origin
-                ),
-                false => format!("nikaia_std::cleanup::settle_quietly::<{kind}>().await"),
-            };
-            out.push("{ let __nikaia_block = ");
-            out.append(inner);
-            out.push(&format!("; {settle}; __nikaia_block }}"));
-            return Ok(());
-        }
-        self.block_plain(out, block, depth, flow, tail, opening)
+        self.cross(flow, |walk, flow, scope| {
+            self.s.emit_stmt_block_opening_with(
+                &self.world,
+                walk,
+                out,
+                self,
+                block,
+                depth as i64,
+                flow,
+                scope,
+                tail,
+                opening.map(str::to_string),
+            )
+        })
     }
 
-    /// A block as it is written, with no settle point after it.
+    /// A block as it is written, with no settle point after it:
+    /// `emit_stmt_block_plain` (`tools/emit_stmt.nika`).
     fn block_plain(
         &self,
         out: &mut Out,
@@ -2320,183 +2284,26 @@ impl<'p> Emitter<'p> {
         tail: Tail,
         opening: Option<&str>,
     ) -> Result<()> {
-        if block.stmts.is_empty() {
-            match opening {
-                Some(line) => {
-                    out.push(&format!("{{ {line} }}"));
-                    return Ok(());
-                }
-                None => {
-                    out.push("{ }");
-                    return Ok(());
-                }
-            }
-        }
-
-        // A one-statement block stays on its line. Most action blocks are one
-        // expression, and a grammar reads better when its actions do not push
-        // the pattern three lines apart. Whether it fits is decided by
-        // rendering it, not by guessing from the shape.
-        if block.stmts.len() == 1 && opening.is_none() {
-            let only = block.stmts.first().expect("one statement");
-            // **A try that is thrown away leaves nothing behind**: the keeps
-            // it declared (ADR-283 D10) are declared again by the rendering
-            // that is kept - `println(d())` alone in `main` lost its keep.
-            let declared = self.walk(|w| w.preluded.clone());
-            let rendered = {
-                let mut rendered = Out::empty();
-                let st = rendered.mark();
-                self.stmt(&mut rendered, &only.node, &only.span, depth, tail, flow)?;
-                rendered.record(&only.span, st);
-                rendered
-            };
-            if !rendered.buf.contains('\n') {
-                out.push("{ ");
-                out.append(rendered);
-                out.push(" }");
-                return Ok(());
-            }
-            self.walking(|w| w.preluded = declared);
-        }
-
-        let pad = "    ".repeat(depth);
-        let inner_pad = "    ".repeat(depth + 1);
-
-        out.push("{\n");
-        if let Some(line) = opening {
-            out.push(&inner_pad);
-            out.push(line);
-            out.push("\n");
-        }
-        let last = block.stmts.len() - 1;
-        // **Statements run in the order they are written**
-        // ([ADR-292](../../../docs/specification/adr/adr-292.md) D1), and no
-        // analysis stands between the source and the schedule. A program
-        // that wants overlap writes `overlap { … }` and has the claim
-        // checked (D3). One exception no program can tell: an assignment
-        // that runs unconditionally is written before the `if`s directly in
-        // front of it that neither touch what it touches nor can stop the
-        // program ([ADR-379](../../../docs/specification/adr/adr-379.md)),
-        // so the optimiser sees its read and its write in one block.
-        let order = nikaia_std::tools::emit_order::emit_order(
-            block,
-            &self.order_proofs,
-            &self.parsed.interner,
-        );
-        let mut pos = 0;
-        while pos < order.len() {
-            let i = order[pos] as usize;
-            let stmt = &block.stmts[i];
-            // **An empty list made `n` long at once is `vec![v; n]`**
-            // ([ADR-270](../../docs/specification/adr/adr-270.md) D8 step 1):
-            // `let mut xs: Vec[T] = []` followed by `xs.resize(n, v)` is one
-            // allocation of a known length - zeroed by the system for zeros -
-            // which is what Rust writes, and what lets the optimiser drop the
-            // bounds checks of every read below that it can see is in range.
-            if i < last
-                && order
-                    .get(pos + 1)
-                    .is_some_and(|&next| next as usize == i + 1)
-                && let Some((fill, length)) = self.filled_at_once(stmt, &block.stmts[i + 1])
-            {
-                let declared = {
-                    let mut declared = Out::empty();
-                    let st = declared.mark();
-                    self.stmt(
-                        &mut declared,
-                        &stmt.node,
-                        &stmt.span,
-                        depth + 1,
-                        tail.at(i as i64, last as i64),
-                        flow,
-                    )?;
-                    declared.record(&stmt.span, st);
-                    declared
-                };
-                if let Some(head) = declared.buf.strip_suffix("vec![];") {
-                    let next = &block.stmts[i + 1];
-                    let flow = flow.at(next.span.at());
-                    let value = {
-                        let mut v_buf = Out::empty();
-                        let v = &mut v_buf;
-                        self.expr(v, fill, depth + 1, flow)?;
-                        v_buf
-                    };
-                    let count = {
-                        let mut c_buf = Out::empty();
-                        let c = &mut c_buf;
-                        let done = match only_literals(length) {
-                            true => self.expr(c, length, depth + 1, flow.inferred()),
-                            false => {
-                                c.push("nikaia_std::count::of(");
-                                self.expr(c, length, depth + 1, flow)?;
-                                c.push(")");
-                                Ok(())
-                            }
-                        };
-                        done?;
-                        c_buf
-                    };
-                    out.push(&inner_pad);
-                    {
-                        let st = out.mark();
-                        out.push(&format!("{head}vec![{}; {}];", value.buf, count.buf));
-                        out.record(&stmt.span, st);
-                    }
-                    out.push("\n");
-                    pos += 2;
-                    continue;
-                }
-            }
-            out.push(&inner_pad);
-            {
-                let st = out.mark();
-
-                self.stmt(
-                    out,
-                    &stmt.node,
-                    &stmt.span,
-                    depth + 1,
-                    tail.at(i as i64, last as i64),
-                    flow,
-                )?;
-                out.record(&stmt.span, st);
-            }
-            out.push("\n");
-            pos += 1;
-        }
-        out.push(&pad);
-        out.push("}");
-        Ok(())
+        self.cross(flow, |walk, flow, scope| {
+            self.s.emit_stmt_block_plain(
+                &self.world,
+                walk,
+                out,
+                self,
+                block,
+                depth as i64,
+                flow,
+                scope,
+                tail,
+                opening.map(str::to_string),
+            )
+        })
     }
 
     /// Whether `expr` is never negative here: a non-negative literal, a
     /// counter of [`Emitter::nonnegative`], or a sum or product of those.
     fn never_negative(&self, flow: Flow<'_>, expr: &Expr) -> bool {
         self.walk(|w| w.never_negative(&self.world, flow.function, expr))
-    }
-
-    /// `let mut xs = []` and, right after it, `xs.resize(n, v)` with `std`'s
-    /// `resize`: the value and the length, for `vec![v; n]`.
-    fn filled_at_once<'s>(
-        &self,
-        declared: &'s Spanned<Stmt>,
-        next: &'s Spanned<Stmt>,
-    ) -> Option<(&'s Expr, &'s Expr)> {
-        use nikaia_std::tools::emit_core_below as below;
-        if !below::emit_filled_at_once(
-            &self.world,
-            &self.s.own_contracts,
-            &self.s.own_methods,
-            &declared.node,
-            &next.node,
-        ) {
-            return None;
-        }
-        match below::emit_resize_args(&next.node).as_slice() {
-            [length, fill] => Some((fill, length)),
-            _ => None,
-        }
     }
 
     /// Whether a **branch of an `overlap`** can pause
@@ -2562,8 +2369,7 @@ impl<'p> Emitter<'p> {
         self.crossed(crossed)
     }
 
-    /// A statement; a `let` of a task whose body cannot fail is remembered,
-    /// since its `join` throws `task::Crashed` alone (ADR-328 D8).
+    /// A statement: `emit_stmt` (`tools/emit_stmt.nika`).
     fn stmt(
         &self,
         out: &mut Out,
@@ -2573,84 +2379,20 @@ impl<'p> Emitter<'p> {
         tail: Tail,
         flow: Flow<'_>,
     ) -> Result<()> {
-        let mark = out.buf.len();
-        self.stmt_written(out, stmt, span, depth, tail, flow)?;
-        if let Stmt::Let {
-            names,
-            value: Expr::Spawn { .. },
-            ..
-        } = stmt
-            && let [name] = names.as_slice()
-        {
-            let written = &out.buf[mark..];
-            let first = |what: &str| written.find(what).unwrap_or(usize::MAX);
-            let plain = first("task::TaskHandle::start")
-                < first("task::FailingTask::").min(first("task::BoxedTask::"));
-            let name = self.text(*name).to_string();
-            self.walking(|w| {
-                if plain {
-                    w.plain_tasks.insert(name);
-                } else {
-                    w.plain_tasks.remove(&name);
-                }
-            });
-        }
-        Ok(())
-    }
-
-    /// A statement, and the map a `let` of [`Emitter::trusted_lets`] makes
-    /// under its fast hash (#431).
-    fn stmt_written(
-        &self,
-        out: &mut Out,
-        stmt: &Stmt,
-        span: &Span,
-        depth: usize,
-        tail: Tail,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let trusted =
-            matches!(stmt, Stmt::Let { .. }) && self.s.trusted_lets.contains(&(span.at() as i64));
-        let outer = self.walking(|w| std::mem::replace(&mut w.trusting, trusted));
-        // **A `let` that makes a map is a position of its own**: its hasher is
-        // the package's, as it was before a body could hold parameters.
-        let pinned = match stmt {
-            Stmt::Let { value, .. } => {
-                self.makes_a_map(value) && !self.s.escaped_lets.contains(&(span.at() as i64))
-            }
-            _ => false,
-        };
-        let loose = self.walk(|w| w.unpinned);
-        if pinned {
-            self.walking(|w| w.unpinned = false);
-        }
-        let written = self.a_stmt(out, stmt, span, depth, tail, flow);
-        self.walking(|w| w.trusting = outer);
-        self.walking(|w| w.unpinned = loose);
-        written
-    }
-
-    /// Whether an expression is `HashMap()` or `HashSet()`, made and nothing else.
-    fn makes_a_map(&self, expr: &Expr) -> bool {
-        let Expr::Call { func, args, .. } = expr else {
-            return false;
-        };
-        if !args.is_empty() {
-            return false;
-        }
-        let name = match &**func {
-            Expr::Variable(name, _) => self.text(*name).to_string(),
-            Expr::Path(segments, _) => segments
-                .iter()
-                .map(|s| self.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => return false,
-        };
-        matches!(
-            name.rsplit("::").next().unwrap_or(&name),
-            "HashMap" | "HashSet"
-        )
+        self.cross(flow, |walk, flow, scope| {
+            self.s.emit_stmt(
+                &self.world,
+                walk,
+                out,
+                self,
+                stmt,
+                span,
+                depth as i64,
+                tail,
+                flow,
+                scope,
+            )
+        })
     }
 
     fn a_stmt(

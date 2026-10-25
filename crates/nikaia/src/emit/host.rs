@@ -291,6 +291,34 @@ impl EmitHost for Emitter<'_> {
         })
     }
 
+    fn a_stmt(
+        &self,
+        walk: &mut EmitWalk,
+        out: &mut Out,
+        stmt: &crate::ast::Stmt,
+        span: &crate::ast::Span,
+        depth: i64,
+        tail: Tail,
+        flow: EmitFlow,
+        scope: &EmitScope,
+    ) -> Crossing {
+        self.hosted(walk, || {
+            Emitter::a_stmt(
+                self,
+                out,
+                stmt,
+                span,
+                depth as usize,
+                tail,
+                Flow::from_emit(flow, scope),
+            )
+        })
+    }
+
+    fn order_of(&self, block: &Block) -> Vec<i64> {
+        nikaia_std::tools::emit_order::emit_order(block, &self.order_proofs, &self.parsed.interner)
+    }
+
     fn ty_of_name(
         &self,
         walk: &mut EmitWalk,

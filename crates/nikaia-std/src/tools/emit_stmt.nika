@@ -1,0 +1,229 @@
+// crates/nikaia-std/src/tools/emit_stmt.nika
+//
+// **Statements and blocks of the emitter's core** (ADR-294, #125, #583, E11-4b):
+// a block with the settle point a value with a cleanup takes (ADR-297 D2), a
+// block as it is written, one statement, and the map a `let` makes under its
+// fast hash (#431). What a statement writes is still `Emitter::a_stmt`, reached
+// through the host; the Rust `block_plain`, `block_opening_with` and `stmt` are
+// adapters over the functions here.
+
+/// Whether an expression is `HashMap()` or `HashSet()`, made and nothing else.
+fn emit_stmt_makes_a_map(world: ref EmitWorld, node: ref Expr) -> bool {
+    return match node {
+        Expr::Call { func, args, .. } => {
+            if args.len() != 0 {
+                return false
+            }
+            let name = match func {
+                Expr::Variable(name, _) => emit_text(world, name),
+                Expr::Path(segments, _) => if segments.len() == 0 { "" } else { emit_text(world, segments[segments.len() - 1]) },
+                else => "",
+            }
+            name == "HashMap" || name == "HashSet"
+        },
+        else => false,
+    }
+}
+
+/// Where `what` first occurs in `buf` from `from`, or a number past any end.
+fn emit_stmt_first(buf: ref String, what: ref String, from: i64) -> i64 {
+    return buf.find(what; from: from) ?? 9223372036854775807
+}
+
+impl EmitState {
+    /// A block, with `opening` (one line) written before its statements where
+    /// there is one.
+    ///
+    /// **A block where a value with a cleanup dies is settled where it ends**
+    /// (ADR-297 D2): the value dies at its closing brace and parks its cleanup,
+    /// and the settle point right after runs it. Not inside a closure that
+    /// cannot pause - there the function's own settle point runs it.
+    pub fn emit_stmt_block_opening_with[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
+        let mut settles = false
+        let mut fails = false
+        for each in block.stmts {
+            let one = self.facts.settle_lets.get(each.span.start as i64)
+            if one != null {
+                settles = true
+                if one ?? false {
+                    fails = true
+                }
+            }
+        }
+        // **A failure is never settled away**: where a cleanup that can fail
+        // has no channel to fail into here - a lambda's body, a branch that is
+        // not wrapped, a guarded half - the value stays parked for the next
+        // settle point out, which has one (ADR-297 D4).
+        let propagates = flow.can_throw && !flow.caught
+        if settles && !flow.in_lambda && (!fails || propagates) {
+            let mut inner = EmitOut::empty()
+            self.emit_stmt_block_plain(world, walk, inner, host, block, depth, flow, scope, tail, opening?.clone())
+            let kind = emit_settle_kind(host.overlaps_user_code())
+            let settle = if fails {
+                f"nikaia_std::cleanup::settle_at::<{kind}>(&{rust_string(scope.origin)}).await?"
+            } else {
+                f"nikaia_std::cleanup::settle_quietly::<{kind}>().await"
+            }
+            out.push("{ let __nikaia_block = ")
+            out.append(inner)
+            out.push(f"; {settle}; __nikaia_block }}")
+            return
+        }
+        self.emit_stmt_block_plain(world, walk, out, host, block, depth, flow, scope, tail, opening)
+    }
+
+    /// A block as it is written, with no settle point after it.
+    pub fn emit_stmt_block_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
+        if block.stmts.len() == 0 {
+            if opening != null {
+                out.push(f"{{ {opening ?? ""} }}")
+            } else {
+                out.push("{ }")
+            }
+            return
+        }
+
+        // A one-statement block stays on its line. Most action blocks are one
+        // expression, and a grammar reads better when its actions do not push
+        // the pattern three lines apart. Whether it fits is decided by
+        // rendering it, not by guessing from the shape.
+        if block.stmts.len() == 1 && opening == null {
+            // **A try that is thrown away leaves nothing behind**: the keeps
+            // it declared (ADR-283 D10) are declared again by the rendering
+            // that is kept - `println(d())` alone in `main` lost its keep.
+            let declared = walk.preluded.clone()
+            let mut rendered = EmitOut::empty()
+            let st = rendered.mark()
+            self.emit_stmt(world, walk, rendered, host, block.stmts[0].node, block.stmts[0].span, depth, tail, flow, scope)
+            rendered.record(block.stmts[0].span, st)
+            if !rendered.buf.contains("\n") {
+                out.push("{ ")
+                out.append(rendered)
+                out.push(" }")
+                return
+            }
+            walk.preluded = declared
+        }
+
+        let pad = "    ".repeat(depth)
+        let inner_pad = "    ".repeat(depth + 1)
+
+        out.push("{\n")
+        if opening != null {
+            out.push(inner_pad)
+            out.push(opening ?? "")
+            out.push("\n")
+        }
+        let last = block.stmts.len() - 1
+        // **Statements run in the order they are written** (ADR-292 D1), and no
+        // analysis stands between the source and the schedule. A program that
+        // wants overlap writes `overlap { ... }` and has the claim checked
+        // (D3). One exception no program can tell: an assignment that runs
+        // unconditionally is written before the `if`s directly in front of it
+        // that neither touch what it touches nor can stop the program
+        // (ADR-379), so the optimiser sees its read and its write in one block.
+        let order = host.order_of(block)
+        let mut pos = 0
+        while pos < order.len() {
+            let i = order[pos]
+            // **An empty list made `n` long at once is `vec![v; n]`**
+            // (ADR-270 D8 step 1): `let mut xs: Vec[T] = []` followed by
+            // `xs.resize(n, v)` is one allocation of a known length - zeroed
+            // by the system for zeros - which is what Rust writes, and what
+            // lets the optimiser drop the bounds checks of every read below
+            // that it can see is in range.
+            if i < last && pos + 1 < order.len() && order[pos + 1] == i + 1 && emit_filled_at_once(world, self.own_contracts, self.own_methods, block.stmts[i].node, block.stmts[i + 1].node) {
+                let args = emit_resize_args(block.stmts[i + 1].node)
+                if args.len() == 2 {
+                    let mut declared = EmitOut::empty()
+                    let st = declared.mark()
+                    self.emit_stmt(world, walk, declared, host, block.stmts[i].node, block.stmts[i].span, depth + 1, tail.at(i, last), flow, scope)
+                    declared.record(block.stmts[i].span, st)
+                    let head = declared.buf.strip_suffix("vec![];")
+                    if head != null {
+                        let beside = flow.at(block.stmts[i + 1].span.start as i64)
+                        let mut value = EmitOut::empty()
+                        host.expr(walk, value, args[1], depth + 1, beside, scope)
+                        let mut count = EmitOut::empty()
+                        if only_literals(args[0]) {
+                            host.expr(walk, count, args[0], depth + 1, beside.inferred(), scope)
+                        } else {
+                            count.push("nikaia_std::count::of(")
+                            host.expr(walk, count, args[0], depth + 1, beside, scope)
+                            count.push(")")
+                        }
+                        out.push(inner_pad)
+                        let st = out.mark()
+                        out.push(f"{head ?? ""}vec![{value.buf}; {count.buf}];")
+                        out.record(block.stmts[i].span, st)
+                        out.push("\n")
+                        pos += 2
+                        continue
+                    }
+                }
+            }
+            out.push(inner_pad)
+            let st = out.mark()
+            self.emit_stmt(world, walk, out, host, block.stmts[i].node, block.stmts[i].span, depth + 1, tail.at(i, last), flow, scope)
+            out.record(block.stmts[i].span, st)
+            out.push("\n")
+            pos += 1
+        }
+        out.push(pad)
+        out.push("}")
+    }
+
+    /// A statement; a `let` of a task whose body cannot fail is remembered,
+    /// since its `join` throws `task::Crashed` alone (ADR-328 D8).
+    pub fn emit_stmt[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let mark = out.buf.len()
+        self.emit_stmt_written(world, walk, out, host, node, span, depth, tail, flow, scope)
+        match node {
+            Stmt::Let { names, value, .. } => {
+                match value {
+                    Expr::Spawn { .. } => {
+                        if names.len() == 1 {
+                            let started = emit_stmt_first(out.buf, "task::TaskHandle::start", mark)
+                            let failing = emit_stmt_first(out.buf, "task::FailingTask::", mark)
+                            let boxed = emit_stmt_first(out.buf, "task::BoxedTask::", mark)
+                            let plain = started < failing && started < boxed
+                            let name = emit_text(world, names[0])
+                            if plain {
+                                walk.plain_tasks.insert(name)
+                            } else {
+                                walk.plain_tasks.remove(name)
+                            }
+                        }
+                    },
+                    else => {}
+                }
+            },
+            else => {}
+        }
+    }
+
+    /// A statement, and the map a `let` of `trusted_lets` makes under its fast
+    /// hash (#431).
+    fn emit_stmt_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let is_let = match node {
+            Stmt::Let { .. } => true,
+            else => false,
+        }
+        let trusted = is_let && self.trusted_lets.contains(span.start as i64)
+        let outer = walk.trusting
+        walk.trusting = trusted
+        // **A `let` that makes a map is a position of its own**: its hasher is
+        // the package's, as it was before a body could hold parameters.
+        let pinned = match node {
+            Stmt::Let { value, .. } => emit_stmt_makes_a_map(world, value) && !self.escaped_lets.contains(span.start as i64),
+            else => false,
+        }
+        let loose = walk.unpinned
+        if pinned {
+            walk.unpinned = false
+        }
+        host.a_stmt(walk, out, node, span, depth, tail, flow, scope)
+        walk.trusting = outer
+        walk.unpinned = loose
+    }
+}

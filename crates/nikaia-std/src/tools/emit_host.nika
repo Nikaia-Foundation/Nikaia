@@ -78,6 +78,12 @@ pub trait EmitHost {
     /// `Emitter::stmt`: a statement, written to `out`.
     fn stmt(ref self, mut walk: EmitWalk, mut out: EmitOut, stmt: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws
 
+    /// `Emitter::a_stmt`: what one statement writes (not yet moved).
+    fn a_stmt(ref self, mut walk: EmitWalk, mut out: EmitOut, stmt: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws
+
+    /// The order the statements of a block are written in (`emit_order`).
+    fn order_of(ref self, block: ref Block) -> Vec[i64] sync
+
     /// A type known by its name alone, as a grammar rule returns it
     /// (`ty_filled` with named lifetimes).
     fn ty_of_name(ref self, mut walk: EmitWalk, name: winnow_grammar::Symbol) -> String sync throws

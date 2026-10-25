@@ -1199,6 +1199,14 @@ mod emit_state_lowered {
 #[allow(unused_imports)]
 pub use emit_state_lowered::*;
 
+mod emit_stmt_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_stmt.rs");
+}
+#[allow(unused_imports)]
+pub use emit_stmt_lowered::*;
+
 mod emit_sums_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2360,6 +2368,7 @@ pub mod emit_state {
     #[allow(unused_imports)]
     pub use super::{EmitPair, EmitKeptCall, EmitWorld, EmitState, EmitWalk};
 }
+pub mod emit_stmt {}
 pub mod emit_sums {}
 pub mod emit_text {
     #[allow(unused_imports)]

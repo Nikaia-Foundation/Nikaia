@@ -554,3 +554,12 @@ they called: `call`, `overlap`, `select`, `match_expr`, `string`, `method_arm`, 
 `boxed_future_in`, `integer_literal`, `unary_op`). Found on the way and fixed first: `m.get(k)`
 lent to a `ref T?` parameter was opened twice (`map_gets`). `lower-std` output unchanged
 beyond the slice's files. Next: E11-4b (statements and blocks).
+
+E11-4b part 1 switched: `Emitter::block_plain`, `block_opening_with` and `stmt` are thin adapters over
+`emit_stmt_block_plain`, `emit_stmt_block_opening_with` and `emit_stmt` (`tools/emit_stmt.nika`):
+the settle point of a block (ADR-297), the one-line block, `vec![v; n]` for a list made `n` long, the
+statement order, the `plain_tasks` note of a spawned `let`, and the fast-hash and unpinned map of a
+`let` (`stmt_written`, `makes_a_map`). The host gained `a_stmt` and `order_of`. Removed from Rust:
+`filled_at_once`, `settle_kind`, `makes_a_map`, `stmt_written` and the three bodies (about 290 lines).
+Still Rust: `a_stmt` (about 950 lines, reached through `host.a_stmt`) and its callees (`handed_back`,
+`around_value`, `returns_either`, keeps, `map_key`, `index_expr`...). Next: E11-4b part 2, `a_stmt`.
