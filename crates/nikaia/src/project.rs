@@ -4643,7 +4643,10 @@ mod tests {
     #[test]
     fn a_rustc_failure_is_no_refusal() {
         assert!(is_refusal(b"error[NK1103]: mismatched\n"));
-        assert!(!is_refusal(b"error[E0308]: mismatched\n"));
+        assert!(is_refusal(b"error: expected `)`\n"));
+        assert!(!is_refusal(
+            b"error[E0308]: mismatched\nerror: could not compile `p`\n"
+        ));
         assert!(!is_refusal(
             b"error[NK1103]: x\nerror: could not compile `p`\n"
         ));
