@@ -179,6 +179,7 @@ Update 2026-10-24 later: U-d4 done (steps 1-3, dfb42b5f); #667 per-file cache ke
 Update after daf562f3: U-d6 landed in part; what is left of C-7 and E10/E11 is the table at the end of `selfhosting-plan.md`. C7-a..c and E10-0 have no prerequisite; C7-d waits for #804, E10-1 for #791. #801 is built (0.0.1212); #803 and #804 are `ready`.
 Tests in Nikaia (owner, 2026-10-24): #821 `ready`; ADR-269 D22 (`tests/NAME.nika` + `.stdout`/`.stderr`) is specified but unbuilt (probe: `output_tests` in `project.rs` sees only `.stdout`/`.out`); step 1 builds it, then new program tests go there.
 Update 2026-10-25 (fresh architect): #837 running, then briefs 838, 744, 582, 747 (scratchpad `briefs/`); then E10-4 adapter switch (`priorities.md` table). #825 closed by hand.
+Update 2026-10-25 end of architect run (~65 turns): done #753 #780 #838 #744 #839 #582 #840, #747 step 1; #778 #775 #825 closed by hand. Next: briefs `e10-4-switch.md` (Opus), then `native-compiler.md` (alone; then evaluate its CI CPU log after ~20 runs for the owner's question on runner CPUs). Open small bugs: #841, #747 step 2. Owner direction: optional native compiler build, `native` always resolved to the CPU name in flags and cache keys.
 Stage: 1 (serial). Current issue: #125, C-7 of `selfhosting-plan.md`: U-d0 and
 U-d1 done, **U-d2** (`check/attributes.rs`, 714 lines, to
 `tools/check_attributes.nika`) running; then **#667** (owner: before U-d3):
