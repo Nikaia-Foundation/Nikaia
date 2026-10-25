@@ -151,6 +151,39 @@ fn receiver_of(expr: ref Expr) -> Vec[ref Expr] sync {
     }
 }
 
+/// Whether every value an expression ends in is a text or a `'…'` literal:
+/// the arms of an `if` or a `match` handed to a `u8` are bytes (#773), as
+/// those handed to a `String` are text of their own. `text` is whether a
+/// text literal counts, or only a `'…'`.
+fn check_texts_ends_in_literal(expr: ref Expr, text: bool) -> bool sync {
+    match expr {
+        Expr::LitStr { .. } => return text,
+        Expr::LitChar(_, _) => return true,
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = else_branch ?? return false
+            let first = block_tail(then_branch)
+            let second = block_tail(otherwise)
+            return first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(first[0], text) && check_texts_ends_in_literal(second[0], text)
+        },
+        Expr::Match { arms, .. } => {
+            if arms.len() == 0 {
+                return false
+            }
+            for arm in arms {
+                if !check_texts_ends_in_literal(arm.body, text) {
+                    return false
+                }
+            }
+            return true
+        },
+        Expr::Block(block, _) => {
+            let ends = block_tail(block)
+            return ends.len() == 1 && check_texts_ends_in_literal(ends[0], text)
+        },
+        else => return false,
+    }
+}
+
 pub fn a_text_literal_expr(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::LitStr { .. } => true,
@@ -227,7 +260,7 @@ impl CheckState {
                     let otherwise = else_branch ?? return null
                     let first = block_tail(then_branch)
                     let second = block_tail(otherwise)
-                    if first.len() == 1 && second.len() == 1 && ends_in_text(first[0]) && ends_in_text(second[0]) {
+                    if first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(first[0], true) && check_texts_ends_in_literal(second[0], true) {
                         self.text_literal(world, want, first[0], owned)
                         return self.text_literal(world, want, second[0], owned)
                     }
@@ -235,8 +268,13 @@ impl CheckState {
                 }
             },
             Expr::Match { arms, .. } => {
-                if !all_arms_text(arms) {
+                if arms.len() == 0 {
                     return null
+                }
+                for arm in arms {
+                    if !check_texts_ends_in_literal(arm.body, true) {
+                        return null
+                    }
                 }
                 let mut answered: Ty? = null
                 for arm in arms {
@@ -246,7 +284,7 @@ impl CheckState {
             },
             Expr::Block(block, _) => {
                 let ends = block_tail(block)
-                if ends.len() == 1 && ends_in_text(ends[0]) {
+                if ends.len() == 1 && check_texts_ends_in_literal(ends[0], true) {
                     return self.text_literal(world, want, ends[0], owned)
                 }
                 return null
@@ -609,6 +647,11 @@ fn check_texts_all_chars(element: ref Ty, items: ref Vec[Expr]) -> bool sync {
             },
             Expr::ListLit { items: nested, .. } => {
                 if nested.len() == 0 || !check_texts_all_chars(inner, nested) {
+                    return false
+                }
+            },
+            Expr::If { .. } | Expr::Match { .. } | Expr::Block(..) => {
+                if !bytes || !check_texts_ends_in_literal(item, false) {
                     return false
                 }
             },

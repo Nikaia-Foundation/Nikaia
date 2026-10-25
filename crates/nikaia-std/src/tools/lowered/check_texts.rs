@@ -127,6 +127,31 @@ pub(crate) fn receiver_of(expr: &Expr) -> Vec<&Expr> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_texts_ends_in_literal(expr: &Expr, text: bool) -> bool {
+    match expr {
+        Expr::LitStr { .. } => return text,
+        Expr::LitChar(_, _) => return true,
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let first = block_tail(then_branch);
+            let second = block_tail(otherwise);
+            return first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&first, 0), text) && check_texts_ends_in_literal(*nikaia_std::index::get(&second, 0), text);
+        },
+        Expr::Match { arms, .. } => {
+            if arms.is_empty() { return false; }
+            for arm in arms.iter() { if !check_texts_ends_in_literal(&arm.body, text) { return false; } }
+            return true;
+        },
+        Expr::Block(block, _) => {
+            let ends = block_tail(block);
+            return ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), text);
+        },
+        _ => return false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn a_text_literal_expr(expr: &Expr) -> bool { matches!(expr, Expr::LitStr { .. }) }
 
 impl CheckState {
@@ -193,7 +218,7 @@ impl CheckState {
                     let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let first = block_tail(then_branch);
                     let second = block_tail(otherwise);
-                    if first.len() == 1 && second.len() == 1 && ends_in_text(*nikaia_std::index::get(&first, 0)) && ends_in_text(*nikaia_std::index::get(&second, 0)) {
+                    if first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&first, 0), true) && check_texts_ends_in_literal(*nikaia_std::index::get(&second, 0), true) {
                         self.text_literal(world, want, *nikaia_std::index::get(&first, 0), owned);
                         return self.text_literal(world, want, *nikaia_std::index::get(&second, 0), owned);
                     }
@@ -201,14 +226,15 @@ impl CheckState {
                 }
             },
             Expr::Match { arms, .. } => {
-                if !all_arms_text(arms) { return None; }
+                if arms.is_empty() { return None; }
+                for arm in arms.iter() { if !check_texts_ends_in_literal(&arm.body, true) { return None; } }
                 let mut answered: Option<Ty> = None;
                 for arm in arms.iter() { answered = self.text_literal(world, want, &arm.body, owned); }
                 return answered;
             },
             Expr::Block(block, _) => {
                 let ends = block_tail(block);
-                if ends.len() == 1 && ends_in_text(*nikaia_std::index::get(&ends, 0)) { return self.text_literal(world, want, *nikaia_std::index::get(&ends, 0), owned); }
+                if ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), true) { return self.text_literal(world, want, *nikaia_std::index::get(&ends, 0), owned); }
                 return None;
             },
             Expr::ListLit { items, .. } => {
@@ -483,6 +509,7 @@ pub(crate) fn check_texts_all_chars(element: &Ty, items: &[Expr]) -> bool {
         match item {
             Expr::LitChar(..) => { if !bytes { return false; } },
             Expr::ListLit { items: nested, .. } => { if nested.is_empty() || !check_texts_all_chars(&inner, nested) { return false; } },
+            Expr::If { .. } | Expr::Match { .. } | Expr::Block(..) => { if !bytes || !check_texts_ends_in_literal(item, false) { return false; } },
             _ => { return false; },
         }
     }

@@ -509,3 +509,18 @@ fn a_literal_beside_a_widened_integer_takes_the_common_type() {
     );
     assert_eq!(printed.trim(), "12 13 43983 43997 10 11");
 }
+
+/// #773: a `'…'` in the arms of an `if` or a `match` handed to a `u8` is a
+/// byte, as one written there directly is.
+#[test]
+fn a_character_in_the_arms_of_an_if_handed_to_a_byte_is_a_byte() {
+    let (printed, _) = printed_and_lowered(
+        "char-arms-byte",
+        "fn pick(n: i64) -> u8 {\n    return match n { 0 => 'x', else => { 'y' } }\n}\n\n\
+         fn main() {\n    let b = true\n    let mut v: Vec[u8] = []\n    \
+         v.push(if b { 'a' } else { 'b' })\n    let x: u8 = if b { 'c' } else { 'd' }\n    \
+         v.push(x)\n    let w: Vec[u8] = [if b { 'e' } else { 'f' }]\n    \
+         println(f\"{v[0]} {v[1]} {w[0]} {pick(0)} {pick(1)}\")\n}\n",
+    );
+    assert_eq!(printed.trim(), "97 99 101 120 121");
+}
