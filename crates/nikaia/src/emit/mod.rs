@@ -34,8 +34,8 @@ use winnow_grammar::Symbol;
 
 use crate::assets::Reads;
 use crate::ast::{
-    BinaryOp, Block, Expr, FoldSpec, GrammarDef, Item, Pattern, Repeat, SelectArm, Span, Spanned,
-    Stmt, Type, UnaryOp, VariantFields,
+    BinaryOp, Block, Expr, GrammarDef, Item, Pattern, SelectArm, Span, Spanned, Stmt, Type,
+    UnaryOp, VariantFields,
 };
 use crate::parser::Parsed;
 use crate::{refused, refused_at};
@@ -1171,12 +1171,6 @@ struct Emitter<'p> {
     place: std::cell::RefCell<seeds::Place>,
     /// A signature of a barrier is being written: its maps are the keyed ones.
     floor: std::cell::Cell<bool>,
-    /// A grammar's copy over bytes is being written (ADR-366 D2): what Nikaia
-    /// types as text is taken through the backend's checking `text(...)`.
-    grammar_bytes: std::cell::Cell<bool>,
-    /// Inside `bytes(...)` of a grammar's copy over bytes: `any` there is the
-    /// backend's raw `byte`, since what is captured is not checked.
-    grammar_raw: std::cell::Cell<bool>,
     /// **The counters `bounds::proven` already found never negative**, by the
     /// address of the body in `parsed` (`Proven::nonnegative_locals`).
     nonnegative_bodies: HashMap<usize, HashSet<Symbol>>,
@@ -2045,8 +2039,6 @@ impl<'p> Emitter<'p> {
             seeds: seeds_of,
             place: std::cell::RefCell::new(seeds::Place::default()),
             floor: std::cell::Cell::new(false),
-            grammar_bytes: std::cell::Cell::new(false),
-            grammar_raw: std::cell::Cell::new(false),
             nonnegative_bodies: std::mem::take(&mut proven.nonnegative_locals),
             main_params: std::cell::RefCell::new(Vec::new()),
             order_proofs,
@@ -2497,173 +2489,6 @@ impl<'p> Emitter<'p> {
             }
         }
         let crossed = self.nikaia(|walk| self.s.emit_item(&self.world, walk, out, self, written));
-        self.crossed(crossed)
-    }
-
-    // --- Grammars ---
-
-    fn pattern(&self, out: &mut Out, pattern: &Spanned<Pattern>) -> Result<()> {
-        let st = out.mark();
-        self.pattern_body(out, pattern)?;
-        out.record(&pattern.span, st);
-        Ok(())
-    }
-
-    fn pattern_body(&self, out: &mut Out, pattern: &Spanned<Pattern>) -> Result<()> {
-        match &pattern.node {
-            Pattern::Seq(parts) => self.patterns(out, parts, " "),
-            Pattern::Choice(parts) => self.patterns(out, parts, " | "),
-            Pattern::Bind { name, pat } => {
-                out.push(&format!("{}:", self.text(*name)));
-                // A literal's capture is text in Nikaia; over bytes the backend
-                // hands back bytes, so it is checked (ADR-366 D2).
-                if self.grammar_bytes.get() && matches!(pat.node, Pattern::Literal(_)) {
-                    out.push("text(");
-                    self.pattern(out, pat)?;
-                    out.push(")");
-                    return Ok(());
-                }
-                self.pattern(out, pat)
-            }
-            Pattern::Literal(text) => {
-                out.push(&format!("\"{text}\""));
-                Ok(())
-            }
-            Pattern::Ref {
-                name,
-                generics,
-                args,
-            } if self.text(*name) == "list" && generics.is_empty() && args.len() == 2 => {
-                out.push(LIST_RULE);
-                // The element type is the item rule's where this grammar
-                // declares it; a built-in is left to the backend to infer.
-                if let Pattern::Ref {
-                    name: item,
-                    args: none,
-                    ..
-                } = &args[0].node
-                    && none.is_empty()
-                    && let Some(ty) =
-                        self.walk(|w| w.grammar_rule_types.get(self.text(*item)).cloned())
-                {
-                    out.push(&format!("<{ty}>"));
-                }
-                out.push("(item = ");
-                self.pattern(out, &args[0])?;
-                out.push(", sep = ");
-                self.pattern(out, &args[1])?;
-                out.push(")");
-                Ok(())
-            }
-            Pattern::Ref {
-                name,
-                generics,
-                args,
-            } if generics.is_empty()
-                && !args.is_empty()
-                && (self.text(*name) == "bytes"
-                    || self.grammar_bytes.get()
-                        && matches!(self.text(*name), "until" | "text")) =>
-            {
-                // Over bytes `until(t)` is bytes to the backend and text to
-                // Nikaia: it is checked where it becomes text (ADR-366 D2).
-                // Inside `bytes(...)` or `text(...)` what is captured is the
-                // outer one's, so nothing below is wrapped again.
-                let called = self.text(*name);
-                let wrap = called == "until";
-                let called = if called == "bytes" && !self.grammar_bytes.get() {
-                    "text"
-                } else {
-                    called
-                };
-                out.push(if wrap { "text(until(" } else { called });
-                if !wrap {
-                    out.push("(");
-                }
-                let bytes = self.grammar_bytes.replace(false);
-                let raw = self
-                    .grammar_raw
-                    .replace(self.grammar_raw.get() || bytes && called == "bytes");
-                let written = self.patterns(out, args, ", ");
-                self.grammar_raw.set(raw);
-                self.grammar_bytes.set(bytes);
-                written?;
-                out.push(if wrap { "))" } else { ")" });
-                Ok(())
-            }
-            Pattern::Ref {
-                name,
-                generics,
-                args,
-            } => {
-                // Over bytes the backend's `any` is a checked `char`, as in
-                // Nikaia; under `bytes(...)` it is the raw `byte`.
-                let called = self.text(*name);
-                let raw_any = self.grammar_raw.get() && called == "any" && args.is_empty();
-                out.push(if raw_any { "byte" } else { called });
-                // `dec[i32](…)` -> `dec::<i32>(…)`? No: the backend's builtin
-                // takes its type between angles, not after a turbofish, and a
-                // grammar body is the backend's syntax once it is emitted.
-                if !generics.is_empty() {
-                    let params: Vec<String> = generics
-                        .iter()
-                        .map(|g| self.ty(g, Lifetimes::Named))
-                        .collect();
-                    out.push(&format!("<{}>", params.join(", ")));
-                }
-                if !args.is_empty() {
-                    out.push("(");
-                    self.patterns(out, args, ", ")?;
-                    out.push(")");
-                }
-                Ok(())
-            }
-            Pattern::Repeat { pat, rep } => {
-                // A sequence or a choice has to be grouped before a suffix can
-                // apply to all of it rather than to its last element.
-                let group = matches!(pat.node, Pattern::Seq(_) | Pattern::Choice(_));
-                if group {
-                    out.push("(");
-                }
-                self.pattern(out, pat)?;
-                if group {
-                    out.push(")");
-                }
-                out.push(&repeat_suffix(*rep));
-                Ok(())
-            }
-            Pattern::Group(inner) => {
-                out.push("(");
-                self.pattern(out, inner)?;
-                out.push(")");
-                Ok(())
-            }
-            Pattern::Cut => {
-                out.push("=>");
-                Ok(())
-            }
-            Pattern::Fold(spec) => self.fold(out, spec),
-        }
-    }
-
-    fn patterns(
-        &self,
-        out: &mut Out,
-        patterns: &[Spanned<Pattern>],
-        separator: &str,
-    ) -> Result<()> {
-        for (i, pattern) in patterns.iter().enumerate() {
-            if i > 0 {
-                out.push(separator);
-            }
-            self.pattern(out, pattern)?;
-        }
-        Ok(())
-    }
-
-    /// A `fold` or `par_fold` (`tools/emit_fold.nika`).
-    fn fold(&self, out: &mut Out, spec: &FoldSpec) -> Result<()> {
-        let crossed = self.nikaia(|walk| self.s.emit_fold(&self.world, walk, out, self, spec));
         self.crossed(crossed)
     }
 
@@ -5682,13 +5507,6 @@ impl<'p> Emitter<'p> {
 }
 
 // --- Free helpers ---
-
-/// The template rule `list(item, sep)` lowers to (Part II 10.8).
-const LIST_RULE: &str = "__nikaia_list";
-
-fn repeat_suffix(rep: Repeat) -> String {
-    nikaia_std::tools::emit_ops::repeat_suffix(rep)
-}
 
 /// **An integer literal, and the one case it has to carry its own type**
 /// ([ADR-285](../../../docs/specification/adr/adr-285.md) D21).

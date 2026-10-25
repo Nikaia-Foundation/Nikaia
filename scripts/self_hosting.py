@@ -180,6 +180,7 @@ COMPILER_NIKA = {
     "emit_function.nika": "emit: a function's signature, its seeds, lifetimes and settle point (E10-4)",
     "emit_grammar.nika": "emit: the grammars, their copy over bytes, the options of a par_fold entry and each rule (E10-1)",
     "emit_item.nika": "emit: one item of a unit, its impl bridges, trait and extern declarations (E11-1)",
+    "emit_pattern.nika": "emit: a grammar pattern in the backend's syntax, list, bytes and repeats (E11-2)",
     "emit_fold.nika": "emit: a fold and a par_fold of a grammar pattern, step and merge (E10-2)",
     "emit_host.nika": "emit: the host trait the emitter's core asks of the Rust side, and the first moved methods: a cast's operand, a bare range, an index (0.0.816)",
     "emit_core_types.nika": "emit: how a type is written, the tethered wrapper, the pointer an extern parameter takes and the words that depend on user parallelism (0.0.818)",

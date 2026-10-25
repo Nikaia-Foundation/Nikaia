@@ -254,15 +254,6 @@ impl EmitHost for Emitter<'_> {
         super::OutText::insert_before_last_brace(out, text);
     }
 
-    fn pattern(
-        &self,
-        walk: &mut EmitWalk,
-        out: &mut Out,
-        pattern: &crate::ast::Spanned<crate::ast::Pattern>,
-    ) -> Crossing {
-        self.hosted(walk, || Emitter::pattern(self, out, pattern))
-    }
-
     fn ty_named(
         &self,
         walk: &mut EmitWalk,
@@ -319,10 +310,6 @@ impl EmitHost for Emitter<'_> {
             lasting: false,
         };
         self.ty_named(walk, &ty)
-    }
-
-    fn set_grammar_bytes(&self, bytes: bool) {
-        self.grammar_bytes.set(bytes);
     }
 
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr {

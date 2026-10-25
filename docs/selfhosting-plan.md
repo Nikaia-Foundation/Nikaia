@@ -518,3 +518,9 @@ E11-1 switched: `Emitter::item` is a thin adapter over `emit_item` (`tools/emit_
 removed (`item`, the trait, bridge, `Error` and `extern` writers, `MethodOf`, `function`,
 `grammar` and nine helpers only they used). The host gained `seeds_arity`, `place_*` and
 `set_floor`; `lower-std` output unchanged. Next: E11-2 (patterns).
+
+E11-2 switched: `pattern`, `pattern_body`, `patterns` and the `fold` adapter are `emit_pattern`
+(`tools/emit_pattern.nika`, 141 lines), called by `emit_grammar` directly; the grammar's
+bytes/raw flags moved from `Emitter` cells into `EmitWalk`, the host lost `pattern` and
+`set_grammar_bytes`; 168 Rust lines removed (with `LIST_RULE`, `repeat_suffix`). `lower-std`
+output unchanged beyond the four files of the slice. Next: E11-3 (`program`).

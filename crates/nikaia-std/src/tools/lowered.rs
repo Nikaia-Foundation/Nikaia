@@ -1159,6 +1159,14 @@ mod emit_out_lowered {
 #[allow(unused_imports)]
 pub use emit_out_lowered::*;
 
+mod emit_pattern_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_pattern.rs");
+}
+#[allow(unused_imports)]
+pub use emit_pattern_lowered::*;
+
 mod emit_reach_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2325,6 +2333,7 @@ pub mod emit_out {
     #[allow(unused_imports)]
     pub use super::{EmitMapEntry, EmitOut};
 }
+pub mod emit_pattern {}
 pub mod emit_reach {
     #[allow(unused_imports)]
     pub use super::{pausing_reach};

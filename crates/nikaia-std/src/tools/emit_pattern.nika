@@ -1,0 +1,145 @@
+// crates/nikaia-std/src/tools/emit_pattern.nika
+//
+// **A grammar pattern, as the backend's grammar syntax**, moved from
+// `emit/mod.rs` (ADR-294, #125, #583, E11-2): sequences, choices, captures,
+// `list(item, sep)`, the built-ins over bytes (ADR-366 D2), repeats and
+// groups. A `fold` is `emit_fold`; a type argument is written by the host.
+
+impl EmitState {
+    /// One pattern, its span recorded in the source map.
+    pub fn emit_pattern[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref Spanned[Pattern]) sync throws {
+        let st = out.mark()
+        self.emit_pattern_body(world, walk, out, host, pattern)
+        out.record(pattern.span, st)
+    }
+
+    fn emit_patterns[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, patterns: ref Vec[Spanned[Pattern]], separator: String) sync throws {
+        for i in 0..<patterns.len() {
+            if i > 0 {
+                out.push(separator)
+            }
+            self.emit_pattern(world, walk, out, host, patterns[i])
+        }
+    }
+
+    fn emit_pattern_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref Spanned[Pattern]) sync throws {
+        match pattern.node {
+            Pattern::Seq(parts) => self.emit_patterns(world, walk, out, host, parts, " "),
+            Pattern::Choice(parts) => self.emit_patterns(world, walk, out, host, parts, " | "),
+            Pattern::Bind { name, pat } => {
+                out.push(f"{emit_text(world, name)}:")
+                // A literal's capture is text in Nikaia; over bytes the backend
+                // hands back bytes, so it is checked (ADR-366 D2).
+                let literal = match pat.node {
+                    Pattern::Literal(_) => true,
+                    else => false,
+                }
+                if walk.grammar_bytes && literal {
+                    out.push("text(")
+                    self.emit_pattern(world, walk, out, host, pat)
+                    out.push(")")
+                } else {
+                    self.emit_pattern(world, walk, out, host, pat)
+                }
+            },
+            Pattern::Literal(text) => out.push(f"\"{text}\""),
+            Pattern::Ref { name, generics, args } => self.emit_pattern_ref(world, walk, out, host, name, generics, args),
+            Pattern::Repeat { pat, rep } => {
+                // A sequence or a choice has to be grouped before a suffix can
+                // apply to all of it rather than to its last element.
+                let group = match pat.node {
+                    Pattern::Seq(_) => true,
+                    Pattern::Choice(_) => true,
+                    else => false,
+                }
+                if group {
+                    out.push("(")
+                }
+                self.emit_pattern(world, walk, out, host, pat)
+                if group {
+                    out.push(")")
+                }
+                out.push(repeat_suffix(rep))
+            },
+            Pattern::Group(inner) => {
+                out.push("(")
+                self.emit_pattern(world, walk, out, host, inner)
+                out.push(")")
+            },
+            Pattern::Cut => out.push("=>"),
+            Pattern::Fold(spec) => self.emit_fold(world, walk, out, host, spec),
+        }
+    }
+
+    /// A rule reference, a built-in, or a call to either.
+    fn emit_pattern_ref[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: winnow_grammar::Symbol, generics: ref Vec[Type], args: ref Vec[Spanned[Pattern]]) sync throws {
+        let called = emit_text(world, name)
+        if called == "list" && generics.len() == 0 && args.len() == 2 {
+            // The template rule `list(item, sep)` lowers to (Part II 10.8).
+            out.push("__nikaia_list")
+            // The element type is the item rule's where this grammar
+            // declares it; a built-in is left to the backend to infer.
+            match args[0].node {
+                Pattern::Ref { name: item, args: none, .. } => {
+                    if none.len() == 0 {
+                        let declared = walk.grammar_rule_types.get(emit_text(world, item))?.clone()
+                        match declared {
+                            ty => out.push(f"<{ty}>"),
+                            null => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+            out.push("(item = ")
+            self.emit_pattern(world, walk, out, host, args[0])
+            out.push(", sep = ")
+            self.emit_pattern(world, walk, out, host, args[1])
+            out.push(")")
+            return
+        }
+        let over_bytes = walk.grammar_bytes && (called == "until" || called == "text")
+        if generics.len() == 0 && args.len() > 0 && (called == "bytes" || over_bytes) {
+            // Over bytes `until(t)` is bytes to the backend and text to
+            // Nikaia: it is checked where it becomes text (ADR-366 D2).
+            // Inside `bytes(...)` or `text(...)` what is captured is the
+            // outer one's, so nothing below is wrapped again.
+            let wrap = called == "until"
+            let written = if called == "bytes" && !walk.grammar_bytes { "text" } else { called.clone() }
+            if wrap {
+                out.push("text(until(")
+            } else {
+                out.push(written)
+                out.push("(")
+            }
+            let bytes = walk.grammar_bytes
+            let raw = walk.grammar_raw
+            walk.grammar_bytes = false
+            walk.grammar_raw = raw || bytes && written == "bytes"
+            self.emit_patterns(world, walk, out, host, args, ", ")
+            walk.grammar_raw = raw
+            walk.grammar_bytes = bytes
+            out.push(if wrap { "))" } else { ")" })
+            return
+        }
+        // Over bytes the backend's `any` is a checked `char`, as in
+        // Nikaia; under `bytes(...)` it is the raw `byte`.
+        let raw_any = walk.grammar_raw && called == "any" && args.len() == 0
+        out.push(if raw_any { "byte" } else { called.clone() })
+        // The backend's builtin takes its type between angles, not after a
+        // turbofish, and a grammar body is the backend's syntax once it is
+        // emitted.
+        if generics.len() > 0 {
+            let mut params: Vec[String] = []
+            for g in generics {
+                params.push(host.ty_named(walk, g))
+            }
+            out.push(f"<{params.join(", ")}>")
+        }
+        if args.len() > 0 {
+            out.push("(")
+            self.emit_patterns(world, walk, out, host, args, ", ")
+            out.push(")")
+        }
+    }
+}

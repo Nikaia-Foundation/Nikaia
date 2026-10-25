@@ -105,9 +105,9 @@ impl EmitState {
         out.push("grammar! {\n");
         out.push(&format!("    grammar {} {{\n", name));
         if bytes { out.push("        input bytes;\n"); }
-        host.set_grammar_bytes(bytes);
+        walk.grammar_bytes = bytes;
         self.emit_grammar_body(world, walk, out, host, def, bytes)?;
-        host.set_grammar_bytes(false);
+        walk.grammar_bytes = false;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -169,7 +169,7 @@ impl EmitState {
             match &alt.action {
                 Some(action) => {
                     out.push(&format!("          {}", separator));
-                    host.pattern(walk, out, &alt.pattern)?;
+                    self.emit_pattern(world, walk, out, host, &alt.pattern)?;
                     out.push("\n            -> ");
                     let mut as_bytes: Vec<String> = vec![];
                     if !bytes { emit_bytes_bindings(world, &alt.pattern.node, &mut as_bytes); }
@@ -184,11 +184,11 @@ impl EmitState {
                 None => {
                     if rule.ret_type.is_some() {
                         out.push(&format!("          {}folded:", separator));
-                        host.pattern(walk, out, &alt.pattern)?;
+                        self.emit_pattern(world, walk, out, host, &alt.pattern)?;
                         out.push("\n            -> { folded }\n");
                     } else {
                         out.push(&format!("          {}", separator));
-                        host.pattern(walk, out, &alt.pattern)?;
+                        self.emit_pattern(world, walk, out, host, &alt.pattern)?;
                         out.push("\n");
                     }
                 },

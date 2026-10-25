@@ -144,9 +144,9 @@ impl EmitState {
         if bytes {
             out.push("        input bytes;\n")
         }
-        host.set_grammar_bytes(bytes)
+        walk.grammar_bytes = bytes
         self.emit_grammar_body(world, walk, out, host, def, bytes)
-        host.set_grammar_bytes(false)
+        walk.grammar_bytes = false
     }
 
     fn emit_grammar_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef, bytes: bool) sync throws {
@@ -222,7 +222,7 @@ impl EmitState {
             match alt.action {
                 action => {
                     out.push(f"          {separator}")
-                    host.pattern(walk, out, alt.pattern)
+                    self.emit_pattern(world, walk, out, host, alt.pattern)
                     out.push("\n            -> ")
                     // In a text grammar the backend has no `bytes(p)`: it is
                     // `text(p)` there, and the action sees its bytes (ADR-366
@@ -253,11 +253,11 @@ impl EmitState {
                     // supplied here rather than demanded from the user.
                     if rule.ret_type != null {
                         out.push(f"          {separator}folded:")
-                        host.pattern(walk, out, alt.pattern)
+                        self.emit_pattern(world, walk, out, host, alt.pattern)
                         out.push("\n            -> { folded }\n")
                     } else {
                         out.push(f"          {separator}")
-                        host.pattern(walk, out, alt.pattern)
+                        self.emit_pattern(world, walk, out, host, alt.pattern)
                         out.push("\n")
                     }
                 },

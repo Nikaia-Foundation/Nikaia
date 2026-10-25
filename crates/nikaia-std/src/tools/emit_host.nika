@@ -71,9 +71,6 @@ pub trait EmitHost {
     /// The same, just before the last `}`.
     fn insert_before_last_brace(ref self, mut out: EmitOut, text: ref String) sync
 
-    /// `Emitter::pattern`: a grammar pattern, written to `out`.
-    fn pattern(ref self, mut walk: EmitWalk, mut out: EmitOut, pattern: ref Spanned[Pattern]) sync throws
-
     /// `Emitter::ty_filled` with named lifetimes: a type as a grammar rule
     /// returns it.
     fn ty_named(ref self, mut walk: EmitWalk, ty: ref Type) -> String sync throws
@@ -84,10 +81,6 @@ pub trait EmitHost {
     /// A type known by its name alone, as a grammar rule returns it
     /// (`ty_filled` with named lifetimes).
     fn ty_of_name(ref self, mut walk: EmitWalk, name: winnow_grammar::Symbol) -> String sync throws
-
-    /// Whether the grammar being written is the copy over bytes (the pattern
-    /// writer reads it).
-    fn set_grammar_bytes(ref self, bytes: bool) sync
 
     /// `Build::overlaps_user_code`: user code may run on more than one thread.
     fn overlaps_user_code(ref self) -> bool sync

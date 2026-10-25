@@ -17,11 +17,9 @@ pub trait EmitHost {
     fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>>;
     fn insert_after_first_brace(&self, out: &mut EmitOut, text: &str);
     fn insert_before_last_brace(&self, out: &mut EmitOut, text: &str);
-    fn pattern(&self, walk: &mut EmitWalk, out: &mut EmitOut, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>>;
     fn ty_named(&self, walk: &mut EmitWalk, ty: &Type) -> Result<String, Box<dyn std::error::Error>>;
     fn stmt(&self, walk: &mut EmitWalk, out: &mut EmitOut, stmt: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>>;
     fn ty_of_name(&self, walk: &mut EmitWalk, name: winnow_grammar::Symbol) -> Result<String, Box<dyn std::error::Error>>;
-    fn set_grammar_bytes(&self, bytes: bool);
     fn overlaps_user_code(&self) -> bool;
     fn crossings_are_possible(&self) -> bool;
     fn user_parallelism(&self) -> bool;
