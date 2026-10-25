@@ -1087,6 +1087,14 @@ mod emit_host_lowered {
 #[allow(unused_imports)]
 pub use emit_host_lowered::*;
 
+mod emit_item_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_item.rs");
+}
+#[allow(unused_imports)]
+pub use emit_item_lowered::*;
+
 mod emit_items_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2281,6 +2289,10 @@ pub mod emit_host {
     #[allow(unused_imports)]
     pub use super::{EmitHost};
 }
+pub mod emit_item {
+    #[allow(unused_imports)]
+    pub use super::{emit_seeds_declared, emit_seeds_applied};
+}
 pub mod emit_items {
     #[allow(unused_imports)]
     pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name, error_kind, sum_member_type, library_error_path, member_of};
@@ -2396,7 +2408,7 @@ pub mod ledger_defaults {
 }
 pub mod ledger_items {
     #[allow(unused_imports)]
-    pub use super::{types_this_file_declares, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures};
+    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures};
 }
 pub mod ledger_ops {
     #[allow(unused_imports)]

@@ -1,0 +1,671 @@
+// crates/nikaia-std/src/tools/emit_item.nika
+//
+// **One item of a unit**, moved from `emit/mod.rs` (ADR-294, #125, #558,
+// E11-1): an enum, a struct, a function, an `impl` with its bridges (`Error`,
+// `Cleanup`, `Fatal`, `Eq`, `Ord`, a method narrower than its trait's
+// declaration), a trait, an import, a `comptime`, an `extern` block. What the
+// Rust side keeps is the seed table and its place (`seeds_arity`, `place_*`),
+// the barrier floor (`set_floor`) and the refusal of an item this lowering does
+// not write, which names the item's tree.
+use std::collections
+
+/// The declared hidden parameters of an item, `n` of them from `first`
+/// (ADR-010 D9), with `Keyed` as their default where `defaulted`.
+pub fn emit_seeds_declared(first: i64, n: i64, defaulted: bool) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut at = first
+    while at < first + n {
+        if defaulted {
+            out.push(f"__S{at}: nikaia_std::hash::Seed = nikaia_std::hash::Keyed")
+        } else {
+            out.push(f"__S{at}: nikaia_std::hash::Seed")
+        }
+        at += 1
+    }
+    return out
+}
+
+/// The same names, as arguments.
+pub fn emit_seeds_applied(first: i64, n: i64) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut at = first
+    while at < first + n {
+        out.push(f"__S{at}")
+        at += 1
+    }
+    return out
+}
+
+/// The text of a symbol that may be absent, empty where it is.
+fn emit_item_text_of(world: ref EmitWorld, name: winnow_grammar::Symbol?) -> String {
+    let symbol = name ?? return ""
+    return emit_text(world, symbol)
+}
+
+/// Whether the file declares a trait of this name.
+fn emit_item_declares_trait(world: ref EmitWorld, wanted: ref String) -> bool {
+    for item in world.items {
+        match item.node {
+            Item::Trait { name, .. } => {
+                if emit_text(world, name) == wanted {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// Whether the file declares a `pub` struct or enum of this name.
+fn emit_item_public_type(world: ref EmitWorld, wanted: ref String) -> bool {
+    for item in world.items {
+        match item.node {
+            Item::Struct { name, is_public, .. } => {
+                if is_public && emit_text(world, name) == wanted {
+                    return true
+                }
+            },
+            Item::Enum { name, is_public, .. } => {
+                if is_public && emit_text(world, name) == wanted {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// The method `wanted` of the trait `trait_name` the file declares.
+fn emit_item_trait_method(world: ref EmitWorld, trait_name: ref String, wanted: ref String) -> TraitMethod? {
+    for item in world.items {
+        match item.node {
+            Item::Trait { name, methods, .. } => {
+                if emit_text(world, name) == trait_name {
+                    for m in methods {
+                        if emit_text(world, m.node.name) == wanted {
+                            return m.node.clone()
+                        }
+                    }
+                    return null
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+/// The receiver, as a declaration writes it.
+fn emit_item_receiver(given: ref Receiver?) -> String {
+    let receiver = given ?? return "self"
+    if receiver.is_ref && receiver.is_mut {
+        return "&mut self"
+    }
+    if receiver.is_ref {
+        return "&self"
+    }
+    return "self"
+}
+
+impl EmitState {
+    /// The names the input lifetime reaches a function through, at a method's offset.
+    fn emit_item_carries(ref self, at: i64) -> collections::BTreeSet[String] {
+        let found = self.carries_input.get(at) ?? return collections::BTreeSet()
+        return found.clone()
+    }
+
+    /// The view fields of a struct, in order (ADR-353 D1).
+    fn emit_item_slots(ref self, name: ref String) -> Vec[String] {
+        let found = self.view_slots.get(name) ?? return []
+        return found.clone()
+    }
+
+    /// The type and the value the checker computed for a `comptime` item.
+    fn emit_item_comptime(ref self, at: i64) -> (String, String)? {
+        let found = self.facts.comptime_values.get(at) ?? return null
+        return found.clone()
+    }
+
+    /// Whether a function is one the build runs at build time only.
+    fn emit_item_built(ref self, world: ref EmitWorld, name: winnow_grammar::Symbol?) -> bool {
+        let symbol = name ?? return false
+        return self.built_at_build_time.contains(emit_text(world, symbol))
+    }
+
+    /// What a declaration returns: a handle as the address it is (ADR-302
+    /// D12), text a C library owns as `Option<CText>` (ADR-218).
+    fn emit_trait_returned[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, given: ref Type?, foreign: bool) -> String sync {
+        let ty = given ?? return "()"
+        if foreign && emit_base(emit_text(world, ty.name)) == "CStr" {
+            return "Option<nikaia_std::foreign::CText>"
+        }
+        if foreign && self.handle_named(world, ty) != null {
+            return f"*mut {self.pointed_at(world, ty)}"
+        }
+        if foreign {
+            return self.emit_foreign_ty(world, walk, host, ty)
+        }
+        return self.emit_item_ty(world, walk, host, ty, EmitLifetimes::Elided)
+    }
+
+    /// A type, with the atomic floor for any `Shared` inside it.
+    fn emit_item_ty[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type, lifetimes: EmitLifetimes) -> String sync {
+        return self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, lifetimes)
+    }
+
+    /// One method of an `impl`, recorded in the source map.
+    fn emit_item_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: ref Spanned[Item], lifetimes: EmitLifetimes, target: ref String, declared_by: String?, bridged: bool?) sync throws {
+        let carries = self.emit_item_carries(method.span.start)
+        let st = out.mark()
+        out.push("    ")
+        self.emit_function(world, walk, out, host, method, 1, lifetimes, carries, target.clone(), declared_by, bridged)
+        out.record(method.span, st)
+    }
+
+    /// An item of the unit (`emit/mod.rs` refuses the ones this does not write).
+    pub fn emit_item[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item]) sync throws {
+        let at = written.span.start
+        match written.node {
+            Item::Grammar(def) => {
+                self.emit_grammar(world, walk, out, host, def)
+            },
+            Item::Enum { name, variants, is_public, is_extern } => {
+                out.push(self.derives(world, name))
+                // **A tagged union in C's layout** (ADR-284 D32).
+                if is_extern {
+                    out.push("#[repr(C)]\n")
+                }
+                let vis = if is_public { "pub " } else { "" }
+                let enum_name = emit_text(world, name)
+                let mut params = ""
+                if self.borrowing.contains(enum_name) {
+                    params = "<'a>"
+                }
+                out.push(f"{vis}enum {escaped_name(enum_name)}{params} {{\n")
+                for variant in variants {
+                    let owner = emit_text(world, variant.name)
+                    let vname = escaped_name(owner)
+                    match variant.fields {
+                        VariantFields::Unit => { out.push(f"    {vname},\n") },
+                        VariantFields::Tuple(types) => {
+                            let mut parts: Vec[String] = []
+                            let mut i = 0
+                            for t in types {
+                                let member = boxed_member(owner, i, "")
+                                let lowered = self.emit_fn_ty(world, walk, host, t, EmitLifetimes::Named, "<field>", variant_slot(enum_name, owner, i))
+                                parts.push(self.boxed_ty(enum_name, member, lowered))
+                                i += 1
+                            }
+                            out.push(f"    {vname}({parts.join(", ")}),\n")
+                        },
+                        VariantFields::Named(fields) => {
+                            let mut parts: Vec[String] = []
+                            for f in fields {
+                                let member = boxed_member(owner, -1, emit_text(world, f.name))
+                                let lowered = self.emit_item_ty(world, walk, host, f.ty, EmitLifetimes::Named)
+                                parts.push(f"{escaped_name(emit_text(world, f.name))}: {self.boxed_ty(enum_name, member, lowered)}")
+                            }
+                            out.push(f"    {vname} {{ {parts.join(", ")} }},\n")
+                        },
+                    }
+                }
+                out.push("}\n")
+            },
+            Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
+                let text = emit_text(world, name)
+                // **A `pub` struct's map positions are its hidden type
+                // parameters** (ADR-010 D9), numbered by the fields in order.
+                let seeded = is_public && !is_extern && host.seeds_arity(text) > 0
+                if seeded {
+                    host.place_declare_type(0)
+                }
+                let mut derives = self.derives(world, name)
+                // `Keyed` is `std`'s own hasher, which does not compare: the
+                // comparison is written by hand for the fields, over any seed.
+                let by_hand = seeded && generics.is_empty() && !self.borrowing.contains(text) && derives.contains("PartialEq")
+                if by_hand {
+                    derives = derives.replace(", PartialEq", "").replace(", Eq", "")
+                }
+                out.push(derives)
+                // **C's layout** (ADR-284 D14), and every field `pub` (D15).
+                if is_extern {
+                    out.push("#[repr(C)]\n")
+                }
+                let vis = if is_public { "pub " } else { "" }
+                let mut body = EmitOut::empty()
+                // **One lifetime per view field** (ADR-353 D1): `'a`, `'a1`, ...
+                let slots = self.emit_item_slots(text)
+                for field in fields {
+                    let field_text = emit_text(world, field.name)
+                    let slot = f"{text}.{field_text}"
+                    let mut lowered = self.emit_fn_ty(world, walk, host, field.ty, EmitLifetimes::Named, "<field>", slot)
+                    let mut position = 0
+                    for each in slots {
+                        if each == field_text {
+                            if position > 0 {
+                                lowered = emit_renamed_lifetime(lowered, "'a", f"'a{position}")
+                            }
+                            break
+                        }
+                        position += 1
+                    }
+                    let field_vis = if field.is_public || is_extern { "pub " } else { "" }
+                    body.push(f"    {field_vis}{escaped_name(field_text)}: {self.boxed_ty(text, field_text, lowered)},\n")
+                }
+                let mut hidden = 0
+                if seeded {
+                    hidden = host.place_finish(0)
+                }
+                // The input lifetime first and the type parameters after it,
+                // which is the order Rust wants them in (ADR-295 D3); the
+                // hidden ones last, where their defaults may stand.
+                let mut parts: Vec[String] = []
+                if self.borrowing.contains(text) {
+                    parts.push("'a")
+                    let mut more = 1
+                    while more < slots.len() {
+                        parts.push(f"'a{more}")
+                        more += 1
+                    }
+                }
+                for g in generics {
+                    parts.push(emit_bounded(world, g))
+                }
+                for s in emit_seeds_declared(0, hidden, true) {
+                    parts.push(s)
+                }
+                out.push(f"{vis}struct {escaped_name(text)}{emit_angled(parts)} {{\n")
+                out.append(body)
+                out.push("}\n")
+                if by_hand {
+                    let declares = emit_angled(emit_seeds_declared(0, hidden, false))
+                    let applied = emit_angled(emit_seeds_applied(0, hidden))
+                    let me = escaped_name(text)
+                    let mut same: Vec[String] = []
+                    for f in fields {
+                        let n = escaped_name(emit_text(world, f.name))
+                        same.push(f"self.{n} == other.{n}")
+                    }
+                    let mut compared: String = "true"
+                    if !same.is_empty() {
+                        compared = same.join(" && ")
+                    }
+                    out.push(f"impl{declares} PartialEq for {me}{applied} {{\n    fn eq(&self, other: &Self) -> bool {{ {compared} }}\n}}\n")
+                    if self.facts.compares_totally.contains(text) {
+                        out.push(f"impl{declares} Eq for {me}{applied} {{}}\n")
+                    }
+                }
+            },
+            Item::Fn { name, .. } => {
+                if self.emit_item_built(world, name) {
+                    out.push("#[allow(dead_code)]\n")
+                }
+                let carries = self.emit_item_carries(at)
+                self.emit_function(world, walk, out, host, written, 0, EmitLifetimes::Elided, carries, null, null, null)
+            },
+            Item::Impl { trait_name, target, methods } => {
+                self.emit_item_impl(world, walk, out, host, trait_name, target, methods)
+            },
+            // Kap 4.7: `trait Summarize { … }` becomes the same trait below, and
+            // the method is a signature with a `;` where an `impl`'s has a body
+            // (ADR-295 D6). No method here is `async` (ADR-295 D9, #253).
+            Item::Trait { name, methods, is_public } => {
+                let vis = if is_public { "pub " } else { "" }
+                out.push(f"{vis}trait {escaped_name(emit_text(world, name))} {{\n")
+                for method in methods {
+                    let st = out.mark()
+                    out.push("    ")
+                    self.emit_trait_method(world, walk, out, host, method.node, method.node.is_sync, false)
+                    out.record(method.span, st)
+                }
+                out.push("}\n")
+            },
+            Item::Import { path, alias } => {
+                // The names come in through `nikaia_std::prelude`; the import is
+                // kept as a comment. An alias is resolved away (ADR-286 D12).
+                let mut segments: Vec[String] = []
+                for s in path {
+                    segments.push(emit_text(world, s))
+                }
+                // **Inside `std` there is no prelude to bring it in** (0.0.248):
+                // `use std::text` has to be the import itself.
+                if self.is_std && alias == null && segments.len() == 2 && segments[0] == "std" {
+                    out.push(f"#[allow(unused_imports)]\nuse nikaia_std::{segments[1]};\n")
+                    return
+                }
+                let joined = segments.join("::")
+                if alias != null {
+                    out.push(f"// use {joined} as {emit_item_text_of(world, alias)}\n")
+                } else {
+                    out.push(f"// use {joined}\n")
+                }
+            },
+            // **The same `const` the body form writes, one level out**
+            // (ADR-287): the spelling is the checker's, keyed by the item's
+            // offset. `pub` reaches Rust as Rust's own (ADR-286 D2).
+            Item::Comptime { name, public, .. } => {
+                let bound = escaped_name(emit_text(world, name))
+                let found = self.emit_item_comptime(at)
+                if found == null {
+                    throw EmitRefused { message: f"`{bound}` has no value computed at build time. This is a compiler bug: the check should have reported it first.", at: at }
+                }
+                let value = found ?? ("", "")
+                let vis = if public { "pub " } else { "" }
+                if self.facts.folded_comptimes.contains(emit_text(world, name)) {
+                    out.push("#[allow(dead_code)]\n")
+                }
+                out.push(f"{vis}const {bound}: {value.0} = {value.1};\n")
+            },
+            // **Rust's own `extern` block** (ADR-302 D1), `extern "C"` whatever
+            // the source said (ADR-324 D6).
+            Item::Extern { abi, declarations, opaque, .. } => {
+                if abi != null {
+                    throw EmitRefused { message: "[NK1227] `extern` takes no convention: write `extern {{ … }}`.", at: at }
+                }
+                // **A handle is a type of its own, outside the block** (ADR-302
+                // D7), written before the declarations, because they name it.
+                for handle in opaque {
+                    let st = out.mark()
+                    out.push(opaque_type_text(escaped_name(emit_text(world, handle.node.name)), escaped_name(emit_text(world, handle.node.released_by))))
+                    out.record(handle.span, st)
+                }
+                out.push("unsafe extern \"C\" {\n")
+                for declaration in declarations {
+                    let st = out.mark()
+                    out.push("    ")
+                    self.emit_trait_method(world, walk, out, host, declaration.node, true, true)
+                    out.record(declaration.span, st)
+                }
+                out.push("}\n")
+            },
+            else => {
+                throw EmitRefused { message: "The compiler can't translate this item yet", at: at }
+            },
+        }
+    }
+
+    /// An `impl`: the target's own methods, and the bridges a trait the
+    /// compiler reads asks for.
+    fn emit_item_impl[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, trait_name: winnow_grammar::Symbol?, target: ref Type, methods: ref Vec[Spanned[Item]]) sync throws {
+        // A type that holds a view carries the input lifetime, and the impl
+        // has to declare the lifetime its methods are written with.
+        let borrows = self.borrows(world, target.name)
+        let mut params = ""
+        let mut lifetimes = EmitLifetimes::Elided
+        if borrows {
+            params = "<'a>"
+            lifetimes = EmitLifetimes::Inner
+        }
+        let target_name = emit_text(world, target.name)
+        let trait_text = emit_item_text_of(world, trait_name)
+        let has_trait = trait_name != null
+        // Kap 7.1: `Error` is the one trait the compiler reads rather than
+        // relays: `Display` plus `Error` from the `message` the author wrote.
+        if has_trait && trait_text == "Error" {
+            out.push(f"impl{params} {target_name}{params} {{\n")
+            for method in methods {
+                self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), target_name, null, null)
+            }
+            out.push("}\n")
+            out.push(f"impl{params} std::fmt::Display for {target_name}{params} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        f.write_str(&self.message())\n    }}\n}}\n")
+            out.push(f"impl{params} std::error::Error for {target_name}{params} {{}}\n")
+            return
+        }
+        // `impl Stack[T]` declares `T` and writes `Stack<T>`; the lifetime
+        // stands in front of it (ADR-295 D4).
+        let declared = types_declared_in(world.items, world.words)
+        let generics = impl_parameters(world.words, target, declared)
+        let mut head_parts: Vec[String] = []
+        if borrows {
+            head_parts.push("'a")
+        }
+        for g in generics {
+            head_parts.push(g.clone())
+        }
+        let mut target_parts: Vec[String] = []
+        if borrows {
+            target_parts.push(self.lifetime_args(target_name, "'a"))
+        }
+        for g in target.generics {
+            target_parts.push(self.emit_item_ty(world, walk, host, g, EmitLifetimes::Elided))
+        }
+        let mut declares = emit_angled(head_parts)
+        let mut applied = emit_angled(target_parts)
+        // **`impl Fatal for T` is a marker** (ADR-345 D1); it answers `Ending`
+        // for the status it sets (ADR-345 D4, ADR-346 D6).
+        if has_trait && trait_text == "Fatal" && !emit_item_declares_trait(world, "Fatal") {
+            out.push(f"impl{declares} nikaia_std::process::Ending for {target_name}{applied} {{\n    fn exit_code(&self) -> Option<i32> {{\n        None\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        Some(1)\n    }}\n}}\n\n")
+            return
+        }
+        // **`impl Cleanup for T` is the type's own `cleanup` and a one-line
+        // bridge to std's trait** (ADR-297 D1).
+        if has_trait && trait_text == "Cleanup" {
+            out.push(f"impl{declares} {target_name}{applied} {{\n")
+            for method in methods {
+                self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), target_name, null, null)
+            }
+            out.push("}\n")
+            let awaited = if call_pauses(self.own_contracts, f"{target_name}::cleanup") { ".await" } else { "" }
+            let mut bridge = "Cleanup"
+            let mut send = ""
+            if host.overlaps_user_code() {
+                bridge = "CleanupSend"
+                send = " + Send"
+            }
+            out.push(f"impl{declares} nikaia_std::cleanup::{bridge} for {target_name}{applied} {{\n    fn cleanup(&mut self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>>{send} + '_>> {{\n        Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({target_name}::cleanup(self){awaited}) }})\n    }}\n}}\n")
+            return
+        }
+        // **`impl Eq` and `impl Ord` are the language's** (ADR-341 D1), unless
+        // the program declares a trait of the name.
+        if has_trait && (trait_text == "Eq" || trait_text == "Ord") && !emit_item_declares_trait(world, trait_text) {
+            out.push(f"impl{declares} {target_name}{applied} {{\n")
+            for method in methods {
+                self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), target_name, null, null)
+            }
+            out.push("}\n")
+            let me = f"{target_name}{applied}"
+            if trait_text == "Eq" {
+                out.push(f"impl{declares} PartialEq for {me} {{\n    fn eq(&self, other: &Self) -> bool {{ {target_name}::eq(self, other) }}\n}}\nimpl{declares} Eq for {me} {{}}\n")
+            } else {
+                out.push(f"impl{declares} PartialOrd for {me} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{declares} Ord for {me} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {target_name}::compare(self, other) }}\n}}\n")
+            }
+            return
+        }
+        // **The methods of a type that declares map parameters take them**
+        // (ADR-010 D9): the `impl` is generic over them.
+        let hidden = host.seeds_arity(target_name)
+        if hidden > 0 {
+            for s in emit_seeds_declared(0, hidden, false) {
+                head_parts.push(s)
+            }
+            for s in emit_seeds_applied(0, hidden) {
+                target_parts.push(s)
+            }
+            declares = emit_angled(head_parts)
+            applied = emit_angled(target_parts)
+            host.place_enter(target_name, emit_seeds_applied(0, hidden))
+        }
+        // **A method narrower than the trait's declaration is the type's own,
+        // and the trait reaches it through a bridge** (ADR-288 D2, D25).
+        let mut declared_by: String? = null
+        if has_trait {
+            declared_by = trait_text.clone()
+        }
+        let mut wider: Vec[TraitMethod?] = []
+        let mut any_wider = false
+        for method in methods {
+            let w = self.emit_declared_wider(world, has_trait, trait_text, target_name, method.node)
+            if w != null {
+                any_wider = true
+            }
+            wider.push(w)
+        }
+        if any_wider {
+            let public = emit_item_public_type(world, target_name)
+            out.push(f"impl{declares} {target_name}{applied} {{\n")
+            let mut i = 0
+            for method in methods {
+                if wider[i] != null {
+                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), target_name, declared_by?.clone(), public)
+                }
+                i += 1
+            }
+            out.push("}\n")
+        }
+        if has_trait {
+            out.push(f"impl{declares} {trait_text} for {target_name}{applied} {{\n")
+        } else {
+            out.push(f"impl{declares} {target_name}{applied} {{\n")
+        }
+        let mut i = 0
+        for method in methods {
+            let w = wider[i]?.clone()
+            i += 1
+            match w {
+                null => {
+                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), target_name, declared_by?.clone(), null)
+                },
+                declared => {
+                    out.push("    ")
+                    self.emit_bridge(world, walk, out, host, declared, target_name, method.node)
+                },
+            }
+        }
+        host.place_leave()
+        out.push("}\n")
+    }
+
+    /// One method of a `trait` or an `extern` block: a signature and a `;`.
+    /// `sync` is the caller's: a trait method without the word may pause
+    /// (ADR-288 D24), a C declaration never can (ADR-302 D2). A trait's
+    /// methods are barriers (ADR-010 D9): the keyed map.
+    fn emit_trait_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: ref TraitMethod, is_sync: bool, foreign: bool) sync throws {
+        host.set_floor(true)
+        let mut params: Vec[String] = []
+        if method.receiver != null {
+            params.push(emit_item_receiver(method.receiver))
+        }
+        for arg in method.args {
+            // **`mut` lowers to `&mut T` here as it does in the impl** (ADR-094 D3).
+            let reference = if arg.mutable && !foreign { "&mut " } else { "" }
+            let mut written: String = ""
+            if foreign {
+                written = self.emit_foreign_ty(world, walk, host, arg.ty)
+            } else {
+                written = self.emit_item_ty(world, walk, host, arg.ty, EmitLifetimes::Elided)
+            }
+            // **A list the method only reads is a slice**, as it is in the impl.
+            let plain_list = !foreign && emit_text(world, arg.ty.name) == "Vec" && arg.ty.generics.len() == 1 && !arg.ty.is_nullable && !arg.ty.is_slice
+            if plain_list && written.starts_with("&Vec<") && written.ends_with(">") {
+                let element = (written.strip_prefix("&Vec<") ?? "").strip_suffix(">") ?? ""
+                written = f"&[{element}]"
+            }
+            params.push(f"{escaped_name(emit_text(world, arg.name))}: {reference}{written}")
+        }
+        // Kap 5.1: an option is an ordinary parameter here too.
+        for option in method.config {
+            params.push(f"{escaped_name(emit_text(world, option.name))}: {self.emit_item_ty(world, walk, host, option.ty, EmitLifetimes::Elided)}")
+        }
+        let returned = self.emit_trait_returned(world, walk, host, method.ret_type, foreign)
+        let mut outcome = returned.clone()
+        if method.can_throw {
+            outcome = f"Result<{returned}, Box<dyn std::error::Error>>"
+        }
+        // **A method that may pause is declared in the return-position form**
+        // (ADR-288 D26); `+ Send` follows the executor, not the type.
+        let mut ret: String = ""
+        if !is_sync {
+            let send = if host.user_parallelism() { " + Send" } else { "" }
+            ret = f" -> impl std::future::Future<Output = {outcome}>{send}"
+        } else if method.ret_type != null || method.can_throw {
+            ret = f" -> {outcome}"
+        }
+        let mut generics: Vec[String] = []
+        for g in method.generics {
+            generics.push(emit_bounded(world, g))
+        }
+        out.push(f"fn {escaped_name(emit_text(world, method.name))}{emit_angled(generics)}({params.join(", ")}){ret};\n")
+        host.set_floor(false)
+    }
+
+    /// **A type in an `extern "C"` declaration, as the pointer C wants**
+    /// (ADR-302 D5): a view or a run (ADR-184 D3, D4) is `*const T` or
+    /// `*mut T`, anything else the ordinary lowering.
+    fn emit_foreign_ty[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type) -> String sync {
+        if self.writes_a_run(world, ty) {
+            let mut element: String = "u8"
+            if ty.generics.len() > 0 {
+                element = self.emit_foreign_ty(world, walk, host, ty.generics[0])
+            }
+            return f"*{pointing(ty.is_mut)} {element}"
+        }
+        if ty.is_view {
+            let mut pointed = ty.clone()
+            pointed.is_view = false
+            pointed.is_mut = false
+            return f"*{pointing(ty.is_mut)} {self.emit_foreign_ty(world, walk, host, pointed)}"
+        }
+        return self.emit_item_ty(world, walk, host, ty, EmitLifetimes::Elided)
+    }
+
+    /// The trait's declaration of `method`, where it is wider than the method
+    /// itself (ADR-288 D2, D25): it may pause and the method's own body does
+    /// not, or it may fail and the method does not.
+    fn emit_declared_wider(ref self, world: ref EmitWorld, has_trait: bool, trait_name: ref String, target: ref String, method: ref Item) -> TraitMethod? {
+        if !has_trait {
+            return null
+        }
+        match method {
+            Item::Fn { name, can_throw, .. } => {
+                let symbol = name ?? return null
+                let text = emit_text(world, symbol)
+                let declared = emit_item_trait_method(world, trait_name, text) ?? return null
+                let pauses_less = !declared.is_sync && !call_pauses(self.own_contracts, f"{target}::{text}")
+                let fails_less = declared.can_throw && !can_throw
+                if pauses_less || fails_less {
+                    return declared
+                }
+                return null
+            },
+            else => { return null },
+        }
+    }
+
+    /// The trait's half of a bridged method: the declaration's signature and
+    /// a body that calls the type's own method, awaited where that one pauses
+    /// and wrapped in `Ok` where only the declaration fails.
+    fn emit_bridge[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, declared: ref TraitMethod, target: ref String, method: ref Item) sync throws {
+        let mut own_throws = false
+        match method {
+            Item::Fn { can_throw, .. } => { own_throws = can_throw },
+            else => {},
+        }
+        let name = emit_text(world, declared.name)
+        let mut written = EmitOut::empty()
+        self.emit_trait_method(world, walk, written, host, declared, declared.is_sync, false)
+        let trimmed = written.buf.trim_end()
+        let signature = (trimmed.strip_suffix(";") ?? trimmed).clone()
+        let mut passed: Vec[String] = []
+        if declared.receiver != null {
+            passed.push("self")
+        }
+        for a in declared.args {
+            passed.push(escaped_name(emit_text(world, a.name)))
+        }
+        for o in declared.config {
+            passed.push(escaped_name(emit_text(world, o.name)))
+        }
+        let awaited = if call_pauses(self.own_contracts, f"{target}::{name}") { ".await" } else { "" }
+        let called = f"Self::{escaped_name(name)}({passed.join(", ")}){awaited}"
+        let mut body = called.clone()
+        if declared.can_throw && !own_throws {
+            body = f"Ok({called})"
+        }
+        if !declared.is_sync {
+            body = f"async move {{ {body} }}"
+        }
+        out.push(f"{signature} {{ {body} }}\n")
+    }
+}

@@ -3,9 +3,11 @@
 
 pub(crate) fn is_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" || name == "Self" }
 
-pub fn types_this_file_declares(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+pub fn types_this_file_declares(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> { types_declared_in(&program.items, words) }
+
+pub fn types_declared_in(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for item in program.items.iter() {
+    for item in items.iter() {
         match &item.node {
             Item::Struct { name, .. } => {
                 let name = *name;

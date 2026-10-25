@@ -572,4 +572,28 @@ impl EmitHost for Emitter<'_> {
     fn skip_free_at_exit(&self) -> bool {
         self.build.skip_free_at_exit
     }
+
+    fn seeds_arity(&self, name: &str) -> i64 {
+        self.seeds.arity(name) as i64
+    }
+
+    fn place_declare_type(&self, base: i64) {
+        self.place.borrow_mut().declare_type(base as usize);
+    }
+
+    fn place_finish(&self, base: i64) -> i64 {
+        self.place.borrow_mut().finish(base as usize) as i64
+    }
+
+    fn place_enter(&self, target: &str, params: &[String]) {
+        self.place.borrow_mut().enter(target, params.to_vec());
+    }
+
+    fn place_leave(&self) {
+        self.place.borrow_mut().leave();
+    }
+
+    fn set_floor(&self, on: bool) {
+        self.floor.set(on);
+    }
 }

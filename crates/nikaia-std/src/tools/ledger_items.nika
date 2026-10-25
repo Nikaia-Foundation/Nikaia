@@ -19,8 +19,13 @@ fn is_offered(name: ref String) -> bool {
 
 /// Every type name this file declares.
 pub fn types_this_file_declares(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    return types_declared_in(program.items, words)
+}
+
+/// The same, over a file's items.
+pub fn types_declared_in(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
-    for item in program.items {
+    for item in items {
         match item.node {
             Item::Struct { name, .. } => { declared.insert(words.resolve(name).clone()) },
             Item::Enum { name, .. } => { declared.insert(words.resolve(name).clone()) },

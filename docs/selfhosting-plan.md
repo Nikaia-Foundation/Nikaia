@@ -512,3 +512,9 @@ Leaves-first slices:
    (about 3600, the host's `expr` / `stmt` / `block_*` callbacks go with it).
 5. E11-5 the template / literal-hole tables and `view_slots` / `borrowing_structs*`
    (about 350), then what is left of `with_contracts` that only feeds them.
+
+E11-1 switched: `Emitter::item` is a thin adapter over `emit_item` (`tools/emit_item.nika`,
+671 lines) that keeps only the refusal naming an unwritten item's tree; 1212 Rust lines
+removed (`item`, the trait, bridge, `Error` and `extern` writers, `MethodOf`, `function`,
+`grammar` and nine helpers only they used). The host gained `seeds_arity`, `place_*` and
+`set_floor`; `lower-std` output unchanged. Next: E11-2 (patterns).

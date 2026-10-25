@@ -36,6 +36,12 @@ pub trait EmitHost {
     fn set_main_params(&self, params: &[String]);
     fn counts_steps(&self) -> bool;
     fn skip_free_at_exit(&self) -> bool;
+    fn seeds_arity(&self, name: &str) -> i64;
+    fn place_declare_type(&self, base: i64);
+    fn place_finish(&self, base: i64) -> i64;
+    fn place_enter(&self, target: &str, params: &[String]);
+    fn place_leave(&self);
+    fn set_floor(&self, on: bool);
 }
 
 impl EmitState {

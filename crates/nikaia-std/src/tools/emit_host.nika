@@ -136,6 +136,19 @@ pub trait EmitHost {
 
     /// Whether the program leaves the memory of what dies to the system.
     fn skip_free_at_exit(ref self) -> bool sync
+    /// How many hidden map parameters a `pub` struct of this name declares
+    /// (ADR-010 D9).
+    fn seeds_arity(ref self, name: ref String) -> i64 sync
+    /// A type with hidden parameters begins at `base` in the seed place.
+    fn place_declare_type(ref self, base: i64) sync
+    /// The type begun at `base` ends: how many hidden parameters it took.
+    fn place_finish(ref self, base: i64) -> i64 sync
+    /// An `impl` of a seeded type begins: a mention of it is `Self`'s.
+    fn place_enter(ref self, target: ref String, params: ref Vec[String]) sync
+    /// The `impl` ends.
+    fn place_leave(ref self) sync
+    /// Whether a barrier's keyed map is written (ADR-010 D9).
+    fn set_floor(ref self, on: bool) sync
 }
 
 impl EmitState {
