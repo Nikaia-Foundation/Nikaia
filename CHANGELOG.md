@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1220] — 2026-10-25
+
+**EitherText for an assigned if/match, the emitter's item writer in Nikaia (#841, E11-1)**
+- A name bound to a literal and later assigned an if/match mixing a field read through a ref parameter and text of its own holds EitherText instead of NK1105 (#841).
+- E11-1: the emitter's item writer (enums, structs, impls with their bridges, traits, imports, comptimes, extern blocks) is written in Nikaia, in tools/emit_item.nika (#583).
+
 ## [0.0.1219] — 2026-10-25
 
 **let lends a field read through a ref, a let-bound function lends its parameters, NK1131 alone (#744, #839, #582, #747)**
