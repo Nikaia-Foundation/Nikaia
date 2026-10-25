@@ -110,7 +110,7 @@ fn main() throws {
     for a in cli::args() { args.push(a) }
     let mut dry = false
     let mut path: String = ""
-    for i in 1..(args.len() - 1) {
+    for i in 1..<args.len() {
         if args[i] == "--dry-run" { dry = true } else { path = args[i].clone() }
     }
     if path == "" {
