@@ -123,6 +123,16 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         for option in lowered_options(contract) {
             if option.name != *name || known { continue; }
             known = true;
+            if at < state.flow.option_values.len() as i64 && check_arguments_nullable(&option.ty) && !check_arguments_nullable(found_option) {
+                let inner = match option.ty {
+                    Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); held.clone() },
+                    _ => option.ty.clone(),
+                };
+                if found_option.fits(&inner) {
+                    state.facts.nullable_args.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)), FactWrap::Constructor);
+                    continue;
+                }
+            }
             if found_option.fits(&option.ty) { continue; }
             if at < state.flow.option_literals.len() as i64 && *nikaia_std::index::get(&state.flow.option_literals, nikaia_std::index::at(at)) && a_plain_string(&option.ty) {
                 state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));

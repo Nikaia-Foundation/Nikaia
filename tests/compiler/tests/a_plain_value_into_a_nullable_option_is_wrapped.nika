@@ -1,0 +1,14 @@
+// #847: a plain value passed to an option declared `T? = null` goes inside
+// the option, and a left-out one is `None`.
+use std::time
+
+fn pick(base: i64; extra: i64? = null, wait: time::Duration? = null) -> i64 {
+    let w = wait?.in_nanos() ?? 0
+    return base + (extra ?? 100) + w
+}
+
+fn main() {
+    println(pick(1))
+    println(pick(1; extra: 5))
+    println(pick(1; extra: 5, wait: 2.micros()))
+}

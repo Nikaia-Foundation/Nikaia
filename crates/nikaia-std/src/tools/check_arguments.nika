@@ -160,6 +160,18 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 continue
             }
             known = true
+            // **A plain value handed to a nullable option goes inside it**
+            // (Part I 2.3), as at a parameter: `Some(value)`.
+            if at < state.flow.option_values.len() && check_arguments_nullable(option.ty) && !check_arguments_nullable(found_option) {
+                let inner = match option.ty {
+                    Ty::Nullable(held) => held.clone(),
+                    else => option.ty.clone(),
+                }
+                if found_option.fits(inner) {
+                    state.facts.nullable_args.insert(state.flow.option_values[at], FactWrap::Constructor)
+                    continue
+                }
+            }
             if found_option.fits(option.ty) {
                 continue
             }

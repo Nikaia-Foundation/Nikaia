@@ -1005,9 +1005,17 @@ impl EmitState {
                 if self.facts.lent_options.contains(node_key(passed.value)) {
                     out.push("&")
                 }
+                let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(passed.value), passed.value)
+                out.push(before)
                 host.expr(walk, out, passed.value, depth, flow, scope)
+                out.push(after)
                 return
             }
+        }
+        // **A nullable option left out is `None`**, the default `null`.
+        if option.default == "null" {
+            out.push("None")
+            return
         }
         // Not passed, so the declaration's default is the value. It is a
         // literal, and Nikaia spells a literal the way the language below does

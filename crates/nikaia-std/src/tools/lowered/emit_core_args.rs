@@ -623,9 +623,16 @@ impl EmitState {
         for passed in config.iter() {
             if emit_text(world, passed.name) == option.name {
                 if self.facts.lent_options.contains(&node_key(&passed.value)) { out.push("&"); }
+                let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value), &passed.value);
+                out.push(&before);
                 host.expr(walk, out, &passed.value, depth, flow, scope)?;
+                out.push(&after);
                 return Ok(());
             }
+        }
+        if option.default == "null" {
+            out.push("None");
+            return Ok(());
         }
         if option.default.starts_with('[') && option.ty.is_a_view() {
             out.push("&vec!");
