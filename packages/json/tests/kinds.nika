@@ -1,0 +1,53 @@
+use json
+
+fn show(v: ref json::Value) -> String {
+    return match v {
+        json::Value::Null => "null"
+        json::Value::Bool(b) => f"bool({b})"
+        json::Value::Int(n) => f"int({n})"
+        json::Value::Float(x) => f"float({x})"
+        json::Value::Str(s) => f"str({s})"
+        json::Value::Array(items) => {
+            let mut out = String()
+            out.push_str("[")
+            let mut first = true
+            for item in items {
+                if !first { out.push_str(", ") }
+                first = false
+                out.push_str(show(item))
+            }
+            out.push_str("]")
+            out
+        }
+        json::Value::Object(members) => {
+            let mut out = String()
+            out.push_str("{")
+            let mut first = true
+            for m in members {
+                if !first { out.push_str(", ") }
+                first = false
+                out.push_str(f"{m.key}: {show(m.value)}")
+            }
+            out.push_str("}")
+            out
+        }
+    }
+}
+
+fn line(text: String) {
+    let v = json::parse(text) catch {
+        println(f"error {error.line}:{error.column} {error.path}: {error.message}")
+        return
+    }
+    println(show(v))
+}
+
+fn main() {
+    line("null")
+    line("true")
+    line("false")
+    line("\"text\"")
+    line("[]")
+    line("{}")
+    line("  [1, [2, [3]], {\"a\": [null]}]  ")
+}

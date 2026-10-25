@@ -76,6 +76,11 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
             }
             entry.signature = Some(signature);
         }
+        if qualified {
+            let mut fails: Vec<String> = vec![];
+            for kind in contract.fails_with.iter() { if declared.contains(kind) { fails.push(format!("{}::{}", prefix, kind)); } else { fails.push(kind.to_owned()); } }
+            entry.fails_with = fails;
+        }
         ledger.functions.insert(key_under(name, &prefix, qualified), entry);
     }
     for (name, contract) in other.types.iter() {
@@ -97,16 +102,26 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
             let mut attributes: Vec<String> = vec![];
             for attribute in contract.attributes.iter() { attributes.push(qualified_default(attribute, &prefix, &declared)); }
             entry.attributes = attributes;
-            let mut variants: Vec<VariantContract> = vec![];
-            for variant in contract.variants.iter() {
-                let mut changed = variant.clone();
+        }
+        let mut variants: Vec<VariantContract> = vec![];
+        for variant in contract.variants.iter() {
+            let mut changed = variant.clone();
+            let mut holds: Vec<FieldContract> = vec![];
+            for held in variant.holds.iter() {
+                let mut part = held.clone();
+                part.ty = qualified_ty(&held.ty, &prefix, qualified, &declared, &kept);
+                if qualified { part.default = qualified_default(&held.default, &prefix, &declared); }
+                holds.push(part);
+            }
+            changed.holds = holds;
+            if qualified {
                 let mut held: Vec<String> = vec![];
                 for attribute in variant.attributes.iter() { held.push(qualified_default(attribute, &prefix, &declared)); }
                 changed.attributes = held;
-                variants.push(changed);
             }
-            entry.variants = variants;
+            variants.push(changed);
         }
+        entry.variants = variants;
         ledger.types.insert(key_under(name, &prefix, qualified), entry);
     }
     for (trait_name, types) in other.implementations.iter() {

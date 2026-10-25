@@ -1,0 +1,12 @@
+error 1:1 $: unexpected end of text
+error 1:6 $: expected `,` or `]`
+error 1:7 $[2]: unexpected end of text
+error 1:7 $.a: unexpected end of text
+error 1:17 $.a[2]: expected `true`
+error 1:5 $.a: expected `:`
+error 1:5 $: unterminated string
+error 3:2 $[2]: unexpected character
+error 1:26 $.a.b[2].c: unexpected character
+error 1:5 $: unexpected character after the value
+error 1:4 $: expected `,` or `]`
+error 1:2 $: expected a member name

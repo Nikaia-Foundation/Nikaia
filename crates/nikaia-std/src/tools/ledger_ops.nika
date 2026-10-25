@@ -139,6 +139,20 @@ pub fn absorb_into(mut ledger: Ledger, module: ref String?, renames: ref collect
             }
             entry.signature = signature
         }
+        // **An error type the package declares is named as a caller writes
+        // it** (`lib::Fault`), or `error.line` in a `catch` is a field of a
+        // type nothing can find.
+        if qualified {
+            let mut fails: Vec[String] = []
+            for kind in contract.fails_with {
+                if declared.contains(kind) {
+                    fails.push(f"{prefix}::{kind}")
+                } else {
+                    fails.push(kind.clone())
+                }
+            }
+            entry.fails_with = fails
+        }
         ledger.functions.insert(key_under(name, prefix, qualified), entry)
     }
     for (name, contract) in other.types {
@@ -167,18 +181,33 @@ pub fn absorb_into(mut ledger: Ledger, module: ref String?, renames: ref collect
                 attributes.push(qualified_default(attribute, prefix, declared))
             }
             entry.attributes = attributes
-            let mut variants: Vec[VariantContract] = []
-            for variant in contract.variants {
-                let mut changed = variant.clone()
+        }
+        // **What a variant holds is named as a field's type is**: `Many(Vec[V])`
+        // of package `lib` is `Many(Vec[lib::V])` to a consumer, or a `show`
+        // over a `ref lib::V` is refused for the `ref V` it gets from a match.
+        let mut variants: Vec[VariantContract] = []
+        for variant in contract.variants {
+            let mut changed = variant.clone()
+            let mut holds: Vec[FieldContract] = []
+            for held in variant.holds {
+                let mut part = held.clone()
+                part.ty = qualified_ty(held.ty, prefix, qualified, declared, kept)
+                if qualified {
+                    part.default = qualified_default(held.default, prefix, declared)
+                }
+                holds.push(part)
+            }
+            changed.holds = holds
+            if qualified {
                 let mut held: Vec[String] = []
                 for attribute in variant.attributes {
                     held.push(qualified_default(attribute, prefix, declared))
                 }
                 changed.attributes = held
-                variants.push(changed)
             }
-            entry.variants = variants
+            variants.push(changed)
         }
+        entry.variants = variants
         ledger.types.insert(key_under(name, prefix, qualified), entry)
     }
     // A trait's implementations, under **both spellings, on both sides**:

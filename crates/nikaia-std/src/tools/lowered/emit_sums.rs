@@ -16,7 +16,11 @@ impl EmitState {
         }
         None
     }
-    pub fn name_of_error(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 { error_kind(&self.declared_errors, world.library, name) }
+    pub fn name_of_error(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
+        let kind = error_kind(&self.declared_errors, world.library, name);
+        if kind == 0 && name.contains("::") && self.own_contracts.types.contains_key(name) { return 1; }
+        kind
+    }
     pub fn named_error_of(&self, world: &EmitWorld<'_, '_, '_, '_>, thrown: &[String]) -> i64 {
         if thrown.len() != 1 { return 0; }
         self.name_of_error(world, nikaia_std::index::get(&thrown, 0))
