@@ -8,6 +8,18 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1217] — 2026-10-25
+
+**Some(x)/None over T? refused; list elements past a jump are views; T? slots widen (ADR-352 D5, #803, #819, #824, #827, #828)**
+- Some(x) and None are no Nikaia patterns over a T?: refused with NK2704/NK2705, the tools write x/null (ADR-352 D5).
+- A nested list literal into Vec[Vec[T?]] wraps each element in Some at any depth (#824).
+- A list element past a jump (`v[k] ?? return`) over a list of options is bound as a view, in untyped let (#819), typed let and call arguments (#827); where an own value is wanted it is refused with NK1103/NK1102 instead of rustc E0507.
+- An integer widens into a T? slot, and a match over an option of copied views binds values, not references.
+- A written-out list of texts owns them in a Vec[String?] too (#828): `let ts: Vec[String?] = ["abc"]` can be passed as ref Vec[String?].
+- A Vec[String] field read through a struct a function returned, and a list of literals lent to a ref Vec[String], own their texts (#803).
+- nikaia test runs tests/NAME.nika with .stdout/.stderr, refusals included, --bless (ADR-269 D22); a rustc failure is no refusal (#823).
+- A dependency's fn main is allowed dead code (#822); method options are keyed by the receiver's node, not the statement.
+
 ## [0.0.1216] — 2026-10-24
 
 **`String::quoted()`; `panic(..)` works in tools; methods are matched by receiver type in keeps (#804, #805, #791)**
