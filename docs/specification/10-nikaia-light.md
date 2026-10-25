@@ -569,7 +569,8 @@ in a published `String` slot that text of its own also flows into is refused wit
 word for a copy**, of text and of everything else: a copy of text is text of its
 own. `.to_owned()` is refused naming it (`NK1189`); `.to_string()` is the text
 form of a value, and the text form of text is the text itself: a view stays a
-view, and nothing is copied.
+view, and nothing is copied. On a plain text literal neither `.to_string()` nor
+`.clone()` is written: the literal is the text (`NK1301`).
 
 **`T?` lowers to the backend's `Option<T>`**, the mapping Part III 15.2 writes
 the other way round, and `null` is a reserved word (2.1) that lowers to `None`.
