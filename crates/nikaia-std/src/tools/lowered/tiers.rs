@@ -11,7 +11,7 @@ pub(crate) const CHANGES: [&str; 14] = ["push_str", "push", "insert", "insert_st
 
 pub(crate) const PUTS: [&str; 6] = ["push", "push_back", "push_front", "insert", "extend", "append"];
 
-pub(crate) const RUNS: [&str; 4] = ["Vec", "List", "VecDeque", "Deque"];
+pub(crate) const RUNS: [&str; 5] = ["Vec", "List", "VecDeque", "Deque", "Array"];
 
 pub(crate) const SETS: [&str; 3] = ["HashSet", "BTreeSet", "Set"];
 

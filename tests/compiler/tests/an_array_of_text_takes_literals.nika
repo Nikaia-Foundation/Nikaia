@@ -1,0 +1,15 @@
+fn main() {
+    let mut v: Vec[String] = ["x", "y"]
+    v[1] = "z"
+    let mut names: Array[String, 2] = ["x", "y"]
+    names[1] = "w"
+    println(f"{v[1]} {names[1]}")
+    let n = 3
+    let mut owned: Array[String, 2] = [f"a{n}", f"b{n}"]
+    owned[0] = f"c{n}"
+    println(f"{owned[0]} {owned[1]}")
+    let mut mixed: Array[String, 2] = ["lit", f"own{n}"]
+    mixed[0] = f"m{n}"
+    mixed[1] = "l"
+    println(f"{mixed[0]} {mixed[1]}")
+}

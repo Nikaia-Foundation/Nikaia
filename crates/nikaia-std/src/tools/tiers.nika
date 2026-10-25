@@ -26,7 +26,7 @@ comptime PUTS: Array[ref String, 6] = ["push", "push_back", "push_front", "inser
 
 // Containers whose element is a position: a run or a set of one, and a map
 // whose key and value are two.
-comptime RUNS: Array[ref String, 4] = ["Vec", "List", "VecDeque", "Deque"]
+comptime RUNS: Array[ref String, 5] = ["Vec", "List", "VecDeque", "Deque", "Array"]
 comptime SETS: Array[ref String, 3] = ["HashSet", "BTreeSet", "Set"]
 comptime MAPS: Array[ref String, 3] = ["HashMap", "BTreeMap", "Map"]
 
