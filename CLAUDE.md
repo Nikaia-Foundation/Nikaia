@@ -284,7 +284,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   no longer use and `target/release/nikaia-scratch` before and after a test run;
   keep `target/nikaia-project-tests`: it is the tests' Nikaia cache
   (`NIKAIA_CACHE_DIR`), and the compiler prunes it itself after each build,
-  least recently used entry first, to `NIKAIA_CACHE_LIMIT` (set `2G`);
+  least recently used entry first, to `NIKAIA_CACHE_LIMIT` (set `4G`; the default for users stays 8 GiB);
   delete it only when the disk has under 3 GB free, and run `cargo test --no-fail-fast` (it stops at
   the first failing binary otherwise).
 * **Moving a resolver or a map loop:** never compare a contract by address

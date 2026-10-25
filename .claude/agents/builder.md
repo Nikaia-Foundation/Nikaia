@@ -65,9 +65,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   Run it with `target/fast/nikaia test --both-settings --project tests/compiler` (no `it`
   rebuild). A new `#[test]` in `crates/nikaia/tests/it/` only where the check
   needs the compiler's Rust API or the lowered text.
-* **Last step, always:** `export NIKAIA_CACHE_LIMIT=2G` holds for the whole
+* **Last step, always:** `export NIKAIA_CACHE_LIMIT=4G` holds for the whole
   run (the compiler prunes `target/nikaia-project-tests` to it, least recently
-  used entry first). At the end: `d=target/nikaia-project-tests; [ $(df -m --output=avail / | tail -1) -lt 3072 ] && rm -rf $d; du -sh $d 2>/dev/null; df -h / | tail -1`, and report both figures.
+  used entry first). At the end: `d=target/nikaia-project-tests; [ $(df -m --output=avail / | tail -1) -lt 3072 ] && rm -rf $d; du -sh $d 2>/dev/null; df -h / | tail -1`, and report both figures, and the large cache entries (over 100 MB) newly created in this run: `find $d -mindepth 2 -maxdepth 2 -newer <your brief> -size +0 -type d -exec du -sm {} + | awk '$1>100'`.
 * **No `sysroot` in the touched tests** unless you changed `sysroot.rs`,
   `described.contracts` or a `.nika` of `std` itself: it re-lowers the whole
   toolchain two or three times, and the cycle's second `lower-std` with an

@@ -102,7 +102,7 @@ rules above bring in the *Runs* table, then decide on more agents at once.
   builders get those steps, not the research.
 * **Builds are shared.** Delete `target/release/nikaia-scratch` after each test run;
   keep `target/nikaia-project-tests` (the compiler prunes it to
-  `NIKAIA_CACHE_LIMIT`) unless the disk has under 3 GB free; no two full test runs
+  `NIKAIA_CACHE_LIMIT`, set `4G`) unless the disk has under 3 GB free; no two full test runs
   at once (disk, and the same machine).
 * **Check the cost while it runs.** The orchestrator looks at an agent's
   transcript size: past about 150 turns or 250 k context the agent is told to

@@ -56,6 +56,7 @@ The builder writes its report to `<brief>.report.md`, these fields only:
     Found: none | <one sentence, issue number if filed>
     Needs: none | <NK code, owner decision, help from main session>
     Changelog: none | <one sentence for the version heading>
+    Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
 
 Its final answer to the main session is one line: `done <sha>, report <path>`,
