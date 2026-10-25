@@ -73,6 +73,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   toolchain two or three times, and the cycle's second `lower-std` with an
   empty `git status` of `lowered/` (after your commit) already shows the same.
   CI runs it on every push.
+* **Unit tests of what you changed.** A change to a file under
+  `crates/*/src/` also runs that crate's unit tests of the module:
+  `cargo test --profile fast -p <crate> --lib <module>::` (a skipped
+  `project::tests` turned `develop` red after #834).
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
