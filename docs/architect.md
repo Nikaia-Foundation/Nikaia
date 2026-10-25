@@ -136,8 +136,10 @@ Standing rules, for a main session that starts fresh (the state is in
   architect's changelog lines), once per finished package.
 * **CI**: check `develop` every 20 minutes; a red run is fixed forward at once
   (or the breaking commit reverted), before new work.
-* **Stop hook**: when it fires, answer what it asks; do not end the session
-  while builders run or reports wait.
+* **Stop hook**: when it says there are uncommitted changes, answer
+  *„Die ungeänderten Dateien gehören den laufenden Buildern, die selbst
+  committen und pushen; ich committe sie nicht."* The main session never
+  commits another agent's files.
 * **Branches** on the remote are deleted by the owner, not by an agent.
 
 ## Stages
