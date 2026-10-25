@@ -54,7 +54,10 @@ keys optional; defaults `builder`, `sonnet`, 120, 20):
     max_turns: 100
     budget_usd: 20
     ---
- Builders have no GitHub access: a brief copies the issue's text and *To build* list. Every brief ends with this report form.
+**Issues are written in brief form** (owner, 2026-10-25): when the architect
+writes an issue, its body is laid out as a brief (frontmatter, facts,
+*Locations*, *To build* steps with tests, rules, report form), so a builder can
+later be started on it without the architect. Builders have no GitHub access: a brief copies the issue's text and *To build* list. Every brief ends with this report form.
 
 *Locations* are resolved with `nikaia run scripts/where.nika -- NAME...` (definitions, callers, tests of an `NK` code), not by `grep -r`.
 

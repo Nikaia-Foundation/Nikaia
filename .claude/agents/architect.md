@@ -33,6 +33,8 @@ holds the repository rules; `docs/tokensaverstrategy.md` the cost rules.
 ## Workflow experiment: briefs (owner, 2026-10-25)
 
 * Choose the next open topic yourself: develop green first, then bugs, then self-hosting.
+* Write an issue in brief form (`docs/architect.md`, *Briefs and reports*), so a builder
+  can later start on it without you.
 * Write ONE brief per builder to the scratchpad `briefs/<topic>.md` (or the repo-external
   dir the main session names). It holds everything the builder needs: the CLAUDE.md rules
   that apply; disk rule (delete own clone's `target/`, report GB freed, at most two clones
