@@ -142,6 +142,11 @@ Standing rules, for a main session that starts fresh (the state is in
   committen und pushen; ich committe sie nicht."* The main session never
   commits another agent's files.
 * **Branches** on the remote are deleted by the owner, not by an agent.
+* **Architect restart** (owner, 2026-10-25): at every architect hand-back the
+  main session reads the harness token figure; at about 150k context or about
+  80 turns the next architect is started fresh, never resumed with
+  SendMessage. Its state is in the repository: this file, `priorities.md`,
+  the briefs, the issues.
 
 ## Stages
 
