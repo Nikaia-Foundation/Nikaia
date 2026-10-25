@@ -10,7 +10,8 @@
 // `claude -p` within 90 minutes, writes BRIEF.run.json, appends the cost to
 // DIR/tokens.txt (through `batch.nika --tokens`) and DIR/cost.txt, and prints
 // `done <sha8> report <path> cost <usd> turns <n>`. A failed run writes
-// DIR/ESCALATE (one line) and exits 2. `--dry-run` prints the command only.
+// DIR/ESCALATE (one line) and exits 2. A report with `Gate: red ...` writes
+// DIR/RED (empty again after a green one); a second red in a row escalates. `--dry-run` prints the command only.
 
 use std::cli
 use std::fs
@@ -92,6 +93,14 @@ fn agent_escalate(dir: String, why: String) throws {
     fs::write(f"{dir}/ESCALATE", fs::Root::Anywhere, why.clone() + "\n")
     println(f"ESCALATE {why}")
     process::exit(2)
+}
+
+// The report's `Gate: red ...` line, or "" (green, or no Gate line).
+fn agent_gate(report: String) -> String throws {
+    for line in agent_read(report).split("\n") {
+        if line.trim().starts_with("Gate: red") { return line.trim().clone() }
+    }
+    return ""
 }
 
 fn agent_exe() -> String throws {
@@ -176,6 +185,14 @@ fn main() throws {
     if reason != "completed" { agent_escalate(dir.clone(), f"terminal_reason {reason}") }
     if !fs::exists(report.clone(), fs::Root::Anywhere) { agent_escalate(dir.clone(), f"no report {report}") }
     if session != wanted { agent_escalate(dir.clone(), f"session_id {session} differs from {wanted}") }
+    let gate = agent_gate(report.clone())
+    let before = agent_read(f"{dir}/RED").trim().clone()
+    if gate == "" {
+        fs::write(f"{dir}/RED", fs::Root::Anywhere, "")
+    } else {
+        fs::write(f"{dir}/RED", fs::Root::Anywhere, f"{abs}: {gate}\n")
+        if before != "" { agent_escalate(dir.clone(), f"two red gates in a row: {before} / {abs}: {gate}") }
+    }
     let sha = process::run("git", ["rev-parse", "--short=8", "HEAD"]).stdout.trim().clone()
     println(f"done {sha} report {report} cost {cost} turns {turns}")
 }
