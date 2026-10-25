@@ -235,8 +235,6 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * a `T?` local needs `?.clone()` (NK1125);
   * a `ref String?` parameter does not accept a bare `String` argument: pass a `String?` local;
   * `for mut x in v` is not accepted;
-  * a reserved word (`grammar`, `throws`) as a parameter name gives
-    *Expected `)`* (#799): rename it.
   * the catch-all arm of a `match` is `else =>`; `_ =>` and `None =>` are refused;
   * a `String?` field needs `x?.clone()` before it can be matched;
   * calls to other tools files are unqualified (one global namespace);

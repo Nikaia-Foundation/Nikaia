@@ -410,9 +410,18 @@ pub fn a_parse_error(error: ref Failure, source: ref String, stops_at: fn(ref St
     }
     let mut notes: Vec[String] = []
     let said_word = error.found.clone()
+    // A reserved word where a name was wanted is the headline (#799): what the
+    // parser expected instead says nothing to someone who wrote a name, so it
+    // becomes the note, and the help names a spelling that is free.
     let reserved = reserved_word_note(error.has_found, error.found, c, at, stops_at)
     if reserved != null {
-        notes.push(reserved ?? "")
+        if error.has_message {
+            notes.push(reserved ?? "")
+        } else {
+            notes.push(message.clone())
+            message = (reserved ?? "").clone()
+            help = f"Choose another name, such as `{said_word}_`."
+        }
     }
     let lambda = an_effect_on_a_lambda_note(said_word, before)
     if lambda != null {

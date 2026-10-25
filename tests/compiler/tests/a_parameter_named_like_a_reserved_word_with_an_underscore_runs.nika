@@ -1,0 +1,7 @@
+fn f(grammar_: i64) -> i64 sync {
+    return grammar_
+}
+
+fn main() {
+    println(f"{f(1)}")
+}

@@ -247,7 +247,13 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
     let mut notes: Vec<String> = vec![];
     let said_word = error.found.to_owned();
     let reserved = reserved_word_note(error.has_found, &error.found, &c, at, stops_at);
-    if reserved.is_some() { notes.push(nikaia_std::index::or(reserved, || "".into())); }
+    if reserved.is_some() {
+        if error.has_message { notes.push(nikaia_std::index::or(reserved, || "".into())); } else {
+            notes.push(message.to_owned());
+            message = nikaia_std::index::or(reserved.as_deref(), || "").to_owned();
+            help = Some(format!("Choose another name, such as `{}_`.", said_word));
+        }
+    }
     let lambda = an_effect_on_a_lambda_note(&said_word, &before);
     if lambda.is_some() { notes.push(nikaia_std::index::or(lambda, || "".into())); }
     let ref_note = the_spelling_ref_replaced_note(&said_word);
