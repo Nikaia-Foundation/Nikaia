@@ -79,6 +79,8 @@ impl CheckState {
             param = "prefix"
         } else if key == "str::strip_suffix" {
             param = "suffix"
+        } else if key == "str::split" || key == "str::rsplit" || key == "str::split_once" || key == "str::rsplit_once" || key == "str::matches" || key == "str::trim_start_matches" || key == "str::trim_end_matches" {
+            param = "sep"
         } else {
             return
         }

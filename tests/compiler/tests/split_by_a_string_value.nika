@@ -1,0 +1,15 @@
+fn pieces(line: String, sep: String) {
+    for p in line.split(sep) { println(p) }
+}
+
+fn main() {
+    let name = "f"
+    let line = "a f(x) b"
+    let sep = name + "("
+    for p in line.split(sep.clone()) { println(p) }
+    for q in line.split(name + "(") { println(q) }
+    pieces(line, sep)
+    let (head, tail) = line.split_once(sep.clone()) ?? ("", "")
+    println(head)
+    println(tail)
+}

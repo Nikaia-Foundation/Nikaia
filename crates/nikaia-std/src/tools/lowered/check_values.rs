@@ -40,7 +40,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
         let mut param: &'static str = "";
-        if key == "str::starts_with" { param = "prefix"; } else if key == "str::ends_with" { param = "suffix"; } else if key == "str::contains" { param = "part"; } else if key == "str::strip_prefix" { param = "prefix"; } else if key == "str::strip_suffix" { param = "suffix"; } else { return; }
+        if key == "str::starts_with" { param = "prefix"; } else if key == "str::ends_with" { param = "suffix"; } else if key == "str::contains" { param = "part"; } else if key == "str::strip_prefix" { param = "prefix"; } else if key == "str::strip_suffix" { param = "suffix"; } else if key == "str::split" || key == "str::rsplit" || key == "str::split_once" || key == "str::rsplit_once" || key == "str::matches" || key == "str::trim_start_matches" || key == "str::trim_end_matches" { param = "sep"; } else { return; }
         if found.is_empty() { return; }
         let a_list = match nikaia_std::index::get(&found, 0) {
             Ty::Named { name, .. } => name == "Vec" || name == "Array",
