@@ -390,14 +390,14 @@ rows.
 | Rust, `scan.rs`, `x86-64` | 31.3 | 0.12 |
 | Nikaia, `scan.nika`, `x86-64` | 38.2 | 0.26 |
 | Rust, `scan.rs`, `x86-64-v3` | 29.4 | 0.01 |
-| Nikaia, `scan.nika`, `x86-64-v3` | 115.0 | 0.26 |
+| Nikaia, `scan.nika`, `x86-64-v3` | 34.2 | 0.26 |
 
-Nikaia 0.0.1185; the Rust rows are from an earlier count of the same
-program. `scan.nika` takes `find_all`'s default, `Scan::ByBlock`. Its set is
-held in a variable, and at `x86-64-v3` that costs about 400 instructions a
-block: LLVM splits each half block's mask into single bits on the stack
-([#780](https://github.com/Nikaia-Foundation/Nikaia/issues/780)). The same
-set written at `find_all` counts 36.7 at `x86-64` and 32.2 at `x86-64-v3`.
+The Nikaia rows are counted on the commit that fixes
+[#780](https://github.com/Nikaia-Foundation/Nikaia/issues/780); the Rust rows
+are from an earlier count of the same program. `scan.nika` takes
+`find_all`'s default, `Scan::ByBlock`. Its set is held in a variable, so each
+block looks up the set's way; the same set written at `find_all` counted 36.7
+at `x86-64` and 32.2 at `x86-64-v3` (Nikaia 0.0.1185).
 
 Per separator `find_all`'s `next` is a `tzcnt`, an add, the lowest bit cleared
 and the loop's test; per 64-byte block one length test, the set's kind (a

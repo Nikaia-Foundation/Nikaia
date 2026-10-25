@@ -97,12 +97,13 @@ impl ByteSet {
     /// nothing (a search never reads for it).
     #[inline(always)]
     fn mask<const L: usize>(&self, block: &[u8; L]) -> u64 {
-        match self.way {
-            Way::One => byte_blocks::any_of(block, [self.few[0]]),
-            Way::Two => byte_blocks::any_of(block, [self.few[0], self.few[1]]),
-            Way::Three => byte_blocks::any_of(block, self.few),
-            Way::Empty | Way::Table => byte_blocks::in_tables(block, &self.tables),
-        }
+        let n = match self.way {
+            Way::One => 1,
+            Way::Two => 2,
+            Way::Three => 3,
+            Way::Empty | Way::Table => 0,
+        };
+        byte_blocks::few_or_tables(block, self.few, n, &self.tables)
     }
 
     /// The mask of the last, short block: off the hot loop, so that the copy

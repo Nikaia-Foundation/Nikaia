@@ -113,6 +113,32 @@ pub fn any_of<const L: usize, const N: usize>(block: &[u8; L], few: [u8; N]) -> 
     return by_words(block, few);
 }
 
+/// **The bytes of `block` in a set held at run time**: the first `n` of
+/// `few` compared directly where `n` is one to three, else the set `tables`
+/// holds. One function for every way, so that under AVX2 the way is chosen
+/// per 32-byte part and one `vpmovmskb` makes the mask: with a mask made in
+/// each way and the ways joined after, LLVM joined them as vectors of single
+/// bits and spilled the mask bit by bit (#780).
+#[inline(always)]
+pub fn few_or_tables<const L: usize>(
+    block: &[u8; L],
+    few: [u8; 3],
+    n: usize,
+    tables: &Tables,
+) -> u64 {
+    const { assert!(L == BLOCK || L == HALF) };
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    // SAFETY: the build enables AVX2 for every function (`cfg`).
+    return unsafe { avx2::few_or_tables(block, few, n, tables) };
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    match n {
+        1 => any_of(block, [few[0]]),
+        2 => any_of(block, [few[0], few[1]]),
+        3 => any_of(block, few),
+        _ => in_tables(block, tables),
+    }
+}
+
 /// **The bytes of `lanes` whose top bit is set**: bit `i` where `lanes[i]`
 /// is at least 128, as a vector compare leaves a lane that holds. `L` is 16,
 /// 32 or 64.
@@ -254,6 +280,53 @@ mod avx2 {
         _mm256_broadcastsi128_si256(unsafe { _mm_loadu_si128(t.as_ptr().cast::<__m128i>()) })
     }
 
+    /// [`super::few_or_tables`]: the bytes in the set, a byte of all ones
+    /// each, chosen per part, then one mask.
+    #[inline]
+    #[target_feature(enable = "avx2")]
+    pub(super) fn few_or_tables<const L: usize>(
+        block: &[u8; L],
+        few: [u8; 3],
+        n: usize,
+        tables: &Tables,
+    ) -> u64 {
+        let splat = few.map(|m| _mm256_set1_epi8(m as i8));
+        let nibble = _mm256_set1_epi8(0x0f);
+        bits(block, |v| match n {
+            1 => _mm256_cmpeq_epi8(v, splat[0]),
+            2 => _mm256_or_si256(
+                _mm256_cmpeq_epi8(v, splat[0]),
+                _mm256_cmpeq_epi8(v, splat[1]),
+            ),
+            3 => _mm256_or_si256(
+                _mm256_or_si256(
+                    _mm256_cmpeq_epi8(v, splat[0]),
+                    _mm256_cmpeq_epi8(v, splat[1]),
+                ),
+                _mm256_cmpeq_epi8(v, splat[2]),
+            ),
+            _ => {
+                let lo = _mm256_and_si256(v, nibble);
+                let hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), nibble);
+                let pair = |p: usize| {
+                    _mm256_and_si256(
+                        _mm256_shuffle_epi8(table(&tables.low[p]), lo),
+                        _mm256_shuffle_epi8(table(&tables.high[p]), hi),
+                    )
+                };
+                let mut hits = pair(0);
+                if tables.two {
+                    hits = _mm256_or_si256(hits, pair(1));
+                }
+                // Outside the set where no table bit is left; inverted.
+                _mm256_xor_si256(
+                    _mm256_cmpeq_epi8(hits, _mm256_setzero_si256()),
+                    _mm256_set1_epi8(-1),
+                )
+            }
+        })
+    }
+
     #[inline]
     #[target_feature(enable = "avx2")]
     pub(super) fn tables<const L: usize>(block: &[u8; L], tables: &Tables) -> u64 {
@@ -338,7 +411,9 @@ mod sse2 {
 
 #[cfg(test)]
 mod tests {
-    use super::{BLOCK, HALF, Tables, any_of, by_map, by_words, high_bits, in_tables};
+    use super::{
+        BLOCK, HALF, Tables, any_of, by_map, by_words, few_or_tables, high_bits, in_tables,
+    };
 
     fn block(seed: &mut u64) -> [u8; BLOCK] {
         let mut out = [0u8; BLOCK];
@@ -420,7 +495,20 @@ mod tests {
                     assert_eq!(by_words(&b, one), any_of(&b, one));
                     assert_eq!(any_of(&b, two), by_map(&b, &Tables::new(map_of(&two))));
                     assert_eq!(by_words(&b, two), any_of(&b, two));
+                    let three = [few[0], few[1], few[2]];
+                    assert_eq!(few_or_tables(&b, three, 3, &tables), want);
+                    let t1 = Tables::new(map_of(&one));
+                    assert_eq!(few_or_tables(&b, three, 1, &t1), any_of(&b, one));
+                    assert_eq!(
+                        few_or_tables(&b, [two[0], two[1], 0], 2, &tables),
+                        any_of(&b, two)
+                    );
                 }
+                // With no member compared directly, the tables answer.
+                let want = in_tables(&b, &tables);
+                assert_eq!(few_or_tables(&b, [0; 3], 0, &tables), want, "{members:?}");
+                let half = b.first_chunk::<HALF>().unwrap();
+                assert_eq!(few_or_tables(half, [0; 3], 0, &tables), want & 0xFFFF_FFFF);
             }
         }
         for few in [[0u8, 0x80, 0xFF], *b";\n\n", [7, 7, 7]] {
