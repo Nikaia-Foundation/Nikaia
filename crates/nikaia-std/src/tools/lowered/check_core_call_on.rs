@@ -561,6 +561,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         check_core_call_on_reached(state, Some("fs::Path::text_of".to_owned()));
     } else { check_core_call_on_reached(state, Some(key.to_owned())); }
     state.flow.last_resolved = Some(key.to_owned());
+    if contract.mutates { state.facts.mut_receivers.insert(node); }
     if state.flow.receiver_name.is_some() {
         let changed: String = nikaia_std::index::or(match state.flow.receiver_name.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),

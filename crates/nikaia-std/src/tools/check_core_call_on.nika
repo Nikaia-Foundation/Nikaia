@@ -718,6 +718,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         check_core_call_on_reached(state, key.clone())
     }
     state.flow.last_resolved = key.clone()
+    if contract.mutates {
+        state.facts.mut_receivers.insert(node)
+    }
     // **A receiver the method changes or takes is not only read.**
     if state.flow.receiver_name != null {
         let changed: String = state.flow.receiver_name?.clone() ?? ""

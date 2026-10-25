@@ -146,6 +146,13 @@ impl CheckState {
                     return true
                 }
             }
+            // **A borrowed `self` is the reference already** (#787): lent on
+            // again (`&mut *self`), not copied out.
+            if self.borrowing_self && check_references_is_self(world, given_expr) && unviewed_type(found).fits(want) {
+                self.facts.mut_args.insert(id_of(given_expr) as i64)
+                self.facts.reborrowed_args.insert(id_of(given_expr) as i64)
+                return true
+            }
             // **The `&mut` is the compiler's, the type is still the
             // argument's.**
             if !(found.fits(want) || self.fits_through_deref(world, found, want)) {
@@ -388,5 +395,13 @@ impl CheckState {
             }
             else => false,
         }
+    }
+}
+
+/// Whether `expr` is the receiver `self` written as it is.
+fn check_references_is_self(world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Variable(symbol, _) => world.words.resolve(symbol) == "self",
+        else => false,
     }
 }

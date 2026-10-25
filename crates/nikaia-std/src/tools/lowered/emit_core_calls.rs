@@ -553,7 +553,10 @@ impl EmitState {
         hoisted
     }
     pub(crate) fn emit_lends_mut(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
-        for each in visited_in_expr(expr) { if self.facts.mut_args.contains(&node_key(each)) && nikaia_std::index::or(root_of(world.words, each), || "".into()) == name { return true; } }
+        for each in visited_in_expr(expr) {
+            let lent = self.facts.mut_args.contains(&node_key(each)) || self.facts.mut_receivers.contains(&node_key(each));
+            if lent && nikaia_std::index::or(root_of(world.words, each), || "".into()) == name { return true; }
+        }
         false
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

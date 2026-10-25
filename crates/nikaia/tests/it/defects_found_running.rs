@@ -935,6 +935,57 @@ fn a_method_receiver_lent_again_in_an_argument() {
     );
 }
 
+/// **`self` handed to a `mut` parameter is lent again** (#787): `g(self, 7)`
+/// inside a `ref mut self` method is `&mut *self`, not a copy `*self`.
+#[test]
+fn a_borrowed_self_handed_to_a_mut_parameter() {
+    runs_in(
+        "borrowed-self-to-mut",
+        "struct W { n: i64 }\n\
+         fn g(mut w: W, k: i64) -> i64 {\n\
+         \x20   w.n = w.n * 10 + k\n\
+         \x20   return w.n\n\
+         }\n\
+         impl W {\n\
+         \x20   fn put(ref mut self, a: i64, b: i64, c: i64) { self.n = self.n * 100 + a + b + c }\n\
+         \x20   fn again(ref mut self) { self.put(0, g(self, 7), 0) }\n\
+         \x20   fn twice(ref mut self) -> i64 { return g(self, 2) }\n\
+         }\n\
+         fn main() {\n\
+         \x20   let mut w = W { n: 1 }\n\
+         \x20   w.again()\n\
+         \x20   println(f\"{w.n}\")\n\
+         \x20   println(f\"{w.twice()}\")\n\
+         }\n",
+        "1717\n17172\n",
+        |_| {},
+    );
+}
+
+/// **A `ref mut self` call in an argument of another on the same receiver**
+/// (#787): `w.add(w.next())` binds the argument first.
+#[test]
+fn a_mut_receiver_called_in_an_argument_of_its_own_method() {
+    runs_in(
+        "mut-receiver-in-argument",
+        "struct W { n: i64 }\n\
+         impl W {\n\
+         \x20   fn next(ref mut self) -> i64 {\n\
+         \x20       self.n = self.n + 1\n\
+         \x20       return self.n\n\
+         \x20   }\n\
+         \x20   fn add(ref mut self, k: i64) { self.n = self.n + k }\n\
+         }\n\
+         fn main() {\n\
+         \x20   let mut w = W { n: 1 }\n\
+         \x20   w.add(w.next())\n\
+         \x20   println(f\"{w.n}\")\n\
+         }\n",
+        "4\n",
+        |_| {},
+    );
+}
+
 /// **`?? []` beside a list view is a view** (#812): `f.value?.parts ?? []` is
 /// the list's slice or a static empty one, never a refused `Vec[?]` and never
 /// a borrowed temporary; an owned `Vec[T]? ?? []` still builds a `Vec`.

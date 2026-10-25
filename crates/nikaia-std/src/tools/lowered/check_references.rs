@@ -104,6 +104,11 @@ impl CheckState {
                     return true;
                 }
             }
+            if self.borrowing_self && check_references_is_self(world, given_expr) && unviewed_type(found).fits(want) {
+                self.facts.mut_args.insert(id_of(given_expr) as i64);
+                self.facts.reborrowed_args.insert(id_of(given_expr) as i64);
+                return true;
+            }
             if !(found.fits(want) || self.fits_through_deref(world, found, want)) { return false; }
             if self.a_name_that_changes(world, given_expr) { return true; }
             let root: Option<String> = self.rooted_at(world, given_expr);
@@ -247,6 +252,15 @@ impl CheckState {
             },
             _ => false,
         }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_references_is_self(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    match expr {
+        Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol) == "self" },
+        _ => false,
     }
 }
 

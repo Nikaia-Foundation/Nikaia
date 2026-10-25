@@ -296,6 +296,9 @@ pub struct CheckFacts {
     pub reaches: collections::BTreeMap[(String, String), CallReach],
     pub published: collections::BTreeMap[String, Published],
     pub mut_args: collections::BTreeSet[i64],
+    /// **The receivers of methods written `ref mut self`** (#787), by the
+    /// receiver's node: a call there lends its root as a `mut` argument does.
+    pub mut_receivers: collections::BTreeSet[i64],
     /// The binding each argument of `mut_args` names, by the argument's node.
     pub mut_arg_bindings: collections::BTreeMap[i64, i64],
     /// **A `mut` argument that is a reference already** (#703): a part an
@@ -490,6 +493,7 @@ impl CheckFacts {
             reaches: collections::BTreeMap(),
             published: collections::BTreeMap(),
             mut_args: collections::BTreeSet(),
+            mut_receivers: collections::BTreeSet(),
             mut_arg_bindings: collections::BTreeMap(),
             reborrowed_args: collections::BTreeSet(),
             copied_args: collections::BTreeSet(),
