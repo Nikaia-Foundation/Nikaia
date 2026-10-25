@@ -39,6 +39,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   whole probe matrix: every case the step must handle (own field, getter of
   a getter, `std` methods, the example programs the issue names). Then
   implement all of them and build once. Catch slips without a build:
+  A stricter check refuses old code in `tools/*.nika` and blocks `lower-std`:
+  fix that `.nika` code first (the old binary's `lower-std` still runs), then
+  build the new binary and run its `lower-std` once; do not reset the lowered
+  files and rebuild in a loop.
   `lower-std` with the binary you already have reports every refusal in the
   `.nika` files in seconds, and `cargo check --release -p nikaia
   --message-format short` reports the Rust errors in under a minute. After
