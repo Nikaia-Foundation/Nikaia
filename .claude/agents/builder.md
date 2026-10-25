@@ -82,6 +82,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
 * **Scripts in files**, in your scratchpad subdirectory; call them, do not
   repeat long inline commands.
+* **Probes and scripts go in `<scratchpad>/<brief name>/`**, a directory
+  you create; never write into another directory of the scratchpad (one builder
+  overwrote another's `p/src/main.nika`).
 * **Think briefly on mechanical work.** Where a design choice is open that
   the task and the records do not settle, stop and report it instead of
   guessing.

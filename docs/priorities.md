@@ -46,6 +46,8 @@ which past run), area`; on a departure from bugs-first, the figures.
 | Ticket | S | O (M) | C (M) | Order |
 | :--- | :--- | :--- | :--- | :--- |
 | #837 | done 02c9b5f5 | | | |
+| #753, #780, #838, #744 | done 761a7b93, 2f4775ef, f719c5ee, 153cf532 | | | |
+| #839 rest of #744 (plain let, assignment: NK2106 against Part I 6.5) | 3 | 1 | 6 | 1 |
 | #753 --cpu dropped under RUSTFLAGS (owner: native builds) | 3 | 1 | 4 | 1 |
 | #780 ByteSet in a variable, 115 vs 32 a row at v3 | 3 | 0.5 | 10 | 2 |
 | #838 | 2 | 0.5 | 3 | 3 |
