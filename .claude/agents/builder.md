@@ -67,6 +67,11 @@ You build one small slice of an issue in the Nikaia repository and end.
   needs the compiler's Rust API or the lowered text.
 * **Last step, always:** `d=target/nikaia-project-tests; [ -d $d ] && [ $(du -sm $d | cut -f1) -gt 2048 -o $(df -m --output=avail / | tail -1) -lt 3072 ] && rm -rf $d; du -sh $d 2>/dev/null; df -h / | tail -1`
   and report both figures.
+* **No `sysroot` in the touched tests** unless you changed `sysroot.rs`,
+  `described.contracts` or a `.nika` of `std` itself: it re-lowers the whole
+  toolchain two or three times, and the cycle's second `lower-std` with an
+  empty `git status` of `lowered/` (after your commit) already shows the same.
+  CI runs it on every push.
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
