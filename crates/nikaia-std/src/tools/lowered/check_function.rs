@@ -102,16 +102,43 @@ pub fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body
     out
 }
 
-pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_function_ends_in(expr: &Expr, grows: bool) -> bool {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => check_function_block_ends_in(then_branch, grows) || match else_branch {
+            Some(other) => check_function_block_ends_in(other, grows),
+            None => false,
+        },
+        Expr::Match { arms, .. } => check_function_arms_end_in(arms, grows),
+        Expr::Block(block, _) => check_function_block_ends_in(block, grows),
+        Expr::Field { .. } => !grows,
+        _ => grows && check_function_grows(None, expr),
+    }
+}
+
+pub(crate) fn check_function_arms_end_in(arms: &[MatchArm], grows: bool) -> bool {
+    for arm in arms.iter() { if check_function_ends_in(&arm.body, grows) { return true; } }
+    false
+}
+
+pub(crate) fn check_function_block_ends_in(block: &Block, grows: bool) -> bool {
+    if block.stmts.is_empty() { return false; }
+    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    match &last.node {
+        Stmt::Expr(value) => check_function_ends_in(value, grows),
+        _ => false,
+    }
+}
+
+pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>, both: &mut collections::BTreeSet<String>) {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Assign { target, op, value } => {
                 match target {
                     Expr::Variable(name, _) => {
                         let name = *name;
-                        match value {
-                            Expr::Field { .. } => { if op.is_none() { out.insert(here.text(name)); } },
-                            _ => { },
+                        if op.is_none() && check_function_ends_in(value, false) {
+                            out.insert(here.text(name));
+                            if check_function_ends_in(value, true) { both.insert(here.text(name)); }
                         }
                     },
                     _ => { },
@@ -119,15 +146,16 @@ pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_
             },
             _ => { },
         }
-        for inner in check_visit_stmt_blocks(&stmt.node) { check_function_fielded_in(here, inner, out); }
+        for inner in check_visit_stmt_blocks(&stmt.node) { check_function_fielded_in(here, inner, out, both); }
     }
 }
 
 pub fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut fielded: collections::BTreeSet<String> = collections::BTreeSet::new();
-    check_function_fielded_in(here, body, &mut fielded);
+    let mut both: collections::BTreeSet<String> = collections::BTreeSet::new();
+    check_function_fielded_in(here, body, &mut fielded, &mut both);
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for name in fielded.iter() { if grown.contains(name) { out.insert(name.to_owned()); } }
+    for name in fielded.iter() { if grown.contains(name) || both.contains(name) { out.insert(name.to_owned()); } }
     out
 }
 

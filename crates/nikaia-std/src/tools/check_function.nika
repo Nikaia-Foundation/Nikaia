@@ -149,19 +149,53 @@ pub fn check_function_grown_text(here: ref ParsedView, body: ref Block) -> colle
     return out
 }
 
-fn check_function_fielded_in(here: ref ParsedView, block: ref Block, mut out: collections::BTreeSet[String]) {
+/// Whether an `if`, a `match` or a block ends, on some path, in a field read
+/// (`grows` false) or in a value that can only be text of its own (`grows`).
+fn check_function_ends_in(expr: ref Expr, grows: bool) -> bool {
+    return match expr {
+        Expr::If { then_branch, else_branch, .. } => check_function_block_ends_in(then_branch, grows) || match else_branch {
+            other => check_function_block_ends_in(other, grows),
+            null => false,
+        },
+        Expr::Match { arms, .. } => check_function_arms_end_in(arms, grows),
+        Expr::Block(block, _) => check_function_block_ends_in(block, grows),
+        Expr::Field { .. } => !grows,
+        else => grows && check_function_grows(null, expr),
+    }
+}
+
+fn check_function_arms_end_in(arms: ref Vec[MatchArm], grows: bool) -> bool {
+    for arm in arms {
+        if check_function_ends_in(arm.body, grows) {
+            return true
+        }
+    }
+    return false
+}
+
+fn check_function_block_ends_in(block: ref Block, grows: bool) -> bool {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    let last = block.stmts[block.stmts.len() - 1]
+    return match last.node {
+        Stmt::Expr(value) => check_function_ends_in(value, grows),
+        else => false,
+    }
+}
+
+fn check_function_fielded_in(here: ref ParsedView, block: ref Block, mut out: collections::BTreeSet[String], mut both: collections::BTreeSet[String]) {
     for stmt in block.stmts {
         match stmt.node {
             Stmt::Assign { target, op, value } => {
                 match target {
                     Expr::Variable(name, _) => {
-                        match value {
-                            Expr::Field { .. } => {
-                                if op == null {
-                                    out.insert(here.text(name))
-                                }
-                            },
-                            else => {},
+                        if op == null && check_function_ends_in(value, false) {
+                            out.insert(here.text(name))
+                            // **One value that reads a field on one path and builds text on another** (#841).
+                            if check_function_ends_in(value, true) {
+                                both.insert(here.text(name))
+                            }
                         }
                     },
                     else => {},
@@ -170,19 +204,21 @@ fn check_function_fielded_in(here: ref ParsedView, block: ref Block, mut out: co
             else => {},
         }
         for inner in check_visit_stmt_blocks(stmt.node) {
-            check_function_fielded_in(here, inner, out)
+            check_function_fielded_in(here, inner, out, both)
         }
     }
 }
 
 /// **The names a body gives text of its own and a field read** (ADR-282 D13,
-/// #840): `x = h.name` beside `x = f"…"`. Syntactic, as `grown_text` is.
+/// #840, #841): `x = h.name` beside `x = f"…"`, or an `if` or `match` with both.
+/// Syntactic, as `grown_text` is.
 pub fn check_function_mixed_text(here: ref ParsedView, body: ref Block, grown: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
     let mut fielded: collections::BTreeSet[String] = collections::BTreeSet()
-    check_function_fielded_in(here, body, fielded)
+    let mut both: collections::BTreeSet[String] = collections::BTreeSet()
+    check_function_fielded_in(here, body, fielded, both)
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     for name in fielded {
-        if grown.contains(name) {
+        if grown.contains(name) || both.contains(name) {
             out.insert(name.clone())
         }
     }

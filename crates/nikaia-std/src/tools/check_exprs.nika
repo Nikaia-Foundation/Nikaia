@@ -299,6 +299,18 @@ impl CheckState {
         if local.literal == null || !local.ty.is_a_view() {
             return false
         }
+        if is_a_choice(value) {
+            // **Arms that read a field through a `ref` parameter are lent, each leaf wrapped on its own** (#841).
+            let text = a_string_type()
+            for leaf in self.value_leaves(world, value) {
+                if (self.arm_type_of(leaf) ?? Ty::Unknown) == text && self.a_place_of_a_lent_parameter(world, leaf) {
+                    self.facts.lent_reads.insert(node_key(leaf))
+                    self.flow.lent_tail_leaves.insert(node_key(leaf))
+                }
+            }
+            self.note_mixed(world, value, false)
+            return true
+        }
         if self.a_lent_text_place(world, value, found) {
             self.facts.lent_reads.insert(node_key(value))
         }

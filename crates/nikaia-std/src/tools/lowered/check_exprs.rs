@@ -222,6 +222,17 @@ impl CheckState {
         if !self.flow.mixed_text.contains(&name) { return false; }
         let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
         if local.literal.is_none() || !local.ty.is_a_view() { return false; }
+        if is_a_choice(value) {
+            let text = a_string_type();
+            for leaf in self.value_leaves(world, value) {
+                if nikaia_std::index::or(self.arm_type_of(leaf), || Ty::Unknown) == text && self.a_place_of_a_lent_parameter(world, leaf) {
+                    self.facts.lent_reads.insert(node_key(leaf));
+                    self.flow.lent_tail_leaves.insert(node_key(leaf));
+                }
+            }
+            self.note_mixed(world, value, false);
+            return true;
+        }
         if self.a_lent_text_place(world, value, found) { self.facts.lent_reads.insert(node_key(value)); }
         self.facts.mixed_leaves.insert(node_key(check_peeled(value)), false);
         true

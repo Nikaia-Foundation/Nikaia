@@ -1,0 +1,27 @@
+// A name bound to a literal and later assigned an `if` or a `match` whose arms
+// are a field read through a `ref` parameter and text of its own holds
+// `EitherText` (ADR-282 D13, #841).
+struct Holder { name: String }
+
+fn pick(h: ref Holder, c: bool, n: i64) -> i64 {
+    let mut x = "none"
+    x = if c { h.name } else { f"a{n}{n}" }
+    return x.len()
+}
+
+fn pick_match(h: ref Holder, n: i64) -> i64 {
+    let mut x = "none"
+    x = match n {
+        0 => h.name,
+        1 => "one",
+        else => f"m{n}{n}",
+    }
+    return x.len()
+}
+
+fn main() {
+    let h = Holder { name: f"abc{1}" }
+    println(f"{pick(h, true, 7)} {pick(h, false, 7)}")
+    println(f"{pick_match(h, 0)} {pick_match(h, 1)} {pick_match(h, 5)}")
+    println(h.name)
+}
