@@ -54,6 +54,7 @@ which past run), area`; on a departure from bugs-first, the figures.
 | #842, native count, E11-2, release script | done 21da4394, a334c6b6 (v3 saves 0.7 %, dropped), bfcace65, 08ca0fd1 | | | |
 | E11-3 `program` | done 27d33ed0 | | | |
 | #843 tier walk: `to_string()` of a view (restated, `ready`) | 3 | 0.3 | 3 | batch 1 |
+| #844 `Array[String, N]` of literals refused (D44 checked: gone) | 3 | 0.2 | 3 | batch 1b |
 | `scripts/cycle.nika`, one call per main-session cycle (owner) | 1 | 2 | 2 | batch 2 |
 | E11-4a expression core of `emit` | 2 | 1 | 20 | batch 3 |
 | E11-4b statements and blocks, then 4c | 2 | 1 | 20 | after 4a |
