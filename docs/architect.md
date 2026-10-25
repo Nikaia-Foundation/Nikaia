@@ -104,6 +104,9 @@ What the architect hands the main session for a builder, in this form:
   `gh run watch <run id> --exit-status` on that commit's run; it wakes the
   session at the end, no polling. The next builder starts meanwhile. A red
   run goes to the architect, whose next order is the repair.
+* **Release.** `nikaia run scripts/release.nika -- [--dry-run] [--loop M] REPORTS_DIR`
+  reads the new `*.report.md`, prints CI, STOP and RED lines, and raises the
+  version once for the done reports' `Changelog:` lines (`bump.py new`, push).
 * **Hand-over.** A fresh agent gets: the task, the issue numbers, the two or
   three facts that are in no file. If a fact will be needed again, it is written
   to the repository (the architect's *State* below, a doc, a commit message), not

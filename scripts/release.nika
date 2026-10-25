@@ -1,0 +1,234 @@
+// The release job as a program: reads the builders' reports, looks at CI on
+// `develop`, and raises the version once for every finished report that has a
+// changelog line (`scripts/bump.py new`), so the main session does not.
+//
+//     nikaia run scripts/release.nika -- [--dry-run] [--loop MINUTES] REPORTS_DIR
+//
+// A report is `REPORTS_DIR/*.report.md` with the lines `Result:`, `Pushed:`
+// and `Changelog:` (`none` for no entry); the ones already released are named
+// in `REPORTS_DIR/released.txt`, one per line. Prints at most five lines:
+//
+//     CI <sha8> <state> [failed jobs]   (CI unknown when `gh` fails)
+//     STOP <report>: <Result or Deviation line>
+//     RED <sha8> <jobs>                 (the tip of develop is red: no bump)
+//     BUMP 0.0.X <titles> | NO BUMP: <why> | PUSH REJECTED
+//
+// `--dry-run` prints what it would do and changes nothing. `--loop M` runs
+// again every M minutes, prints only lines that changed, and ends on RED or
+// when the file `REPORTS_DIR/STOP` exists.
+
+use std::cli
+use std::fs
+use std::process
+use std::text
+use std::time
+
+struct ReleaseReport {
+    name: String,
+    result: String,
+    pushed: String,
+    deviation: String,
+    changelog: String,
+}
+
+fn release_field(text: String, key: String) -> String {
+    for line in text.split("\n") {
+        if line.starts_with(key.clone()) {
+            return (line.strip_prefix(key.clone()) ?? "").trim().clone()
+        }
+    }
+    return ""
+}
+
+fn release_git(args: Vec[String]) -> String throws {
+    let out = process::run("git", args)
+    if !out.ok { return "" }
+    return out.stdout.trim().clone()
+}
+
+// The subject of the pushed commit, with the issues its message fixes.
+fn release_title(sha: String) -> String throws {
+    let subject = release_git(["log", "-1", "--format=%s", sha.clone()])
+    let body = release_git(["log", "-1", "--format=%B", sha])
+    let mut fixes: Vec[String] = []
+    for line in body.split("\n") {
+        for word in line.split(" ") {
+            let w = word.trim().trim_end_matches(",").trim_end_matches(";").trim_end_matches(".")
+            if w.starts_with("#") && !subject.contains(w) && body.contains(f"Fixes {w}") { fixes.push(w.clone()) }
+        }
+    }
+    if fixes.len() == 0 { return subject }
+    return subject + " (" + fixes.join(", ") + ")"
+}
+
+// `CI <sha8> <state>`, with the failed jobs' names when the tip failed.
+fn release_ci() -> String throws {
+    let runs = process::run("gh", ["api", "repos/:owner/:repo/actions/runs?branch=develop&per_page=10", "--jq", ".workflow_runs[] | [.head_sha[0:8], .status, (.conclusion // \"none\"), (.id|tostring)] | join(\" \")"])
+    if !runs.ok { return "CI unknown" }
+    let lines = runs.stdout.trim().split("\n").collect()
+    if lines.len() == 0 || lines[0] == "" { return "CI unknown" }
+    let parts = lines[0].split(" ").collect()
+    if parts.len() < 4 { return "CI unknown" }
+    let sha = parts[0].clone()
+    let mut state = parts[1].clone()
+    if state == "completed" { state = parts[2].clone() }
+    if state != "failure" { return f"CI {sha} {state}" }
+    let jobs = process::run("gh", ["api", f"repos/:owner/:repo/actions/runs/{parts[3]}/jobs", "--jq", ".jobs[] | select(.conclusion == \"failure\") | .name"])
+    let names = jobs.stdout.trim().split("\n").collect().join(",")
+    return f"CI {sha} failure {names}"
+}
+
+fn release_reports(dir: String) -> Vec[ReleaseReport] throws {
+    let mut released: Vec[String] = []
+    let list = f"{dir}/released.txt"
+    if fs::exists(list.clone(), fs::Root::Anywhere) {
+        for line in fs::read_to_string(list, fs::Root::Anywhere).split("\n") { released.push(line.trim().clone()) }
+    }
+    let mut found: Vec[ReleaseReport] = []
+    for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
+        let name = entry.to_text()
+        if !name.ends_with(".report.md") || released.contains(name.clone()) { continue }
+        let text = fs::read_to_string(f"{dir}/{name}", fs::Root::Anywhere)
+        found.push(ReleaseReport {
+            name: name,
+            result: release_field(text.clone(), "Result:"),
+            pushed: release_field(text.clone(), "Pushed:"),
+            deviation: release_field(text.clone(), "Deviation:"),
+            changelog: release_field(text, "Changelog:"),
+        })
+    }
+    return found
+}
+
+fn release_changed() -> Vec[String] throws {
+    let mut files: Vec[String] = []
+    let listed = release_git(["diff", "--name-only", "HEAD"]) + "\n" + release_git(["ls-files", "--others", "--exclude-standard"])
+    for line in listed.split("\n") {
+        if line != "" { files.push(line.clone()) }
+    }
+    return files
+}
+
+fn release_version() -> String throws {
+    for line in fs::read_to_string("CHANGELOG.md", fs::Root::Anywhere).split("\n") {
+        if line.starts_with("## [") { return (line.strip_prefix("## [") ?? "").split("]").collect()[0].clone() }
+    }
+    return "?"
+}
+
+// Raises the version, commits the files bump.py changed and pushes; the line to print.
+fn release_bump(titles: Vec[String], entries: Vec[String]) -> String throws {
+    release_git(["fetch", "origin", "develop"])
+    let before = release_changed()
+    for f in before {
+        if f == "CHANGELOG.md" || f.starts_with("docs/specification/") || f.starts_with("assets/badges/") {
+            return f"NO BUMP: {f} is not clean"
+        }
+    }
+    let title = titles.join("; ")
+    let mut args: Vec[String] = ["scripts/bump.py", "new", "--title", title.clone()]
+    for e in entries {
+        args.push("--entry")
+        args.push(e.clone())
+    }
+    let bumped = process::run("python3", args)
+    if !bumped.ok { return "NO BUMP: bump.py new failed" }
+    if !process::run("python3", ["scripts/bump.py", "check"]).ok { return "NO BUMP: bump.py check failed" }
+    let mut add: Vec[String] = ["add"]
+    for f in release_changed() {
+        if !before.contains(f.clone()) { add.push(f) }
+    }
+    release_git(add)
+    let version = release_version()
+    let mut message = f"{version}: {title}\n"
+    for line in release_git(["log", "-1", "--format=%B"]).split("\n") {
+        if line.starts_with("Co-Authored-By:") || line.starts_with("Claude-Session:") { message = message + "\n" + line }
+    }
+    if !process::run("git", ["commit", "-m", message]).ok { return "NO BUMP: commit failed" }
+    if !process::run("git", ["push", "origin", "develop"]).ok {
+        process::run("git", ["pull", "--rebase", "origin", "develop"])
+        process::run("python3", ["scripts/bump.py", "rebase-fix"])
+        if !process::run("git", ["push", "origin", "develop"]).ok { return "PUSH REJECTED" }
+    }
+    return f"BUMP {release_version()} {title}"
+}
+
+fn release_once(dir: String, dry: bool) -> Vec[String] throws {
+    let mut lines: Vec[String] = []
+    let ci = release_ci()
+    let mut red: String = ""
+    if ci.contains(" failure") { red = "RED " + (ci.replace(" failure", "").strip_prefix("CI ") ?? "") }
+    lines.push(ci)
+    let mut titles: Vec[String] = []
+    let mut entries: Vec[String] = []
+    let mut names: Vec[String] = []
+    for r in release_reports(dir.clone()) {
+        if r.result != "done" || r.pushed == "rejected" || r.pushed == "none" || r.pushed == "" {
+            let mut why = f"Result: {r.result}"
+            if r.result == "done" { why = f"Deviation: {r.deviation}" }
+            if lines.len() < 4 { lines.push(f"STOP {r.name}: {why}") }
+            continue
+        }
+        if r.changelog == "none" || r.changelog == "" { continue }
+        titles.push(release_title(r.pushed.clone()))
+        entries.push(r.changelog.clone())
+        names.push(r.name.clone())
+    }
+    if red != "" {
+        lines.push(red)
+        return lines
+    }
+    if entries.len() == 0 {
+        lines.push("NO BUMP: no changelog line")
+        return lines
+    }
+    if dry {
+        lines.push(f"BUMP (dry run) {titles.join("; ")}")
+        return lines
+    }
+    let done = release_bump(titles, entries)
+    if done.starts_with("BUMP") {
+        let list = f"{dir}/released.txt"
+        let mut old: String = ""
+        if fs::exists(list.clone(), fs::Root::Anywhere) { old = fs::read_to_string(list.clone(), fs::Root::Anywhere) }
+        fs::write(list, fs::Root::Anywhere, old + names.join("\n") + "\n")
+    }
+    lines.push(done)
+    return lines
+}
+
+fn main() throws {
+    let mut dry = false
+    let mut every: i64 = 0
+    let mut dir: String = ""
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let mut i = 1
+    while i < args.len() {
+        if args[i] == "--dry-run" {
+            dry = true
+        } else if args[i] == "--loop" && i + 1 < args.len() {
+            every = text::parse_i64(args[i + 1].clone()) ?? 0
+            i += 1
+        } else {
+            dir = args[i].clone()
+        }
+        i += 1
+    }
+    if dir == "" {
+        println("usage: nikaia run scripts/release.nika -- [--dry-run] [--loop MINUTES] REPORTS_DIR")
+        process::exit(2)
+    }
+    let mut shown: Vec[String] = []
+    while true {
+        let lines = release_once(dir.clone(), dry)
+        let mut stop = false
+        for line in lines.clone() {
+            if !shown.contains(line.clone()) { println(line.clone()) }
+            if line.starts_with("RED") { stop = true }
+        }
+        shown = lines
+        if every == 0 || stop || fs::exists(f"{dir}/STOP", fs::Root::Anywhere) { break }
+        time::sleep(every.minutes())
+    }
+}
