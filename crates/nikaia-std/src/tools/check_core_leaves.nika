@@ -353,7 +353,9 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
     // The other door into a lambda's body, with the same boundary as `expr`'s.
     let saved = state.enter_boundary("lambda")
     state.handed_over = CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() }
-    let tail = check_core_block(state, world, host, body)
+    let outer = check_core_lambda_enter(state)
+    let walked = check_core_block(state, world, host, body)
+    let tail = check_core_lambda_leave(state, outer, walked, body)
     let seen: CheckHanded? = state.handed_over?.clone()
     state.handed_over = null
     state.leave_boundary(saved)
@@ -367,6 +369,87 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
         state.a_handler_that_does_more_than_the_type_allows(promised, handed, span)
     }
     return (tail, paused)
+}
+
+/// **Into a lambda's body** (#758): a `return` there is the lambda's, not
+/// the enclosing function's; what the function declares is set aside.
+pub fn check_core_lambda_enter(mut state: CheckState) -> Ty? sync {
+    let outer: Ty? = state.expected?.clone()
+    state.expected = null
+    state.flow.lambda_returns.push([])
+    return outer
+}
+
+/// **Out of a lambda's body** (#758): its result is read from its `return`s
+/// as well as from its last value, and they agree, as a named function's do
+/// (`NK1104`). A body that ends in a `return` comes to what that hands back.
+pub fn check_core_lambda_leave(mut state: CheckState, outer: ref Ty?, tail: ref Ty, body: ref Block) -> Ty sync {
+    state.expected = outer?.clone()
+    let returns: Vec[CheckLambdaReturn] = state.flow.lambda_returns.pop() ?? []
+    state.flow.last_lambda_returns = returns.clone()
+    let mut ends_in_a_return = false
+    if body.stmts.len() > 0 {
+        ends_in_a_return = match body.stmts[body.stmts.len() - 1].node {
+            Stmt::Return(_) => true,
+            else => false,
+        }
+    }
+    let mut first: Ty? = null
+    let mut seen: Vec[Ty] = []
+    if !ends_in_a_return {
+        seen.push(tail.clone())
+    }
+    let mut result: Ty = tail.clone()
+    for one in returns {
+        if first == null && wholly_known(one.ty) {
+            first = one.ty.clone()
+        }
+        for other in seen {
+            if !check_core_lambda_results_agree(other, one.ty) {
+                let was = one.ty.text()
+                let wanted = other.text()
+                state.findings.push(check_refusal("NK1104", one.at, f"You're returning `{was}`, but this lambda's other result is `{wanted}`.", ["A lambda's `return`s and its last value are its result, so they are of one type.".clone()], f"Make it a `{wanted}`, or the others a `{was}`."))
+            }
+        }
+        seen.push(one.ty.clone())
+    }
+    if ends_in_a_return && first != null {
+        result = first ?? Ty::Unknown
+    }
+    return result
+}
+
+/// Whether two results of one lambda are of one type: an unknown, a unit, a
+/// number or a nullable one agrees with what it can stand for.
+fn check_core_lambda_results_agree(a: ref Ty, b: ref Ty) -> bool {
+    let x = a.unseen()
+    let y = b.unseen()
+    if !wholly_known(x) || !wholly_known(y) || check_core_lambda_a_unit(x) || check_core_lambda_a_unit(y) {
+        return true
+    }
+    if integer_named(x) != null && integer_named(y) != null {
+        return true
+    }
+    let vx = view_of_type(check_core_lambda_held(x))
+    let vy = view_of_type(check_core_lambda_held(y))
+    return vx == vy
+}
+
+/// A unit, written either way.
+fn check_core_lambda_a_unit(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Tuple(parts) => parts.len() == 0,
+        Ty::Named { name, args, .. } => name == "()" && args.len() == 0,
+        else => false,
+    }
+}
+
+/// What a nullable type holds, or the type itself.
+fn check_core_lambda_held(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Nullable(inner) => inner.clone(),
+        else => ty.clone(),
+    }
 }
 
 /// **A `return`**: what it hands back is checked against what the function
@@ -414,6 +497,18 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
         found = check_core_expr(state, world, host, given, span)
     }
     state.flow.lambda_expected = null
+    // **A lambda's `return` is the lambda's** (#758): recorded, and checked
+    // against its other results when the body is done.
+    let inside = state.flow.lambda_returns.len() as i64
+    if inside > 0 {
+        let mut written: Vec[Expr] = []
+        if value != null {
+            let given = value ?? return
+            written.push(given.clone())
+        }
+        state.flow.lambda_returns[inside - 1].push(CheckLambdaReturn { ty: found, at: Span { start: span.start, end: span.end }, value: written })
+        return
+    }
     let expected: Ty = state.expected?.clone() ?? return
     if lending {
         found = view_of_type(found)

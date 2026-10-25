@@ -1046,7 +1046,9 @@ pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref Ch
     state.scope.push(frame)
     // Part I 3.3: a lambda is a closure below, and a jump does not leave one.
     let saved = state.enter_boundary("lambda")
-    check_core_block(state, world, host, body)
+    let outer = check_core_lambda_enter(state)
+    let walked = check_core_block(state, world, host, body)
+    check_core_lambda_leave(state, outer, walked, body)
     state.leave_boundary(saved)
     state.scope.pop()
     state.repeats.pop()

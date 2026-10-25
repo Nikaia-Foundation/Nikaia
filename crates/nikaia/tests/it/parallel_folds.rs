@@ -644,3 +644,49 @@ fn an_in_place_fold_hands_its_arguments_on_as_the_callee_takes_them() {
         }
     }
 }
+
+/// **A lambda's result is read from its `return`s too** (#758): a fold whose
+/// `init` and `step` end in `return` binds the accumulator's type, so a `for`
+/// over the result knows its items.
+#[test]
+fn a_lambdas_returns_give_its_result_type() {
+    let source = "fn main() {\n\
+         \x20   let xs: Vec[i64] = [1, -2, 3]\n\
+         \x20   let got = xs.par_iter().fold(fn { let v: Vec[i64] = []; return v }, fn(acc, x) { let mut l = acc; l.push(x); return l }, fn(a, b) { let mut l = a; for x in b { l.push(x) }; return l })\n\
+         \x20   let mut sum = 0\n\
+         \x20   for v in got {\n\
+         \x20       sum += v.abs()\n\
+         \x20   }\n\
+         \x20   println(f\"{sum}\")\n\
+         }\n";
+    let found = findings(source);
+    assert!(found.is_empty(), "{found:?}");
+}
+
+/// **And they agree with its last value** (#758, `NK1104`), while a `return`
+/// in a lambda is not asked what the enclosing function declares.
+#[test]
+fn a_lambdas_return_and_last_value_that_disagree_are_refused() {
+    let source = "fn main() {\n\
+         \x20   let xs: Vec[i64] = [1, 2]\n\
+         \x20   let ys = xs.iter().map(fn(x) { if x > 1 { return \"big\" }; x }).collect()\n\
+         \x20   println(f\"{ys.len()}\")\n\
+         }\n";
+    let found = findings(source);
+    assert!(
+        found
+            .iter()
+            .any(|f| f.code == "NK1104" && f.message.contains("this lambda's other result")),
+        "{found:?}"
+    );
+    let outer = "fn apply(f: fn(i64) -> String, x: i64) -> String { return f(x) }\n\
+         fn g() -> i64 {\n\
+         \x20   let s = apply(fn(x) { return \"a\" }, 1)\n\
+         \x20   return s.len() as i64\n\
+         }\n\
+         fn main() {\n\
+         \x20   println(f\"{g()}\")\n\
+         }\n";
+    let found = findings(outer);
+    assert!(found.is_empty(), "{found:?}");
+}

@@ -90,6 +90,16 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     state.flow.lambda_tails.insert(id, came_to.clone())
                     state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first)
                     let written: Ty = result?.clone() ?? Ty::Unknown
+                    // A text a `return` hands back is the declared kind, as the
+                    // last value's is (#758).
+                    if !written.is_unknown() {
+                        let returned: Vec[CheckLambdaReturn] = state.flow.last_lambda_returns.clone()
+                        for one in returned {
+                            for value in one.value {
+                                state.text_literal(world, written, value, true)
+                            }
+                        }
+                    }
                     let mut out: Ty? = null
                     if !written.is_unknown() {
                         out = written

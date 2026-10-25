@@ -52,7 +52,14 @@ pub struct CheckUnrolling {
     pub field: FieldContract,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckLambdaReturn {
+    pub ty: Ty,
+    pub at: Span,
+    pub value: Vec<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct CheckFlow {
     pub raised: (Option<u64>, Option<u64>),
     pub computes: bool,
@@ -78,6 +85,8 @@ pub struct CheckFlow {
     pub settled_methods: collections::BTreeSet<i64>,
     pub paused_args: Vec<i64>,
     pub lambda_tails: collections::BTreeMap<i64, Ty>,
+    pub lambda_returns: Vec<Vec<CheckLambdaReturn>>,
+    pub last_lambda_returns: Vec<CheckLambdaReturn>,
     pub next_choice: i64,
     pub read_index: collections::BTreeMap<(i64, i64), i64>,
     pub pending_coalesces: Vec<CheckPendingCoalesce>,
@@ -131,6 +140,6 @@ pub struct CheckFlow {
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), lambda_tails: collections::BTreeMap::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, lending_let: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), handle_lets: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), empty_maps: collections::BTreeSet::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_keys: collections::BTreeMap::new(), open_map_parts: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), lent_text_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, lent_tail_leaves: collections::BTreeSet::new(), open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_lambda_params: collections::BTreeSet::new(), lambda_firsts: collections::BTreeMap::new(), last_lambda_first: -1, unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None, pushed_receiver: -1 } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), lambda_tails: collections::BTreeMap::new(), lambda_returns: Vec::new(), last_lambda_returns: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, lending_let: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), handle_lets: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), empty_maps: collections::BTreeSet::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_keys: collections::BTreeMap::new(), open_map_parts: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), lent_text_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, lent_tail_leaves: collections::BTreeSet::new(), open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_lambda_params: collections::BTreeSet::new(), lambda_firsts: collections::BTreeMap::new(), last_lambda_first: -1, unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None, pushed_receiver: -1 } }
 }
 

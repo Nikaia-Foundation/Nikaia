@@ -69,6 +69,10 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                         Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                         None => None,
                     }, || Ty::Unknown);
+                    if !written.is_unknown() {
+                        let returned: Vec<CheckLambdaReturn> = state.flow.last_lambda_returns.to_owned();
+                        for one in returned.iter() { for value in one.value.iter() { state.text_literal(world, &written, value, true); } }
+                    }
                     let mut out: Option<Ty> = None;
                     if !written.is_unknown() { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); }
                     return Ty::Fn { params: given.to_owned(), result: Box::new(out), is_sync: !pauses, can_throw: fails };

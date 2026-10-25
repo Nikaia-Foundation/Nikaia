@@ -719,7 +719,9 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.repeats.push(CheckRepeats::a_lambda(depth));
     state.scope.push(frame);
     let saved = state.enter_boundary("lambda");
-    check_core_block(state, world, host, body);
+    let outer = check_core_lambda_enter(state);
+    let walked = check_core_block(state, world, host, body);
+    check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
     state.leave_boundary(&saved);
     state.scope.pop();
     state.repeats.pop();

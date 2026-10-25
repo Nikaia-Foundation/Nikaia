@@ -299,7 +299,9 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     state.scope.push(frame);
     let saved = state.enter_boundary("lambda");
     state.handed_over = Some(CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() });
-    let tail = check_core_block(state, world, host, body);
+    let outer = check_core_lambda_enter(state);
+    let walked = check_core_block(state, world, host, body);
+    let tail = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
     let seen: Option<CheckHanded> = match state.handed_over.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -316,6 +318,73 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
         state.a_handler_that_does_more_than_the_type_allows(promised, &handed, span);
     }
     (tail, paused)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_lambda_enter(state: &mut CheckState) -> Option<Ty> {
+    let outer: Option<Ty> = match state.expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.expected = None;
+    state.flow.lambda_returns.push(vec![]);
+    outer
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>, tail: &Ty, body: &Block) -> Ty {
+    state.expected = match outer {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    };
+    let returns: Vec<CheckLambdaReturn> = nikaia_std::index::or(state.flow.lambda_returns.pop(), || vec![].into());
+    state.flow.last_lambda_returns = returns.to_owned();
+    let mut ends_in_a_return = false;
+    if !body.stmts.is_empty() { ends_in_a_return = matches!(nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node, Stmt::Return(_)); }
+    let mut first: Option<Ty> = None;
+    let mut seen: Vec<Ty> = vec![];
+    if !ends_in_a_return { seen.push(tail.clone()); }
+    let mut result: Ty = tail.clone();
+    for one in returns.iter() {
+        if first.is_none() && wholly_known(&one.ty) { first = Some(one.ty.clone()); }
+        for other in seen.iter() {
+            if !check_core_lambda_results_agree(other, &one.ty) {
+                let was = one.ty.text();
+                let wanted = other.text();
+                state.findings.push(check_refusal("NK1104", &one.at, format!("You're returning `{}`, but this lambda's other result is `{}`.", was, wanted), vec!["A lambda's `return`s and its last value are its result, so they are of one type.".to_owned()], Some(format!("Make it a `{}`, or the others a `{}`.", wanted, was))));
+            }
+        }
+        seen.push(one.ty.clone());
+    }
+    if ends_in_a_return && first.is_some() { result = nikaia_std::index::or(first, || Ty::Unknown); }
+    result
+}
+
+pub(crate) fn check_core_lambda_results_agree(a: &Ty, b: &Ty) -> bool {
+    let x = a.unseen();
+    let y = b.unseen();
+    if !wholly_known(&x) || !wholly_known(&y) || check_core_lambda_a_unit(&x) || check_core_lambda_a_unit(&y) { return true; }
+    if integer_named(&x).is_some() && integer_named(&y).is_some() { return true; }
+    let vx = view_of_type(&check_core_lambda_held(&x));
+    let vy = view_of_type(&check_core_lambda_held(&y));
+    vx == vy
+}
+
+pub(crate) fn check_core_lambda_a_unit(ty: &Ty) -> bool {
+    match ty {
+        Ty::Tuple(parts) => parts.is_empty(),
+        Ty::Named { name, args, .. } => name == "()" && args.is_empty(),
+        _ => false,
+    }
+}
+
+pub(crate) fn check_core_lambda_held(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+        _ => ty.clone(),
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -357,6 +426,16 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         found = check_core_expr(state, world, host, given, span);
     }
     state.flow.lambda_expected = None;
+    let inside = state.flow.lambda_returns.len() as i64;
+    if inside > 0 {
+        let mut written: Vec<Expr> = vec![];
+        if value.is_some() {
+            let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            written.push(given.clone());
+        }
+        state.flow.lambda_returns[nikaia_std::index::at(inside - 1)].push(CheckLambdaReturn { ty: found, at: Span { start: span.start, end: span.end }, value: written });
+        return;
+    }
     let expected: Ty = match match state.expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

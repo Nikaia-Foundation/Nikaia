@@ -101,6 +101,14 @@ pub struct CheckUnrolling {
     pub field: FieldContract,
 }
 
+/// **A `return` inside a lambda** (#758): what it hands back and where.
+pub struct CheckLambdaReturn {
+    pub ty: Ty,
+    pub at: Span,
+    /// What it hands back as written: none for a bare `return`.
+    pub value: Vec[Expr],
+}
+
 /// **What the walk of a body keeps beside the scope**: see the Rust `Checker`'s
 /// history for each field's reason; the comments here say what it is.
 pub struct CheckFlow {
@@ -162,6 +170,10 @@ pub struct CheckFlow {
     /// back: a fold's step that ends with nothing changes its accumulator in
     /// place (ADR-372 D9).
     pub lambda_tails: collections::BTreeMap[i64, Ty],
+    /// The `return`s of each lambda being walked, innermost last (#758).
+    pub lambda_returns: Vec[Vec[CheckLambdaReturn]],
+    /// The `return`s of the lambda walked last.
+    pub last_lambda_returns: Vec[CheckLambdaReturn],
     /// The next number to give a choice: one per `if` and per `match`.
     pub next_choice: i64,
     /// Which read an expression is, by the expression's id (ADR-293 D1).
@@ -321,6 +333,8 @@ impl CheckFlow {
             settled_methods: collections::BTreeSet(),
             paused_args: Vec(),
             lambda_tails: collections::BTreeMap(),
+            lambda_returns: Vec(),
+            last_lambda_returns: Vec(),
             next_choice: 0,
             read_index: collections::BTreeMap(),
             pending_coalesces: Vec(),
