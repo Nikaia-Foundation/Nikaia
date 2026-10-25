@@ -70,6 +70,13 @@ change decided for the supervisor's version heading, and picks the next topic.
 The main session still acts on its own for: CI red on `develop`, a rejected
 push (it rebases), `BLOCKED`, and owner questions.
 
+## Batches (owner, 2026-10-25, measure 8 option C)
+
+Two or three briefs per round, for independent bugs in different files, with
+their order. The main session starts the next builder when one says `done`;
+a report with `Found`, a `Deviation` other than none, or `BLOCKED` cuts the
+batch, and the briefs left come back to the architect with the reports.
+
 ## The work order
 
 What the architect hands the main session for a builder, in this form:
