@@ -29,6 +29,25 @@ struct ReleaseReport {
     pushed: String,
     deviation: String,
     changelog: String,
+    old: bool,
+}
+
+// A line of output is at most 160 characters.
+fn release_cap(line: String) -> String throws {
+    if line.len() <= 160 { return line }
+    return line.bytes[0..157].text() + "..."
+}
+
+// `#a #b ...` of the titles, `n entries`.
+fn release_summary(titles: Vec[String]) -> String {
+    let mut issues: Vec[String] = []
+    for t in titles.clone() {
+        for word in t.split(" ") {
+            let w = word.trim().trim_end_matches(",").trim_end_matches(";").trim_end_matches(")").trim_start_matches("(")
+            if w.starts_with("#") && w.len() > 1 && !issues.contains(w.clone()) { issues.push(w.clone()) }
+        }
+    }
+    return f"{titles.len()} entries, " + issues.join(" ")
 }
 
 fn release_field(text: String, key: String) -> String {
@@ -81,20 +100,27 @@ fn release_ci() -> String throws {
 fn release_reports(dir: String) -> Vec[ReleaseReport] throws {
     let mut released: Vec[String] = []
     let list = f"{dir}/released.txt"
-    if fs::exists(list.clone(), fs::Root::Anywhere) {
-        for line in fs::read_to_string(list, fs::Root::Anywhere).split("\n") { released.push(line.trim().clone()) }
+    let listed = fs::exists(list.clone(), fs::Root::Anywhere)
+    let since = text::parse_i64(release_git(["log", "-1", "--format=%ct", "--", "CHANGELOG.md"])) ?? 0
+    if listed {
+        for line in fs::read_to_string(list, fs::Root::Anywhere).split("\n") {
+            let parts = line.trim().split("/").collect()
+            if parts.len() > 0 { released.push(parts[parts.len() - 1].clone()) }
+        }
     }
     let mut found: Vec[ReleaseReport] = []
     for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
         let name = entry.to_text()
         if !name.ends_with(".report.md") || released.contains(name.clone()) { continue }
         let text = fs::read_to_string(f"{dir}/{name}", fs::Root::Anywhere)
+        let stamp = text::parse_i64(process::run("stat", ["-c", "%Y", f"{dir}/{name}"]).stdout.trim()) ?? 0
         found.push(ReleaseReport {
             name: name,
             result: release_field(text.clone(), "Result:"),
             pushed: release_field(text.clone(), "Pushed:"),
             deviation: release_field(text.clone(), "Deviation:"),
             changelog: release_field(text, "Changelog:"),
+            old: !listed && stamp < since,
         })
     }
     return found
@@ -150,7 +176,7 @@ fn release_bump(titles: Vec[String], entries: Vec[String]) -> String throws {
         process::run("python3", ["scripts/bump.py", "rebase-fix"])
         if !process::run("git", ["push", "origin", "develop"]).ok { return "PUSH REJECTED" }
     }
-    return f"BUMP {release_version()} {title}"
+    return f"BUMP {release_version()}"
 }
 
 fn release_once(dir: String, dry: bool) -> Vec[String] throws {
@@ -162,11 +188,16 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
     let mut titles: Vec[String] = []
     let mut entries: Vec[String] = []
     let mut names: Vec[String] = []
+    let mut skipped = 0
     for r in release_reports(dir.clone()) {
+        if r.old {
+            skipped += 1
+            continue
+        }
         if r.result != "done" || r.pushed == "rejected" || r.pushed == "none" || r.pushed == "" {
             let mut why = f"Result: {r.result}"
             if r.result == "done" { why = f"Deviation: {r.deviation}" }
-            if lines.len() < 4 { lines.push(f"STOP {r.name}: {why}") }
+            if lines.len() < 4 { lines.push(release_cap(f"STOP {r.name}: {why}")) }
             continue
         }
         if r.changelog == "none" || r.changelog == "" { continue }
@@ -174,6 +205,7 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         entries.push(r.changelog.clone())
         names.push(r.name.clone())
     }
+    if skipped > 0 { lines.push(f"SKIPPED {skipped} old reports") }
     if red != "" {
         lines.push(red)
         return lines
@@ -183,9 +215,10 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         return lines
     }
     if dry {
-        lines.push(f"BUMP (dry run) {titles.join("; ")}")
+        lines.push(release_cap(f"BUMP (dry run) {release_summary(titles)}"))
         return lines
     }
+    let summary = release_summary(titles.clone())
     let done = release_bump(titles, entries)
     if done.starts_with("BUMP") {
         let list = f"{dir}/released.txt"
@@ -193,7 +226,11 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         if fs::exists(list.clone(), fs::Root::Anywhere) { old = fs::read_to_string(list.clone(), fs::Root::Anywhere) }
         fs::write(list, fs::Root::Anywhere, old + names.join("\n") + "\n")
     }
-    lines.push(done)
+    if done.starts_with("BUMP") {
+        lines.push(release_cap(f"{done}: {summary}"))
+    } else {
+        lines.push(release_cap(done))
+    }
     return lines
 }
 
