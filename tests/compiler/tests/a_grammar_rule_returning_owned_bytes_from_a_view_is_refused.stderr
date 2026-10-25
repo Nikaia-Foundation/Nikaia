@@ -1,0 +1,8 @@
+error[NK1104]: This action builds `ref Bytes`, but its rule returns `Bytes`.
+  --> tests/a_grammar_rule_returning_owned_bytes_from_a_view_is_refused.nika:2:45
+   |
+ 2 |     rule n -> Bytes = s:bytes(until(";")) { s }
+   |                                             ^
+   |
+   = help: Make it a `Bytes`, or change the declaration to `ref Bytes`.
+1 type error
