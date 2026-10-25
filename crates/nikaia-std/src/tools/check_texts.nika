@@ -626,6 +626,12 @@ fn check_texts_all_text(element: ref Ty, items: ref Vec[Expr]) -> bool sync {
 }
 
 fn check_texts_text_for(element: ref Ty, item: ref Expr) -> bool sync {
+    // **A list of `String?` written out is text of its own too** (#828):
+    // each text is wrapped where it is kept, a `null` stays one.
+    match element {
+        Ty::Nullable(inner) => return check_texts_is_null(item) || check_texts_text_for(inner, item),
+        else => {},
+    }
     if a_plain_string(element) {
         return a_text_literal_expr(item)
     }
@@ -651,4 +657,11 @@ fn check_texts_tuple_all_text(each: ref Vec[Ty], parts: ref Vec[Expr]) -> bool s
         i += 1
     }
     return true
+}
+
+fn check_texts_is_null(item: ref Expr) -> bool sync {
+    return match item {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
 }

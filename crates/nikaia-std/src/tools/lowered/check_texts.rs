@@ -499,6 +499,10 @@ pub(crate) fn check_texts_all_text(element: &Ty, items: &[Expr]) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_texts_text_for(element: &Ty, item: &Expr) -> bool {
+    match element {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); return check_texts_is_null(item) || check_texts_text_for(inner, item); },
+        _ => { },
+    }
     if a_plain_string(element) { return a_text_literal_expr(item); }
     let each: Vec<Ty> = match element {
         Ty::Tuple(each) => each.to_owned(),
@@ -521,4 +525,8 @@ pub(crate) fn check_texts_tuple_all_text(each: &[Ty], parts: &[Expr]) -> bool {
     }
     true
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_texts_is_null(item: &Expr) -> bool { matches!(item, Expr::LitNull(_)) }
 

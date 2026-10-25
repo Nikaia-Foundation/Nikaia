@@ -436,6 +436,24 @@ fn main() {
     );
 }
 
+/// **A list of `String?` written out owns its texts** (#828): handed on as a
+/// `ref Vec[String?]` it is not taken for a `Vec[ref String]`.
+#[test]
+fn a_typed_list_of_nullable_texts_is_lent_whole() {
+    let (said, _) = printed_and_lowered(
+        "nullable-text-list-lent",
+        r#"
+fn n(xs: ref Vec[String?]) -> i64 { xs.len() }
+fn main() {
+    let ts: Vec[String?] = ["abc"]
+    let us: Vec[String?] = ["a", null, "b"]
+    println(f"{n(ts)} {n(us)} {ts[0] ?? "-"}")
+}
+"#,
+    );
+    assert_eq!(said, "1 3 abc\n");
+}
+
 /// **A narrower integer widens into a `T?` of a wider one** (E10-4): `u32`
 /// into an `i64?` field is `Some(i64::from(..))`, not a bare `Some(..)`.
 #[test]
