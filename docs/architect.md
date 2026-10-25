@@ -152,11 +152,11 @@ What the architect hands the main session for a builder, in this form:
 
 ## The main session's cycle
 
-1. `nikaia run scripts/cycle.nika -- DIR` (until it exists: `status.nika`, then `batch.nika`). Nothing else is checked.
+1. `nikaia run scripts/cycle.nika -- DIR` (`--apply` raises the version, `--done N` clears an OWNER line). Nothing else is checked.
 2. `NEXT <brief>`: start a `builder` with *Read your brief at <brief>* (model as the architect's start order says).
 3. A builder's one-line answer: `--tokens` into the batch, then back to 1. Read nothing else.
 4. `CUT`, `RED`, `BLOCKED`, `BATCH DONE`, or an owner message: start a fresh architect with that line, the token figures and the owner's words verbatim.
-5. `BUMP pending` and CI green: `cycle.nika --apply` (until then `release.nika`).
+5. `BUMP pending` and CI green: `cycle.nika --apply` .
 6. `OWNER` lines: ask the owner in German, per *Decision rounds*; his answer goes to the architect.
 7. Stop hook: the fixed answer below. An architect past 80 turns / 150k: restart fresh.
 

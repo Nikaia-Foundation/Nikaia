@@ -1,0 +1,134 @@
+// One call per cycle for the main session, at most six lines.
+//
+//     nikaia run scripts/cycle.nika -- DIR [--apply] [--done N]
+//
+//     CI <sha8> green|red|running|unknown
+//     NEXT <brief> | CUT <brief>: <line> -> ARCHITECT | BATCH DONE
+//     RED <sha8> <jobs> -> ARCHITECT          (only when the tip is red)
+//     BUMP pending <n> changelog lines | BUMP <version> pushed | NO BUMP: <why>
+//     OWNER <n> open: <first line>            (DIR/owner.txt, one per line)
+//
+// The lines come from `status.nika` (CI, batch, pending bump), which runs
+// `batch.nika`; `--apply` runs `release.nika` when CI is green and the batch
+// line is not NEXT (a builder may be running then). They are run as programs:
+// a script cannot `use` another. `--done N` deletes line N of owner.txt.
+
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+fn cycle_cap(line: String) -> String throws {
+    if line.len() <= 160 { return line }
+    return line.bytes[0..157].text() + "..."
+}
+
+fn cycle_exe() -> String throws {
+    for exe in ["target/fast/nikaia", "target/release/nikaia"] {
+        if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
+    }
+    return ""
+}
+
+// `CI abcd1234 success` -> `CI abcd1234 green`, failure -> red, else running.
+fn cycle_ci(line: String) -> String {
+    let parts = line.split(" ").collect()
+    if parts.len() < 3 { return "CI unknown" }
+    let state = parts[2].clone()
+    if state == "success" { return f"CI {parts[1]} green" }
+    if state == "failure" { return f"CI {parts[1]} red" }
+    if state == "unknown" { return "CI unknown" }
+    return f"CI {parts[1]} running"
+}
+
+fn cycle_red(line: String) -> String {
+    let parts = line.split(" ").collect()
+    if parts.len() < 3 || parts[2] != "failure" { return "" }
+    let jobs = if parts.len() > 3 { parts[3].clone() } else { "" }
+    return f"RED {parts[1]} {jobs} -> ARCHITECT"
+}
+
+fn cycle_bump(line: String) -> String {
+    let n = (line.strip_prefix("BUMP pending: ") ?? "").split(" ").collect()[0].clone()
+    if !line.starts_with("BUMP pending") { return "" }
+    return f"BUMP pending {n} changelog lines"
+}
+
+fn cycle_owner(dir: String) -> String throws {
+    let file = f"{dir}/owner.txt"
+    if !fs::exists(file.clone(), fs::Root::Anywhere) { return "" }
+    let mut open: Vec[String] = []
+    for raw in fs::read_to_string(file, fs::Root::Anywhere).split("\n") {
+        if raw.trim() != "" { open.push(raw.trim().clone()) }
+    }
+    if open.len() == 0 { return "" }
+    return f"OWNER {open.len()} open: {open[0]}"
+}
+
+fn cycle_done(dir: String, n: i64) -> String throws {
+    let file = f"{dir}/owner.txt"
+    if !fs::exists(file.clone(), fs::Root::Anywhere) { return "" }
+    let mut kept: Vec[String] = []
+    let mut i: i64 = 0
+    for raw in fs::read_to_string(file.clone(), fs::Root::Anywhere).split("\n") {
+        if raw.trim() == "" { continue }
+        i += 1
+        if i != n { kept.push(raw.trim().clone()) }
+    }
+    fs::write(file, fs::Root::Anywhere, kept.join("\n") + if kept.len() > 0 { "\n" } else { "" })
+    return ""
+}
+
+fn main() throws {
+    let mut dir: String = ""
+    let mut apply = false
+    let mut done: i64 = 0
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let mut i = 1
+    while i < args.len() {
+        if args[i] == "--apply" {
+            apply = true
+        } else if args[i] == "--done" && i + 1 < args.len() {
+            done = text::parse_i64(args[i + 1].clone()) ?? 0
+            i += 1
+        } else {
+            dir = args[i].clone()
+        }
+        i += 1
+    }
+    if dir == "" {
+        println("usage: nikaia run scripts/cycle.nika -- DIR [--apply] [--done N]")
+        process::exit(2)
+    }
+    if done > 0 { cycle_done(dir.clone(), done) }
+    let exe = cycle_exe()
+    if exe == "" {
+        println("no target/fast/nikaia")
+        process::exit(1)
+    }
+    let out = process::run(exe.clone(), ["run", "scripts/status.nika", "--", dir.clone()])
+    let lines = out.stdout.trim().split("\n").collect()
+    if !out.ok || lines.len() < 3 {
+        println("CI unknown (status.nika failed)")
+        return
+    }
+    let ci = cycle_ci(lines[0].clone())
+    println(ci.clone())
+    let red = cycle_red(lines[0].clone())
+    if red != "" { println(cycle_cap(red)) }
+    let batch = lines[1].clone()
+    if batch.starts_with("CUT") { println(cycle_cap(batch.clone() + " -> ARCHITECT")) } else { println(cycle_cap(batch.clone())) }
+    let mut bump = cycle_bump(lines[2].clone())
+    if apply && ci.ends_with("green") && !batch.starts_with("NEXT") && bump != "" {
+        let rel = process::run(exe, ["run", "scripts/release.nika", "--", dir.clone()])
+        bump = "NO BUMP: release.nika printed nothing"
+        for l in rel.stdout.trim().split("\n") {
+            if l.starts_with("BUMP") { bump = cycle_cap(l.replace("BUMP ", "BUMP ").clone()) }
+            if l.starts_with("NO BUMP") || l.starts_with("PUSH REJECTED") { bump = l.clone() }
+        }
+    }
+    if bump != "" { println(bump) }
+    let owner = cycle_owner(dir)
+    if owner != "" { println(cycle_cap(owner)) }
+}
