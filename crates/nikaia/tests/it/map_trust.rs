@@ -815,3 +815,34 @@ fn sections(rust: &str) -> Vec<String> {
     parts.sort();
     parts
 }
+
+/// **A function bound by a `let` is one class with the maps called through
+/// it** (#582): the socket map handed through the name keeps the keyed hash,
+/// as the parameter does, and `rustc` takes the call.
+#[test]
+fn a_map_called_through_a_bound_function_is_one_class_with_its_parameter() {
+    let source = BOTH.replace(
+        "    println(f\"{from_file.len()} {from_socket.len()}\")\n",
+        "    let f = count\n    println(f\"{from_file.len()} {f(from_socket)}\")\n",
+    ) + "fn count(m: collections::HashMap[i64, i64]) -> i64 {\n    return m.len()\n}\n";
+    let rust = lowered(&source);
+    assert!(
+        !the_map_made_by(&rust, "from_socket").contains("TrustedMap"),
+        "{rust}"
+    );
+    assert!(!rust.contains("m: &collections::TrustedMap<"), "{rust}");
+    let dir = common::scratch_dir("map-trust-bound");
+    let path = dir.join("program.rs");
+    std::fs::write(&path, &rust).expect("write the Rust");
+    let binary = dir.join("program");
+    let compiled = common::compile(
+        &path,
+        &["--crate-type", "bin", "-o", &binary.to_string_lossy()],
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        compiled.status.success(),
+        "{}\n{rust}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+}

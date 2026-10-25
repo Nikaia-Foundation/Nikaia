@@ -410,6 +410,15 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let found = check_core_expr(state, world, host, value, span)
     state.flow.lending_let = false
     state.flow.lambda_expected = null
+    // **A declared function bound without a type** (#582): called through
+    // the name with its parameters by value, as a parameter of function type
+    // is (#757).
+    if ty == null && names.len() == 1 && check_core_args_named(state, world, value) {
+        match found {
+            Ty::Fn { .. } => state.facts.named_fn_values.insert(id_of(value) as i64, []),
+            else => {}
+        }
+    }
     // **A call's whole-number result is a number of the bounds walk**
     // (#781): `let at = self.slot_of(…)` is bounded by what is assumed of
     // `at`, as a name bound to a sum is.

@@ -321,6 +321,12 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let found = check_core_expr(state, world, host, value, span);
     state.flow.lending_let = false;
     state.flow.lambda_expected = None;
+    if ty.is_none() && names.len() == 1 && check_core_args_named(&state, world, value) {
+        match found {
+            Ty::Fn { .. } => { state.facts.named_fn_values.insert(id_of(value) as i64, vec![]); },
+            _ => { },
+        }
+    }
     if names.len() == 1 && check_core_stmt_a_call(value) {
         match found {
             Ty::Named { ref name, ref args, .. } => { if args.is_empty() && is_whole_number(name) { state.facts.whole_fields.insert(id_of(value) as i64); } },

@@ -423,6 +423,41 @@ impl EmitState {
         if !any { return vec![]; }
         lent
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_arg_named_fn_bound<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+        if !self.facts.named_fn_values.contains_key(&node_key(value)) { return Ok(false); }
+        let wanted = match value {
+            Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
+            _ => return Ok(false),
+        };
+        let lent = self.emit_arg_lent_params(world, value);
+        if lent.is_empty() { return Ok(false); }
+        let mut written: Vec<String> = vec![];
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Fn { name, receiver, generics, args, .. } => {
+                    let name = *name;
+                    let declared = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if receiver.is_some() || !generics.is_empty() || emit_text(world, declared) != wanted || (args.len() as i64) != lent.len() as i64 { continue; }
+                    for arg in args.iter() { written.push(self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), &arg.ty, EmitLifetimes::Elided)); }
+                },
+                _ => { },
+            }
+        }
+        if (written.len() as i64) != lent.len() as i64 { return Ok(false); }
+        let mut names: Vec<String> = vec![];
+        let mut typed: Vec<String> = vec![];
+        for n in 0..lent.len() as i64 {
+            names.push(format!("__nikaia_a{}", n));
+            typed.push(format!("__nikaia_a{}: {}", n, *nikaia_std::index::get(&written, (n) as usize)));
+        }
+        out.push(&format!("|{}| ", typed.join(", ")));
+        host.expr(walk, out, value, depth, flow, scope)?;
+        out.push(&format!("({})", emit_arg_passing(&names, &lent)));
+        Ok(true)
+    }
 }
 
 pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {

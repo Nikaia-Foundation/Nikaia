@@ -1,0 +1,25 @@
+// #582: a function bound by a `let` without a type is called through the name
+// with its map by value; the function itself lends it.
+use std::collections
+
+fn count(m: collections::HashMap[String, i64]) -> i64 {
+    return m.len()
+}
+
+fn sum(v: Vec[i64]) -> i64 {
+    let mut total = 0
+    for x in v {
+        total += x
+    }
+    return total
+}
+
+fn main() {
+    let f = count
+    let mut a = collections::HashMap()
+    a["x"] = 1
+    a["y"] = 2
+    println(f"{f(a)}")
+    let g = sum
+    println(f"{g([1, 2, 3])}")
+}

@@ -1,0 +1,27 @@
+// #582: a function with a map parameter, handed to a parameter of function
+// type or kept in a field, is called with the map by value.
+use std::collections
+
+struct Holder {
+    g: fn(collections::HashMap[String, i64]) -> i64,
+}
+
+fn count(m: collections::HashMap[String, i64]) -> i64 {
+    return m.len()
+}
+
+fn apply(g: fn(collections::HashMap[String, i64]) -> i64, m: collections::HashMap[String, i64]) -> i64 {
+    return g(m)
+}
+
+fn main() {
+    let mut a = collections::HashMap()
+    a["x"] = 1
+    println(f"{apply(count, a)}")
+    let h = Holder { g: count }
+    let mut b = collections::HashMap()
+    b["x"] = 1
+    b["y"] = 1
+    let n = h.g(b)
+    println(f"{n}")
+}

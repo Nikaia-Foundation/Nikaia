@@ -701,6 +701,53 @@ impl EmitState {
         }
         return lent
     }
+
+    /// **A named function bound by a `let` without a type** (#582): the local
+    /// is called with its parameters by value, as a function type takes them,
+    /// so where the function lends one, the value is a closure that lends it.
+    /// Its parameters carry the written types: the language below cannot infer
+    /// an owned argument from the view the call lends. Whether it wrote one.
+    pub fn emit_arg_named_fn_bound[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        if !self.facts.named_fn_values.contains_key(node_key(value)) {
+            return false
+        }
+        let wanted = match value {
+            Expr::Variable(name, _) => emit_text(world, name),
+            else => return false,
+        }
+        let lent = self.emit_arg_lent_params(world, value)
+        if lent.is_empty() {
+            return false
+        }
+        let mut written: Vec[String] = []
+        for item in world.items {
+            match item.node {
+                Item::Fn { name, receiver, generics, args, .. } => {
+                    let declared = name ?? continue
+                    if receiver != null || !generics.is_empty() || emit_text(world, declared) != wanted || args.len() != lent.len() {
+                        continue
+                    }
+                    for arg in args {
+                        written.push(self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), arg.ty, EmitLifetimes::Elided))
+                    }
+                },
+                else => {}
+            }
+        }
+        if written.len() != lent.len() {
+            return false
+        }
+        let mut names: Vec[String] = []
+        let mut typed: Vec[String] = []
+        for n in 0..<lent.len() {
+            names.push(f"__nikaia_a{n}")
+            typed.push(f"__nikaia_a{n}: {written[n]}")
+        }
+        out.push(f"|{typed.join(", ")}| ")
+        host.expr(walk, out, value, depth, flow, scope)
+        out.push(f"({emit_arg_passing(names, lent)})")
+        return true
+    }
 }
 
 /// The arguments a closure around a named function hands it: each name, behind

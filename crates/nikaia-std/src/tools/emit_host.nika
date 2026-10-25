@@ -142,6 +142,9 @@ impl EmitState {
     /// A cast's operand, through the view a `for` binding is (ADR-182 D1):
     /// inside the checked conversion and not around it.
     pub fn emit_core_operand[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, viewed: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if self.emit_arg_named_fn_bound(world, walk, out, host, node, depth, flow, scope) {
+            return
+        }
         if !viewed {
             host.expr(walk, out, node, depth, flow, scope)
             return

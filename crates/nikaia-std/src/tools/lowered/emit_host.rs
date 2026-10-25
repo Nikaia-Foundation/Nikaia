@@ -43,6 +43,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_operand<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, viewed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        if self.emit_arg_named_fn_bound(world, walk, out, host, node, depth, flow, scope)? { return Ok(()); }
         if !viewed {
             host.expr(walk, out, node, depth, flow, scope)?;
             return Ok(());
