@@ -1,0 +1,63 @@
+// The gate before a commit (#852): the repository-wide guard tests, and with
+// `--shard K/N` one part (K of N, from 1) of the `it` tests.
+//
+//     nikaia run scripts/gate.nika [-- --shard K/N]
+//
+// Prints `Gate: green` or `Gate: red <tests>`; exit code 0 or 1.
+
+use std::cli
+use std::process
+use std::text
+
+fn gate_cargo(extra: Vec[String]) -> String throws {
+    let mut args: Vec[String] = ["test", "--profile", "fast", "-p", "nikaia", "--test", "it", "--"]
+    for a in extra { args.push(a.clone()) }
+    let out = process::run("cargo", args)
+    let mut failed: Vec[String] = []
+    for line in (out.stdout + "\n" + out.stderr).split("\n") {
+        let l = line.trim()
+        if l.starts_with("test ") && l.ends_with("FAILED") {
+            failed.push((l.strip_prefix("test ") ?? "").split(" ").collect()[0].clone())
+        }
+    }
+    if out.code != 0 && failed.len() == 0 { failed.push("cargo-test-error") }
+    return failed.join(" ")
+}
+
+fn main() throws {
+    let mut shard: String = "".to_string()
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let mut i = 0
+    while i < args.len() {
+        if args[i] == "--shard" && i + 1 < args.len() { shard = args[i + 1].clone() }
+        i += 1
+    }
+    let mut red = gate_cargo(["range_spelling::", "shipped_ledger::", "contracts::every_std_module", "dependency_ledger::"])
+    if shard != "" {
+        let parts = shard.split("/").collect()
+        let k = text::parse_i64(parts[0].clone()) ?? 0
+        let n = text::parse_i64(parts[1].clone()) ?? 0
+        if k < 1 || n < 1 || k > n {
+            println("bad --shard K/N")
+            process::exit(2)
+        }
+        let listed = process::run("cargo", ["test", "--profile", "fast", "-p", "nikaia", "--test", "it", "--", "--list", "--format", "terse"])
+        let mut mine: Vec[String] = ["--exact"]
+        let mut idx: i64 = 0
+        for line in listed.stdout.split("\n") {
+            let l = line.trim()
+            if !l.ends_with(": test") { continue }
+            idx += 1
+            if (idx % n) == (k % n) { mine.push((l.strip_suffix(": test") ?? "").clone()) }
+        }
+        let more = gate_cargo(mine)
+        if more != "" { red = (red + " " + more).trim().clone() }
+    }
+    if red == "" {
+        println("Gate: green")
+    } else {
+        println(f"Gate: red {red}")
+        process::exit(1)
+    }
+}
