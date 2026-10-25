@@ -72,3 +72,6 @@ node_modules/
 /tests/build-time/nikaia.contracts
 /tests/build-time/nikaia.derived
 /tests/build-time/nikaia.proofs
+
+# A package built in place keeps its build tree beside it.
+packages/*/target
