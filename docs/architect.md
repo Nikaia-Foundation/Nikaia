@@ -102,8 +102,19 @@ What the architect hands the main session for a builder, in this form:
   resume one for a second slice.
 * **CI watch.** After each builder's push, one background call
   `gh run watch <run id> --exit-status` on that commit's run; it wakes the
-  session at the end, no polling. The next builder starts meanwhile. A red
-  run goes to the architect, whose next order is the repair.
+  session at the end, no polling. The next builder starts meanwhile. For the
+  state of `develop`, `nikaia run scripts/release.nika -- --dry-run DIR`
+  prints one `CI` line; never the GitHub MCP `actions_list` (tens of k tokens
+  of JSON). A red run goes to the architect, whose next order is the
+  fix-forward brief (or a revert, when a record settles it).
+* **What the main session reads.** Only the one-line answers (builder:
+  `done <sha>, report <path>`; architect: at most 10 lines: brief paths in
+  order, start orders, needs). It does not open reports or quote them: it
+  passes the architect only `batch done` or `cut at <brief>` with the harness
+  token figures, one line per agent. Owner messages go verbatim.
+* **Where briefs live.** `briefs/` in the session's scratchpad (named in the
+  architect's task); the *State* section below names the next brief, so a
+  fresh session that lost the scratchpad starts the architect, not a builder.
 * **Release.** `nikaia run scripts/release.nika -- [--dry-run] [--loop M] REPORTS_DIR`
   reads the new `*.report.md`, prints CI, STOP and RED lines, and raises the
   version once for the done reports' `Changelog:` lines (`bump.py new`, push).
@@ -184,6 +195,7 @@ Tests in Nikaia (owner, 2026-10-24): #821 `ready`; ADR-269 D22 (`tests/NAME.nika
 Update 2026-10-25 (fresh architect): #837 running, then briefs 838, 744, 582, 747 (scratchpad `briefs/`); then E10-4 adapter switch (`priorities.md` table). #825 closed by hand.
 Update 2026-10-25 end of architect run (~65 turns): done #753 #780 #838 #744 #839 #582 #840, #747 step 1; #778 #775 #825 closed by hand. Next: briefs `e10-4-switch.md` (Opus), then `native-compiler.md` (alone; then evaluate its CI CPU log after ~20 runs for the owner's question on runner CPUs). Open small bugs: #841, #747 step 2. Owner direction: optional native compiler build, `native` always resolved to the CPU name in flags and cache keys.
 Update 2026-10-25 (architect after 087ce275): briefs `841.md`, `747-2.md` (Sonnet), `e11-1.md` (Opus), serial. Native tool partial: count owed with a non-AVX-512 CPU name (x86-64-v3). d995ae5a red in bootstrap_compiler only, fixed by later green runs.
+Update 2026-10-25 later: done #756 #842 E11-1..3, release script; #843 reopened `blocked` (contradicted ADR-282 D8, revert brief `fix-843-revert.md` running, develop red until it lands). Next: E11-4 (the core, ~3600 lines) needs a brief; automation step `scripts/batch.nika` (brief `batch-script.md`).
 Stage: 1 (serial). Current issue: #125, C-7 of `selfhosting-plan.md`: U-d0 and
 U-d1 done, **U-d2** (`check/attributes.rs`, 714 lines, to
 `tools/check_attributes.nika`) running; then **#667** (owner: before U-d3):
