@@ -48,8 +48,9 @@ pub(crate) fn sub_program(
     value: &Expr,
     ty: &Ty,
     known: &dyn Fn(&str) -> Option<Value>,
+    typed: &dyn Fn(&str) -> Option<Ty>,
 ) -> Option<Parsed> {
-    let mut kept = unit_without_its_constants(parsed, bound, known)?;
+    let mut kept = unit_without_its_constants(parsed, bound, known, typed)?;
     let returns = written_type(ty, &kept)?;
     let main = kept.interner.intern_string("main");
     let value_fn = kept.interner.intern_string(VALUE_FN);
@@ -135,6 +136,7 @@ pub(crate) fn unit_without_its_constants(
     parsed: &Parsed,
     bound: &str,
     known: &dyn Fn(&str) -> Option<Value>,
+    typed: &dyn Fn(&str) -> Option<Ty>,
 ) -> Option<Parsed> {
     let mut kept = parsed.keeping(|item| match item {
         // **The program's `main` is not this program's**, and its constants
@@ -166,10 +168,19 @@ pub(crate) fn unit_without_its_constants(
         if matches!(held, Value::Constant { .. }) {
             continue;
         }
+        // **Its type goes with it** (#779): where none is written, the one
+        // the checker found, so a list's numbers keep their element type
+        // rather than default to `i64`.
+        let ty = match declared {
+            Some(written) => Some(written.clone()),
+            None => typed(named)
+                .and_then(|found| held_as(found, &held))
+                .and_then(|found| written_type(&found, &kept)),
+        };
         kept.program.items.push(Spanned::new(
             Item::Comptime {
                 name: *name,
-                ty: declared.clone(),
+                ty,
                 value: literal_of(&held, &kept)?,
                 public: *public,
                 bounds: Vec::new(),
@@ -479,6 +490,7 @@ pub(crate) fn compute(
     value: &Expr,
     ty: &Ty,
     known: &dyn Fn(&str) -> Option<Value>,
+    typed: &dyn Fn(&str) -> Option<Ty>,
     library: &crate::contracts::Ledger,
     workshop: &crate::grammar_run::Workshop,
     bounds: Bounds,
@@ -491,7 +503,7 @@ pub(crate) fn compute(
     defaults_known_from(outer, || {
         defaults_compiled_in(None, || {
             computed(
-                files, here, bound, value, ty, known, library, workshop, bounds,
+                files, here, bound, value, ty, known, typed, library, workshop, bounds,
             )
         })
     })
@@ -505,13 +517,14 @@ fn computed(
     value: &Expr,
     ty: &Ty,
     known: &dyn Fn(&str) -> Option<Value>,
+    typed: &dyn Fn(&str) -> Option<Ty>,
     library: &crate::contracts::Ledger,
     workshop: &crate::grammar_run::Workshop,
     bounds: Bounds,
 ) -> Computed {
     use crate::contracts::LedgerOps;
     let not_here = |why: &str| Computed::NotHere(why.to_string());
-    let Some(sub) = sub_program(files[here], bound, value, ty, known) else {
+    let Some(sub) = sub_program(files[here], bound, value, ty, known, typed) else {
         // **A callee nothing declares is named** (0.0.113): its result has no
         // type, so neither has the value, and the callee is why.
         if let Some(callee) = undeclared_callee(files, here, value, library) {
@@ -520,7 +533,7 @@ fn computed(
             ));
         }
         // The earlier constants, or else the type, had no written form.
-        return match unit_without_its_constants(files[here], bound, known) {
+        return match unit_without_its_constants(files[here], bound, known, typed) {
             None => not_here(NOT_CARRIED),
             Some(_) => not_here(
                 "Its type has no form this compiler writes into the program that computes it",
@@ -532,7 +545,7 @@ fn computed(
     for (at, file) in files.iter().enumerate() {
         let unit = match at == here {
             true => sub.take(),
-            false => unit_without_its_constants(file, bound, known),
+            false => unit_without_its_constants(file, bound, known, typed),
         };
         match unit {
             Some(unit) => units.push(unit),
@@ -571,7 +584,9 @@ fn computed(
             _ => false,
         })
     {
-        let ahead = worked_out_ahead(files, bound, &absent, known, library, workshop, bounds);
+        let ahead = worked_out_ahead(
+            files, bound, &absent, known, typed, library, workshop, bounds,
+        );
         // **Only a constant worked out anew is a reason to run again**: one
         // that stays out stays out, and asking again went round without end.
         if ahead.keys().all(|name| known(name).is_some()) {
@@ -581,7 +596,7 @@ fn computed(
         }
         let known = |name: &str| known(name).or_else(|| ahead.get(name).cloned());
         return computed(
-            files, here, bound, value, ty, &known, library, workshop, bounds,
+            files, here, bound, value, ty, &known, typed, library, workshop, bounds,
         );
     }
     // **A dependency's functions are the program's to call** (ADR-321 D13):
@@ -658,11 +673,13 @@ fn computed(
 /// compiled and run as any `comptime` is. One already being worked out
 /// further up is left alone, which is how a ring ends: its run stays without
 /// it and is refused.
+#[allow(clippy::too_many_arguments)]
 fn worked_out_ahead(
     files: &[&Parsed],
     bound: &str,
     absent: &BTreeSet<String>,
     known: &dyn Fn(&str) -> Option<Value>,
+    typed: &dyn Fn(&str) -> Option<Ty>,
     library: &crate::contracts::Ledger,
     workshop: &crate::grammar_run::Workshop,
     bounds: Bounds,
@@ -694,7 +711,7 @@ fn worked_out_ahead(
                 (None, Some(written)) => {
                     let ty = <Ty as crate::contracts::ty::TyOps>::from_ast(file, written);
                     match computed(
-                        files, at, named, value, &ty, known, library, workshop, bounds,
+                        files, at, named, value, &ty, known, typed, library, workshop, bounds,
                     ) {
                         Computed::Value(value) => Some(value),
                         _ => None,
@@ -970,6 +987,50 @@ fn literal_of(value: &Value, parsed: &Parsed) -> Option<Expr> {
                 }),
             }
         }
+    }
+}
+
+/// **The type a worked-out `comptime` is carried under** (#779): the one
+/// found, in the shape a `comptime` holds (`NK1167`): text as `ref String`, a
+/// `Vec` as the `Array` of as many elements as it came to, and so inside.
+fn held_as(found: Ty, held: &Value) -> Option<Ty> {
+    match (found, held) {
+        (Ty::Named { name, args, .. }, Value::Text(_)) if name == "String" && args.is_empty() => {
+            Some(Ty::Named {
+                name,
+                args,
+                view: true,
+            })
+        }
+        (Ty::Named { name, args, view }, Value::List(items))
+            if name == "Vec" && args.len() == 1 =>
+        {
+            let element = args.into_iter().next()?;
+            let element = match items.first() {
+                Some(first) => held_as(element, first)?,
+                None => element,
+            };
+            Some(Ty::Named {
+                name: "Array".to_string(),
+                args: vec![element, Ty::Count(i64::try_from(items.len()).ok()?)],
+                view,
+            })
+        }
+        // **An open number past `i64`** (ADR-287 D21) is carried as the
+        // type it fits, which its literal alone would not default to.
+        (Ty::Unknown, Value::Int(n)) if n.magnitude > i64::MAX as u64 => {
+            let fits = match n.negative {
+                false => "u64",
+                true if n.magnitude == 1 << 63 => return Some(Ty::Unknown),
+                true => "i128",
+            };
+            Some(Ty::Named {
+                name: fits.to_string(),
+                args: Vec::new(),
+                view: false,
+            })
+        }
+        (found, _) => Some(found),
     }
 }
 

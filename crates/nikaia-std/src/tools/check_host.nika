@@ -80,7 +80,7 @@ pub trait CheckHost {
     /// what the scope knows.
     fn evaluate(ref self, value: ref Expr, held: ref collections::BTreeMap[String, BuildValue]) -> CheckBuilt sync
     /// Compile an initialiser with the program's functions and run it.
-    fn compute_comptime(ref self, value: ref Expr, found: ref Ty, bound: ref String, known: ref collections::BTreeMap[String, BuildValue], steps: u64?, bytes: u64?) -> CheckComputed sync
+    fn compute_comptime(ref self, value: ref Expr, found: ref Ty, bound: ref String, known: ref collections::BTreeMap[String, BuildValue], typed: ref collections::BTreeMap[String, Ty], steps: u64?, bytes: u64?) -> CheckComputed sync
     /// Whether a grammar can be run anywhere (a workshop to build it in).
     fn somewhere(ref self) -> bool sync
     /// The text a literal in source stands for.
@@ -657,15 +657,18 @@ impl CheckState {
         }
         let rewritten = host.assets_read_in(value, read)
         let mut outermost: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
+        // **What each came to is carried with its type** (#779).
+        let mut typed: collections::BTreeMap[String, Ty] = collections::BTreeMap()
         if self.scope.len() > 0 {
             for local in self.scope[0] {
                 let one = host_known(local)
                 if one != null {
                     outermost.insert(local.name.clone(), one ?? continue)
+                    typed.insert(local.name.clone(), local.ty.clone())
                 }
             }
         }
-        match host.compute_comptime(rewritten, found, bound, outermost, self.flow.raised.0, self.flow.raised.1) {
+        match host.compute_comptime(rewritten, found, bound, outermost, typed, self.flow.raised.0, self.flow.raised.1) {
             CheckComputed::Value(computed) => return CheckCompiled { answered: true, value: computed, said: false },
             CheckComputed::Forbidden { callee, because } => self.a_body_that_may_not_run_at_build_time(callee, because, span),
             CheckComputed::Stopped(detail) => self.a_build_time_run_that_stopped(host, bound, detail, here, span),

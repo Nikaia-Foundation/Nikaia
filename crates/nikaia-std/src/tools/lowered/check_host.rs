@@ -42,7 +42,7 @@ pub trait CheckHost {
     fn literal_holes(&self, literal: &Expr) -> Vec<Expr>;
     fn free_calls(&self, body: &Block) -> collections::BTreeSet<String>;
     fn evaluate(&self, value: &Expr, held: &collections::BTreeMap<String, BuildValue>) -> CheckBuilt;
-    fn compute_comptime(&self, value: &Expr, found: &Ty, bound: &str, known: &collections::BTreeMap<String, BuildValue>, steps: Option<u64>, bytes: Option<u64>) -> CheckComputed;
+    fn compute_comptime(&self, value: &Expr, found: &Ty, bound: &str, known: &collections::BTreeMap<String, BuildValue>, typed: &collections::BTreeMap<String, Ty>, steps: Option<u64>, bytes: Option<u64>) -> CheckComputed;
     fn somewhere(&self) -> bool;
     fn decoded(&self, literal: &str) -> Option<String>;
     fn composed(&self, text: &str) -> String;
@@ -471,13 +471,17 @@ impl CheckState {
         }
         let rewritten = host.assets_read_in(value, &read);
         let mut outermost: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
+        let mut typed: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
         if !self.scope.is_empty() {
             for local in (*nikaia_std::index::get(&self.scope, 0)).iter() {
                 let one = host_known(local);
-                if one.is_some() { outermost.insert(local.name.to_owned(), match one { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+                if one.is_some() {
+                    outermost.insert(local.name.to_owned(), match one { Some(__nikaia_value) => __nikaia_value, None => continue });
+                    typed.insert(local.name.to_owned(), local.ty.clone());
+                }
             }
         }
-        match host.compute_comptime(&rewritten, found, bound, &outermost, self.flow.raised.0, self.flow.raised.1) {
+        match host.compute_comptime(&rewritten, found, bound, &outermost, &typed, self.flow.raised.0, self.flow.raised.1) {
             CheckComputed::Value(computed) => { return CheckCompiled { answered: true, value: Some(computed), said: false }; },
             CheckComputed::Forbidden { ref callee, ref because } => { self.a_body_that_may_not_run_at_build_time(callee, because, span); },
             CheckComputed::Stopped(ref detail) => { self.a_build_time_run_that_stopped(host, bound, detail, here, span); },

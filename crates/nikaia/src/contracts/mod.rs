@@ -1281,6 +1281,7 @@ fn computed_literal(
         expr,
         &ty,
         &nothing,
+        &|_: &str| None,
         library,
         &workshop,
         workshop.bounds(),

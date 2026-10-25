@@ -1,0 +1,26 @@
+// #779: a worked-out `comptime` with no written type is carried into the next
+// one's program with the type the checker found, so a `u64` above `i64::MAX`
+// keeps its type,
+// and a `u64` one is read by a later one, as text is.
+comptime ONES: u64 = 0xFFFFFFFFFFFFFFFF
+comptime A = masks(0)
+comptime B = masks(1)
+comptime BIG: u64 = ONES - id(0)
+comptime AFTER = id(BIG) - 1
+comptime LOUD = "abc".to_uppercase()
+comptime N = LOUD.len()
+
+fn masks(word: i64) -> Vec[u64] {
+    let mut out: Vec[u64] = []
+    if word == 0 { out.push(ONES) } else { out.push(1) }
+    return out
+}
+
+fn id(x: u64) -> u64 {
+    return x
+}
+
+fn main() {
+    println(f"{A[0]} {B[0]}")
+    println(f"{BIG} {AFTER} {LOUD} {N}")
+}

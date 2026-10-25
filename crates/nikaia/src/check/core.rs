@@ -236,11 +236,12 @@ impl CheckHost for Core<'_, '_> {
         found: &Ty,
         bound: &str,
         known: &BTreeMap<String, build_time::Value>,
+        typed: &BTreeMap<String, Ty>,
         steps: Option<u64>,
         bytes: Option<u64>,
     ) -> CheckComputed {
         self.h
-            .compute_comptime(value, found, bound, known, steps, bytes)
+            .compute_comptime(value, found, bound, known, typed, steps, bytes)
     }
 
     fn somewhere(&self) -> bool {

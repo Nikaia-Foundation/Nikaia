@@ -108,7 +108,15 @@ impl Host<'_> {
                 )
             })
             .collect();
-        match self.compute_comptime(&value, &result, CLAIM_BOUND, &known, None, None) {
+        match self.compute_comptime(
+            &value,
+            &result,
+            CLAIM_BOUND,
+            &known,
+            &BTreeMap::new(),
+            None,
+            None,
+        ) {
             CheckComputed::Value(build_time::Value::Int(n)) => match integer_as_count(&n) {
                 Some(value) => ClaimRun::Value(value),
                 None => not_run("Its value is more than a whole number of the proof holds."),
@@ -249,10 +257,12 @@ impl CheckHost for Host<'_> {
         found: &Ty,
         bound: &str,
         known: &BTreeMap<String, build_time::Value>,
+        typed: &BTreeMap<String, Ty>,
         steps: Option<u64>,
         bytes: Option<u64>,
     ) -> CheckComputed {
         let (files, here) = self.files();
+        let typed = |name: &str| typed.get(name).cloned();
         let workshop = self.reads.workshop();
         let known = |name: &str| known.get(name).cloned();
         let mut bounds = workshop.bounds();
@@ -269,6 +279,7 @@ impl CheckHost for Host<'_> {
             value,
             found,
             &known,
+            &typed,
             self.library,
             workshop,
             bounds,
