@@ -132,8 +132,9 @@ Standing rules, for a main session that starts fresh (the state is in
   at <path>*, type `builder`), in batches as *Batches* above says; the
   harness figures of each (tokens, tool uses) go to the architect with the
   report path.
-* **Version raises** are the main session's (`scripts/bump.py new`, with the
-  architect's changelog lines), once per finished package.
+* **Version raises** are the main session's, done by itself without an agent
+  (owner, 2026-10-25, measure 9): `scripts/bump.py new` with the architect's
+  changelog lines, once per finished package.
 * **CI**: check `develop` every 20 minutes; a red run is fixed forward at once
   (or the breaking commit reverted), before new work.
 * **Stop hook**: when it says there are uncommitted changes, answer
