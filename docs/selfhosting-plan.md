@@ -489,3 +489,26 @@ now: `never_returns`, `jumps`, `a_tail_that_enters_a_grammar`, `PANIC`, `ARM_VAL
 E10-4 switched: `Emitter::function` is a thin adapter over `emit_function`
 (`tools/emit_function.nika`); 1326 Rust lines removed (the body and 16 items it alone used,
 `check::specialised` among them), `lower-std` output unchanged. Next: E11.
+
+**E11 plan** (call graph of `emit/mod.rs` at ae4bbb9d, 7691 lines, 212 fns; sizes are Rust lines
+of the group, a helper counted where its only callers are). Stays Rust (the adapter):
+`with_contracts` and its table builders (733), the entry points, `SourceMap`, `Build`,
+`Target`, `EmitRefused`, `host.rs`, `take_lend`, `insert_after_first_brace`. Dead (no caller in
+the repository): `emit_std`, `emit_std_items_against`, `emit_module_body`,
+`holds_map_positions`, `BuildFlags::for_emit` (about 60 lines, delete with the slice that
+passes them). Thin adapters already (3-20 lines over `nikaia_std::tools`): `ty`,
+`ty_counted`, `count_at`, `function`, `grammar`, `handle_named`, `pointed_at`,
+`writes_a_run`, `pauses`, `format_of`, `dsl_name`, `seeded` and most one-liners near the end.
+Leaves-first slices:
+1. E11-1 `item` and what only it calls (`trait_method(_written)`, `bridge`,
+   `declared_wider`, `error_impl`, `opaque_type`, `foreign_ty`, `derives`, `boxed_ty`,
+   `borrows`, `bounded`, `angled`): 1004 lines; calls only adapters.
+2. E11-2 `pattern` / `pattern_body` / `patterns` / `fold` / `repeat_suffix` (169), called
+   through the host's `pattern`.
+3. E11-3 `program`, `items_only`, `entry_point`, `shadow_types`, `tether_wrappers`,
+   `error_channel` (about 560): calls `item` (after 1).
+4. E11-4 the core in one step: `block_plain`, `block_opening_with`, `stmt`,
+   `stmt_written`, `a_stmt`, `expr`, `expr_as_written`, `expr_written` and their helpers
+   (about 3600, the host's `expr` / `stmt` / `block_*` callbacks go with it).
+5. E11-5 the template / literal-hole tables and `view_slots` / `borrowing_structs*`
+   (about 350), then what is left of `with_contracts` that only feeds them.
