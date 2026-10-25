@@ -72,6 +72,30 @@ pub fn literals_in(expr: &Expr) -> Vec<(i64, Integer)> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn open_part_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<i64> {
+        let field: String = match expr {
+            Expr::Field { name, .. } => { let name = *name; world.words.resolve(name).to_owned() },
+            _ => return None,
+        };
+        let held: String = match expr {
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
+                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+                _ => return None,
+            } },
+            _ => return None,
+        };
+        let local = match self.binding(&held) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let parts = match *nikaia_std::index::get(&self.flow.open_parts, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let mut i = 0;
+        for at in parts.iter() {
+            let at = nikaia_std::num::value(at);
+            if format!("{}", i) == field && at >= 0 { return Some(at); }
+            i += 1;
+        }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn open_element_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<i64> {
         match expr {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.open_element_in(world, base, index) },
@@ -137,6 +161,10 @@ impl CheckState {
                 let at = self.open_element_of(world, expr);
                 if at.is_some() && !self.a_read_of_a_map(world, expr) { out.push(self.open_root(nikaia_std::index::or(at, || 0))); }
             },
+            Expr::Field { .. } => {
+                let part = self.open_part_of(world, expr);
+                if part.is_some() { out.push(self.open_root(nikaia_std::index::or(part, || 0))); }
+            },
             Expr::Call { args, .. } => {
                 if !args.is_empty() {
                     let calls = *nikaia_std::index::get(&self.flow.open_calls, &(id_of(nikaia_std::index::get(&args, 0)) as i64));
@@ -186,6 +214,7 @@ impl CheckState {
             Expr::LitInt { .. } => true,
             Expr::Variable(name, _) => { let name = *name; self.a_name_of_an_open_number(world, name) },
             Expr::Index { .. } => self.open_element_of(world, expr).is_some() && !self.a_read_of_a_map(world, expr),
+            Expr::Field { .. } => self.open_part_of(world, expr).is_some(),
             Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
             Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver) || world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0 },
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),

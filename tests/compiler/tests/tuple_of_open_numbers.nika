@@ -1,0 +1,9 @@
+fn main() {
+    let p = (1, -2)
+    println(f"{p.0} {p.1}")
+    let q = (1, "a")
+    println(f"{q.0} {q.1}")
+    let r = (7, 300)
+    let x: u8 = r.0
+    println(f"{x} {r.1}")
+}

@@ -118,6 +118,31 @@ pub fn literals_in(expr: ref Expr) -> Vec[(i64, Integer)] sync {
 impl CheckState {
     /// **An element read out of a list whose elements are open** (D34): `xs[i]`,
     /// and not a slice of it.
+    /// `p.0` of a tuple written in numbers: the open number that part is.
+    pub fn open_part_of(ref self, world: ref CheckWorld, expr: ref Expr) -> i64? sync {
+        let field: String = match expr {
+            Expr::Field { name, .. } => world.words.resolve(name).clone(),
+            else => return null,
+        }
+        let held: String = match expr {
+            Expr::Field { base, .. } => match base {
+                Expr::Variable(name, _) => world.words.resolve(name).clone(),
+                else => return null,
+            },
+            else => return null,
+        }
+        let local = self.binding(held) ?? return null
+        let parts = self.flow.open_parts[local.id] ?? return null
+        let mut i = 0
+        for at in parts {
+            if f"{i}" == field && at >= 0 {
+                return at
+            }
+            i += 1
+        }
+        return null
+    }
+
     pub fn open_element_of(ref self, world: ref CheckWorld, expr: ref Expr) -> i64? sync {
         return match expr {
             Expr::Index { base, index, .. } => self.open_element_in(world, base, index),
@@ -195,6 +220,12 @@ impl CheckState {
                     out.push(self.open_root(at ?? 0))
                 }
             },
+            Expr::Field { .. } => {
+                let part = self.open_part_of(world, expr)
+                if part != null {
+                    out.push(self.open_root(part ?? 0))
+                }
+            },
             Expr::Call { args, .. } => {
                 if args.len() > 0 {
                     let calls = self.flow.open_calls[id_of(args[0]) as i64]
@@ -260,6 +291,7 @@ impl CheckState {
             Expr::LitInt { .. } => true,
             Expr::Variable(name, _) => self.a_name_of_an_open_number(world, name),
             Expr::Index { .. } => self.open_element_of(world, expr) != null && !self.a_read_of_a_map(world, expr),
+            Expr::Field { .. } => self.open_part_of(world, expr) != null,
             Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
             Expr::MethodCall { receiver, method, .. } => (self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver)) || (world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0),
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),

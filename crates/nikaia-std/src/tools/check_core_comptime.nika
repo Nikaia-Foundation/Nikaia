@@ -26,6 +26,38 @@ fn check_core_comptime_shape(evaluated: ref BuildValue?) -> i64 {
     }
 }
 
+/// A tuple's parts nothing typed, typed by the numbers they hold.
+fn check_core_comptime_tuple_parts(found: ref Ty, evaluated: ref BuildValue?) -> Ty {
+    let value = evaluated ?? return found.clone()
+    let parts: Vec[BuildValue] = match value {
+        BuildValue::Tuple(each) => each.clone(),
+        else => return found.clone(),
+    }
+    let tys: Vec[Ty] = match found {
+        Ty::Tuple(each) => each.clone(),
+        else => return found.clone(),
+    }
+    if tys.len() != parts.len() {
+        return found.clone()
+    }
+    let mut out: Vec[Ty] = []
+    let mut at = 0
+    for t in tys {
+        let mut one = t.clone()
+        if t.is_unknown() {
+            match parts[at] {
+                BuildValue::Int(n) => {
+                    one = Ty::Named { name: check_core_comptime_first_type(n, false), args: [], view: false }
+                },
+                else => {},
+            }
+        }
+        out.push(one)
+        at = at + 1
+    }
+    return Ty::Tuple(out)
+}
+
 /// The type a number with nothing declaring one takes: the first of `i32` and
 /// `i64` that holds it (Part I 2.4).
 fn check_core_comptime_first_type(n: ref Integer, beyond: bool) -> String {
@@ -335,10 +367,16 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
 
     // **An integer with no written type is an open number** (ADR-287 D21).
     let shape = check_core_comptime_shape(evaluated)
-    let open = want == null && shape == 1
+    let declared = want != null
+    let open = !declared && shape == 1
     let mut held: Ty = Ty::Unknown
     if !open {
         held = want ?? found
+    }
+    // **A tuple of numbers nothing typed** (#837): each part is the type a
+    // lone number of its value takes, the one its `const` is written with.
+    if !open && !declared && shape == 6 {
+        held = check_core_comptime_tuple_parts(held, evaluated)
     }
     let id = state.a_new_binding()
     if open {

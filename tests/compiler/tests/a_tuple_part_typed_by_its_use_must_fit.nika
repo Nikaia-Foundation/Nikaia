@@ -1,0 +1,5 @@
+fn main() {
+    let r = (300, 1)
+    let x: u8 = r.0
+    println(f"{x}")
+}

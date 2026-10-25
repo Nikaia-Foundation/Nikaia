@@ -1,0 +1,10 @@
+error[NK1116]: `300` doesn't fit in a `u8`.
+  --> tests/a_tuple_part_typed_by_its_use_must_fit.nika:2:5
+   |
+ 2 |     let r = (300, 1)
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = note: A `u8` holds 0 to 255.
+   = note: `r.0` is a `u8` because of how it is used.
+   = help: A `u8` is one byte. Use `i32` or `i64` where the number is a count rather than a byte.
+1 type error

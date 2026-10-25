@@ -1,0 +1,5 @@
+comptime P = (1, -2)
+
+fn main() {
+    println(f"{P.0} {P.1}")
+}

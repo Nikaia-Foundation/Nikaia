@@ -232,6 +232,9 @@ pub struct CheckFlow {
     /// and the entry of `open_numbers` they are; its values are in
     /// `open_elements`, as a list's elements are.
     pub open_keys: collections::BTreeMap[i64, i64],
+    /// **A tuple written in numbers** (#837): the binding and, per part, the
+    /// entry of `open_numbers` it is, or -1.
+    pub open_parts: collections::BTreeMap[i64, Vec[i64]],
     /// The entries of `open_numbers` that are a map's keys or values, by the
     /// entry: `true` for the keys, and the other part's type as written, for
     /// the message.
@@ -357,6 +360,7 @@ impl CheckFlow {
             chars_refused: collections::BTreeSet(),
             open_elements: collections::BTreeMap(),
             open_keys: collections::BTreeMap(),
+            open_parts: collections::BTreeMap(),
             open_map_parts: collections::BTreeMap(),
             open_walks: collections::BTreeMap(),
             open_params: collections::BTreeMap(),

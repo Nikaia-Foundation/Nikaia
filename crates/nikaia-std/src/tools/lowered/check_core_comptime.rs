@@ -16,6 +16,33 @@ pub(crate) fn check_core_comptime_shape(evaluated: Option<&BuildValue>) -> i64 {
     }
 }
 
+pub(crate) fn check_core_comptime_tuple_parts(found: &Ty, evaluated: Option<&BuildValue>) -> Ty {
+    let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return found.clone() };
+    let parts: Vec<BuildValue> = match value {
+        BuildValue::Tuple(each) => each.to_owned(),
+        _ => return found.clone(),
+    };
+    let tys: Vec<Ty> = match found {
+        Ty::Tuple(each) => each.to_owned(),
+        _ => return found.clone(),
+    };
+    if (tys.len() as i64) != parts.len() as i64 { return found.clone(); }
+    let mut out: Vec<Ty> = vec![];
+    let mut at: i64 = 0;
+    for t in tys.iter() {
+        let mut one = t.clone();
+        if t.is_unknown() {
+            match *nikaia_std::index::get(&parts, nikaia_std::index::at(at)) {
+                BuildValue::Int(n) => { one = Ty::Named { name: check_core_comptime_first_type(&n, false), args: vec![], view: false }; },
+                _ => { },
+            }
+        }
+        out.push(one);
+        at = at + 1;
+    }
+    Ty::Tuple(out)
+}
+
 pub(crate) fn check_core_comptime_first_type(n: &Integer, beyond: bool) -> String {
     if !beyond && integer_fits(n, "i32") { return "i32".to_owned(); }
     "i64".to_owned()
@@ -266,9 +293,11 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         state.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), notes, Some(format!("Write `let {} = …` to compute it while the program runs instead.", bound))));
     }
     let shape = check_core_comptime_shape((evaluated).as_ref());
-    let open = want.is_none() && shape == 1;
+    let declared = want.is_some();
+    let open = !declared && shape == 1;
     let mut held: Ty = Ty::Unknown;
     if !open { held = nikaia_std::index::or(want, || found.into()); }
+    if !open && !declared && shape == 6 { held = check_core_comptime_tuple_parts(&held, (evaluated).as_ref()); }
     let id = state.a_new_binding();
     if open { state.open_comptimes.insert(id, Span { start: span.start, end: span.end }); }
     let mut constant: Option<Integer> = None;

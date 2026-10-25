@@ -173,6 +173,14 @@ pub(crate) fn check_core_stmt_an_unknown_list(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_unknown_parts(tys: &[Ty]) -> Vec<bool> {
+    let mut out: Vec<bool> = vec![];
+    for t in tys.iter() { out.push(t.is_unknown()); }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_path(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => name == "fs::Path",
@@ -443,6 +451,33 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             _ => { },
         }
     }
+    let mut part_opens: Vec<i64> = vec![];
+    if ty.is_none() {
+        match value {
+            Expr::Tuple(parts, _) => {
+                let unknowns: Vec<bool> = match bound {
+                    Ty::Tuple(ref tys) => check_core_stmt_unknown_parts(tys),
+                    _ => vec![],
+                };
+                let mut i: i64 = 0;
+                let mut any = false;
+                for part in parts.iter() {
+                    let mut at: i64 = -1;
+                    if ((i) as usize) < unknowns.len() && *nikaia_std::index::get(&unknowns, (i) as usize) && state.number_shaped(world, part) {
+                        at = span.start as i64 + i + 1;
+                        let named = format!("{}.{}", name, i);
+                        state.flow.open_numbers.insert(at, check_core_stmt_open_number(&named, false, &Span { start: span.start + u32::try_from(i).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + 1u32, end: span.end }));
+                        state.open_number_given(world, at, part, span);
+                        any = true;
+                    }
+                    part_opens.push(at);
+                    i += 1;
+                }
+                if !any { part_opens = vec![]; }
+            },
+            _ => { },
+        }
+    }
     let mut pending: Option<i64> = None;
     if ty.is_none() {
         match value {
@@ -491,6 +526,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         }
     }
     if followed.is_some() { state.flow.followed.insert(id, match followed { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() }); }
+    if !part_opens.is_empty() { state.flow.open_parts.insert(id, part_opens); }
     if element_at.is_some() {
         state.flow.open_elements.insert(id, nikaia_std::index::or(element_at, || 0));
         if element_constants.is_some() { state.flow.list_constants.insert(id, nikaia_std::index::or(element_constants, || vec![].into())); }

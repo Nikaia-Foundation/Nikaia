@@ -234,6 +234,15 @@ fn check_core_stmt_an_unknown_list(ty: ref Ty) -> bool sync {
     }
 }
 
+/// Which parts of a tuple's type nothing typed.
+fn check_core_stmt_unknown_parts(tys: ref Vec[Ty]) -> Vec[bool] sync {
+    let mut out: Vec[bool] = []
+    for t in tys {
+        out.push(t.is_unknown())
+    }
+    return out
+}
+
 /// A list's own type, `fs::Path`.
 fn check_core_stmt_a_path(ty: ref Ty) -> bool sync {
     return match ty {
@@ -602,6 +611,37 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             else => {},
         }
     }
+    // **A tuple written in numbers has one open number for each part**
+    // (ADR-286 D41, #837): a part is typed by its uses, as a lone literal is.
+    let mut part_opens: Vec[i64] = []
+    if ty == null {
+        match value {
+            Expr::Tuple(parts, _) => {
+                let unknowns: Vec[bool] = match bound {
+                    Ty::Tuple(tys) => check_core_stmt_unknown_parts(tys),
+                    else => [],
+                }
+                let mut i = 0
+                let mut any = false
+                for part in parts {
+                    let mut at: i64 = -1
+                    if i < unknowns.len() && unknowns[i] && state.number_shaped(world, part) {
+                        at = span.start as i64 + i + 1
+                        let named = f"{name}.{i}"
+                        state.flow.open_numbers.insert(at, check_core_stmt_open_number(named, false, Span { start: span.start + i as u32 + 1, end: span.end }))
+                        state.open_number_given(world, at, part, span)
+                        any = true
+                    }
+                    part_opens.push(at)
+                    i += 1
+                }
+                if !any {
+                    part_opens = []
+                }
+            },
+            else => {},
+        }
+    }
     // **An empty list has no element type, and D2 says where one comes
     // from** (ADR-135).
     let mut pending: i64? = null
@@ -675,6 +715,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     }
     if followed != null {
         state.flow.followed.insert(id, followed ?? return check_core_stmt_unit())
+    }
+    if part_opens.len() > 0 {
+        state.flow.open_parts.insert(id, part_opens)
     }
     if element_at != null {
         state.flow.open_elements.insert(id, element_at ?? 0)
