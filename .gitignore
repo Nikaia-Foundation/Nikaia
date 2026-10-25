@@ -68,6 +68,7 @@ node_modules/
 /tests/build-time/target
 /tests/compiler/target
 /tests/build-time/nikaia.lock
+/tests/compiler/nikaia.lock
 /tests/build-time/nikaia.contracts
 /tests/build-time/nikaia.derived
 /tests/build-time/nikaia.proofs

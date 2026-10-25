@@ -20,9 +20,8 @@ the same dirty lock file). Read once; the brief adds only what is specific.
 
 ## Traps already met
 
-* `tests/compiler/nikaia.lock` changes after every compiler build (its
-  `compiler =` hash). It is nobody's work: never list it in `Files:`, do not
-  restore it, ignore it in `git status`.
+* `tests/compiler/nikaia.lock` is git-ignored, like the other test
+  packages' locks (it changes with every compiler build). Never commit it.
 * `scripts/pre-push-check.sh` fails with *out of date: self-hosted.svg* when a
   `.nika` changed the self-hosting share: run `python3 scripts/badges.py` and
   add `assets/badges/self-hosted.svg` to `Files:` (the only badge you touch).
