@@ -513,6 +513,8 @@ pub(crate) fn check_core_ops_a_word(ty: &Ty) -> bool {
 pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
     let outer = state.flow.read_a_map;
     state.flow.read_a_map = false;
+    let lending = state.flow.lending_let;
+    state.flow.lending_let = false;
     let left = check_core_expr(state, world, host, value, span);
     let read_now = state.flow.read_a_map;
     state.flow.read_a_map = outer;
@@ -525,7 +527,9 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     let from_a_map = check_core_ops_from_a_map(&state, world, value, read_now);
     let from = state.taken_so_far();
+    state.flow.lending_let = lending;
     let other = check_core_expr(state, world, host, fallback, span);
+    state.flow.lending_let = false;
     let leaves = state.leaves(world, fallback);
     state.a_branch_that_leaves(from, leaves, span);
     let nullable = check_core_ops_nullable(&left);
@@ -533,6 +537,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     let place = check_core_ops_place(value);
     if from_a_map && nullable && moves(&inner) && state.jumps(world, fallback) { state.facts.map_read_views.insert(id_of(expr) as i64); }
     if nullable && leaves && check_core_ops_a_word(&inner) && (check_core_stmt_an_index(value) || check_core_stmt_a_get(world, value)) { state.facts.copied_jump_reads.insert(id_of(expr) as i64); }
+    if lending && !from_a_map && check_core_ops_index(value) && (state.jumps(world, fallback) || state.facts.lent_coalesces.contains_key(&(id_of(fallback) as i64))) && nullable && state.takes_away(world, &inner.unseen()) {
+        if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned()); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".to_owned()); }
+        return view_of_type(&inner);
+    }
     if place && state.jumps(world, fallback) && nullable && state.takes_away(world, &inner.unseen()) && (check_core_ops_lent_root(&state, world, value) || check_core_ops_behind_a_view(&state, world, value)) {
         if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned()); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".to_owned()); }
         return view_of_type(&inner);

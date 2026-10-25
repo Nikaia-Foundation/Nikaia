@@ -425,9 +425,22 @@ impl EmitState {
                     _ => { },
                 }
             }
-            out.push("match ");
-            host.expr(walk, out, value, depth, flow, scope)?;
             let opened_jump = self.emit_flow_opened(node);
+            out.push("match ");
+            let mut wrote = false;
+            if opened_jump != "" {
+                match value {
+                    Expr::Index { base, index, .. } => {
+                        let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                        if self.map_key(index, false).is_none() {
+                            self.emit_core_index_read(world, walk, out, host, base, index, false, depth, flow, scope)?;
+                            wrote = true;
+                        }
+                    },
+                    _ => { },
+                }
+            }
+            if !wrote { host.expr(walk, out, value, depth, flow, scope)?; }
             if opened_jump == "" && emit_flow_a_field_of_an_index(value) { out.push(".clone()"); }
             out.push(&opened_jump);
             if self.facts.copied_jump_reads.contains(&node_key(node)) { out.push(" { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => "); } else { out.push(" { Some(__nikaia_value) => __nikaia_value, None => "); }

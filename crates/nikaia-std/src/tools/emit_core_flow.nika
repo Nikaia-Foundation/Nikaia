@@ -636,11 +636,25 @@ impl EmitState {
                     else => {},
                 }
             }
-            out.push("match ")
-            host.expr(walk, out, value, depth, flow, scope)
             // **A loan on the left is opened, and the answer is a view** (ADR-279
-            // D10).
+            // D10); a list element is read without the `*` (#819).
             let opened_jump = self.emit_flow_opened(node)
+            out.push("match ")
+            let mut wrote = false
+            if opened_jump != "" {
+                match value {
+                    Expr::Index { base, index, .. } => {
+                        if self.map_key(index, false) == null {
+                            self.emit_core_index_read(world, walk, out, host, base, index, false, depth, flow, scope)
+                            wrote = true
+                        }
+                    },
+                    else => {},
+                }
+            }
+            if !wrote {
+                host.expr(walk, out, value, depth, flow, scope)
+            }
             // **An option in a list element is cloned out of it** (D31): the element
             // is behind a borrow, and the `match` would move out of it.
             if opened_jump == "" && emit_flow_a_field_of_an_index(value) {

@@ -172,6 +172,9 @@ pub struct CheckFlow {
     pub writing_index: bool,
     /// Set where an `Index` read a map (ADR-293 D28).
     pub read_a_map: bool,
+    /// Set while an immutable, untyped `let` checks its value (#819): a list
+    /// element past a jump is bound as a view of it.
+    pub lending_let: bool,
     /// Every read of a map, by the expression's id (ADR-293 D15).
     pub map_read_sites: collections::BTreeSet[i64],
     /// The bindings a `let` made of a map read (#297), by binding.
@@ -317,6 +320,7 @@ impl CheckFlow {
             pending_coalesces: Vec(),
             writing_index: false,
             read_a_map: false,
+            lending_let: false,
             map_read_sites: collections::BTreeSet(),
             map_views: collections::BTreeSet(),
             last_resolved: null,

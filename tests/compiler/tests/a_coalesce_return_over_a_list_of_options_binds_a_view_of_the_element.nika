@@ -1,0 +1,82 @@
+// #819: `let e = v[0] ?? return` over a list of options (non-Copy elements) binds a view of the element: alone, nested, chained, in loops, a field, a `match`; `let mut` and a map read stay as they were.
+use std::collections
+struct Entry { n: i64, s: String }
+fn first(v: ref Vec[Entry?]) -> i64 {
+    let e = v[0] ?? return 0
+    e.n
+}
+fn nums(v: ref Vec[i64?]) -> i64 {
+    let e = v[0] ?? return 0
+    e
+}
+fn texts(v: ref Vec[String?]) -> i64 {
+    let e = v[0] ?? return 0
+    e.len()
+}
+fn nested(v: ref Vec[Vec[Entry?]]) -> i64 {
+    let e = v[0][0] ?? return 0
+    e.n
+}
+fn three(a: ref Vec[Entry?], b: ref Vec[Entry?], c: ref Vec[Entry?]) -> i64 {
+    let e = a[0] ?? b[0] ?? c[0] ?? return 0
+    e.n
+}
+fn looped(v: ref Vec[Entry?]) -> i64 {
+    let mut s = 0
+    for i in 0..<v.len() {
+        let e = v[i] ?? continue
+        s = s + e.n
+    }
+    for i in 0..<v.len() {
+        let e = v[i] ?? break
+        s = s + e.n
+    }
+    s
+}
+fn mapped(m: ref collections::HashMap[String, Entry]) -> i64 {
+    let e = m["a"] ?? return 0
+    e.n
+}
+fn owned(v: Vec[Entry?]) -> i64 {
+    let e = v[0] ?? return 0
+    e.n
+}
+fn muts(mut v: Vec[Entry?]) -> i64 {
+    let mut e = v[0] ?? return 0
+    e.n = e.n + 1
+    e.n
+}
+enum Shape { Dot, Line(String) }
+fn shaped(v: ref Vec[Shape?]) -> i64 {
+    let e = v[0] ?? return 0
+    match e {
+        Shape::Line(s) => s.len(),
+        else => 1,
+    }
+}
+fn fields(v: ref Vec[Entry?]) -> i64 {
+    let e = v[0] ?? return 0
+    e.s.len() + e.n
+}
+fn main() {
+    let sh: Vec[Shape?] = [Shape::Line("abc"), Shape::Dot]
+    println(shaped(sh))
+    println(fields([Entry { n: 1, s: "xy" }]))
+    let u: Vec[Entry?] = [Entry { n: 7, s: "x" }]
+    println(muts(u.clone()))
+    let v: Vec[Entry?] = [Entry { n: 3, s: "x" }, null]
+    println(first(v))
+    let w: Vec[i64?] = [4]
+    println(nums(w))
+    let t: Vec[String?] = ["ab", null]
+    println(texts(t))
+    let inner: Vec[Entry?] = [Entry { n: 5, s: "x" }]
+    let vv: Vec[Vec[Entry?]] = [inner]
+    println(nested(vv))
+    println(three(v, v, v))
+    println(looped(v))
+    let mut m: collections::HashMap[String, Entry] = collections::HashMap()
+    m["a"] = Entry { n: 6, s: "x" }
+    println(mapped(m))
+    println(owned(v.clone()))
+}

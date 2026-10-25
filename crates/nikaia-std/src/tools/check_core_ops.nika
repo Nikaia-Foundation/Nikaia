@@ -711,6 +711,8 @@ fn check_core_ops_a_word(ty: ref Ty) -> bool {
 pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, fallback: ref Expr, span: ref Span) -> Ty sync {
     let outer = state.flow.read_a_map
     state.flow.read_a_map = false
+    let lending = state.flow.lending_let
+    state.flow.lending_let = false
     let left = check_core_expr(state, world, host, value, span)
     let read_now = state.flow.read_a_map
     state.flow.read_a_map = outer
@@ -726,7 +728,9 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     let from_a_map = check_core_ops_from_a_map(state, world, value, read_now)
     // **A fallback that jumps takes its takings with it** (ADR-293 D30).
     let from = state.taken_so_far()
+    state.flow.lending_let = lending
     let other = check_core_expr(state, world, host, fallback, span)
+    state.flow.lending_let = false
     let leaves = state.leaves(world, fallback)
     state.a_branch_that_leaves(from, leaves, span)
     let nullable = check_core_ops_nullable(left)
@@ -742,6 +746,16 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     // an argument.
     if nullable && leaves && check_core_ops_a_word(inner) && (check_core_stmt_an_index(value) || check_core_stmt_a_get(world, value)) {
         state.facts.copied_jump_reads.insert(id_of(expr) as i64)
+    }
+    // **A list element past a jump, bound by a `let`, is a view of it** (#819,
+    // ADR-282 D7): neither moved out of the list nor copied.
+    if lending && !from_a_map && check_core_ops_index(value) && (state.jumps(world, fallback) || state.facts.lent_coalesces.contains_key(id_of(fallback) as i64)) && nullable && state.takes_away(world, inner.unseen()) {
+        if check_core_ops_plain_text(inner) {
+            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".clone())
+        } else {
+            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".clone())
+        }
+        return view_of_type(inner)
     }
     // **A loan on the left and a jump on the right is a view** (ADR-279 D10).
     if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && (check_core_ops_lent_root(state, world, value) || check_core_ops_behind_a_view(state, world, value)) {

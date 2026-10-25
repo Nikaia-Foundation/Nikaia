@@ -309,7 +309,9 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let code_place = names.len() == 1 && state.current.is_some() && check_core_stmt_code_given(value);
     if code_place { state.stored_frames.push(CheckStoredCode::empty()); }
     let findings_before = state.findings.len() as i64;
+    state.flow.lending_let = !mutable && ty.is_none();
     let found = check_core_expr(state, world, host, value, span);
+    state.flow.lending_let = false;
     state.flow.lambda_expected = None;
     if names.len() == 1 && check_core_stmt_a_call(value) {
         match found {
