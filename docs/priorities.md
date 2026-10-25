@@ -50,7 +50,8 @@ which past run), area`; on a departure from bugs-first, the figures.
 | #839, #582, #747 step 1 | done c7becda0, d25f0fd6, d995ae5a | | | |
 | #840, E10-4 switch, native tool (partial) | done e2854552, ad9e07b3, 087ce275 | | | |
 | #841, #747 step 2, E11-1 | done 9d2f86c6, ae4bbb9d, 2f571550 | | | |
-| #756 method keeping `ref Bytes` copies | 3 | 0.3 | 5 | batch 1 |
+| #756 | done 9f8d71d9 | | | |
+| #842 rest of #756 (callee by receiver type, no-copy test) | 3 | 0.3 | 5 | batch 3 |
 | native count x86-64-v3 | 1 | 0.5 | 2 | batch 2 |
 | E11-2 patterns | 2 | 1 | 8 | batch 3 |
 | #753 --cpu dropped under RUSTFLAGS (owner: native builds) | 3 | 1 | 4 | 1 |
