@@ -40,7 +40,7 @@ It raises it to `high` for one task only when the owner asks for it.
 
 ## Choosing the topic
 
-By `docs/priorities.md`: bands first (bugs, self-hosting, CI, rs2nika), the score within a band; every brief names its score terms in 2-3 lines.
+By `docs/priorities.md`: the score decides across areas, bugs-first is the default prior; every brief names its score terms in 2-3 lines.
 
 ## The work order
 

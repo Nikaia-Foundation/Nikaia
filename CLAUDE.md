@@ -73,12 +73,11 @@
 * **A red `develop` is fixed forward.** Whoever finds it red fixes it with the
   next commit, or reverts the commit that broke it. Until then `main` stays
   where it was, and work on `develop` goes on.
-* **Bugs before moving (owner's rule).** Fixing compiler bugs has priority over
-  self-hosting. As a rule one builder works on compiler bugs and one on
-  self-hosting. A second bug builder only when the bugs sit in clearly separate
-  places. A second self-hosting builder (two at most) only when the bug
-  backlog is not growing, i.e. we are not finding more bugs than we fix. When
-  we find more than we fix, self-hosting pauses until the backlog is down.
+* **Order of work: the architect's score (`docs/priorities.md`), delegated by
+  the owner (2026-10-25).** Bugs before moving is the default: as a rule one
+  builder works on compiler bugs and one on self-hosting, and self-hosting
+  pauses while we find more bugs than we fix. The score overrides this
+  default when its figures say so, and the brief states them.
 * **Parallel agents in one session work together on `develop`, in one shared
   checkout.** Each agent commits after every finished step, so the others see
   the work at once. A commit adds exactly the files that agent changed

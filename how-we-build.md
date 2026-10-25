@@ -6,7 +6,7 @@
 
     Priority = (strategic value + operational value) / total cost
 
-over one horizon. Strategic value: self-hosting progress, compiler bugs found and fixed, fewer known open bugs, trust in the language. Operational value: tokens saved by faster CI, less manual translation, less debugging and fewer workarounds, shorter feedback loops, fewer regressions. Cost: tokens for implementation, tests and integration, added maintenance, and the self-hosting progress delayed meanwhile. Progress is counted in Rust lines replaced, not Nikaia tokens, since Nikaia code is shorter. The bands (bugs, self-hosting, CI, converter) and the estimate per ticket are in [`docs/priorities.md`](docs/priorities.md).
+over one horizon. Strategic value: self-hosting progress, compiler bugs found and fixed, fewer known open bugs, trust in the language. Operational value: tokens saved by faster CI, less manual translation, less debugging and fewer workarounds, shorter feedback loops, fewer regressions. Cost: tokens for implementation, tests and integration, added maintenance, and the self-hosting progress delayed meanwhile. Progress is counted in Rust lines replaced, not Nikaia tokens, since Nikaia code is shorter. Bugs first is the default; the score overrides it when the figures say so. The estimate per ticket are in [`docs/priorities.md`](docs/priorities.md).
 
 We keep changing the way we work, and each change is a row below. The table says what we did, what we hoped for, and what was measured; where nobody counted, it says so.
 

@@ -19,21 +19,17 @@ S is a coarse grade: 3 = fixes a defect a builder hit or a wrong value;
 2 = moves a slice or closes a refusal; 1 = completeness. Score = (S x 10 M + O) / C;
 only the order matters, not the number.
 
-## Order and rules
+## Order
 
-1. Compiler bugs (CLAUDE.md *Bugs before moving*, owner's rule: this is a rule,
-   not a weight; a bug a builder is blocked on comes first regardless of score).
-2. Self-hosting.
-3. CI speed.
-4. `rs2nika`: only when it measurably speeds a planned move (report
-   `kept N of M lines`), is needed for it, and saves more than it costs and
-   delays; not for completeness.
-
-Within each band the score orders the tickets; across bands the order holds,
-except that a CI or rs2nika item whose O exceeds a band-1 item's whole cost may
-be raised by the owner.
+The score decides, across areas. The default prior is the adviser's order:
+compiler bugs, self-hosting, CI speed, `rs2nika` (the converter only when it
+measurably speeds a planned move, not for completeness). A bug a builder is
+blocked on comes first. Any other departure from bugs-first is allowed when
+the figures say so, and the brief states them. The owner delegated this rule
+and the weight (10M per S point) to the architect (2026-10-25); the architect
+revises the weight from measurements.
 
 ## In each brief
 
 Two or three lines: `S=<grade> (why), O=<M tokens> (why), C=<M tokens> (from
-which past run), band <n>`.
+which past run), area`; on a departure from bugs-first, the figures.
