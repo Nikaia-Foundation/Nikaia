@@ -45,9 +45,14 @@ which past run), area`; on a departure from bugs-first, the figures.
 
 | Ticket | S | O (M) | C (M) | Order |
 | :--- | :--- | :--- | :--- | :--- |
-| #837, #838 (running, briefed) | 2 | 0.5 | 3 | 1, 2 |
-| #744 let over field/literal arms, rustc refuses | 3 | 1 | 8 | 3 |
-| #582 map through a function value, E0308 | 3 | 0.5 | 10 | 4 |
-| #747 step 1 NK1104 after NK1131 | 2 | 0.3 | 3 | 5 |
-| E10-4 adapter switch (emit_function.nika built, not called from Rust) | 2 | 2 | 15 | 6, after the bug batch |
+| #837 | done 02c9b5f5 | | | |
+| #753 --cpu dropped under RUSTFLAGS (owner: native builds) | 3 | 1 | 4 | 1 |
+| #780 ByteSet in a variable, 115 vs 32 a row at v3 | 3 | 0.5 | 10 | 2 |
+| #838 | 2 | 0.5 | 3 | 3 |
+| #744 let over field/literal arms, rustc refuses | 3 | 1 | 8 | 4 |
+| #582 map through a function value, E0308 | 3 | 0.5 | 10 | 5 |
+| #747 step 1 NK1104 after NK1131 | 2 | 0.3 | 3 | 6 |
+| E10-4 adapter switch (emit_function.nika built, not called from Rust) | 2 | 2 | 15 | 9 |
+| #778/#775 audit (look built, not closed) | 1 | 0.5 | 3 | 7 |
+| optional native compiler build + CI CPU count (owner) | 1 | ? | 5 | 8 |
 | #825 | built (3573f202, 4b13ffa7), closed by hand | | | |
