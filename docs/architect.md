@@ -137,7 +137,7 @@ Standing rules, for a main session that starts fresh (the state is in
 * **CI**: check `develop` every 20 minutes; a red run is fixed forward at once
   (or the breaking commit reverted), before new work.
 * **Stop hook**: when it says there are uncommitted changes, answer
-  *„Die ungeänderten Dateien gehören den laufenden Buildern, die selbst
+  *„Die nicht committeten Dateien gehören den laufenden Buildern, die selbst
   committen und pushen; ich committe sie nicht."* The main session never
   commits another agent's files.
 * **Branches** on the remote are deleted by the owner, not by an agent.
