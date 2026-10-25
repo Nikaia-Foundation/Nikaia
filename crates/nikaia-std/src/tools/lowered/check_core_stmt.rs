@@ -409,6 +409,9 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         state.expect_kept_asked(world, &found_kept, &want, Some(value), "the `let` declares a `String`, which is text of its own", span, "let", &|was, wanted| { format!("This value is `{}`, but the `let` declares `{}`.", was, wanted) });
         check_core_stmt_a_number_read_through_a_lent_binding(state, world, &want, value, span);
         bound = want;
+    } else if mutable && state.flow.mixed_text.contains(&name) && found.is_a_view() && check_core_stmt_literal(value).is_some() {
+        state.facts.mixed_leaves.insert(node_key(check_peeled(value)), false);
+        bound = found.clone();
     } else if mutable && state.flow.grown_text.contains(&name) && found.is_a_view() && state.text_literal(world, &check_core_method_named("String"), value, true).is_some() { bound = check_core_method_named("String"); } else {
         if !(found.is_unknown() && state.number_shaped(world, value)) { state.constant_fits(world, value, None, span); }
         if found.is_unknown() {
@@ -707,6 +710,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         check_fields_map_first_written(state, world, target, value, &found, span);
     }
     if op.is_none() { check_core_a_kept_lambda(state, world, host, &into, value, span); }
+    if op.is_none() && state.mixed_text_assigned(world, target, value, &found) { return check_core_stmt_unit(); }
     if op.is_none() {
         let built = state.text_literal(world, &into, value, true);
         if built.is_some() { found = nikaia_std::index::or(built, || found.clone().into()); }

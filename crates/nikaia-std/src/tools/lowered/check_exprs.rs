@@ -214,6 +214,20 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn mixed_text_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty) -> bool {
+        let name = match target {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            _ => return false,
+        };
+        if !self.flow.mixed_text.contains(&name) { return false; }
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if local.literal.is_none() || !local.ty.is_a_view() { return false; }
+        if self.a_lent_text_place(world, value, found) { self.facts.lent_reads.insert(node_key(value)); }
+        self.facts.mixed_leaves.insert(node_key(check_peeled(value)), false);
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
         let name = match target {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },

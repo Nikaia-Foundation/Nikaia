@@ -1,0 +1,20 @@
+// A name that started as a literal and is assigned a field read through a
+// `ref` parameter and text of its own holds both (ADR-282 D13, D14, #840).
+struct Holder { name: String }
+
+fn pick(h: ref Holder, c: bool, n: i64) -> i64 {
+    let mut x = "none"
+    if c {
+        x = h.name
+    } else {
+        x = f"a{n}"
+    }
+    println(x)
+    return x.len()
+}
+
+fn main() {
+    let h = Holder { name: f"ab{1}" }
+    println(pick(h, true, 3))
+    println(pick(h, false, 3))
+}

@@ -102,6 +102,35 @@ pub fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body
     out
 }
 
+pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, out: &mut collections::BTreeSet<String>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Assign { target, op, value } => {
+                match target {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        match value {
+                            Expr::Field { .. } => { if op.is_none() { out.insert(here.text(name)); } },
+                            _ => { },
+                        }
+                    },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { check_function_fielded_in(here, inner, out); }
+    }
+}
+
+pub fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut fielded: collections::BTreeSet<String> = collections::BTreeSet::new();
+    check_function_fielded_in(here, body, &mut fielded);
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in fielded.iter() { if grown.contains(name) { out.insert(name.to_owned()); } }
+    out
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
@@ -526,8 +555,11 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.flow.high_bytes = collections::BTreeMap::new();
     let outer_grown = state.flow.grown_text.to_owned();
     state.flow.grown_text = check_function_grown_text(&world.here, body);
+    let outer_mixed = state.flow.mixed_text.to_owned();
+    state.flow.mixed_text = check_function_mixed_text(&world.here, body, &state.flow.grown_text);
     let tail = check_core_block(state, world, host, body);
     state.flow.grown_text = outer_grown;
+    state.flow.mixed_text = outer_mixed;
     let (tail_lent, tail_view) = check_function_handed_back(state, world, host, body, (expected).as_ref(), &tail);
     state.numbers_typed_by_their_uses();
     state.flow.open_numbers = outer_numbers;

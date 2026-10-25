@@ -283,6 +283,29 @@ impl CheckState {
         self.findings.push(check_refusal("NK1185", span, message, notes, help))
     }
 
+    /// **A value assigned to a name that started as a literal and is given
+    /// views and text of its own** (ADR-282 D13, D14, #840) goes in as an
+    /// `EitherText`: wrapped on its own, a field read through a `ref`
+    /// parameter lent. True where the name is such.
+    pub fn mixed_text_assigned(ref mut self, world: ref CheckWorld, target: ref Expr, value: ref Expr, found: ref Ty) -> bool sync {
+        let name = match target {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        if !self.flow.mixed_text.contains(name) {
+            return false
+        }
+        let local = self.binding(name) ?? return false
+        if local.literal == null || !local.ty.is_a_view() {
+            return false
+        }
+        if self.a_lent_text_place(world, value, found) {
+            self.facts.lent_reads.insert(node_key(value))
+        }
+        self.facts.mixed_leaves.insert(node_key(check_peeled(value)), false)
+        return true
+    }
+
     /// `NK1105`: text of its own given to a name that started as a literal, so
     /// can only hold a view. True where it said so.
     pub fn owned_text_into_a_literal_binding(ref mut self, world: ref CheckWorld, target: ref Expr, found: ref Ty, into: ref Ty, span: ref Span) -> bool sync {

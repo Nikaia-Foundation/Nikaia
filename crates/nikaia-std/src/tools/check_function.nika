@@ -149,6 +149,46 @@ pub fn check_function_grown_text(here: ref ParsedView, body: ref Block) -> colle
     return out
 }
 
+fn check_function_fielded_in(here: ref ParsedView, block: ref Block, mut out: collections::BTreeSet[String]) {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Assign { target, op, value } => {
+                match target {
+                    Expr::Variable(name, _) => {
+                        match value {
+                            Expr::Field { .. } => {
+                                if op == null {
+                                    out.insert(here.text(name))
+                                }
+                            },
+                            else => {},
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            check_function_fielded_in(here, inner, out)
+        }
+    }
+}
+
+/// **The names a body gives text of its own and a field read** (ADR-282 D13,
+/// #840): `x = h.name` beside `x = f"…"`. Syntactic, as `grown_text` is.
+pub fn check_function_mixed_text(here: ref ParsedView, body: ref Block, grown: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut fielded: collections::BTreeSet[String] = collections::BTreeSet()
+    check_function_fielded_in(here, body, fielded)
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in fielded {
+        if grown.contains(name) {
+            out.insert(name.clone())
+        }
+    }
+    return out
+}
+
 /// **A grammar's actions, checked** (ADR-296): each rule's own key for its
 /// answers, the fold lambdas in the pattern's frame, the action's block against
 /// the rule's declared type. An action may not pause (D35), so the flag is
@@ -638,8 +678,11 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.flow.high_bytes = collections::BTreeMap()
     let outer_grown = state.flow.grown_text.clone()
     state.flow.grown_text = check_function_grown_text(world.here, body)
+    let outer_mixed = state.flow.mixed_text.clone()
+    state.flow.mixed_text = check_function_mixed_text(world.here, body, state.flow.grown_text)
     let tail = check_core_block(state, world, host, body)
     state.flow.grown_text = outer_grown
+    state.flow.mixed_text = outer_mixed
     let (tail_lent, tail_view) = check_function_handed_back(state, world, host, body, expected, tail)
     state.numbers_typed_by_their_uses()
     state.flow.open_numbers = outer_numbers

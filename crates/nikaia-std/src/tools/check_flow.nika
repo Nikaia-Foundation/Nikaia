@@ -290,6 +290,10 @@ pub struct CheckFlow {
     pub reached: String?,
     /// The names this function's body gives text of its own later on.
     pub grown_text: collections::BTreeSet[String],
+    /// **The names of those that are also assigned a field read** (ADR-282
+    /// D13, #840): views and text of their own flow into them, so a name that
+    /// started as a literal holds `EitherText`.
+    pub mixed_text: collections::BTreeSet[String],
     /// The conversions that do not narrow.
     pub widening_casts: collections::BTreeSet[i64],
     /// Signed values put where an unsigned type is stated, by the statement.
@@ -384,6 +388,7 @@ impl CheckFlow {
             reaching: null,
             reached: null,
             grown_text: collections::BTreeSet(),
+            mixed_text: collections::BTreeSet(),
             widening_casts: collections::BTreeSet(),
             unsigned_slots: collections::BTreeMap(),
             at_a_write_door: false,

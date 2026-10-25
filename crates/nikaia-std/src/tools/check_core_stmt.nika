@@ -551,6 +551,12 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         state.expect_kept_asked(world, found_kept, want, value, "the `let` declares a `String`, which is text of its own", span, "let", fn(was, wanted) { f"This value is `{was}`, but the `let` declares `{wanted}`." })
         check_core_stmt_a_number_read_through_a_lent_binding(state, world, want, value, span)
         bound = want
+    } else if mutable && state.flow.mixed_text.contains(name) && found.is_a_view() && check_core_stmt_literal(value) != null {
+        // **A `let mut` of a literal that is later given views and text of its
+        // own holds `EitherText`** (ADR-282 D13, D14, #840): the literal is
+        // wrapped as the assigned values are.
+        state.facts.mixed_leaves.insert(node_key(check_peeled(value)), false)
+        bound = found.clone()
     } else if mutable && state.flow.grown_text.contains(name) && found.is_a_view() && state.text_literal(world, check_core_method_named("String"), value, true) != null {
         // **A `let mut` of a literal that the body later grows holds text of
         // its own** (0.0.232).
@@ -949,6 +955,9 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     // **An assignment keeps what it is given** (ADR-282 D3, ADR-293 D28).
     if op == null {
         check_core_a_kept_lambda(state, world, host, into, value, span)
+    }
+    if op == null && state.mixed_text_assigned(world, target, value, found) {
+        return check_core_stmt_unit()
     }
     if op == null {
         let built = state.text_literal(world, into, value, true)
