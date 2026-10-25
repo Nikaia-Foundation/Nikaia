@@ -5,3 +5,5 @@ run: ok=true done cost 1.5 turns 3
 100
 no report: code=2 no report escalate=true
 refused: code=2
+cap: code=2 ESCALATE escalate=true
+small: code=0 escalate=false

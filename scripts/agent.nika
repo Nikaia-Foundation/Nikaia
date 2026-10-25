@@ -74,9 +74,14 @@ fn agent_int(body: String, key: String) -> i64 {
     return text::parse_i64(agent_json(body, key)) ?? 0
 }
 
-// Whole dollars of "12.34".
-fn agent_dollars(cost: String) -> i64 {
-    return text::parse_i64(cost.split(".").collect()[0].clone()) ?? 0
+// Micro-dollars of "12.34": whole * 1_000_000 + the first six decimals.
+fn agent_micro(cost: String) -> i64 throws {
+    let parts = cost.trim().split(".").collect()
+    let whole = text::parse_i64(parts[0].clone()) ?? 0
+    if parts.len() < 2 { return whole * 1000000 }
+    let padded = parts[1].clone() + "000000"
+    let frac = text::parse_i64(padded.bytes[0..6].text()) ?? 0
+    return whole * 1000000 + frac
 }
 
 fn agent_escalate(dir: String, why: String) throws {
@@ -135,9 +140,9 @@ fn main() throws {
     let mut spent = 0
     for line in agent_read(f"{dir}/cost.txt").split("\n") {
         let parts = line.split(" ").collect()
-        if parts.len() == 2 && parts[0] == today { spent += agent_dollars(parts[1].clone()) }
+        if parts.len() == 2 && parts[0] == today { spent += agent_micro(parts[1].clone()) }
     }
-    if spent > 200 { agent_escalate(dir.clone(), f"cost today {spent} USD above 200") }
+    if spent > 200 * 1000000 { agent_escalate(dir.clone(), f"cost today {spent / 1000000} USD above 200") }
 
     let out = process::run(claude, claude_args; within: 90.minutes())
     let json = out.stdout.clone()
