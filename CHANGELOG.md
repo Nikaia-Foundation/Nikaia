@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1219] — 2026-10-25
+
+**let lends a field read through a ref, a let-bound function lends its parameters, NK1131 alone (#744, #839, #582, #747)**
+- A let over an if/match whose arms read a String field through a ref parameter lends it: a view beside literals and views, mixed (EitherText) beside text of its own (ADR-282 D13, #744).
+- A plain let x = h.name, or an assignment of such a read (or of a selection of such reads and literals) into a name holding a view, with h a ref parameter, lends the field instead of refusing NK2106 (Part I 6.5, ADR-282 D13, #839).
+- A function bound by a let without a type is a closure that lends its read-only parameters, so calling it through the name compiles (#582).
+- A return of a mut view parameter refused with NK1131 no longer also reports NK1104 (#747).
+
 ## [0.0.1218] — 2026-10-25
 
 **compiler bugs and --cpu with RUSTFLAGS (#792, #777, #773, #760, #787, #757, #829, #762, #764, #765, #758, #830, #831, #832, #776, #799, #834, #779, #790, #835, #836, #837, #753, #780, #838)**
