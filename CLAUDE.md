@@ -243,6 +243,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * a `T?` local needs `?.clone()` (NK1125);
   * a `ref String?` parameter does not accept a bare `String` argument: pass a `String?` local;
   * `for mut x in v` is not accepted;
+  * `a..b` includes `b` (Part I, ranges); the half-open range is `a..<b`;
   * the catch-all arm of a `match` is `else =>`; `_ =>` and `None =>` are refused;
   * a `String?` field needs `x?.clone()` before it can be matched;
   * calls to other tools files are unqualified (one global namespace);
