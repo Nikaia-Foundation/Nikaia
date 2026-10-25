@@ -1,0 +1,7 @@
+fn f(throws: i64) -> i64 sync {
+    return throws
+}
+
+fn main() {
+    print(f(1))
+}

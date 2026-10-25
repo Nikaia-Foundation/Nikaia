@@ -4111,9 +4111,11 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
         .collect()
 }
 
-/// Whether a stderr file holds a compiler's refusal.
+/// Whether a stderr file holds a compiler's refusal, whatever stage produced
+/// it: a checker's `error[NK…]` or a parse error's plain `error:` (ADR-269 D22,
+/// #834). rustc's own failure is told apart by its `could not compile`.
 fn is_refusal(text: &[u8]) -> bool {
-    (text.starts_with(b"error[NK") || text.windows(9).any(|w| w == b"\nerror[NK"))
+    (text.starts_with(b"error") || text.windows(6).any(|w| w == b"\nerror"))
         && !does_not_compile(text)
 }
 

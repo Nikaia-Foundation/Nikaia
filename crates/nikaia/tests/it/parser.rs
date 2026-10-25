@@ -220,30 +220,6 @@ fn a_reserved_word_where_no_name_was_wanted_gets_no_note_about_names() {
     }
 }
 
-/// **A reserved word as a parameter name is said as one** (#799): the headline
-/// names the word, not the `)` the parser wanted instead, and the help names a
-/// free spelling; a plain name still parses.
-#[test]
-fn a_reserved_word_as_a_parameter_name_is_said_as_one() {
-    for word in ["grammar", "throws"] {
-        let source = format!("fn f({word}: i64) -> i64 sync {{\n    return {word}\n}}\n");
-        let Err(err) = parse_to_ast(&source) else {
-            panic!("{source} must not parse");
-        };
-        let finding = nikaia::diagnostics::refused_finding(&err).expect("a finding");
-        let said = nikaia::diagnostics::render_finding(finding, "app.nika", &source);
-        assert!(
-            said.starts_with(&format!(
-                "error: `{word}` is a reserved word, so it can't be used as a name here."
-            )) && said.contains("= note: Expected `)` here, but found")
-                && said.contains(&format!("= help: Choose another name, such as `{word}_`.")),
-            "{said}"
-        );
-        let renamed = source.replace(word, &format!("{word}_"));
-        assert!(parse_to_ast(&renamed).is_ok(), "{renamed}");
-    }
-}
-
 /// **And the grammar sublanguage's words are not reserved**, which is the other
 /// half of the decision: they are keywords inside a `grammar` block and names
 /// everywhere else.

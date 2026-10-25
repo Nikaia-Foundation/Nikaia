@@ -1,0 +1,8 @@
+error: `grammar` is a reserved word, so it can't be used as a name here.
+  --> tests/a_reserved_word_grammar_as_a_parameter_name_is_said_as_one.nika:1:6
+   |
+ 1 | fn f(grammar: i64) -> i64 sync {
+   |      ^^^^^^^
+   |
+   = note: Expected `)` here, but found `grammar`.
+   = help: Choose another name, such as `grammar_`.
