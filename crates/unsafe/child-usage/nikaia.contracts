@@ -21,3 +21,11 @@ pub = true
 keeps = ["child"]
 throws = ["?"]
 signature = "(child: ?) -> ?"
+
+# SIGKILL to the group a child leads (`taskkill /T /F` off Unix): two
+# integers in, nothing out, and a failure (the group already gone) is
+# ignored inside. It signals other processes, so what it touches and
+# whether it locks are left fail-closed.
+[fn."child_usage::kill_group"]
+pub = true
+signature = "(pid: u32)"
