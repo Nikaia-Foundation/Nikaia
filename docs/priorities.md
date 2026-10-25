@@ -47,7 +47,9 @@ which past run), area`; on a departure from bugs-first, the figures.
 | :--- | :--- | :--- | :--- | :--- |
 | #837 | done 02c9b5f5 | | | |
 | #753, #780, #838, #744 | done 761a7b93, 2f4775ef, f719c5ee, 153cf532 | | | |
-| #839 rest of #744 (plain let, assignment: NK2106 against Part I 6.5) | 3 | 1 | 6 | 1 |
+| #839, #582, #747 step 1 | done c7becda0, d25f0fd6, d995ae5a | | | |
+| #840 mixed assignment NK1105 instead of EitherText | 2 | 0.3 | 4 | next batch 1 |
+| E10-4 switch (brief e10-4-switch.md) | 2 | 2 | 15 | next batch 3 |
 | #753 --cpu dropped under RUSTFLAGS (owner: native builds) | 3 | 1 | 4 | 1 |
 | #780 ByteSet in a variable, 115 vs 32 a row at v3 | 3 | 0.5 | 10 | 2 |
 | #838 | 2 | 0.5 | 3 | 3 |
