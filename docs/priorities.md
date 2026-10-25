@@ -29,6 +29,13 @@ the figures say so, and the brief states them. The owner delegated this rule
 and the weight (10M per S point) to the architect (2026-10-25); the architect
 revises the weight from measurements.
 
+## Before scoring a ticket
+
+Check that it is still open in the code: `git log --oneline -i --grep='#N'
+origin/develop`. A commit that names the issue with `(#N)` or `Part of #N`
+may have built it without closing it (#800, #801: both built, briefed again).
+Such an issue is closed by hand with the commit named, not briefed.
+
 ## In each brief
 
 Two or three lines: `S=<grade> (why), O=<M tokens> (why), C=<M tokens> (from
