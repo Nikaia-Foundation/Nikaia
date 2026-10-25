@@ -581,6 +581,10 @@ impl EmitState {
             return
         }
         let arity = self.emit_arg_run_async(world, inside.statement, i, arg)
+        // **A named function whose read-only parameters are lent, handed over
+        // as a value** (#757): the parameter of function type takes them by
+        // value, so whatever closure is written below lends them to the call.
+        let lent = self.emit_arg_lent_params(world, arg)
         // **A function whose channel is narrower than the box, run by a
         // `fn(..) throws` parameter** (ADR-280 D9, #703): a closure that calls
         // it and puts its error in the box, `async` where the parameter may
@@ -602,7 +606,7 @@ impl EmitState {
             }
             out.push(f"|{joined}| Ok(")
             host.expr(walk, out, arg, depth, inside, scope)
-            out.push(f"({joined})")
+            out.push(f"({emit_arg_passing(names, lent)})")
             if pauses {
                 out.push(".await")
             }
@@ -621,7 +625,18 @@ impl EmitState {
             }
             out.push(f"|{joined}| ")
             host.expr(walk, out, arg, depth, inside, scope)
-            out.push(f"({joined}).map_err(Into::into)")
+            out.push(f"({emit_arg_passing(names, lent)}).map_err(Into::into)")
+            return
+        }
+        if arity < 0 && lent.len() > 0 {
+            let mut names: Vec[String] = []
+            for n in 0..<lent.len() {
+                names.push(f"__nikaia_a{n}")
+            }
+            let joined = names.join(", ")
+            out.push(f"|{joined}| ")
+            host.expr(walk, out, arg, depth, inside, scope)
+            out.push(f"({emit_arg_passing(names, lent)})")
             return
         }
         if arity < 0 {
@@ -638,8 +653,56 @@ impl EmitState {
         let joined = names.join(", ")
         out.push(f"async |{joined}| ")
         host.expr(walk, out, arg, depth, inside, scope)
-        out.push(f"({joined})")
+        out.push(f"({emit_arg_passing(names, lent)})")
     }
+
+    /// For an argument that names a function of this unit without a receiver,
+    /// whether each of its parameters is lent (lowered behind a `&`) where the
+    /// parameter of function type it is handed to takes it by value; empty
+    /// where none is, or the argument is no such name, or a kept function
+    /// value already calls it (#757).
+    fn emit_arg_lent_params(ref self, world: ref EmitWorld, arg: ref Expr) -> Vec[bool] {
+        let key = match arg {
+            Expr::Variable(name, _) => emit_text(world, name),
+            else => return [],
+        }
+        if self.facts.kept_functions.contains_key(node_key(arg)) {
+            return []
+        }
+        let viewed = self.facts.named_fn_values.get(node_key(arg)) ?? return []
+        let contract = self.own_contracts.functions.get(key) ?? return []
+        let signature = contract.signature?.clone() ?? return []
+        if signature.takes_a_receiver() {
+            return []
+        }
+        let mut lent: Vec[bool] = []
+        let mut any = false
+        for at in 0..<signature.params.len() {
+            let one = emit_arg_lends_own(contract, at, world.library, self.described) && !(at < viewed.len() && viewed[at])
+            any = any || one
+            lent.push(one)
+        }
+        if !any {
+            return []
+        }
+        return lent
+    }
+}
+
+/// The arguments a closure around a named function hands it: each name, behind
+/// a `&` where the function lends that parameter (#757).
+fn emit_arg_passing(names: ref Vec[String], lent: ref Vec[bool]) -> String {
+    let mut passed: Vec[String] = []
+    let mut at = 0
+    for name in names {
+        if at < lent.len() && lent[at] {
+            passed.push(f"&{name}")
+        } else {
+            passed.push(name.clone())
+        }
+        at += 1
+    }
+    return passed.join(", ")
 }
 
 /// `std`'s entries that run a kept function in a task of their own and have a

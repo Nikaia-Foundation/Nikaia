@@ -226,6 +226,10 @@ pub struct CheckFacts {
     /// count of its parameters. The lowering hands over a closure that wraps
     /// its result in `Ok`.
     pub infallible_fn_values: collections::BTreeMap[i64, i64],
+    /// A declared function named where a parameter of function type takes it
+    /// as a value (#757), with which parameters of that type are views: the
+    /// lowering lends the others the function lends in a closure around it.
+    pub named_fn_values: collections::BTreeMap[i64, Vec[bool]],
     pub pausing_lambdas: collections::BTreeMap[i64, FactPausing],
     pub paused_scopes: collections::BTreeSet[i64],
     /// The lambdas handed to `task::Scope::spawn` (ADR-346 D7): each fails in
@@ -447,6 +451,7 @@ impl CheckFacts {
             sync_functions_run_async: collections::BTreeMap(),
             boxed_fn_values: collections::BTreeMap(),
             infallible_fn_values: collections::BTreeMap(),
+            named_fn_values: collections::BTreeMap(),
             pausing_lambdas: collections::BTreeMap(),
             paused_scopes: collections::BTreeSet(),
             scope_tasks: collections::BTreeSet(),

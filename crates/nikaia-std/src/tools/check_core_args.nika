@@ -113,11 +113,15 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let mut wants_fn = false
     let mut wants_pausing_fn = false
     let mut wants_throwing_fn = false
+    let mut viewed: Vec[bool] = []
     if at < expected.len() as i64 {
         lends = expected[at].is_a_view()
         match expected[at] {
-            Ty::Fn { is_sync, can_throw, .. } => {
+            Ty::Fn { params, is_sync, can_throw, .. } => {
                 wants_fn = true
+                for p in params {
+                    viewed.push(p.is_a_view())
+                }
                 let plain: bool = is_sync
                 wants_pausing_fn = !plain
                 wants_throwing_fn = can_throw
@@ -159,6 +163,10 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     // the `Ok` the type's channel wants.
     if declared_here && named && runs && wants_throwing_fn && found_fn && !found_throws {
         state.facts.infallible_fn_values.insert(id_of(arg) as i64, arity)
+    }
+    // **A declared function handed over as a value** (#757).
+    if named && wants_fn && found_fn {
+        state.facts.named_fn_values.insert(id_of(arg) as i64, viewed)
     }
     // **A declared function, run by a parameter that may pause** (#516).
     if declared_here && named && runs && wants_pausing_fn && found_fn {

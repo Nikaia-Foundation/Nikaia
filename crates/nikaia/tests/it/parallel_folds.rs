@@ -80,6 +80,8 @@ fn main() {
     println(f"{seven} {eight}")
     let t = xs.par_iter().fold(Tally, fn(acc, x) { tally_add(acc, x) }, fn(a, b) { tally_merge(a, b) }; order: par::Order::Any)
     println(f"{t.n}")
+    let named = xs.par_iter().fold(Tally, fn(acc, x) { tally_add(acc, x) }, tally_merge)
+    println(f"{named.n}")
     let none = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; workers: 0)
     println(f"not reached {none}")
 }
@@ -151,6 +153,7 @@ fn the_folds(out: &Output) -> Vec<String> {
             format!("{sum} {sum} {sum} {sum} {} {sum} {sum}", 2 * sum),
             "1000000 0".to_owned(),
             "7 8".to_owned(),
+            format!("{sum}"),
             format!("{sum}"),
         ],
         "{lines:?}"

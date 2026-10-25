@@ -88,12 +88,14 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     let mut wants_fn = false;
     let mut wants_pausing_fn = false;
     let mut wants_throwing_fn = false;
+    let mut viewed: Vec<bool> = vec![];
     if at < expected.len() as i64 {
         lends = (*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_a_view();
         match nikaia_std::index::get(&expected, nikaia_std::index::at(at)) {
-            Ty::Fn { is_sync, can_throw, .. } => {
+            Ty::Fn { params, is_sync, can_throw, .. } => {
                 let can_throw = *can_throw; let is_sync = *is_sync;
                 wants_fn = true;
+                for p in params.iter() { viewed.push(p.is_a_view()); }
                 let plain: bool = is_sync;
                 wants_pausing_fn = !plain;
                 wants_throwing_fn = can_throw;
@@ -123,6 +125,7 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     }
     if declared_here && named && runs && wants_throwing_fn && found_throws { state.facts.boxed_fn_values.insert(id_of(arg) as i64, arity); }
     if declared_here && named && runs && wants_throwing_fn && found_fn && !found_throws { state.facts.infallible_fn_values.insert(id_of(arg) as i64, arity); }
+    if named && wants_fn && found_fn { state.facts.named_fn_values.insert(id_of(arg) as i64, viewed); }
     if declared_here && named && runs && wants_pausing_fn && found_fn { state.facts.sync_functions_run_async.insert(id_of(arg) as i64, arity); }
     if declared_here && wants_fn && found_fn && runs && !check_core_args_a_run_parameter(&state, world, arg) && !named { state.facts.kept_args.insert(id_of(arg) as i64); }
     if wants_fn && found_fn && !runs && named { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), arg, span); }

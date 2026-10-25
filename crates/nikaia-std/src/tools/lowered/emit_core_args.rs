@@ -342,6 +342,7 @@ impl EmitState {
             return Ok(());
         }
         let arity = self.emit_arg_run_async(world, inside.statement, i, arg);
+        let lent = self.emit_arg_lent_params(world, arg);
         let never_fails = nikaia_std::index::or(self.facts.infallible_fn_values.get(&node_key(arg)), || -1);
         if never_fails >= 0 {
             let mut names: Vec<String> = vec![];
@@ -352,7 +353,7 @@ impl EmitState {
             if arity >= 0 || pauses { out.push("async "); }
             out.push(&format!("|{}| Ok(", joined));
             host.expr(walk, out, arg, depth, inside, scope)?;
-            out.push(&format!("({})", joined));
+            out.push(&format!("({})", emit_arg_passing(&names, &lent)));
             if pauses { out.push(".await"); }
             out.push(")");
             return Ok(());
@@ -365,7 +366,16 @@ impl EmitState {
             if arity >= 0 { out.push("async "); }
             out.push(&format!("|{}| ", joined));
             host.expr(walk, out, arg, depth, inside, scope)?;
-            out.push(&format!("({}).map_err(Into::into)", joined));
+            out.push(&format!("({}).map_err(Into::into)", emit_arg_passing(&names, &lent)));
+            return Ok(());
+        }
+        if arity < 0 && !lent.is_empty() {
+            let mut names: Vec<String> = vec![];
+            for n in 0..lent.len() as i64 { names.push(format!("__nikaia_a{}", n)); }
+            let joined = names.join(", ");
+            out.push(&format!("|{}| ", joined));
+            host.expr(walk, out, arg, depth, inside, scope)?;
+            out.push(&format!("({})", emit_arg_passing(&names, &lent)));
             return Ok(());
         }
         if arity < 0 {
@@ -377,9 +387,42 @@ impl EmitState {
         let joined = names.join(", ");
         out.push(&format!("async |{}| ", joined));
         host.expr(walk, out, arg, depth, inside, scope)?;
-        out.push(&format!("({})", joined));
+        out.push(&format!("({})", emit_arg_passing(&names, &lent)));
         Ok(())
     }
+    pub(crate) fn emit_arg_lent_params(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<bool> {
+        let key = match arg {
+            Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
+            _ => return vec![],
+        };
+        if self.facts.kept_functions.contains_key(&node_key(arg)) { return vec![]; }
+        let viewed = match self.facts.named_fn_values.get(&node_key(arg)) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        let contract = match self.own_contracts.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        let signature = match match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        if signature.takes_a_receiver() { return vec![]; }
+        let mut lent: Vec<bool> = vec![];
+        let mut any = false;
+        for at in 0..signature.params.len() as i64 {
+            let one = emit_arg_lends_own(&contract, at, world.library, &self.described) && !(at < viewed.len() as i64 && *nikaia_std::index::get(&viewed, nikaia_std::index::at(at)));
+            any = any || one;
+            lent.push(one);
+        }
+        if !any { return vec![]; }
+        lent
+    }
+}
+
+pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
+    let mut passed: Vec<String> = vec![];
+    let mut at: i64 = 0;
+    for name in names.iter() {
+        if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) { passed.push(format!("&{}", name)); } else { passed.push(name.to_owned()); }
+        at += 1;
+    }
+    passed.join(", ")
 }
 
 pub(crate) fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
