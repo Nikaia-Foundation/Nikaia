@@ -916,9 +916,10 @@ impl EmitState {
             return Ok(());
         }
         let rotation = world.words.resolve(method);
-        if (rotation == "rotate_left" || rotation == "rotate_right") && args.len() == 1 {
+        let counted = rotation == "rotate_left" || rotation == "rotate_right" || rotation == "wrapping_shl" || rotation == "wrapping_shr";
+        if counted && args.len() == 1 {
             let on_type = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.std_receivers, &(node_key(node))), || "");
-            if on_type == "u8" || on_type == "u32" || on_type == "u64" {
+            if on_type == "u8" || on_type == "u32" || on_type == "u64" || on_type == "i32" || on_type == "i64" {
                 self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?;
                 out.push(&format!(".{}((", rotation));
                 self.emit_core_nested(world, walk, out, host, nikaia_std::index::get(&args, 0), 0, depth, flow, scope)?;

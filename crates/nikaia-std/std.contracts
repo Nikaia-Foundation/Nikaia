@@ -1716,7 +1716,7 @@ signature = "(self) -> u64"
 # ## Rotations (#776)
 #
 # **The bits moved out at one end come back in at the other**: `rotate_left(n)`
-# and `rotate_right(n)` on every unsigned integer type, `n` any integer type,
+# and `rotate_right(n)` on every fixed-width integer type, `n` any integer type,
 # taken modulo the width, so no count aborts. Lowered to Rust's own, with the
 # count as a `u32`: Rust takes that modulo the width, which divides `2^32`.
 
@@ -1761,6 +1761,38 @@ pub = true
 sync = true
 touches = []
 signature = "(self, n: ?) -> u64"
+
+# The bits of an `i32` turned left by `n` places, modulo its width; the sign
+# bit is one bit like the others.
+[fn."i32::rotate_left"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> i32"
+
+# The bits of an `i32` turned right by `n` places, modulo its width; the sign
+# bit is one bit like the others.
+[fn."i32::rotate_right"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> i32"
+
+# The bits of an `i64` turned left by `n` places, modulo its width; the sign
+# bit is one bit like the others.
+[fn."i64::rotate_left"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> i64"
+
+# The bits of an `i64` turned right by `n` places, modulo its width; the sign
+# bit is one bit like the others.
+[fn."i64::rotate_right"]
+pub = true
+sync = true
+touches = []
+signature = "(self, n: ?) -> i64"
 
 # ## The lowest bits (Part I)
 #

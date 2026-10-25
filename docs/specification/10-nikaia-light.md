@@ -384,7 +384,7 @@ fn main() {
 On a `bool` they are refused (`NK1198`): `&&` and `||` join two `bool`s.
 
 **A rotation puts the bits it moves out back in at the other end**:
-`x.rotate_left(n)` and `x.rotate_right(n)` exist for `u8`, `u32` and `u64`. The
+`x.rotate_left(n)` and `x.rotate_right(n)` exist for `u8`, `u32`, `u64`, `i32` and `i64`. The
 count `n` may be of any integer type and is taken modulo the type's width, so
 no count aborts: `w.rotate_right(-1)` is `w.rotate_left(1)`.
 `x.low_bits(n)` is `x` with only its `n` lowest bits kept, for `u8`, `u32` and

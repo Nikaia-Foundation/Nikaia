@@ -324,3 +324,28 @@ fn low_bits_at_every_cpu_level() {
         assert_eq!(String::from_utf8_lossy(&out.stdout), expected, "{cpu}");
     }
 }
+
+/// **A wrapping shift's count is any integer, taken modulo the width** (#765):
+/// handed to Rust's `wrapping_shl` as a `u32`, as a rotation's is; and
+/// rotations exist on the signed types too.
+#[test]
+fn wrapping_shift_counts_and_signed_rotations_are_lowered_as_u32() {
+    let source = "fn main() {\n    \
+         let x: u64 = 1\n    \
+         let n: i64 = 3\n    \
+         let y: i32 = -8\n    \
+         let z: i64 = 1\n    \
+         let w: u64 = 0x8000000000000001\n    \
+         println(f\"{x.wrapping_shl(n)} {y.wrapping_shr(n)} {z.rotate_right(1)} {w.rotate_left(1)}\")\n\
+         }\n";
+    assert!(codes(source).is_empty(), "{:?}", codes(source));
+    let rust = lowered(source);
+    for written in [
+        "x.wrapping_shl((n) as i64 as u32)",
+        "y.wrapping_shr((n) as i64 as u32)",
+        "z.rotate_right((1) as i64 as u32)",
+        "w.rotate_left((1) as i64 as u32)",
+    ] {
+        assert!(rust.contains(written), "{written} not in {rust}");
+    }
+}
