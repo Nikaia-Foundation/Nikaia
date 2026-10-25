@@ -174,6 +174,55 @@ fn a_kept_ref_bytes_is_lowered_with_its_owner() {
     );
 }
 
+/// **A method that keeps a `ref Bytes` takes it with its owner too** (#756):
+/// `put` stores a clone in `self`; it is a `&Bytes`, and each call wraps the
+/// argument in `kept`, for a `Bytes`, a mapping and a text's bytes.
+const METHOD_KEEPER: &str = "use std::fs\n\
+     struct Holder { body: Bytes }\n\
+     impl Holder {\n\
+     \x20   fn put(ref mut self, b: ref Bytes) { self.body = b.clone() }\n\
+     }\n\
+     fn main() throws {\n\
+     \x20   let mut v: Vec[u8] = []\n\
+     \x20   v.push(65)\n\
+     \x20   v.push(10)\n\
+     \x20   let own = Bytes(v)\n\
+     \x20   let m = fs::map(\"in.txt\", fs::Root::Anywhere)\n\
+     \x20   let s = \"x\\ny\\n\"\n\
+     \x20   let mut h = Holder { body: own.clone() }\n\
+     \x20   h.put(own)\n\
+     \x20   let a = h.body.len()\n\
+     \x20   h.put(m)\n\
+     \x20   let b = h.body.len()\n\
+     \x20   h.put(s.bytes)\n\
+     \x20   println(f\"{a} {b} {h.body.len()}\")\n\
+     }\n";
+
+#[test]
+fn a_method_keeping_a_ref_bytes_takes_every_owner() {
+    let out = printed("bytes-owner-method", METHOD_KEEPER);
+    assert_eq!(out, "2 6 4");
+    let dir = common::scratch_dir("bytes-owner-method-lowered");
+    std::fs::write(dir.join("main.nika"), METHOD_KEEPER).expect("the source");
+    let lowered = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["lower", "main.nika"])
+        .output()
+        .expect("the nikaia binary runs");
+    assert!(lowered.status.success());
+    let rust = std::fs::read_to_string(dir.join("main.rs")).expect("the lowering");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(rust.contains("b: &Bytes"), "{rust}");
+    assert!(
+        rust.contains(".put(&*nikaia_std::bytes::kept(&own))"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains(".put(&*nikaia_std::bytes::kept(&m))"),
+        "{rust}"
+    );
+}
+
 /// An owned `Bytes` compares with a cut, in either order, and with another
 /// owned `Bytes`, by content (#764).
 #[test]

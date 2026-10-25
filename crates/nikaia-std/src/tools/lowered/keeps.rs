@@ -201,7 +201,7 @@ pub(crate) fn a_position_the_result_points_into(callee: Option<&str>, at: i64, o
 
 pub fn keeps_its_bytes(contract: &FnContract, at: i64) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if signature.takes_a_receiver() || at < 0 || at >= signature.params.len() as i64 { return false; }
+    if at < 0 || at >= signature.params.len() as i64 { return false; }
     let parameter = &nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).0;
     let is_bytes = match &nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1 {
         Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == "Bytes" },

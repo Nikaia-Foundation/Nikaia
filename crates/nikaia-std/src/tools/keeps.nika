@@ -334,14 +334,14 @@ fn a_position_the_result_points_into(callee: ref String?, at: i64, own: ref Ledg
 }
 
 /// **Whether position `at` takes a `Bytes` with its owner** (ADR-373 D1, D4):
-/// a `ref Bytes` parameter of a function, not a method, that the body keeps and
+/// a `ref Bytes` parameter of a function or a method (`at` counts `self`), that the body keeps and
 /// the result does not point into. It is lowered to `&Bytes`, so a clone is a
 /// count, and each call hands over the `Bytes` it has, a mapping's at a count
 /// and a run of bytes copied into one. A `ref Bytes` only read, or one the
 /// result views, stays a run of bytes, which any caller lends as it is.
 pub fn keeps_its_bytes(contract: ref FnContract, at: i64) -> bool {
     let signature = contract.signature ?? return false
-    if signature.takes_a_receiver() || at < 0 || at >= signature.params.len() {
+    if at < 0 || at >= signature.params.len() {
         return false
     }
     let parameter = signature.params[at].0

@@ -106,7 +106,19 @@ impl EmitState {
     }
     pub(crate) fn emit_arg_keeps_bytes(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> bool {
         if self.own_contracts.functions.contains_key(callee) { return keeps_its_bytes(match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
-        keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i)
+        if world.library.functions.contains_key(callee) { return keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
+        let mut seen = false;
+        for key in method_keys(&self.own_methods, callee) {
+            let c = match self.own_contracts.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if !emit_takes_self(&c) || !keeps_its_bytes(&c, i + 1) { return false; }
+            seen = true;
+        }
+        for key in method_keys(&self.library_methods, callee) {
+            let c = match world.library.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if !emit_takes_self(&c) || !keeps_its_bytes(&c, i + 1) { return false; }
+            seen = true;
+        }
+        seen
     }
     pub(crate) fn emit_arg_opening(&self, callee: &str, i: i64) -> String {
         if self.own_contracts.functions.contains_key(callee) {

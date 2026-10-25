@@ -572,7 +572,7 @@ impl EmitState {
                     }
                     // **A `ref Bytes` the body keeps takes the `Bytes` with its
                     // owner** (ADR-373 D1, D4).
-                    if plain_bytes && receiver == null && self.emit_fn_keeps_bytes(key, at) {
+                    if plain_bytes && self.emit_fn_keeps_bytes(key, at) {
                         let stripped = spelled.strip_suffix("[u8]")
                         match stripped {
                             lead => {

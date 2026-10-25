@@ -368,7 +368,7 @@ impl EmitState {
                         let inner = nikaia_std::index::or(nikaia_std::index::or(spelled.strip_prefix("&Vec<"), || "").strip_suffix('>'), || "");
                         spelled = format!("&[{}]", inner);
                     }
-                    if plain_bytes && receiver.is_none() && self.emit_fn_keeps_bytes(&key, at) {
+                    if plain_bytes && self.emit_fn_keeps_bytes(&key, at) {
                         let stripped = spelled.strip_suffix("[u8]");
                         match stripped {
                             Some(lead) => { if lead.starts_with('&') { spelled = format!("{}Bytes", lead); } },

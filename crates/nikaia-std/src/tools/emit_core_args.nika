@@ -173,7 +173,27 @@ impl EmitState {
         if self.own_contracts.functions.contains_key(callee) {
             return keeps_its_bytes(self.own_contracts.functions.get(callee) ?? return false, i)
         }
-        return keeps_its_bytes(world.library.functions.get(callee) ?? return false, i)
+        if world.library.functions.contains_key(callee) {
+            return keeps_its_bytes(world.library.functions.get(callee) ?? return false, i)
+        }
+        // **A method** (#756): `callee` is its name, `self` is position 0, and
+        // every method of that name must agree.
+        let mut seen = false
+        for key in method_keys(self.own_methods, callee) {
+            let c = self.own_contracts.functions.get(key) ?? return false
+            if !emit_takes_self(c) || !keeps_its_bytes(c, i + 1) {
+                return false
+            }
+            seen = true
+        }
+        for key in method_keys(self.library_methods, callee) {
+            let c = world.library.functions.get(key) ?? return false
+            if !emit_takes_self(c) || !keeps_its_bytes(c, i + 1) {
+                return false
+            }
+            seen = true
+        }
+        return seen
     }
 
     /// The opening a lent view gets inside the option a nullable parameter is:
