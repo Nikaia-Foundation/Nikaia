@@ -1,0 +1,166 @@
+// Start one headless agent from a brief (#847 step 2).
+//
+//     nikaia run scripts/agent.nika -- BRIEF [--dir DIR] [--dry-run] [--claude CMD]
+//
+// Reads BRIEF's frontmatter (agent, model, max_turns, budget_usd), runs
+// `claude -p` within 90 minutes, writes BRIEF.run.json, appends the cost to
+// DIR/tokens.txt (through `batch.nika --tokens`) and DIR/cost.txt, and prints
+// `done <sha8> report <path> cost <usd> turns <n>`. A failed run writes
+// DIR/ESCALATE (one line) and exits 2. `--dry-run` prints the command only.
+
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+fn agent_front(body: String, key: String, default: String) -> String {
+    let lines = body.split("\n").collect()
+    let mut found: String = default.clone()
+    if lines.len() == 0 || lines[0].trim() != "---" { return found }
+    let prefix = key.clone() + ":"
+    for i in 1..<lines.len() {
+        let line = lines[i].trim()
+        if line == "---" { return found }
+        if line.starts_with(prefix.clone()) {
+            found = (line.strip_prefix(prefix.clone()) ?? "").trim().clone()
+            return found
+        }
+    }
+    return found
+}
+
+fn agent_tools(agent: String) -> String {
+    if agent == "architect" {
+        return "Read Grep Glob Bash Edit Write mcp__github__issue_read mcp__github__issue_write mcp__github__add_issue_comment mcp__github__list_issues mcp__github__search_issues mcp__github__sub_issue_write mcp__github__get_label".to_string()
+    }
+    return "Bash Read Edit Write Grep Glob".to_string()
+}
+
+// The argument list of `claude`, in the order the brief names.
+fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
+    let agent = agent_front(body.clone(), "agent".to_string(), "builder".to_string())
+    let mut v: Vec[String] = []
+    v.push("-p".to_string())
+    v.push(f"Read your brief at {brief}")
+    v.push("--agent".to_string())
+    v.push(agent.clone())
+    v.push("--model".to_string())
+    v.push(agent_front(body.clone(), "model".to_string(), "sonnet".to_string()))
+    v.push("--max-turns".to_string())
+    v.push(agent_front(body.clone(), "max_turns".to_string(), "120".to_string()))
+    v.push("--max-budget-usd".to_string())
+    v.push(agent_front(body, "budget_usd".to_string(), "20".to_string()))
+    v.push("--output-format".to_string())
+    v.push("json".to_string())
+    v.push("--no-session-persistence".to_string())
+    v.push("--session-id".to_string())
+    v.push(session.clone())
+    v.push("--allowedTools".to_string())
+    v.push(agent_tools(agent))
+    return v
+}
+
+// The raw value after `"key":` (first occurrence), quotes removed; "" if absent.
+fn agent_json(body: String, key: String) -> String {
+    let marker = "\"" + key + "\":"
+    let parts = body.split(marker).collect()
+    if parts.len() < 2 { return "" }
+    let first = parts[1].split(",").collect()[0].clone()
+    let value = first.split("}").collect()[0].clone()
+    return value.trim().replace("\"", "")
+}
+
+fn agent_int(body: String, key: String) -> i64 {
+    return text::parse_i64(agent_json(body, key)) ?? 0
+}
+
+// Whole dollars of "12.34".
+fn agent_dollars(cost: String) -> i64 {
+    return text::parse_i64(cost.split(".").collect()[0].clone()) ?? 0
+}
+
+fn agent_escalate(dir: String, why: String) throws {
+    fs::write(f"{dir}/ESCALATE", fs::Root::Anywhere, why.clone() + "\n")
+    println(f"ESCALATE {why}")
+    process::exit(2)
+}
+
+fn agent_exe() -> String throws {
+    for exe in ["target/fast/nikaia", "target/release/nikaia"] {
+        if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
+    }
+    return ""
+}
+
+fn agent_read(path: String) -> String throws {
+    if !fs::exists(path.clone(), fs::Root::Anywhere) { return "" }
+    return fs::read_to_string(path, fs::Root::Anywhere)
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let mut dry = false
+    let mut brief: String = ""
+    let mut dir: String = ""
+    let mut claude: String = "claude"
+    let mut i = 1
+    while i < args.len() {
+        if args[i] == "--dry-run" { dry = true }
+        else if args[i] == "--dir" && i + 1 < args.len() { dir = args[i + 1].clone(); i += 1 }
+        else if args[i] == "--claude" && i + 1 < args.len() { claude = args[i + 1].clone(); i += 1 }
+        else { brief = args[i].clone() }
+        i += 1
+    }
+    if brief == "" {
+        println("usage: nikaia run scripts/agent.nika -- BRIEF [--dir DIR] [--dry-run] [--claude CMD]")
+        process::exit(2)
+    }
+    let abs = process::run("realpath", [brief.clone()]).stdout.trim().clone()
+    if dir == "" { dir = process::run("dirname", [abs.clone()]).stdout.trim().clone() }
+    let text = fs::read_to_string(abs.clone(), fs::Root::Anywhere)
+    let wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()
+    let claude_args = agent_args(abs.clone(), text, wanted.clone())
+    if dry {
+        println(claude + " " + claude_args.join(" "))
+        return
+    }
+    if fs::exists(f"{dir}/ESCALATE", fs::Root::Anywhere) {
+        println(f"refused: {dir}/ESCALATE exists")
+        process::exit(2)
+    }
+    let free = text::parse_i64(process::run("sh", ["-c", "df -m --output=avail / | tail -1"]).stdout.trim()) ?? 0
+    if free < 3072 { agent_escalate(dir.clone(), f"less than 3 GB free ({free} MB)") }
+    let today = process::run("date", ["+%F"]).stdout.trim().clone()
+    let mut spent = 0
+    for line in agent_read(f"{dir}/cost.txt").split("\n") {
+        let parts = line.split(" ").collect()
+        if parts.len() == 2 && parts[0] == today { spent += agent_dollars(parts[1].clone()) }
+    }
+    if spent > 200 { agent_escalate(dir.clone(), f"cost today {spent} USD above 200") }
+
+    let out = process::run(claude, claude_args; within: 90.minutes())
+    let json = out.stdout.clone()
+    fs::write(f"{abs}.run.json", fs::Root::Anywhere, json.clone())
+    let cost = agent_json(json.clone(), "total_cost_usd")
+    let turns = agent_int(json.clone(), "num_turns")
+    let tokens = agent_int(json.clone(), "input_tokens") + agent_int(json.clone(), "output_tokens") + agent_int(json.clone(), "cache_creation_input_tokens") + agent_int(json.clone(), "cache_read_input_tokens")
+    let session = agent_json(json.clone(), "session_id")
+    let reason = agent_json(json.clone(), "terminal_reason")
+    let stem = (abs.strip_suffix(".md") ?? "").clone()
+    let report = if stem != "" { f"{stem}.report.md" } else { f"{abs}.report.md" }
+    let old_cost = agent_read(f"{dir}/cost.txt")
+    fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, old_cost + f"{today} {cost}\n")
+    let exe = agent_exe()
+    if exe != "" {
+        process::run(exe, ["run", "scripts/batch.nika", "--", dir.clone(), "--tokens", abs.clone(), f"{tokens}", f"{turns}"])
+    }
+    if out.timed_out { agent_escalate(dir.clone(), "timed out after 90 minutes") }
+    if !out.ok { agent_escalate(dir.clone(), f"claude exited with code {out.code}") }
+    if agent_json(json.clone(), "is_error") != "false" { agent_escalate(dir.clone(), "is_error") }
+    if reason != "completed" { agent_escalate(dir.clone(), f"terminal_reason {reason}") }
+    if !fs::exists(report.clone(), fs::Root::Anywhere) { agent_escalate(dir.clone(), f"no report {report}") }
+    if session != wanted { agent_escalate(dir.clone(), f"session_id {session} differs from {wanted}") }
+    let sha = process::run("git", ["rev-parse", "--short=8", "HEAD"]).stdout.trim().clone()
+    println(f"done {sha} report {report} cost {cost} turns {turns}")
+}

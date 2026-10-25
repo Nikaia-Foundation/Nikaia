@@ -1,0 +1,7 @@
+architect: --agent architect --model opus --max-turns 7 --max-budget-usd 20
+tools: true mcp__github__get_label
+plain: --agent builder --model sonnet --max-turns 120 --max-budget-usd 20
+run: ok=true done cost 1.5 turns 3
+100
+no report: code=2 no report escalate=true
+refused: code=2

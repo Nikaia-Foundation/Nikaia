@@ -1,0 +1,45 @@
+// #847 step 2: scripts/agent.nika builds the claude command from a brief's
+// frontmatter and escalates a failed run, checked with a fake `claude`.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/agent.nika", fs::Root::Anywhere) { return here }
+    return process::run("realpath", [f"{here}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = process::run("realpath", [f"{repo}/target/fast/nikaia"]).stdout.trim().clone()
+    let fake = f"{tmp}/claude"
+    let json = "{\"is_error\":false,\"num_turns\":3,\"session_id\":\"SID\",\"total_cost_usd\":1.5,\"terminal_reason\":\"completed\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":20,\"cache_read_input_tokens\":30,\"output_tokens\":40}" + "}"
+    let script = f"#!/bin/sh\nsid=\"\"\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --session-id ]; then sid=$2; fi; shift; done\necho '{json}' | sed \"s/SID/$sid/\"\ntouch {tmp}/b.report.md\n"
+    fs::write(fake.clone(), fs::Root::Anywhere, script.clone())
+    process::run("chmod", ["+x", fake.clone()]; dir: repo.clone())
+    fs::write(f"{tmp}/b.md", fs::Root::Anywhere, "---\nagent: architect\nmodel: opus\nmax_turns: 7\n---\nbody\n")
+    fs::write(f"{tmp}/plain.md", fs::Root::Anywhere, "no frontmatter\n")
+
+    let dry = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dry-run"]; dir: repo.clone())
+    let words = dry.stdout.trim().split(" ").collect()
+    println(f"architect: {words[7]} {words[8]} {words[9]} {words[10]} {words[11]} {words[12]} {words[13]} {words[14]}")
+    println(f"tools: {words.len() > 20} {words[words.len() - 1]}")
+    let plain = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/plain.md", "--dry-run"]; dir: repo.clone())
+    let pw = plain.stdout.trim().split(" ").collect()
+    println(f"plain: {pw[7]} {pw[8]} {pw[9]} {pw[10]} {pw[11]} {pw[12]} {pw[13]} {pw[14]}")
+
+    let ran = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--claude", fake.clone()]; dir: repo.clone())
+    let line = ran.stdout.trim().split(" ").collect()
+    println(f"run: ok={ran.ok} {line[0]} cost {line[5]} turns {line[7]}")
+    println(fs::read_to_string(f"{tmp}/tokens.txt", fs::Root::Anywhere).trim().split(" ").collect()[1])
+    fs::remove(f"{tmp}/b.report.md", fs::Root::Anywhere)
+    let silent = f"{tmp}/silent"
+    fs::write(silent.clone(), fs::Root::Anywhere, script.replace("touch", "true"))
+    process::run("chmod", ["+x", silent.clone()])
+    let again = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--claude", silent.clone()]; dir: repo.clone())
+    println(f"no report: code={again.code} {again.stdout.trim().split(' ').collect()[1]} {again.stdout.trim().split(' ').collect()[2]} escalate={fs::exists(f"{tmp}/ESCALATE", fs::Root::Anywhere)}")
+    let refused = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--claude", fake.clone()]; dir: repo.clone())
+    println(f"refused: code={refused.code}")
+    process::run("rm", ["-rf", tmp])
+}

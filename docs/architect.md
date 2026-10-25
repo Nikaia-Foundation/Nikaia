@@ -156,8 +156,8 @@ What the architect hands the main session for a builder, in this form:
 ## The main session's cycle
 
 1. `nikaia run scripts/cycle.nika -- DIR` (`--apply` raises the version, `--done N` clears an OWNER line). Nothing else is checked.
-2. `NEXT <brief>`: start a `builder` with *Read your brief at <brief>* (model as the architect's start order says).
-3. A builder's one-line answer: `--tokens` into the batch, then back to 1. Read nothing else.
+2. `NEXT <brief>`: `nikaia run scripts/agent.nika -- <brief>` with `run_in_background`, not the Agent tool (agent, model, turns and budget from the brief's frontmatter). It records tokens and cost itself; its one line is `done <sha8> report <path> cost <usd> turns <n>`. An `ESCALATE` file in DIR or exit 2 is read like a failed builder (step 4).
+3. A builder's one-line answer (`--tokens` is already done by `agent.nika`): back to 1. Read nothing else.
 4. `CUT`, `RED`, `BLOCKED`, `BATCH DONE`, or an owner message: start a fresh architect with that line, the token figures and the owner's words verbatim.
 5. `BUMP pending` and CI green: `cycle.nika --apply` .
 6. `OWNER` lines: ask the owner in German, per *Decision rounds*; his answer goes to the architect.
