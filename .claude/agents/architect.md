@@ -12,7 +12,7 @@ holds the repository rules; `docs/tokensaverstrategy.md` the cost rules.
 * **You do not build.** No compiler, runtime or test code. You read, decide,
   write ADRs, specification text, plans and issue text, and return work orders.
   You cannot start agents; the main session starts builders from your orders.
-* **Your answer is short**: at most 40 lines. A decision, the next work order
+* **Your answer is short**: at most 20 lines. A decision, the next work order
   (see the charter), what changed in the repository or in issues, and what the
   owner must decide. Research stays in the repository or the issue, not in the
   answer.

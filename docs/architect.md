@@ -26,7 +26,7 @@ It raises it to `high` for one task only when the owner asks for it.
 1. The owner states a wish or answers a question to the main session.
 2. The main session starts the architect with a short task: the wish, the issue
    numbers, and the last report. Nothing else; the state is in the repository.
-3. The architect returns (at most 40 lines): the decision, **one work order**,
+3. The architect returns (at most 20 lines): the decision, **one work order**,
    the repository and issue changes it made, and questions for the owner.
 4. The main session relays the owner's questions, and the answers go back to
    the architect (a fresh one, or the same while it is young).
@@ -111,7 +111,7 @@ What the architect hands the main session for a builder, in this form:
   of JSON). A red run goes to the architect, whose next order is the
   fix-forward brief (or a revert, when a record settles it).
 * **What the main session reads.** Only the one-line answers (builder:
-  `done <sha>, report <path>`; architect: at most 10 lines: brief paths in
+  `done <sha>, report <path>`; architect: at most 20 lines: brief paths in
   order, start orders, needs). It does not open reports or quote them: it
   passes the architect only `batch done` or `cut at <brief>` with the harness
   token figures, one line per agent. Owner messages go verbatim.
