@@ -1,0 +1,29 @@
+// #803: a `Vec[String]` field filled with the result of a function that returns literals, read through a struct a call returned, is the `Vec[String]` it is written as (ADR-282 D29).
+struct Score {
+    kinds: Vec[String],
+}
+
+fn kind_of(t: String) -> String {
+    if t.starts_with("x") { return "ex" }
+    return "other"
+}
+
+fn stats(hits: ref Vec[String]) -> String {
+    return f"{hits.len()}"
+}
+
+fn score(lines: ref Vec[String]) -> Score {
+    let mut kinds: Vec[String] = []
+    for t in lines {
+        kinds.push(kind_of(t))
+    }
+    return Score { kinds: kinds }
+}
+
+fn main() {
+    let mut ls: Vec[String] = []
+    ls.push("xa".clone())
+    let s = score(ls)
+    let kinds: Vec[String] = s.kinds.clone()
+    print(stats(kinds))
+}

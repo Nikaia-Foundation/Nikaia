@@ -2445,8 +2445,21 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Strin
         Expr::Try(inner, _) => tier_struct_of(inner, ask, walk),
         Expr::Field { base, name, .. } => field_struct_or_bytes(base, ask.names.resolve(name), ask, walk),
         Expr::Index { base, index, .. } => cut_bytes(base, index, ask, walk),
+        // **A struct a function of the program returns** (#803): its fields
+        // read through the name it is bound to are that struct's.
+        Expr::Call { func, .. } => called_struct(func, ask, walk),
         else => null,
     }
+}
+
+/// The struct a call's declared result names, where that is one plain name.
+fn called_struct(func: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+    let found = called_result(func, ask, walk) ?? return null
+    let ty = found.ty
+    if ty.generics.len() > 0 || ty.is_nullable || ty.is_tuple || ty.is_slice || ty.code != null {
+        return null
+    }
+    return ask.names.resolve(ty.name).clone()
 }
 
 /// A field's type as `field_struct` names it, and a text's `bytes` where it

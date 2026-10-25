@@ -180,7 +180,7 @@ signature = "(t: ref String) -> bool"
 sync = "inferred"
 touches = []
 views = ["t: borrowed"]
-signature = "(t: ref String) -> ref String"
+signature = "(t: ref String) -> String"
 
 [fn."rs2nika_enum_arity"]
 sync = "inferred"

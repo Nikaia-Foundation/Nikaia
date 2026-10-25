@@ -1,0 +1,9 @@
+error[NK1102]: `stats` expects `hits` to be `ref Vec[String]`, but you're passing `Vec[i64]`.
+  --> tests/a_list_of_numbers_lent_to_a_list_of_texts_is_refused.nika:8:17
+   |
+ 8 |     print(stats(ns))
+   |                 ^^
+   |
+   = note: It's declared as `stats(hits: ref Vec[String]) -> String`.
+   = help: Make it a `ref Vec[String]`, or change the declaration to `Vec[i64]`.
+1 type error

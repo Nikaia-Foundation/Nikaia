@@ -1790,8 +1790,16 @@ pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_struct_of(inner, ask, walk) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_struct_or_bytes(base, ask.names.resolve(name), ask, walk) },
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); cut_bytes(base, index, ask, walk) },
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); called_struct(func, ask, &walk) },
         _ => None,
     }
+}
+
+pub(crate) fn called_struct(func: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &TierWalk) -> Option<String> {
+    let found = match called_result(func, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let ty = &found.ty;
+    if !ty.generics.is_empty() || ty.is_nullable || ty.is_tuple || ty.is_slice || (*ty.code).is_some() { return None; }
+    Some(ask.names.resolve(ty.name).to_owned())
 }
 
 pub(crate) fn field_struct_or_bytes(base: &Expr, field: &str, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {

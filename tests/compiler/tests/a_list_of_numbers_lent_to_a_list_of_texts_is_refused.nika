@@ -1,0 +1,9 @@
+// #803: a list of whole numbers handed to a `ref Vec[String]` parameter is still refused.
+fn stats(hits: ref Vec[String]) -> String {
+    return f"{hits.len()}"
+}
+
+fn main() {
+    let ns: Vec[i64] = [1, 2]
+    print(stats(ns))
+}

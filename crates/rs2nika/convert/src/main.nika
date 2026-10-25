@@ -5383,7 +5383,7 @@ pub fn rs2nika_score(draft: ref String, fin: ref String) -> Rs2nikaScore {
         if found {
             kept = kept + 1
         } else {
-            kinds.push(rs2nika_edit_kind(t).clone())
+            kinds.push(rs2nika_edit_kind(t))
         }
     }
     return Rs2nikaScore { kept: kept, total: total, kinds: kinds }

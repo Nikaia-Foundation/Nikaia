@@ -213,12 +213,12 @@ impl CheckState {
             },
             Expr::ListLit { items, .. } => {
                 let element: Ty = match want {
-                    Ty::Named { name, args, view } => { let view = *view; if !view && name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown } },
+                    Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown },
                     _ => Ty::Unknown,
                 };
                 if !items.is_empty() && check_texts_all_text(&element, items) {
                     for item in items.iter() { self.text_literal(world, &element, item, true); }
-                    return Some(want.clone());
+                    return Some(want.owned());
                 }
                 if !items.is_empty() && check_texts_all_chars(&element, items) {
                     for item in items.iter() { self.text_literal(world, &element, item, true); }

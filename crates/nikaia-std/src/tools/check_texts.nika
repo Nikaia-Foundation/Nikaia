@@ -255,16 +255,18 @@ impl CheckState {
             // its own** (ADR-282 D4): `[("A", "1")]` handed to a
             // `Vec[(String, String)]` builds each `String` where it is kept
             // (ADR-243 D5's `env`).
+            // A list lent to a `ref Vec[String]` is one too (#803).
             Expr::ListLit { items, .. } => {
                 let element: Ty = match want {
-                    Ty::Named { name, args, view } => if !view && name == "Vec" && args.len() == 1 { args[0].clone() } else { Ty::Unknown },
+                    Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { Ty::Unknown },
                     else => Ty::Unknown,
                 }
                 if items.len() > 0 && check_texts_all_text(element, items) {
                     for item in items {
                         self.text_literal(world, element, item, true)
                     }
-                    return want.clone()
+                    // Built here, lent where a `ref` is asked.
+                    return want.owned()
                 }
                 // **A list of `'…'` handed to a `Vec[u8]` is a list of
                 // bytes** (ADR-320 D8, ADR-375 D2): each is the byte it
