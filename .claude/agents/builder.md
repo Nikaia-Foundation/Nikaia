@@ -85,6 +85,7 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Think briefly on mechanical work.** Where a design choice is open that
   the task and the records do not settle, stop and report it instead of
   guessing.
+* **Do not delete branches.** You cannot, and need not: leave a `wip/*` branch where it is; the owner deletes it.
 * **You have no GitHub access.** What the issue says is in your task; put
   what an issue comment should say in your report.
 * **Report** in at most 30 lines: the commits, what the change decided (a
