@@ -1,0 +1,143 @@
+// The commit from the report: one message form for every builder.
+//
+//     nikaia run scripts/commit.nika -- [--dry-run] REPORT
+//
+// REPORT is `<brief>.report.md` with `Files:` (paths, space-separated) and
+// `Commit:` (subject), plus `Changelog:`, and optionally `Fixes: #N[, #M]` or
+// `Part: #N`. Refuses when a listed file is unchanged or when a staged file is
+// not listed. Adds exactly the listed files, commits with the subject,
+// `Changelog:`, `Fixes #N` / `Part of #N` and the lines under `Attribution:` at
+// the end of the brief (`<brief>.md`, the report's name without `.report.md`),
+// pushes `origin develop` fast-forward only (no rebase), writes `Pushed: <sha>`
+// into the report and prints `committed <sha8> pushed|rejected`. A rejected
+// push prints `PUSH REJECTED <sha>` first. `--dry-run` prints the message only.
+
+use std::cli
+use std::fs
+use std::process
+
+fn commit_field(text: String, key: String) -> String {
+    for line in text.split("\n") {
+        if line.starts_with(key.clone()) {
+            return (line.strip_prefix(key.clone()) ?? "").trim().clone()
+        }
+    }
+    return ""
+}
+
+// The lines after `Attribution:` up to the end of the brief.
+fn commit_attribution(brief: String) -> String {
+    let mut out: Vec[String] = []
+    let mut on = false
+    for line in brief.split("\n") {
+        if on {
+            out.push(line.trim_end().clone())
+        } else if line.starts_with("Attribution:") {
+            on = true
+        }
+    }
+    return out.join("\n").trim().clone()
+}
+
+fn commit_message(report: String, brief: String) -> String {
+    let mut msg = commit_field(report.clone(), "Commit:")
+    let changelog = commit_field(report.clone(), "Changelog:")
+    if changelog != "" && changelog != "none" { msg = msg + f"\n\nChangelog: {changelog}" }
+    let fixes = commit_field(report.clone(), "Fixes:")
+    let part = commit_field(report, "Part:")
+    if fixes != "" {
+        msg = msg + f"\n\nFixes {fixes}"
+    } else if part != "" {
+        msg = msg + f"\n\nPart of {part}"
+    }
+    let who = commit_attribution(brief)
+    if who != "" { msg = msg + f"\n\n{who}" }
+    return msg
+}
+
+fn commit_git(args: Vec[String]) -> String throws {
+    let out = process::run("git", args)
+    if !out.ok { return "" }
+    return out.stdout.trim().clone()
+}
+
+// "" when fine, else the refusal.
+fn commit_check(files: Vec[String]) -> String throws {
+    for f in files.clone() {
+        if commit_git(["status", "--porcelain", "--", f.clone()]) == "" { return f"REFUSED: {f} is unchanged" }
+    }
+    for staged in commit_git(["diff", "--cached", "--name-only"]).split("\n") {
+        if staged != "" && !files.contains(staged.clone()) { return f"REFUSED: {staged} is staged but not listed" }
+    }
+    return ""
+}
+
+fn commit_put_pushed(path: String, text: String, sha: String) throws {
+    let mut out: Vec[String] = []
+    let mut done = false
+    for line in text.trim_end().split("\n") {
+        if line.starts_with("Pushed:") {
+            out.push(f"Pushed: {sha}")
+            done = true
+        } else {
+            out.push(line.clone())
+        }
+    }
+    if !done { out.push(f"Pushed: {sha}") }
+    fs::write(path, fs::Root::Anywhere, out.join("\n") + "\n")
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let mut dry = false
+    let mut path: String = ""
+    for i in 1..(args.len() - 1) {
+        if args[i] == "--dry-run" { dry = true } else { path = args[i].clone() }
+    }
+    if path == "" {
+        println("usage: nikaia run scripts/commit.nika -- [--dry-run] REPORT")
+        process::exit(2)
+    }
+    let report = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+    let brief_path = path.strip_suffix(".report.md") ?? ""
+    let mut brief: String = ""
+    if brief_path != "" && fs::exists(f"{brief_path}.md", fs::Root::Anywhere) {
+        brief = fs::read_to_string(f"{brief_path}.md", fs::Root::Anywhere)
+    }
+    let mut files: Vec[String] = []
+    for f in commit_field(report.clone(), "Files:").split(" ") {
+        if f != "" { files.push(f.clone()) }
+    }
+    if files.len() == 0 || commit_field(report.clone(), "Commit:") == "" {
+        println("REFUSED: the report has no Files: or Commit:")
+        process::exit(1)
+    }
+    let why = commit_check(files.clone())
+    if why != "" {
+        println(why)
+        process::exit(1)
+    }
+    let msg = commit_message(report.clone(), brief)
+    if dry {
+        println(f"git add {files.join(" ")}")
+        println(msg)
+        return
+    }
+    let mut add: Vec[String] = ["add", "--"]
+    for f in files { add.push(f.clone()) }
+    if !process::run("git", add).ok {
+        println("REFUSED: git add failed")
+        process::exit(1)
+    }
+    if !process::run("git", ["commit", "-m", msg]).ok {
+        println("REFUSED: git commit failed")
+        process::exit(1)
+    }
+    let sha = commit_git(["rev-parse", "HEAD"])
+    let pushed = process::run("git", ["push", "origin", "develop"]).ok
+    commit_put_pushed(path, report, if pushed { sha.clone() } else { "rejected" })
+    let short = commit_git(["rev-parse", "--short=8", "HEAD"])
+    if !pushed { println(f"PUSH REJECTED {sha}") }
+    println(f"committed {short} {if pushed { "pushed" } else { "rejected" }}")
+}

@@ -50,6 +50,9 @@ with `Read your brief at <path>`. Builders have no GitHub access: a brief copies
 The builder writes its report to `<brief>.report.md`, these fields only:
 
     Result: done | partial | blocked
+    Files: <paths of the commit, space-separated>   (for scripts/commit.nika)
+    Commit: <subject line>
+    Fixes: #N[, #M] | Part: #N   (optional)
     Pushed: <sha> | rejected | none
     Tests: <test filters run> - pass | <failing names>
     Deviation: none | <one sentence>
@@ -58,6 +61,9 @@ The builder writes its report to `<brief>.report.md`, these fields only:
     Changelog: none | <one sentence for the version heading>
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
+
+Every brief ends with an `Attribution:` block (the commit's trailer lines);
+`scripts/commit.nika` copies it into the message.
 
 Its final answer to the main session is one line: `done <sha>, report <path>`,
 or `BLOCKED: <reason>, report <path>`, or `PUSH REJECTED <sha>, report <path>`.

@@ -110,6 +110,15 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Think briefly on mechanical work.** Where a design choice is open that
   the task and the records do not settle, stop and report it instead of
   guessing.
+* **Commit with the script.** Before committing, add to the report
+  `Files: <paths, space-separated>`, `Commit: <subject>` and, where it applies,
+  `Fixes: #N[, #M]` or `Part: #N`; then run `target/fast/nikaia run
+  scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
+  unchanged listed file or a staged file not listed, adds exactly the listed
+  files, writes the message (subject, `Changelog:`, `Fixes`, the brief's
+  `Attribution:` block), pushes fast-forward, writes `Pushed:` into the report
+  and prints `committed <sha8> pushed|rejected`. Several commits: one report
+  `<brief>.step<N>.report.md` per step, only if needed.
 * **Do not delete branches.** You cannot, and need not: leave a `wip/*` branch where it is; the owner deletes it.
 * **You have no GitHub access.** What the issue says is in your task; put
   what an issue comment should say in your report.
