@@ -170,10 +170,7 @@ pub(crate) fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
             facts.ints.insert(name.to_owned());
             if ty.starts_with('u') { bounding_at_least_zero(walk, &mut facts, &name); }
         }
-        if ty == "Vec" || ty == "List" || ty == "Array" {
-            let __keep_17305 = nikaia_std::tether::Keep::new();
-            bounding_at_least_zero(walk, &mut facts, (&__keep_17305).put(length_of(&name)));
-        }
+        if ty == "Vec" || ty == "List" || ty == "Array" { bounding_at_least_zero(walk, &mut facts, &length_of(&name)); }
     }
     for (name, range) in context.given.iter() {
         let range = *range;
@@ -184,10 +181,7 @@ pub(crate) fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
     }
     for (name, range) in context.text_lengths.iter() {
         let range = *range;
-        if !walk.shape.bound.contains(name) {
-            let __keep_17860 = nikaia_std::tether::Keep::new();
-            bounding_bounded(walk, &mut facts, (&__keep_17860).put(length_of(name)), &range);
-        }
+        if !walk.shape.bound.contains(name) { bounding_bounded(walk, &mut facts, &length_of(name), &range); }
     }
     bounding_block(walk, body, &mut facts, context, program, words, ask);
 }
@@ -1475,7 +1469,6 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
                 Expr::Variable(name, _) => {
                     let name = *name;
                     bounding_forget_elements_at(&walk, facts, words.resolve(name));
-                    let __keep_89367 = nikaia_std::tether::Keep::new();
                     bounding_assign(walk, facts, words.resolve(name), (op).as_ref(), value, context, program, words, ask);
                 },
                 Expr::Field { .. } => {
@@ -2086,10 +2079,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
         let fact = nikaia_std::num::value(fact);
         bounding_push(&walk, facts, fact);
     }
-    for list in filled.iter() {
-        let __keep_123810 = nikaia_std::tether::Keep::new();
-        bounding_shift(walk, facts, (&__keep_123810).put(length_of(list)), count);
-    }
+    for list in filled.iter() { bounding_shift(walk, facts, &length_of(list), count); }
 }
 
 pub(crate) fn bounding_below(walk: &mut BoundsWalk, n: i64, h: i64, closed: bool) -> i64 {

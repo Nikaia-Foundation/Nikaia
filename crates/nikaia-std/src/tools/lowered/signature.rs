@@ -24,13 +24,11 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
     }
     let optional = generic_of(text, "Option");
     if optional.is_some() {
-        let __keep_2262 = nikaia_std::tether::Keep::new();
         let inner = translate(nikaia_std::index::or(optional.as_deref(), || ""), crate_word, parameters, types, mentioned);
         return Translated { ty: Ty::Nullable(Box::new(inner.ty)), kept: inner.kept };
     }
     let listed = generic_of(text, "Vec");
     if listed.is_some() {
-        let __keep_2496 = nikaia_std::tether::Keep::new();
         let inner = translate(nikaia_std::index::or(listed.as_deref(), || ""), crate_word, parameters, types, mentioned);
         return Translated { ty: Ty::Named { name: String::from("Vec"), args: vec![inner.ty], view: false }, kept: true };
     }

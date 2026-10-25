@@ -1300,6 +1300,24 @@ pub(crate) fn rsrc_ty_holds_view(asked: &Asked<'_, '_, '_>, ty: &Ty) -> bool {
     }
 }
 
+pub(crate) fn rsrc_type_holds_view(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool {
+    if ty.is_view { return true; }
+    for part in ty.generics.iter() { if rsrc_type_holds_view(asked, part) { return true; } }
+    if ty.is_tuple || !ty.generics.is_empty() && rsrc_plain_name(asked.names.resolve(ty.name)) { return false; }
+    let name = asked.names.resolve(ty.name);
+    let own = nikaia_std::index::or(match (*nikaia_std::index::get(&asked.own.types, name)).as_ref().map(|__nikaia_it| &__nikaia_it.tethered) {
+        Some(__nikaia_it) => Some(__nikaia_it.len() as i64),
+        None => None,
+    }, || -1);
+    if own >= 0 { return own > 0; }
+    let library = nikaia_std::index::or(match (*nikaia_std::index::get(&asked.library.types, name)).as_ref().map(|__nikaia_it| &__nikaia_it.tethered) {
+        Some(__nikaia_it) => Some(__nikaia_it.len() as i64),
+        None => None,
+    }, || -1);
+    if library >= 0 { return library > 0; }
+    !rsrc_plain_name(name)
+}
+
 pub(crate) fn rsrc_plain_name(name: &str) -> bool { name == "String" || name == "bool" || name == "char" || name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "Vec" || name == "Array" || name == "Option" || name == "BTreeSet" || name == "BTreeMap" || name == "HashSet" || name == "HashMap" || name == "VecDeque" || name == "Box" || name == "Tuple" || name == "Duration" || name == "Instant" || name == "scalar" || name == "bytes" }
 
 pub(crate) fn rsrc_any_ty_holds_view(asked: &Asked<'_, '_, '_>, types: &[Ty]) -> bool {
@@ -2181,7 +2199,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             if receiver.is_some() { position = 1; }
             for arg in args.iter() {
                 let named = asked.names.resolve(arg.name).to_owned();
-                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) { places.insert(named.to_owned()); } else if !arg.mutable && rsrc_plain_text(asked, &arg.ty) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(named.to_owned()); }
+                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(named.to_owned()); } else if !arg.mutable && rsrc_plain_text(asked, &arg.ty) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(named.to_owned()); }
                 position += 1;
             }
             if places.is_empty() || sources.is_empty() { return; }

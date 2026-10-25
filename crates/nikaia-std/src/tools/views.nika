@@ -1796,6 +1796,32 @@ fn rsrc_ty_holds_view(asked: ref Asked, ty: ref Ty) -> bool {
     }
 }
 
+// Whether a type written in the source may hold a view: a place whose type
+// cannot is never a place a view is kept in (#747).
+fn rsrc_type_holds_view(asked: ref Asked, ty: ref Type) -> bool {
+    if ty.is_view {
+        return true
+    }
+    for part in ty.generics {
+        if rsrc_type_holds_view(asked, part) {
+            return true
+        }
+    }
+    if ty.is_tuple || ty.generics.len() > 0 && rsrc_plain_name(asked.names.resolve(ty.name)) {
+        return false
+    }
+    let name = asked.names.resolve(ty.name)
+    let own = asked.own.types[name]?.tethered?.len() ?? -1
+    if own >= 0 {
+        return own > 0
+    }
+    let library = asked.library.types[name]?.tethered?.len() ?? -1
+    if library >= 0 {
+        return library > 0
+    }
+    return !rsrc_plain_name(name)
+}
+
 fn rsrc_plain_name(name: ref String) -> bool {
     return name == "String" || name == "bool" || name == "char" || name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "Vec" || name == "Array" || name == "Option" || name == "BTreeSet" || name == "BTreeMap" || name == "HashSet" || name == "HashMap" || name == "VecDeque" || name == "Box" || name == "Tuple" || name == "Duration" || name == "Instant" || name == "scalar" || name == "bytes"
 }
@@ -2897,7 +2923,7 @@ fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span,
             }
             for arg in args {
                 let named = asked.names.resolve(arg.name).clone()
-                if arg.mutable && arg.ty.code == null && !rsrc_scalar(asked, arg.ty) {
+                if arg.mutable && arg.ty.code == null && !rsrc_scalar(asked, arg.ty) && rsrc_type_holds_view(asked, arg.ty) {
                     places.insert(named.clone())
                 } else if !arg.mutable && rsrc_plain_text(asked, arg.ty) && (arg.ty.is_view || rsrc_lent(asked, own_contract, position)) {
                     sources.push(named.clone())

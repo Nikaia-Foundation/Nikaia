@@ -1062,7 +1062,6 @@ pub(crate) fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[C
             a_lambda_handed_on((described).as_ref(), at, &arg, asked, holes_of, ty_of, walk);
             continue;
         }
-        let __keep_63484 = nikaia_std::tether::Keep::new();
         a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk);
     }
     for setting in config.iter() {

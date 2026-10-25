@@ -1,0 +1,20 @@
+struct Tally {
+    pub names: Vec[String],
+    pub count: i64,
+}
+
+fn note(mut tally: Tally, name: String) {
+    tally.names.push(name.clone())
+    tally.count += 1
+}
+
+fn relay(mut tally: Tally, name: String) {
+    note(tally, name)
+}
+
+fn main() {
+    let mut tally = Tally { names: [], count: 0 }
+    relay(tally, "a")
+    relay(tally, "b")
+    println(f"{tally.count} {tally.names.len()}")
+}

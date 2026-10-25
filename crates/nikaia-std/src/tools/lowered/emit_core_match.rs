@@ -478,8 +478,7 @@ impl EmitState {
             if !inside_a_box {
                 if !nikaia_std::index::or(answer, || true) { out.push("!"); }
                 out.push("matches!(");
-                let __keep_33917 = nikaia_std::tether::Keep::new();
-                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, (&__keep_33917).put(self.emit_match_lent_subject(world, value)), self.facts.text_scrutinees.contains(&node_key(value)), self.facts.copied_walks.contains(&node_key(value)))?;
+                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value), self.facts.text_scrutinees.contains(&node_key(value)), self.facts.copied_walks.contains(&node_key(value)))?;
                 out.push(", ");
                 let mut i: i64 = 0;
                 for arm in arms.iter() {
@@ -496,8 +495,7 @@ impl EmitState {
         out.push("match ");
         let text = self.facts.text_scrutinees.contains(&node_key(value));
         if self.facts.lent_scrutinees.contains(&node_key(value)) && !text { out.push("&"); }
-        let __keep_35008 = nikaia_std::tether::Keep::new();
-        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, (&__keep_35008).put(self.emit_match_lent_subject(world, value)), text, self.facts.copied_walks.contains(&node_key(value)))?;
+        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(&node_key(value)))?;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let close = "    ".repeat(nikaia_std::count::of(depth));
         out.push(" {\n");
