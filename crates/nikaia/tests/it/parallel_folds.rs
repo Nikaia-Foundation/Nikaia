@@ -606,3 +606,41 @@ fn a_grammars_par_fold_takes_the_options_of_a_fold() {
         "{counted:?}"
     );
 }
+
+/// **#762: a declared merge taking its second argument by value, and a step
+/// lambda handing its accumulator to a `mut` parameter** (`&mut *acc`).
+const IN_PLACE_BY_VALUE: &str = "struct Acc { n: i64 }
+fn merge(mut a: Acc, other: Acc) { a.n += other.n }
+fn main() {
+    let xs: Vec[i64] = [1, 2, 3]
+    let r = xs.par_iter().fold(fn { Acc { n: 0 } }, fn(acc, x) { acc.n += x }, merge)
+    println(f\"{r.n}\")
+}
+";
+
+const IN_PLACE_HANDED_ON: &str = "struct Acc { n: i64 }
+fn add(mut a: Acc, x: i64) { a.n += x }
+fn main() {
+    let xs: Vec[i64] = [1, 2, 3]
+    let r = xs.par_iter().fold(fn { Acc { n: 0 } }, fn(acc, x) { add(acc, x) }, fn(a, b) { a.n += b.n })
+    println(f\"{r.n}\")
+}
+";
+
+#[test]
+fn an_in_place_fold_hands_its_arguments_on_as_the_callee_takes_them() {
+    let dir = common::scratch_dir("parallel-folds-in-place-762");
+    for (name, source) in [("value", IN_PLACE_BY_VALUE), ("handed", IN_PLACE_HANDED_ON)] {
+        for parallel in ["no", "yes"] {
+            let (binary, _) = build(&dir.join(format!("{name}-{parallel}")), source, parallel);
+            let out = run(&binary, &dir.join(format!("run-{name}-{parallel}")), None);
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(stdout.trim(), "6", "{name} at {parallel}");
+        }
+    }
+}

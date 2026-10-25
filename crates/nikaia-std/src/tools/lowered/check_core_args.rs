@@ -64,6 +64,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, &CheckPromises { may_pause: pauses, may_fail: fails }, span);
                     if paused && !declared_here { state.flow.paused_args.push(id); }
                     state.flow.lambda_tails.insert(id, came_to.clone());
+                    state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first);
                     let written: Ty = nikaia_std::index::or(match result {
                         Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                         None => None,
@@ -219,6 +220,18 @@ pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '
             return;
         }
         if params.len() > 1 { lent = (*nikaia_std::index::get(&params, 1)).is_a_view(); }
+    }
+    if lambda {
+        let first = nikaia_std::index::or(state.flow.lambda_firsts.get(&(id_of(part) as i64)), || -1);
+        let mut handed: Vec<i64> = vec![];
+        for (node, binding) in state.facts.mut_arg_bindings.iter() {
+            let node = nikaia_std::num::value(node);let binding = nikaia_std::num::value(binding);
+            if binding == first && first >= 0 { handed.push(node); }
+        }
+        for node in handed.iter() {
+            let node = nikaia_std::num::value(node);
+            state.facts.reborrowed_args.insert(node);
+        }
     }
     let form = if lent { 2 } else { 1 };
     state.facts.in_place_folds.insert(id_of(part) as i64, form);

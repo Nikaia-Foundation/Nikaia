@@ -293,6 +293,7 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
         frame.push(local);
         at += 1;
     }
+    let first = if !frame.is_empty() { nikaia_std::index::get(&frame, 0).id } else { -1 };
     let depth = state.scope.len() as i64;
     state.repeats.push(CheckRepeats::a_lambda(depth));
     state.scope.push(frame);
@@ -307,6 +308,7 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     state.leave_boundary(&saved);
     state.scope.pop();
     state.repeats.pop();
+    state.flow.last_lambda_first = first;
     let mut paused = false;
     if seen.is_some() {
         let handed = match seen { Some(__nikaia_value) => __nikaia_value, None => return (tail, false) };

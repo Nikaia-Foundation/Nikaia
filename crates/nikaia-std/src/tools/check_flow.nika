@@ -258,6 +258,11 @@ pub struct CheckFlow {
     /// **The lambda parameters handed a value of no known type** (#703), by
     /// binding: a member of one is asked where the lambda stands (`NK1245`).
     pub unknown_lambda_params: collections::BTreeSet[i64],
+    /// **The binding of each lambda's first parameter**, by the lambda's
+    /// node (#762): an in-place fold step lends it on as `&mut *acc`.
+    pub lambda_firsts: collections::BTreeMap[i64, i64],
+    /// The first parameter's binding of the lambda checked last.
+    pub last_lambda_first: i64,
     /// How many `NK1245`s this walk has said (or stood back for).
     pub unknown_said: i64,
     /// What such a list holds, where nothing can change it (D26).
@@ -352,6 +357,8 @@ impl CheckFlow {
             open_calls: collections::BTreeMap(),
             unknown_bound: collections::BTreeSet(),
             unknown_lambda_params: collections::BTreeSet(),
+            lambda_firsts: collections::BTreeMap(),
+            last_lambda_first: -1,
             unknown_said: 0,
             list_constants: collections::BTreeMap(),
             overflowed: collections::BTreeSet(),

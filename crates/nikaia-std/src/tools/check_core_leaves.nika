@@ -346,6 +346,7 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
         frame.push(local)
         at += 1
     }
+    let first = if frame.len() > 0 { frame[0].id } else { -1 }
     let depth = state.scope.len() as i64
     state.repeats.push(CheckRepeats::a_lambda(depth))
     state.scope.push(frame)
@@ -358,6 +359,7 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
     state.leave_boundary(saved)
     state.scope.pop()
     state.repeats.pop()
+    state.flow.last_lambda_first = first
     let mut paused = false
     if seen != null {
         let handed = seen ?? return (tail, false)

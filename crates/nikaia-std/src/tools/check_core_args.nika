@@ -88,6 +88,7 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                         state.flow.paused_args.push(id)
                     }
                     state.flow.lambda_tails.insert(id, came_to.clone())
+                    state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first)
                     let written: Ty = result?.clone() ?? Ty::Unknown
                     let mut out: Ty? = null
                     if !written.is_unknown() {
@@ -294,6 +295,20 @@ pub fn check_core_fold_form(mut state: CheckState, world: ref CheckWorld, part: 
         }
         if params.len() > 1 {
             lent = params[1].is_a_view()
+        }
+    }
+    // **A lambda's accumulator is the mutable borrow already** (#762): handed
+    // to a `mut` parameter it is lent on again, `&mut *acc`.
+    if lambda {
+        let first = state.flow.lambda_firsts.get(id_of(part) as i64) ?? -1
+        let mut handed: Vec[i64] = []
+        for (node, binding) in state.facts.mut_arg_bindings {
+            if binding == first && first >= 0 {
+                handed.push(node)
+            }
+        }
+        for node in handed {
+            state.facts.reborrowed_args.insert(node)
         }
     }
     let form = if lent { 2 } else { 1 }
