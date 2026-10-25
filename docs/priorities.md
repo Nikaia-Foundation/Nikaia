@@ -40,3 +40,14 @@ Such an issue is closed by hand with the commit named, not briefed.
 
 Two or three lines: `S=<grade> (why), O=<M tokens> (why), C=<M tokens> (from
 which past run), area`; on a departure from bugs-first, the figures.
+
+## Current score (2026-10-25, after 80f767a3)
+
+| Ticket | S | O (M) | C (M) | Order |
+| :--- | :--- | :--- | :--- | :--- |
+| #837, #838 (running, briefed) | 2 | 0.5 | 3 | 1, 2 |
+| #744 let over field/literal arms, rustc refuses | 3 | 1 | 8 | 3 |
+| #582 map through a function value, E0308 | 3 | 0.5 | 10 | 4 |
+| #747 step 1 NK1104 after NK1131 | 2 | 0.3 | 3 | 5 |
+| E10-4 adapter switch (emit_function.nika built, not called from Rust) | 2 | 2 | 15 | 6, after the bug batch |
+| #825 | built (3573f202, 4b13ffa7), closed by hand | | | |
