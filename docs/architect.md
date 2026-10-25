@@ -61,7 +61,7 @@ title because the issue text was missing):
   there, not in each brief.
 * The fixed block (`common.part`): rules, disk, report form, `Attribution:`.
 
-The builder writes its report to `<brief>.report.md`, these fields only:
+The builder writes its report to exactly `<full brief path>.report.md`, beside the brief (the brief names the path), these fields only:
 
     Result: done | partial | blocked
     Files: <paths of the commit, space-separated>   (for scripts/commit.nika)
@@ -75,6 +75,7 @@ The builder writes its report to `<brief>.report.md`, these fields only:
     Changelog: none | <one sentence for the version heading>
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
+    Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
 
 Every brief ends with an `Attribution:` block (the commit's trailer lines);
 `scripts/commit.nika` copies it into the message.
