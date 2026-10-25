@@ -539,10 +539,12 @@ static void nk_settle(napi_env env, napi_value js, void *context, void *data) {{
 /* `done`, on a library thread: what last_error says is read here, where it was said. */
 static void nk_landed(int status, void *ctx) {{
     nk_async *job = ctx;
+    /* Read before the call: the main thread may settle and free `job` at once. */
+    napi_threadsafe_function tsfn = job->tsfn;
     job->status = status;
     if (status != 0) job->said = nk_said(&job->said_len);
-    napi_call_threadsafe_function(job->tsfn, job, napi_tsfn_blocking);
-    napi_release_threadsafe_function(job->tsfn, napi_tsfn_release);
+    napi_call_threadsafe_function(tsfn, job, napi_tsfn_blocking);
+    napi_release_threadsafe_function(tsfn, napi_tsfn_release);
 }}
 
 /* A Promise with its `cancel()`, and the call that settles it, which takes what the

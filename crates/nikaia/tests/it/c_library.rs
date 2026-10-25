@@ -1312,6 +1312,18 @@ fn node_calls_the_library_through_its_binding() {
     assert!(bound.status.success(), "{}", said(&bound));
     let made = root.join("target/nikaia/c-library");
     assert!(made.join("node/binding.gyp").is_file(), "the build file");
+    // Once `nk_landed` hands `job` to the main thread, `nk_settle` may free it
+    // at once: nothing after the hand-off may read it (#829, a hang in CI).
+    let glue = std::fs::read_to_string(made.join("node/calc.c")).expect("the glue");
+    let landed = &glue[glue.find("static void nk_landed").expect("nk_landed")..];
+    let landed = &landed[..landed.find("\n}").expect("its end")];
+    let handed = &landed[landed
+        .find("napi_call_threadsafe_function")
+        .expect("the hand-off")..];
+    assert!(
+        !handed[handed.find(';').unwrap()..].contains("job"),
+        "{landed}"
+    );
     let module = made.join("node/calc.node");
     let compiled = Command::new("cc")
         .args([

@@ -42,15 +42,29 @@ type Task = Pin<Box<dyn Future<Output = ()>>>;
 /// locking discipline to get wrong: waking a task sets a bit, and the executor
 /// reads the bit. A wake that arrives while the task is already queued is
 /// therefore free rather than a duplicate.
-struct Alarm(AtomicBool);
+///
+/// **A wake from another thread also rings the bell** (#829): the executor
+/// may be parked in `rt::io` - on a `sleep`'s timer, say - and a flag alone
+/// does not reach it there. A C library's `cancel()` from the caller's thread
+/// waited out a whole 60-second `sleep` that way. The thread is the one that
+/// made the alarm, which is the one whose executor polls it.
+struct Alarm(AtomicBool, std::thread::ThreadId);
 
 impl Alarm {
     fn woken() -> Arc<Alarm> {
-        Arc::new(Alarm(AtomicBool::new(true)))
+        Arc::new(Alarm(AtomicBool::new(true), std::thread::current().id()))
     }
 
     fn ring(self: &Arc<Self>) {
         self.0.store(true, Ordering::Release);
+    }
+
+    /// [`Alarm::ring`], and the bell when the waker is on another thread.
+    fn wake_up(self: &Arc<Self>) {
+        self.ring();
+        if std::thread::current().id() != self.1 {
+            crate::rt::ring_the_bell();
+        }
     }
 
     /// Whether it rang, and clear it.
@@ -67,10 +81,10 @@ fn waker_for(alarm: Arc<Alarm>) -> Waker {
 
 impl std::task::Wake for Alarm {
     fn wake(self: Arc<Self>) {
-        self.ring();
+        self.wake_up();
     }
     fn wake_by_ref(self: &Arc<Self>) {
-        self.ring();
+        self.wake_up();
     }
 }
 
@@ -657,6 +671,34 @@ mod tests {
                 "each task ran up to its suspension point before the other resumed"
             );
         });
+    }
+
+    /// **A wake from another thread reaches an executor parked on the timer**
+    /// (#829): a C library's `cancel()`, called on the caller's thread while
+    /// the call sleeps, ended the call only when the whole sleep was over.
+    #[test]
+    fn a_wake_from_another_thread_ends_a_park_on_the_timer() {
+        let woken = Arc::new(AtomicBool::new(false));
+        let mut sleeping = Box::pin(crate::time::sleep(std::time::Duration::from_secs(60)));
+        let mut handed = false;
+        let began = std::time::Instant::now();
+        let ended_by_wake = block_on(std::future::poll_fn(|context| {
+            if woken.load(Ordering::SeqCst) {
+                return Poll::Ready(true);
+            }
+            if !handed {
+                handed = true;
+                let (waker, flag) = (context.waker().clone(), woken.clone());
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    flag.store(true, Ordering::SeqCst);
+                    waker.wake();
+                });
+            }
+            sleeping.as_mut().poll(context).map(|()| false)
+        }));
+        assert!(ended_by_wake, "the sleep ran out first");
+        assert!(began.elapsed() < std::time::Duration::from_secs(30));
     }
 
     /// **A task nobody joins still runs** (D5), which is what Part I 8.2's own
