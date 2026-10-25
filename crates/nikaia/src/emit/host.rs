@@ -606,4 +606,8 @@ impl EmitHost for Emitter<'_> {
     fn set_floor(&self, on: bool) {
         self.floor.set(on);
     }
+
+    fn char_literal(&self, written: &str) -> String {
+        crate::check::char_literal(written)
+    }
 }

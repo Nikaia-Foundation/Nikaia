@@ -1039,6 +1039,14 @@ mod emit_entry_lowered {
 #[allow(unused_imports)]
 pub use emit_entry_lowered::*;
 
+mod emit_expr_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_expr.rs");
+}
+#[allow(unused_imports)]
+pub use emit_expr_lowered::*;
+
 mod emit_exprs_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2290,6 +2298,7 @@ pub mod emit_core_types {
     pub use super::{emit_settle_kind, emit_cleaned, emit_boxed_future, emit_boxed_future_in, emit_counted_turn};
 }
 pub mod emit_entry {}
+pub mod emit_expr {}
 pub mod emit_exprs {
     #[allow(unused_imports)]
     pub use super::{emit_around, emit_around_held, emit_around_value};

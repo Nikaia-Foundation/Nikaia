@@ -42,6 +42,7 @@ pub trait EmitHost {
     fn place_enter(&self, target: &str, params: &[String]);
     fn place_leave(&self);
     fn set_floor(&self, on: bool);
+    fn char_literal(&self, written: &str) -> String;
 }
 
 impl EmitState {

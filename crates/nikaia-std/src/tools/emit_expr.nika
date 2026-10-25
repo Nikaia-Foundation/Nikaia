@@ -1,0 +1,527 @@
+// crates/nikaia-std/src/tools/emit_expr.nika
+//
+// **The expression family of the emitter's core** (ADR-294, #125, #583, E11-4a):
+// `expr`, the wrap an arm in a mixed position or beside a `null` takes, the copy
+// out of a map's read, the copy of a text's bytes, and `expr_written`, the
+// dispatch over every expression to the `emit_core_*` writer of its kind.
+// Statements and blocks are still reached through the host; the Rust
+// `Emitter::expr` is the adapter over `emit_expr`.
+
+/// The number an integer literal says, as the language below writes it.
+fn emit_expr_int_text(value: u64, negative: bool) -> String {
+    if negative && value != 0 {
+        return f"-{value}"
+    }
+    return f"{value}"
+}
+
+/// **An integer literal, and the one case it has to carry its own type**
+/// (ADR-285 D21): one an `i32` does not hold is an `i64`, and one above an
+/// `i64` is a `u64` (D19, the checker refused it anywhere else).
+fn emit_expr_integer_literal(value: u64, negative: bool, widen: bool) -> String {
+    let text = emit_expr_int_text(value, negative)
+    let fits_i32 = if negative { value <= 2147483648 } else { value <= 2147483647 }
+    if fits_i32 && !widen {
+        return text
+    }
+    let fits_i64 = negative || value <= 9223372036854775807
+    if fits_i64 {
+        return f"{text}i64"
+    }
+    return f"{text}u64"
+}
+
+/// **What a kept function's call is cached by**: the name, or the path
+/// joined with `::` (`Parsed::kept_function_call`).
+fn emit_expr_kept_text(world: ref EmitWorld, func: ref Expr) -> String {
+    return match func {
+        Expr::Path(segments, _) => {
+            let mut parts: Vec[String] = []
+            for s in segments {
+                parts.push(emit_text(world, s))
+            }
+            parts.join("::")
+        },
+        Expr::Variable(name, _) => emit_text(world, name),
+        else => "",
+    }
+}
+
+impl EmitState {
+    /// An expression, written to `out`.
+    pub fn emit_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = node_key(node)
+        // **A receiver bound before the statement** reads as its name
+        // (`hold_owned_receiver`).
+        if walk.held.contains_key(at) {
+            out.push((walk.held.get(at) ?? "").clone())
+            return
+        }
+        // **A `T?` a test proved not `null` is read as the `T`** (ADR-350):
+        // the test runs before the read on every path, so the unwrap never
+        // fails.
+        let how = self.facts.narrowed_reads.get(at) ?? -1
+        if how >= 0 {
+            let narrowed = match node {
+                Expr::Variable(name, _) => emit_text(world, name),
+                else => "",
+            }
+            if narrowed != "" {
+                self.emit_expr_narrowed(out, narrowed, how)
+                return
+            }
+        }
+        // **An arm of a choice that goes into a mixed position is wrapped on
+        // its own** (ADR-282 D14, `mixed_leaves`, #562): a view and text of
+        // its own are two types, and only `EitherText` holds both.
+        if self.facts.mixed_leaves.contains_key(at) {
+            let nullable = self.facts.mixed_leaves.get(at) ?? false
+            if nullable {
+                out.push("nikaia_std::either_text::either_maybe(")
+            } else {
+                out.push("nikaia_std::either_text::either(")
+            }
+            // `either_maybe` hands a present value in as `Some` itself, and an
+            // arm that is a `String?` already as it is (#696).
+            if nullable && (self.facts.some_tails.contains(at) || self.facts.wrapped.contains_key(at)) {
+                self.emit_expr_as_written(world, walk, out, host, node, depth, flow, scope)
+            } else {
+                self.emit_expr_unmixed(world, walk, out, host, node, depth, flow, scope)
+            }
+            out.push(")")
+            return
+        }
+        self.emit_expr_unmixed(world, walk, out, host, node, depth, flow, scope)
+    }
+
+    /// A narrowed read of `name`, by the checker's flags in `how`: 1 copied,
+    /// 2 an operand, 4 a struct or a list lent out of the option (#621), 8
+    /// given up where the read hands it to something that keeps it.
+    fn emit_expr_narrowed(ref self, mut out: EmitOut, name: ref String, how: i64) sync {
+        let copied = how % 2 == 1
+        let operand = (how / 2) % 2 == 1
+        let other = (how / 4) % 2 == 1
+        let given_up = (how / 8) % 2 == 1
+        // **Put back into an option, it stays the option it is**: the wrap
+        // the slot asked for is already written, and its `)` follows.
+        let lent = if copied || other { "Option::as_ref(&" } else { "Option::as_deref(&" }
+        if !operand {
+            if out.buf.ends_with("Some(&") {
+                out.buf = (out.buf.strip_suffix("Some(&") ?? "").clone()
+                out.push(lent)
+                out.push(name)
+                return
+            }
+            if out.buf.ends_with("Some(") {
+                out.buf = (out.buf.strip_suffix("Some(") ?? "").clone()
+                out.push("std::convert::identity(")
+                out.push(name)
+                return
+            }
+        }
+        // Lent where a `&` asked for a reference: `as_ref` is that reference
+        // already.
+        if other && !given_up && out.buf.ends_with("&") && !out.buf.ends_with("&&") {
+            out.buf = (out.buf.strip_suffix("&") ?? "").clone()
+        }
+        out.push(name)
+        if copied || given_up {
+            out.push(".unwrap()")
+        } else {
+            out.push(".as_ref().unwrap()")
+        }
+    }
+
+    /// `emit_expr`, past the wrap of an arm in a mixed position.
+    pub fn emit_expr_unmixed[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = node_key(node)
+        // **A plain arm beside a `null` is `Some`** (`some_tails`).
+        if self.facts.some_tails.contains(at) {
+            out.push("Some(")
+            self.emit_expr_as_written(world, walk, out, host, node, depth, flow, scope)
+            out.push(")")
+            return
+        }
+        // **And a plain value in a nullable slot** (`wrapped`).
+        if self.facts.wrapped.contains_key(at) {
+            let (before, after) = emit_around_value(self.facts.wrapped.get(at), node)
+            out.push(before)
+            self.emit_expr_as_written(world, walk, out, host, node, depth, flow, scope)
+            out.push(after)
+            return
+        }
+        // **A map's read copied out where a `T?` of its own is kept** (ADR-293
+        // D15). A read through the brackets is `*get(…)`, whose `*` would take
+        // the whole chain, so it is held in parentheses.
+        if self.facts.copied_reads.contains(at) {
+            let indexed = match node {
+                Expr::Index { .. } => true,
+                else => false,
+            }
+            let held = indexed && !self.facts.flat_reads.contains(at)
+            if held {
+                out.push("(")
+            }
+            self.emit_expr_after_the_copy(world, walk, out, host, node, depth, flow, scope)
+            if held {
+                out.push(")")
+            }
+            out.push(".copied()")
+            return
+        }
+        self.emit_expr_after_the_copy(world, walk, out, host, node, depth, flow, scope)
+    }
+
+    /// `emit_expr`'s last step, after a copy out of a map's read: **`get` on a
+    /// map of `T?`** is one `T?`, as the brackets are (ADR-293 D14).
+    fn emit_expr_after_the_copy[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let method = match node {
+            Expr::MethodCall { .. } => true,
+            else => false,
+        }
+        if method && self.facts.flat_reads.contains(node_key(node)) {
+            out.push("nikaia_std::index::flat(")
+            self.emit_expr_as_written(world, walk, out, host, node, depth, flow, scope)
+            out.push(")")
+            return
+        }
+        self.emit_expr_as_written(world, walk, out, host, node, depth, flow, scope)
+    }
+
+    /// `emit_expr`, without the wrap an arm beside a `null` takes: **a text's
+    /// own bytes kept beyond the text are copied** into a `Bytes` of their own
+    /// (ADR-320 D11, `kept_text_bytes`).
+    pub fn emit_expr_as_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if self.facts.kept_text_bytes.contains(node_key(node)) {
+            out.push("nikaia_std::bytes::Bytes::from(")
+            self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)
+            out.push(")")
+            return
+        }
+        self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)
+    }
+
+    /// **Whether a call that can fail inside the expression a `catch` guards
+    /// leaves it with its error** (#721, Part I 7.1): then the call is written
+    /// between `emit_expr_break_open` and `emit_expr_break_close`.
+    fn emit_expr_breaks_out(ref self, world: ref EmitWorld, node: ref Expr, flow: EmitFlow) -> bool {
+        return flow.breaks_to >= 0 && self.emit_call_fails(world, node)
+    }
+
+    /// The end of a call that leaves to the labelled block the `catch` opened
+    /// (`emit_core_try_catch`) with its error.
+    fn emit_expr_break_close(ref self, mut out: EmitOut, flow: EmitFlow) sync {
+        out.push(f" {{ Ok(value) => value, Err(error) => break '__nikaia_caught_{flow.breaks_to} Err(error.into()) }}")
+    }
+
+    /// `emit_expr_as_written`, past the copy of a text's bytes: the dispatch.
+    fn emit_expr_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = node_key(node)
+        // **An arm read off a place under a `ref T` is lent** (ADR-354 D1).
+        if self.facts.lent_reads.contains(at) {
+            out.push("&")
+        }
+        match node {
+            // **A literal in an unsigned place carries that type's suffix**
+            // (ADR-285 D3), ahead of the widening a bare one gets.
+            Expr::LitInt { value, negative, .. } => {
+                if self.facts.unsigned_literals.contains_key(at) {
+                    let ty = (self.facts.unsigned_literals.get(at) ?? "").clone()
+                    out.push(f"{emit_expr_int_text(value, negative)}{ty}")
+                } else {
+                    out.push(emit_expr_integer_literal(value, negative, flow.widen))
+                }
+            },
+            Expr::LitFloat(v, _) => out.push(v),
+            Expr::LitStr { .. } => self.emit_core_string(world, walk, out, host, node, depth, flow, scope),
+            Expr::LitInterpolated { .. } => self.emit_core_string(world, walk, out, host, node, depth, flow, scope),
+            Expr::LitChar(c, _) => {
+                if self.facts.byte_literals.contains(at) {
+                    out.push(check_byte_literal(c))
+                } else {
+                    out.push(host.char_literal(c))
+                }
+            },
+            // **A range is a value** (ADR-293 D18): one that is kept, handed on
+            // or called on is `nikaia_std`'s, and only one written straight
+            // into a `for` or into brackets is Rust's (`bare_range`).
+            Expr::Range { start, end, inclusive, .. } => {
+                if inclusive {
+                    out.push("nikaia_std::range::through(")
+                } else {
+                    out.push("nikaia_std::range::span(")
+                }
+                self.emit_expr(world, walk, out, host, start, depth, flow, scope)
+                out.push(", ")
+                self.emit_expr(world, walk, out, host, end, depth, flow, scope)
+                out.push(")")
+            },
+            Expr::LitBool(b, _) => {
+                if b {
+                    out.push("true")
+                } else {
+                    out.push("false")
+                }
+            },
+            // Part I 2.3: `null` has no type of its own, so the type beside it
+            // says what it is the absence of.
+            Expr::LitNull(_) => out.push("None"),
+            Expr::Variable(name, _) => self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope),
+            Expr::Path(segments, _) => {
+                if self.emit_expr_kept_function(world, walk, out, host, node, depth, flow, scope) {
+                    return
+                }
+                let mut path: Vec[String] = []
+                for s in segments {
+                    path.push(emit_text(world, s))
+                }
+                out.push(self.path(world, walk.trusting, walk.unpinned, path))
+            },
+            // **A block over a grammar of this program is the value its entry
+            // computed while the program was built** (#518), recorded under
+            // the statement as a `comptime`'s; any other is a template
+            // (ADR-017) or a statement whose holes the call site fills.
+            Expr::Dsl { target, package, context, content, .. } => {
+                let target_text = emit_text(world, target)
+                if package == null && context == null && self.grammars.contains_key(target_text) && self.facts.dsl_values.contains_key(at) {
+                    let (below, written) = self.facts.dsl_values.get(at) ?? return
+                    out.push(f"{{ const __NIKAIA_DSL: {below} = {written}; __NIKAIA_DSL }}")
+                    return
+                }
+                let name = if package != null { f"{emit_text(world, package ?? target)}::{target_text}" } else { target_text.clone() }
+                self.emit_core_template(world, walk, out, host, name, context, content, at, depth, flow, scope)
+            },
+            // A block in *expression* position: its last statement is its own
+            // value, and a `return` inside it leaves the function around it.
+            Expr::Block(block, _) => self.emit_core_block(world, walk, out, host, block, depth, flow, scope, EmitTail::Value),
+            // **Rust's own `unsafe`** (ADR-302 D3); **a block of nothing but
+            // `assume`s, checked** (ADR-376 D2), holds nothing Rust calls
+            // unsafe, so it is written as a plain block.
+            Expr::Unsafe(block, _) => {
+                let only_checked_assumes = !self.unchecked_assumes && !prover_assumed_in_unsafe(block, world.words).is_empty()
+                if !only_checked_assumes {
+                    out.push("unsafe ")
+                }
+                self.emit_core_block(world, walk, out, host, block, depth, flow, scope, EmitTail::Value)
+            },
+            // Part I 8.1.2 and Part II 12.4 (ADR-292 D2, D12).
+            Expr::Overlap(block, _) => self.emit_core_overlap(world, walk, out, host, block, depth, flow, scope),
+            Expr::Select(arms, _) => self.emit_core_select(world, walk, out, host, arms, depth, flow, scope),
+            // An `if` in *expression* position hands its branch's value to
+            // whoever asked for it.
+            Expr::If { cond, then_branch, else_branch, .. } => self.emit_core_if_expr(world, walk, out, host, cond, then_branch, else_branch, depth, flow, scope, EmitTail::Value),
+            Expr::Call { func, args, config, .. } => {
+                let breaks = self.emit_expr_breaks_out(world, node, flow)
+                if breaks {
+                    out.push("match ")
+                }
+                self.emit_core_call(world, walk, out, host, func, args, config, depth, flow, scope)
+                if breaks {
+                    self.emit_expr_break_close(out, flow)
+                }
+            },
+            Expr::MethodCall { receiver, method, args, config, .. } => self.emit_expr_method(world, walk, out, host, node, receiver, method, args, config, depth, flow, scope),
+            // **A `?.` after a value that cannot be absent is the plain call**
+            // (ADR-279 D13, `plain_reaches`); Part I 3.5 onto a method
+            // otherwise (ADR-278).
+            Expr::SafeMethod { receiver, method, args, config, .. } => {
+                if self.facts.plain_reaches.contains(at) {
+                    self.emit_expr_method(world, walk, out, host, node, receiver, method, args, config, depth, flow, scope)
+                } else {
+                    self.emit_core_safe_method(world, walk, out, host, receiver, method, args, config, depth, flow, scope)
+                }
+            },
+            Expr::Match { value, arms, .. } => self.emit_core_match(world, walk, out, host, value, arms, depth, flow, scope),
+            Expr::Tuple(parts, _) => self.emit_core_tuple(world, walk, out, host, parts, depth, flow, scope),
+            Expr::ListLit { items, .. } => self.emit_core_list_lit(world, walk, out, host, node, items, depth, flow, scope),
+            Expr::ListRepeat { value, count, .. } => self.emit_core_list_repeat(world, walk, out, host, node, value, count, depth, flow, scope),
+            Expr::Field { base, name, .. } => self.emit_core_field(world, walk, out, host, node, base, name, depth, flow, scope),
+            Expr::SafeField { base, name, .. } => {
+                if self.facts.plain_reaches.contains(at) {
+                    self.emit_core_field(world, walk, out, host, node, base, name, depth, flow, scope)
+                } else {
+                    self.emit_core_safe_field(world, walk, out, host, node, base, name, depth, flow, scope)
+                }
+            },
+            Expr::Index { base, index, .. } => self.emit_core_index(world, walk, out, host, node, base, index, depth, flow, scope),
+            Expr::Cast { expr, ty, .. } => self.emit_core_cast(world, walk, out, host, expr, ty, depth, flow, scope),
+            Expr::StructLit { name, fields, .. } => self.emit_core_struct_lit(world, walk, out, host, node, name, fields, depth, flow, scope),
+            Expr::With { base, fields, at: written_at, .. } => self.emit_core_with(world, walk, out, host, node, base, fields, written_at, depth, flow, scope),
+            Expr::Closure { params, mutable, body, .. } => self.emit_core_closure(world, walk, out, host, node, params, mutable, body, depth, flow, scope),
+            Expr::Unary { op, expr, .. } => self.emit_expr_unary(world, walk, out, host, node, op, expr, depth, flow, scope),
+            Expr::Binary { op, lhs, rhs, span, .. } => self.emit_core_binary(world, walk, out, host, node, op, lhs, rhs, span, depth, flow, scope),
+            // The four arms of `??`, in their original order, are one function.
+            Expr::Coalesce { value, fallback, .. } => self.emit_core_coalesce(world, walk, out, host, node, value, fallback, depth, flow, scope),
+            Expr::TryCatch { expr, handler, .. } => self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope),
+            Expr::Try(inner, _) => self.emit_core_try(world, walk, out, host, inner, depth, flow, scope),
+            Expr::Return(value, _) => self.emit_core_return(world, walk, out, host, value, depth, flow, scope),
+            Expr::Break(_) => self.emit_core_jump(out, true, flow),
+            Expr::Continue(_) => self.emit_core_jump(out, false, flow),
+            Expr::Throw(inner, _) => self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope),
+            Expr::Spawn { body, .. } => self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope),
+            else => {
+                throw EmitRefused { message: "The compiler can't translate this expression yet: an `asm` block in expression position", at: flow.statement }
+            },
+        }
+    }
+
+    /// The `MethodCall` arm, and the `?.` that is a plain call (ADR-279 D13),
+    /// left with its error where a `catch` guards it.
+    fn emit_expr_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let breaks = self.emit_expr_breaks_out(world, node, flow)
+        if breaks {
+            out.push("match ")
+        }
+        self.emit_core_method_arm(world, walk, out, host, node, receiver, method, args, config, depth, flow, scope)
+        if breaks {
+            self.emit_expr_break_close(out, flow)
+        }
+    }
+
+    /// A name read as a value.
+    fn emit_expr_variable[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = node_key(node)
+        let text = emit_text(world, name)
+        // **A `mut` lambda parameter is an address** (ADR-281 D12), so every
+        // mention of it is dereferenced.
+        if scope.changed.contains(name) {
+            out.push(f"(*{self.emit_expr_read_name(world, name, node)})")
+            return
+        }
+        // **A constructor handed over as a value** (ADR-140 D2): `Summary` in
+        // value position is `Summary::new`, where only a type this file
+        // declares or one the library publishes with a constructor.
+        if self.constructs_by_name(world, text) {
+            out.push(self.path(world, walk.trusting, walk.unpinned, [text.clone(), "new"]))
+            return
+        }
+        if self.emit_expr_kept_function(world, walk, out, host, node, depth, flow, scope) {
+            return
+        }
+        // **An integer `comptime` where a use asks a type is its value in that
+        // type** (ADR-287 D21, `comptime_uses`).
+        if self.facts.comptime_uses.contains_key(at) {
+            out.push((self.facts.comptime_uses.get(at) ?? "").clone())
+            return
+        }
+        if !flow.in_a_place && self.copied_in_place(scope.function, text) {
+            out.push(f"*{self.emit_expr_read_name(world, name, node)}")
+            return
+        }
+        out.push(self.emit_expr_read_name(world, name, node))
+        // **A binding packed for a task is read through its handle** (ADR-283
+        // D11), for as long as the read borrows it - and so is an element
+        // taken out of a keeper that holds structs of views (D16).
+        let key = self.keep_plan_key(walk, scope.function) ?? return
+        let plan = self.keep_plans.get(key) ?? return
+        let packed = plan.tethered.contains_key(text) || plan.held_locals.contains(text)
+        if packed && !flow.in_a_place {
+            out.push(".get()")
+        }
+    }
+
+    /// **A read of a name**: under the binding's own name where it reads a
+    /// binding that shadows a `comptime` (#703), the source's otherwise.
+    fn emit_expr_read_name(ref self, world: ref EmitWorld, name: winnow_grammar::Symbol, node: ref Expr) -> String {
+        let text = emit_text(world, name)
+        if self.facts.shadowing_reads.contains(node_key(node)) {
+            return emit_local_name(self.facts.comptime_names, text)
+        }
+        return escaped_name(text)
+    }
+
+    /// **A named function, or a method named by its path, where a function
+    /// value is kept** is the closure that calls it, written as the checker
+    /// typed it; false where this is not one.
+    fn emit_expr_kept_function[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let at = node_key(node)
+        if walk.in_a_kept_call || !self.facts.kept_functions.contains_key(at) {
+            return false
+        }
+        let (pauses, fails, arity) = self.facts.kept_functions.get(at) ?? (false, false, 0)
+        // The call the checker built and typed, read back by its key: only
+        // the checker knows whether a method takes a `self`.
+        let key = emit_expr_kept_text(world, node)
+        let kept = self.kept_calls.get((key.clone(), arity)) ?? throw EmitRefused { message: f"no kept call was built for `{key}`", at: flow.statement }
+        let mut names: Vec[String] = []
+        for n in kept.names {
+            names.push(emit_text(world, n))
+        }
+        out.push(f"nikaia_std::func::Kept(std::sync::Arc::new(move |{names.join(", ")}| ")
+        let inside = EmitFlow::plain() with { can_throw: fails, statement: flow.statement }
+        if pauses {
+            out.push("Box::pin(async move ")
+        }
+        if fails {
+            out.push("{ Ok(")
+        } else {
+            out.push("{ ")
+        }
+        let outer = walk.in_a_kept_call
+        walk.in_a_kept_call = true
+        self.emit_expr(world, walk, out, host, kept.call, depth, inside, EmitScope::plain())
+        walk.in_a_kept_call = outer
+        if fails {
+            out.push(") }")
+        } else {
+            out.push(" }")
+        }
+        if pauses {
+            out.push(f") as {emit_boxed_future_in(host.overlaps_user_code())}<'_, _>")
+        }
+        out.push("))")
+        return true
+    }
+
+    /// A unary operator.
+    fn emit_expr_unary[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, op: UnaryOp, operand: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let negation = match op {
+            UnaryOp::Neg => true,
+            else => false,
+        }
+        let reference = match op {
+            UnaryOp::Ref => true,
+            else => false,
+        }
+        // **`-2147483648` is an `i32`**, and its digits are not (ADR-285 D23):
+        // a negation is folded here rather than left for the literal to answer
+        // about a number that is one too large. The suffix still applies.
+        if negation {
+            let folded = match operand {
+                Expr::LitInt { value, negative, .. } => {
+                    let fits = if negative { value <= 2147483647 } else { value <= 2147483648 }
+                    if fits { emit_expr_int_text(value, negative) } else { "" }
+                },
+                else => "",
+            }
+            if folded != "" {
+                let wide = if flow.widen { "i64" } else { "" }
+                out.push(f"-{folded}{wide}")
+                return
+            }
+        }
+        // **A `&` over a slice read is the view it already is** (ADR-182 D2):
+        // the read answers a `&str` or a `&[T]` already.
+        if reference && !flow.in_a_place {
+            let slice = match operand {
+                Expr::Index { index, .. } => self.slices(index),
+                else => false,
+            }
+            if slice {
+                self.emit_expr(world, walk, out, host, operand, depth, flow, scope)
+                return
+            }
+        }
+        // **`-x` proved to stay inside its type** (ADR-314 D5) is written
+        // without its check, by `proven-index` (ADR-378 D2).
+        if negation && self.proven_negations.contains_key(node_key(node)) {
+            let ty = (self.proven_negations.get(node_key(node)) ?? "").clone()
+            out.push(f"unsafe {{ nikaia_std::proven::neg::<{ty}>(")
+            self.emit_expr(world, walk, out, host, operand, depth, flow, scope)
+            out.push(") }")
+            return
+        }
+        out.push(unary_op(op))
+        self.emit_core_nested(world, walk, out, host, operand, 255, depth, flow, scope)
+    }
+}

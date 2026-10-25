@@ -542,3 +542,15 @@ about 2100 lines deep, too much for one builder run): **4a** the expression fami
 which already has `stmt` / `block_*` callbacks. **4b** `a_stmt`, `stmt`, `stmt_written`,
 `block_plain`, `block_opening_with` (about 1300). **4c** the host's `expr` / `stmt` /
 `block_*` callbacks and the adapters go, once both sides are Nikaia. Brief `e11-4a.md`.
+
+E11-4a switched: `Emitter::expr` is a thin adapter over `emit_expr` (`tools/emit_expr.nika`,
+527 lines): the held receiver, the narrowed read, the mixed, `Some` and nullable wraps,
+the copy out of a map's read, the kept text bytes and the dispatch over every expression kind
+to its `emit_core_*` writer (blocks and `if` through `emit_core_block` / `emit_core_if_expr`
+directly). The host gained `char_literal`. 1212 Rust lines removed (`expr_unmixed`,
+`expr_after_the_copy`, `breaking_out`, `expr_as_written`, `expr_written` and the stubs only
+they called: `call`, `overlap`, `select`, `match_expr`, `string`, `method_arm`, `nested`,
+`template`, `path`, `read_name`, `slices`, `copied_in_place`, `constructs_by_name`,
+`boxed_future_in`, `integer_literal`, `unary_op`). Found on the way and fixed first: `m.get(k)`
+lent to a `ref T?` parameter was opened twice (`map_gets`). `lower-std` output unchanged
+beyond the slice's files. Next: E11-4b (statements and blocks).

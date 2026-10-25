@@ -148,6 +148,8 @@ pub trait EmitHost {
     fn place_leave(ref self) sync
     /// Whether a barrier's keyed map is written (ADR-010 D9).
     fn set_floor(ref self, on: bool) sync
+    /// A `'…'` as the language below writes it (ADR-320 D8, `check::char_literal`).
+    fn char_literal(ref self, written: ref String) -> String sync
 }
 
 impl EmitState {
