@@ -42,6 +42,33 @@ It raises it to `high` for one task only when the owner asks for it.
 
 By `docs/priorities.md`: the score decides across areas, bugs-first is the default prior; every brief names its score terms in 2-3 lines.
 
+## Briefs and reports
+
+A brief is one file (`briefs/<topic>.md`); the main session starts the builder
+with `Read your brief at <path>`. Every brief ends with this report form.
+
+The builder writes its report to `<brief>.report.md`, these fields only:
+
+    Result: done | partial | blocked
+    Pushed: <sha> | rejected | none
+    Tests: <test filters run> - pass | <failing names>
+    Deviation: none | <one sentence>
+    Found: none | <one sentence, issue number if filed>
+    Needs: none | <NK code, owner decision, help from main session>
+    Disk freed: <GB>
+
+Its final answer to the main session is one line: `done <sha>, report <path>`,
+or `BLOCKED: <reason>, report <path>`, or `PUSH REJECTED <sha>, report <path>`.
+A non-empty `Needs` adds `NEEDS: <short>` to that line. The main session reads
+nothing else; token figures reach it from the harness.
+
+The architect reads the report in its next task (the main session passes only
+the path and the token figures). It files or updates issues from `Found`,
+comments on or reopens an issue a `Deviation` leaves open, lists what the
+change decided for the supervisor's version heading, and picks the next topic.
+The main session still acts on its own for: CI red on `develop`, a rejected
+push (it rebases), `BLOCKED`, and owner questions.
+
 ## The work order
 
 What the architect hands the main session for a builder, in this form:
