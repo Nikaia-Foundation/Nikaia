@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1221] — 2026-10-25
+
+**emit: a kept Bytes follows the receiver's method; grammar patterns in Nikaia (#756, #842, #583)**
+- A method that keeps a `ref Bytes` parameter now takes it as `&Bytes`, and its call sites hand over the `Bytes` with its owner (ADR-373 D1, D4): a `Bytes` or a mapping is not copied, and a run of bytes such as a text's is copied once (#756).
+- A method call hands a `Bytes` over with its owner only where the method its receiver's type resolves to keeps it; a same-named method elsewhere, or a closure in a field, no longer changes the call (#842).
+- The emitter's grammar pattern writer is in Nikaia (`tools/emit_pattern.nika`); the grammar's bytes flags live in the walk (#583).
+
 ## [0.0.1220] — 2026-10-25
 
 **EitherText for an assigned if/match, the emitter's item writer in Nikaia (#841, E11-1)**
