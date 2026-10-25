@@ -32,7 +32,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   never on a whole `lower-std` or a test run.
 * **Few builds: finish first, then build once.** Build and test with
   `--profile fast` (`cargo build --profile fast -p nikaia`, `cargo test
-  --profile fast -p nikaia --test it a:: b::`, binary `target/fast/nikaia`):
+  --profile fast -p nikaia --test it -- a:: b::`, binary `target/fast/nikaia`):
   after a one-file change about 20 s instead of 70 s, the tests as fast as at
   release; `--release` is CI's. A build still costs, `lower-std` cold 181 G instructions (about 40 s), after a body or comment change 60 G (one file re-lowered, the ledger pass still runs), unchanged 1.3 G (under a second
   when no `.nika` changed), and the touched tests often 10 minutes more. Before the first one, write down the

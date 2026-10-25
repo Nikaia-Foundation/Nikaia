@@ -203,7 +203,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   was built in). Keep the Rust compiling until the binary exists: loop on
   `cargo check --release -p nikaia --message-format short` (under a minute);
   build once at the end. Run the touched tests as one `cargo test --profile
-  fast -p nikaia --test it a:: b::` (one binary, files in
+  fast -p nikaia --test it -- a:: b::` (one binary, files in
   `crates/nikaia/tests/it/`; grep the NK codes you touched there), in the background. `--release` is CI's and the
   benchmarks'. No foreground `sleep`; poll with a bounded loop. The linker is
   already LLD (rustc's own `rust-lld`, the default on x86-64 Linux since Rust
