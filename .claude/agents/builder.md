@@ -59,6 +59,12 @@ You build one small slice of an issue in the Nikaia repository and end.
   nikaia --test it -- a:: b:: 2>&1 | grep -E 'FAILED|panicked|test result' | head
   -40; wait; cat $S/clippy.txt` ($S your scratchpad directory), then
   `scripts/pre-push-check.sh`.
+* **A new regression test is a test program** where it checks what a
+  program prints or which NK code refuses it: `tests/compiler/tests/NAME.nika`
+  with `NAME.stdout` (or `NAME.stderr`, the whole refusal), ADR-269 D22, #821.
+  Run it with `target/fast/nikaia test --project tests/compiler` (no `it`
+  rebuild). A new `#[test]` in `crates/nikaia/tests/it/` only where the check
+  needs the compiler's Rust API or the lowered text.
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
