@@ -1,0 +1,174 @@
+// Where a name lives, in one call.
+//
+//     nikaia run scripts/where.nika -- NAME...
+//
+//     def <file>:<line> <the line, trimmed>     (at most 12 lines a name)
+//     calls <n> in <k> files: f1 f2 f3          (at most five files named)
+//
+// `fn`, `struct`, `enum` and `type` NAME in `crates/*/src/**/*.rs` and
+// `crates/nikaia-std/src/tools/*.nika` (not `tools/lowered/`). For an `NK1234`
+// NAME instead `tests <file>` (crates/nikaia/tests/it/, tests/compiler/tests/)
+// and `spec <file>:<line>` (docs/specification/30-nikaia-tooling.md).
+// Each line is at most 160 characters.
+
+use std::cli
+use std::fs
+use std::text
+use std::process
+
+struct WhereFile {
+    path: String,
+    lines: Vec[String],
+}
+
+fn where_cap(line: String) -> String throws {
+    if line.len() <= 160 { return line }
+    return line.bytes[0..<157].text() + "..."
+}
+
+fn where_ident(b: String) -> bool {
+    return "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".contains(b)
+}
+
+fn where_first(s: String) -> String throws {
+    if s.len() == 0 { return "" }
+    return s.bytes[0..<1].text()
+}
+
+fn where_load(dir: String, keep: fn(String) -> bool sync) -> Vec[WhereFile] throws {
+    let mut out: Vec[WhereFile] = []
+    for p in fs::walk(dir.clone(), fs::Root::Anywhere) {
+        let rel = p.to_text()
+        let path = f"{dir}/{rel}"
+        if !keep(path.clone()) { continue }
+        let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+        out.push(WhereFile { path: path, lines: text.split("\n").collect() })
+    }
+    return out
+}
+
+fn where_rust_or_tool(path: String) -> bool {
+    if path.contains("/lowered/") || path.contains("/target/") { return false }
+    if path.ends_with(".rs") { return path.contains("/src/") }
+    if path.ends_with(".nika") { return path.starts_with("crates/nikaia-std/src/tools/") }
+    return false
+}
+
+fn where_any(path: String) -> bool {
+    return !path.contains("/target/")
+}
+
+fn where_rest(line: String) -> String {
+    let mut s = line.trim().clone()
+    for _round in 0..<4 {
+        for q in ["pub(crate) ", "pub(super) ", "pub ", "async ", "unsafe ", "const ", "sync "] {
+            if s.starts_with(q) { s = (s.strip_prefix(q) ?? "").clone() }
+        }
+    }
+    return s
+}
+
+// Is `line` a definition of `name`?
+fn where_is_def(line: String, name: String) -> bool throws {
+    let s = where_rest(line)
+    for kw in ["fn ", "struct ", "enum ", "type "] {
+        if !s.starts_with(kw) { continue }
+        let after = (s.strip_prefix(kw) ?? "").clone()
+        if !after.starts_with(name.clone()) { continue }
+        let tail = (after.strip_prefix(name.clone()) ?? "").clone()
+        if !where_ident(where_first(tail)) { return true }
+    }
+    return false
+}
+
+fn where_calls_in(line: String, name: String) -> i64 throws {
+    let sep = name + "("
+    let mut n = 0
+    let mut from = 0
+    while from < line.len() {
+        let at = line.find(sep.clone(); from: from) ?? -1
+        if at < 0 { break }
+        if at == 0 || !where_ident(line.bytes[at - 1..<at].text()) { n += 1 }
+        from = at + 1
+    }
+    return n
+}
+
+fn where_names(files: ref Vec[WhereFile], name: String) -> Vec[String] throws {
+    let mut out: Vec[String] = []
+    let mut calls = 0
+    let mut named: Vec[String] = []
+    let mut count = 0
+    for f in files {
+        let mut here = 0
+        for i in 0..<f.lines.len() {
+            let line = f.lines[i].clone()
+            if where_is_def(line.clone(), name.clone()) {
+                count += 1
+                if count <= 12 { out.push(where_cap(f"def {f.path}:{i + 1} {line.trim()}")) }
+            } else {
+                here += where_calls_in(line, name.clone())
+            }
+        }
+        if here > 0 {
+            calls += here
+            named.push(f.path.clone())
+        }
+    }
+    if count > 12 { out.push(f"def ... {count - 12} more") }
+    let mut list = ""
+    for i in 0..<named.len() {
+        if i < 5 { list = list + " " + named[i] }
+    }
+    out.push(where_cap(f"calls {calls} in {named.len()} files:{list}"))
+    return out
+}
+
+fn where_is_code(name: String) -> bool throws {
+    if name.len() != 6 || !name.starts_with("NK") { return false }
+    return (text::parse_i64(name.bytes[2..<6].text()) ?? -1) >= 0
+}
+
+fn where_code(name: String) -> Vec[String] throws {
+    let mut out: Vec[String] = []
+    let mut tests = 0
+    for dir in ["crates/nikaia/tests/it", "tests/compiler/tests"] {
+        for f in where_load(dir, where_any) {
+            for line in f.lines {
+                if line.contains(name.clone()) {
+                    tests += 1
+                    if tests <= 10 { out.push(where_cap(f"tests {f.path}")) }
+                    break
+                }
+            }
+        }
+    }
+    if tests > 10 { out.push(f"tests ... {tests - 10} more") }
+    let spec = "docs/specification/30-nikaia-tooling.md"
+    let lines = fs::read_to_string(spec, fs::Root::Anywhere).split("\n").collect()
+    for i in 0..<lines.len() {
+        if lines[i].contains(f"`{name}`") {
+            out.push(f"spec {spec}:{i + 1}")
+            break
+        }
+    }
+    return out
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    if args.len() < 2 {
+        println("usage: nikaia run scripts/where.nika -- NAME...")
+        process::exit(2)
+    }
+    let files = where_load("crates", where_rust_or_tool)
+    for k in 1..<args.len() {
+        let name = args[k].clone()
+        if where_is_code(name.clone()) {
+            for l in where_code(name) { println(l) }
+        } else {
+            for l in where_names(files, name) { println(l) }
+        }
+    }
+}

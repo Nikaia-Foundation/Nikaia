@@ -47,6 +47,8 @@ By `docs/priorities.md`: the score decides across areas, bugs-first is the defau
 A brief is one file (`briefs/<topic>.md`); the main session starts the builder
 with `Read your brief at <path>`. Builders have no GitHub access: a brief copies the issue's text and *To build* list. Every brief ends with this report form.
 
+*Locations* are resolved with `nikaia run scripts/where.nika -- NAME...` (definitions, callers, tests of an `NK` code), not by `grep -r`.
+
 What a brief must hold, so the builder does not look it up (2026-10-25 count:
 builders spent up to 19 `grep -r` calls finding definitions, one built from a
 title because the issue text was missing):

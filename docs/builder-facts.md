@@ -16,7 +16,7 @@ the same dirty lock file). Read once; the brief adds only what is specific.
 | Program tests (new tests) | `tests/compiler/tests/NAME.nika` + `.stdout` / `.stderr` |
 | Rust tests by NK code | `grep -rln NK1234 crates/nikaia/tests/it/` |
 | Specification | `docs/specification/10-nikaia-light.md`, `20-nikaia-advance.md`, `30-nikaia-tooling.md` (code table) |
-| A name, Rust or Nikaia | `grep -rn 'fn NAME\b' crates/nikaia/src crates/nikaia-std/src/tools/*.nika` (one call, both trees) |
+| A name, Rust or Nikaia | `nikaia run scripts/where.nika -- NAME...`: definitions (`fn`, `struct`, `enum`, `type`) with file:line, the files that call it; for an `NKnnnn` the tests and the spec row (a field is not found: grep it) |
 
 ## Traps already met
 
