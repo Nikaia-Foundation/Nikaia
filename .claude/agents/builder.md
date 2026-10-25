@@ -52,6 +52,13 @@ You build one small slice of an issue in the Nikaia repository and end.
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.
+* **Clippy beside the last test run, in one call.** Clippy builds in
+  `target/debug`, the tests in `target/fast` (no shared lock): when the edits
+  are final, run `(cargo clippy --all-targets -- -D warnings 2>&1 | grep -E
+  '^(error|warning)' | head > $S/clippy.txt) & cargo test --profile fast -p
+  nikaia --test it -- a:: b:: 2>&1 | grep -E 'FAILED|panicked|test result' | head
+  -40; wait; cat $S/clippy.txt` ($S your scratchpad directory), then
+  `scripts/pre-push-check.sh`.
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
