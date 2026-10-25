@@ -489,6 +489,9 @@ fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref Ch
                 FactWrap::Widen(into) => {
                     state.facts.wrapped.insert(node, FactWrap::Widen(into.clone()))
                 },
+                FactWrap::WidenSome(into) => {
+                    state.facts.wrapped.insert(node, FactWrap::WidenSome(into.clone()))
+                },
                 FactWrap::Unsigned(into) => {
                     state.facts.wrapped.insert(node, FactWrap::Unsigned(into.clone()))
                 },

@@ -90,7 +90,7 @@ fn emit_match_yes_or_no(arms: ref Vec[MatchArm]) -> bool? {
 /// **A list pattern matches a slice** (ADR-355 D5): where an arm writes one,
 /// the subject is matched as `&x[..]`, which a `Vec`, an array and a view all
 /// give, and leaves the list where it was.
-fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope, deref: ref String, text: bool) sync throws {
+fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope, deref: ref String, text: bool, copied_view: bool) sync throws {
     // **An owned `String` matched against text literals is matched as a
     // `&str`** (#704, `text_scrutinees`): `&*` reaches it whether the value
     // is lowered owned or as a view.
@@ -118,14 +118,27 @@ fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: r
         }
     }
     // A slice is reached through the reference by itself.
+    // **A `T?` of views of values that copy is matched as the values**
+    // (ADR-231 D1, `copied_walks`).
+    // A method call copies by itself (`emit_core_calls`).
+    let a_call = match value {
+        Expr::MethodCall { .. } => true,
+        else => false,
+    }
+    let copied = !list && copied_view && !a_call
     if list {
         out.push("&(")
+    } else if copied {
+        out.push("(")
+        out.push(deref)
     } else {
         out.push(deref)
     }
     host.expr(walk, out, value, depth, flow, scope)
     if list {
         out.push(")[..]")
+    } else if copied {
+        out.push(").copied()")
     }
 }
 
@@ -733,7 +746,7 @@ impl EmitState {
                     out.push("!")
                 }
                 out.push("matches!(")
-                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), self.facts.text_scrutinees.contains(node_key(value)))
+                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), self.facts.text_scrutinees.contains(node_key(value)), self.facts.copied_walks.contains(node_key(value)))
                 out.push(", ")
                 let mut i = 0
                 for arm in arms {
@@ -756,7 +769,7 @@ impl EmitState {
         if self.facts.lent_scrutinees.contains(node_key(value)) && !text {
             out.push("&")
         }
-        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), text)
+        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(node_key(value)))
         let pad = "    ".repeat(depth + 1)
         let close = "    ".repeat(depth)
         out.push(" {\n")

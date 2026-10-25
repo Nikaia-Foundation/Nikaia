@@ -190,6 +190,13 @@ pub fn check_wrap_for(found: ref Ty, want: ref Ty, literal: bool) -> FactWrap? s
     if !wants_nullable || found_nullable {
         return null
     }
+    let inner_into = match want {
+        Ty::Nullable(inner) => widened_into(found, inner) ?? "",
+        else => "",
+    }
+    if !inner_into.is_empty() {
+        return FactWrap::WidenSome(inner_into.clone())
+    }
     if !found.is_unknown() || literal {
         return FactWrap::Constructor
     }

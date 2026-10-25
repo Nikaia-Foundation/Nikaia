@@ -22,6 +22,8 @@ pub enum FactWrap {
     PathView,
     /// An integer widened where no value can be lost: the type the slot states.
     Widen(String),
+    /// ...and wrapped as a `T?` of it: `u32` into `i64?`.
+    WidenSome(String),
     /// A signed value proved not negative, in the unsigned type the slot states.
     Unsigned(String),
     /// A mapping where a `Bytes` is kept (ADR-373 D3): the mapping at a count.

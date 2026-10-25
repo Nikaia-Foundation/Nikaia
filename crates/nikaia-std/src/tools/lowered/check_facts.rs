@@ -8,6 +8,7 @@ pub enum FactWrap {
     Path,
     PathView,
     Widen(String),
+    WidenSome(String),
     Unsigned(String),
     MappedBytes,
 }

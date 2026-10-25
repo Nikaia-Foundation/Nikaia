@@ -69,6 +69,7 @@ pub fn emit_around_held(held: &FactWrap) -> (String, String) {
         FactWrap::MappedBytes => emit_two("(", ").bytes()"),
         FactWrap::Widen(into) => emit_two(&emit_widen(into), ")"),
         FactWrap::Unsigned(into) => emit_two(&emit_unsigned(into), ")"),
+        FactWrap::WidenSome(into) => emit_two(&format!("Some({}", emit_widen(into)), "))"),
     }
 }
 

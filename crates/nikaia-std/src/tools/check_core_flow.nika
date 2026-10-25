@@ -862,6 +862,15 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     }
     state.a_variant_matched_on_a_nullable(world, over, value, arms, span)
     state.a_null_arm_on_a_plain_value(world, over, value, arms, span)
+    // **A `T?` of views of values that copy is matched as the values**
+    // (ADR-231 D1): `map.get(k)` of a `bool` binds the `bool`.
+    let copied = match on {
+        Ty::Nullable(inner) => copies_as_a_view(inner),
+        else => false,
+    }
+    if copied {
+        state.facts.copied_walks.insert(id_of(value) as i64)
+    }
     state.a_pattern_of_another_type(world, over, value, arms, span)
     if any && agree {
         return seen

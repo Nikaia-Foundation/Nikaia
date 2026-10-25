@@ -435,3 +435,44 @@ fn main() {
         "{lowered}"
     );
 }
+
+/// **A narrower integer widens into a `T?` of a wider one** (E10-4): `u32`
+/// into an `i64?` field is `Some(i64::from(..))`, not a bare `Some(..)`.
+#[test]
+fn a_narrower_integer_widens_into_a_nullable_slot() {
+    let (said, lowered) = printed_and_lowered(
+        "widen-some",
+        r#"struct R { at: i64? }
+struct S { start: u32 }
+fn main() {
+    let s = S { start: 3 }
+    let r = R { at: s.start }
+    println(f"{r.at ?? 0}")
+}
+"#,
+    );
+    assert_eq!(said, "3\n");
+    assert!(lowered.contains("Some(i64::from(s.start))"), "{lowered}");
+}
+
+/// **A `T?` of views of values that copy is matched as the values** (E10-4):
+/// `map.get(k)` of a `bool` bound by name is a `bool`, not a `&bool`.
+#[test]
+fn a_nullable_view_of_a_copy_is_matched_as_the_value() {
+    let (said, lowered) = printed_and_lowered(
+        "copied-match",
+        r#"use std::collections
+fn main() {
+    let mut m: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    m.insert("a", true)
+    let s = m.get("a")
+    match s {
+        f => { if f { println("yes") } },
+        null => { println("none") },
+    }
+}
+"#,
+    );
+    assert_eq!(said, "yes\n");
+    assert!(lowered.contains("(s).copied()"), "{lowered}");
+}

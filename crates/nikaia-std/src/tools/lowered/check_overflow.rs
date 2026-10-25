@@ -125,6 +125,11 @@ pub fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> 
     let wants_nullable = matches!(want, Ty::Nullable(_));
     let found_nullable = matches!(found, Ty::Nullable(_));
     if !wants_nullable || found_nullable { return None; }
+    let inner_into = match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); nikaia_std::index::or(widened_into(found, inner), || "".into()) },
+        _ => String::from(""),
+    };
+    if !inner_into.is_empty() { return Some(FactWrap::WidenSome(inner_into.to_owned())); }
     if !found.is_unknown() || literal { return Some(FactWrap::Constructor); }
     Some(FactWrap::Conversion)
 }
