@@ -39,16 +39,19 @@ You build one small slice of an issue in the Nikaia repository and end.
   whole probe matrix: every case the step must handle (own field, getter of
   a getter, `std` methods, the example programs the issue names). Then
   implement all of them and build once. Catch slips without a build:
-  A stricter check refuses old code in `tools/*.nika` and blocks `lower-std`:
-  fix that `.nika` code first (the old binary's `lower-std` still runs), then
-  build the new binary and run its `lower-std` once; do not reset the lowered
-  files and rebuild in a loop.
-  `lower-std` with the binary you already have reports every refusal in the
-  `.nika` files in seconds, and `cargo check --release -p nikaia
-  --message-format short` reports the Rust errors in under a minute. After
-  the build, run every probe and the touched tests in one go, and fix
-  everything they show before the next build. A build only to try out a
-  single case is a wasted cycle.
+  Catch Rust slips with `cargo check --release -p nikaia --message-format
+  short` (under a minute). Then **the cycle, as one tool call**, exactly:
+
+      target/fast/nikaia lower-std 2>&1 | grep -E '^error|-->' | head -30; cargo build --profile fast -p nikaia --message-format short 2>&1 | grep -E '^error' | head; target/fast/nikaia lower-std 2>&1 | grep -E '^error|-->' | head; git status --short crates/nikaia-std/src/tools/lowered
+
+  The first `lower-std` (old binary) reports refusals in `.nika` in seconds:
+  fix them all before the next cycle. If the second `lower-std` changed a
+  lowered file, build once more (the fixpoint); else go straight to the
+  probes and touched tests, in one go, and fix all they show before the next
+  cycle. Never reset `lowered/` by hand (`git checkout ...lowered/`), never
+  `git clone` or a second `target/` (a cold build is about 10 minutes of 4
+  cores), never `sleep`/`pgrep` loops. A build only to try one case is a
+  wasted cycle.
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
