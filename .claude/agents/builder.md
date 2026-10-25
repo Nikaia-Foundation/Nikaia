@@ -52,11 +52,22 @@ You build one small slice of an issue in the Nikaia repository and end.
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.
-* **Native build (optional).** `target/fast/nikaia run scripts/native_build.nika`
-  builds the compiler for this machine's CPU in `target/cpu-<name>` (cargo gets
-  the resolved name, never `native`) and prints the binary's path. Use it only
-  when the brief says so, delete `target/cpu-*` after use (disk, several GB).
-  Valgrind cannot run it on an AVX-512 CPU (SIGILL): count with the normal binary.
+* **Native build (optional).** `target/fast/nikaia run scripts/native_build.nika
+  [-- CPU [PROFILE]]` builds the compiler with `-C target-cpu=CPU` (default the
+  host's, resolved by rustc, never `native`; PROFILE default `fast`) in
+  `target/cpu-<name>` and prints the binary's path. Use it only when the brief
+  says so, delete `target/cpu-*` after use (disk, several GB). Valgrind cannot
+  run a binary built for an AVX-512 host CPU (SIGILL): name `x86-64-v3`.
+  Measured: `nikaia check crates/nikaia-std/src/tools/libraries.nika`, same
+  output, callgrind `--branch-sim=yes`, release profile on both (no LTO,
+  default codegen units):
+
+  | target-cpu | Ir | mispredicts |
+  | :--- | ---: | ---: |
+  | x86-64 | 102,166,612 | 879,786 |
+  | x86-64-v3 | 101,447,105 | 902,430 |
+
+  So v3 saves 0.7 % of the instructions and does not pay for the compiler.
 * **Clippy beside the last test run, in one call.** Clippy builds in
   `target/debug`, the tests in `target/fast` (no shared lock): when the edits
   are final, run `(cargo clippy --all-targets -- -D warnings 2>&1 | grep -E

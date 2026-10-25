@@ -3,11 +3,13 @@
 // and `target/cpu-NAME` is the target directory, so a build on another CPU
 // never reuses it. Delete `target/cpu-*` after use (disk).
 //
-//     nikaia run scripts/native_build.nika
+//     nikaia run scripts/native_build.nika [-- CPU [PROFILE]]
 //
-// Prints the path of the binary.
+// CPU defaults to the host's (`x86-64-v3` or `x86-64` name one explicitly),
+// PROFILE to `fast`. Prints the path of the binary.
 
 use std::process
+use std::cli
 
 fn main() throws {
     let cpus = process::run("rustc", ["--print", "target-cpus"]).stdout
@@ -18,16 +20,25 @@ fn main() throws {
             name = tail.split(")").collect()[0].clone()
         }
     }
+    let mut given: Vec[String] = []
+    for a in cli::args() { given.push(a) }
+    if given.len() > 1 {
+        name = given[1].clone()
+    }
+    let mut profile: String = "fast"
+    if given.len() > 2 {
+        profile = given[2].clone()
+    }
     if name == "" {
         println("rustc does not name the host CPU")
         process::exit(1)
     }
     let dir = f"target/cpu-{name}"
     let flags = "-C\u{1f}target-cpu=" + name
-    let built = process::run("cargo", ["build", "--profile", "fast", "-p", "nikaia"]; env: [("CARGO_ENCODED_RUSTFLAGS", flags), ("CARGO_TARGET_DIR", dir.clone())])
+    let built = process::run("cargo", ["build", "--profile", profile.clone(), "-p", "nikaia"]; env: [("CARGO_ENCODED_RUSTFLAGS", flags), ("CARGO_TARGET_DIR", dir.clone())])
     if !built.ok {
         println(built.stderr)
         process::exit(built.code)
     }
-    println(f"{dir}/fast/nikaia")
+    println(f"{dir}/{profile}/nikaia")
 }
