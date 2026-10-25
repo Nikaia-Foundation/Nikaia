@@ -15,7 +15,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, ...), one line
   each, no prose: `scripts/release.nika` parses them. A test added for a fix
   is run once against the unfixed compiler (stash the fix) and the report
-  says it failed there.
+  says it failed there. **New tests are Nikaia programs in `tests/compiler/`,
+  never a new Rust `#[test]`** (CLAUDE.md).
 * **If the task names a brief file, read it first**; it replaces reading the
   plan, the call graph and the issue yourself. A research task (no edits, no
   commit) writes such a brief, at most 80 lines, and reports its path.

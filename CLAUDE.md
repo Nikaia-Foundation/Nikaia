@@ -107,6 +107,14 @@
   to be sharpened. What blocks or chafes on the way (a missing `std` entry, a
   syntax gap, a lowering defect) is a finding: fix it in the compiler - do not
   route around it, in the tool or in another language.
+* **New tests are written in Nikaia only** (owner's rule, 2026-10-25, #821). A
+  new test is a `.nika` program with its `.stdout` / `.stderr` beside it in
+  `tests/compiler/` (or a package's own tests), run by `nikaia test`; no new
+  `#[test]` and no new Rust test file. An existing Rust test is changed only
+  to keep it passing, or moved to Nikaia (#821 steps 4-5). What cannot yet be
+  said in Nikaia (a check on the Rust side, the C library) is a finding: fix
+  or file it, and wait for the fix; do not write the Rust test as the way
+  around.
 
 ## Decision rounds with the owner
 
