@@ -534,3 +534,11 @@ refusal naming an unwritten item's tree (host `refuse_unwritten_item`; the host 
 `item`, `error_channel`, `write_error_sums`, `walks_a_shape`, `walked_parameter`,
 `uses_driver`, `held_structs`, `MAIN`, `ALLOCATOR`. `lower-std` output unchanged beyond the
 slice's files. Next: E11-4 (the core).
+
+E11-4 split (architect, 2026-10-25, at d9d3f921: mod.rs 5809 lines; the core calls itself
+about 2100 lines deep, too much for one builder run): **4a** the expression family (`expr`,
+`expr_unmixed`, `expr_as_written`, `expr_written` and the helpers only they call, about
+1100-1300) into `tools/emit_expr.nika`; statements and blocks are reached through the host,
+which already has `stmt` / `block_*` callbacks. **4b** `a_stmt`, `stmt`, `stmt_written`,
+`block_plain`, `block_opening_with` (about 1300). **4c** the host's `expr` / `stmt` /
+`block_*` callbacks and the adapters go, once both sides are Nikaia. Brief `e11-4a.md`.

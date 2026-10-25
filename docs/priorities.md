@@ -41,7 +41,7 @@ Such an issue is closed by hand with the commit named, not briefed.
 Two or three lines: `S=<grade> (why), O=<M tokens> (why), C=<M tokens> (from
 which past run), area`; on a departure from bugs-first, the figures.
 
-## Current score (2026-10-25, after 087ce275)
+## Current score (2026-10-25, after d9d3f921)
 
 | Ticket | S | O (M) | C (M) | Order |
 | :--- | :--- | :--- | :--- | :--- |
@@ -52,8 +52,11 @@ which past run), area`; on a departure from bugs-first, the figures.
 | #841, #747 step 2, E11-1 | done 9d2f86c6, ae4bbb9d, 2f571550 | | | |
 | #756 | done 9f8d71d9 | | | |
 | #842, native count, E11-2, release script | done 21da4394, a334c6b6 (v3 saves 0.7 %, dropped), bfcace65, 08ca0fd1 | | | |
-| #843 `to_string()` typed `ref String` | 3 | 0.3 | 3 | batch 1 |
-| E11-3 `program` | 2 | 1 | 10 | batch 2 |
+| E11-3 `program` | done 27d33ed0 | | | |
+| #843 tier walk: `to_string()` of a view (restated, `ready`) | 3 | 0.3 | 3 | batch 1 |
+| `scripts/cycle.nika`, one call per main-session cycle (owner) | 1 | 2 | 2 | batch 2 |
+| E11-4a expression core of `emit` | 2 | 1 | 20 | batch 3 |
+| E11-4b statements and blocks, then 4c | 2 | 1 | 20 | after 4a |
 | #753 --cpu dropped under RUSTFLAGS (owner: native builds) | 3 | 1 | 4 | 1 |
 | #780 ByteSet in a variable, 115 vs 32 a row at v3 | 3 | 0.5 | 10 | 2 |
 | #838 | 2 | 0.5 | 3 | 3 |

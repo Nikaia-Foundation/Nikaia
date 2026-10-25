@@ -138,6 +138,16 @@ What the architect hands the main session for a builder, in this form:
   raises, `CHANGELOG.md`, badges, reserved `NK` blocks, rebases, a red `develop`.
 * **No building in the main session**, except what a work order cannot reach.
 
+## The main session's cycle
+
+1. `nikaia run scripts/cycle.nika -- DIR` (until it exists: `status.nika`, then `batch.nika`). Nothing else is checked.
+2. `NEXT <brief>`: start a `builder` with *Read your brief at <brief>* (model as the architect's start order says).
+3. A builder's one-line answer: `--tokens` into the batch, then back to 1. Read nothing else.
+4. `CUT`, `RED`, `BLOCKED`, `BATCH DONE`, or an owner message: start a fresh architect with that line, the token figures and the owner's words verbatim.
+5. `BUMP pending` and CI green: `cycle.nika --apply` (until then `release.nika`).
+6. `OWNER` lines: ask the owner in German, per *Decision rounds*; his answer goes to the architect.
+7. Stop hook: the fixed answer below. An architect past 80 turns / 150k: restart fresh.
+
 ## Handover to a new main session
 
 Standing rules, for a main session that starts fresh (the state is in
@@ -208,6 +218,7 @@ Update 2026-10-25 (fresh architect): #837 running, then briefs 838, 744, 582, 74
 Update 2026-10-25 end of architect run (~65 turns): done #753 #780 #838 #744 #839 #582 #840, #747 step 1; #778 #775 #825 closed by hand. Next: briefs `e10-4-switch.md` (Opus), then `native-compiler.md` (alone; then evaluate its CI CPU log after ~20 runs for the owner's question on runner CPUs). Open small bugs: #841, #747 step 2. Owner direction: optional native compiler build, `native` always resolved to the CPU name in flags and cache keys.
 Update 2026-10-25 (architect after 087ce275): briefs `841.md`, `747-2.md` (Sonnet), `e11-1.md` (Opus), serial. Native tool partial: count owed with a non-AVX-512 CPU name (x86-64-v3). d995ae5a red in bootstrap_compiler only, fixed by later green runs.
 Update 2026-10-25 later: done #756 #842 E11-1..3, release script; #843 reopened `blocked` (contradicted ADR-282 D8, revert brief `fix-843-revert.md` running, develop red until it lands). Next: E11-4 (the core, ~3600 lines) needs a brief; automation step `scripts/batch.nika` (brief `batch-script.md`).
+Update 2026-10-25 (architect after d9d3f921): #843 restated `ready` (tier walk vs D8; no owner decision). Batch `843-tiers.md` (Sonnet), `cycle-script.md` (Sonnet), `e11-4a.md` (Opus). E11-4 split 4a/4b/4c (`selfhosting-plan.md`). Owner (merge duties): main-session cycle above; reminders go to `DIR/owner.txt` (architect writes); `Found` lines become issues by the architect, not the main session.
 Stage: 1 (serial). Current issue: #125, C-7 of `selfhosting-plan.md`: U-d0 and
 U-d1 done, **U-d2** (`check/attributes.rs`, 714 lines, to
 `tools/check_attributes.nika`) running; then **#667** (owner: before U-d3):
