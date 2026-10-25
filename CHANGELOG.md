@@ -8,6 +8,35 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1218] — 2026-10-25
+
+**compiler bugs and --cpu with RUSTFLAGS (#792, #777, #773, #760, #787, #757, #829, #762, #764, #765, #758, #830, #831, #832, #776, #799, #834, #779, #790, #835, #836, #837, #753, #780, #838)**
+- An element of a ref list passed to an owning parameter is refused with NK1131 (#792).
+- A literal beside two integer widths takes the common type (#777, #763).
+- A char literal in if/match arms handed to u8 is a byte (#773).
+- text += x appends any text (#760).
+- A borrowed self handed to a mut parameter is lent again as &mut *self (#787).
+- A declared function with read-only parameters can be handed directly to fn(A, A) -> A (#757).
+- Cross-thread wakes reach a parked executor; a node binding no longer reads its job after hand-off (#829).
+- An in-place fold step/merge lambda lends its accumulator as &mut *acc (#762, ADR-372 D9).
+- An owned Bytes compares with a cut by content (#764).
+- wrapping_shl/wrapping_shr take any integer count, lowered as u32; rotate_left/rotate_right on i32 and i64 (#765).
+- A lambda's result type is read from its returns as well as its last value and they must agree (NK1104); a lambda's return is no longer checked against the enclosing function's result (#758).
+- A return inside a spawn's task is the task's (#830).
+- A call through a function value that may pause counts as a pause (#831).
+- A local function value that may pause, handed to a parameter of the same fn(A) -> R type, is awaited through an async closure at the call (#832).
+- A grammar binding of bytes(p) is a ref Bytes view; -> Bytes is refused with NK1104 (ADR-366 D4, #776).
+- A reserved word where a name was wanted is now the parse error's headline (#799).
+- The test runner compares a parse error with a test program's .stderr (ADR-269 D22, #834).
+- A worked-out comptime with no written type is carried into the next one's build-time program with the type the checker found (#779).
+- nikaia describe refuses a manifest key that differs from the program's word and names the word to write (#790).
+- A comptime may hold a tuple whose parts can cross; NK1127 for a value that cannot cross names the type and the reason (#835).
+- A comptime read only by another comptime no longer warns it is never used (#836).
+- A tuple of numbers nothing typed (let p = (1, -2), comptime P = (1, -2)) is accepted: each part is an open number its uses type, refused NK1116 when a use's type cannot hold it (#837).
+- --cpu now takes effect when RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS is set: the user's flags still apply, the level comes after them (#753).
+- find_all over a ByteSet held in a variable costs 34.2 instructions a row at x86-64-v3 instead of 115 (one vpmovmskb per half block, #780).
+- NK1127 for a comptime of type scalar or char says the type has no written form at build time and suggests computing its code as a u32 (#838).
+
 ## [0.0.1217] — 2026-10-25
 
 **Some(x)/None over T? refused; list elements past a jump are views; T? slots widen (ADR-352 D5, #803, #819, #824, #827, #828)**
