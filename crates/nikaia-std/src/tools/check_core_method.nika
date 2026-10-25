@@ -510,11 +510,18 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         state.facts.list_indices.insert(id_of(receiver) as i64)
     }
     if text && args.len() == 0 && name == "to_string" && ledger_candidates(world.own, world.own_methods, "to_string").len() == 0 {
-        state.facts.text_as_is.insert(id_of(receiver) as i64)
+        let lent = match on {
+            Ty::Named { view, .. } => view,
+            else => false,
+        }
+        if !lent {
+            state.facts.text_as_is.insert(id_of(receiver) as i64)
+        }
         state.flow.receiver_name = outer_named
         state.flow.at_a_write_door = outer_door
         state.inside_a_door = outer_inside
-        return on
+        // **`to_string()` makes owned text, whatever the receiver** (ADR-282 D2).
+        return Ty::Named { name: "String".clone(), args: [], view: false }
     }
     // **A field that holds a function is called as one**.
     let called: Ty? = check_core_a_called_field(state, world, host, on, receiver, method, args, outer_inside, span)

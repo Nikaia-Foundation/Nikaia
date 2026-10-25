@@ -1,0 +1,20 @@
+fn first(words: ref Vec[String]) -> String {
+    for w in words {
+        return w.to_string()
+    }
+    return "".to_string()
+}
+
+fn pushed(words: ref Vec[String]) -> Vec[String] {
+    let mut v: Vec[String] = Vec()
+    for w in words {
+        v.push(w.to_string())
+    }
+    return v
+}
+
+fn main() {
+    let words: Vec[String] = ["abc".to_string(), "def".to_string()]
+    println(first(words))
+    println(pushed(words)[1])
+}
