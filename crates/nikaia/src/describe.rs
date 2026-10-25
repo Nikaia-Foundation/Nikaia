@@ -308,6 +308,17 @@ fn rust_dependency(
         };
         return Ok((key.clone(), value.clone()));
     }
+    // A manifest key whose program word differs (`low-bits` for `low_bits`):
+    // the refusal names the word that works (Part III 15.2).
+    for key in manifest.dependencies().keys() {
+        let word = key.replace('-', "_");
+        if key != &word && key == crate_word {
+            bail!(
+                "`{crate_word}` is the manifest's key, not the crate's name: write \
+                 `nikaia describe {word}`, the name a program writes after `use`."
+            );
+        }
+    }
     bail!(
         "`{crate_word}` isn't in this project's `[dependencies]`. Add it to `nikaia.toml` \
          first: only crates the project depends on can be described."

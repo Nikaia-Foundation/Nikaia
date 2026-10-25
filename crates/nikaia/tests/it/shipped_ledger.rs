@@ -209,6 +209,26 @@ fn every_unsafe_crate_ledger_is_adopted() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **The manifest key is refused with the word to write** (#790, Part III
+/// 15.2): `low-bits` in `nikaia.toml` is `low_bits` after `use`.
+#[test]
+fn describe_with_the_manifest_key_names_the_word() {
+    let dir = a_project_on(
+        "describe-key",
+        &[("low-bits", "low_bits")],
+        "fn main() {\n}\n",
+    );
+    let refused = nikaia(&["describe", "low-bits"], &dir);
+    assert!(!refused.status.success(), "{}", said(&refused));
+    assert!(
+        said(&refused)
+            .contains("write `nikaia describe low_bits`, the name a program writes after `use`"),
+        "{}",
+        said(&refused)
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`examples/crate-ledger` runs** (#788 step 5): two `unsafe` crates called
 /// from Nikaia through `use`, under the descriptions they ship. Its committed
 /// `contracts/` are what `describe` adopts today, and its output is the
