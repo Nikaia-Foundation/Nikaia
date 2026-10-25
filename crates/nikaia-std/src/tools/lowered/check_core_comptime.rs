@@ -138,6 +138,15 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
     let walked_from = state.findings.len() as i64;
     let found = check_core_expr(state, world, host, value, span);
     state.flow.inside_a_comptime = outside;
+    for read in check_visit_preorder(value) {
+        match read {
+            Expr::Variable(read_name, _) => {
+                let read_name = *read_name;
+                state.facts.folded_comptimes.insert(world.words.resolve(read_name).to_owned());
+            },
+            _ => { },
+        }
+    }
     let mut said_a_name = false;
     let mut at = walked_from;
     while at < state.findings.len() as i64 {

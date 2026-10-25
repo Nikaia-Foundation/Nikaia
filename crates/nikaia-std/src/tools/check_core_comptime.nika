@@ -179,6 +179,17 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     let walked_from = state.findings.len()
     let found = check_core_expr(state, world, host, value, span)
     state.flow.inside_a_comptime = outside
+    // **A `comptime` another one reads is used** (#836): the reader is written
+    // below as its folded value, so the language below sees no read and is
+    // told so.
+    for read in check_visit_preorder(value) {
+        match read {
+            Expr::Variable(read_name, _) => {
+                state.facts.folded_comptimes.insert(world.words.resolve(read_name).clone())
+            },
+            else => {},
+        }
+    }
     // **A name nothing declares is the one error** (ADR-287 D19, #380).
     let mut said_a_name = false
     let mut at = walked_from
