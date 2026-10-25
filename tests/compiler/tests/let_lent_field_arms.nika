@@ -1,0 +1,31 @@
+// A `let` over an `if` or a `match` whose arms are a field read through a
+// `ref` parameter and literals is a view of it (ADR-282 D13, #744); an arm of
+// text of its own beside them makes it mixed.
+struct Holder { name: String }
+
+fn label(h: ref Holder, c: bool) -> i64 {
+    let x = if c { h.name } else { "none" }
+    return x.len()
+}
+
+fn picked(h: ref Holder, n: i64) -> i64 {
+    let x = match n {
+        0 => h.name,
+        1 => "one",
+        else => "many",
+    }
+    return x.len()
+}
+
+fn mixed(h: ref Holder, c: bool) -> i64 {
+    let x = if c { h.name } else { f"n{1}{2}" }
+    return x.len()
+}
+
+fn main() {
+    let h = Holder { name: f"a{1}" }
+    println(f"{label(h, true)} {label(h, false)}")
+    println(f"{picked(h, 0)} {picked(h, 1)} {picked(h, 5)}")
+    println(f"{mixed(h, true)} {mixed(h, false)}")
+    println(h.name)
+}

@@ -552,6 +552,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         if found.is_unknown() {
             let met = state.views_meet_owned_text(world, value)
             bound = met ?? found.clone()
+        } else if found == a_string_type() {
+            let lent = state.lent_arms_bound(world, value)
+            bound = lent ?? found.clone()
         } else {
             bound = found.clone()
         }

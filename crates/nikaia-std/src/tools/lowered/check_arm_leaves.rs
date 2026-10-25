@@ -118,27 +118,47 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn views_meet_owned_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> {
+    pub fn views_meet_owned_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> { self.choice_of_views_and_text(world, value, false) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn lent_arms_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> { self.choice_of_views_and_text(world, value, true) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn choice_of_views_and_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, only_lent: bool) -> Option<Ty> {
         if !is_a_choice(value) { return None; }
         let text = a_string_type();
         let maybe_text = Ty::Nullable(Box::new(a_string_type()));
         let mut views = 0;
         let mut owned = 0;
         let mut absent = false;
+        let mut lent: Vec<i64> = vec![];
+        let mut literals: Vec<i64> = vec![];
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) {
                 absent = true;
                 continue;
             }
             let ty = match self.arm_type_of(leaf) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            if views_into_text(&ty, &text) { views += 1; } else if ty == text { owned += 1; } else if ty == maybe_text {
+            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) { lent.push(node_key(leaf)); } else if arm_leaves_a_text_literal(leaf) {
+                literals.push(node_key(check_peeled(leaf)));
+                views += 1;
+            } else if views_into_text(&ty, &text) { views += 1; } else if ty == text { owned += 1; } else if ty == maybe_text {
                 owned += 1;
                 absent = true;
             } else { return None; }
         }
-        if views == 0 || owned == 0 { return None; }
+        if lent.is_empty() && (only_lent || views == 0 || owned == 0) { return None; }
         for node in self.choice_nodes(world, value) { self.arm_disagreements.remove(&node); }
-        self.note_mixed(world, value, absent);
+        for node in lent.iter() {
+            let node = nikaia_std::num::value(node);
+            self.facts.lent_reads.insert(node);
+        }
+        if owned == 0 {
+            for at in literals.iter() {
+                let at = nikaia_std::num::value(at);
+                let built = self.facts.owned_texts.remove(&at);
+            }
+        } else { self.note_mixed(world, value, absent); }
         let view = Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true };
         if absent { return Some(Ty::Nullable(Box::new(view))); }
         Some(view)

@@ -172,6 +172,18 @@ impl CheckState {
     /// goes into decides what it is (ADR-282 D14). The name is bound as the
     /// view it may be (ADR-282 D22, D25).
     pub fn views_meet_owned_text(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
+        return self.choice_of_views_and_text(world, value, false)
+    }
+
+    /// **A `let` over arms that are a `String` read through a borrowed
+    /// parameter** (ADR-282 D13, #744): those arms are lent, as `return
+    /// h.name` is; beside literals and views the whole is a view, beside text
+    /// of its own it is mixed. Null where no arm is such a read.
+    pub fn lent_arms_bound(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
+        return self.choice_of_views_and_text(world, value, true)
+    }
+
+    fn choice_of_views_and_text(ref mut self, world: ref CheckWorld, value: ref Expr, only_lent: bool) -> Ty? sync {
         if !is_a_choice(value) {
             return null
         }
@@ -180,13 +192,22 @@ impl CheckState {
         let mut views = 0
         let mut owned = 0
         let mut absent = false
+        let mut lent: Vec[i64] = []
+        let mut literals: Vec[i64] = []
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) {
                 absent = true
                 continue
             }
             let ty = self.arm_type_of(leaf) ?? return null
-            if views_into_text(ty, text) {
+            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) {
+                // **A field read through a `ref` parameter is a view of it**
+                // in a `let`, as it is handed back (ADR-282 D13, #744).
+                lent.push(node_key(leaf))
+            } else if arm_leaves_a_text_literal(leaf) {
+                literals.push(node_key(check_peeled(leaf)))
+                views += 1
+            } else if views_into_text(ty, text) {
                 views += 1
             } else if ty == text {
                 owned += 1
@@ -197,13 +218,23 @@ impl CheckState {
                 return null
             }
         }
-        if views == 0 || owned == 0 {
+        if lent.len() == 0 && (only_lent || views == 0 || owned == 0) {
             return null
         }
         for node in self.choice_nodes(world, value) {
             self.arm_disagreements.remove(node)
         }
-        self.note_mixed(world, value, absent)
+        for node in lent {
+            self.facts.lent_reads.insert(node)
+        }
+        if owned == 0 {
+            // Views only: the literals stay static text, the whole is a view.
+            for at in literals {
+                let built = self.facts.owned_texts.remove(at)
+            }
+        } else {
+            self.note_mixed(world, value, absent)
+        }
         let view = Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
         if absent {
             return Ty::Nullable(view)

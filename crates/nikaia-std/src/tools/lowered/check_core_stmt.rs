@@ -408,6 +408,9 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         if found.is_unknown() {
             let met = state.views_meet_owned_text(world, value);
             bound = nikaia_std::index::or(met, || found.clone().into());
+        } else if found == a_string_type() {
+            let lent = state.lent_arms_bound(world, value);
+            bound = nikaia_std::index::or(lent, || found.clone().into());
         } else { bound = found.clone(); }
     }
     let mut open: Option<i64> = None;
