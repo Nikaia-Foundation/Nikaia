@@ -3618,6 +3618,10 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
     if method == "filter" || method == "rev" || method == "skip" || method == "take" || method == "step_by" {
         return received
     }
+    // **`to_string()` of text is the text itself** (ADR-282 D8): a view stays a view.
+    if method == "to_string" && args.len() == 0 && (!no_text(received) || a_text_read_whole(receiver, ask, walk)) {
+        return viewed(received)
+    }
     if owns_its_text(method) {
         return owned_kinds()
     }
@@ -3732,6 +3736,18 @@ fn result_kinds(key: ref String, ask: ref TierAsk, mut walk: TierWalk) -> Kinds 
 
 /// A view of text of these kinds: a view of a literal is as lasting as the
 /// literal, and a view of anything else is a view.
+/// Whether a receiver is a name bound to a `String` read whole out of a
+/// position (`for w in words`): text, though its kinds are not told apart.
+fn a_text_read_whole(receiver: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    return match receiver {
+        Expr::Variable(name, _) => {
+            let local = tier_local(ask.names.resolve(name), walk) ?? return false
+            local.from != null
+        }
+        else => false,
+    }
+}
+
 fn viewed(received: ref Kinds) -> Kinds {
     if (received.lasting || received.still) && !received.owned && !received.view && !received.either {
         if received.still {

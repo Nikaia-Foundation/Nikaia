@@ -2706,6 +2706,7 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
         }
     }
     if method == "filter" || method == "rev" || method == "skip" || method == "take" || method == "step_by" { return received; }
+    if method == "to_string" && args.is_empty() && (!no_text(&received) || a_text_read_whole(receiver, ask, &walk)) { return viewed(&received); }
     if owns_its_text(method) { return owned_kinds(); }
     if views_what_it_is_called_on(method) || cuts_in_two(method) { return viewed(&received); }
     if hands_back_an_element(method) { return received; }
@@ -2785,6 +2786,17 @@ pub(crate) fn result_kinds(key: &str, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut 
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     kinds_of(&TextOwner::Returned(key.to_owned()), &result, &mut vec![], ask, walk)
+}
+
+pub(crate) fn a_text_read_whole(receiver: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &TierWalk) -> bool {
+    match receiver {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = match tier_local(ask.names.resolve(name), walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            local.from.is_some()
+        },
+        _ => false,
+    }
 }
 
 pub(crate) fn viewed(received: &Kinds) -> Kinds {

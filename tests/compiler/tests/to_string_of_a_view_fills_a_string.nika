@@ -1,0 +1,26 @@
+// #843: `to_string()` of a view is the view (ADR-282 D8), so it fills a declared `String`.
+fn first(ws: ref Vec[String]) -> String {
+    for w in ws {
+        return w.to_string()
+    }
+    return ""
+}
+
+fn copied(ws: ref Vec[String]) -> i64 {
+    let mut v: Vec[String] = []
+    for w in ws {
+        v.push(w.to_string())
+    }
+    return v.len()
+}
+
+fn main() {
+    let words: Vec[String] = ["abc".to_string(), "d".to_string()]
+    println(words.len())
+    println(words[1])
+    let lit: Vec[String] = ["p", "q"]
+    println(first(lit))
+    println(copied(lit))
+    let name = "xyz".to_string()
+    println(name)
+}
