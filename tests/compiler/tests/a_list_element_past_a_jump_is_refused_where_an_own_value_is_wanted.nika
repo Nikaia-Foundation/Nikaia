@@ -1,0 +1,26 @@
+// #827: a list element past a jump is a view of it (ADR-282 D7); a typed `let` or a parameter that wants a value of its own refuses it, as for a map's read (ADR-293 D15), instead of moving it out of the list.
+struct Entry { n: i64, s: String }
+fn keep(s: String) -> Vec[String] {
+    let mut o: Vec[String] = []
+    o.push(s)
+    o
+}
+fn by_val(e: Entry) -> Entry { e }
+fn typed(v: ref Vec[Entry?]) -> i64 {
+    let e: Entry = v[0] ?? return 0
+    e.n
+}
+fn chained(a: ref Vec[Entry?], b: ref Vec[Entry?]) -> i64 {
+    let e: Entry = a[0] ?? b[0] ?? return 0
+    e.n
+}
+fn kept(v: ref Vec[String?]) -> i64 {
+    keep(v[0] ?? return 0).len()
+}
+fn given(v: ref Vec[Entry?]) -> i64 {
+    by_val(v[0] ?? return 0).n
+}
+fn main() {
+    let v: Vec[Entry?] = [Entry { n: 3, s: "a" }]
+    println(f"{typed(v)} {chained(v, v)} {given(v)}")
+}

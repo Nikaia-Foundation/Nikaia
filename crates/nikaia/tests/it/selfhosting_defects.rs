@@ -378,3 +378,60 @@ fn main() {
         "{lowered}"
     );
 }
+
+/// #827: a list element past a jump is a view of it in a `let` typed
+/// `ref T`, in a chain, and as an argument to a parameter that only reads it
+/// (ADR-282 D7): `index::get(..).as_ref()`, never `*index::get(..)`, which
+/// moved the option out of the list (E0507). A type that copies is copied.
+#[test]
+fn a_list_element_past_a_jump_is_a_view_in_a_typed_let_and_an_argument() {
+    let (said, lowered) = printed_and_lowered(
+        "list-element-view-typed-and-argument",
+        r#"
+struct Entry { n: i64, s: String }
+struct Pt { x: i64 }
+fn by_ref(e: ref Entry) -> i64 { e.n }
+fn by_val(e: Entry) -> i64 { e.n }
+fn text_len(s: String) -> i64 { s.len() }
+fn typed_ref(v: ref Vec[Entry?]) -> i64 {
+    let e: ref Entry = v[0] ?? return 0
+    e.n
+}
+fn chain_ref(a: ref Vec[Entry?], b: ref Vec[Entry?]) -> i64 {
+    let e: ref Entry = a[0] ?? b[0] ?? return 0
+    e.n
+}
+fn typed_copy(a: ref Vec[Entry?]) -> i64 {
+    let e: Entry = a[0]?.clone() ?? return 0
+    e.n
+}
+fn pt(v: ref Vec[Pt?]) -> i64 {
+    let p: Pt = v[0] ?? return 0
+    p.x
+}
+fn arg_ref(v: ref Vec[Entry?]) -> i64 {
+    by_ref(v[0] ?? return 0)
+}
+fn arg_val(v: ref Vec[Entry?]) -> i64 {
+    by_val(v[0]?.clone() ?? return 0)
+}
+fn arg_text(v: ref Vec[String?]) -> i64 {
+    text_len(v[0] ?? return 0)
+}
+fn main() {
+    let v: Vec[Entry?] = [Entry { n: 3, s: "a" }, null]
+    let w: Vec[Entry?] = [null]
+    let ps: Vec[Pt?] = [Pt { x: 5 }]
+    let mut ts: Vec[String?] = []
+    ts.push("abc")
+    println(f"{typed_ref(v)} {chain_ref(w, v)} {typed_copy(v)} {pt(ps)} {arg_ref(v)} {arg_val(v)} {arg_ref(w)} {arg_text(ts)}")
+}
+"#,
+    );
+    assert_eq!(said, "3 3 3 5 3 3 0 3\n");
+    assert!(!lowered.contains("*nikaia_std::index::get(&a"), "{lowered}");
+    assert!(
+        lowered.contains("by_ref(match nikaia_std::index::get(&v, 0).as_ref()"),
+        "{lowered}"
+    );
+}

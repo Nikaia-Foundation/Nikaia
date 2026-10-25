@@ -1,0 +1,34 @@
+error[NK1103]: This value is `ref Entry`, but the `let` declares `Entry`.
+   --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:10:20
+    |
+ 10 |     let e: Entry = v[0] ?? return 0
+    |                    ^^^^^^^^^^^^^^^^
+    |
+    = help: Make it an `Entry`, or change the declaration to `ref Entry`.
+error[NK1103]: This value is `ref Entry`, but the `let` declares `Entry`.
+   --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:14:20
+    |
+ 14 |     let e: Entry = a[0] ?? b[0] ?? return 0
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it an `Entry`, or change the declaration to `ref Entry`.
+error[NK1102]: `keep` expects `s` to be `String`, but you're passing `ref String`.
+   --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:18:10
+    |
+ 18 |     keep(v[0] ?? return 0).len()
+    |          ^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `keep(s: String) -> Vec[String]`.
+    = note: This is a view: it points into text that something else owns.
+    = note: `keep` keeps its `s` after the call returns, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+error[NK1102]: `by_val` expects `e` to be `Entry`, but you're passing `ref Entry`.
+   --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:21:12
+    |
+ 21 |     by_val(v[0] ?? return 0).n
+    |            ^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `by_val(e: Entry) -> Entry`.
+    = help: Make it an `Entry`, or change the declaration to `ref Entry`.
+4 type errors

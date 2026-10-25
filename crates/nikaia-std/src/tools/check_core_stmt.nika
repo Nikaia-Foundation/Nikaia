@@ -397,7 +397,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         state.stored_frames.push(CheckStoredCode::empty())
     }
     let findings_before = state.findings.len() as i64
-    state.flow.lending_let = !mutable && ty == null
+    state.flow.lending_let = !mutable
     let found = check_core_expr(state, world, host, value, span)
     state.flow.lending_let = false
     state.flow.lambda_expected = null

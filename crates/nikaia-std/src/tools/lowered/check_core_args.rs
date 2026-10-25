@@ -102,7 +102,9 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
         }
     }
     if !lends { check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed"); }
+    state.flow.lending_let = !wants_fn;
     let found = check_core_expr(state, world, host, arg, span);
+    state.flow.lending_let = false;
     let named = check_core_args_named(&state, world, arg);
     let runs = check_core_args_runs(callee, at);
     let mut found_fn = false;
