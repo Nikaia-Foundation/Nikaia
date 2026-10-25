@@ -392,6 +392,7 @@ pub(crate) fn check_core_lambda_held(ty: &Ty) -> Ty {
 pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, span: &Span, in_an_expression: bool) {
     let mut lending = false;
     let mut closure = false;
+    let mut refused = false;
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         lending = state.hands_back_a_view_of_the_subject(world, given);
@@ -411,7 +412,9 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         if !lending {
             check_core_a_field_of_a_borrowed_subject(state, world, host, given, span, "handed back");
             check_core_a_field_of_a_lent_place_handed_back(state, world, host, given, span);
+            let before = state.findings.len() as i64;
             check_core_a_mut_parameter_given_away(state, world, host, given, span, "handed back");
+            refused = (state.findings.len() as i64) > before;
         }
     }
     if closure {
@@ -467,6 +470,7 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         let by_use = check_core_literal_by_use(state, world, host, &found, &expected, given, span);
         if by_use.is_some() { found = nikaia_std::index::or(by_use, || Ty::Unknown); }
     }
+    if refused { return; }
     state.expect_kept_asked(world, &found, &expected, value, "the function returns it, and the caller keeps it after the call ends", span, "returns", &|was, wanted| { format!("You're returning `{}`, but the function is declared to return `{}`.", was, wanted) });
 }
 

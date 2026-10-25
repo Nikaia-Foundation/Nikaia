@@ -801,11 +801,9 @@ fn a_mut_view_parameter_handed_back_is_refused() {
          }\n\
          fn main() {}\n",
     );
-    assert_eq!(
-        found.first().map(String::as_str),
-        Some("NK1131"),
-        "{found:?}"
-    );
+    // Each refused `return` once, and no NK1104 beside it (#747).
+    assert!(found.iter().all(|c| c == "NK1131"), "{found:?}");
+    assert!(!found.is_empty(), "{found:?}");
 }
 
 /// **A thrown type of the program's own with no

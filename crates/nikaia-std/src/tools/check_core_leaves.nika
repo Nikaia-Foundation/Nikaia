@@ -458,6 +458,7 @@ fn check_core_lambda_held(ty: ref Ty) -> Ty {
 pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span, in_an_expression: bool) sync {
     let mut lending = false
     let mut closure = false
+    let mut refused = false
     if value != null {
         let given = value ?? return
         lending = state.hands_back_a_view_of_the_subject(world, given)
@@ -485,7 +486,9 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
         if !lending {
             check_core_a_field_of_a_borrowed_subject(state, world, host, given, span, "handed back")
             check_core_a_field_of_a_lent_place_handed_back(state, world, host, given, span)
+            let before = state.findings.len() as i64
             check_core_a_mut_parameter_given_away(state, world, host, given, span, "handed back")
+            refused = state.findings.len() as i64 > before
         }
     }
     if closure {
@@ -547,6 +550,11 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
         if by_use != null {
             found = by_use ?? Ty::Unknown
         }
+    }
+    // **A `return` refused with NK1131 is not asked again** (#747): its
+    // type is the reason it was refused, not a second fault.
+    if refused {
+        return
     }
     state.expect_kept_asked(world, found, expected, value, "the function returns it, and the caller keeps it after the call ends", span, "returns", fn(was, wanted) { f"You're returning `{was}`, but the function is declared to return `{wanted}`." })
 }
