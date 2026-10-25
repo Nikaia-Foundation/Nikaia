@@ -1,0 +1,20 @@
+use std::collections
+fn main() {
+    let mut m: collections::HashMap[String, (String, i64)] = collections::HashMap()
+    m.insert("a", ("x", 1))
+    let (s, n) = m.get("a") ?? ("", 0)
+    println(s)
+    println(n)
+    let (s2, n2) = m.get("b") ?? ("none", 0)
+    println(s2)
+    println(n2)
+    second()
+}
+fn second() {
+    let mut m: collections::HashMap[String, (String, String)] = collections::HashMap()
+    m.insert("a", ("x", "y"))
+    let (p, q) = m.get("a") ?? ("", "")
+    println(p + q)
+    let (p2, q2) = m.get("b") ?? ("u", "v")
+    println(p2 + q2)
+}

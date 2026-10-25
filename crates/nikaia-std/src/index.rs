@@ -734,6 +734,25 @@ impl<'a> Or<&'a str> for &'a Option<String> {
     }
 }
 
+/// **A map's pair of text and a copy value, with a pair of a literal after
+/// `??`** (#846): `let (s, n) = m.get(k) ?? ("", 0)` over a map of
+/// `(String, i64)`. The map keeps the pair, so the read is lent, and what the
+/// pair and the literal pair can both be is a pair of a view of text and the
+/// copy value, as for a lone text (ADR-293 D28). Nothing is copied.
+impl<'a, B: Copy> Or<(&'a str, B)> for Option<&'a (String, B)> {
+    fn or(self, fallback: impl FnOnce() -> (&'a str, B)) -> (&'a str, B) {
+        self.map(|(a, b)| (a.as_str(), *b)).unwrap_or_else(fallback)
+    }
+}
+
+/// The same for a pair of two texts.
+impl<'a> Or<(&'a str, &'a str)> for Option<&'a (String, String)> {
+    fn or(self, fallback: impl FnOnce() -> (&'a str, &'a str)) -> (&'a str, &'a str) {
+        self.map(|(a, b)| (a.as_str(), b.as_str()))
+            .unwrap_or_else(fallback)
+    }
+}
+
 /// The emitted spelling: `nikaia_std::index::or(value, || fallback)`.
 ///
 /// A **free function** and not a method, because `Option` has an inherent `or`
