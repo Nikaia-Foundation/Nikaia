@@ -185,7 +185,19 @@ pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, 
         },
         _ => false,
     };
-    if !wants_nullable || !found_plain { return false; }
+    if !wants_nullable || !found_plain {
+        let inner_want = match want {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return false; },
+            _ => return false,
+        };
+        let inner_found = match found {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return false; },
+            _ => return false,
+        };
+        let mut deeper = false;
+        for item in items.iter() { if check_overflow_list_into_nullables(state, item, &inner_found, &inner_want) { deeper = true; } }
+        return deeper;
+    }
     let mut any = false;
     for item in items.iter() {
         if !open || is_a_literal(item) {

@@ -264,7 +264,23 @@ pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr
         else => false,
     }
     if !wants_nullable || !found_plain {
-        return false
+        // **Deeper**: `Vec[Vec[T?]]` is wanted of `[[..]]`; each inner
+        // literal is wrapped against the element type, at any depth (#824).
+        let inner_want = match want {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { return false },
+            else => return false,
+        }
+        let inner_found = match found {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { return false },
+            else => return false,
+        }
+        let mut deeper = false
+        for item in items {
+            if check_overflow_list_into_nullables(state, item, inner_found, inner_want) {
+                deeper = true
+            }
+        }
+        return deeper
     }
     let mut any = false
     for item in items {

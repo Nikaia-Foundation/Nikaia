@@ -1,0 +1,11 @@
+struct Entry {
+    n: i64,
+}
+
+fn main() {
+    let two: Vec[Vec[Entry?]] = [[Entry { n: 5 }]]
+    let three: Vec[Vec[Vec[Entry?]]] = [[[Entry { n: 1 }]]]
+    let ints: Vec[Vec[i64?]] = [[1, 2], [3]]
+    println(f"{two.len()} {two[0].len()} {three.len()} {three[0][0].len()} {ints[0].len()} {ints[1].len()}")
+    println(f"{(two[0][0]?.n) ?? 0} {(three[0][0][0]?.n) ?? 0} {ints[0][1] ?? 0}")
+}
