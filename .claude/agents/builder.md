@@ -62,7 +62,7 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **A new regression test is a test program** where it checks what a
   program prints or which NK code refuses it: `tests/compiler/tests/NAME.nika`
   with `NAME.stdout` (or `NAME.stderr`, the whole refusal), ADR-269 D22, #821.
-  Run it with `target/fast/nikaia test --project tests/compiler` (no `it`
+  Run it with `target/fast/nikaia test --both-settings --project tests/compiler` (no `it`
   rebuild). A new `#[test]` in `crates/nikaia/tests/it/` only where the check
   needs the compiler's Rust API or the lowered text.
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
