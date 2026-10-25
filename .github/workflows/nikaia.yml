@@ -49,6 +49,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # One line per run: the architect counts the CPU models the pool gives.
+      - name: Runner CPU
+        run: echo "runner-cpu $(rustc --print target-cpus | grep native) nproc=$(nproc)"
+
       - name: Decide
         id: decide
         run: sh scripts/ci-changes.sh

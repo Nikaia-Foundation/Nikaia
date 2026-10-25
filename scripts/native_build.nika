@@ -1,0 +1,33 @@
+// Optional native build of the compiler (an option for agents, not the default).
+// Cargo never gets the word `native`: it gets the CPU name rustc resolves it to,
+// and `target/cpu-NAME` is the target directory, so a build on another CPU
+// never reuses it. Delete `target/cpu-*` after use (disk).
+//
+//     nikaia run scripts/native_build.nika
+//
+// Prints the path of the binary.
+
+use std::process
+
+fn main() throws {
+    let cpus = process::run("rustc", ["--print", "target-cpus"]).stdout
+    let mut name: String = ""
+    for line in cpus.split("\n") {
+        if line.contains("native") && line.contains("(currently ") {
+            let tail = line.split("(currently ").collect()[1].clone()
+            name = tail.split(")").collect()[0].clone()
+        }
+    }
+    if name == "" {
+        println("rustc does not name the host CPU")
+        process::exit(1)
+    }
+    let dir = f"target/cpu-{name}"
+    let flags = "-C\u{1f}target-cpu=" + name
+    let built = process::run("cargo", ["build", "--profile", "fast", "-p", "nikaia"]; env: [("CARGO_ENCODED_RUSTFLAGS", flags), ("CARGO_TARGET_DIR", dir.clone())])
+    if !built.ok {
+        println(built.stderr)
+        process::exit(built.code)
+    }
+    println(f"{dir}/fast/nikaia")
+}

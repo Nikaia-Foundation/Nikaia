@@ -52,6 +52,11 @@ You build one small slice of an issue in the Nikaia repository and end.
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.
+* **Native build (optional).** `target/fast/nikaia run scripts/native_build.nika`
+  builds the compiler for this machine's CPU in `target/cpu-<name>` (cargo gets
+  the resolved name, never `native`) and prints the binary's path. Use it only
+  when the brief says so, delete `target/cpu-*` after use (disk, several GB).
+  Valgrind cannot run it on an AVX-512 CPU (SIGILL): count with the normal binary.
 * **Clippy beside the last test run, in one call.** Clippy builds in
   `target/debug`, the tests in `target/fast` (no shared lock): when the edits
   are final, run `(cargo clippy --all-targets -- -D warnings 2>&1 | grep -E
