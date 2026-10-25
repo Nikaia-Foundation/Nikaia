@@ -2046,7 +2046,7 @@ pub mod check_flow {
 }
 pub mod check_function {
     #[allow(unused_imports)]
-    pub use super::{check_function_grown_text, check_function_grammar, check_function_function};
+    pub use super::{check_function_grown_text, check_function_mixed_text, check_function_grammar, check_function_function};
 }
 pub mod check_grammar {}
 pub mod check_host {
