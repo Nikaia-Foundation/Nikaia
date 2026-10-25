@@ -34,7 +34,7 @@ struct ReleaseReport {
 fn release_field(text: String, key: String) -> String {
     for line in text.split("\n") {
         if line.starts_with(key.clone()) {
-            return (line.strip_prefix(key.clone()) ?? "").trim().clone()
+            return (line.strip_prefix(key.clone()) ?? "").trim().to_string()
         }
     }
     return ""
@@ -43,7 +43,7 @@ fn release_field(text: String, key: String) -> String {
 fn release_git(args: Vec[String]) -> String throws {
     let out = process::run("git", args)
     if !out.ok { return "" }
-    return out.stdout.trim().clone()
+    return out.stdout.trim().to_string()
 }
 
 // The subject of the pushed commit, with the issues its message fixes.
@@ -82,7 +82,7 @@ fn release_reports(dir: String) -> Vec[ReleaseReport] throws {
     let mut released: Vec[String] = []
     let list = f"{dir}/released.txt"
     if fs::exists(list.clone(), fs::Root::Anywhere) {
-        for line in fs::read_to_string(list, fs::Root::Anywhere).split("\n") { released.push(line.trim().clone()) }
+        for line in fs::read_to_string(list, fs::Root::Anywhere).split("\n") { released.push(line.trim().to_string()) }
     }
     let mut found: Vec[ReleaseReport] = []
     for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
