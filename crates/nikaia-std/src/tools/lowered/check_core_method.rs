@@ -367,15 +367,11 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     if args.is_empty() && name == "clone" && check_core_method_bytes(&on) { state.facts.byte_copies.insert(id_of(receiver) as i64); }
     if args.len() == 1 && bytes_word_width(&name) > 0 && check_core_method_bytes(&on) { state.facts.list_indices.insert(id_of(receiver) as i64); }
     if text && args.is_empty() && name == "to_string" && ledger_candidates(world.own, world.own_methods, "to_string").is_empty() {
-        let lent = match on {
-            Ty::Named { view, .. } => view,
-            _ => false,
-        };
-        if !lent { state.facts.text_as_is.insert(id_of(receiver) as i64); }
+        state.facts.text_as_is.insert(id_of(receiver) as i64);
         state.flow.receiver_name = outer_named;
         state.flow.at_a_write_door = outer_door;
         state.inside_a_door = outer_inside;
-        return Ty::Named { name: "String".to_owned(), args: vec![], view: false };
+        return on;
     }
     let called: Option<Ty> = check_core_a_called_field(state, world, host, &on, receiver, method, args, outer_inside, span);
     if called.is_some() {

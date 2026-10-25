@@ -92,11 +92,11 @@ impl EmitState {
                 types.push(format!("Vec<{}>", element));
                 passing.push(String::from("&{}"));
             } else if ty.starts_with('&') && !ty.starts_with("&mut ") {
-                types.push(nikaia_std::index::or(ty.strip_prefix('&'), || "").to_string());
+                types.push(nikaia_std::index::or(ty.strip_prefix('&'), || "").to_owned());
                 passing.push(String::from("&{}"));
             } else {
                 let mut owned = ty.to_owned();
-                while owned.starts_with("&mut ") { owned = nikaia_std::index::or(owned.strip_prefix("&mut "), || "").to_string(); }
+                while owned.starts_with("&mut ") { owned = nikaia_std::index::or(owned.strip_prefix("&mut "), || "").to_owned(); }
                 types.push(owned);
                 passing.push(String::from("{}"));
             }

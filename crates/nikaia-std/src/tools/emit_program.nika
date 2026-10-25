@@ -154,12 +154,12 @@ impl EmitState {
                 // Any other view the body only reads, `&Option<String>` for an
                 // unused `String?` among them (#703), is lent from the local
                 // that owns the word.
-                types.push((ty.strip_prefix("&") ?? "").to_string())
+                types.push((ty.strip_prefix("&") ?? "").clone())
                 passing.push("&{}")
             } else {
                 let mut owned = ty.clone()
                 while owned.starts_with("&mut ") {
-                    owned = (owned.strip_prefix("&mut ") ?? "").to_string()
+                    owned = (owned.strip_prefix("&mut ") ?? "").clone()
                 }
                 types.push(owned)
                 passing.push("{}")
