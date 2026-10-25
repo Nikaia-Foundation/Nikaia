@@ -260,7 +260,7 @@ pub(crate) fn fmt_joins(before: &[FmtToken], line: &[FmtToken]) -> bool {
     let last = (*nikaia_std::index::get(&before, nikaia_std::index::at(before.len() as i64 - 1))).clone();
     if last.kind == FmtKind::Comment || last.multi { return false; }
     let first = (*nikaia_std::index::get(&line, 0)).clone();
-    if first.kind == FmtKind::Open && first.text == "{" { return fmt_head(&nikaia_std::index::get(&before, 0).text.to_owned()); }
+    if first.kind == FmtKind::Open && first.text == "{" { return fmt_head(&nikaia_std::index::get(&before, 0).text); }
     if first.text == "else" && first.kind == FmtKind::Word {
         let arm = line.len() > 1 && nikaia_std::index::get(&line, 1).text == "=>";
         return !arm && last.kind == FmtKind::Close && last.text == "}";
@@ -659,7 +659,7 @@ pub(crate) fn fmt_sealed(toks: &[FmtToken], open: i64, close: i64) -> bool {
     if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "[" && open > 0 && nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).kind == FmtKind::Word { return true; }
     if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "(" && open > 0 && (nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).text == "->" || nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).text == ":") { return true; }
     if close + 1 >= toks.len() as i64 { return false; }
-    let after = nikaia_std::index::get(&toks, nikaia_std::index::at(close + 1)).text.to_owned();
+    let after = &nikaia_std::index::get(&toks, nikaia_std::index::at(close + 1)).text;
     after == "=>" || after == "|" || after == "=" || after == "in"
 }
 

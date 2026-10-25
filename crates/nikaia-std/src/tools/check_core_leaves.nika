@@ -52,16 +52,43 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
             return
         }
     }
+    check_core_a_lent_place_given_away(state, world, host, value, span, true)
+}
+
+/// **`NK1131` for a place that is lent here, passed to a parameter that owns
+/// its value** (#792): `k(v[0])` or `k(v[0].u)` out of `v: ref Vec[T]`.
+/// Text is `NK1102`'s, which says what it views.
+pub fn check_core_a_lent_place_passed[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) sync {
+    check_core_a_lent_place_given_away(state, world, host, value, span, false)
+}
+
+fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, handed_back: bool) sync {
     // **An element read out of a lent list is a place of it too** (#738):
     // `return v[0]` out of `v: ref Vec[String]`.
     let mut element = false
     let mut path: String = ""
     let mut root: String = ""
     match value {
-        Expr::Field { .. } => {
-            path = state.place_path(world, value) ?? return
-            let at = path.find(".") ?? return
-            root = path[0..<at].clone()
+        Expr::Field { base, name, .. } => {
+            let whole: String? = state.place_path(world, value)
+            if whole != null {
+                path = (whole ?? return).clone()
+                let at = path.find(".") ?? return
+                root = path[0..<at].clone()
+            } else {
+                // **A field of a list's element** (#792): `v[0].u`.
+                if handed_back {
+                    return
+                }
+                match base {
+                    Expr::Index { base: list, .. } => {
+                        let over = state.place_path(world, list) ?? return
+                        path = f"{over}[…].{world.words.resolve(name)}"
+                        root = state.rooted_at(world, list) ?? return
+                    }
+                    else => return,
+                }
+            }
         }
         Expr::Index { base, .. } => {
             let list = state.place_path(world, base) ?? return
@@ -78,6 +105,24 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
     if ty.is_unknown() || copies_plainly(ty) {
         return
     }
+    if !handed_back {
+        // An option of a type that copies copies too.
+        let held: Ty = match ty {
+            Ty::Nullable(inner) => inner.clone(),
+            else => ty.clone(),
+        }
+        let in_package = match held {
+            Ty::Named { name, .. } => state.copies_in_the_package.contains(name),
+            else => false,
+        }
+        let text = match held {
+            Ty::Named { name, .. } => a_type_base(name) == "String" || a_type_base(name) == "str",
+            else => false,
+        }
+        if text || ty.is_a_view() || held.is_a_view() || state.copied(world, held) || in_package {
+            return
+        }
+    }
     // A map's read is `NK1102`'s, which says what it views.
     let nullable = match ty {
         Ty::Nullable(_) => true,
@@ -91,7 +136,10 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
         return
     }
     let notes: Vec[String] = [f"`{root}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{path}` is a `{ty.text()}`. Giving it away would take a piece out of something this function doesn't own."]
-    let help: String = f"Declare the result `ref {ty.text()}` to return a view of it, or write `{path}.clone()` for a copy."
+    let mut help: String = f"Declare the result `ref {ty.text()}` to return a view of it, or write `{path}.clone()` for a copy."
+    if !handed_back {
+        help = f"Write `{path}.clone()` to pass a copy, or declare the parameter `ref {ty.text()}` if it only reads it."
+    }
     state.findings.push(check_refusal("NK1131", span, f"You can't give away `{path}` here: `{root}` is only borrowed.", notes, help))
 }
 

@@ -35,14 +35,39 @@ pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut 
         let declared = match expected { Some(__nikaia_value) => __nikaia_value, None => return };
         if declared.is_a_view() { return; }
     }
+    check_core_a_lent_place_given_away(state, world, host, value, span, true);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_a_lent_place_passed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span) { check_core_a_lent_place_given_away(state, world, host, value, span, false); }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, handed_back: bool) {
     let mut element = false;
     let mut path: String = String::from("");
     let mut root: String = String::from("");
     match value {
-        Expr::Field { .. } => {
-            path = match state.place_path(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
-            let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-            root = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_owned();
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let whole: Option<String> = state.place_path(world, value);
+            if whole.is_some() {
+                path = match whole { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
+                let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
+                root = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_owned();
+            } else {
+                if handed_back { return; }
+                match base {
+                    Expr::Index { base: list, .. } => {
+                        let list = nikaia_std::boxed::open(list);
+                        let over = match state.place_path(world, list) { Some(__nikaia_value) => __nikaia_value, None => return };
+                        path = format!("{}[…].{}", over, world.words.resolve(name));
+                        root = match state.rooted_at(world, list) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    },
+                    _ => { return; },
+                }
+            }
         },
         Expr::Index { base, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -56,11 +81,27 @@ pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut 
     if root == "self" || !state.lent_here(&root) { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
+    if !handed_back {
+        let held: Ty = match ty {
+            Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+            _ => ty.clone(),
+        };
+        let in_package = match held {
+            Ty::Named { ref name, .. } => state.copies_in_the_package.contains(name),
+            _ => false,
+        };
+        let text = match held {
+            Ty::Named { ref name, .. } => a_type_base(name) == "String" || a_type_base(name) == "str",
+            _ => false,
+        };
+        if text || ty.is_a_view() || held.is_a_view() || state.copied(world, &held) || in_package { return; }
+    }
     let nullable = matches!(ty, Ty::Nullable(_));
     if element && nullable { return; }
     if state.a_text_bytes_view(world, value) { return; }
     let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
-    let help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path);
+    let mut help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path);
+    if !handed_back { help = format!("Write `{}.clone()` to pass a copy, or declare the parameter `ref {}` if it only reads it.", path, ty.text()); }
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: `{}` is only borrowed.", path, root), notes, Some(help)));
 }
 

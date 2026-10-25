@@ -330,7 +330,7 @@ fn fmt_joins(before: ref Vec[FmtToken], line: ref Vec[FmtToken]) -> bool sync {
     }
     let first = line[0].clone()
     if first.kind == FmtKind::Open && first.text == "{" {
-        return fmt_head(before[0].text.clone())
+        return fmt_head(before[0].text)
     }
     if first.text == "else" && first.kind == FmtKind::Word {
         let arm = line.len() > 1 && line[1].text == "=>"
@@ -858,7 +858,7 @@ fn fmt_sealed(toks: ref Vec[FmtToken], open: i64, close: i64) -> bool sync {
     if close + 1 >= toks.len() {
         return false
     }
-    let after = toks[close + 1].text.clone()
+    let after = toks[close + 1].text
     return after == "=>" || after == "|" || after == "=" || after == "in"
 }
 

@@ -1,0 +1,24 @@
+// #792: an element of a lent list, or a field of one, passed to a parameter that owns its value would take it out of the list; it is refused as for `ref self` (NK1131). `.clone()` passes a copy, and a parameter that only reads takes a view.
+struct LentU { n: i64, s: String }
+struct LentT { text: String, u: LentU }
+fn lent_keep(mut out: Vec[LentU], u: LentU) { out.push(u) }
+fn lent_reads(s: String) -> i64 { match s { "a" => 1, else => 0 } }
+fn lent_element(v: ref Vec[LentU]) -> i64 {
+    let mut o: Vec[LentU] = []
+    lent_keep(o, v[0])
+    o.len() as i64
+}
+fn lent_field(v: ref Vec[LentT]) -> i64 {
+    let mut o: Vec[LentU] = []
+    lent_keep(o, v[0].u)
+    o.len() as i64
+}
+fn lent_copied(v: ref Vec[LentT]) -> i64 {
+    let mut o: Vec[LentU] = []
+    lent_keep(o, v[0].u.clone())
+    o.len() as i64 + lent_reads(v[0].text)
+}
+fn main() {
+    let v = [LentT { text: "a", u: LentU { n: 1, s: "x" } }]
+    println(f"{lent_element([v[0].u.clone()])} {lent_field(v)} {lent_copied(v)}")
+}

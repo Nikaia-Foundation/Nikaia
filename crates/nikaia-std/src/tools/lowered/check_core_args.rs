@@ -101,7 +101,10 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
             _ => { },
         }
     }
-    if !lends { check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed"); }
+    if !lends {
+        check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed");
+        if at < expected.len() as i64 && !wants_fn && !(*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_unknown() { check_core_a_lent_place_passed(state, world, host, arg, span); }
+    }
     state.flow.lending_let = !wants_fn;
     let found = check_core_expr(state, world, host, arg, span);
     state.flow.lending_let = false;

@@ -1984,7 +1984,7 @@ pub mod check_core_flow {
 }
 pub mod check_core_leaves {
     #[allow(unused_imports)]
-    pub use super::{check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_lent_place_handed_back, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_returns, check_core_an_assert};
+    pub use super::{check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_lent_place_handed_back, check_core_a_lent_place_passed, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_returns, check_core_an_assert};
 }
 pub mod check_core_method {
     #[allow(unused_imports)]

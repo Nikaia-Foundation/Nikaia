@@ -127,6 +127,9 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     }
     if !lends {
         check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed")
+        if at < expected.len() as i64 && !wants_fn && !expected[at].is_unknown() {
+            check_core_a_lent_place_passed(state, world, host, arg, span)
+        }
     }
     // **A list element past a jump, handed as an argument, is a view of it**
     // (#827, ADR-282 D7), as a `let` binds it (#819).

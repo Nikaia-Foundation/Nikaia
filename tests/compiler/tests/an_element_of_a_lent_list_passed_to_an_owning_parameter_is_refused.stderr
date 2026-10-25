@@ -1,0 +1,17 @@
+error[NK1131]: You can't give away `v[…]` here: `v` is only borrowed.
+  --> tests/an_element_of_a_lent_list_passed_to_an_owning_parameter_is_refused.nika:8:5
+   |
+ 8 |     lent_keep(o, v[0])
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `v` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `v[…]` is a `LentU`. Giving it away would take a piece out of something this function doesn't own.
+   = help: Write `v[…].clone()` to pass a copy, or declare the parameter `ref LentU` if it only reads it.
+error[NK1131]: You can't give away `v[…].u` here: `v` is only borrowed.
+   --> tests/an_element_of_a_lent_list_passed_to_an_owning_parameter_is_refused.nika:13:5
+    |
+ 13 |     lent_keep(o, v[0].u)
+    |     ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `v` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `v[…].u` is a `LentU`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `v[…].u.clone()` to pass a copy, or declare the parameter `ref LentU` if it only reads it.
+2 type errors
