@@ -1,0 +1,13 @@
+// #706: views of a `String` parameter pushed into a `mut Vec[String]`
+// parameter run (the lowering once gave `Vec<&str>` and rustc refused).
+fn words(s: String, mut v: Vec[String]) {
+    for w in s.split(" ") {
+        v.push(w)
+    }
+}
+
+fn main() {
+    let mut v: Vec[String] = []
+    words(f"a b {1}", v)
+    println(v.len())
+}
