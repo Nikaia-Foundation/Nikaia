@@ -919,6 +919,17 @@ fn keeps_handed(expr: ref Expr, interner: ref winnow_grammar::InternerContext, c
     for one in keeps_viewed_of(expr, interner, context, own, library, walk) {
         names.push(one)
     }
+    // **A name a `let` moved a part of a parameter into is that part** (#665):
+    // handed to what keeps it, it keeps the parameter.
+    match expr {
+        Expr::Variable(ident, _) => {
+            let moved = walk.aliases[interner.resolve(ident)] ?? return names
+            for one in moved {
+                names.push(one.clone())
+            }
+        }
+        else => {}
+    }
     return names
 }
 

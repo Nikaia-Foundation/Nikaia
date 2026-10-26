@@ -570,6 +570,14 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
     let part = part_of_a_parameter(expr, interner, context);
     if part.is_some() { names.push(nikaia_std::index::or(part, || "".into())); }
     for one in keeps_viewed_of(expr, interner, context, own, library, walk) { names.push(one); }
+    match expr {
+        Expr::Variable(ident, _) => {
+            let ident = *ident;
+            let moved = match *nikaia_std::index::get(&walk.aliases, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return names };
+            for one in moved.iter() { names.push(one.to_owned()); }
+        },
+        _ => { },
+    }
     names
 }
 

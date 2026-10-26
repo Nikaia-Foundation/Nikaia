@@ -1,0 +1,11 @@
+// The part is moved into `k`, so reading it again is refused (#665).
+struct P { items: Vec[i64] }
+fn back(p: P) -> Vec[i64] {
+    let k = p.items
+    print(p.items.len())
+    return k
+}
+fn main() {
+    let v = back(P { items: [1, 2, 3] })
+    print(v.len())
+}

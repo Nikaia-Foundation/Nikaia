@@ -140,6 +140,15 @@ pub(crate) fn check_core_stmt_a_place(value: &Expr) -> bool { matches!(value, Ex
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_part_of_an_owned_parameter(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_stmt_a_part_of_an_owned_parameter(state, world, base) || state.an_owned_parameter(world, base) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_name(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -380,12 +389,15 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         element_view = check_core_stmt_element_view(&state, world, value, &found, &want);
     }
     let bytes_view = !mutable && names.len() == 1 && shape.is_empty() && state.a_text_bytes_view(world, value);
+    let mut moved_out = false;
     if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if any_named && !bytes_view && !(ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && state.a_lent_text_place(world, value, &found)) {
         let to = format!("bound to `{}` by a `let`", bound_names.join("`, `"));
+        let before = state.findings.len() as i64;
         state.hands_over(world, value, &found, &to, span);
+        moved_out = a_name_or_a_field(value) && check_core_stmt_a_part_of_an_owned_parameter(&state, world, value) && (state.findings.len() as i64) == before;
     }
     for n in bound_names.iter() { if n != "_" { state.written_at.push((n.to_owned(), span.start as i64)); } }
-    if check_core_stmt_a_place(value) && state.takes_away(world, &found) && !state.facts.text_bytes.contains(&node_key(value)) { check_core_stmt_lent_let(state, world, names, span); }
+    if !moved_out && check_core_stmt_a_place(value) && state.takes_away(world, &found) && !state.facts.text_bytes.contains(&node_key(value)) { check_core_stmt_lent_let(state, world, names, span); }
     if names.len() >= 2 || !shape.is_empty() { return state.tuple_let(world, names, shape, ty.is_some(), &found, value, span); }
     let name: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
     if name == "_" { state.a_let_that_binds_nothing(span); }

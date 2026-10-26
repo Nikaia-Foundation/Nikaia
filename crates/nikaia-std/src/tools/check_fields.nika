@@ -232,6 +232,34 @@ impl CheckState {
         return lends_in_own(contract, at, [world.library])
     }
 
+    /// **A name that is a parameter this function owns** (#665): one the
+    /// contract does not lend (its body keeps it), that is not `mut`, `self`
+    /// or a view - a part of it may be moved out.
+    pub fn an_owned_parameter(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+        let name = match given {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        let key = self.current ?? return false
+        let contract = world.own.functions[key]?.clone() ?? return false
+        let signature = contract.signature?.clone() ?? return false
+        if name == "self" || signature.mutable.contains(name) {
+            return false
+        }
+        let mut at: i64 = -1
+        let mut scan = 0
+        while scan < signature.params.len() {
+            if at < 0 && signature.params[scan].0 == name {
+                at = scan
+            }
+            scan = scan + 1
+        }
+        if at < 0 || signature.params[at].1.is_a_view() {
+            return false
+        }
+        return !lends_in_own(contract, at, [world.library])
+    }
+
     /// **A `comptime` binding used where a type is asked**: the use is written
     /// with the type's suffix (`3u8`), by the node (ADR-287). `ty` is the suffix.
     pub fn comptimes_asked(ref mut self, world: ref CheckWorld, expr: ref Expr, ty: ref String) sync {

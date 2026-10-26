@@ -1,0 +1,10 @@
+// A `let` over a part of a parameter this function owns, then handed back: a move, not a loan (#665).
+struct P { items: Vec[i64] }
+fn back(p: P) -> Vec[i64] {
+    let k = p.items
+    return k
+}
+fn main() {
+    let v = back(P { items: [1, 2, 3] })
+    print(v.len())
+}

@@ -1,0 +1,11 @@
+// Over a `ref` parameter the `let` cannot give the part away (#665).
+struct P { items: Vec[i64] }
+fn back(p: ref P) -> Vec[i64] {
+    let k = p.items
+    return k
+}
+fn main() {
+    let p = P { items: [1, 2, 3] }
+    let v = back(p)
+    print(v.len())
+}

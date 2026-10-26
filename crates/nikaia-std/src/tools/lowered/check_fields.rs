@@ -196,6 +196,32 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn an_owned_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+        let name = match given {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            _ => return false,
+        };
+        let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let signature = match match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if name == "self" || nikaia_std::list::contains(&signature.mutable, &name) { return false; }
+        let mut at: i64 = -1;
+        let mut scan: i64 = 0;
+        while scan < signature.params.len() as i64 {
+            if at < 0 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(scan)).0 == name { at = scan; }
+            scan = scan + 1;
+        }
+        if at < 0 || nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1.is_a_view() { return false; }
+        !lends_in_own(&contract, at, &vec![world.library])
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn comptimes_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, ty: &str) {
         match expr {
             Expr::Variable(name, _) => {

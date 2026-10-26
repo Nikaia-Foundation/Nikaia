@@ -1,0 +1,10 @@
+error[NK2105]: You're using `p.items` again, but it was bound to `k` by a `let`.
+  --> tests/let_moved_read_again.nika:5:5
+   |
+ 5 |     print(p.items.len())
+   |     ^
+   |
+   = note: `p.items` is a `Vec[i64]`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+   = note: Numbers, `bool`s, `char`s and views would be fine: they're copied.
+   = help: If both need it, hand over a copy: `p.items.clone()`.
+

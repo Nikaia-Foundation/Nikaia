@@ -198,6 +198,14 @@ fn check_core_stmt_a_place(value: ref Expr) -> bool sync {
     }
 }
 
+/// A field path whose root is a parameter this function owns (#665).
+fn check_core_stmt_a_part_of_an_owned_parameter(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Field { base, .. } => check_core_stmt_a_part_of_an_owned_parameter(state, world, base) || state.an_owned_parameter(world, base),
+        else => false,
+    }
+}
+
 /// A bare name.
 fn check_core_stmt_a_name(value: ref Expr) -> bool sync {
     return match value {
@@ -498,13 +506,16 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // handed over, and the name is copied where it is kept. A `let mut` keeps
     // it, so it is copied there.
     let bytes_view = !mutable && names.len() == 1 && shape.len() == 0 && state.a_text_bytes_view(world, value)
+    let mut moved_out = false
     if seen_through || element_view == 1 {
         check_core_stmt_lent_let(state, world, names, span)
     } else if any_named && !bytes_view && !(ty == null && !mutable && names.len() == 1 && shape.len() == 0 && state.a_lent_text_place(world, value, found)) {
         // A plain `let` over a `String` read through a `ref` parameter is a
         // view of it (Part I 6.5, #839), bound so below.
         let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
+        let before = state.findings.len()
         state.hands_over(world, value, found, to, span)
+        moved_out = a_name_or_a_field(value) && check_core_stmt_a_part_of_an_owned_parameter(state, world, value) && state.findings.len() == before
     }
     // **And a `let` gives the name a value again**, as an assignment does.
     for n in bound_names {
@@ -513,7 +524,8 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         }
     }
     // **A `let` over a place is a view of it** (ADR-094 D4).
-    if check_core_stmt_a_place(value) && state.takes_away(world, found) && !state.facts.text_bytes.contains(node_key(value)) {
+    // **Moved out of its owner, it is no view** (#665): the name owns what it holds.
+    if !moved_out && check_core_stmt_a_place(value) && state.takes_away(world, found) && !state.facts.text_bytes.contains(node_key(value)) {
         check_core_stmt_lent_let(state, world, names, span)
     }
     // **A tuple of names takes the value apart** (ADR-291).
