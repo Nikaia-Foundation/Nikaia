@@ -19,7 +19,8 @@ pub trait EmitHost {
     fn insert_before_last_brace(&self, out: &mut EmitOut, text: &str);
     fn ty_named(&self, walk: &mut EmitWalk, ty: &Type) -> Result<String, Box<dyn std::error::Error>>;
     fn stmt(&self, walk: &mut EmitWalk, out: &mut EmitOut, stmt: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>>;
-    fn a_stmt(&self, walk: &mut EmitWalk, out: &mut EmitOut, stmt: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>>;
+    fn given_up_unmuted(&self, at: i64) -> bool;
+    fn given_up_rebound(&self, at: i64) -> Option<bool>;
     fn order_of(&self, block: &Block) -> Vec<i64>;
     fn ty_of_name(&self, walk: &mut EmitWalk, name: winnow_grammar::Symbol) -> Result<String, Box<dyn std::error::Error>>;
     fn overlaps_user_code(&self) -> bool;

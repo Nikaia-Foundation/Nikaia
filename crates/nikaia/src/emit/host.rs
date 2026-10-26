@@ -291,28 +291,12 @@ impl EmitHost for Emitter<'_> {
         })
     }
 
-    fn a_stmt(
-        &self,
-        walk: &mut EmitWalk,
-        out: &mut Out,
-        stmt: &crate::ast::Stmt,
-        span: &crate::ast::Span,
-        depth: i64,
-        tail: Tail,
-        flow: EmitFlow,
-        scope: &EmitScope,
-    ) -> Crossing {
-        self.hosted(walk, || {
-            Emitter::a_stmt(
-                self,
-                out,
-                stmt,
-                span,
-                depth as usize,
-                tail,
-                Flow::from_emit(flow, scope),
-            )
-        })
+    fn given_up_unmuted(&self, at: i64) -> bool {
+        self.give_ups.unmuted.contains(&at)
+    }
+
+    fn given_up_rebound(&self, at: i64) -> Option<bool> {
+        self.give_ups.rebound.get(&at).copied()
     }
 
     fn order_of(&self, block: &Block) -> Vec<i64> {

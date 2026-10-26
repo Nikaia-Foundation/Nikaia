@@ -30,6 +30,80 @@ fn emit_stmt_first(buf: ref String, what: ref String, from: i64) -> i64 {
     return buf.find(what; from: from) ?? 9223372036854775807
 }
 
+/// **Rust's own tuple pattern for a head** (ADR-291, ADR-356): one name as it
+/// is, a flat tuple in parentheses, and a nested one rebuilt from its shape - a
+/// tuple's width, `0` for a name, in prefix order.
+fn emit_stmt_tuple_pattern(names: ref Vec[String], shape: ref Vec[i64]) -> String {
+    if shape.len() == 0 {
+        if names.len() == 1 {
+            return names[0].clone()
+        }
+        return f"({names.join(", ")})"
+    }
+    if shape[0] == -1 {
+        return f"({names.join(", ")})"
+    }
+    let mut at = 0
+    let mut next = 0
+    return emit_stmt_tuple_part(names, shape, at, next)
+}
+
+/// One part of a nested head, read from `at` in the shape and `next` among the
+/// names.
+fn emit_stmt_tuple_part(names: ref Vec[String], shape: ref Vec[i64], mut at: i64, mut next: i64) -> String {
+    let mut width = 0
+    if at < shape.len() {
+        width = shape[at]
+    }
+    at += 1
+    if width <= 0 {
+        let mut name = "_".clone()
+        if next < names.len() {
+            name = names[next].clone()
+        }
+        next += 1
+        return name
+    }
+    let mut parts: Vec[String] = []
+    for _ in 0..<width {
+        parts.push(emit_stmt_tuple_part(names, shape, at, next))
+    }
+    return f"({parts.join(", ")})"
+}
+
+/// What a buffer put into a keep is written with: `put_viewed` where the views
+/// are held one by one (ADR-283 D14) or a task's `Holding` finds them (ADR-218
+/// D4), `put` otherwise.
+fn emit_stmt_put_call(keep: ref KeepAt) -> String {
+    let method = match keep {
+        KeepAt::Element(_) => "put_viewed",
+        KeepAt::Task => "put_viewed",
+        KeepAt::Param => "put_viewed",
+        else => "put",
+    }
+    return f"{emit_keep_expr(keep, false)}.{method}("
+}
+
+/// What the keep plan of a function says about one `let`.
+struct EmitStmtKept {
+    /// The keep the buffer goes into, with the call that puts it there.
+    put: String?,
+    /// A binding a task takes with it.
+    packed: bool,
+    /// The width a keeper that drops entries holds each text view with.
+    holding: i64?,
+}
+
+fn emit_stmt_kept_none() -> EmitStmtKept {
+    return EmitStmtKept { put: null, packed: false, holding: null }
+}
+
+/// The operator of an assignment: `+` for `+=`, nothing for `=`.
+fn emit_stmt_op_text(op: ref BinaryOp?) -> String {
+    let given = op ?? return ""
+    return f"{binary_op(given)}="
+}
+
 impl EmitState {
     /// A block, with `opening` (one line) written before its statements where
     /// there is one.
@@ -222,8 +296,758 @@ impl EmitState {
         if pinned {
             walk.unpinned = false
         }
-        host.a_stmt(walk, out, node, span, depth, tail, flow, scope)
+        self.emit_stmt_a_stmt(world, walk, out, host, node, span, depth, tail, flow, scope)
         walk.trusting = outer
         walk.unpinned = loose
+    }
+
+    /// **What one statement writes** (`Emitter::a_stmt`, ADR-294, E11-4b). The
+    /// statement it is in is shadowed for everything emitted from here - an
+    /// expression, a nested block, a `catch` handler - so that a method call
+    /// that can fail looks itself up by it (ADR-023 D8).
+    fn emit_stmt_a_stmt[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = span.start as i64
+        let here = flow.at(at)
+        self.write_keep_prelude(walk, out, scope.function, at, depth)
+        self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, tail, here, scope)
+        match node {
+            Stmt::Let { names, shape, mutable, ty, value } => self.emit_stmt_let(world, walk, out, host, names, shape, mutable, ty, value, span, depth, here, scope),
+            Stmt::Comptime { name, .. } => {
+                let bound = emit_text(world, name)
+                let found = self.facts.comptime_values.get(at)
+                if found == null {
+                    throw EmitRefused { message: f"`{bound}` has no value computed at build time. This is a compiler bug: the check should have reported it first.", at: at }
+                }
+                let pair = found ?? return
+                let below = pair.0.clone()
+                let written = pair.1.clone()
+                if self.facts.folded_comptimes.contains(bound) {
+                    out.push("#[allow(dead_code)]\n")
+                }
+                out.push(f"const {bound}: {below} = {written};")
+            },
+            Stmt::Assign { target, op, value } => self.emit_stmt_assign(world, walk, out, host, target, op, value, span, depth, here, scope),
+            Stmt::While { cond, body } => {
+                // **`while true` is emitted as `loop`** (ADR-276 D1): the one
+                // place the lowering translates what a loop means rather than how
+                // it is spelled. The literal only, never a name that happens to
+                // be true; `loop` diverges and is `!`, where `while true` is `()`.
+                let mut forever = false
+                match cond {
+                    Expr::LitBool(truth, _) => {
+                        forever = truth
+                    },
+                    else => {}
+                }
+                if forever {
+                    out.push("loop ")
+                } else {
+                    out.push("while ")
+                    host.expr(walk, out, cond, depth, here, scope)
+                    out.push(" ")
+                }
+                self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), null))
+            },
+            Stmt::For { bindings, shape, iter, body } => self.emit_stmt_for(world, walk, out, host, bindings, shape, iter, body, span, depth, here, scope),
+            Stmt::Break => self.emit_stmt_jump(out, "break", here),
+            Stmt::Continue => self.emit_stmt_jump(out, "continue", here),
+            Stmt::Return(value) => {
+                let is_return = match tail {
+                    EmitTail::Return => true,
+                    else => false,
+                }
+                if value != null {
+                    let given = value ?? return
+                    if is_return {
+                        // A `return` that ends a function body is that
+                        // function's value, written as one.
+                        self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)
+                    } else if here.can_throw {
+                        out.push("return Ok(")
+                        self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)
+                        out.push(");")
+                    } else {
+                        out.push("return ")
+                        self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)
+                        out.push(";")
+                    }
+                } else if here.can_throw {
+                    out.push("return Ok(());")
+                } else {
+                    out.push("return;")
+                }
+            },
+            Stmt::Expr(expr) => self.emit_stmt_expr(world, walk, out, host, expr, span, depth, tail, here, scope),
+        }
+    }
+
+    /// `break` and `continue`, name for name (ADR-296 D17), refused outside a
+    /// loop: the checker's `NK1132` is the message a program meets, and this is
+    /// what makes its walk's completeness hold (ADR-276 D6).
+    fn emit_stmt_jump(ref self, mut out: EmitOut, word: String, flow: EmitFlow) sync throws {
+        if !flow.in_loop {
+            throw EmitRefused { message: f"`{word}` only works inside a loop, and there's none here.", at: flow.statement }
+        }
+        out.push(f"{word};")
+    }
+
+    /// The local a name is written as (#703).
+    fn emit_stmt_local(ref self, name: ref String) -> String {
+        return emit_local_name(self.facts.comptime_names, name)
+    }
+
+    /// What the keep plan of the function says about the `let` at `at` that
+    /// binds `bound`.
+    fn emit_stmt_kept(ref self, walk: ref EmitWalk, function: ref String, at: i64, bound: ref String) -> EmitStmtKept {
+        let key = self.keep_plan_key(walk, function) ?? return emit_stmt_kept_none()
+        let plan = self.keep_plans.get(key) ?? return emit_stmt_kept_none()
+        // **A buffer whose views outlive this scope goes into a keep** (ADR-283
+        // D9), and the binding is where it now lives.
+        let mut put: String? = null
+        let keep = plan.puts.get(at)
+        if keep != null {
+            put = emit_stmt_put_call(keep ?? return emit_stmt_kept_none())
+        }
+        // **A binding a task takes with it is packed with the task's keep**
+        // (D3), and every use of it reads through the handle.
+        let packed = (plan.tethered.get(bound) ?? -1) == at
+        // **A keeper that drops entries holds each text view with its own
+        // handle** (D4): `ref String` is `Held` in its type.
+        let mut holding: i64? = null
+        if plan.element_keepers.contains(bound) {
+            holding = plan.widths.get(bound) ?? 1
+        }
+        return EmitStmtKept { put: put, packed: packed, holding: holding }
+    }
+
+    /// The keep a kept buffer assigned again goes into, with the call (#293).
+    fn emit_stmt_reput(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> String? {
+        let key = self.keep_plan_key(walk, function) ?? return null
+        let plan = self.keep_plans.get(key) ?? return null
+        let keep = plan.reputs.get(at) ?? return null
+        return emit_stmt_put_call(keep)
+    }
+
+    /// The annotation of a single-name `let`: the written type, or the type a
+    /// number's uses gave it (ADR-285 D27).
+    fn emit_stmt_annotation[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type?, at: i64, count: Count, kept: bool) -> String {
+        if ty == null {
+            let found = self.facts.number_lets.get(at) ?? return ""
+            return f": {found}"
+        }
+        if kept {
+            return ""
+        }
+        let own = ty ?? return ""
+        let written = self.emit_core_ty_counted(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), own, EmitLifetimes::Elided, count)
+        return f": {host.seeded(written)}"
+    }
+
+    /// `let`: one name with its keep, a task's packing and its nullable hull,
+    /// or a tuple of names, Rust's own pattern (ADR-291).
+    fn emit_stmt_let[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = span.start as i64
+        // **A mutable view of an entry is the `&mut` itself** (#816): the
+        // binding is never reassigned, so it takes no `mut`.
+        let unmuted = host.given_up_unmuted(at) || self.facts.mut_view_reads.contains_key(node_key(value))
+        let mut_word = if mutable && !unmuted { "mut " } else { "" }
+        // **A tuple of names is Rust's own tuple pattern** (ADR-291): there is
+        // no count to look up and no annotation to write, because a hull's count
+        // is decided per value and a destructure names none.
+        if names.len() > 1 || shape.len() != 0 {
+            let mut bound: Vec[String] = []
+            for each in names {
+                bound.push(self.emit_stmt_local(emit_text(world, each)))
+            }
+            let pattern = emit_stmt_tuple_pattern(bound, shape)
+            out.push(f"let {mut_word}{pattern} = ")
+            let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+            out.push(before)
+            // **Out of a place, the tuple is lent** (#465).
+            if mut_word == "" && self.facts.lent_lets.contains(at) {
+                out.push("&")
+            }
+            host.expr(walk, out, value, depth, flow, scope)
+            out.push(after)
+            out.push(";")
+            // A number among its parts is read out of its view.
+            for each in names {
+                if self.facts.copied_tuple_parts.contains((at, emit_text(world, each))) {
+                    let local = self.emit_stmt_local(emit_text(world, each))
+                    out.push(f" let {local} = nikaia_std::num::value({local});")
+                }
+            }
+            return
+        }
+        let bound = emit_text(world, names[0])
+        let count = self.count_at(host.crossings_are_possible(), scope.function, bound)
+        // A hull written by a call inside this value looks its count up by the
+        // name being bound (ADR-281 D2), and an expression has none of its own.
+        let inner = scope.clone() with { bound: bound.clone() }
+        let kept = self.emit_stmt_kept(walk, scope.function, at, bound)
+        walk.holding = kept.holding
+        let annotation = self.emit_stmt_annotation(world, walk, host, ty, at, count, kept.put != null || kept.packed)
+        walk.holding = null
+        let local = self.emit_stmt_local(bound)
+        if kept.packed {
+            let held = emit_tethered_type(world, ty, value)
+            if held == null {
+                throw EmitRefused { message: f"`{bound}` is passed to a task and keeps data alive, so it needs its type written out: `let {bound}: … = …`.", at: at }
+            }
+            // **Held by the task's keep** (ADR-218 D4): the value is built
+            // first, and every view in it is found again in the keep over a
+            // lifetime the `Holding` alone decides.
+            let wrapper = self.emit_core_tether_wrapper(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), held ?? return)
+            out.push(f"let {mut_word}{local} = {{ let __packed = ")
+            host.expr(walk, out, value, depth, flow, inner)
+            out.push(f"; nikaia_std::tether::Holding::<{wrapper}, 1>::new([std::sync::Arc::clone(&__keep_task)], move |keeps| nikaia_std::tether::Rebase::rebase(__packed, &keeps)) }};")
+            return
+        }
+        if kept.put != null {
+            out.push(f"let {mut_word}{local} = {kept.put ?? ""}")
+            host.expr(walk, out, value, depth, flow, inner)
+            out.push(");")
+            return
+        }
+        // **The annotation is no longer the constructor** (ADR-281 D2).
+        // Part I 2.3: a plain value standing in a nullable slot keeps its hull
+        // in the compiler, because it is one a program cannot observe.
+        let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+        out.push(f"let {mut_word}{local}{annotation} = ")
+        out.push(before)
+        // **A `let` over a place is a view of it** (ADR-094 D4); `let y = x`
+        // over a whole variable stays a move, and a call or a literal owns what
+        // it is given.
+        if self.facts.lent_lets.contains(at) {
+            out.push("&")
+        }
+        // **A `let` whose annotation is a number and whose value is a `for`
+        // binding reads the number through the view** (ADR-182 D5).
+        let viewed = match value {
+            Expr::Variable(name, _) => self.facts.viewed_numbers.contains((flow.statement, emit_text(world, name))),
+            else => false,
+        }
+        self.emit_core_operand(world, walk, out, host, value, viewed, depth, flow, inner)
+        out.push(after)
+        out.push(";")
+    }
+
+    /// An assignment: through the brackets (`index::set`, ADR-080 D2), into a
+    /// held struct (ADR-283 D17), a slot or a counter proved inside its type
+    /// (#387), or plain.
+    fn emit_stmt_assign[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = span.start as i64
+        if op == null {
+            match target {
+                Expr::Index { base, index, .. } => {
+                    self.emit_stmt_assign_index(world, walk, out, host, base, index, value, span, depth, flow, scope)
+                    return
+                },
+                else => {}
+            }
+        }
+        match target {
+            Expr::Field { base: element, name: field, .. } => {
+                match element {
+                    Expr::Index { base: keeper, index, .. } => {
+                        if self.reads_through_handle(world, walk, scope.function, keeper) {
+                            self.emit_stmt_assign_held(world, walk, out, host, keeper, index, field, op, value, span, depth, flow, scope)
+                            return
+                        }
+                    },
+                    else => {}
+                }
+            },
+            else => {}
+        }
+        if self.emit_stmt_assign_slot(world, walk, out, host, target, op, value, span, depth, flow, scope) {
+            return
+        }
+        if self.emit_stmt_assign_proven(world, walk, out, host, target, op, value, span, depth, flow, scope) {
+            return
+        }
+        let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+        // **A `mut` parameter assigned whole is written through** (ADR-094 D3,
+        // #576): below it is a `&mut T`, and `n = n + 1` is `*n = *n + 1`.
+        match target {
+            Expr::Variable(name, _) => {
+                if self.changes_in_place(scope.function, emit_text(world, name)) {
+                    out.push("*")
+                }
+            },
+            else => {}
+        }
+        // **Given up while a view of it is used** (ADR-353 D3): the new value is
+        // a binding of its own, and the old one lives on to the end of the block.
+        let rebound = host.given_up_rebound(at)
+        if rebound != null {
+            if rebound ?? false {
+                out.push("let mut ")
+            } else {
+                out.push("let ")
+            }
+        }
+        host.expr(walk, out, target, depth, flow.place(), scope)
+        if op == null {
+            out.push(" = ")
+        } else {
+            out.push(f" {emit_stmt_op_text(op)} ")
+        }
+        // **A kept buffer assigned again goes into its keep too** (#293): the
+        // binding is a place in the keep, and the views of the old value still
+        // point into the old one.
+        let reput = self.emit_stmt_reput(walk, scope.function, at)
+        let reputted = reput != null
+        if reputted {
+            out.push(reput ?? "")
+        }
+        out.push(before)
+        // **A view of the place being assigned is copied first** (#563):
+        // `rest = rest.strip_prefix(">") ?? ""` into a mixed `String` hands
+        // `EitherText` a borrow of the very buffer the assignment replaces
+        // (E0506). The text is made its own.
+        let mut own_view = false
+        if op == null {
+            match target {
+                Expr::Variable(assigned, _) => {
+                    match value {
+                        Expr::MethodCall { receiver, method, args, .. } => {
+                            if args.len() == 0 && emit_text(world, method) == "into_either" {
+                                let mut mentions = false
+                                for inner in visited_in_expr(receiver) {
+                                    match inner {
+                                        Expr::Variable(read, _) => {
+                                            if emit_text(world, read) == emit_text(world, assigned) {
+                                                mentions = true
+                                            }
+                                        },
+                                        else => {}
+                                    }
+                                }
+                                if mentions {
+                                    self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
+                                    out.push(".to_owned().into_either()")
+                                    own_view = true
+                                }
+                            }
+                        },
+                        else => {}
+                    }
+                },
+                else => {}
+            }
+        }
+        // **`text += x` appends a `str`** (#760): an owned right side is lent, a
+        // view taken as it is.
+        let appended = op != null && self.facts.appended_texts.contains(at)
+        if appended {
+            out.push("::core::convert::AsRef::<str>::as_ref(&")
+        }
+        if !own_view {
+            host.expr(walk, out, value, depth, flow, scope)
+        }
+        if appended {
+            out.push(")")
+        }
+        out.push(after)
+        if reputted {
+            out.push(")")
+        }
+        out.push(";")
+    }
+
+    /// `m[k] = v`: **a write through the brackets is not an index** (ADR-080
+    /// D2). `index::set` is `insert` for a map and an indexed assignment for a
+    /// sequence, chosen by the language below on the container's type. The
+    /// value first, and then the write (ADR-293 D2): a read in the value ends
+    /// before the write begins.
+    fn emit_stmt_assign_index[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = span.start as i64
+        let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+        out.push("{ let __nikaia_stored = ")
+        out.push(before)
+        host.expr(walk, out, value, depth, flow, scope)
+        out.push(after)
+        // **A `mut` parameter is already a `&mut`** (ADR-094 D3), so it is lent
+        // on again rather than borrowed a second time.
+        let mut lent_on = false
+        match base {
+            Expr::Variable(name, _) => {
+                lent_on = self.changes_in_place(scope.function, emit_text(world, name))
+            },
+            else => {}
+        }
+        // **A position proved inside is written without its check** (ADR-306
+        // D5), as it is read.
+        if self.proven_indices.contains(node_key(base)) && self.map_key(index, true) == null {
+            if lent_on {
+                out.push("; unsafe { nikaia_std::proven::write(&mut *")
+            } else {
+                out.push("; unsafe { nikaia_std::proven::write(&mut ")
+            }
+            host.expr(walk, out, base, depth, flow.place(), scope)
+            out.push(", (")
+            if only_literals(index) {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+            } else {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            }
+            out.push(") as usize, __nikaia_stored) }; }")
+            return
+        }
+        if lent_on {
+            out.push("; nikaia_std::index::set(&mut *")
+        } else {
+            out.push("; nikaia_std::index::set(&mut ")
+        }
+        // **The container written into is a place** (0.0.238): `d[i][j] = v`
+        // writes into the list `d[i]`, which the language below lends mutably.
+        host.expr(walk, out, base, depth, flow.place(), scope)
+        // **A key the map keeps goes in as it is** (ADR-293 D27): it is not a
+        // position, and `at` is for positions.
+        let form = self.map_key(index, true)
+        if form != null {
+            out.push(", ")
+            self.emit_core_key(world, walk, out, host, form ?? return, index, depth, flow, scope)
+            out.push(", __nikaia_stored); }")
+            return
+        }
+        // A literal position is written as the `usize` it is.
+        match index {
+            Expr::LitInt { value: number, negative, .. } => {
+                if !negative {
+                    out.push(f", {number}usize, __nikaia_stored); }}")
+                    return
+                }
+            },
+            else => {}
+        }
+        if walk.never_negative(world, scope.function, index) {
+            out.push(", (")
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            out.push(") as usize, __nikaia_stored); }")
+            return
+        }
+        out.push(", nikaia_std::index::at(")
+        self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+        out.push("), __nikaia_stored); }")
+    }
+
+    /// **A field of a held struct is written through its handle** (ADR-283
+    /// D17): the value first, and then a closure that is handed the struct and
+    /// its keeps - where a view made outside is found again in them, or copied
+    /// into them, before it is stored.
+    fn emit_stmt_assign_held[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, keeper: ref Expr, index: ref Expr, field: winnow_grammar::Symbol, op: ref BinaryOp?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = span.start as i64
+        let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+        out.push("{ let __nikaia_stored = ")
+        out.push(before)
+        host.expr(walk, out, value, depth, flow, scope)
+        out.push(after)
+        out.push("; ")
+        host.expr(walk, out, keeper, depth, flow.place(), scope)
+        if only_literals(index) {
+            out.push("[")
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+            out.push("]")
+        } else {
+            out.push("[nikaia_std::index::at(")
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            out.push(")]")
+        }
+        let carries = self.held_field_carries_view(world, walk, scope.function, keeper, field)
+        let keeps = if carries { "keeps" } else { "_" }
+        let stored = if carries { "nikaia_std::tether::Rebase::rebase(__nikaia_stored, &keeps)" } else { "__nikaia_stored" }
+        let assign = emit_stmt_op_text(op)
+        let name = escaped_name(emit_text(world, field))
+        if op == null {
+            out.push(f".with_mut(|held, {keeps}| held.{name} = {stored}); }}")
+        } else {
+            out.push(f".with_mut(|held, {keeps}| held.{name} {assign} {stored}); }}")
+        }
+    }
+
+    /// `xs[i] += d` at a position proved inside (#387): the slot is a number,
+    /// so it is read once and written back, neither without its check - the
+    /// value first, then the position, as the plain write runs them (ADR-293
+    /// D2). Where the operation is proved too it is the operation alone.
+    fn emit_stmt_assign_slot[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let at = span.start as i64
+        let given = op ?? return false
+        match target {
+            Expr::Index { base, index, .. } => {
+                if !self.facts.copied_slots.contains(at) || !self.proven_indices.contains(node_key(base)) || self.map_key(index, true) != null {
+                    return false
+                }
+                let mut lent_on = false
+                match base {
+                    Expr::Variable(name, _) => {
+                        lent_on = self.changes_in_place(scope.function, emit_text(world, name))
+                    },
+                    else => {}
+                }
+                out.push("{ let __nikaia_stored = ")
+                host.expr(walk, out, value, depth, flow, scope)
+                out.push("; let __nikaia_at = (")
+                if only_literals(index) {
+                    self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+                } else {
+                    self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+                }
+                out.push(") as usize; ")
+                out.push("let __nikaia_stored = ")
+                let arithmetic = self.proven_arithmetic.get(at)
+                let wide = given == BinaryOp::Add || given == BinaryOp::Sub || given == BinaryOp::Mul
+                if arithmetic != null && wide {
+                    out.push(f"unsafe {{ {emit_flow_proven(given)}::<{arithmetic ?? ""}>(")
+                    self.emit_stmt_proven_read(walk, out, host, base, depth, flow, scope)
+                    out.push(", __nikaia_stored) }")
+                } else {
+                    self.emit_stmt_proven_read(walk, out, host, base, depth, flow, scope)
+                    out.push(f" {binary_op(given)} __nikaia_stored")
+                }
+                if lent_on {
+                    out.push("; unsafe { nikaia_std::proven::write(&mut *")
+                } else {
+                    out.push("; unsafe { nikaia_std::proven::write(&mut ")
+                }
+                host.expr(walk, out, base, depth, flow.place(), scope)
+                out.push(", __nikaia_at, __nikaia_stored) }; }")
+                return true
+            },
+            else => return false,
+        }
+    }
+
+    /// The slot read once, unchecked.
+    fn emit_stmt_proven_read[H: EmitHost](ref self, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        out.push("*unsafe { nikaia_std::proven::read(&")
+        host.expr(walk, out, base, depth, flow.place(), scope)
+        out.push(", __nikaia_at) }")
+    }
+
+    /// `x += d` proved to stay inside its type (#387) is written as the
+    /// operation it is, without its check, as `x = x + d` would be (ADR-306
+    /// D10); so is `x.f += d`, a fold's counter (ADR-367 D3).
+    fn emit_stmt_assign_proven[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let at = span.start as i64
+        let given = op ?? return false
+        if given != BinaryOp::Add && given != BinaryOp::Sub && given != BinaryOp::Mul {
+            return false
+        }
+        let ty = self.proven_arithmetic.get(at) ?? return false
+        let place = match target {
+            Expr::Variable(_, _) => true,
+            Expr::Field { .. } => true,
+            else => false,
+        }
+        if !place {
+            return false
+        }
+        host.expr(walk, out, target, depth, flow.place(), scope)
+        out.push(f" = unsafe {{ {emit_flow_proven(given)}::<{ty}>(")
+        host.expr(walk, out, target, depth, flow, scope)
+        out.push(", ")
+        host.expr(walk, out, value, depth, flow, scope)
+        out.push(") };")
+        return true
+    }
+
+    /// `for`: a loop over a type's fields is the block once per field (ADR-304
+    /// D5, D6); a step that pauses is a `.next().await` loop (ADR-172 D1); else
+    /// Rust's own `for`, which lends what is a place (ADR-094 D4).
+    fn emit_stmt_for[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], iter: ref Expr, body: ref Block, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = span.start as i64
+        if walk.specialising != null {
+            let parameter = (walk.specialising?.first ?? "").clone()
+            let on = (walk.specialising?.second ?? "").clone()
+            let fields = self.unrolls_here(world, parameter, on, iter)
+            if fields != null {
+                let mut first = "".clone()
+                if bindings.len() != 0 {
+                    first = emit_text(world, bindings[0])
+                }
+                let list = fields ?? return
+                for field in list {
+                    let outer = walk.at_field?.clone()
+                    walk.at_field = EmitPair { first: first.clone(), second: field.name.clone() }
+                    self.emit_core_block(world, walk, out, host, body, depth, flow, scope, EmitTail::Statement)
+                    walk.at_field = outer
+                }
+                return
+            }
+        }
+        let mut each: Vec[String] = []
+        for one in bindings {
+            each.push(self.emit_stmt_local(emit_text(world, one)))
+        }
+        let names = each.join(", ")
+        let bound = emit_stmt_tuple_pattern(each, shape)
+        // **A step that pauses is a loop that gives its thread up** (ADR-172
+        // D1): the sequence is bound once and stepped with a `.next().await`.
+        // Off the checker's set and not off the shape, as the `?` below is.
+        if self.facts.pausing_loops.contains(at) {
+            // ADR-025 D1's `?`: a step that can fail fails the enclosing
+            // function.
+            let mut unwrap: String? = null
+            if self.facts.fallible_loops.contains(at) {
+                unwrap = f"let {bound} = {bound}?;"
+            }
+            let pad = "    ".repeat(depth)
+            let inner = "    ".repeat(depth + 1)
+            out.push("{\n")
+            out.push(inner)
+            out.push("let mut __nikaia_sequence = ")
+            host.expr(walk, out, iter, depth + 1, flow, scope)
+            // A produced sequence is walked by value (ADR-105 D2).
+            out.push(";\n")
+            out.push(inner)
+            out.push(f"while let Some({bound}) = __nikaia_sequence.next().await ")
+            self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))
+            out.push("\n")
+            out.push(pad)
+            out.push("}")
+            return
+        }
+        out.push(f"for {bound} in ")
+        // **A `for` lends** (ADR-094 D4), a place and not a call, a range or a
+        // literal; **a name holding a sequence is not a place that lends**
+        // (ADR-293 D19): the checker says which loops walk by value.
+        let lends = is_a_place(iter) && !self.facts.owned_loops.contains(at)
+        self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)
+        if lends {
+            out.push(".iter()")
+            if self.reads_through_handle(world, walk, scope.function, iter) {
+                out.push(".map(|held| held.get())")
+            }
+        }
+        out.push(" ")
+        // ADR-025 D1: a step that can fail fails the enclosing function.
+        let mut unwrap: String? = null
+        if self.facts.fallible_loops.contains(at) {
+            unwrap = f"let {names} = {names}?;"
+        }
+        // **A number, a `bool` or a `char` is read out of the view once, where
+        // the body opens** (`Checked::copied_loop_bindings`, ADR-182 D1, D5).
+        let mut copied = ""
+        for one in bindings {
+            if self.facts.copied_loop_bindings.contains((at, emit_text(world, one))) {
+                let name = self.emit_stmt_local(emit_text(world, one))
+                copied += f"let {name} = nikaia_std::num::value({name});"
+            }
+        }
+        for one in bindings {
+            if self.facts.copied_view_bindings.contains((at, emit_text(world, one))) {
+                let name = self.emit_stmt_local(emit_text(world, one))
+                copied += f"let {name} = *{name};"
+            }
+        }
+        let mut opening: String? = null
+        if copied == "" {
+            opening = unwrap
+        } else if unwrap == null {
+            opening = copied.clone()
+        } else {
+            opening = f"{unwrap ?? ""} {copied}"
+        }
+        self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))
+    }
+
+    /// What a `for` iterates over, written.
+    fn emit_stmt_for_iter[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, iter: ref Expr, lends: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match iter {
+            // **A range written into the `for` stays the language below's own**
+            // (ADR-293 D18): it is walked once, where it stands.
+            Expr::Range { .. } => {
+                self.emit_core_bare_range(world, walk, out, host, iter, depth, flow, scope)
+                return
+            },
+            // **So does a list written into it**: walked once and dropped, it is
+            // an array, which Rust walks by value. Not an empty one, whose
+            // element type nothing would say.
+            Expr::ListLit { items, .. } => {
+                if !lends && items.len() != 0 {
+                    out.push("[")
+                    let mut i = 0
+                    for item in items {
+                        if i > 0 {
+                            out.push(", ")
+                        }
+                        host.expr(walk, out, item, depth, flow, scope)
+                        i += 1
+                    }
+                    out.push("]")
+                    return
+                }
+            },
+            else => {}
+        }
+        // **An element walked is a read with a postfix after it** (0.0.250):
+        // `(*get(&v, i)).iter()`, parenthesised.
+        if lends {
+            self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)
+        } else {
+            host.expr(walk, out, iter, depth, flow, scope)
+        }
+    }
+
+    /// A statement that is an expression: an `if` or a `match` in statement
+    /// position is not a value and its branches are not tails; otherwise a tail
+    /// is a `return` written without the word, so the `&` it may owe is the same.
+    fn emit_stmt_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, expr: ref Expr, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = span.start as i64
+        let is_return = match tail {
+            EmitTail::Return => true,
+            else => false,
+        }
+        let is_statement = match tail {
+            EmitTail::Statement => true,
+            else => false,
+        }
+        // An `if` in *statement* position is not a value: emitting its branches
+        // as tails would stop a `return` at the end of a branch returning.
+        match expr {
+            Expr::If { cond, then_branch, else_branch, .. } => {
+                self.emit_core_if_expr(world, walk, out, host, cond, then_branch, else_branch, depth, flow, scope, tail)
+                return
+            },
+            Expr::Match { .. } => {
+                // A `match` in statement position, for the `if`'s reason.
+                if is_statement {
+                    host.expr(walk, out, expr, depth, flow with { arms_are_statements: true }, scope)
+                    return
+                }
+            },
+            else => {}
+        }
+        // A `match` or `if` whose arms all leave has no value to wrap (#696):
+        // only the arms that come to one are handed back.
+        let is_null = match expr {
+            Expr::LitNull(_) => true,
+            else => false,
+        }
+        let either = is_return && call_returns_either(world.words, world.items, scope.function) && !is_null && !never_a_value(expr) && !self.facts.mixed_choices.contains(node_key(expr)) && !self.facts.mixed_leaves.contains_key(node_key(expr))
+        if either {
+            out.push("nikaia_std::either_text::either(")
+        }
+        if is_return && self.facts.lent_returns.contains(at) {
+            out.push("&")
+        }
+        host.expr(walk, out, expr, depth, flow, scope)
+        if either {
+            out.push(")")
+        }
+        // `if x { … };` is legal and noisy; a block-shaped statement ends where
+        // its brace does.
+        let block_shaped = match expr {
+            Expr::If { .. } => true,
+            Expr::Block(_, _) => true,
+            Expr::Unsafe(_, _) => true,
+            Expr::Overlap(_, _) => true,
+            else => false,
+        }
+        if !tail.is_value() && !block_shaped {
+            out.push(";")
+        }
     }
 }

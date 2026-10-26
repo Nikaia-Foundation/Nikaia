@@ -563,3 +563,9 @@ statement order, the `plain_tasks` note of a spawned `let`, and the fast-hash an
 `filled_at_once`, `settle_kind`, `makes_a_map`, `stmt_written` and the three bodies (about 290 lines).
 Still Rust: `a_stmt` (about 950 lines, reached through `host.a_stmt`) and its callees (`handed_back`,
 `around_value`, `returns_either`, keeps, `map_key`, `index_expr`...). Next: E11-4b part 2, `a_stmt`.
+
+E11-4b switched: `Emitter::a_stmt` is `EmitState::emit_stmt_a_stmt` in `tools/emit_stmt.nika` (let,
+comptime, the five kinds of assignment, `while`, `for`, `break`/`continue`, `return`, expression
+statements); `EmitHost::a_stmt` is gone, and the host gained `given_up_unmuted` and `given_up_rebound`.
+The Rust helpers only it called (`around_value`, `handed_back`, `map_key`, keeps, `tuple_pattern`...) are
+deleted. Next: E11-4c.

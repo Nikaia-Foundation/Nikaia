@@ -19,6 +19,56 @@ pub(crate) fn emit_stmt_makes_a_map(world: &EmitWorld<'_, '_, '_, '_>, node: &Ex
 
 pub(crate) fn emit_stmt_first(buf: &str, what: &str, from: i64) -> i64 { nikaia_std::index::or(nikaia_std::search::find(&buf, &what, from), || 9223372036854775807i64) }
 
+pub(crate) fn emit_stmt_tuple_pattern(names: &[String], shape: &[i64]) -> String {
+    if shape.is_empty() {
+        if names.len() == 1 { return (*nikaia_std::index::get(&names, 0)).to_owned(); }
+        return format!("({})", names.join(", "));
+    }
+    if *nikaia_std::index::get(&shape, 0) == -1 { return format!("({})", names.join(", ")); }
+    let mut at: i64 = 0;
+    let mut next: i64 = 0;
+    emit_stmt_tuple_part(names, shape, &mut at, &mut next)
+}
+
+pub(crate) fn emit_stmt_tuple_part(names: &[String], shape: &[i64], at: &mut i64, next: &mut i64) -> String {
+    let mut width: i64 = 0;
+    if *at < shape.len() as i64 { width = *nikaia_std::index::get(&shape, nikaia_std::index::at(*at)); }
+    *at += 1;
+    if width <= 0 {
+        let mut name = "_".to_owned();
+        if *next < names.len() as i64 { name = (*nikaia_std::index::get(&names, nikaia_std::index::at(*next))).to_owned(); }
+        *next += 1;
+        return name;
+    }
+    let mut parts: Vec<String> = vec![];
+    for _ in 0..width { parts.push(emit_stmt_tuple_part(names, shape, at, next)); }
+    format!("({})", parts.join(", "))
+}
+
+pub(crate) fn emit_stmt_put_call(keep: &KeepAt) -> String {
+    let method = match keep {
+        KeepAt::Element(_) => "put_viewed",
+        KeepAt::Task => "put_viewed",
+        KeepAt::Param => "put_viewed",
+        _ => "put",
+    };
+    format!("{}.{}(", emit_keep_expr(keep, false), method)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EmitStmtKept {
+    pub(crate) put: Option<String>,
+    pub(crate) packed: bool,
+    pub(crate) holding: Option<i64>,
+}
+
+pub(crate) fn emit_stmt_kept_none() -> EmitStmtKept { EmitStmtKept { put: None, packed: false, holding: None } }
+
+pub(crate) fn emit_stmt_op_text(op: Option<&BinaryOp>) -> String {
+    let given = match op { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    format!("{}=", binary_op(*given))
+}
+
 impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -164,9 +214,553 @@ impl EmitState {
         };
         let loose = walk.unpinned;
         if pinned { walk.unpinned = false; }
-        host.a_stmt(walk, out, node, span, depth, tail, flow, scope)?;
+        self.emit_stmt_a_stmt(world, walk, out, host, node, span, depth, tail, flow, scope)?;
         walk.trusting = outer;
         walk.unpinned = loose;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_a_stmt<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        let here = flow.at(at);
+        self.write_keep_prelude(walk, out, &scope.function, at, depth);
+        self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, tail, here, scope)?;
+        match node {
+            Stmt::Let { names, shape, mutable, ty, value } => { let mutable = *mutable; self.emit_stmt_let(world, walk, out, host, names, shape, mutable, (ty).as_ref(), value, span, depth, here, scope)?; },
+            Stmt::Comptime { name, .. } => {
+                let name = *name;
+                let bound = emit_text(world, name);
+                let found = self.facts.comptime_values.get(&at);
+                if found.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` has no value computed at build time. This is a compiler bug: the check should have reported it first.", bound), at: Some(at) }, &"emit_stmt_a_stmt")); }
+                let pair = match found { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                let below = pair.0.clone();
+                let written = pair.1.clone();
+                if self.facts.folded_comptimes.contains(&bound) { out.push("#[allow(dead_code)]\n"); }
+                out.push(&format!("const {}: {} = {};", bound, below, written));
+            },
+            Stmt::Assign { target, op, value } => { self.emit_stmt_assign(world, walk, out, host, target, (op).as_ref(), value, span, depth, here, scope)?; },
+            Stmt::While { cond, body } => {
+                let mut forever = false;
+                match cond {
+                    Expr::LitBool(truth, _) => {
+                        let truth = *truth;
+                        forever = truth;
+                    },
+                    _ => { },
+                }
+                if forever { out.push("loop "); } else {
+                    out.push("while ");
+                    host.expr(walk, out, cond, depth, here, scope)?;
+                    out.push(" ");
+                }
+                self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), None))?;
+            },
+            Stmt::For { bindings, shape, iter, body } => { self.emit_stmt_for(world, walk, out, host, bindings, shape, iter, body, span, depth, here, scope)?; },
+            Stmt::Break => { self.emit_stmt_jump(out, String::from("break"), here)?; },
+            Stmt::Continue => { self.emit_stmt_jump(out, String::from("continue"), here)?; },
+            Stmt::Return(value) => {
+                let is_return = matches!(tail, EmitTail::Return);
+                if value.is_some() {
+                    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                    if is_return { self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)?; } else if here.can_throw {
+                        out.push("return Ok(");
+                        self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)?;
+                        out.push(");");
+                    } else {
+                        out.push("return ");
+                        self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)?;
+                        out.push(";");
+                    }
+                } else if here.can_throw { out.push("return Ok(());"); } else { out.push("return;"); }
+            },
+            Stmt::Expr(expr) => { self.emit_stmt_expr(world, walk, out, host, expr, span, depth, tail, here, scope)?; },
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_stmt_jump(&self, out: &mut EmitOut, word: String, flow: EmitFlow) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if !flow.in_loop { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` only works inside a loop, and there's none here.", word), at: Some(flow.statement) }, &"emit_stmt_jump")); }
+        out.push(&format!("{};", word));
+        Ok(())
+    }
+    pub(crate) fn emit_stmt_local(&self, name: &str) -> String { emit_local_name(&self.facts.comptime_names, name) }
+    pub(crate) fn emit_stmt_kept(&self, walk: &EmitWalk, function: &str, at: i64, bound: &str) -> EmitStmtKept {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() };
+        let mut put: Option<String> = None;
+        let keep = plan.puts.get(&at);
+        if keep.is_some() { put = Some(emit_stmt_put_call(match keep { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() })); }
+        let packed = nikaia_std::index::or(plan.tethered.get(bound), || -1) == at;
+        let mut holding: Option<i64> = None;
+        if plan.element_keepers.contains(bound) { holding = Some(nikaia_std::index::or(plan.widths.get(bound), || 1)); }
+        EmitStmtKept { put, packed, holding }
+    }
+    pub(crate) fn emit_stmt_reput(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let keep = match plan.reputs.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(emit_stmt_put_call(&keep))
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_annotation<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: Option<&Type>, at: i64, count: Count, kept: bool) -> String {
+        if ty.is_none() {
+            let found = match self.facts.number_lets.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+            return format!(": {}", found);
+        }
+        if kept { return String::from(""); }
+        let own = match ty { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let written = self.emit_core_ty_counted(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), own, EmitLifetimes::Elided, count);
+        format!(": {}", host.seeded(written))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_let<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        let unmuted = host.given_up_unmuted(at) || self.facts.mut_view_reads.contains_key(&node_key(value));
+        let mut_word = if mutable && !unmuted { "mut " } else { "" };
+        if names.len() > 1 || !shape.is_empty() {
+            let mut bound: Vec<String> = vec![];
+            for each in names.iter() {
+                let each = *each;
+                bound.push(self.emit_stmt_local(&emit_text(world, each)));
+            }
+            let pattern = emit_stmt_tuple_pattern(&bound, shape);
+            out.push(&format!("let {}{} = ", mut_word, pattern));
+            let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+            out.push(&before);
+            if mut_word == "" && self.facts.lent_lets.contains(&at) { out.push("&"); }
+            host.expr(walk, out, value, depth, flow, scope)?;
+            out.push(&after);
+            out.push(";");
+            for each in names.iter() {
+                let each = *each;
+                if self.facts.copied_tuple_parts.contains(&(at, emit_text(world, each))) {
+                    let local = self.emit_stmt_local(&emit_text(world, each));
+                    out.push(&format!(" let {} = nikaia_std::num::value({});", local, local));
+                }
+            }
+            return Ok(());
+        }
+        let bound = emit_text(world, *nikaia_std::index::get(&names, 0));
+        let count = self.count_at(host.crossings_are_possible(), &scope.function, &bound);
+        let inner = EmitScope { bound: bound.to_owned(), ..scope.clone() };
+        let kept = self.emit_stmt_kept(&walk, &scope.function, at, &bound);
+        walk.holding = kept.holding;
+        let annotation = self.emit_stmt_annotation(world, walk, host, ty, at, count, kept.put.is_some() || kept.packed);
+        walk.holding = None;
+        let local = self.emit_stmt_local(&bound);
+        if kept.packed {
+            let held = emit_tethered_type(world, ty, value);
+            if held.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` is passed to a task and keeps data alive, so it needs its type written out: `let {}: … = …`.", bound, bound), at: Some(at) }, &"emit_stmt_let")); }
+            let wrapper = self.emit_core_tether_wrapper(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), &match held { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) });
+            out.push(&format!("let {}{} = {{ let __packed = ", mut_word, local));
+            host.expr(walk, out, value, depth, flow, &inner)?;
+            out.push(&format!("; nikaia_std::tether::Holding::<{}, 1>::new([std::sync::Arc::clone(&__keep_task)], move |keeps| nikaia_std::tether::Rebase::rebase(__packed, &keeps)) }};", wrapper));
+            return Ok(());
+        }
+        if kept.put.is_some() {
+            out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || "")));
+            host.expr(walk, out, value, depth, flow, &inner)?;
+            out.push(");");
+            return Ok(());
+        }
+        let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+        out.push(&format!("let {}{}{} = ", mut_word, local, annotation));
+        out.push(&before);
+        if self.facts.lent_lets.contains(&at) { out.push("&"); }
+        let viewed = match value {
+            Expr::Variable(name, _) => { let name = *name; self.facts.viewed_numbers.contains(&(flow.statement, emit_text(world, name))) },
+            _ => false,
+        };
+        self.emit_core_operand(world, walk, out, host, value, viewed, depth, flow, &inner)?;
+        out.push(&after);
+        out.push(";");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_assign<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, target: &Expr, op: Option<&BinaryOp>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        if op.is_none() {
+            match target {
+                Expr::Index { base, index, .. } => {
+                    let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                    self.emit_stmt_assign_index(world, walk, out, host, base, index, value, span, depth, flow, scope)?;
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
+        match target {
+            Expr::Field { base: element, name: field, .. } => {
+                let element = nikaia_std::boxed::open(element); let field = *field;
+                match element {
+                    Expr::Index { base: keeper, index, .. } => {
+                        let keeper = nikaia_std::boxed::open(keeper); let index = nikaia_std::boxed::open(index);
+                        if self.reads_through_handle(world, &walk, &scope.function, keeper) {
+                            self.emit_stmt_assign_held(world, walk, out, host, keeper, index, field, op, value, span, depth, flow, scope)?;
+                            return Ok(());
+                        }
+                    },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+        if self.emit_stmt_assign_slot(world, walk, out, host, target, op, value, span, depth, flow, scope)? { return Ok(()); }
+        if self.emit_stmt_assign_proven(world, walk, out, host, target, op, value, span, depth, flow, scope)? { return Ok(()); }
+        let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+        match target {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                if self.changes_in_place(&scope.function, &emit_text(world, name)) { out.push("*"); }
+            },
+            _ => { },
+        }
+        let rebound = host.given_up_rebound(at);
+        if rebound.is_some() { if nikaia_std::index::or(rebound, || false) { out.push("let mut "); } else { out.push("let "); } }
+        host.expr(walk, out, target, depth, flow.place(), scope)?;
+        if op.is_none() { out.push(" = "); } else { out.push(&format!(" {} ", emit_stmt_op_text(op))); }
+        let reput = self.emit_stmt_reput(&walk, &scope.function, at);
+        let reputted = reput.is_some();
+        if reputted { out.push(nikaia_std::index::or(reput.as_deref(), || "")); }
+        out.push(&before);
+        let mut own_view = false;
+        if op.is_none() {
+            match target {
+                Expr::Variable(assigned, _) => {
+                    let assigned = *assigned;
+                    match value {
+                        Expr::MethodCall { receiver, method, args, .. } => {
+                            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                            if args.is_empty() && emit_text(world, method) == "into_either" {
+                                let mut mentions = false;
+                                for inner in visited_in_expr(receiver) {
+                                    match inner {
+                                        Expr::Variable(read, _) => {
+                                            let read = *read;
+                                            if emit_text(world, read) == emit_text(world, assigned) { mentions = true; }
+                                        },
+                                        _ => { },
+                                    }
+                                }
+                                if mentions {
+                                    self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?;
+                                    out.push(".to_owned().into_either()");
+                                    own_view = true;
+                                }
+                            }
+                        },
+                        _ => { },
+                    }
+                },
+                _ => { },
+            }
+        }
+        let appended = op.is_some() && self.facts.appended_texts.contains(&at);
+        if appended { out.push("::core::convert::AsRef::<str>::as_ref(&"); }
+        if !own_view { host.expr(walk, out, value, depth, flow, scope)?; }
+        if appended { out.push(")"); }
+        out.push(&after);
+        if reputted { out.push(")"); }
+        out.push(";");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_assign_index<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, index: &Expr, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+        out.push("{ let __nikaia_stored = ");
+        out.push(&before);
+        host.expr(walk, out, value, depth, flow, scope)?;
+        out.push(&after);
+        let mut lent_on = false;
+        match base {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                lent_on = self.changes_in_place(&scope.function, &emit_text(world, name));
+            },
+            _ => { },
+        }
+        if self.proven_indices.contains(&node_key(base)) && self.map_key(index, true).is_none() {
+            if lent_on { out.push("; unsafe { nikaia_std::proven::write(&mut *"); } else { out.push("; unsafe { nikaia_std::proven::write(&mut "); }
+            host.expr(walk, out, base, depth, flow.place(), scope)?;
+            out.push(", (");
+            if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
+            out.push(") as usize, __nikaia_stored) }; }");
+            return Ok(());
+        }
+        if lent_on { out.push("; nikaia_std::index::set(&mut *"); } else { out.push("; nikaia_std::index::set(&mut "); }
+        host.expr(walk, out, base, depth, flow.place(), scope)?;
+        let form = self.map_key(index, true);
+        if form.is_some() {
+            out.push(", ");
+            self.emit_core_key(world, walk, out, host, match form { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }, index, depth, flow, scope)?;
+            out.push(", __nikaia_stored); }");
+            return Ok(());
+        }
+        match index {
+            Expr::LitInt { value: number, negative, .. } => {
+                let negative = *negative; let number = *number;
+                if !negative {
+                    out.push(&format!(", {}usize, __nikaia_stored); }}", number));
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
+        if walk.never_negative(world, &scope.function, index) {
+            out.push(", (");
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?;
+            out.push(") as usize, __nikaia_stored); }");
+            return Ok(());
+        }
+        out.push(", nikaia_std::index::at(");
+        self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?;
+        out.push("), __nikaia_stored); }");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_assign_held<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, keeper: &Expr, index: &Expr, field: winnow_grammar::Symbol, op: Option<&BinaryOp>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+        out.push("{ let __nikaia_stored = ");
+        out.push(&before);
+        host.expr(walk, out, value, depth, flow, scope)?;
+        out.push(&after);
+        out.push("; ");
+        host.expr(walk, out, keeper, depth, flow.place(), scope)?;
+        if only_literals(index) {
+            out.push("[");
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?;
+            out.push("]");
+        } else {
+            out.push("[nikaia_std::index::at(");
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?;
+            out.push(")]");
+        }
+        let carries = self.held_field_carries_view(world, &walk, &scope.function, keeper, field);
+        let keeps = if carries { "keeps" } else { "_" };
+        let stored = if carries { "nikaia_std::tether::Rebase::rebase(__nikaia_stored, &keeps)" } else { "__nikaia_stored" };
+        let assign = emit_stmt_op_text(op);
+        let name = escaped_name(&emit_text(world, field));
+        if op.is_none() { out.push(&format!(".with_mut(|held, {}| held.{} = {}); }}", keeps, name, stored)); } else { out.push(&format!(".with_mut(|held, {}| held.{} {} {}); }}", keeps, name, assign, stored)); }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_assign_slot<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, target: &Expr, op: Option<&BinaryOp>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        let given = match op { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        Ok(match target {
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                if !self.facts.copied_slots.contains(&at) || !self.proven_indices.contains(&node_key(base)) || self.map_key(index, true).is_some() { return Ok(false); }
+                let mut lent_on = false;
+                match base {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        lent_on = self.changes_in_place(&scope.function, &emit_text(world, name));
+                    },
+                    _ => { },
+                }
+                out.push("{ let __nikaia_stored = ");
+                host.expr(walk, out, value, depth, flow, scope)?;
+                out.push("; let __nikaia_at = (");
+                if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
+                out.push(") as usize; ");
+                out.push("let __nikaia_stored = ");
+                let arithmetic = self.proven_arithmetic.get(&at);
+                let wide = *given == BinaryOp::Add || *given == BinaryOp::Sub || *given == BinaryOp::Mul;
+                if arithmetic.is_some() && wide {
+                    out.push(&format!("unsafe {{ {}::<{}>(", emit_flow_proven(*given), nikaia_std::index::or(arithmetic, || "")));
+                    self.emit_stmt_proven_read(walk, out, host, base, depth, flow, scope)?;
+                    out.push(", __nikaia_stored) }");
+                } else {
+                    self.emit_stmt_proven_read(walk, out, host, base, depth, flow, scope)?;
+                    out.push(&format!(" {} __nikaia_stored", binary_op(*given)));
+                }
+                if lent_on { out.push("; unsafe { nikaia_std::proven::write(&mut *"); } else { out.push("; unsafe { nikaia_std::proven::write(&mut "); }
+                host.expr(walk, out, base, depth, flow.place(), scope)?;
+                out.push(", __nikaia_at, __nikaia_stored) }; }");
+                return Ok(true);
+            },
+            _ => return Ok(false),
+        })
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_proven_read<H: EmitHost>(&self, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        out.push("*unsafe { nikaia_std::proven::read(&");
+        host.expr(walk, out, base, depth, flow.place(), scope)?;
+        out.push(", __nikaia_at) }");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_assign_proven<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, target: &Expr, op: Option<&BinaryOp>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        let given = match op { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        if *given != BinaryOp::Add && *given != BinaryOp::Sub && *given != BinaryOp::Mul { return Ok(false); }
+        let ty = match self.proven_arithmetic.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let place = matches!(target, Expr::Variable(_, _) | Expr::Field { .. });
+        if !place { return Ok(false); }
+        host.expr(walk, out, target, depth, flow.place(), scope)?;
+        out.push(&format!(" = unsafe {{ {}::<{}>(", emit_flow_proven(*given), ty));
+        host.expr(walk, out, target, depth, flow, scope)?;
+        out.push(", ");
+        host.expr(walk, out, value, depth, flow, scope)?;
+        out.push(") };");
+        Ok(true)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_for<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], iter: &Expr, body: &Block, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        if walk.specialising.is_some() {
+            let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_owned();
+            let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_owned();
+            let fields = self.unrolls_here(world, &parameter, &on, iter);
+            if fields.is_some() {
+                let mut first = "".to_owned();
+                if !bindings.is_empty() { first = emit_text(world, *nikaia_std::index::get(&bindings, 0)); }
+                let list = match fields { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                for field in list.iter() {
+                    let outer = match walk.at_field.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    };
+                    walk.at_field = Some(EmitPair { first: first.to_owned(), second: field.name.to_owned() });
+                    self.emit_core_block(world, walk, out, host, body, depth, flow, scope, EmitTail::Statement)?;
+                    walk.at_field = outer;
+                }
+                return Ok(());
+            }
+        }
+        let mut each: Vec<String> = vec![];
+        for one in bindings.iter() {
+            let one = *one;
+            each.push(self.emit_stmt_local(&emit_text(world, one)));
+        }
+        let names = each.join(", ");
+        let bound = emit_stmt_tuple_pattern(&each, shape);
+        if self.facts.pausing_loops.contains(&at) {
+            let mut unwrap: Option<String> = None;
+            if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", bound, bound)); }
+            let pad = "    ".repeat(nikaia_std::count::of(depth));
+            let inner = "    ".repeat(nikaia_std::count::of(depth + 1));
+            out.push("{\n");
+            out.push(&inner);
+            out.push("let mut __nikaia_sequence = ");
+            host.expr(walk, out, iter, depth + 1, flow, scope)?;
+            out.push(";\n");
+            out.push(&inner);
+            out.push(&format!("while let Some({}) = __nikaia_sequence.next().await ", bound));
+            self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))?;
+            out.push("\n");
+            out.push(&pad);
+            out.push("}");
+            return Ok(());
+        }
+        out.push(&format!("for {} in ", bound));
+        let lends = is_a_place(iter) && !self.facts.owned_loops.contains(&at);
+        self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)?;
+        if lends {
+            out.push(".iter()");
+            if self.reads_through_handle(world, &walk, &scope.function, iter) { out.push(".map(|held| held.get())"); }
+        }
+        out.push(" ");
+        let mut unwrap: Option<String> = None;
+        if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", names, names)); }
+        let mut copied = String::from("");
+        for one in bindings.iter() {
+            let one = *one;
+            if self.facts.copied_loop_bindings.contains(&(at, emit_text(world, one))) {
+                let name = self.emit_stmt_local(&emit_text(world, one));
+                copied += ::core::convert::AsRef::<str>::as_ref(&format!("let {} = nikaia_std::num::value({});", name, name));
+            }
+        }
+        for one in bindings.iter() {
+            let one = *one;
+            if self.facts.copied_view_bindings.contains(&(at, emit_text(world, one))) {
+                let name = self.emit_stmt_local(&emit_text(world, one));
+                copied += ::core::convert::AsRef::<str>::as_ref(&format!("let {} = *{};", name, name));
+            }
+        }
+        let mut opening: Option<String> = None;
+        if copied == "" { opening = unwrap; } else if unwrap.is_none() { opening = Some(copied.to_owned()); } else { opening = Some(format!("{} {}", nikaia_std::index::or(unwrap.as_deref(), || ""), copied)); }
+        self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_for_iter<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, iter: &Expr, lends: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        match iter {
+            Expr::Range { .. } => {
+                self.emit_core_bare_range(world, walk, out, host, iter, depth, flow, scope)?;
+                return Ok(());
+            },
+            Expr::ListLit { items, .. } => {
+                if !lends && !items.is_empty() {
+                    out.push("[");
+                    let mut i = 0;
+                    for item in items.iter() {
+                        if i > 0 { out.push(", "); }
+                        host.expr(walk, out, item, depth, flow, scope)?;
+                        i += 1;
+                    }
+                    out.push("]");
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
+        if lends { self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)?; } else { host.expr(walk, out, iter, depth, flow, scope)?; }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, expr: &Expr, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let at = span.start as i64;
+        let is_return = matches!(tail, EmitTail::Return);
+        let is_statement = matches!(tail, EmitTail::Statement);
+        match expr {
+            Expr::If { cond, then_branch, else_branch, .. } => {
+                let cond = nikaia_std::boxed::open(cond);
+                self.emit_core_if_expr(world, walk, out, host, cond, then_branch, (else_branch).as_ref(), depth, flow, scope, tail)?;
+                return Ok(());
+            },
+            Expr::Match { .. } => {
+                if is_statement {
+                    host.expr(walk, out, expr, depth, EmitFlow { arms_are_statements: true, ..flow }, scope)?;
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
+        let is_null = matches!(expr, Expr::LitNull(_));
+        let either = is_return && call_returns_either(world.words, world.items, &scope.function) && !is_null && !never_a_value(expr) && !self.facts.mixed_choices.contains(&node_key(expr)) && !self.facts.mixed_leaves.contains_key(&node_key(expr));
+        if either { out.push("nikaia_std::either_text::either("); }
+        if is_return && self.facts.lent_returns.contains(&at) { out.push("&"); }
+        host.expr(walk, out, expr, depth, flow, scope)?;
+        if either { out.push(")"); }
+        let block_shaped = matches!(expr, Expr::If { .. } | Expr::Block(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _));
+        if !tail.is_value() && !block_shaped { out.push(";"); }
         Ok(())
     }
 }
