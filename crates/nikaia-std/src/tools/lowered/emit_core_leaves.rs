@@ -47,10 +47,10 @@ impl EmitState {
         if self.hole_wraps.contains_key(&at) {
             let wraps = match self.hole_wraps.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let wrapped = host.wrap_hole(node, &wraps);
-            host.expr(walk, out, &wrapped, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, &wrapped, depth, flow, scope)?;
             return Ok(());
         }
-        host.expr(walk, out, node, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -66,23 +66,23 @@ impl EmitState {
         if kind == 3 {
             out.push("nikaia_std::index::as_text(&");
             if !emit_leaf_bare_key(index) { out.push("("); }
-            host.expr(walk, out, index, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, index, depth, flow, scope)?;
             if !emit_leaf_bare_key(index) { out.push(")"); }
             out.push(")");
             return Ok(());
         }
         if kind == 1 {
             out.push("nikaia_std::index::key(");
-            host.expr(walk, out, index, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, index, depth, flow, scope)?;
             out.push(")");
             return Ok(());
         }
         if kind == 0 {
-            host.expr(walk, out, index, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, index, depth, flow, scope)?;
             return Ok(());
         }
         if emit_leaf_bare_key(index) { out.push("&"); } else { out.push("&("); }
-        host.expr(walk, out, index, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, index, depth, flow, scope)?;
         if !emit_leaf_bare_key(index) { out.push(")"); }
         Ok(())
     }
@@ -118,7 +118,7 @@ impl EmitState {
             };
         }
         if parenthesise { out.push("("); }
-        host.expr(walk, out, node, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
         if parenthesise { out.push(")"); }
         Ok(())
     }
@@ -131,7 +131,7 @@ impl EmitState {
             _ => self.emits_as_cast(world, node) && (needs == 255 || needs == precedence(BinaryOp::Lt)),
         };
         if parenthesise { out.push("("); }
-        host.expr(walk, out, node, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
         if parenthesise { out.push(")"); }
         Ok(())
     }
@@ -142,11 +142,11 @@ impl EmitState {
         let indexed = matches!(side, Expr::Index { .. });
         if indexed {
             out.push("::core::convert::AsRef::<str>::as_ref(&");
-            host.expr(walk, out, side, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, side, depth, flow, scope)?;
             out.push(")");
             return Ok(());
         }
-        host.expr(walk, out, side, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, side, depth, flow, scope)?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -159,7 +159,7 @@ impl EmitState {
         let either = call_returns_either(world.words, world.items, &scope.function) && !is_null && !self.facts.mixed_choices.contains(&node_key(value)) && !never_a_value(value);
         if either { out.push("nikaia_std::either_text::either("); }
         if self.facts.lent_returns.contains(&at) { out.push("&"); }
-        host.expr(walk, out, value, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         if either { out.push(")"); }
         out.push(&after);
         Ok(())
@@ -250,7 +250,7 @@ impl EmitState {
             if n > 0 { out.push(", "); }
             n += 1;
             out.push(&format!("{}: ", emit_text(world, argument.name)));
-            host.expr(walk, out, &argument.value, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, &argument.value, depth, flow, scope)?;
         }
         out.push(" }");
         Ok(())
@@ -269,7 +269,7 @@ impl EmitState {
             let mut found = false;
             for a in config.iter() {
                 if !found && emit_text(world, a.name) == *option {
-                    host.expr(walk, out, &a.value, depth, flow, scope)?;
+                    self.emit_expr(world, walk, out, host, &a.value, depth, flow, scope)?;
                     found = true;
                 }
             }
@@ -283,12 +283,12 @@ impl EmitState {
     pub fn emit_core_guard_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, guard: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let reopening = self.emit_core_guard_reopening(world, host, pattern, guard);
         if reopening.is_empty() {
-            host.expr(walk, out, guard, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, guard, depth, flow, scope)?;
             return Ok(());
         }
         out.push("{ ");
         out.push(&reopening);
-        host.expr(walk, out, guard, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, guard, depth, flow, scope)?;
         out.push(" }");
         Ok(())
     }
@@ -328,14 +328,14 @@ impl EmitState {
         }
         if parallel {
             out.push(&format!("nikaia_std::grammar::parse{}_pieces(&*", over));
-            host.expr(walk, out, input, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
             let options = emit_fold_options(&name, &rule_name);
             let claimed = parallelism != "Parallelism::Off";
             out.push(&format!(", {}(), {}, |source, how| {}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", options, claimed, lowered, rule_name, question));
             return Ok(());
         }
         out.push(&format!("nikaia_std::grammar::parse{}(&*", over));
-        host.expr(walk, out, input, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
         out.push(&format!(", {}::parse_{}()){}", lowered, rule_name, question));
         Ok(())
     }
@@ -354,7 +354,7 @@ impl EmitState {
                     }
                     let parsed = match self.template_holes.get(&(site, expr.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                     out.push(&format!("{}__html.push_str(&::nikaia_std::html::Render::render(&", pad));
-                    host.expr(walk, out, &parsed, depth, flow, scope)?;
+                    self.emit_expr(world, walk, out, host, &parsed, depth, flow, scope)?;
                     out.push("));\n");
                 },
                 Segment::For { binding, collection, body } => {
@@ -412,7 +412,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>> {
-        host.block_opening_with(walk, out, block, depth, flow, scope, tail, None)?;
+        self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, flow, scope, tail, None)?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -420,7 +420,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_if_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, condition: &Expr, then_block: &Block, else_block: Option<&Block>, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>> {
         out.push("if ");
-        host.expr(walk, out, condition, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, condition, depth, flow, scope)?;
         out.push(" ");
         self.emit_core_block(world, walk, out, host, then_block, depth, flow, scope, tail)?;
         if else_block.is_none() { return Ok(()); }

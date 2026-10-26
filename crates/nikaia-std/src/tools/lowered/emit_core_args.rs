@@ -203,7 +203,7 @@ impl EmitState {
         }
         if self.facts.owned_entry_keys.contains(&node_key(arg)) {
             out.push("String::from(");
-            host.expr(walk, out, arg, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
             out.push(")");
             return Ok(());
         }
@@ -212,7 +212,7 @@ impl EmitState {
         let node = node_key(arg);
         if i == 0 && self.facts.lookup_keys.contains(&node) {
             out.push("nikaia_std::index::AsKey::as_key(&");
-            host.expr(walk, out, arg, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
             out.push(")");
             return Ok(());
         }
@@ -345,7 +345,7 @@ impl EmitState {
             for b in nikaia_std::index::or(buffers, || vec![].into()) { keeps.push(format!("std::sync::Arc::clone(&__keep_{})", b)); }
             let joined = keeps.join(", ");
             out.push("{ use nikaia_std::tether::Hold as _; (");
-            host.expr(walk, out, arg, depth, inside, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!(").hold([{}]) }}", joined));
             return Ok(());
         }
@@ -355,7 +355,7 @@ impl EmitState {
             for n in 0..kept_arity { names.push(format!("__nikaia_a{}", n)); }
             let joined = names.join(", ");
             out.push(&format!("&async |{}| (*", joined));
-            host.expr(walk, out, arg, depth, inside, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!(")({}).await", joined));
             return Ok(());
         }
@@ -376,7 +376,7 @@ impl EmitState {
             let pauses = key != "" && call_pauses(&self.own_contracts, &key);
             if arity >= 0 || pauses { out.push("async "); }
             out.push(&format!("|{}| Ok(", joined));
-            host.expr(walk, out, arg, depth, inside, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!("({})", emit_arg_passing(&names, &lent)));
             if pauses { out.push(".await"); }
             out.push(")");
@@ -389,7 +389,7 @@ impl EmitState {
             let joined = names.join(", ");
             if arity >= 0 { out.push("async "); }
             out.push(&format!("|{}| ", joined));
-            host.expr(walk, out, arg, depth, inside, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!("({}).map_err(Into::into)", emit_arg_passing(&names, &lent)));
             return Ok(());
         }
@@ -398,19 +398,19 @@ impl EmitState {
             for n in 0..lent.len() as i64 { names.push(format!("__nikaia_a{}", n)); }
             let joined = names.join(", ");
             out.push(&format!("|{}| ", joined));
-            host.expr(walk, out, arg, depth, inside, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!("({})", emit_arg_passing(&names, &lent)));
             return Ok(());
         }
         if arity < 0 {
-            host.expr(walk, out, arg, depth, inside, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             return Ok(());
         }
         let mut names: Vec<String> = vec![];
         for n in 0..arity { names.push(format!("__nikaia_a{}", n)); }
         let joined = names.join(", ");
         out.push(&format!("async |{}| ", joined));
-        host.expr(walk, out, arg, depth, inside, scope)?;
+        self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
         out.push(&format!("({})", emit_arg_passing(&names, &lent)));
         Ok(())
     }
@@ -468,7 +468,7 @@ impl EmitState {
             typed.push(format!("__nikaia_a{}: {}", n, *nikaia_std::index::get(&written, (n) as usize)));
         }
         out.push(&format!("|{}| ", typed.join(", ")));
-        host.expr(walk, out, value, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         out.push(&format!("({})", emit_arg_passing(&names, &lent)));
         Ok(true)
     }
@@ -513,7 +513,7 @@ impl EmitState {
     pub fn emit_core_called<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.emit_call_special(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.opens_a_paused_scope(world, func, args) && self.emit_call_paused_scope(world, walk, out, host, args, depth, flow, scope)? { return Ok(()); }
-        host.expr(walk, out, func, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, func, depth, flow, scope)?;
         if host.overlaps_user_code() {
             match func {
                 Expr::Path(segments, _) => { if emit_call_on_the_pool(&unaliased_in(world.aliases, &emit_arg_joined(world, segments))) { out.push("_on_pool"); } },
@@ -625,7 +625,7 @@ impl EmitState {
                 if self.facts.lent_options.contains(&node_key(&passed.value)) { out.push("&"); }
                 let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value), &passed.value);
                 out.push(&before);
-                host.expr(walk, out, &passed.value, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, &passed.value, depth, flow, scope)?;
                 out.push(&after);
                 return Ok(());
             }
@@ -721,7 +721,7 @@ impl EmitState {
                 for arg in args.iter() {
                     if at > 0 { out.push(", "); }
                     at += 1;
-                    host.expr(walk, out, arg, depth, flow, scope)?;
+                    self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
                 }
                 out.push(")");
                 return Ok(true);
@@ -763,12 +763,12 @@ impl EmitState {
                 let hulls = match self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", count) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 if hulls.len() != 2 { return Ok(false); }
                 out.push(&format!("{}::new({}::supervised_kept(", *nikaia_std::index::get(&hulls, 0), *nikaia_std::index::get(&hulls, 1)));
-                host.expr(walk, out, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
                 out.push(", ");
                 let mut named = false;
                 for a in config.iter() {
                     if !named && emit_text(world, a.name) == "policy" {
-                        host.expr(walk, out, &a.value, depth, flow, scope)?;
+                        self.emit_expr(world, walk, out, host, &a.value, depth, flow, scope)?;
                         named = true;
                     }
                 }
@@ -790,9 +790,9 @@ impl EmitState {
             for lock in args.iter() {
                 if at < last {
                     out.push("&");
-                    host.expr(walk, out, lock, depth, flow, scope)?;
+                    self.emit_expr(world, walk, out, host, lock, depth, flow, scope)?;
                     out.push(", ");
-                } else { host.expr(walk, out, lock, depth, flow, scope)?; }
+                } else { self.emit_expr(world, walk, out, host, lock, depth, flow, scope)?; }
                 at += 1;
             }
             out.push(")");
@@ -804,7 +804,7 @@ impl EmitState {
             if hulls.is_some() {
                 let paths = match hulls { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 for path in paths.iter() { out.push(&format!("{}::new(", path)); }
-                host.expr(walk, out, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
                 for _ in paths.iter() { out.push(")"); }
                 return Ok(true);
             }
@@ -844,7 +844,7 @@ impl EmitState {
                 out.push("nikaia_std::fs::path::print(&(");
                 match given {
                     Expr::LitInterpolated { parts, .. } => { self.emit_core_joined_name(world, walk, out, host, parts, &names, depth, flow, scope)?; },
-                    _ => { host.expr(walk, out, &given, depth, flow, scope)?; },
+                    _ => { self.emit_expr(world, walk, out, host, &given, depth, flow, scope)?; },
                 }
                 out.push(&format!("), {}, {})", to_err, newline));
                 return Ok(());

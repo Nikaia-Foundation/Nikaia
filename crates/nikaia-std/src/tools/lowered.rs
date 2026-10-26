@@ -1215,6 +1215,14 @@ mod emit_sums_lowered {
 #[allow(unused_imports)]
 pub use emit_sums_lowered::*;
 
+mod emit_tables_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_tables.rs");
+}
+#[allow(unused_imports)]
+pub use emit_tables_lowered::*;
+
 mod emit_text_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2370,6 +2378,10 @@ pub mod emit_state {
 }
 pub mod emit_stmt {}
 pub mod emit_sums {}
+pub mod emit_tables {
+    #[allow(unused_imports)]
+    pub use super::{emit_tables_names_outside, emit_tables_names_borrowing, emit_tables_borrowing_structs_beside, emit_tables_view_slots};
+}
 pub mod emit_text {
     #[allow(unused_imports)]
     pub use super::{rust_string, rust_format_escape, top_level_parts, format_of, truncating, checked, held_literal, plain_rust_spelling};

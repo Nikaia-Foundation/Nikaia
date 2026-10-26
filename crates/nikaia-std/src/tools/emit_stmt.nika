@@ -217,13 +217,13 @@ impl EmitState {
                     if head != null {
                         let beside = flow.at(block.stmts[i + 1].span.start as i64)
                         let mut value = EmitOut::empty()
-                        host.expr(walk, value, args[1], depth + 1, beside, scope)
+                        self.emit_expr(world, walk, value, host, args[1], depth + 1, beside, scope)
                         let mut count = EmitOut::empty()
                         if only_literals(args[0]) {
-                            host.expr(walk, count, args[0], depth + 1, beside.inferred(), scope)
+                            self.emit_expr(world, walk, count, host, args[0], depth + 1, beside.inferred(), scope)
                         } else {
                             count.push("nikaia_std::count::of(")
-                            host.expr(walk, count, args[0], depth + 1, beside, scope)
+                            self.emit_expr(world, walk, count, host, args[0], depth + 1, beside, scope)
                             count.push(")")
                         }
                         out.push(inner_pad)
@@ -343,7 +343,7 @@ impl EmitState {
                     out.push("loop ")
                 } else {
                     out.push("while ")
-                    host.expr(walk, out, cond, depth, here, scope)
+                    self.emit_expr(world, walk, out, host, cond, depth, here, scope)
                     out.push(" ")
                 }
                 self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), null))
@@ -467,7 +467,7 @@ impl EmitState {
             if mut_word == "" && self.facts.lent_lets.contains(at) {
                 out.push("&")
             }
-            host.expr(walk, out, value, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
             out.push(after)
             out.push(";")
             // A number among its parts is read out of its view.
@@ -499,13 +499,13 @@ impl EmitState {
             // lifetime the `Holding` alone decides.
             let wrapper = self.emit_core_tether_wrapper(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), held ?? return)
             out.push(f"let {mut_word}{local} = {{ let __packed = ")
-            host.expr(walk, out, value, depth, flow, inner)
+            self.emit_expr(world, walk, out, host, value, depth, flow, inner)
             out.push(f"; nikaia_std::tether::Holding::<{wrapper}, 1>::new([std::sync::Arc::clone(&__keep_task)], move |keeps| nikaia_std::tether::Rebase::rebase(__packed, &keeps)) }};")
             return
         }
         if kept.put != null {
             out.push(f"let {mut_word}{local} = {kept.put ?? ""}")
-            host.expr(walk, out, value, depth, flow, inner)
+            self.emit_expr(world, walk, out, host, value, depth, flow, inner)
             out.push(");")
             return
         }
@@ -587,7 +587,7 @@ impl EmitState {
                 out.push("let ")
             }
         }
-        host.expr(walk, out, target, depth, flow.place(), scope)
+        self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)
         if op == null {
             out.push(" = ")
         } else {
@@ -644,7 +644,7 @@ impl EmitState {
             out.push("::core::convert::AsRef::<str>::as_ref(&")
         }
         if !own_view {
-            host.expr(walk, out, value, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
         }
         if appended {
             out.push(")")
@@ -666,7 +666,7 @@ impl EmitState {
         let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
         out.push("{ let __nikaia_stored = ")
         out.push(before)
-        host.expr(walk, out, value, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
         out.push(after)
         // **A `mut` parameter is already a `&mut`** (ADR-094 D3), so it is lent
         // on again rather than borrowed a second time.
@@ -685,7 +685,7 @@ impl EmitState {
             } else {
                 out.push("; unsafe { nikaia_std::proven::write(&mut ")
             }
-            host.expr(walk, out, base, depth, flow.place(), scope)
+            self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)
             out.push(", (")
             if only_literals(index) {
                 self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
@@ -702,7 +702,7 @@ impl EmitState {
         }
         // **The container written into is a place** (0.0.238): `d[i][j] = v`
         // writes into the list `d[i]`, which the language below lends mutably.
-        host.expr(walk, out, base, depth, flow.place(), scope)
+        self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)
         // **A key the map keeps goes in as it is** (ADR-293 D27): it is not a
         // position, and `at` is for positions.
         let form = self.map_key(index, true)
@@ -742,10 +742,10 @@ impl EmitState {
         let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
         out.push("{ let __nikaia_stored = ")
         out.push(before)
-        host.expr(walk, out, value, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
         out.push(after)
         out.push("; ")
-        host.expr(walk, out, keeper, depth, flow.place(), scope)
+        self.emit_expr(world, walk, out, host, keeper, depth, flow.place(), scope)
         if only_literals(index) {
             out.push("[")
             self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
@@ -787,7 +787,7 @@ impl EmitState {
                     else => {}
                 }
                 out.push("{ let __nikaia_stored = ")
-                host.expr(walk, out, value, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, value, depth, flow, scope)
                 out.push("; let __nikaia_at = (")
                 if only_literals(index) {
                     self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
@@ -800,10 +800,10 @@ impl EmitState {
                 let wide = given == BinaryOp::Add || given == BinaryOp::Sub || given == BinaryOp::Mul
                 if arithmetic != null && wide {
                     out.push(f"unsafe {{ {emit_flow_proven(given)}::<{arithmetic ?? ""}>(")
-                    self.emit_stmt_proven_read(walk, out, host, base, depth, flow, scope)
+                    self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)
                     out.push(", __nikaia_stored) }")
                 } else {
-                    self.emit_stmt_proven_read(walk, out, host, base, depth, flow, scope)
+                    self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)
                     out.push(f" {binary_op(given)} __nikaia_stored")
                 }
                 if lent_on {
@@ -811,7 +811,7 @@ impl EmitState {
                 } else {
                     out.push("; unsafe { nikaia_std::proven::write(&mut ")
                 }
-                host.expr(walk, out, base, depth, flow.place(), scope)
+                self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)
                 out.push(", __nikaia_at, __nikaia_stored) }; }")
                 return true
             },
@@ -820,9 +820,9 @@ impl EmitState {
     }
 
     /// The slot read once, unchecked.
-    fn emit_stmt_proven_read[H: EmitHost](ref self, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_stmt_proven_read[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         out.push("*unsafe { nikaia_std::proven::read(&")
-        host.expr(walk, out, base, depth, flow.place(), scope)
+        self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)
         out.push(", __nikaia_at) }")
     }
 
@@ -844,11 +844,11 @@ impl EmitState {
         if !place {
             return false
         }
-        host.expr(walk, out, target, depth, flow.place(), scope)
+        self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)
         out.push(f" = unsafe {{ {emit_flow_proven(given)}::<{ty}>(")
-        host.expr(walk, out, target, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, target, depth, flow, scope)
         out.push(", ")
-        host.expr(walk, out, value, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
         out.push(") };")
         return true
     }
@@ -898,7 +898,7 @@ impl EmitState {
             out.push("{\n")
             out.push(inner)
             out.push("let mut __nikaia_sequence = ")
-            host.expr(walk, out, iter, depth + 1, flow, scope)
+            self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)
             // A produced sequence is walked by value (ADR-105 D2).
             out.push(";\n")
             out.push(inner)
@@ -973,7 +973,7 @@ impl EmitState {
                         if i > 0 {
                             out.push(", ")
                         }
-                        host.expr(walk, out, item, depth, flow, scope)
+                        self.emit_expr(world, walk, out, host, item, depth, flow, scope)
                         i += 1
                     }
                     out.push("]")
@@ -987,7 +987,7 @@ impl EmitState {
         if lends {
             self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)
         } else {
-            host.expr(walk, out, iter, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, iter, depth, flow, scope)
         }
     }
 
@@ -1014,7 +1014,7 @@ impl EmitState {
             Expr::Match { .. } => {
                 // A `match` in statement position, for the `if`'s reason.
                 if is_statement {
-                    host.expr(walk, out, expr, depth, flow with { arms_are_statements: true }, scope)
+                    self.emit_expr(world, walk, out, host, expr, depth, flow with { arms_are_statements: true }, scope)
                     return
                 }
             },
@@ -1033,7 +1033,7 @@ impl EmitState {
         if is_return && self.facts.lent_returns.contains(at) {
             out.push("&")
         }
-        host.expr(walk, out, expr, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, expr, depth, flow, scope)
         if either {
             out.push(")")
         }

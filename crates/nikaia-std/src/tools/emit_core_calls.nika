@@ -287,9 +287,9 @@ impl EmitState {
             self.emit_core_nested(world, walk, out, host, args[0], 255, depth, flow, scope)
             out.push(", (")
             if only_literals(args[1]) {
-                host.expr(walk, out, args[1], depth, flow.inferred(), scope)
+                self.emit_expr(world, walk, out, host, args[1], depth, flow.inferred(), scope)
             } else {
-                host.expr(walk, out, args[1], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
             }
             out.push(") as usize) })")
             return
@@ -417,7 +417,7 @@ impl EmitState {
                 out.push("core::hint::assert_unchecked(")
                 let around = walk.believing
                 walk.believing = true
-                host.expr(walk, out, condition, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, condition, depth, flow, scope)
                 walk.believing = around
                 out.push(")")
                 return true
@@ -432,12 +432,12 @@ impl EmitState {
             return true
         }
         out.push("if !(")
-        host.expr(walk, out, condition, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, condition, depth, flow, scope)
         out.push(f") {{ nikaia_std::abort::{failed}({rust_string(claim.written)}, ")
         let message = emit_call_option_named(world, config, "message")
         if message.len() > 0 {
             out.push("Some(&(")
-            host.expr(walk, out, message[0], depth, flow, scope)
+            self.emit_expr(world, walk, out, host, message[0], depth, flow, scope)
             out.push(")), ")
         } else {
             out.push("None, ")
@@ -445,8 +445,8 @@ impl EmitState {
         out.push("&[")
         match condition {
             Expr::Binary { lhs, rhs, .. } => {
-                self.emit_call_operand(walk, out, host, claim.left, lhs, depth, flow, scope)
-                self.emit_call_operand(walk, out, host, claim.right, rhs, depth, flow, scope)
+                self.emit_call_operand(world, walk, out, host, claim.left, lhs, depth, flow, scope)
+                self.emit_call_operand(world, walk, out, host, claim.right, rhs, depth, flow, scope)
             },
             else => {},
         }
@@ -455,13 +455,13 @@ impl EmitState {
     }
 
     /// One operand of a failed claim, by the label the prover gave it.
-    fn emit_call_operand[H: EmitHost](ref self, mut walk: EmitWalk, mut out: EmitOut, host: ref H, label: ref String?, operand: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_call_operand[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, label: ref String?, operand: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if label == null {
             return
         }
         let shown = label ?? return
         out.push(f"({rust_string(shown)}, (&&nikaia_std::abort::Operand(&(")
-        host.expr(walk, out, operand, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, operand, depth, flow, scope)
         out.push("))).shown()), ")
     }
 
@@ -587,7 +587,7 @@ impl EmitState {
                     if self.facts.lent_args.contains(node_key(arg)) {
                         out.push("&")
                     }
-                    host.expr(walk, out, arg, depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
                 }
                 out.push(")")
                 if pauses {
@@ -639,7 +639,7 @@ impl EmitState {
                 }
                 if pieces {
                     out.push("nikaia_std::grammar::parse_pieces(&*")
-                    host.expr(walk, out, args[0], depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                     // Spelled out: this file has no `par_fold` of its own, so the
                     // two names are not imported here.
                     let options = emit_fold_options(book, rule)
@@ -648,7 +648,7 @@ impl EmitState {
                     return true
                 }
                 out.push("nikaia_std::grammar::parse(&*")
-                host.expr(walk, out, args[0], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                 out.push(f", {package}::{book}::parse_{rule}()){question}")
                 return true
             },
@@ -847,7 +847,7 @@ impl EmitState {
                     written = "text_of"
                 }
                 out.push(f"nikaia_std::fs::path::{written}(&(")
-                host.expr(walk, out, on, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, on, depth, flow, scope)
                 out.push(")")
                 if args.len() > 0 {
                     out.push(", ")
@@ -917,9 +917,9 @@ impl EmitState {
             let list = receiver ?? return
             if self.facts.text_in_lists.contains(node_key(list)) {
                 out.push("nikaia_std::list::contains(&")
-                host.expr(walk, out, list, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, list, depth, flow, scope)
                 out.push(", &")
-                host.expr(walk, out, args[0], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                 out.push(")")
                 return
             }
@@ -930,7 +930,7 @@ impl EmitState {
             let text = receiver ?? return
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
             out.push(f".{name}(&")
-            host.expr(walk, out, args[0], depth, flow, scope)
+            self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             out.push(")")
             return
         }
@@ -1018,7 +1018,7 @@ impl EmitState {
             }
             if piece.len() > 0 {
                 out.push(", ")
-                host.expr(walk, out, piece[0], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, piece[0], depth, flow, scope)
             }
             if host.user_parallelism() || piece.len() > 0 {
                 out.push(")")
@@ -1040,10 +1040,10 @@ impl EmitState {
             }
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
             out.push(", ")
-            host.expr(walk, out, args[0], depth, flow, scope)
+            self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             if piece.len() > 0 {
                 out.push(", Some(")
-                host.expr(walk, out, piece[0], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, piece[0], depth, flow, scope)
                 out.push("))")
             } else {
                 out.push(", None)")
@@ -1068,19 +1068,19 @@ impl EmitState {
                         out.push(", ")
                     }
                     first = false
-                    host.expr(walk, out, item, depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, item, depth, flow, scope)
                 }
                 out.push("]), ")
                 let from = emit_call_option_named(world, config, "from")
                 if from.len() > 0 {
-                    host.expr(walk, out, from[0], depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, from[0], depth, flow, scope)
                 } else {
                     out.push("0")
                 }
                 out.push(", ")
                 let scan = emit_call_option_named(world, config, "scan")
                 if scan.len() > 0 {
-                    host.expr(walk, out, scan[0], depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, scan[0], depth, flow, scope)
                 } else {
                     out.push("nikaia_std::bytes::Scan::ByBlock")
                 }
@@ -1157,7 +1157,7 @@ impl EmitState {
             // than every binary operator.
             self.emit_core_postfix_base(world, walk, out, host, witness[0], depth, flow, scope)
         } else if limit.len() > 0 {
-            host.expr(walk, out, limit[0], depth, flow, scope)
+            self.emit_expr(world, walk, out, host, limit[0], depth, flow, scope)
         } else {
             self.emit_core_dsl_parameters(world, walk, out, host, name, args.len(), config, depth, flow, scope)
             self.emit_core_method_options(world, walk, out, host, method, on_node, args.len(), config, depth, flow, scope)
@@ -1318,7 +1318,7 @@ impl EmitState {
             out.push(", ")
             let from = emit_call_option_named(world, config, "from")
             if from.len() > 0 {
-                host.expr(walk, out, from[0], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, from[0], depth, flow, scope)
             } else {
                 out.push("0")
             }
@@ -1336,9 +1336,9 @@ impl EmitState {
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
             out.push(", (")
             if only_literals(args[0]) {
-                host.expr(walk, out, args[0], depth, flow.inferred(), scope)
+                self.emit_expr(world, walk, out, host, args[0], depth, flow.inferred(), scope)
             } else {
-                host.expr(walk, out, args[0], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             }
             out.push(") as usize) })")
             return
@@ -1358,7 +1358,7 @@ impl EmitState {
         let on = walk.specialised_to()
         if variant != null && args.len() > 0 && on != null {
             out.push("matches!(")
-            host.expr(walk, out, args[0], depth, flow, scope)
+            self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             let owner = on ?? ""
             let written = escaped_name(variant ?? "")
             out.push(f", {owner}::{written} {{ .. }})")

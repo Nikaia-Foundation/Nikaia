@@ -161,7 +161,7 @@ impl EmitState {
     /// A counter as the `usize` a length is compared with: `((n) as usize)`.
     fn emit_read_counted[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, counter: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
         let mut scratch = EmitOut::empty()
-        host.expr(walk, scratch, counter, depth, flow, scope)
+        self.emit_expr(world, walk, scratch, host, counter, depth, flow, scope)
         return f"(({scratch.buf}) as usize)"
     }
 
@@ -210,7 +210,7 @@ impl EmitState {
             }
             let name = f"__nikaia_held_{walk.held.len()}"
             out.push(f"let {name} = ")
-            host.expr(walk, out, receiver, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, receiver, depth, flow, scope)
             out.push(f";\n{"    ".repeat(depth)}")
             walk.held.insert(node_key(receiver), name)
         }
@@ -304,7 +304,7 @@ impl EmitState {
                 walk.held.remove(key)
                 let name = f"__nikaia_held_{walk.held.len()}"
                 out.push(f"let {name} = ")
-                host.expr(walk, out, at, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, at, depth, flow, scope)
                 out.push(f";\n{"    ".repeat(depth)}")
                 walk.held.insert(key, name)
             }
@@ -364,7 +364,7 @@ impl EmitState {
                 out.push(", ")
             }
             n += 1
-            host.expr(walk, out, arg, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
         }
         out.push(")")
         if pauses {
@@ -426,15 +426,15 @@ impl EmitState {
                     self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
                     out.push(", (")
                     if only_literals(start) {
-                        host.expr(walk, out, start, depth, flow.inferred(), scope)
+                        self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)
                     } else {
-                        host.expr(walk, out, start, depth, flow, scope)
+                        self.emit_expr(world, walk, out, host, start, depth, flow, scope)
                     }
                     out.push(") as usize, (")
                     if only_literals(end) {
-                        host.expr(walk, out, end, depth, flow.inferred(), scope)
+                        self.emit_expr(world, walk, out, host, end, depth, flow.inferred(), scope)
                     } else {
-                        host.expr(walk, out, end, depth, flow, scope)
+                        self.emit_expr(world, walk, out, host, end, depth, flow, scope)
                     }
                     if inclusive {
                         out.push(") as usize + 1) }")
@@ -479,11 +479,11 @@ impl EmitState {
                         // reason a range in literals is: `at` has nothing to infer
                         // from.
                         if only_literals(start) {
-                            host.expr(walk, out, start, depth, flow.inferred(), scope)
+                            self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)
                             out.push("..)")
                         } else {
                             out.push("nikaia_std::index::at(")
-                            host.expr(walk, out, start, depth, flow, scope)
+                            self.emit_expr(world, walk, out, host, start, depth, flow, scope)
                             out.push("..))")
                         }
                         if self.reads_through_handle(world, walk, scope.function, base) {
@@ -706,7 +706,7 @@ impl EmitState {
                     out.push(f"Ok::<_, {channel}>(")
                 }
                 let st = out.mark()
-                host.expr(walk, out, value, depth + 1, inside, inside_scope)
+                self.emit_expr(world, walk, out, host, value, depth + 1, inside, inside_scope)
                 out.record(stmt.span, st)
                 if fallible {
                     out.push(")")
@@ -770,7 +770,7 @@ impl EmitState {
             if fallible {
                 out.push(f"Ok::<_, {channel}>(")
             }
-            host.expr(walk, out, arm.value, depth + 1, inside, inside_scope)
+            self.emit_expr(world, walk, out, host, arm.value, depth + 1, inside, inside_scope)
             if fallible {
                 out.push(")")
             }
@@ -798,7 +798,7 @@ impl EmitState {
             if fallible && flow.handled_here {
                 out.push(f"match __nikaia_won {{\n{inner}    Err(__nikaia_failed) => Err(__nikaia_failed),\n{inner}    Ok({named}) => {{ let __nikaia_value = ")
                 let st = out.mark()
-                host.block_opening_with(walk, out, arm.body, depth + 2, flow, scope, EmitTail::Value, null)
+                self.emit_stmt_block_opening_with(world, walk, out, host, arm.body, depth + 2, flow, scope, EmitTail::Value, null)
                 out.record(Span { start: arm.at, end: arm.at }, st)
                 out.push(f"; Ok(__nikaia_value) }},\n{inner}}}\n")
                 continue
@@ -812,7 +812,7 @@ impl EmitState {
                 }
             }
             let st = out.mark()
-            host.block_opening_with(walk, out, arm.body, depth + 1, flow, scope, EmitTail::Value, opening)
+            self.emit_stmt_block_opening_with(world, walk, out, host, arm.body, depth + 1, flow, scope, EmitTail::Value, opening)
             out.record(Span { start: arm.at, end: arm.at }, st)
             out.push("\n")
         }

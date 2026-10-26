@@ -303,7 +303,7 @@ impl EmitState {
         // **`entry`'s key built into the map's text** (#676).
         if self.facts.owned_entry_keys.contains(node_key(arg)) {
             out.push("String::from(")
-            host.expr(walk, out, arg, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
             out.push(")")
             return
         }
@@ -318,7 +318,7 @@ impl EmitState {
         // wants, whichever of a number or a view the key turns out to be.
         if i == 0 && self.facts.lookup_keys.contains(node) {
             out.push("nikaia_std::index::AsKey::as_key(&")
-            host.expr(walk, out, arg, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
             out.push(")")
             return
         }
@@ -578,7 +578,7 @@ impl EmitState {
             }
             let joined = keeps.join(", ")
             out.push("{ use nikaia_std::tether::Hold as _; (")
-            host.expr(walk, out, arg, depth, inside, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f").hold([{joined}]) }}")
             return
         }
@@ -594,7 +594,7 @@ impl EmitState {
             }
             let joined = names.join(", ")
             out.push(f"&async |{joined}| (*")
-            host.expr(walk, out, arg, depth, inside, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f")({joined}).await")
             return
         }
@@ -633,7 +633,7 @@ impl EmitState {
                 out.push("async ")
             }
             out.push(f"|{joined}| Ok(")
-            host.expr(walk, out, arg, depth, inside, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)})")
             if pauses {
                 out.push(".await")
@@ -652,7 +652,7 @@ impl EmitState {
                 out.push("async ")
             }
             out.push(f"|{joined}| ")
-            host.expr(walk, out, arg, depth, inside, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)}).map_err(Into::into)")
             return
         }
@@ -663,12 +663,12 @@ impl EmitState {
             }
             let joined = names.join(", ")
             out.push(f"|{joined}| ")
-            host.expr(walk, out, arg, depth, inside, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)})")
             return
         }
         if arity < 0 {
-            host.expr(walk, out, arg, depth, inside, scope)
+            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             return
         }
         // **A function that never pauses, run where a pause may happen** (#516):
@@ -680,7 +680,7 @@ impl EmitState {
         }
         let joined = names.join(", ")
         out.push(f"async |{joined}| ")
-        host.expr(walk, out, arg, depth, inside, scope)
+        self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
         out.push(f"({emit_arg_passing(names, lent)})")
     }
 
@@ -758,7 +758,7 @@ impl EmitState {
             typed.push(f"__nikaia_a{n}: {written[n]}")
         }
         out.push(f"|{typed.join(", ")}| ")
-        host.expr(walk, out, value, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
         out.push(f"({emit_arg_passing(names, lent)})")
         return true
     }
@@ -837,7 +837,7 @@ impl EmitState {
         if self.opens_a_paused_scope(world, func, args) && self.emit_call_paused_scope(world, walk, out, host, args, depth, flow, scope) {
             return
         }
-        host.expr(walk, out, func, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, func, depth, flow, scope)
         // **What runs a kept function in a task of its own** - `net::serve`'s
         // handler (ADR-326 D1), a supervisor's children (ADR-328) - has a twin
         // where tasks run on threads, whose functions cross one: the pool's, as
@@ -1007,7 +1007,7 @@ impl EmitState {
                 }
                 let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(passed.value), passed.value)
                 out.push(before)
-                host.expr(walk, out, passed.value, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, passed.value, depth, flow, scope)
                 out.push(after)
                 return
             }
@@ -1131,7 +1131,7 @@ impl EmitState {
                         out.push(", ")
                     }
                     at += 1
-                    host.expr(walk, out, arg, depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
                 }
                 out.push(")")
                 return true
@@ -1191,13 +1191,13 @@ impl EmitState {
                     return false
                 }
                 out.push(f"{hulls[0]}::new({hulls[1]}::supervised_kept(")
-                host.expr(walk, out, args[0], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                 // **Its policy** (ADR-328 D9): the one `policy:` names, or `std`'s.
                 out.push(", ")
                 let mut named = false
                 for a in config {
                     if !named && emit_text(world, a.name) == "policy" {
-                        host.expr(walk, out, a.value, depth, flow, scope)
+                        self.emit_expr(world, walk, out, host, a.value, depth, flow, scope)
                         named = true
                     }
                 }
@@ -1226,10 +1226,10 @@ impl EmitState {
             for lock in args {
                 if at < last {
                     out.push("&")
-                    host.expr(walk, out, lock, depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, lock, depth, flow, scope)
                     out.push(", ")
                 } else {
-                    host.expr(walk, out, lock, depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, lock, depth, flow, scope)
                 }
                 at += 1
             }
@@ -1248,7 +1248,7 @@ impl EmitState {
                 for path in paths {
                     out.push(f"{path}::new(")
                 }
-                host.expr(walk, out, args[0], depth, flow, scope)
+                self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                 for _ in paths {
                     out.push(")")
                 }
@@ -1302,7 +1302,7 @@ impl EmitState {
                 out.push("nikaia_std::fs::path::print(&(")
                 match given {
                     Expr::LitInterpolated { parts, .. } => self.emit_core_joined_name(world, walk, out, host, parts, names, depth, flow, scope),
-                    else => host.expr(walk, out, given, depth, flow, scope),
+                    else => self.emit_expr(world, walk, out, host, given, depth, flow, scope),
                 }
                 out.push(f"), {to_err}, {newline})")
                 return

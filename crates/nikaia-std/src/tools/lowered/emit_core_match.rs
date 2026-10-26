@@ -53,13 +53,13 @@ pub(crate) fn emit_match_yes_or_no(arms: &[MatchArm]) -> Option<bool> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_match_subject<H: EmitHost>(walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope, deref: &str, text: bool, copied_view: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn emit_match_subject<H: EmitHost>(state: &EmitState, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope, deref: &str, text: bool, copied_view: bool) -> Result<(), Box<dyn std::error::Error>> {
     if text {
         let plain = matches!(value, Expr::Variable(..) | Expr::Field { .. });
         out.push("&*");
         out.push(deref);
         if !plain { out.push("("); }
-        host.expr(walk, out, value, depth, flow, scope)?;
+        state.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         if !plain { out.push(")"); }
         return Ok(());
     }
@@ -71,7 +71,7 @@ pub(crate) fn emit_match_subject<H: EmitHost>(walk: &mut EmitWalk, out: &mut Emi
         out.push("(");
         out.push(deref);
     } else { out.push(deref); }
-    host.expr(walk, out, value, depth, flow, scope)?;
+    state.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
     if list { out.push(")[..]"); } else if copied { out.push(").copied()"); }
     Ok(())
 }
@@ -138,7 +138,7 @@ impl EmitState {
                 }
                 out.push("]");
             },
-            MatchPattern::Literal(value) => { host.expr(walk, out, value, depth, flow, scope)?; },
+            MatchPattern::Literal(value) => { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; },
             MatchPattern::Path(p) => {
                 if p.len() == 1 {
                     for one in p.iter() {
@@ -205,9 +205,9 @@ impl EmitState {
                 }
             },
             MatchPattern::Range { start, end } => {
-                host.expr(walk, out, start, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, start, depth, flow, scope)?;
                 out.push("..=");
-                host.expr(walk, out, end, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, end, depth, flow, scope)?;
             },
         }
         Ok(n)
@@ -269,12 +269,12 @@ impl EmitState {
         let body_flow = if statements && emit_match_is_match(body) { EmitFlow { arms_are_statements: true, ..inside } } else { inside };
         if plain && statements {
             out.push("{ ");
-            host.expr(walk, out, body, depth, body_flow, scope)?;
+            self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)?;
             out.push("; }");
             return Ok(());
         }
         if plain {
-            host.expr(walk, out, body, depth, body_flow, scope)?;
+            self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)?;
             return Ok(());
         }
         match body {
@@ -285,7 +285,7 @@ impl EmitState {
                 for name in cloned.iter() { opening.push_str(&format!("let {} = {}.clone(); ", name, name)); }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
                 let trimmed: Option<String> = Some(opening.trim_end().to_owned());
-                host.block_opening_with(walk, out, block, depth, inside, scope, tail, trimmed)?;
+                self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, tail, trimmed)?;
                 return Ok(());
             },
             _ => { },
@@ -295,7 +295,7 @@ impl EmitState {
         for name in opened.iter() { out.push(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
         for copy in copied.iter() { out.push(copy); }
         for name in cloned.iter() { out.push(&format!("let {} = {}.clone(); ", name, name)); }
-        host.expr(walk, out, body, depth, body_flow, scope)?;
+        self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)?;
         if statements { out.push(";"); }
         out.push(" }");
         Ok(())
@@ -372,7 +372,7 @@ impl EmitState {
                     if arm.guard.is_some() {
                         out.push(" if ");
                         let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                        host.expr(walk, out, guard, depth + 2, inside, &inside_scope)?;
+                        self.emit_expr(world, walk, out, host, guard, depth + 2, inside, &inside_scope)?;
                     }
                     out.push(" => ");
                     self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 2, inside, &inside_scope, "")?;
@@ -449,7 +449,7 @@ impl EmitState {
                     if arm.guard.is_some() {
                         out.push(" if ");
                         let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                        host.expr(walk, out, guard, depth + 2, inside, &inside_scope)?;
+                        self.emit_expr(world, walk, out, host, guard, depth + 2, inside, &inside_scope)?;
                     }
                     out.push(" => ");
                     self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 2, inside, &inside_scope, "")?;
@@ -486,7 +486,7 @@ impl EmitState {
             if !inside_a_box {
                 if !nikaia_std::index::or(answer, || true) { out.push("!"); }
                 out.push("matches!(");
-                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value), self.facts.text_scrutinees.contains(&node_key(value)), self.facts.copied_walks.contains(&node_key(value)))?;
+                emit_match_subject(self, world, walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value), self.facts.text_scrutinees.contains(&node_key(value)), self.facts.copied_walks.contains(&node_key(value)))?;
                 out.push(", ");
                 let mut i: i64 = 0;
                 for arm in arms.iter() {
@@ -503,7 +503,7 @@ impl EmitState {
         out.push("match ");
         let text = self.facts.text_scrutinees.contains(&node_key(value));
         if self.facts.lent_scrutinees.contains(&node_key(value)) && !text { out.push("&"); }
-        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(&node_key(value)))?;
+        emit_match_subject(self, world, walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(&node_key(value)))?;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let close = "    ".repeat(nikaia_std::count::of(depth));
         out.push(" {\n");
@@ -518,7 +518,7 @@ impl EmitState {
                 self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, true, -1, false, 0, depth + 1, flow, scope)?;
                 out.push(" => ");
                 let mut place = EmitOut::empty();
-                host.expr(walk, &mut place, value, depth, flow, scope)?;
+                self.emit_expr(world, walk, &mut place, host, value, depth, flow, scope)?;
                 let mut place_text = place.buf.to_owned();
                 if !emit_match_is_variable(value) { place_text = format!("&mut {}", place.buf); }
                 let mut bound = EmitOut::empty();

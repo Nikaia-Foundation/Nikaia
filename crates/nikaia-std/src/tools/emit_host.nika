@@ -13,13 +13,6 @@
 
 /// What the core asks of the Rust side. Every method may refuse.
 pub trait EmitHost {
-    /// `Emitter::expr`: an expression, written to `out`.
-    fn expr(ref self, mut walk: EmitWalk, mut out: EmitOut, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws
-
-    /// `Emitter::block_opening_with`: a block, with `opening` (one line) written
-    /// before its statements where there is one.
-    fn block_opening_with(ref self, mut walk: EmitWalk, mut out: EmitOut, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws
-
     /// A hole of an `f"..."` with what the tier pass hands over inside it
     /// (`text_tiers::wrap_hole`).
     fn wrap_hole(ref self, hole: ref Expr, wraps: ref Vec[(i64, winnow_grammar::Symbol)]) -> Expr sync
@@ -55,10 +48,6 @@ pub trait EmitHost {
     /// (`Checked::task_handles`); a set cannot be walked in Nikaia.
     fn task_handles(ref self, task: i64) -> Vec[String] sync
 
-    /// `Emitter::block_plain`: a block as it is written, with no settle point
-    /// after it.
-    fn block_plain(ref self, mut walk: EmitWalk, mut out: EmitOut, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws
-
     /// The locals the prover knew to be whole non-negative numbers in `body`
     /// (`Emitter::nonnegative_bodies`, keyed by the block's address); `null`
     /// where it recorded none.
@@ -74,9 +63,6 @@ pub trait EmitHost {
     /// `Emitter::ty_filled` with named lifetimes: a type as a grammar rule
     /// returns it.
     fn ty_named(ref self, mut walk: EmitWalk, ty: ref Type) -> String sync throws
-
-    /// `Emitter::stmt`: a statement, written to `out`.
-    fn stmt(ref self, mut walk: EmitWalk, mut out: EmitOut, stmt: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws
 
     /// Whether the `let` at `at` is a mutable view given up unmuted (ADR-353).
     fn given_up_unmuted(ref self, at: i64) -> bool sync
@@ -169,11 +155,11 @@ impl EmitState {
             return
         }
         if !viewed {
-            host.expr(walk, out, node, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, node, depth, flow, scope)
             return
         }
         out.push("nikaia_std::num::value(")
-        host.expr(walk, out, node, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)
         out.push(")")
     }
 
@@ -182,15 +168,15 @@ impl EmitState {
     pub fn emit_core_bare_range[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match node {
             Expr::Range { start, end, inclusive, .. } => {
-                host.expr(walk, out, start, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, start, depth, flow, scope)
                 if inclusive {
                     out.push("..=")
                 } else {
                     out.push("..")
                 }
-                host.expr(walk, out, end, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, end, depth, flow, scope)
             },
-            else => host.expr(walk, out, node, depth, flow, scope),
+            else => self.emit_expr(world, walk, out, host, node, depth, flow, scope),
         }
     }
 

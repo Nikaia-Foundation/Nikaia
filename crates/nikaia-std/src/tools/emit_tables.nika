@@ -1,0 +1,166 @@
+// crates/nikaia-std/src/tools/emit_tables.nika
+//
+// **The tables of views** (ADR-294, #125, #855, E11-5): which structs and enums
+// of a file hold a view into the input (Part II, 10.6), and the view-holding
+// fields of each struct that holds two or more (ADR-353 D1, D7). The Rust
+// side (`emit/mod.rs`) calls these with the unit's interner and items and puts
+// the answers in its own tables.
+
+/// Whether `ty` names, anywhere, one of the types `outside` holds. By name,
+/// because a `Symbol` belongs to the parse that interned it.
+pub fn emit_tables_names_outside(words: ref winnow_grammar::InternerContext, ty: ref Type, outside: ref collections::BTreeSet[String]) -> bool {
+    if outside.is_empty() {
+        return false
+    }
+    let code = ty.code ?? return emit_tables_named_plain(words, ty, outside)
+    let result = code.result ?? return false
+    return emit_tables_names_outside(words, result, outside)
+}
+
+fn emit_tables_named_plain(words: ref winnow_grammar::InternerContext, ty: ref Type, outside: ref collections::BTreeSet[String]) -> bool {
+    if outside.contains(words.resolve(ty.name)) {
+        return true
+    }
+    for inner in ty.generics {
+        if emit_tables_names_outside(words, inner, outside) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether `ty` names one of the `borrowing` types.
+pub fn emit_tables_names_borrowing(ty: ref Type, borrowing: ref Vec[winnow_grammar::Symbol]) -> bool {
+    let code = ty.code ?? return emit_tables_borrowing_plain(ty, borrowing)
+    // A result that is one of two views handed in is the call's (#730).
+    let mut named = 0
+    for part in ty.generics {
+        if !holds_view(part) && emit_tables_names_borrowing(part, borrowing) {
+            named += 1
+        }
+    }
+    if views_the_call_s(ty, named) {
+        return false
+    }
+    let result = code.result ?? return false
+    return emit_tables_names_borrowing(result, borrowing)
+}
+
+fn emit_tables_borrowing_plain(ty: ref Type, borrowing: ref Vec[winnow_grammar::Symbol]) -> bool {
+    if borrowing.contains(ty.name) {
+        return true
+    }
+    for inner in ty.generics {
+        if emit_tables_names_borrowing(inner, borrowing) {
+            return true
+        }
+    }
+    return false
+}
+
+fn emit_tables_any_holds(words: ref winnow_grammar::InternerContext, types: ref Vec[Type], outside: ref collections::BTreeSet[String]) -> bool {
+    for ty in types {
+        if holds_view(ty) || emit_tables_names_outside(words, ty, outside) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Which structs and enums hold a view into the parser's input: transitively,
+/// so a fixpoint. `outside` names the types another file of the package is
+/// known to hold a view with (Part I 9.1, #544).
+pub fn emit_tables_borrowing_structs_beside(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], outside: ref collections::BTreeSet[String]) -> Vec[winnow_grammar::Symbol] {
+    let mut names: Vec[winnow_grammar::Symbol] = []
+    let mut fields_of: Vec[Vec[Type]] = []
+    let mut borrowing: Vec[winnow_grammar::Symbol] = []
+    for item in items {
+        let mut types: Vec[Type] = []
+        let mut declared: winnow_grammar::Symbol? = null
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                // An enum holds views the way a struct does, in the types of
+                // what its variants carry.
+                declared = name
+                for variant in variants {
+                    match variant.fields {
+                        VariantFields::Unit => {},
+                        VariantFields::Tuple(tuple) => {
+                            for ty in tuple {
+                                types.push(ty.clone())
+                            }
+                        },
+                        VariantFields::Named(named) => {
+                            for field in named {
+                                types.push(field.ty.clone())
+                            }
+                        },
+                    }
+                }
+            },
+            Item::Struct { name, fields, .. } => {
+                declared = name
+                for field in fields {
+                    types.push(field.ty.clone())
+                }
+            },
+            else => {},
+        }
+        let at = declared ?? continue
+        if emit_tables_any_holds(words, types, outside) {
+            borrowing.push(at)
+        }
+        names.push(at)
+        fields_of.push(types)
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        let mut at = 0
+        for name in names {
+            if !borrowing.contains(name) {
+                for ty in fields_of[at] {
+                    if emit_tables_names_borrowing(ty, borrowing) {
+                        borrowing.push(name)
+                        changed = true
+                        break
+                    }
+                }
+            }
+            at += 1
+        }
+    }
+    return borrowing
+}
+
+/// The view-holding fields of each struct of a unit that holds two or more
+/// (ADR-353 D1, D7): one lifetime each, `pub` or not, in the order written.
+/// An error keeps one place.
+pub fn emit_tables_view_slots(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], borrowing: ref collections::BTreeSet[String]) -> Vec[(String, Vec[String])] {
+    let errors = declared_errors(words, items)
+    let mut slots: Vec[(String, Vec[String])] = []
+    for item in items {
+        match item.node {
+            Item::Struct { name, fields, is_extern, .. } => {
+                if is_extern {
+                    continue
+                }
+                let text = words.resolve(name).clone()
+                if errors.contains(text) {
+                    continue
+                }
+                let mut held: Vec[String] = []
+                for field in fields {
+                    if holds_view(field.ty) || emit_tables_names_outside(words, field.ty, borrowing) {
+                        held.push(words.resolve(field.name).clone())
+                    }
+                }
+                if held.len() >= 2 {
+                    slots.push((text, held))
+                }
+            },
+            else => {},
+        }
+    }
+    return slots
+}

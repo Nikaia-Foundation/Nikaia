@@ -229,18 +229,18 @@ impl EmitState {
         if (op == BinaryOp::Eq || op == BinaryOp::Ne) && self.facts.path_comparisons.contains(&site) {
             if op == BinaryOp::Ne { out.push("!"); }
             out.push("nikaia_std::fs::path::same(&(");
-            host.expr(walk, out, lhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push("), &(");
-            host.expr(walk, out, rhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
             out.push("))");
             return Ok(());
         }
         if self.facts.mixed_comparisons.contains_key(&site) {
             let unsigned_left = nikaia_std::index::or(self.facts.mixed_comparisons.get(&site), || false);
             if unsigned_left { out.push("nikaia_std::num::unsigned_with_signed("); } else { out.push("nikaia_std::num::signed_with_unsigned("); }
-            host.expr(walk, out, lhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(", ");
-            host.expr(walk, out, rhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
             out.push(emit_flow_compared(op));
             return Ok(());
         }
@@ -265,9 +265,9 @@ impl EmitState {
         if self.facts.ordered_texts.contains(&site) {
             let symbol = binary_op(op);
             out.push("AsRef::<str>::as_ref(&(");
-            host.expr(walk, out, lhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(&format!(")) {} AsRef::<str>::as_ref(&(", symbol));
-            host.expr(walk, out, rhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
             out.push("))");
             return Ok(());
         }
@@ -280,9 +280,9 @@ impl EmitState {
                     _ => "unchecked_mul",
                 };
                 out.push(&format!("<{}>::{}(", ty, name));
-                host.expr(walk, out, lhs, depth, wide, scope)?;
+                self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
                 out.push(", ");
-                host.expr(walk, out, rhs, depth, wide, scope)?;
+                self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
                 out.push(")");
                 return Ok(());
             }
@@ -292,17 +292,17 @@ impl EmitState {
             if op == BinaryOp::Shl || op == BinaryOp::Shr {
                 let shift = if op == BinaryOp::Shl { "nikaia_std::proven::shl" } else { "nikaia_std::proven::shr" };
                 out.push(&format!("unsafe {{ {}::<{}>(", shift, ty));
-                host.expr(walk, out, lhs, depth, wide, scope)?;
+                self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
                 out.push(", (");
-                host.expr(walk, out, rhs, depth, wide, scope)?;
+                self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
                 out.push(") as u32) }");
                 return Ok(());
             }
             let name = emit_flow_proven(op);
             out.push(&format!("unsafe {{ {}::<{}>(", name, ty));
-            host.expr(walk, out, lhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(", ");
-            host.expr(walk, out, rhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
             out.push(") }");
             return Ok(());
         }
@@ -312,7 +312,7 @@ impl EmitState {
         let symbol = binary_op(op);
         if number_left {
             out.push("nikaia_std::num::value(");
-            host.expr(walk, out, lhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(&format!(") {} ", symbol));
             self.emit_core_nested(world, walk, out, host, rhs, here + 1, depth, wide, scope)?;
             return Ok(());
@@ -320,7 +320,7 @@ impl EmitState {
         if number_right {
             self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)?;
             out.push(&format!(" {} nikaia_std::num::value(", symbol));
-            host.expr(walk, out, rhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
             out.push(")");
             return Ok(());
         }
@@ -328,9 +328,9 @@ impl EmitState {
         if (op == BinaryOp::Eq || op == BinaryOp::Ne) && !viewed && emit_flow_is_cut(lhs) && emit_flow_is_cut(rhs) {
             if op == BinaryOp::Ne { out.push("!"); }
             out.push("nikaia_std::same!(");
-            host.expr(walk, out, lhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(", ");
-            host.expr(walk, out, rhs, depth, wide, scope)?;
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
             out.push(")");
             return Ok(());
         }
@@ -388,7 +388,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_coalesce<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, fallback: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.facts.plain_reaches.contains(&node_key(node)) {
-            host.expr(walk, out, value, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
             return Ok(());
         }
         if jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) {
@@ -396,9 +396,9 @@ impl EmitState {
                 match value {
                     Expr::Field { .. } => {
                         out.push("match ");
-                        host.expr(walk, out, value, depth, flow, scope)?;
+                        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                         out.push(".as_mut() { Some(__nikaia_value) => __nikaia_value, None => ");
-                        host.expr(walk, out, fallback, depth, flow, scope)?;
+                        self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
                         out.push(" }");
                         return Ok(());
                     },
@@ -414,11 +414,11 @@ impl EmitState {
                             self.emit_core_key(world, walk, out, host, form, index, depth, flow, scope)?;
                         } else {
                             out.push("nikaia_std::index::at(");
-                            host.expr(walk, out, index, depth, flow, scope)?;
+                            self.emit_expr(world, walk, out, host, index, depth, flow, scope)?;
                             out.push(")");
                         }
                         out.push(") { Some(__nikaia_value) => __nikaia_value, None => ");
-                        host.expr(walk, out, fallback, depth, flow, scope)?;
+                        self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
                         out.push(" }");
                         return Ok(());
                     },
@@ -440,18 +440,18 @@ impl EmitState {
                     _ => { },
                 }
             }
-            if !wrote { host.expr(walk, out, value, depth, flow, scope)?; }
+            if !wrote { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; }
             if opened_jump == "" && emit_flow_a_field_of_an_index(value) { out.push(".clone()"); }
             out.push(&opened_jump);
             if self.facts.copied_jump_reads.contains(&node_key(node)) { out.push(" { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => "); } else { out.push(" { Some(__nikaia_value) => __nikaia_value, None => "); }
-            host.expr(walk, out, fallback, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
             out.push(" }");
             return Ok(());
         }
         if self.facts.lent_coalesces.contains_key(&node_key(node)) {
             let opened = self.emit_flow_opened(node);
             out.push("nikaia_std::index::or(");
-            host.expr(walk, out, value, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
             out.push(&opened);
             out.push(", || ");
             let mut a_name = false;
@@ -459,13 +459,13 @@ impl EmitState {
                 Expr::Variable(_, _) => { a_name = true; },
                 _ => { },
             }
-            if emit_flow_a_lit_str(fallback) { host.expr(walk, out, fallback, depth, flow, scope)?; } else if a_name && opened == ".as_deref()" {
+            if emit_flow_a_lit_str(fallback) { self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?; } else if a_name && opened == ".as_deref()" {
                 out.push("std::convert::AsRef::<str>::as_ref(&");
-                host.expr(walk, out, fallback, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
                 out.push(")");
             } else {
                 out.push("&");
-                host.expr(walk, out, fallback, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
             }
             out.push(")");
             return Ok(());
@@ -473,18 +473,18 @@ impl EmitState {
         let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(&node_key(fallback)) || self.facts.view_coalesces.contains(&node_key(node));
         if self.facts.optional_fallbacks.contains(&node_key(node)) {
             out.push("nikaia_std::index::or_maybe(");
-            host.expr(walk, out, value, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
             out.push(", || ");
-            host.expr(walk, out, fallback, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
             out.push(")");
             return Ok(());
         }
         out.push("nikaia_std::index::or(");
         if self.facts.lent_list_reads.contains(&node_key(node)) { out.push("&"); }
-        host.expr(walk, out, value, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         if self.facts.text_owned_fallbacks.contains(&node_key(node)) {
             out.push(".map(String::from), || String::from(");
-            host.expr(walk, out, fallback, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
             out.push("))");
             return Ok(());
         }
@@ -496,19 +496,19 @@ impl EmitState {
         }
         if self.facts.text_view_fallbacks.contains(&node_key(node)) {
             out.push("std::convert::AsRef::<str>::as_ref(");
-            host.expr(walk, out, fallback, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
             out.push("))");
             return Ok(());
         }
         if self.facts.lent_map_fallbacks.contains(&node_key(node)) {
             out.push("&");
-            host.expr(walk, out, fallback, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
             out.push(")");
             return Ok(());
         }
         if !bare && emit_flow_an_index(fallback) {
             out.push("&");
-            host.expr(walk, out, fallback, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
             out.push(".clone().into())");
             return Ok(());
         }
@@ -523,7 +523,7 @@ impl EmitState {
                         let plain = a_number(part);
                         let wrapped = !plain && (emit_flow_operated(part) || self.ends_in_a_cast(world, part));
                         if wrapped { out.push("("); }
-                        host.expr(walk, out, part, depth, flow, scope)?;
+                        self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
                         if wrapped { out.push(")"); }
                         if !plain { out.push(".into()"); }
                     }
@@ -536,7 +536,7 @@ impl EmitState {
         let operated = emit_flow_operated(fallback);
         let cast = !bare && (operated || self.ends_in_a_cast(world, fallback));
         if cast { out.push("("); }
-        host.expr(walk, out, fallback, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
         if cast { out.push(")"); }
         if bare { out.push(")"); } else { out.push(".into())"); }
         Ok(())
@@ -570,7 +570,7 @@ impl EmitState {
         walk.boxed_scope = false;
         let bracketed = emit_flow_struct_headed(guarded_expr);
         if bracketed { out.push("("); }
-        host.expr(walk, out, guarded_expr, depth, guarded, scope)?;
+        self.emit_expr(world, walk, out, host, guarded_expr, depth, guarded, scope)?;
         if bracketed { out.push(")"); }
         if nested { out.push(") }"); }
         let a_scope = a_scope_call && walk.boxed_scope;
@@ -648,7 +648,7 @@ impl EmitState {
             }
         }
         out.push(&format!("{}{}", pad, handler_takes));
-        host.block_opening_with(walk, out, handler, depth + 1, inside, &inside_scope, EmitTail::Value, opening)?;
+        self.emit_stmt_block_opening_with(world, walk, out, host, handler, depth + 1, inside, &inside_scope, EmitTail::Value, opening)?;
         out.push(&format!(",\n{}}}", close));
         Ok(())
     }
@@ -687,11 +687,11 @@ impl EmitState {
             let held = match value { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if flow.can_throw {
                 out.push("return Ok(");
-                host.expr(walk, out, held, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, held, depth, flow, scope)?;
                 out.push(")");
             } else {
                 out.push("return ");
-                host.expr(walk, out, held, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, held, depth, flow, scope)?;
             }
         } else if flow.can_throw { out.push("return Ok(())"); } else { out.push("return"); }
         Ok(())
@@ -735,17 +735,17 @@ impl EmitState {
             if thrown.is_some() { own = self.name_of_error(world, nikaia_std::index::or(thrown.as_deref(), || "")) != 0; }
             if own {
                 out.push("return Err(nikaia_std::error::throwing(");
-                host.expr(walk, out, inner, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, inner, depth, flow, scope)?;
                 out.push(&format!(", &{}).into())", rust_string(&scope.origin)));
             } else {
                 out.push("return Err(");
-                host.expr(walk, out, inner, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, inner, depth, flow, scope)?;
                 out.push(".into())");
             }
             return Ok(());
         }
         if self.named_error(world, &scope.function) != 0 && scope.channel != "Box<dyn std::error::Error>" { out.push("return Err(nikaia_std::error::throwing("); } else { out.push("return Err(nikaia_std::error::raise("); }
-        host.expr(walk, out, inner, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, inner, depth, flow, scope)?;
         out.push(&format!(", &{}))", rust_string(&scope.origin)));
         Ok(())
     }

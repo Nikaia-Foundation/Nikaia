@@ -21,81 +21,13 @@
 use anyhow::Result;
 use nikaia_std::tools::emit_function::{EmitSeedsBegin, EmitSeedsEnd, EmitSplit};
 use nikaia_std::tools::emit_host::EmitHost;
-use nikaia_std::tools::emit_kinds::{EmitFlow, EmitRefused, EmitScope};
+use nikaia_std::tools::emit_kinds::EmitRefused;
 use nikaia_std::tools::emit_state::{EmitPair, EmitWalk};
 
-use super::{Emitter, Flow, Out, Tail};
+use super::{Emitter, Out};
 use crate::ast::{Block, Expr};
 
 type Crossing = Result<(), Box<dyn std::error::Error>>;
-
-impl<'a> Flow<'a> {
-    /// The flow as Nikaia sees it: the flags by value, the rest owned.
-    pub(super) fn to_emit(self) -> (EmitFlow, EmitScope) {
-        (
-            EmitFlow {
-                can_throw: self.throws,
-                caught: self.caught,
-                caught_named: self.caught_named,
-                in_a_place: self.in_a_place,
-                arms_are_statements: self.arms_are_statements,
-                statement: match self.statement {
-                    usize::MAX => -1,
-                    at => at as i64,
-                },
-                handled_here: self.handled_here,
-                in_lambda: self.in_lambda,
-                widen: self.widen,
-                inferred: self.inferred,
-                in_loop: self.in_loop,
-                breaks_to: self.breaks_to,
-            },
-            EmitScope {
-                origin: self.origin.to_string(),
-                function: self.function.to_string(),
-                channel: self.channel.to_string(),
-                caught_sum: self.caught_sum.map(str::to_string),
-                caught_member: self.caught_member.map(str::to_string),
-                bound: self.bound.to_string(),
-                changed: self.changed.to_vec(),
-                awaited: self.awaited.to_vec(),
-                tasks_channel: self.tasks_channel.to_string(),
-                tasks_function: self.tasks_function.to_string(),
-            },
-        )
-    }
-
-    /// The same flow back, borrowing the scope.
-    pub(super) fn from_emit(flow: EmitFlow, scope: &'a EmitScope) -> Flow<'a> {
-        Flow {
-            throws: flow.can_throw,
-            origin: &scope.origin,
-            caught: flow.caught,
-            caught_named: flow.caught_named,
-            caught_sum: scope.caught_sum.as_deref(),
-            caught_member: scope.caught_member.as_deref(),
-            in_a_place: flow.in_a_place,
-            arms_are_statements: flow.arms_are_statements,
-            statement: match flow.statement {
-                -1 => usize::MAX,
-                at => at as usize,
-            },
-            function: &scope.function,
-            handled_here: flow.handled_here,
-            channel: &scope.channel,
-            in_lambda: flow.in_lambda,
-            changed: &scope.changed,
-            awaited: &scope.awaited,
-            tasks_channel: &scope.tasks_channel,
-            tasks_function: &scope.tasks_function,
-            bound: &scope.bound,
-            widen: flow.widen,
-            inferred: flow.inferred,
-            in_loop: flow.in_loop,
-            breaks_to: flow.breaks_to,
-        }
-    }
-}
 
 impl Emitter<'_> {
     /// Run `f` with the walk handed to Nikaia: the baton leaves the emitter for
@@ -107,18 +39,6 @@ impl Emitter<'_> {
         let result = f(&mut walk);
         *self.w.borrow_mut() = Some(walk);
         result
-    }
-
-    /// A moved arm: the flow split for the crossing, `f` run with the walk, the
-    /// result as the Rust side raises it.
-    pub(super) fn cross(
-        &self,
-        flow: Flow<'_>,
-        f: impl FnOnce(&mut EmitWalk, EmitFlow, &EmitScope) -> Crossing,
-    ) -> Result<()> {
-        let (flow, scope) = flow.to_emit();
-        let crossed = self.nikaia(|walk| f(walk, flow, &scope));
-        self.crossed(crossed)
     }
 
     /// The result of a crossing into Nikaia, as the Rust side raises it.
@@ -173,73 +93,6 @@ impl Emitter<'_> {
 }
 
 impl EmitHost for Emitter<'_> {
-    fn expr(
-        &self,
-        walk: &mut EmitWalk,
-        out: &mut Out,
-        node: &Expr,
-        depth: i64,
-        flow: EmitFlow,
-        scope: &EmitScope,
-    ) -> Crossing {
-        self.hosted(walk, || {
-            Emitter::expr(
-                self,
-                out,
-                node,
-                depth as usize,
-                Flow::from_emit(flow, scope),
-            )
-        })
-    }
-
-    fn block_opening_with(
-        &self,
-        walk: &mut EmitWalk,
-        out: &mut Out,
-        block: &Block,
-        depth: i64,
-        flow: EmitFlow,
-        scope: &EmitScope,
-        tail: Tail,
-        opening: Option<String>,
-    ) -> Crossing {
-        self.hosted(walk, || {
-            Emitter::block_opening_with(
-                self,
-                out,
-                block,
-                depth as usize,
-                Flow::from_emit(flow, scope),
-                tail,
-                opening.as_deref(),
-            )
-        })
-    }
-
-    fn block_plain(
-        &self,
-        walk: &mut EmitWalk,
-        out: &mut Out,
-        block: &Block,
-        depth: i64,
-        flow: EmitFlow,
-        scope: &EmitScope,
-        tail: Tail,
-    ) -> Crossing {
-        self.hosted(walk, || {
-            Emitter::block_plain(
-                self,
-                out,
-                block,
-                depth as usize,
-                Flow::from_emit(flow, scope),
-                tail,
-                None,
-            )
-        })
-    }
-
     fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>> {
         self.nonnegative_bodies
             .get(&(std::ptr::from_ref(body) as usize))
@@ -265,30 +118,6 @@ impl EmitHost for Emitter<'_> {
             Ok(())
         })?;
         Ok(written)
-    }
-
-    fn stmt(
-        &self,
-        walk: &mut EmitWalk,
-        out: &mut Out,
-        stmt: &crate::ast::Stmt,
-        span: &crate::ast::Span,
-        depth: i64,
-        tail: Tail,
-        flow: EmitFlow,
-        scope: &EmitScope,
-    ) -> Crossing {
-        self.hosted(walk, || {
-            Emitter::stmt(
-                self,
-                out,
-                stmt,
-                span,
-                depth as usize,
-                tail,
-                Flow::from_emit(flow, scope),
-            )
-        })
     }
 
     fn given_up_unmuted(&self, at: i64) -> bool {

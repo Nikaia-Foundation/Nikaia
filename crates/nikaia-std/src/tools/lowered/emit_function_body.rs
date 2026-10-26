@@ -33,7 +33,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_function_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail, settled: bool) -> Result<(), Box<dyn std::error::Error>> {
-        if settled { host.block_plain(walk, out, body, depth, flow, scope, tail)?; } else { self.emit_core_block(world, walk, out, host, body, depth, flow, scope, tail)?; }
+        if settled { self.emit_stmt_block_plain(world, walk, out, host, body, depth, flow, scope, tail, None)?; } else { self.emit_core_block(world, walk, out, host, body, depth, flow, scope, tail)?; }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -90,7 +90,7 @@ impl EmitState {
             self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1);
             let st = out.mark();
             if wrap { if binds { out.push("let __nikaia_value = "); } else { out.push("Ok("); } }
-            host.stmt(walk, out, &stmt.node, &stmt.span, depth + 1, here, flow, &scope)?;
+            self.emit_stmt(world, walk, out, host, &stmt.node, &stmt.span, depth + 1, here, flow, &scope)?;
             if wrap { if binds { out.push(&format!(";\n{}Ok(__nikaia_value)", inner_pad)); } else { out.push(")"); } }
             out.record(&stmt.span, st);
             out.push("\n");

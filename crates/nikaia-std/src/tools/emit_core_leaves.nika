@@ -92,10 +92,10 @@ impl EmitState {
         if self.hole_wraps.contains_key(at) {
             let wraps = self.hole_wraps.get(at) ?? return
             let wrapped = host.wrap_hole(node, wraps)
-            host.expr(walk, out, wrapped, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, wrapped, depth, flow, scope)
             return
         }
-        host.expr(walk, out, node, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)
     }
 
     /// A key, handed over as it is, lent with a `&`, or read as the `str` it
@@ -112,7 +112,7 @@ impl EmitState {
             if !emit_leaf_bare_key(index) {
                 out.push("(")
             }
-            host.expr(walk, out, index, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, index, depth, flow, scope)
             if !emit_leaf_bare_key(index) {
                 out.push(")")
             }
@@ -121,12 +121,12 @@ impl EmitState {
         }
         if kind == 1 {
             out.push("nikaia_std::index::key(")
-            host.expr(walk, out, index, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, index, depth, flow, scope)
             out.push(")")
             return
         }
         if kind == 0 {
-            host.expr(walk, out, index, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, index, depth, flow, scope)
             return
         }
         if emit_leaf_bare_key(index) {
@@ -134,7 +134,7 @@ impl EmitState {
         } else {
             out.push("&(")
         }
-        host.expr(walk, out, index, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, index, depth, flow, scope)
         if !emit_leaf_bare_key(index) {
             out.push(")")
         }
@@ -180,7 +180,7 @@ impl EmitState {
         if parenthesise {
             out.push("(")
         }
-        host.expr(walk, out, node, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)
         if parenthesise {
             out.push(")")
         }
@@ -202,7 +202,7 @@ impl EmitState {
         if parenthesise {
             out.push("(")
         }
-        host.expr(walk, out, node, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)
         if parenthesise {
             out.push(")")
         }
@@ -217,11 +217,11 @@ impl EmitState {
         }
         if indexed {
             out.push("::core::convert::AsRef::<str>::as_ref(&")
-            host.expr(walk, out, side, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, side, depth, flow, scope)
             out.push(")")
             return
         }
-        host.expr(walk, out, side, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, side, depth, flow, scope)
     }
 
     /// What a `return` or a tail hands back: the nullable wrap, the `Either`
@@ -242,7 +242,7 @@ impl EmitState {
         if self.facts.lent_returns.contains(at) {
             out.push("&")
         }
-        host.expr(walk, out, value, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
         if either {
             out.push(")")
         }
@@ -360,7 +360,7 @@ impl EmitState {
             }
             n += 1
             out.push(f"{emit_text(world, argument.name)}: ")
-            host.expr(walk, out, argument.value, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, argument.value, depth, flow, scope)
         }
         out.push(" }")
     }
@@ -383,7 +383,7 @@ impl EmitState {
             let mut found = false
             for a in config {
                 if !found && emit_text(world, a.name) == option {
-                    host.expr(walk, out, a.value, depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, a.value, depth, flow, scope)
                     found = true
                 }
             }
@@ -397,12 +397,12 @@ impl EmitState {
     pub fn emit_core_guard_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, guard: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let reopening = self.emit_core_guard_reopening(world, host, pattern, guard)
         if reopening.len() == 0 {
-            host.expr(walk, out, guard, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, guard, depth, flow, scope)
             return
         }
         out.push("{ ")
         out.push(reopening)
-        host.expr(walk, out, guard, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, guard, depth, flow, scope)
         out.push(" }")
     }
 
@@ -456,7 +456,7 @@ impl EmitState {
         // names** (ADR-372 D4-D7): claimed at `yes`, one parse at `no`.
         if parallel {
             out.push(f"nikaia_std::grammar::parse{over}_pieces(&*")
-            host.expr(walk, out, input, depth, flow, scope)
+            self.emit_expr(world, walk, out, host, input, depth, flow, scope)
             let options = emit_fold_options(name, rule_name)
             let claimed = parallelism != "Parallelism::Off"
             out.push(f", {options}(), {claimed}, |source, how| {lowered}::parse_{rule_name}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){question}")
@@ -464,7 +464,7 @@ impl EmitState {
         }
         // A sequential entry rule: the parser is driven over the whole input once.
         out.push(f"nikaia_std::grammar::parse{over}(&*")
-        host.expr(walk, out, input, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, input, depth, flow, scope)
         out.push(f", {lowered}::parse_{rule_name}()){question}")
     }
 
@@ -486,7 +486,7 @@ impl EmitState {
                     }
                     let parsed = self.template_holes.get((site, expr.clone())) ?? return
                     out.push(f"{pad}__html.push_str(&::nikaia_std::html::Render::render(&")
-                    host.expr(walk, out, parsed, depth, flow, scope)
+                    self.emit_expr(world, walk, out, host, parsed, depth, flow, scope)
                     out.push("));\n")
                 },
                 // The loop of the language below, over the captured collection:
@@ -548,14 +548,14 @@ impl EmitState {
 
     /// A block: its statements with nothing written before them.
     pub fn emit_core_block[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws {
-        host.block_opening_with(walk, out, block, depth, flow, scope, tail, null)
+        self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, flow, scope, tail, null)
     }
 
     /// `if c { ... } else { ... }`, where `tail` says what the whole thing is in
     /// the position of: the branches are in the same position the `if` is.
     pub fn emit_core_if_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, condition: ref Expr, then_block: ref Block, else_block: ref Block?, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws {
         out.push("if ")
-        host.expr(walk, out, condition, depth, flow, scope)
+        self.emit_expr(world, walk, out, host, condition, depth, flow, scope)
         out.push(" ")
         self.emit_core_block(world, walk, out, host, then_block, depth, flow, scope, tail)
         if else_block == null {

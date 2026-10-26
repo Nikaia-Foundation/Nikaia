@@ -90,7 +90,7 @@ fn emit_match_yes_or_no(arms: ref Vec[MatchArm]) -> bool? {
 /// **A list pattern matches a slice** (ADR-355 D5): where an arm writes one,
 /// the subject is matched as `&x[..]`, which a `Vec`, an array and a view all
 /// give, and leaves the list where it was.
-fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope, deref: ref String, text: bool, copied_view: bool) sync throws {
+fn emit_match_subject[H: EmitHost](state: ref EmitState, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope, deref: ref String, text: bool, copied_view: bool) sync throws {
     // **An owned `String` matched against text literals is matched as a
     // `&str`** (#704, `text_scrutinees`): `&*` reaches it whether the value
     // is lowered owned or as a view.
@@ -105,7 +105,7 @@ fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: r
         if !plain {
             out.push("(")
         }
-        host.expr(walk, out, value, depth, flow, scope)
+        state.emit_expr(world, walk, out, host, value, depth, flow, scope)
         if !plain {
             out.push(")")
         }
@@ -134,7 +134,7 @@ fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: r
     } else {
         out.push(deref)
     }
-    host.expr(walk, out, value, depth, flow, scope)
+    state.emit_expr(world, walk, out, host, value, depth, flow, scope)
     if list {
         out.push(")[..]")
     } else if copied {
@@ -241,7 +241,7 @@ impl EmitState {
                 }
                 out.push("]")
             },
-            MatchPattern::Literal(value) => host.expr(walk, out, value, depth, flow, scope),
+            MatchPattern::Literal(value) => self.emit_expr(world, walk, out, host, value, depth, flow, scope),
             MatchPattern::Path(p) => {
                 if p.len() == 1 {
                     for one in p {
@@ -327,9 +327,9 @@ impl EmitState {
             // **`..=`, because a pattern's range includes both ends** (D3) and
             // that is how the language below spells one.
             MatchPattern::Range { start, end } => {
-                host.expr(walk, out, start, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, start, depth, flow, scope)
                 out.push("..=")
-                host.expr(walk, out, end, depth, flow, scope)
+                self.emit_expr(world, walk, out, host, end, depth, flow, scope)
             },
         }
         return n
@@ -439,12 +439,12 @@ impl EmitState {
         // arms disagree with `else => {}`, so its value is dropped with `;`.
         if plain && statements {
             out.push("{ ")
-            host.expr(walk, out, body, depth, body_flow, scope)
+            self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)
             out.push("; }")
             return
         }
         if plain {
-            host.expr(walk, out, body, depth, body_flow, scope)
+            self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)
             return
         }
         // **A block arm opens with the names it binds**, inside its own braces: a
@@ -464,7 +464,7 @@ impl EmitState {
                 }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value }
                 let trimmed: String? = opening.trim_end().clone()
-                host.block_opening_with(walk, out, block, depth, inside, scope, tail, trimmed)
+                self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, tail, trimmed)
                 return
             },
             else => {}
@@ -480,7 +480,7 @@ impl EmitState {
         for name in cloned {
             out.push(f"let {name} = {name}.clone(); ")
         }
-        host.expr(walk, out, body, depth, body_flow, scope)
+        self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)
         if statements {
             out.push(";")
         }
@@ -604,7 +604,7 @@ impl EmitState {
                     if arm.guard != null {
                         out.push(" if ")
                         let guard = arm.guard ?? return
-                        host.expr(walk, out, guard, depth + 2, inside, inside_scope)
+                        self.emit_expr(world, walk, out, host, guard, depth + 2, inside, inside_scope)
                     }
                     out.push(" => ")
                     self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 2, inside, inside_scope, "")
@@ -701,7 +701,7 @@ impl EmitState {
                     if arm.guard != null {
                         out.push(" if ")
                         let guard = arm.guard ?? return
-                        host.expr(walk, out, guard, depth + 2, inside, inside_scope)
+                        self.emit_expr(world, walk, out, host, guard, depth + 2, inside, inside_scope)
                     }
                     out.push(" => ")
                     self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 2, inside, inside_scope, "")
@@ -755,7 +755,7 @@ impl EmitState {
                     out.push("!")
                 }
                 out.push("matches!(")
-                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), self.facts.text_scrutinees.contains(node_key(value)), self.facts.copied_walks.contains(node_key(value)))
+                emit_match_subject(self, world, walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), self.facts.text_scrutinees.contains(node_key(value)), self.facts.copied_walks.contains(node_key(value)))
                 out.push(", ")
                 let mut i = 0
                 for arm in arms {
@@ -778,7 +778,7 @@ impl EmitState {
         if self.facts.lent_scrutinees.contains(node_key(value)) && !text {
             out.push("&")
         }
-        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(node_key(value)))
+        emit_match_subject(self, world, walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(node_key(value)))
         let pad = "    ".repeat(depth + 1)
         let close = "    ".repeat(depth)
         out.push(" {\n")
@@ -806,7 +806,7 @@ impl EmitState {
                 self.emit_core_pattern_written(world, walk, out, host, arm.pattern, true, -1, false, 0, depth + 1, flow, scope)
                 out.push(" => ")
                 let mut place = EmitOut::empty()
-                host.expr(walk, place, value, depth, flow, scope)
+                self.emit_expr(world, walk, place, host, value, depth, flow, scope)
                 let mut place_text = place.buf.clone()
                 if !emit_match_is_variable(value) {
                     place_text = f"&mut {place.buf}"

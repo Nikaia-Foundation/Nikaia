@@ -49,7 +49,7 @@ impl EmitState {
         if !maker {
             out.push("|| ")
         }
-        host.expr(walk, out, spec.init, 0, EmitFlow::plain(), EmitScope::plain())
+        self.emit_expr(world, walk, out, host, spec.init, 0, EmitFlow::plain(), EmitScope::plain())
         out.push(", ")
         self.emit_fold_step(world, walk, out, host, spec.step)
         match spec.merge {
@@ -112,7 +112,7 @@ impl EmitState {
                     if on_accumulator && mutates {
                         out.push(f"|{emit_text(world, accumulator)}: &mut _, {emit_text(world, item)}| {{ ")
                         for stmt in body.stmts {
-                            host.stmt(walk, out, stmt.node, stmt.span, 0, EmitTail::Statement, EmitFlow::plain(), EmitScope::plain())
+                            self.emit_stmt(world, walk, out, host, stmt.node, stmt.span, 0, EmitTail::Statement, EmitFlow::plain(), EmitScope::plain())
                             out.push(" ")
                         }
                         out.push("}")
@@ -126,11 +126,11 @@ impl EmitState {
         // D9): its result type said so, and it is lent the accumulator.
         if self.emit_in_place_fold(step) != 0 {
             out.push("|__nk_acc: &mut _, __nk_x| { nikaia_std::par::in_place(__nk_acc, __nk_x, ")
-            host.expr(walk, out, step, 0, EmitFlow::plain(), EmitScope::plain())
+            self.emit_expr(world, walk, out, host, step, 0, EmitFlow::plain(), EmitScope::plain())
             out.push("); }")
             return
         }
-        host.expr(walk, out, step, 0, EmitFlow::plain(), EmitScope::plain())
+        self.emit_expr(world, walk, out, host, step, 0, EmitFlow::plain(), EmitScope::plain())
     }
 
     /// A fold's merge. `Summary::merge` names a method, and the `impl` says
@@ -172,10 +172,10 @@ impl EmitState {
         if form != 0 && !closure {
             let second = if form == 2 { "&__nk_b" } else { "__nk_b" }
             out.push(f"|mut __nk_a, __nk_b| {{ nikaia_std::par::in_place(&mut __nk_a, {second}, ")
-            host.expr(walk, out, merge, 0, EmitFlow::plain(), EmitScope::plain())
+            self.emit_expr(world, walk, out, host, merge, 0, EmitFlow::plain(), EmitScope::plain())
             out.push("); __nk_a }")
             return
         }
-        host.expr(walk, out, merge, 0, EmitFlow::plain(), EmitScope::plain())
+        self.emit_expr(world, walk, out, host, merge, 0, EmitFlow::plain(), EmitScope::plain())
     }
 }

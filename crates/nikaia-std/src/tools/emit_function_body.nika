@@ -53,7 +53,7 @@ impl EmitState {
     /// (ADR-297 D2).
     fn emit_function_block[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, settled: bool) sync throws {
         if settled {
-            host.block_plain(walk, out, body, depth, flow, scope, tail)
+            self.emit_stmt_block_plain(world, walk, out, host, body, depth, flow, scope, tail, null)
         } else {
             self.emit_core_block(world, walk, out, host, body, depth, flow, scope, tail)
         }
@@ -168,7 +168,7 @@ impl EmitState {
                     out.push("Ok(")
                 }
             }
-            host.stmt(walk, out, stmt.node, stmt.span, depth + 1, here, flow, scope)
+            self.emit_stmt(world, walk, out, host, stmt.node, stmt.span, depth + 1, here, flow, scope)
             if wrap {
                 if binds {
                     out.push(f";\n{inner_pad}Ok(__nikaia_value)")

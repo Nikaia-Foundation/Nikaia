@@ -33,9 +33,7 @@ pub mod template;
 use winnow_grammar::Symbol;
 
 use crate::assets::Reads;
-use crate::ast::{
-    Block, Expr, GrammarDef, Item, Pattern, Span, Spanned, Stmt, Type, VariantFields,
-};
+use crate::ast::{Block, Expr, GrammarDef, Item, Pattern, Span, Spanned, Stmt, Type};
 use crate::parser::Parsed;
 use crate::refused;
 
@@ -1174,31 +1172,6 @@ fn built_at_build_time(parsed: &Parsed) -> HashSet<String> {
 /// program could also have chosen would be a name this compiler took from it.
 const ABORT_TABLE: &str = "__NIKAIA_SITES";
 
-/// What the **last** statement of a block is, which is two questions and not
-/// one.
-///
-/// Nikaia's blocks are expressions (Part I, 3.1), so a block's last statement
-/// is usually its value. That much was a `bool`. What a `bool` could not say is
-/// *whose* value it is, and exactly one rewrite in this file needs to know:
-/// `return x` at the end of a function body is written as `x`, because the
-/// value a function body ends in **is** what the function hands back.
-///
-/// That is true of a function body. It is not true of a `match` arm, a `catch`
-/// handler, or a block used as a value - their last statement is the value of
-/// the *expression around them*, and a `return` inside one leaves the function
-/// past it. Writing such a `return` as a bare value is a different program:
-/// where the function returns something it is rustc's `E0308` about a file
-/// nobody wrote, and where it returns nothing **nothing complains at all** and
-/// the function runs on past the point the source said to leave
-/// ([`docs/history/nightly-cost.md`](../../../docs/history/nightly-cost.md) §3.3).
-///
-/// So the rewrite is allowed where this says [`Tail::Return`] and nowhere else.
-/// Everywhere else a `return` stays a `return`, which is always a legal Rust
-/// statement and always means what the source meant - ADR-296 D17's "the
-/// lowering is syntactic and never guesses a meaning", applied to the one place
-/// it had been guessing.
-use nikaia_std::tools::emit_kinds::EmitTail as Tail;
-
 /// **The oldest Rust a Nikaia installation works with**
 /// ([ADR-305](../../docs/specification/adr/adr-305.md)).
 ///
@@ -1221,239 +1194,6 @@ use nikaia_std::tools::emit_kinds::EmitTail as Tail;
 /// record and a measurement, never silently: `scripts/check-floor.sh` reads it
 /// from here and runs the suite on it.
 pub const RUST_FLOOR: &str = "1.88";
-
-/// What surrounds the statements being emitted.
-#[derive(Debug, Clone, Copy)]
-struct Flow<'a> {
-    /// Kap 7.1: the enclosing function is `throws`, so a `return` carries `Ok`.
-    throws: bool,
-    /// The function a `throw` inside this flow is raised from.
-    ///
-    /// ADR-023 D6 wants a raise site keyed by what the source says rather than
-    /// by where it sits, so that an edit above it does not move it. A name is
-    /// the part of that key this compiler has; the ordinal within the function
-    /// waits on the mark table.
-    origin: &'a str,
-    /// Kap 7.1: what is being emitted is the guarded half of a `catch`, so a
-    /// failure in it is handled here rather than propagated.
-    ///
-    /// It reaches inward for the same reason `sequential` does: in
-    /// `outer(inner()) catch { … }` the handler runs for either call, so
-    /// neither propagates. The handler's own body is emitted with the flow the
-    /// `catch` was written in, because a failure raised *there* leaves the
-    /// function like any other.
-    caught: bool,
-    /// What is being emitted is a `catch`'s **handler**, and the error it was
-    /// handed came through a **named** channel
-    /// ([ADR-280](../../../docs/specification/adr/adr-280.md) D10).
-    ///
-    /// One statement in a handler reads it: `throw error`, which passes the
-    /// error on with the site it was raised at rather than wrapping it again.
-    /// It does **not** reach inward past a function boundary, for the reason
-    /// the binding does not either: a lambda inside a handler has its own
-    /// `error` or none.
-    caught_named: bool,
-    /// The **sum** the error a handler was handed travels in, where it is one
-    /// ([ADR-280](../../../docs/specification/adr/adr-280.md) D17).
-    ///
-    /// `match error { … }` reads it: the patterns the source writes name
-    /// variants of the sum's **members**, so the match has to be taken apart by
-    /// member, and the sum's own name is what the outer arms are written with.
-    caught_sum: Option<&'a str>,
-    /// The **member** of that sum whose arm is being written, where one is
-    /// ([ADR-280](../../../docs/specification/adr/adr-280.md) D17).
-    ///
-    /// `throw error` reads it: inside a member's arm the handler holds the
-    /// member, so passing the error on is putting it back in the variant it
-    /// came out of.
-    caught_member: Option<&'a str>,
-    /// What is being emitted is a **place** rather than a value
-    /// ([ADR-293](../../../docs/specification/adr/adr-293.md) D4).
-    ///
-    /// The left of an assignment is the only one: `self.bodies[0].vx = …`
-    /// writes **through** the index, so the brackets there are the language
-    /// below's own and not a read. A read is what answers a `T?` on a map; a
-    /// place has to stay a place or there is nothing to assign to.
-    in_a_place: bool,
-    /// The `match` being emitted is a **statement**: its arms hand nothing
-    /// back, so a block arm's last statement keeps its semicolon, as an `if`
-    /// in statement position does. Without it `ledger.sources.insert(…)` at
-    /// the end of an arm was the arm's value (found moving the ledger's reader
-    /// into Nikaia, ADR-294).
-    arms_are_statements: bool,
-    /// The byte the statement being emitted starts at.
-    ///
-    /// It is here because the checker's answer about method calls is keyed by
-    /// it (`check::Checked::fallible_methods`), and an expression has no span
-    /// of its own to look itself up by. `stmt` sets it for every statement it
-    /// emits, so a statement nested in a block carries its own and not the
-    /// outer one's - which is what the checker records, because it walks
-    /// statements the same way.
-    statement: usize,
-    /// The key the ledger records the function being emitted under - `main`, or
-    /// `Counter::record` for a method.
-    ///
-    /// It is here for the same reason `statement` is: the answer about a
-    /// `Shared` value is keyed by the function it is written in and the name the
-    /// source gives it (`contracts::sharing`), and a `let` has no way to look
-    /// itself up without knowing which function it stands in. `origin` is the
-    /// name a `throw` reports and is deliberately not this: an error raised in a
-    /// method says the method's own name (ADR-023 D6), and a ledger key says
-    /// `Type::method`.
-    function: &'a str,
-    /// This expression **is** the guarded half of a `catch`, rather than
-    /// sitting somewhere inside it
-    /// ([ADR-292](../../../docs/specification/adr/adr-292.md) D18).
-    ///
-    /// `caught` reaches inward, because in `outer(inner()) catch { … }` the
-    /// handler runs for either call. This does not: it is set on the one
-    /// expression the `match` is written around, and only where that
-    /// expression is a block that joins. A joining block's outcome is a
-    /// `Result` the handler consumes, and one nested in an argument is a tuple
-    /// like any other value.
-    handled_here: bool,
-    /// The type the enclosing function's failures travel in
-    /// ([ADR-292](../../../docs/specification/adr/adr-292.md) D17).
-    ///
-    /// Read by the two vehicles that wrap a fallible branch in an `Ok`:
-    /// `overlap` and `select` write the error type out, and it has to be the
-    /// one the `?` below them converts into. It reaches inward like `function`
-    /// does and for the same reason - a nested block is still that function -
-    /// and `Flow::PLAIN`'s box is what a context with no function around it
-    /// gets.
-    channel: &'a str,
-    /// What is being emitted sits inside a **lambda's body**
-    /// ([ADR-055](../../../docs/specification/adr/adr-055.md) §6).
-    ///
-    /// A lambda is a closure in the language below, and Rust has no stable
-    /// `async` closure - so a call that pauses cannot be written inside one, and
-    /// the lowering says so in Nikaia's words rather than handing `rustc` a file
-    /// nobody wrote (Part III, C.1).
-    ///
-    /// **It is here and not in the checker on purpose.** A lambda that reads a
-    /// file is a correct Nikaia program - `examples/fortunes.nika`'s route
-    /// handler is one - and refusing a correct program is the one thing the
-    /// compiler may never do (Part III, C.4). So the type check accepts it and
-    /// the *lowering* is what cannot write it, which is a limit of this compiler
-    /// and is where a program that is only checked never meets it.
-    ///
-    /// It reaches inward the way `sequential` and `caught` do: a call written in
-    /// a block inside the lambda is still written inside the lambda. A function
-    /// body starts a `Flow` of its own, which is the boundary it does not cross.
-    in_lambda: bool,
-    /// The lambda parameters written **`mut`** that are in scope here
-    /// ([ADR-281](../../docs/specification/adr/adr-281.md) D12).
-    ///
-    /// `kasse.update fn(mut v) { v += 100 }` lowers to a closure whose
-    /// parameter is `&mut T`, because D1 hands the block the **address** in the
-    /// lock. So every mention of `v` in the body is written `(*v)`: `+=` and an
-    /// assignment need the dereference outright, and a method call and a field
-    /// read would get it from Rust anyway — writing it everywhere is one rule
-    /// rather than a list of positions, and a parenthesis nobody needs is a
-    /// warning about the generated file (Part III C.1), which is why the one
-    /// here is always needed.
-    ///
-    /// **It accumulates rather than replacing**, so a lambda written inside an
-    /// `update` block does not lose the dereference for a name it captures.
-    changed: &'a [Symbol],
-    /// The **code parameters whose type may pause**
-    /// ([ADR-277](../../../docs/specification/adr/adr-277.md) D11) that are in
-    /// scope here.
-    ///
-    /// Such a parameter lowers to a closure returning a boxed future, so a call
-    /// to it is a call that hands back a future and carries an `.await`. The
-    /// emitter can answer this one itself — the type is written in the
-    /// declaration it is standing in, which is not the case for anything
-    /// `pausing_key` looks up ([ADR-288](../../../docs/specification/adr/adr-288.md)).
-    ///
-    /// **It does not accumulate the way `changed` does.** A lambda written
-    /// inside the body has parameters of its own, and a name it binds is not
-    /// this function's parameter any more; the list is the declaration's and
-    /// stops at every boundary that starts a `Flow::PLAIN`.
-    awaited: &'a [Symbol],
-    /// The name the statement being emitted **binds**, where it binds one.
-    ///
-    /// It is here for the reason `function` is: the count a `Shared` was given is
-    /// keyed by the function and the name (`contracts::sharing`), and a hull
-    /// written by a **call** ([ADR-281](../../../docs/specification/adr/adr-281.md)
-    /// D2) has to look that up from inside an expression. An expression carries no
-    /// span and no name of its own.
-    ///
-    /// Empty where the statement binds nothing, which is the floor's case and
-    /// never a wrong answer - only a slower one.
-    bound: &'a str,
-    /// What is being emitted is **inside a constant this pass decided to write
-    /// in the wider type** ([ADR-285](../../../docs/specification/adr/adr-285.md)
-    /// D1), so every integer literal in it carries the `i64` suffix.
-    ///
-    /// It reaches inward, and it can only reach literals: an expression folds
-    /// only if it is built from literals and arithmetic, so nothing else is
-    /// down there to be reached. It is set on the **outermost** expression that
-    /// folds, which is why the arms below ask for it before folding again - one
-    /// decision per expression, not one per operator.
-    widen: bool,
-    /// What is being emitted stands where **Rust's own inference gives the
-    /// number its type** - a sequence index and a repeat count, both `usize`.
-    ///
-    /// Those are the two positions a literal is deliberately left bare in
-    /// (`index::at` and `count::of` are skipped there, because `at(0)` has
-    /// nothing to infer from), and a suffix written into one would pin the type
-    /// the position is supposed to decide. So `widen` does not start here, and
-    /// what an index that overflows an `i32` gets is the message it gets today
-    /// rather than a worse one.
-    inferred: bool,
-    /// What is being emitted sits inside the **body of a loop** - so a `break`
-    /// or a `continue` here has somewhere to go (Part I, 3.3).
-    ///
-    /// **The backstop, and the checker is the diagnostic.** `NK1132` is what a
-    /// program actually meets, and it is the one worth writing because it names
-    /// which of a lambda, a task, an `overlap` branch or a fold's step stands in
-    /// the way. This is the guarantee underneath it: a walk that missed a
-    /// corner would otherwise put `break;` into a closure and let `rustc` answer
-    /// about a file nobody wrote (Part III, C.1), and *"the checker's walk is
-    /// complete"* is a thing to hope for rather than a thing that holds. Every
-    /// statement is emitted through one place, so asking here cannot be evaded.
-    ///
-    /// It reaches inward the way `caught` and `in_lambda` do, and it stops at
-    /// exactly the constructs that are a function below: each of them starts
-    /// from [`Flow::PLAIN`], where this is false.
-    in_loop: bool,
-    /// **The `catch` a failing call breaks out to** (#721,
-    /// `EmitFlow::breaks_to`): the node of the expression it guards, `-1`
-    /// where none is around.
-    breaks_to: i64,
-    /// The channel a `task::scope`'s tasks fail in, and whose it is
-    /// (`EmitScope::tasks_channel`, ADR-346 D7).
-    tasks_channel: &'a str,
-    tasks_function: &'a str,
-}
-
-impl<'a> Flow<'a> {
-    const PLAIN: Flow<'static> = Flow {
-        tasks_channel: "",
-        tasks_function: "",
-        changed: &[],
-        awaited: &[],
-        throws: false,
-        origin: "",
-        caught: false,
-        caught_named: false,
-        caught_sum: None,
-        caught_member: None,
-        in_a_place: false,
-        arms_are_statements: false,
-        statement: usize::MAX,
-        function: "",
-        channel: "Box<dyn std::error::Error>",
-        handled_here: false,
-        in_lambda: false,
-        bound: "",
-        widen: false,
-        inferred: false,
-        in_loop: false,
-        breaks_to: -1,
-    };
-}
 
 impl<'p> Emitter<'p> {
     fn new(parsed: &'p Parsed, build: Build, provenance: crate::contracts::Provenance) -> Self {
@@ -1991,65 +1731,6 @@ impl<'p> Emitter<'p> {
 
     // --- Statements and expressions ---
 
-    /// The same, with one line written before the statements:
-    /// `emit_stmt_block_opening_with` (`tools/emit_stmt.nika`).
-    ///
-    /// One caller: a `for` whose step can fail opens its body by unwrapping the
-    /// step (ADR-025 D7). It is a parameter rather than a wrapping block
-    /// because an extra brace level in the emitted Rust is a level the source
-    /// map has to explain and the reader has to skip.
-    fn block_opening_with(
-        &self,
-        out: &mut Out,
-        block: &Block,
-        depth: usize,
-        flow: Flow<'_>,
-        tail: Tail,
-        opening: Option<&str>,
-    ) -> Result<()> {
-        self.cross(flow, |walk, flow, scope| {
-            self.s.emit_stmt_block_opening_with(
-                &self.world,
-                walk,
-                out,
-                self,
-                block,
-                depth as i64,
-                flow,
-                scope,
-                tail,
-                opening.map(str::to_string),
-            )
-        })
-    }
-
-    /// A block as it is written, with no settle point after it:
-    /// `emit_stmt_block_plain` (`tools/emit_stmt.nika`).
-    fn block_plain(
-        &self,
-        out: &mut Out,
-        block: &Block,
-        depth: usize,
-        flow: Flow<'_>,
-        tail: Tail,
-        opening: Option<&str>,
-    ) -> Result<()> {
-        self.cross(flow, |walk, flow, scope| {
-            self.s.emit_stmt_block_plain(
-                &self.world,
-                walk,
-                out,
-                self,
-                block,
-                depth as i64,
-                flow,
-                scope,
-                tail,
-                opening.map(str::to_string),
-            )
-        })
-    }
-
     /// Whether a **branch of an `overlap`** can pause
     /// ([ADR-292](../../../docs/specification/adr/adr-292.md) D6).
     ///
@@ -2063,51 +1744,9 @@ impl<'p> Emitter<'p> {
     /// It was ADR-292's, for the pair the compiler chose to overlap; D1
     /// withdrew that and D6 asks the same question about a branch the
     /// programmer chose.
-    fn branch_pauses(&self, stmt: &Spanned<Stmt>, _flow: Flow<'_>) -> bool {
+    fn branch_pauses(&self, stmt: &Spanned<Stmt>) -> bool {
         self.s
             .branch_pauses(&self.world, &stmt.node, stmt.span.at() as i64)
-    }
-
-    /// A statement: `emit_stmt` (`tools/emit_stmt.nika`).
-    fn stmt(
-        &self,
-        out: &mut Out,
-        stmt: &Stmt,
-        span: &Span,
-        depth: usize,
-        tail: Tail,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        self.cross(flow, |walk, flow, scope| {
-            self.s.emit_stmt(
-                &self.world,
-                walk,
-                out,
-                self,
-                stmt,
-                span,
-                depth as i64,
-                tail,
-                flow,
-                scope,
-            )
-        })
-    }
-
-    /// An expression, written to `out`: `emit_expr` (`tools/emit_expr.nika`).
-    fn expr(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
-        self.cross(flow, |walk, flow, scope| {
-            self.s.emit_expr(
-                &self.world,
-                walk,
-                out,
-                self,
-                expr,
-                depth as i64,
-                flow,
-                scope,
-            )
-        })
     }
 
     /// Whether a type named here holds a view, and so carries the input lifetime
@@ -2350,33 +1989,16 @@ pub(crate) fn view_slots(
     units: &[&Parsed],
     borrowing: &std::collections::BTreeSet<String>,
 ) -> std::collections::BTreeMap<String, Vec<String>> {
-    let mut slots = std::collections::BTreeMap::new();
-    for parsed in units {
-        let errors = declared_errors(parsed);
-        for item in &parsed.program.items {
-            if let Item::Struct {
-                name,
-                fields,
-                is_extern: false,
-                ..
-            } = &item.node
-            {
-                let text = parsed.text(*name).to_string();
-                if errors.contains(&text) {
-                    continue;
-                }
-                let held: Vec<String> = fields
-                    .iter()
-                    .filter(|f| holds_view(&f.ty) || names_outside(parsed, &f.ty, borrowing))
-                    .map(|f| parsed.text(f.name).to_string())
-                    .collect();
-                if held.len() >= 2 {
-                    slots.insert(text, held);
-                }
-            }
-        }
-    }
-    slots
+    units
+        .iter()
+        .flat_map(|parsed| {
+            nikaia_std::tools::emit_tables::emit_tables_view_slots(
+                &parsed.interner,
+                &parsed.program.items,
+                borrowing,
+            )
+        })
+        .collect()
 }
 
 /// Which structs hold a view into the parser's input.
@@ -2396,51 +2018,13 @@ pub(crate) fn borrowing_structs_beside(
     parsed: &Parsed,
     outside: &std::collections::BTreeSet<String>,
 ) -> HashSet<Symbol> {
-    let mut fields_of: HashMap<Symbol, Vec<&Type>> = HashMap::new();
-    let mut borrowing = HashSet::new();
-    let named_outside = |t: &Type| names_outside(parsed, t, outside);
-
-    for item in &parsed.program.items {
-        // An enum holds views the same way a struct does - in the types of
-        // what its variants carry - so it is walked the same way.
-        if let Item::Enum { name, variants, .. } = &item.node {
-            let types: Vec<&Type> = variants
-                .iter()
-                .flat_map(|v| match &v.fields {
-                    VariantFields::Unit => Vec::new(),
-                    VariantFields::Tuple(types) => types.iter().collect(),
-                    VariantFields::Named(fields) => fields.iter().map(|f| &f.ty).collect(),
-                })
-                .collect();
-            if types.iter().any(|t| holds_view(t) || named_outside(t)) {
-                borrowing.insert(*name);
-            }
-            fields_of.insert(*name, types);
-        }
-        if let Item::Struct { name, fields, .. } = &item.node {
-            let types: Vec<&Type> = fields.iter().map(|f| &f.ty).collect();
-            if types.iter().any(|t| holds_view(t) || named_outside(t)) {
-                borrowing.insert(*name);
-            }
-            fields_of.insert(*name, types);
-        }
-    }
-
-    loop {
-        let mut changed = false;
-        for (name, types) in &fields_of {
-            if borrowing.contains(name) {
-                continue;
-            }
-            if types.iter().any(|t| names_borrowing(t, &borrowing)) {
-                borrowing.insert(*name);
-                changed = true;
-            }
-        }
-        if !changed {
-            return borrowing;
-        }
-    }
+    nikaia_std::tools::emit_tables::emit_tables_borrowing_structs_beside(
+        &parsed.interner,
+        &parsed.program.items,
+        outside,
+    )
+    .into_iter()
+    .collect()
 }
 
 /// **A function type holds what its result holds, and nothing it is
@@ -2471,40 +2055,6 @@ pub(crate) fn package_borrowing(units: &[&Parsed]) -> std::collections::BTreeSet
             return found;
         }
     }
-}
-
-fn names_outside(parsed: &Parsed, ty: &Type, outside: &std::collections::BTreeSet<String>) -> bool {
-    if outside.is_empty() {
-        return false;
-    }
-    if let Some(code) = &*ty.code {
-        return (*code.result)
-            .as_ref()
-            .is_some_and(|result| names_outside(parsed, result, outside));
-    }
-    outside.contains(parsed.text(ty.name))
-        || ty
-            .generics
-            .iter()
-            .any(|g| names_outside(parsed, g, outside))
-}
-
-pub(crate) fn names_borrowing(ty: &Type, borrowing: &HashSet<Symbol>) -> bool {
-    if let Some(code) = &*ty.code {
-        // A result that is one of two views handed in is the call's (#730).
-        let named = ty
-            .generics
-            .iter()
-            .filter(|g| !holds_view(g) && names_borrowing(g, borrowing))
-            .count();
-        if nikaia_std::tools::views::views_the_call_s(ty, named as i64) {
-            return false;
-        }
-        return (*code.result)
-            .as_ref()
-            .is_some_and(|result| names_borrowing(result, borrowing));
-    }
-    borrowing.contains(&ty.name) || ty.generics.iter().any(|g| names_borrowing(g, borrowing))
 }
 
 /// Walk every expression in a block, including the ones inside statements.
@@ -2565,7 +2115,7 @@ pub fn branch_starts_first<'p>(
         &Reads::none(),
         None,
     );
-    move |stmt| emitter.branch_pauses(stmt, Flow::PLAIN)
+    move |stmt| emitter.branch_pauses(stmt)
 }
 
 pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {

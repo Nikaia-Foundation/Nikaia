@@ -26,7 +26,7 @@ impl EmitState {
         out.push(&format!("{}({}, ", name, rule));
         let maker = matches!(spec.init, Expr::Variable(..) | Expr::Path(..) | Expr::Closure { .. });
         if !maker { out.push("|| "); }
-        host.expr(walk, out, &spec.init, 0, EmitFlow::plain(), &EmitScope::plain())?;
+        self.emit_expr(world, walk, out, host, &spec.init, 0, EmitFlow::plain(), &EmitScope::plain())?;
         out.push(", ");
         self.emit_fold_step(world, walk, out, host, &spec.step)?;
         match &spec.merge {
@@ -73,7 +73,7 @@ impl EmitState {
                     if on_accumulator && mutates {
                         out.push(&format!("|{}: &mut _, {}| {{ ", emit_text(world, accumulator), emit_text(world, item)));
                         for stmt in body.stmts.iter() {
-                            host.stmt(walk, out, &stmt.node, &stmt.span, 0, EmitTail::Statement, EmitFlow::plain(), &EmitScope::plain())?;
+                            self.emit_stmt(world, walk, out, host, &stmt.node, &stmt.span, 0, EmitTail::Statement, EmitFlow::plain(), &EmitScope::plain())?;
                             out.push(" ");
                         }
                         out.push("}");
@@ -85,11 +85,11 @@ impl EmitState {
         }
         if self.emit_in_place_fold(step) != 0 {
             out.push("|__nk_acc: &mut _, __nk_x| { nikaia_std::par::in_place(__nk_acc, __nk_x, ");
-            host.expr(walk, out, step, 0, EmitFlow::plain(), &EmitScope::plain())?;
+            self.emit_expr(world, walk, out, host, step, 0, EmitFlow::plain(), &EmitScope::plain())?;
             out.push("); }");
             return Ok(());
         }
-        host.expr(walk, out, step, 0, EmitFlow::plain(), &EmitScope::plain())?;
+        self.emit_expr(world, walk, out, host, step, 0, EmitFlow::plain(), &EmitScope::plain())?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -122,11 +122,11 @@ impl EmitState {
         if form != 0 && !closure {
             let second = if form == 2 { "&__nk_b" } else { "__nk_b" };
             out.push(&format!("|mut __nk_a, __nk_b| {{ nikaia_std::par::in_place(&mut __nk_a, {}, ", second));
-            host.expr(walk, out, merge, 0, EmitFlow::plain(), &EmitScope::plain())?;
+            self.emit_expr(world, walk, out, host, merge, 0, EmitFlow::plain(), &EmitScope::plain())?;
             out.push("); __nk_a }");
             return Ok(());
         }
-        host.expr(walk, out, merge, 0, EmitFlow::plain(), &EmitScope::plain())?;
+        self.emit_expr(world, walk, out, host, merge, 0, EmitFlow::plain(), &EmitScope::plain())?;
         Ok(())
     }
 }

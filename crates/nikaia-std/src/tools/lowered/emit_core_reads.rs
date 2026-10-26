@@ -112,7 +112,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_read_counted<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, counter: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<String, Box<dyn std::error::Error>> {
         let mut scratch = EmitOut::empty();
-        host.expr(walk, &mut scratch, counter, depth, flow, scope)?;
+        self.emit_expr(world, walk, &mut scratch, host, counter, depth, flow, scope)?;
         Ok(format!("(({}) as usize)", scratch.buf))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -151,7 +151,7 @@ impl EmitState {
             if !safe || !holdable { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("This `?.` returns a view of a value that's gone at the end of this line. Put the value in a `let` on the line before, and use `?.` on that name."), at: Some(span.start as i64) }, &"emit_core_hold_found")); }
             let name = format!("__nikaia_held_{}", walk.held.len() as i64);
             out.push(&format!("let {} = ", name));
-            host.expr(walk, out, receiver, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, receiver, depth, flow, scope)?;
             out.push(&format!(";\n{}", "    ".repeat(nikaia_std::count::of(depth))));
             walk.held.insert(node_key(receiver), name);
         }
@@ -228,7 +228,7 @@ impl EmitState {
                 walk.held.remove(&key);
                 let name = format!("__nikaia_held_{}", walk.held.len() as i64);
                 out.push(&format!("let {} = ", name));
-                host.expr(walk, out, at, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, at, depth, flow, scope)?;
                 out.push(&format!(";\n{}", "    ".repeat(nikaia_std::count::of(depth))));
                 walk.held.insert(key, name);
             },
@@ -272,7 +272,7 @@ impl EmitState {
         for arg in args.iter() {
             if n > 0 { out.push(", "); }
             n += 1;
-            host.expr(walk, out, arg, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
         }
         out.push(")");
         if pauses { out.push(".await"); }
@@ -311,9 +311,9 @@ impl EmitState {
                     out.push("unsafe { nikaia_std::proven::cut(&");
                     self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
                     out.push(", (");
-                    if only_literals(start) { host.expr(walk, out, start, depth, flow.inferred(), scope)?; } else { host.expr(walk, out, start, depth, flow, scope)?; }
+                    if only_literals(start) { self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)?; } else { self.emit_expr(world, walk, out, host, start, depth, flow, scope)?; }
                     out.push(") as usize, (");
-                    if only_literals(end) { host.expr(walk, out, end, depth, flow.inferred(), scope)?; } else { host.expr(walk, out, end, depth, flow, scope)?; }
+                    if only_literals(end) { self.emit_expr(world, walk, out, host, end, depth, flow.inferred(), scope)?; } else { self.emit_expr(world, walk, out, host, end, depth, flow, scope)?; }
                     if inclusive { out.push(") as usize + 1) }"); } else { out.push(") as usize) }"); }
                     return Ok(());
                 },
@@ -336,11 +336,11 @@ impl EmitState {
                     let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
                     if !inclusive && emit_read_ends_in_len(world, end, base) {
                         if only_literals(start) {
-                            host.expr(walk, out, start, depth, flow.inferred(), scope)?;
+                            self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)?;
                             out.push("..)");
                         } else {
                             out.push("nikaia_std::index::at(");
-                            host.expr(walk, out, start, depth, flow, scope)?;
+                            self.emit_expr(world, walk, out, host, start, depth, flow, scope)?;
                             out.push("..))");
                         }
                         if self.reads_through_handle(world, &walk, &scope.function, base) { out.push(".get()"); }
@@ -477,7 +477,7 @@ impl EmitState {
                 if queued { out.push(&format!("{}(async {{ ", wrapper)); }
                 if fallible { out.push(&format!("Ok::<_, {}>(", channel)); }
                 let st = out.mark();
-                host.expr(walk, out, value, depth + 1, inside, &inside_scope)?;
+                self.emit_expr(world, walk, out, host, value, depth + 1, inside, &inside_scope)?;
                 out.record(&stmt.span, st);
                 if fallible { out.push(")"); }
                 if queued { if wrapper.contains("branch_after") { out.push(&format!(" }}, &\"{}\").await", scope.origin)); } else { out.push(" }).await"); } }
@@ -509,7 +509,7 @@ impl EmitState {
             let inside = EmitFlow { can_throw: fallible, statement: arm.at as i64, ..EmitFlow::plain() };
             let inside_scope = EmitScope { origin: scope.origin.to_owned(), channel: channel.to_owned(), ..EmitScope::plain() };
             if fallible { out.push(&format!("Ok::<_, {}>(", channel)); }
-            host.expr(walk, out, &arm.value, depth + 1, inside, &inside_scope)?;
+            self.emit_expr(world, walk, out, host, &arm.value, depth + 1, inside, &inside_scope)?;
             if fallible { out.push(")"); }
             out.push(" },\n");
         }
@@ -525,7 +525,7 @@ impl EmitState {
             if fallible && flow.handled_here {
                 out.push(&format!("match __nikaia_won {{\n{}    Err(__nikaia_failed) => Err(__nikaia_failed),\n{}    Ok({}) => {{ let __nikaia_value = ", inner, inner, named));
                 let st = out.mark();
-                host.block_opening_with(walk, out, &arm.body, depth + 2, flow, scope, EmitTail::Value, None)?;
+                self.emit_stmt_block_opening_with(world, walk, out, host, &arm.body, depth + 2, flow, scope, EmitTail::Value, None)?;
                 out.record(&Span { start: arm.at, end: arm.at }, st);
                 out.push(&format!("; Ok(__nikaia_value) }},\n{}}}\n", inner));
                 continue;
@@ -533,7 +533,7 @@ impl EmitState {
             let mut opening: Option<String> = None;
             if fallible { if arm.binding.is_some() { opening = Some(format!("let {} = __nikaia_won?;", named)); } else { opening = Some(String::from("__nikaia_won?;")); } }
             let st = out.mark();
-            host.block_opening_with(walk, out, &arm.body, depth + 1, flow, scope, EmitTail::Value, opening)?;
+            self.emit_stmt_block_opening_with(world, walk, out, host, &arm.body, depth + 1, flow, scope, EmitTail::Value, opening)?;
             out.record(&Span { start: arm.at, end: arm.at }, st);
             out.push("\n");
         }

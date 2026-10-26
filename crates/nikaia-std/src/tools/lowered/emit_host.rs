@@ -2,8 +2,6 @@
 // Edit emit_host.nika in the directory above, not this file.
 
 pub trait EmitHost {
-    fn expr(&self, walk: &mut EmitWalk, out: &mut EmitOut, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>>;
-    fn block_opening_with(&self, walk: &mut EmitWalk, out: &mut EmitOut, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail, opening: Option<String>) -> Result<(), Box<dyn std::error::Error>>;
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr;
     fn names_read(&self, expr: &Expr) -> Vec<String>;
     fn copied_bindings(&self, at: i64) -> Vec<String>;
@@ -13,12 +11,10 @@ pub trait EmitHost {
     fn block_mentions(&self, block: &Block, name: &str) -> bool;
     fn error_type(&self, node: &Expr) -> Option<String>;
     fn task_handles(&self, task: i64) -> Vec<String>;
-    fn block_plain(&self, walk: &mut EmitWalk, out: &mut EmitOut, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>>;
     fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>>;
     fn insert_after_first_brace(&self, out: &mut EmitOut, text: &str);
     fn insert_before_last_brace(&self, out: &mut EmitOut, text: &str);
     fn ty_named(&self, walk: &mut EmitWalk, ty: &Type) -> Result<String, Box<dyn std::error::Error>>;
-    fn stmt(&self, walk: &mut EmitWalk, out: &mut EmitOut, stmt: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>>;
     fn given_up_unmuted(&self, at: i64) -> bool;
     fn given_up_rebound(&self, at: i64) -> Option<bool>;
     fn order_of(&self, block: &Block) -> Vec<i64>;
@@ -55,11 +51,11 @@ impl EmitState {
     pub fn emit_core_operand<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, viewed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.emit_arg_named_fn_bound(world, walk, out, host, node, depth, flow, scope)? { return Ok(()); }
         if !viewed {
-            host.expr(walk, out, node, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
             return Ok(());
         }
         out.push("nikaia_std::num::value(");
-        host.expr(walk, out, node, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
         out.push(")");
         Ok(())
     }
@@ -70,11 +66,11 @@ impl EmitState {
         match node {
             Expr::Range { start, end, inclusive, .. } => {
                 let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
-                host.expr(walk, out, start, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, start, depth, flow, scope)?;
                 if inclusive { out.push("..="); } else { out.push(".."); }
-                host.expr(walk, out, end, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, end, depth, flow, scope)?;
             },
-            _ => { host.expr(walk, out, node, depth, flow, scope)?; },
+            _ => { self.emit_expr(world, walk, out, host, node, depth, flow, scope)?; },
         }
         Ok(())
     }

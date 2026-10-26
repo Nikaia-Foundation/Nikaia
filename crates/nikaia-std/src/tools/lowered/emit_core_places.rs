@@ -76,7 +76,7 @@ impl EmitState {
         let name = nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_owned();
         if walk.held.contains_key(&node_key(receiver)) { out.push(&name); } else if lent == "" && emit_place_an_index(receiver) {
             if self.a_list_read(receiver) { out.push("&"); }
-            host.expr(walk, out, receiver, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, receiver, depth, flow, scope)?;
         } else { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; }
         out.push(lent);
         let inner = "    ".repeat(nikaia_std::count::of(depth + 1));
@@ -108,7 +108,7 @@ impl EmitState {
         for part in parts.iter() {
             if i > 0 { out.push(", "); }
             i += 1;
-            host.expr(walk, out, part, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
         }
         out.push(")");
         Ok(())
@@ -122,7 +122,7 @@ impl EmitState {
         for item in items.iter() {
             if i > 0 { out.push(", "); }
             i += 1;
-            host.expr(walk, out, item, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, item, depth, flow, scope)?;
         }
         out.push("]");
         Ok(())
@@ -133,16 +133,16 @@ impl EmitState {
     pub fn emit_core_list_repeat<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, count: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.facts.array_literals.contains(&node_key(node)) {
             out.push("[");
-            host.expr(walk, out, value, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
             out.push("; _]");
             return Ok(());
         }
         out.push("vec![");
-        host.expr(walk, out, value, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         out.push("; ");
-        if only_literals(count) { host.expr(walk, out, count, depth, flow.inferred(), scope)?; } else {
+        if only_literals(count) { self.emit_expr(world, walk, out, host, count, depth, flow.inferred(), scope)?; } else {
             out.push("nikaia_std::count::of(");
-            host.expr(walk, out, count, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, count, depth, flow, scope)?;
             out.push(")");
         }
         out.push("]");
@@ -352,7 +352,7 @@ impl EmitState {
                 out.push("nikaia_std::either_text::either(");
                 if field.value.is_some() {
                     let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                    host.expr(walk, out, value, depth, flow, scope)?;
+                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                 } else { out.push(&written); }
                 out.push(")");
                 out.push(&after);
@@ -370,13 +370,13 @@ impl EmitState {
                 }
                 if same {
                     let mut inner = EmitOut::empty();
-                    host.expr(walk, &mut inner, value, depth, flow, scope)?;
+                    self.emit_expr(world, walk, &mut inner, host, value, depth, flow, scope)?;
                     if inner.buf == written { continue; }
                 }
                 out.push(": ");
                 out.push(&before);
                 if self.facts.lent_fields.contains(&node_key(value)) { out.push("&"); }
-                host.expr(walk, out, value, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                 out.push(&after);
             } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_owned())) {
                 let mut put = written.to_owned();
@@ -411,7 +411,7 @@ impl EmitState {
         let whole = a_name && emit_core_with_names_every_field(world, &owner, fields.len() as i64);
         if whole {
             out.push("{ let _ = ");
-            host.expr(walk, out, base, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, base, depth, flow, scope)?;
             out.push("; ");
         }
         out.push(&format!("{} {{ ", owner));
@@ -422,7 +422,7 @@ impl EmitState {
                 out.push(": Box::new(");
                 if field.value.is_some() {
                     let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                    host.expr(walk, out, value, depth, flow, scope)?;
+                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                 } else { out.push(&written); }
                 out.push("), ");
                 continue;
@@ -432,11 +432,11 @@ impl EmitState {
                 let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 if either {
                     out.push(": nikaia_std::either_text::either(");
-                    host.expr(walk, out, value, depth, flow, scope)?;
+                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                     out.push(")");
                 } else {
                     out.push(": ");
-                    host.expr(walk, out, value, depth, flow, scope)?;
+                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                 }
             } else if either { out.push(&format!(": nikaia_std::either_text::either({})", written)); }
             out.push(", ");
@@ -446,7 +446,7 @@ impl EmitState {
             return Ok(());
         }
         out.push("..");
-        host.expr(walk, out, base, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, base, depth, flow, scope)?;
         out.push(" }");
         Ok(())
     }

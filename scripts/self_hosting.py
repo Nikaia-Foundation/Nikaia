@@ -184,6 +184,7 @@ COMPILER_NIKA = {
     "emit_program.nika": "emit: a unit's text, preamble, shadow types, items, handle types and `fn main` (E11-3)",
     "emit_expr.nika": "emit: the expression family, `expr` and its wraps and the dispatch over every kind (E11-4a)",
     "emit_stmt.nika": "emit: statements and blocks, the settle point, the one-line block and the fast-hash map and what one statement writes (E11-4b)",
+    "emit_tables.nika": "emit: which structs and enums hold a view into the input, and the view-holding fields of each struct that holds two or more (E11-5)",
     "emit_fold.nika": "emit: a fold and a par_fold of a grammar pattern, step and merge (E10-2)",
     "emit_host.nika": "emit: the host trait the emitter's core asks of the Rust side, and the first moved methods: a cast's operand, a bare range, an index (0.0.816)",
     "emit_core_types.nika": "emit: how a type is written, the tethered wrapper, the pointer an extern parameter takes and the words that depend on user parallelism (0.0.818)",

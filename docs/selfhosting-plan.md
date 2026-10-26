@@ -569,3 +569,10 @@ comptime, the five kinds of assignment, `while`, `for`, `break`/`continue`, `ret
 statements); `EmitHost::a_stmt` is gone, and the host gained `given_up_unmuted` and `given_up_rebound`.
 The Rust helpers only it called (`around_value`, `handed_back`, `map_key`, keeps, `tuple_pattern`...) are
 deleted. Next: E11-4c.
+
+E11-4c + E11-5 (#855) switched: Nikaia calls `emit_expr`, `emit_stmt` and `emit_stmt_block_*` itself; `EmitHost::expr`,
+`stmt`, `block_plain` and `block_opening_with`, their `host.rs` impls, the Rust `Emitter::expr`/`stmt`/`block_*` and
+the `Flow` struct with its `to_emit`/`from_emit` are gone. `tools/emit_tables.nika` holds `names_outside`,
+`names_borrowing`, `borrowing_structs_beside` and `view_slots`; `mod.rs` keeps one-line adapters. Left in Rust:
+`template_hole_tables`, `fold_callees`, `read_view_slots`, `tethered_types` (they read Rust-side `Parsed` caches and
+the ledger).

@@ -146,11 +146,11 @@ impl EmitState {
                     if head.is_some() {
                         let beside = flow.at(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64);
                         let mut value = EmitOut::empty();
-                        host.expr(walk, &mut value, *nikaia_std::index::get(&args, 1), depth + 1, beside, scope)?;
+                        self.emit_expr(world, walk, &mut value, host, *nikaia_std::index::get(&args, 1), depth + 1, beside, scope)?;
                         let mut count = EmitOut::empty();
-                        if only_literals(*nikaia_std::index::get(&args, 0)) { host.expr(walk, &mut count, *nikaia_std::index::get(&args, 0), depth + 1, beside.inferred(), scope)?; } else {
+                        if only_literals(*nikaia_std::index::get(&args, 0)) { self.emit_expr(world, walk, &mut count, host, *nikaia_std::index::get(&args, 0), depth + 1, beside.inferred(), scope)?; } else {
                             count.push("nikaia_std::count::of(");
-                            host.expr(walk, &mut count, *nikaia_std::index::get(&args, 0), depth + 1, beside, scope)?;
+                            self.emit_expr(world, walk, &mut count, host, *nikaia_std::index::get(&args, 0), depth + 1, beside, scope)?;
                             count.push(")");
                         }
                         out.push(&inner_pad);
@@ -252,7 +252,7 @@ impl EmitState {
                 }
                 if forever { out.push("loop "); } else {
                     out.push("while ");
-                    host.expr(walk, out, cond, depth, here, scope)?;
+                    self.emit_expr(world, walk, out, host, cond, depth, here, scope)?;
                     out.push(" ");
                 }
                 self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), None))?;
@@ -333,7 +333,7 @@ impl EmitState {
             let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
             out.push(&before);
             if mut_word == "" && self.facts.lent_lets.contains(&at) { out.push("&"); }
-            host.expr(walk, out, value, depth, flow, scope)?;
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
             out.push(&after);
             out.push(";");
             for each in names.iter() {
@@ -358,13 +358,13 @@ impl EmitState {
             if held.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` is passed to a task and keeps data alive, so it needs its type written out: `let {}: … = …`.", bound, bound), at: Some(at) }, &"emit_stmt_let")); }
             let wrapper = self.emit_core_tether_wrapper(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), &match held { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) });
             out.push(&format!("let {}{} = {{ let __packed = ", mut_word, local));
-            host.expr(walk, out, value, depth, flow, &inner)?;
+            self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
             out.push(&format!("; nikaia_std::tether::Holding::<{}, 1>::new([std::sync::Arc::clone(&__keep_task)], move |keeps| nikaia_std::tether::Rebase::rebase(__packed, &keeps)) }};", wrapper));
             return Ok(());
         }
         if kept.put.is_some() {
             out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || "")));
-            host.expr(walk, out, value, depth, flow, &inner)?;
+            self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
             out.push(");");
             return Ok(());
         }
@@ -424,7 +424,7 @@ impl EmitState {
         }
         let rebound = host.given_up_rebound(at);
         if rebound.is_some() { if nikaia_std::index::or(rebound, || false) { out.push("let mut "); } else { out.push("let "); } }
-        host.expr(walk, out, target, depth, flow.place(), scope)?;
+        self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
         if op.is_none() { out.push(" = "); } else { out.push(&format!(" {} ", emit_stmt_op_text(op))); }
         let reput = self.emit_stmt_reput(&walk, &scope.function, at);
         let reputted = reput.is_some();
@@ -464,7 +464,7 @@ impl EmitState {
         }
         let appended = op.is_some() && self.facts.appended_texts.contains(&at);
         if appended { out.push("::core::convert::AsRef::<str>::as_ref(&"); }
-        if !own_view { host.expr(walk, out, value, depth, flow, scope)?; }
+        if !own_view { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; }
         if appended { out.push(")"); }
         out.push(&after);
         if reputted { out.push(")"); }
@@ -479,7 +479,7 @@ impl EmitState {
         let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
         out.push("{ let __nikaia_stored = ");
         out.push(&before);
-        host.expr(walk, out, value, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         out.push(&after);
         let mut lent_on = false;
         match base {
@@ -491,14 +491,14 @@ impl EmitState {
         }
         if self.proven_indices.contains(&node_key(base)) && self.map_key(index, true).is_none() {
             if lent_on { out.push("; unsafe { nikaia_std::proven::write(&mut *"); } else { out.push("; unsafe { nikaia_std::proven::write(&mut "); }
-            host.expr(walk, out, base, depth, flow.place(), scope)?;
+            self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
             out.push(", (");
             if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
             out.push(") as usize, __nikaia_stored) }; }");
             return Ok(());
         }
         if lent_on { out.push("; nikaia_std::index::set(&mut *"); } else { out.push("; nikaia_std::index::set(&mut "); }
-        host.expr(walk, out, base, depth, flow.place(), scope)?;
+        self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
         let form = self.map_key(index, true);
         if form.is_some() {
             out.push(", ");
@@ -535,10 +535,10 @@ impl EmitState {
         let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
         out.push("{ let __nikaia_stored = ");
         out.push(&before);
-        host.expr(walk, out, value, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         out.push(&after);
         out.push("; ");
-        host.expr(walk, out, keeper, depth, flow.place(), scope)?;
+        self.emit_expr(world, walk, out, host, keeper, depth, flow.place(), scope)?;
         if only_literals(index) {
             out.push("[");
             self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?;
@@ -575,7 +575,7 @@ impl EmitState {
                     _ => { },
                 }
                 out.push("{ let __nikaia_stored = ");
-                host.expr(walk, out, value, depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                 out.push("; let __nikaia_at = (");
                 if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
                 out.push(") as usize; ");
@@ -584,14 +584,14 @@ impl EmitState {
                 let wide = *given == BinaryOp::Add || *given == BinaryOp::Sub || *given == BinaryOp::Mul;
                 if arithmetic.is_some() && wide {
                     out.push(&format!("unsafe {{ {}::<{}>(", emit_flow_proven(*given), nikaia_std::index::or(arithmetic, || "")));
-                    self.emit_stmt_proven_read(walk, out, host, base, depth, flow, scope)?;
+                    self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)?;
                     out.push(", __nikaia_stored) }");
                 } else {
-                    self.emit_stmt_proven_read(walk, out, host, base, depth, flow, scope)?;
+                    self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)?;
                     out.push(&format!(" {} __nikaia_stored", binary_op(*given)));
                 }
                 if lent_on { out.push("; unsafe { nikaia_std::proven::write(&mut *"); } else { out.push("; unsafe { nikaia_std::proven::write(&mut "); }
-                host.expr(walk, out, base, depth, flow.place(), scope)?;
+                self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
                 out.push(", __nikaia_at, __nikaia_stored) }; }");
                 return Ok(true);
             },
@@ -601,9 +601,9 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_stmt_proven_read<H: EmitHost>(&self, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_stmt_proven_read<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         out.push("*unsafe { nikaia_std::proven::read(&");
-        host.expr(walk, out, base, depth, flow.place(), scope)?;
+        self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
         out.push(", __nikaia_at) }");
         Ok(())
     }
@@ -617,11 +617,11 @@ impl EmitState {
         let ty = match self.proven_arithmetic.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
         let place = matches!(target, Expr::Variable(_, _) | Expr::Field { .. });
         if !place { return Ok(false); }
-        host.expr(walk, out, target, depth, flow.place(), scope)?;
+        self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
         out.push(&format!(" = unsafe {{ {}::<{}>(", emit_flow_proven(*given), ty));
-        host.expr(walk, out, target, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, target, depth, flow, scope)?;
         out.push(", ");
-        host.expr(walk, out, value, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         out.push(") };");
         Ok(true)
     }
@@ -665,7 +665,7 @@ impl EmitState {
             out.push("{\n");
             out.push(&inner);
             out.push("let mut __nikaia_sequence = ");
-            host.expr(walk, out, iter, depth + 1, flow, scope)?;
+            self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)?;
             out.push(";\n");
             out.push(&inner);
             out.push(&format!("while let Some({}) = __nikaia_sequence.next().await ", bound));
@@ -720,7 +720,7 @@ impl EmitState {
                     let mut i = 0;
                     for item in items.iter() {
                         if i > 0 { out.push(", "); }
-                        host.expr(walk, out, item, depth, flow, scope)?;
+                        self.emit_expr(world, walk, out, host, item, depth, flow, scope)?;
                         i += 1;
                     }
                     out.push("]");
@@ -729,7 +729,7 @@ impl EmitState {
             },
             _ => { },
         }
-        if lends { self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)?; } else { host.expr(walk, out, iter, depth, flow, scope)?; }
+        if lends { self.emit_core_postfix_base(world, walk, out, host, iter, depth, flow, scope)?; } else { self.emit_expr(world, walk, out, host, iter, depth, flow, scope)?; }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -747,7 +747,7 @@ impl EmitState {
             },
             Expr::Match { .. } => {
                 if is_statement {
-                    host.expr(walk, out, expr, depth, EmitFlow { arms_are_statements: true, ..flow }, scope)?;
+                    self.emit_expr(world, walk, out, host, expr, depth, EmitFlow { arms_are_statements: true, ..flow }, scope)?;
                     return Ok(());
                 }
             },
@@ -757,7 +757,7 @@ impl EmitState {
         let either = is_return && call_returns_either(world.words, world.items, &scope.function) && !is_null && !never_a_value(expr) && !self.facts.mixed_choices.contains(&node_key(expr)) && !self.facts.mixed_leaves.contains_key(&node_key(expr));
         if either { out.push("nikaia_std::either_text::either("); }
         if is_return && self.facts.lent_returns.contains(&at) { out.push("&"); }
-        host.expr(walk, out, expr, depth, flow, scope)?;
+        self.emit_expr(world, walk, out, host, expr, depth, flow, scope)?;
         if either { out.push(")"); }
         let block_shaped = matches!(expr, Expr::If { .. } | Expr::Block(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _));
         if !tail.is_value() && !block_shaped { out.push(";"); }
