@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1223 (Draft)
+**Version:** 0.0.1224 (Draft)
 **Date:** 2026-10-26
 
 ---
@@ -1580,6 +1580,8 @@ fn query_data() {
 An official package's source is `packages/<name>/` in the toolchain's repository, with a version of its own.
 
 **`json`.** `json::read[T](text)` reads a text into a `T` and throws `json::Error` where it fails; `json::write[T](value)` writes a `T` as text, fields in declared order. `json::Error` has the form of a grammar's `ParseError` (Appendix C): the line and the column, and the stack of what was being read there, its object members and list elements written as a path (`$.contacts[3].email`). The decoder and the encoder for `T` are generated from `T::fields` while the program is built (Part II 10.3). A member matches the field of its name, or the name `@json::Name` gives; never by position. A member given twice is an error where the text is read; a member `T` has no field for is skipped. A field with no member takes its default if it has one (Part I), is `null` if its type is a `T?`, and is otherwise an error where the text is read. A member that is `null` goes into a `T?`; for any other field it takes the field's default if it has one, and is otherwise an error. A field's type is `bool`, an integer or float type, `String`, a declared struct or enum, or a `T?`, `Vec[T]` or `Map[String, T]` of one; any other is `NK1250`.
+
+For JSON whose shape no struct declares, `json::parse(text)` reads into a `json::Value` and throws `json::Error` as `read[T]` does. A number in a `Value` is kept as its text and converted when it is asked for as a type (`as_i64`, `as_u64`, `as_f64`); the members of an object keep their order.
 
 ```nika
 comptime SCHEMA = asset("contact.schema.json")

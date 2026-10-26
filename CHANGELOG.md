@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1224] — 2026-10-26
+
+**Part III 17.3: json::parse and json::Value (#604)**
+- Part III 17.3 states the dynamic form: `json::parse` reads into a `json::Value`, numbers stay text and convert when asked for as a type (ADR-344 D6a).
+
 ## [0.0.1223] — 2026-10-26
 
 **integer as scalar, match arm naming a struct type (#604)**
