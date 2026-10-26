@@ -7,15 +7,19 @@
 // the wrap, the copy or the refusal each one is told.
 
 /// **One argument as the call reads it**: where it stands among the
-/// arguments (the receiver not counted), what was written there, the type that
-/// was found, and which arm of it it is (`-1` for the whole argument).
+/// arguments (the receiver not counted), the expression written there (the
+/// tail of the arm, for one arm of an `if` or a `match`), whether it is an arm,
+/// and the type that was found.
 struct CheckArgument {
     at: i64,
-    arm: i64,
+    arm: bool,
+    given: ref Expr?,
     found: Ty,
 }
 
-/// The argument written at `at`, where one was.
+/// The argument written at `at`, where one was (a `ref Expr?` is not yet
+/// built from an `if`, nor assigned from a `ref Expr`, so the option is made
+/// where it is returned).
 fn check_arguments_at(given: ref Vec[Expr], at: i64) -> ref Expr? sync {
     if at < given.len() {
         return given[at]
@@ -201,7 +205,6 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     // **An argument that is an `if` or a `match` whose arms did not agree
     // is its arms** (#596): each is a value handed to the parameter.
     let mut expanded: Vec[CheckArgument] = []
-    let mut all_arms: Vec[Vec[CheckArm]] = []
     let mut position = 0
     while position < found.len() {
         let at = position
@@ -213,8 +216,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             arms = state.arms_to_ask(world, given[at])
         }
         if arms.is_empty() {
-            expanded.push(CheckArgument { at: at, arm: -1, found: found_here })
-            all_arms.push(arms)
+            expanded.push(CheckArgument { at: at, arm: false, given: check_arguments_at(given, at), found: found_here })
             continue
         }
         // A number literal as an arm is an `i64` written there (#600).
@@ -222,7 +224,6 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         let mut k = 0
         while k < arms.len() {
             let arm = arms[k].clone()
-            let index = k
             k += 1
             let tail = arm.tail ?? continue
             let literal = match check_peeled(tail) {
@@ -230,18 +231,17 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 else => false,
             }
             if arm.ty.is_unknown() && literal && no_number {
-                expanded.push(CheckArgument { at: at, arm: index, found: Ty::Named { name: "i64", args: [], view: false } })
+                expanded.push(CheckArgument { at: at, arm: true, given: tail, found: Ty::Named { name: "i64", args: [], view: false } })
             } else {
-                expanded.push(CheckArgument { at: at, arm: index, found: arm.ty.clone() })
+                expanded.push(CheckArgument { at: at, arm: true, given: tail, found: arm.ty.clone() })
             }
         }
-        all_arms.push(arms)
     }
     let own = world.own.functions.contains_key(key)
     let offset = if signature.takes_a_receiver() { 1 } else { 0 }
     for argument in expanded {
         let at = argument.at
-        let given_here: ref Expr? = if argument.arm >= 0 { all_arms[at][argument.arm].tail } else { check_arguments_at(given, at) }
+        let given_here: ref Expr? = argument.given
         let name = wanted[at].0.clone()
         let want = wanted[at].1.clone()
         // **A view of a `String` is a view of text here** (ADR-233 D4): an
@@ -350,7 +350,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if views_into_text(found_here, want) && either_param(world.here, key, at) {
             // **An `if` or a `match` asked arm by arm** is wrapped arm by arm
             // below (#562).
-            if argument.arm >= 0 && at < given.len() && check_arguments_a_choice(given[at]) && given_here != null {
+            if argument.arm && at < given.len() && check_arguments_a_choice(given[at]) && given_here != null {
                 state.note_mixed(world, given[at], check_arguments_nullable(want))
             } else if given_here != null && check_arguments_nullable(want) && !check_arguments_nullable(found_here) {
                 // A plain view into a `String?` goes inside its option

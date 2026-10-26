@@ -1,0 +1,14 @@
+error[NK2302]: `count` keeps `given` after this call, but `given: ref Vec[E]` doesn't say whose data it points into.
+   --> tests/a_view_pushed_into_a_local_vec_that_leaves_is_kept.nika:11:5
+    |
+ 11 |     expanded.push(Arg { given: given[0] })
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's stored in `Arg.given`.
+    = note: `Arg.given` is a `ref E`, so it points into some data, but `given: ref Vec[E]` doesn't say whose.
+    = help: Put the view in a struct and pass the struct, so its declaration says whose data it is (like `Reading` in `examples/1brc.nika`):
+           struct Held { given: ref Vec[E] }
+           …
+           fn count(…, held: Held) { … held.given … }
+       Or keep a copy of the text with `.clone()`, which costs one allocation.
+1 view kept past the call that was given it

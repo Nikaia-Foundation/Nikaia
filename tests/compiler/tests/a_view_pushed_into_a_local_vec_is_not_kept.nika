@@ -1,0 +1,23 @@
+struct E {
+    n: i64
+}
+
+struct Arg {
+    given: ref E?
+}
+
+fn count(given: ref Vec[E]) -> i64 {
+    let mut expanded: Vec[Arg] = []
+    expanded.push(Arg { given: given[0] })
+    expanded.push(Arg { given: given[1] })
+    let mut total = 0
+    for each in expanded {
+        total += 1
+    }
+    return expanded.len() + total
+}
+
+fn main() {
+    let g = [E { n: 1 }, E { n: 2 }]
+    println(f"{count(g)}")
+}
