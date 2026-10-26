@@ -1,6 +1,0 @@
-error: Expected `}` here, but found `!`.
-  --> tests/a_bang_after_a_name_is_not_a_second_statement.nika:2:12
-   |
- 2 |     println!("hi")
-   |            ^
-   |

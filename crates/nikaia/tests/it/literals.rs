@@ -723,7 +723,7 @@ fn a_broken_hole_is_refused_by_the_parser() {
     };
     let escaped = said("fn main() { println(f\"{g(\\\"a\\\")}\") }");
     assert!(escaped.contains("plain quotes"), "{escaped}");
-    let unclosed = said("fn main() { let n = 1\n    println(f\"x {n\") }");
+    let unclosed = said("fn main() { let n = 1 println(f\"x {n\") }");
     assert!(unclosed.contains("is never closed"), "{unclosed}");
     let stray = said("fn main() { println(f\"x } y\") }");
     assert!(stray.contains("has no `{` before it"), "{stray}");

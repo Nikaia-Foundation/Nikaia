@@ -88,7 +88,7 @@ fn test_advanced_hello_world_compilation() {
 #[test]
 fn a_keyword_does_not_swallow_the_start_of_a_longer_word() {
     // `asfoo` is a name, so there is no cast and no type called `foo`.
-    let parsed = parse_to_ast("fn main() {\n    let x = true\n    asfoo\n}").expect("it parses");
+    let parsed = parse_to_ast("fn main() {\n    let x = true asfoo\n}").expect("it parses");
     let Item::Fn { body, .. } = &parsed.program.items[0].node else {
         panic!("a function");
     };
@@ -147,6 +147,7 @@ fn the_keywords_themselves_are_untouched() {
         "fn main() {\n    let b = false\n    let c = true\n}",
         "struct S { id: i64 }\nenum E { A }\nimpl S {\n    fn id(ref self) -> i64 { return self.id }\n}",
         "use utils\n\nfn main() {\n    utils::f()\n}",
+        "fn main() {\n    let s = seq { println(\"a\") }\n}",
         "fn main() {\n    spawn fn { println(\"a\") }\n}",
         "fn main() {\n    match 1 {\n        else => println(\"x\")\n    }\n}",
         "fn main() {\n    while true { }\n}",
