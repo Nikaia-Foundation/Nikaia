@@ -56,7 +56,7 @@ pipeline and not a reduction of it:
 
 | what | how |
 |---|---|
-| `pair.nika` | two reads in a loop, built **twice from one source** — `ordering = "effects"` against `ordering = "strict"` |
+| `pair.nika` | two reads in a loop at `user-parallelism = "no"`. `lowered.sh` still builds it twice with the manifest key `ordering`, which the manifest no longer takes (the build fails, `docs/specification/30-nikaia-tooling.md`), so it measures nothing until it is rewritten for a build with and without the lowering |
 
 ```sh
 benches/overlap/lowered.sh                          # both mechanisms, 200 000 pairs, 9 repeats
