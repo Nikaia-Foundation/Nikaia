@@ -276,14 +276,32 @@ fn check_core_flow_branch[H: CheckHost](mut state: CheckState, world: ref CheckW
 pub fn check_core_flow_overlap[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block, span: ref Span) -> Ty sync {
     state.scope.push([])
     let mut parts: Vec[Ty] = []
+    let mut ranges: Vec[(i64, i64)] = []
     for stmt in block.stmts {
         let saved = state.enter_boundary("`overlap` branch")
+        let from = state.changed.len()
         let ty = check_core_flow_branch(state, world, host, stmt.node, stmt.span)
+        ranges.push((from, state.changed.len()))
         state.leave_boundary(saved)
         parts.push(ty)
     }
     state.scope.pop()
-    state.branches_meet_on_nothing(world, block)
+    // **What each branch changed that was declared outside the `overlap`**:
+    // a name a branch declares itself is its own.
+    let mut changed_by: Vec[collections::BTreeSet[String]] = []
+    for (from, to) in ranges {
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut at = from
+        while at < to {
+            let name = state.changed[at].clone()
+            if state.binding(name) != null {
+                names.insert(name)
+            }
+            at = at + 1
+        }
+        changed_by.push(names)
+    }
+    state.branches_meet_on_nothing(world, block, changed_by)
     return Ty::Tuple(parts)
 }
 

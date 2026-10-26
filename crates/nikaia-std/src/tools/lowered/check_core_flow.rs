@@ -227,14 +227,29 @@ pub(crate) fn check_core_flow_branch<H: CheckHost>(state: &mut CheckState, world
 pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block, span: &Span) -> Ty {
     state.scope.push(vec![]);
     let mut parts: Vec<Ty> = vec![];
+    let mut ranges: Vec<(i64, i64)> = vec![];
     for stmt in block.stmts.iter() {
         let saved = state.enter_boundary("`overlap` branch");
+        let from = state.changed.len() as i64;
         let ty = check_core_flow_branch(state, world, host, &stmt.node, &stmt.span);
+        ranges.push((from, state.changed.len() as i64));
         state.leave_boundary(&saved);
         parts.push(ty);
     }
     state.scope.pop();
-    state.branches_meet_on_nothing(world, block);
+    let mut changed_by: Vec<collections::BTreeSet<String>> = vec![];
+    for (from, to) in ranges.iter() {
+        let from = nikaia_std::num::value(from);let to = nikaia_std::num::value(to);
+        let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut at = from;
+        while at < to {
+            let name = (*nikaia_std::index::get(&state.changed, nikaia_std::index::at(at))).to_owned();
+            if state.binding(&name).is_some() { names.insert(name); }
+            at = at + 1;
+        }
+        changed_by.push(names);
+    }
+    state.branches_meet_on_nothing(world, block, &changed_by);
     Ty::Tuple(parts)
 }
 

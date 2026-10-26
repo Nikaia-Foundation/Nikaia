@@ -50,11 +50,30 @@ fn check_walks_clash(earlier: ref Accounted, later: ref Accounted) -> Verdict? {
     }
 }
 
+/// The first binding two branches meet on, where one of them changes it and
+/// the other names it: `(name, both change it)`. `null` for none.
+fn check_walks_shared(changed_by: ref Vec[collections::BTreeSet[String]], mentioned: ref Vec[collections::BTreeSet[String]], i: i64, j: i64) -> (String, bool)? {
+    for name in changed_by[i] {
+        if changed_by[j].contains(name) {
+            return (name.clone(), true)
+        }
+        if mentioned[j].contains(name) {
+            return (name.clone(), false)
+        }
+    }
+    for name in changed_by[j] {
+        if mentioned[i].contains(name) {
+            return (name.clone(), false)
+        }
+    }
+    return null
+}
+
 impl CheckState {
     /// **The branches of an `overlap` meet on nothing** (`NK2104`, ADR-292 D2):
     /// a branch that binds is refused on its own, and two that depend on each
     /// other are refused at the later one - one finding per branch.
-    pub fn branches_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block) sync {
+    pub fn branches_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, changed_by: ref Vec[collections::BTreeSet[String]]) sync {
         for stmt in block.stmts {
             match stmt.node {
                 Stmt::Let { names, .. } => {
@@ -72,8 +91,25 @@ impl CheckState {
         for stmt in block.stmts {
             operations.push(accounted(stmt.node, world.words, Walking { own: world.own, library: world.library, into: Going::Ours }))
         }
+        let mut mentioned: Vec[collections::BTreeSet[String]] = []
+        for stmt in block.stmts {
+            let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+            match stmt.node {
+                Stmt::Expr(value) => names_in(value, world.words, names),
+                Stmt::Let { value, .. } => names_in(value, world.words, names),
+                else => {},
+            }
+            mentioned.push(names)
+        }
         for i in 0..<operations.len() {
             for j in (i + 1)..<operations.len() {
+                let shared = check_walks_shared(changed_by, mentioned, i, j)
+                if shared != null {
+                    let (name, both) = shared ?? ("", false)
+                    let note = if both { f"Both change `{name}`." } else { f"One changes `{name}`, and the other reads it." }
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104", message: "These two branches can't run at the same time.", notes: [note, "`overlap` runs its branches at once, so a binding one changes can't be touched by the other."], help: "If they should run in order, write them as ordinary statements.", labels: [] })
+                    break
+                }
                 let clash = check_walks_clash(operations[i], operations[j])
                 if clash != null {
                     let verdict = clash ?? Verdict::NotAccountedFor

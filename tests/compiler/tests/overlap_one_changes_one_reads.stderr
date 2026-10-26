@@ -1,0 +1,10 @@
+error[NK2104]: These two branches can't run at the same time.
+  --> tests/overlap_one_changes_one_reads.nika:5:9
+   |
+ 5 |         a.len()
+   |         ^^^^^^^
+   |
+   = note: One changes `a`, and the other reads it.
+   = note: `overlap` runs its branches at once, so a binding one changes can't be touched by the other.
+   = help: If they should run in order, write them as ordinary statements.
+1 branch that cannot run beside the others

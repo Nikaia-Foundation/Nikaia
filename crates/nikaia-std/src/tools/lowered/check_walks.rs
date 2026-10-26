@@ -24,10 +24,19 @@ pub(crate) fn check_walks_clash(earlier: &Accounted, later: &Accounted) -> Optio
     }
 }
 
+pub(crate) fn check_walks_shared(changed_by: &[collections::BTreeSet<String>], mentioned: &[collections::BTreeSet<String>], i: i64, j: i64) -> Option<(String, bool)> {
+    for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(i))).iter() {
+        if (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).contains(name) { return Some((name.to_owned(), true)); }
+        if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(j))).contains(name) { return Some((name.to_owned(), false)); }
+    }
+    for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).iter() { if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(i))).contains(name) { return Some((name.to_owned(), false)); } }
+    None
+}
+
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn branches_meet_on_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
+    pub fn branches_meet_on_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, changed_by: &[collections::BTreeSet<String>]) {
         for stmt in block.stmts.iter() {
             match &stmt.node {
                 Stmt::Let { names, .. } => {
@@ -44,9 +53,26 @@ impl CheckState {
         }
         let mut operations: Vec<Accounted> = vec![];
         for stmt in block.stmts.iter() { operations.push(accounted(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
+        let mut mentioned: Vec<collections::BTreeSet<String>> = vec![];
+        for stmt in block.stmts.iter() {
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+            match &stmt.node {
+                Stmt::Expr(value) => { names_in(value, world.words, &mut names); },
+                Stmt::Let { value, .. } => { names_in(value, world.words, &mut names); },
+                _ => { },
+            }
+            mentioned.push(names);
+        }
         for i in 0..operations.len() as i64 {
             for j in i + 1..operations.len() as i64 {
-                let clash = check_walks_clash(nikaia_std::index::get(&operations, (i) as usize), nikaia_std::index::get(&operations, nikaia_std::index::at(j)));
+                let shared = check_walks_shared(changed_by, &mentioned, i, j);
+                if shared.is_some() {
+                    let (name, both) = nikaia_std::index::or(shared, || ("".into(), false.into()));
+                    let note = if both { format!("Both change `{}`.", name) } else { format!("One changes `{}`, and the other reads it.", name) };
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![note, String::from("`overlap` runs its branches at once, so a binding one changes can't be touched by the other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
+                    break;
+                }
+                let clash = check_walks_clash(nikaia_std::index::get(&operations, nikaia_std::index::at(i)), nikaia_std::index::get(&operations, nikaia_std::index::at(j)));
                 if clash.is_some() {
                     let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
                     let why = capitalised(&verdict.why());
