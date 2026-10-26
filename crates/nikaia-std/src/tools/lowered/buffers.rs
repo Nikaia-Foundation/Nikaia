@@ -363,12 +363,38 @@ pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Opti
         },
         _ => { },
     }
+    if joins_text(value, ask, walk) { return Buffer::Named(String::from("String")); }
     let found = makes_a_buffer(value, &Asked { names: ask.names, own: ask.own, library: ask.library }, unaliased);
     if a_named_buffer(&found) { return found; }
     let literal = matches!(value, Expr::LitStr { .. });
     if literal && ty.is_none() && ask.given_up.contains_key(&at) { return Buffer::Named(String::from("String")); }
     if !is_the_buffer(value, ask, walk) && declares_text(ask.names, ty) { return Buffer::Named(String::from("String")); }
     found
+}
+
+pub(crate) fn joins_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    match value {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            let adds = matches!(op, BinaryOp::Add);
+            adds && (text_operand(lhs, ask, walk) || text_operand(rhs, ask, walk))
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn text_operand(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    match value {
+        Expr::LitStr { .. } => true,
+        Expr::LitInterpolated { .. } => true,
+        Expr::Variable(name, _) => { let name = *name; text_local(ask.names.resolve(name), ask, walk) },
+        Expr::Binary { .. } => joins_text(value, ask, walk),
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; match ask.names.resolve(method) == "clone" || ask.names.resolve(method) == "to_owned" {
+            true => copies_text(receiver, ask, walk),
+            false => false,
+        } },
+        _ => false,
+    }
 }
 
 pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {

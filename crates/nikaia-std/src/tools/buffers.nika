@@ -448,6 +448,12 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
         }
         else => {}
     }
+    // **Text joined with `+` is text of this frame's own** (#864): a view of
+    // it that leaves the function lives in the caller's keep, as a view of an
+    // `f"…"` does.
+    if joins_text(value, ask, walk) {
+        return Buffer::Named("String")
+    }
     let found = makes_a_buffer(value, Asked { names: ask.names, own: ask.own, library: ask.library }, unaliased)
     if a_named_buffer(found) {
         return found
@@ -466,6 +472,35 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
         return Buffer::Named("String")
     }
     return found
+}
+
+/// Whether a value is `+` with text on one side: a literal, a name of text, a
+/// copy of one, or such a sum.
+fn joins_text(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match value {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let adds = match op {
+                BinaryOp::Add => true,
+                else => false,
+            }
+            adds && (text_operand(lhs, ask, walk) || text_operand(rhs, ask, walk))
+        },
+        else => false,
+    }
+}
+
+fn text_operand(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match value {
+        Expr::LitStr { .. } => true,
+        Expr::LitInterpolated { .. } => true,
+        Expr::Variable(name, _) => text_local(ask.names.resolve(name), ask, walk),
+        Expr::Binary { .. } => joins_text(value, ask, walk),
+        Expr::MethodCall { receiver, method, .. } => match ask.names.resolve(method) == "clone" || ask.names.resolve(method) == "to_owned" {
+            true => copies_text(receiver, ask, walk),
+            false => false,
+        },
+        else => false,
+    }
 }
 
 // **Whether a `clone` here is a copy of text** (ADR-282 D9), which is text of

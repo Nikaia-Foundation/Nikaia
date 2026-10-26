@@ -1,0 +1,28 @@
+fn trimmed(t: String) -> String {
+    let s = t + "!"
+    return s.trim()
+}
+
+fn through_a_name(t: String, u: String) -> String {
+    let s = t + u
+    let r = s.trim()
+    return r
+}
+
+fn cut(t: String) -> String throws {
+    let s = "<" + t
+    let n = s.len()
+    return s.bytes[0..<n].text()
+}
+
+fn literal() -> String {
+    let s = "  lit "
+    return s.trim()
+}
+
+fn main() throws {
+    println(trimmed(" hello"))
+    println(through_a_name(" a ", "b "))
+    println(cut("x"))
+    println(literal())
+}
