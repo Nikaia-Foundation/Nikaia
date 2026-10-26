@@ -148,7 +148,10 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
     let mut commit: Vec[String] = ["commit", "-m", msg, "-m", trailer, "--"]
     for i in 0..<paths.len() { commit.push(paths[i].clone()) }
     let made = process::run("git", commit)
-    if !made.ok { drive_escalate(f"git commit failed for {name}") }
+    if !made.ok {
+        let why = (made.stderr + made.stdout).trim().split("\n").collect()[0].clone()
+        drive_escalate(f"git commit failed for {name}: {why}")
+    }
     drive_push(false)
 }
 
