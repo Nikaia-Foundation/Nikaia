@@ -1,2 +1,3 @@
-b655-push-local-view.md
 c7-rest-plan.md
+b655-element-view-slots.md
+b655-null-arm-view.md
