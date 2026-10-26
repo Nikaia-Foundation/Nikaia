@@ -1,0 +1,9 @@
+use std::collections
+fn main() {
+    let mut m: collections::HashMap[String, (i64, String, String)] = collections::HashMap()
+    m.insert("a", (1, "p", "q"))
+    let (n, a, b) = m.get("a") ?? (0, "none", "n")
+    println(f"{n} {a} {b}")
+    let (n, a, b) = m.get("b") ?? (0, "none", "n")
+    println(f"{n} {a} {b}")
+}

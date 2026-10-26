@@ -734,23 +734,34 @@ impl<'a> Or<&'a str> for &'a Option<String> {
     }
 }
 
-/// **A map's pair of text and a copy value, with a pair of a literal after
-/// `??`** (#846): `let (s, n) = m.get(k) ?? ("", 0)` over a map of
-/// `(String, i64)`. The map keeps the pair, so the read is lent, and what the
-/// pair and the literal pair can both be is a pair of a view of text and the
-/// copy value, as for a lone text (ADR-293 D28). Nothing is copied.
-impl<'a, B: Copy> Or<(&'a str, B)> for Option<&'a (String, B)> {
-    fn or(self, fallback: impl FnOnce() -> (&'a str, B)) -> (&'a str, B) {
-        self.map(|(a, b)| (a.as_str(), *b)).unwrap_or_else(fallback)
-    }
+/// **A map's tuple that holds text, with a tuple of literals after `??`**
+/// (#846, #848): `let (s, n) = m.get(k) ?? ("", 0)` over a map of
+/// `(String, i64)`. The map keeps the tuple, so the read is lent, and what the
+/// tuple and the literal tuple can both be is a tuple of views of text and the
+/// copy values, as for a lone text (ADR-293 D28). Nothing is copied. One impl
+/// per arity (2, 3) and text position; a position is `String` (a view) or a
+/// `Copy` parameter (copied).
+macro_rules! or_tuple {
+    ($( [$($g:ident),*] ($($x:ident: $own:ty => $view:ty = $conv:expr),+) ;)+) => {$(
+        impl<'a, $($g: Copy),*> Or<($($view,)+)> for Option<&'a ($($own,)+)> {
+            fn or(self, fallback: impl FnOnce() -> ($($view,)+)) -> ($($view,)+) {
+                self.map(|($($x,)+)| ($($conv,)+)).unwrap_or_else(fallback)
+            }
+        }
+    )+};
 }
 
-/// The same for a pair of two texts.
-impl<'a> Or<(&'a str, &'a str)> for Option<&'a (String, String)> {
-    fn or(self, fallback: impl FnOnce() -> (&'a str, &'a str)) -> (&'a str, &'a str) {
-        self.map(|(a, b)| (a.as_str(), b.as_str()))
-            .unwrap_or_else(fallback)
-    }
+or_tuple! {
+    [B] (a: String => &'a str = a.as_str(), b: B => B = *b);
+    [A] (a: A => A = *a, b: String => &'a str = b.as_str());
+    [] (a: String => &'a str = a.as_str(), b: String => &'a str = b.as_str());
+    [B, C] (a: String => &'a str = a.as_str(), b: B => B = *b, c: C => C = *c);
+    [A, C] (a: A => A = *a, b: String => &'a str = b.as_str(), c: C => C = *c);
+    [A, B] (a: A => A = *a, b: B => B = *b, c: String => &'a str = c.as_str());
+    [C] (a: String => &'a str = a.as_str(), b: String => &'a str = b.as_str(), c: C => C = *c);
+    [B] (a: String => &'a str = a.as_str(), b: B => B = *b, c: String => &'a str = c.as_str());
+    [A] (a: A => A = *a, b: String => &'a str = b.as_str(), c: String => &'a str = c.as_str());
+    [] (a: String => &'a str = a.as_str(), b: String => &'a str = b.as_str(), c: String => &'a str = c.as_str());
 }
 
 /// The emitted spelling: `nikaia_std::index::or(value, || fallback)`.
