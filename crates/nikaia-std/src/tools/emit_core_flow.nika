@@ -941,7 +941,11 @@ impl EmitState {
             // A handle whose body cannot fail hands `Crashed` or `Late` bare.
             opening = "let error: Box<dyn std::error::Error> = error.into();"
         }
-        out.push(f" {{\n{pad}Ok(value) => value,\n")
+        if self.facts.owned_catches.contains(node_key(guarded_expr)) {
+            out.push(f" {{\n{pad}Ok(value) => value.to_owned(),\n")
+        } else {
+            out.push(f" {{\n{pad}Ok(value) => value,\n")
+        }
         // **A fatal error the handler does not name passes** (ADR-345 D2): an
         // arm before the handler's hands it on as the function's own failure.
         let passing = self.fatal_passing(world, guarded_expr, handler)

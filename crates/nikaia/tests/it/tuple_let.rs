@@ -39,7 +39,7 @@ fn lowered(source: &str) -> String {
 fn a_tuple_of_names_binds_the_parts() {
     let source = r#"
 fn pair() -> (i64, String) {
-    return (7, "seven".to_string())
+    return (7, "seven")
 }
 
 fn main() {
@@ -80,7 +80,7 @@ fn main() {
 fn a_part_carries_the_type_it_was_taken_from() {
     let source = r#"
 fn pair() -> (i64, String) {
-    return (7, "seven".to_string())
+    return (7, "seven")
 }
 
 fn takes(n: i64) -> i64 { return n }

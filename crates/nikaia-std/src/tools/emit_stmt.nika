@@ -318,9 +318,7 @@ impl EmitState {
                 if found == null {
                     throw EmitRefused { message: f"`{bound}` has no value computed at build time. This is a compiler bug: the check should have reported it first.", at: at }
                 }
-                let pair = found ?? return
-                let below = pair.0.clone()
-                let written = pair.1.clone()
+                let (below, written) = found ?? return
                 if self.facts.folded_comptimes.contains(bound) {
                     out.push("#[allow(dead_code)]\n")
                 }

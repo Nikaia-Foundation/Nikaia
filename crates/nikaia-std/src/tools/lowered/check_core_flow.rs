@@ -797,7 +797,13 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     state.flow.caught_one = single;
     state.scope.pop();
     let value = nikaia_std::index::or(literal, || handled.into());
-    if state.block_leaves(world, handler) || value.is_unknown() || value.fits(&answers) { return answers; }
+    if state.block_leaves(world, handler) || value.is_unknown() || value.fits(&answers) {
+        if a_type_variable(&answers) && a_plain_string(&value) {
+            state.facts.owned_catches.insert(node_key(guarded_expr));
+            return value;
+        }
+        return answers;
+    }
     if !answers.is_unknown() && value.text() != "()" { state.expect_type(world, &value.owned(), &answers, span, "let", &|found, wanted| { format!("This `catch` hands back `{}`, but the value it guards is `{}`.", found, wanted) }); }
     Ty::Unknown
 }
