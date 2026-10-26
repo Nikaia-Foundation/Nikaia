@@ -54,6 +54,82 @@ impl EmitSeedsTables {
         for g in ty.generics.iter() { if self.mentions_a_struct(words, g) { return true; } }
         false
     }
+    pub fn count_words(&self, words: &[String]) -> i64 {
+        let mut sum: i64 = 0;
+        for w in words.iter() { if emit_seeds_is_map(w) { sum += 1; } else { sum += self.arity(w); } }
+        sum
+    }
+    pub fn count_types(&mut self, declared: &[EmitSeedsDeclared]) {
+        self.types = collections::BTreeMap::new();
+        for d in declared.iter() { if !self.excluded.contains(&d.name) { self.types.insert(d.name.to_owned(), 0); } }
+        for _ in 0..8 {
+            let mut changed = false;
+            for d in declared.iter() {
+                if self.excluded.contains(&d.name) { continue; }
+                let n = self.count_words(&d.words);
+                if nikaia_std::index::or(self.types.get(&d.name), || -1) != n {
+                    self.types.insert(d.name.to_owned(), n);
+                    changed = true;
+                }
+            }
+            if !changed { break; }
+        }
+        let mut kept: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+        for (name, n) in self.types.iter() {
+            let n = nikaia_std::num::value(n);
+            if n > 0 { kept.insert(name.to_owned(), n); }
+        }
+        self.types = kept;
+    }
+    pub fn hands(&self, calls: &[EmitSeedsCall], held: &[String]) -> bool {
+        for c in calls.iter() { if self.barriers.contains(&c.callee) || self.fixed.contains(&c.callee) || self.private.contains(&c.callee) { for r in c.roots.iter() { if nikaia_std::list::contains(&held, &r) { return true; } } } }
+        false
+    }
+    pub fn close_barriers(&mut self, bodies: &[EmitSeedsBody]) {
+        for _ in 0..4 {
+            let mut changed = false;
+            for b in bodies.iter() {
+                if !self.fixed.contains(&b.name) && self.hands(&b.calls, &b.held) {
+                    self.fixed.insert(b.name.to_owned());
+                    self.functions = true;
+                    changed = true;
+                }
+            }
+            if !changed { break; }
+        }
+    }
+    pub fn self_handers(&self, impls: &[EmitSeedsBody]) -> Vec<String> {
+        let mut out: Vec<String> = vec![];
+        for i in impls.iter() {
+            if self.arity(&i.name) == 0 || out.contains(&i.name) { continue; }
+            if self.hands(&i.calls, &i.held) { out.push(i.name.to_owned()); }
+        }
+        out
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitSeedsCall {
+    pub callee: String,
+    pub roots: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitSeedsBody {
+    pub name: String,
+    pub held: Vec<String>,
+    pub calls: Vec<EmitSeedsCall>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitSeedsDeclared {
+    pub name: String,
+    pub words: Vec<String>,
+}
+
+pub fn emit_seeds_words(words: &winnow_grammar::InternerContext, ty: &Type, out: &mut Vec<String>) {
+    if (*ty.code).is_none() && !ty.is_tuple { out.push(words.resolve(ty.name).to_owned()); }
+    for g in ty.generics.iter() { emit_seeds_words(words, g, out); }
 }
 
 pub fn emit_seeds_bare(words: &winnow_grammar::InternerContext, ty: &Type) -> i64 {

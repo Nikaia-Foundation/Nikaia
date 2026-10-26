@@ -1,8 +1,9 @@
 // The writer of a map position's hidden seed parameters (`__S0`, ADR-010 D9,
 // #867): where the parameters of a written type come from, and the text of one
 // written type with them put in, and the tables the reader fills (which `pub`
-// structs hold maps, which functions are barriers) with the queries on them.
-// The reader of which `pub` items hold maps is `emit/seeds.rs`.
+// structs hold maps, which functions are barriers) with the queries on them,
+// and the reader's decisions on them (the counting fixpoint, the barrier
+// closure). The walks over the AST that collect the facts are `emit/seeds.rs`.
 
 use std::collections
 
@@ -118,6 +119,136 @@ impl EmitSeedsTables {
             }
         }
         return false
+    }
+
+    /// The map positions of a type by the names of its parts
+    /// (`emit_seeds_words`): what `count` gives for that type.
+    pub fn count_words(ref self, words: ref Vec[String]) -> i64 {
+        let mut sum = 0
+        for w in words {
+            if emit_seeds_is_map(w) {
+                sum += 1
+            } else {
+                sum += self.arity(w)
+            }
+        }
+        return sum
+    }
+
+    /// The hidden parameters of each `pub` struct, until the counts stop
+    /// growing (a struct holds another one that holds a map).
+    pub fn count_types(ref mut self, declared: ref Vec[EmitSeedsDeclared]) {
+        self.types = collections::BTreeMap()
+        for d in declared {
+            if !self.excluded.contains(d.name) {
+                self.types.insert(d.name.clone(), 0)
+            }
+        }
+        for _ in 0..<8 {
+            let mut changed = false
+            for d in declared {
+                if self.excluded.contains(d.name) {
+                    continue
+                }
+                let n = self.count_words(d.words)
+                if (self.types.get(d.name) ?? -1) != n {
+                    self.types.insert(d.name.clone(), n)
+                    changed = true
+                }
+            }
+            if !changed {
+                break
+            }
+        }
+        let mut kept: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        for (name, n) in self.types {
+            if n > 0 {
+                kept.insert(name.clone(), n)
+            }
+        }
+        self.types = kept
+    }
+
+    /// Whether calls hand one of `held` (a name, or a field of one) to a
+    /// barrier, to a function that is one, or to a private function with a
+    /// map of its own.
+    pub fn hands(ref self, calls: ref Vec[EmitSeedsCall], held: ref Vec[String]) -> bool {
+        for c in calls {
+            if self.barriers.contains(c.callee) || self.fixed.contains(c.callee) || self.private.contains(c.callee) {
+                for r in c.roots {
+                    if held.contains(r) {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    /// The barrier closure: the `pub` functions and methods that hand a map
+    /// they were given to a barrier (or to another such function) are fixed,
+    /// until none is added.
+    pub fn close_barriers(ref mut self, bodies: ref Vec[EmitSeedsBody]) {
+        for _ in 0..<4 {
+            let mut changed = false
+            for b in bodies {
+                if !self.fixed.contains(b.name) && self.hands(b.calls, b.held) {
+                    self.fixed.insert(b.name.clone())
+                    self.functions = true
+                    changed = true
+                }
+            }
+            if !changed {
+                break
+            }
+        }
+    }
+
+    /// The types with a method (not a trait's) that hands a map of `self`
+    /// on: one body per `impl`, named by its type.
+    pub fn self_handers(ref self, impls: ref Vec[EmitSeedsBody]) -> Vec[String] {
+        let mut out: Vec[String] = []
+        for i in impls {
+            if self.arity(i.name) == 0 || out.contains(i.name) {
+                continue
+            }
+            if self.hands(i.calls, i.held) {
+                out.push(i.name.clone())
+            }
+        }
+        return out
+    }
+}
+
+/// One call in a body: the name it calls, and the variables its arguments
+/// are field chains of (`m`, `t.counts`).
+pub struct EmitSeedsCall {
+    pub callee: String,
+    pub roots: Vec[String],
+}
+
+/// A body the reader looks at: whose it is, the names it holds maps in, and
+/// its calls.
+pub struct EmitSeedsBody {
+    pub name: String,
+    pub held: Vec[String],
+    pub calls: Vec[EmitSeedsCall],
+}
+
+/// A `pub` struct, and the names of the parts of its fields' types.
+pub struct EmitSeedsDeclared {
+    pub name: String,
+    pub words: Vec[String],
+}
+
+/// The names of a type's parts that can hold a map position (neither a
+/// tuple nor code), in order.
+pub fn emit_seeds_words(words: ref winnow_grammar::InternerContext, ty: ref Type, mut out: Vec[String]) {
+    if ty.code == null && !ty.is_tuple {
+        out.push(words.resolve(ty.name).clone())
+    }
+    for g in ty.generics {
+        emit_seeds_words(words, g, out)
     }
 }
 
