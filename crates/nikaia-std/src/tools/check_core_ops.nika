@@ -562,7 +562,12 @@ fn check_core_ops_a_map_view(state: ref CheckState, name: ref String) -> bool sy
 /// A place lent here, or a local `get` handed back past a jump (ADR-279 D10).
 fn check_core_ops_lent_root(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     let root: String = state.rooted_at(world, value) ?? return false
-    return state.lent_here(root) || state.got_past_a_jump.contains(root)
+    if state.lent_here(root) || state.got_past_a_jump.contains(root) {
+        return true
+    }
+    // **A `mut` parameter is a loan** (#655): what it holds is not taken out.
+    let found = state.binding(root) ?? return false
+    return found.changing
 }
 
 /// **A place reached through a field that is a view** (#735):

@@ -1,0 +1,11 @@
+struct Unroll { names: Vec[String] }
+struct Flow { unrolling: Unroll? }
+struct State { flow: Flow }
+fn first(mut state: State) -> i64 {
+    let u = state.flow.unrolling ?? return 0
+    return u.names.len()
+}
+fn main() {
+    let mut s = State { flow: Flow { unrolling: Unroll { names: ["a"] } } }
+    println(first(s).to_string())
+}

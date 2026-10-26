@@ -373,7 +373,9 @@ pub(crate) fn check_core_ops_a_map_view(state: &CheckState, name: &str) -> bool 
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_lent_root(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     let root: String = match state.rooted_at(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    state.lent_here(&root) || state.got_past_a_jump.contains(&root)
+    if state.lent_here(&root) || state.got_past_a_jump.contains(&root) { return true; }
+    let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    found.changing
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
