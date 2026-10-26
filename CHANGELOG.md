@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1225] — 2026-10-26
+
+**owned literals, NK1301, emit a_stmt in Nikaia (#856, #853, #857)**
+- A text literal bound without a type and then changed in place or reassigned is text of its own; a String match binding may go to a mut parameter (ADR-282 D31, #856).
+- A call on a text literal that adds nothing is refused (NK1301): the call is dropped, text of its own from a literal is written f"x" (ADR-282 D30, #853).
+- The statement writer of the lowering is written in Nikaia (#857).
+
 ## [0.0.1224] — 2026-10-26
 
 **Part III 17.3: json::parse and json::Value (#604)**
