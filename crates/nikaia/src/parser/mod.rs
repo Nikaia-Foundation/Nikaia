@@ -188,6 +188,19 @@ where
     }
 }
 
+/// A token that **is** the first thing on its line: a statement begins a line
+/// (Part I 3.1). Consumes nothing; the opposite of [`same_line`].
+fn new_line<'a, S>(i: &mut ParseInput<'a, S>) -> Result<(), ParseError>
+where
+    S: Clone + std::fmt::Debug + StateOf<Trivia>,
+{
+    let at = i.current_token_start();
+    match StateOf::<Trivia>::state(&mut i.state.user_state).began_a_line(at) {
+        true => Ok(()),
+        false => Err(ParseError::from_input(i)),
+    }
+}
+
 /// The characters in front of the caret that a number, a scale or an exponent
 /// can be made of - what `tools/parse_numbers.nika` is handed.
 fn number_prefix(bytes: &[u8]) -> String {
@@ -905,6 +918,7 @@ grammar! {
         // above ([ADR-135](../../../../docs/specification/adr/adr-135.md) D3,
         // [ADR-285](../../../../docs/specification/adr/adr-285.md) D16).
         extern rule same_line -> ();
+        extern rule new_line -> ();
         extern rule number_lit -> i128;
         extern rule negative_number_lit -> i128;
         extern rule float_end -> ();
@@ -2243,7 +2257,17 @@ grammar! {
             "{" stmts:stmt_list "}" -> { Block { stmts } }
 
         rule stmt_list -> Vec<Spanned<Stmt>> =
-            stmts:stmt* -> { stmts }
+            first:stmt rest:next_stmt* -> {
+                let mut stmts = vec![first];
+                stmts.extend(rest);
+                stmts
+            }
+          | "" -> { Vec::new() }
+
+        // **A statement begins a line** (Part I 3.1): only the first of a
+        // block may stand on the line of its `{`.
+        rule next_stmt -> Spanned<Stmt> =
+            new_line s:stmt -> { s }
 
         rule stmt -> Spanned<Stmt> # "statement" @=
             c:comptime_stmt -> { Spanned::new(c, Span::from(_span)) }

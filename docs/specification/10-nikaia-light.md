@@ -918,6 +918,8 @@ let result = {
 }
 ```
 
+**A statement begins a line.** Two statements on one line are a parse error: `println!("hi")` is not `println` and then `!"hi"`, and `let a = 1 2` is not `let a = 1` and then `2`. The first statement of a block may stand on the line of its `{` (`{ return 0 }`), and a jump's trailing condition (`return 0 if done`) is part of its statement.
+
 A block's last line is the **block's** value; `return` is the **function's**.
 A `return` written at the end of a block that is itself a value (a `match` arm,
 3.4; an `if` branch whose value is taken, 3.2; a `catch` handler, 7.1) leaves
