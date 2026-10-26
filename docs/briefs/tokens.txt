@@ -34,3 +34,4 @@
 /home/user/Nikaia/docs/briefs/b655-one-statement-a-line-redo.md 3304831 59
 /home/user/Nikaia/docs/briefs/architect-task.md 717557 21
 /home/user/Nikaia/docs/briefs/b655-push-local-view.md 1374417 32
+/home/user/Nikaia/docs/briefs/architect-task.md 877103 22

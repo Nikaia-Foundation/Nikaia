@@ -1,4 +1,6 @@
 Result: done
-Batch: b655-push-local-view.md, c7-rest-plan.md
+Batch: c7-rest-plan.md b655-element-view-slots.md b655-null-arm-view.md
 Owner: none
-Notes: #655 step 4 done (deed9ad, f4dfb8c; Changelog lines in their reports, version raise owed). Items 1, 2, 5 reproduce; step 1 briefed. #868 commented (dead key fixed in 356a2e3; only the Nikaia move left). State updated in docs/architect.md.
+Pushed: f958cf7 (briefs, batch.txt, common.part rule, architect State)
+Cut: b655-push-local-view was a false cut (keeping `check_arguments_at` was a choice the brief allowed); #655 step 1 done in 2e1ba5d, Changelog line in its report (version raise owed). Rule added to common.part: a choice the brief left open is no deviation.
+#655: commented; step 2 split into 2a (Vec element, tuple part) and 2b (`null` arm, then `check_arguments_at` removed); step 5 follows.
