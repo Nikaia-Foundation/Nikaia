@@ -9,4 +9,4 @@ Needs: CI rerun on c6a6bdd or later
 Changelog: none
 Gate: green
 GB freed: 0
-Owner: supervisor
+Owner: none
