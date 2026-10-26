@@ -1,6 +1,5 @@
 Result: done
-Batch: b848-map-get-tuple-text.md b864-plus-local-view.md b863-exit-code.md
+Batch: b864-plus-local-view.md, b863-exit-code.md
 Owner: none
-Commit: c0e6a59 (briefs, batch.txt, architect.md State)
-Filed: #864 (ready) from b-drive-loop Found: a view of a `+` local returned as owned String lowers to &'static str (text_tiers lasting tier)
-Note: #863 did not reproduce in two probes; its brief allows noop with the matrix.
+Note: the cut at b848 was false (`Deviation: none (note)`); #848 done in 39ebe78. Report rule fixed at the source (common.part, architect.md report form, the two batch briefs): Deviation/Found take the bare word `none`.
+Changelog (for the supervisor): std: m.get(k) ?? (tuple) answers views for every tuple of arity 2 and 3 that holds text (#848).
