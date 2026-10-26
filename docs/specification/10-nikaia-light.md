@@ -563,7 +563,10 @@ of a list, an argument the callee keeps - into which only literals and other
 views flow, nothing is allocated: the position holds the view, and static text
 outlives every name. Where text of its own (an `f"…"`, a `.clone()`, a `String`
 handed over) flows into the same position, the literal is constructed there, as
-`[1, 2]` is a `Vec` where one is wanted. A **view** of text the program *has* is not a literal,
+`[1, 2]` is a `Vec` where one is wanted. A literal in a `String` that is changed, or handed on to
+what takes text of its own (a `mut` or owning parameter, also through a
+`match` binding or a lambda's last expression), is text of its own:
+`let mut y: String = "hi"` then `y.push_str("!")` needs no copy written. A **view** of text the program *has* is not a literal,
 and where it is kept `.clone()` makes the copy, written where it happens. A view
 in a published `String` slot that text of its own also flows into is refused without it (`NK1106`); any other `String` slot takes the view (2.2). **`.clone()` is the one
 word for a copy**, of text and of everything else: a copy of text is text of its
