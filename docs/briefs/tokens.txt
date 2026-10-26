@@ -35,3 +35,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 717557 21
 /home/user/Nikaia/docs/briefs/b655-push-local-view.md 1374417 32
 /home/user/Nikaia/docs/briefs/architect-task.md 877103 22
+/home/user/Nikaia/docs/briefs/c7-rest-plan.md 2281024 36
