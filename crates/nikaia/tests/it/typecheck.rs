@@ -626,7 +626,7 @@ fn an_integer_literal_fits_any_numeric_parameter() {
         findings(
             "fn small(a: i32) { }\n\
          fn big(a: u64) { }\n\
-         fn main() { small(3) big(3) }"
+         fn main() { small(3)\nbig(3) }"
         )
         .is_empty()
     );
@@ -774,7 +774,7 @@ fn a_value_from_a_written_signature_is_measured_against_the_parameter() {
 /// silent one a bug in this compiler.
 #[test]
 fn a_string_that_used_to_interpolate_is_warned_about() {
-    let found = findings("fn main() { let name = \"welt\" println(\"hallo {name}\") }");
+    let found = findings("fn main() { let name = \"welt\"\nprintln(\"hallo {name}\") }");
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1111");
     assert_eq!(found[0].severity, Severity::Warning);
@@ -814,8 +814,8 @@ fn a_doubled_brace_in_a_plain_string_is_warned_about_too() {
 /// An `f"…"` is held to nothing by this - it says what it is.
 #[test]
 fn an_f_string_is_never_warned_about() {
-    assert!(findings("fn main() { let n = 1 println(f\"{n}\") }").is_empty());
-    assert!(findings("fn main() { let n = 1 println(f\"{{{n}}}\") }").is_empty());
+    assert!(findings("fn main() { let n = 1\nprintln(f\"{n}\") }").is_empty());
+    assert!(findings("fn main() { let n = 1\nprintln(f\"{{{n}}}\") }").is_empty());
 }
 
 /// **The type comes from the syntax** (ADR-309 D2), so a `&str` return that
@@ -1502,7 +1502,7 @@ fn an_undeclared_name_inside_an_expression_is_refused_too() {
         // longer reaches this check at all - the grammar refuses it first, which
         // is the earlier and better place. The shape is what mattered, so an
         // ordinary name stands here now.
-        ("fn main() { let q = builder { 1 + 1 } }", "builder"),
+        ("fn main() { let q = builder\n{ 1 + 1 } }", "builder"),
         // Inside an interpolation, which is Nikaia source too (ADR-309 D13).
         (r#"fn main() { let s = f"{nope}" }"#, "nope"),
         // And as an argument.
@@ -1726,7 +1726,7 @@ fn a_word_this_language_does_not_know_is_refused() {
     // ([ADR-269](../../../docs/specification/adr/adr-269.md) D2): it is a
     // function now, and the statement form Part III 14.1 used to write is the
     // name alone - which is told how the call is written.
-    let (code, message) = one("fn main() {\n    let c = true\n    assert c\n}");
+    let (code, message) = one("fn main() {\n    let c = true\n    assert\nc\n}");
     assert_eq!(code, "NK1195");
     assert!(message.contains("assert(cond)"), "{message}");
 }

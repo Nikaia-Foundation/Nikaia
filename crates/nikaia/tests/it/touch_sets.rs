@@ -562,7 +562,7 @@ fn a_value_that_is_not_a_bare_call_is_weighed() {
 #[test]
 fn a_lambdas_own_effects_are_not_in_the_statements_touch_set() {
     let trailing = "fn lauf(xs: Vec[i64]) {\n\
-         \x20   xs.sort_by_key fn { println(\"aus dem lambda\") return a }\n\
+         \x20   xs.sort_by_key fn { println(\"aus dem lambda\")\n return a }\n\
          \x20   println(\"danach\")\n\
          }";
     let bare = "fn lauf() {\n\

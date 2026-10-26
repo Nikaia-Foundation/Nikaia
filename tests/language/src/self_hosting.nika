@@ -92,8 +92,10 @@ fn self_hosting_unknown(e: ref SelfHostingExpr, known: ref collections::HashSet[
     match e {
         SelfHostingExpr::Num(_) => {}
         SelfHostingExpr::Name(s) => { if !known.contains(s) { out.push(s.clone()) } }
-        SelfHostingExpr::Add(a, b) => { out.extend(self_hosting_unknown(a, known)) out.extend(self_hosting_unknown(b, known)) }
-        SelfHostingExpr::Mul(a, b) => { out.extend(self_hosting_unknown(a, known)) out.extend(self_hosting_unknown(b, known)) }
+        SelfHostingExpr::Add(a, b) => { out.extend(self_hosting_unknown(a, known))
+        out.extend(self_hosting_unknown(b, known)) }
+        SelfHostingExpr::Mul(a, b) => { out.extend(self_hosting_unknown(a, known))
+        out.extend(self_hosting_unknown(b, known)) }
     }
     return out
 }

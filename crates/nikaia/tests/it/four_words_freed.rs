@@ -79,7 +79,7 @@ fn the_three_the_backend_reserves_are_escaped() {
         ("quote", false),
     ] {
         let rust = lowered(&format!(
-            "fn main() {{ let mut {word} = 1 {word} = {word} + 1 println(f\"{{{word}}}\") }}"
+            "fn main() {{ let mut {word} = 1\n{word} = {word} + 1\nprintln(f\"{{{word}}}\") }}"
         ))
         .unwrap_or_else(|e| panic!("`{word}` lowers: {e}"));
         assert_eq!(
@@ -107,7 +107,7 @@ fn a_stray_word_is_told_what_to_write_instead() {
         // `{word} x` is two statements to a scannerless grammar, which is the
         // misparse `NK1117` exists for - so the one about the word is picked out
         // rather than the pair being counted.
-        let found: Vec<_> = findings(&format!("fn main() {{\n    {word} x\n}}"))
+        let found: Vec<_> = findings(&format!("fn main() {{\n    {word}\nx\n}}"))
             .into_iter()
             .filter(|f| f.code == "NK1117" && f.message.contains(&format!("`{word}`")))
             .collect();
@@ -139,7 +139,7 @@ fn a_declared_word_gets_no_sentence() {
 /// what says this added a case rather than replacing the help.
 #[test]
 fn every_other_name_is_answered_as_before() {
-    let found: Vec<_> = findings("fn main() {\n    widgit x\n}")
+    let found: Vec<_> = findings("fn main() {\n    widgit\nx\n}")
         .into_iter()
         .filter(|f| f.code == "NK1117" && f.message.contains("`widgit`"))
         .collect();

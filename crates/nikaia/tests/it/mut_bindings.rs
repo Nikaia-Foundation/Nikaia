@@ -62,7 +62,7 @@ fn refused(source: &str) -> bool {
 fn the_declaration_and_the_call_gain_the_reference_together() {
     let rust = lowered(
         "fn fill(mut out: Vec[i64]) { out.push(1) }\n\
-         fn main() { let mut xs = Vec() fill(xs) }\n",
+         fn main() { let mut xs = Vec()\nfill(xs) }\n",
     );
     assert!(rust.contains("fn fill(out: &mut Vec<i64>)"), "{rust}");
     assert!(rust.contains("fill(&mut xs)"), "{rust}");
@@ -75,7 +75,7 @@ fn the_declaration_and_the_call_gain_the_reference_together() {
 fn a_mut_parameter_is_not_also_lent() {
     let rust = lowered(
         "fn fill(mut out: Vec[i64]) { out.push(1) }\n\
-         fn main() { let mut xs = Vec() fill(xs) }\n",
+         fn main() { let mut xs = Vec()\nfill(xs) }\n",
     );
     assert!(!rust.contains("&&"), "{rust}");
     assert!(!rust.contains("& mut"), "{rust}");

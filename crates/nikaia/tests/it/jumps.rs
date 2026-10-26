@@ -180,7 +180,8 @@ fn a_loop_inside_a_lambda_is_a_loop_a_break_may_leave() {
 fn a_value_written_after_a_break_is_refused() {
     let (code, message) = one("fn f(n: i64) -> i64 {\n\
          \x20   for i in 0..<n {\n\
-         \x20       break i\n\
+         \x20       break\n\
+         \x20       i\n\
          \x20   }\n\
          \x20   return 0\n\
          }\n");
@@ -200,7 +201,8 @@ fn the_help_names_a_let_before_the_loop_and_a_return() {
     let parsed = parse_to_ast(
         "fn f(n: i64) -> i64 {\n\
          \x20   for i in 0..<n {\n\
-         \x20       break i\n\
+         \x20       break\n\
+         \x20       i\n\
          \x20   }\n\
          \x20   return 0\n\
          }\n",

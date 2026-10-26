@@ -122,7 +122,7 @@ fn a_fallback_may_continue() {
 fn a_jump_expression_still_needs_its_loop() {
     let found: Vec<_> = findings(
         "fn find(id: i64) -> i64? { return null }\n\
-         fn f() -> i64 { let v = find(1) ?? break  return v }\n",
+         fn f() -> i64 { let v = find(1) ?? break \nreturn v }\n",
     )
     .into_iter()
     .filter(|f| f.code == "NK1132")

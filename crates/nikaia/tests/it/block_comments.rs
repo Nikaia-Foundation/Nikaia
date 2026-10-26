@@ -47,7 +47,7 @@ fn a_nested_block_comment_stands_inside_an_argument_list() {
 /// the grammar, and this is the program that says it.
 #[test]
 fn a_block_comment_opener_inside_a_string_is_text() {
-    let rust = lowered("fn main() { let text = \"a /* b */ c\" println(text) }")
+    let rust = lowered("fn main() { let text = \"a /* b */ c\"\nprintln(text) }")
         .expect("it parses and lowers");
     assert!(
         rust.contains("\"a /* b */ c\""),
@@ -132,6 +132,6 @@ fn two_stars_and_a_bang_are_comments() {
 /// new lexical rule beside `COMMENT` can cause.
 #[test]
 fn division_is_untouched() {
-    let rust = lowered("fn main() { let n = 10 / 2 println(f\"{n}\") }").expect("it lowers");
+    let rust = lowered("fn main() { let n = 10 / 2\nprintln(f\"{n}\") }").expect("it lowers");
     assert!(rust.contains("10 / 2"), "{rust}");
 }

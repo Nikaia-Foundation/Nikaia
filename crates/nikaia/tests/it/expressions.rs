@@ -99,7 +99,7 @@ fn a_postfix_reparenthesises_what_binds_looser() {
 /// … and does not add parentheses where the expression already binds tighter.
 #[test]
 fn a_postfix_leaves_a_plain_receiver_alone() {
-    let emitted = emit("fn f(xs: Vec[i32]) { let n = xs.len() let m = xs[0].abs() }");
+    let emitted = emit("fn f(xs: Vec[i32]) { let n = xs.len()\nlet m = xs[0].abs() }");
     assert!(emitted.contains("xs.len()"), "{emitted}");
     assert!(!emitted.contains("(xs)"), "{emitted}");
     // The read is a call now ([ADR-293](../../../docs/specification/adr/adr-293.md)
@@ -181,7 +181,7 @@ fn a_return_inside_an_if_statement_still_returns() {
 
     // …and the case it was right for keeps working: in value position the
     // branches *are* the value.
-    let value = emit("fn f(c: bool) -> i32 { let x = if c { 1 } else { 2 } return x }");
+    let value = emit("fn f(c: bool) -> i32 { let x = if c { 1 } else { 2 }\nreturn x }");
     assert!(value.contains("if c { 1 } else { 2 }"), "{value}");
     assert!(!value.contains("return 1"), "{value}");
 }

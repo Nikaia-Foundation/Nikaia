@@ -391,7 +391,7 @@ fn a_task_that_never_finishes_is_abandoned_at_the_deadline() {
 #[test]
 fn the_switch_decides_which_executor_a_task_is_started_on() {
     let source = "fn work() -> i64 { return 1 }\n\
-                  fn main() throws { let t = spawn fn { work() } println(f\"{t.join()}\") }";
+                  fn main() throws { let t = spawn fn { work() }\nprintln(f\"{t.join()}\") }";
 
     let at_no = lower_at(source, "no");
     assert!(

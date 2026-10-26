@@ -419,7 +419,8 @@ fn an_error_set_grows_through_a_caller() {
         enum NetError { Timeout }
         fn load() -> i64 throws { throw ConfigError::NotFound }
         fn fetch() -> i64 throws { throw NetError::Timeout }
-        fn both() -> i64 throws { let a = load() return fetch() }
+        fn both() -> i64 throws { let a = load()
+return fetch() }
         "#,
     );
     let both = ledger
@@ -440,7 +441,8 @@ fn mutual_recursion_settles() {
     let ledger = ledger_for(
         r#"
         enum E { X }
-        fn ping(n: i32) -> i32 throws { if n == 0 { throw E::X } return pong(n - 1) }
+        fn ping(n: i32) -> i32 throws { if n == 0 { throw E::X }
+return pong(n - 1) }
         fn pong(n: i32) -> i32 throws { return ping(n - 1) }
         "#,
     );

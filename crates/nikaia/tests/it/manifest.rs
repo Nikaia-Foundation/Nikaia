@@ -169,7 +169,7 @@ fn a_switch_changed_in_the_manifest_rebuilds_the_program() {
     std::fs::write(
         dir.join("src/main.nika"),
         "fn work() -> i64 { return 1 }\n\
-         fn main() throws { let t = spawn fn { work() } println(f\"{t.join()}\") }\n",
+         fn main() throws { let t = spawn fn { work() }\nprintln(f\"{t.join()}\") }\n",
     )
     .expect("the source");
 

@@ -205,7 +205,7 @@ fn every_program(root: &std::path::Path) -> Vec<std::path::PathBuf> {
 /// mistake that is not ASCII is where the two differ.
 #[test]
 fn an_unclosed_quote_after_umlauts_is_found_where_it_opens() {
-    let source = "fn main() { let s = \"äöü\" let t = \"x }";
+    let source = "fn main() { let s = \"äöü\";let t = \"x }";
     let refused = parse_to_ast(source).expect_err("a parse error");
     let finding = nikaia::diagnostics::refused_finding(&refused).expect("a finding");
     let said = nikaia::diagnostics::render_finding(finding, "app.nika", source);

@@ -54,7 +54,7 @@ const SHAPES: &[(&str, &str, &str)] = &[
     ),
     (
         "a hole that reads the error",
-        "catch { println(f\"{error}\") 0 }",
+        "catch { println(f\"{error}\")\n 0 }",
         "Err(error) =>",
     ),
     (

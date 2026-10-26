@@ -93,7 +93,7 @@ fn a_constructed_vec_keeps_its_element_type() {
 /// the whole of what D2 evens out.
 #[test]
 fn new_is_refused_at_a_call() {
-    let found = refusals("fn main() { let xs = Vec::new() println(f\"{xs.len()}\") }");
+    let found = refusals("fn main() { let xs = Vec::new()\nprintln(f\"{xs.len()}\") }");
     assert_eq!(found.len(), 1, "{found:#?}");
     let help = found[0].help.as_deref().expect("a way out");
     assert!(help.contains("`Vec(…)`"), "{help}");

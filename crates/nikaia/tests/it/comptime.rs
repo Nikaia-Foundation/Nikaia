@@ -90,7 +90,7 @@ fn the_type_is_written_or_the_first_one_that_holds_it() {
 /// with `NK1127`; compiled, it runs as it does in the program.
 #[test]
 fn a_comptime_binding_may_call_a_method_of_std() {
-    let source = "fn main() { comptime GREET = \"hallo\".to_uppercase() println(f\"{GREET}\") }";
+    let source = "fn main() { comptime GREET = \"hallo\".to_uppercase()\nprintln(f\"{GREET}\") }";
     let found = findings(source);
     assert!(found.is_empty(), "{found:#?}");
     let rust = lower(source);
@@ -125,7 +125,7 @@ fn a_comptime_binding_cannot_be_mutable() {
 /// generated file as the `&str` a `const` can hold.
 #[test]
 fn a_comptime_binding_over_text_folds() {
-    let rust = lower("fn main() { comptime GREET = \"hallo\" println(f\"{GREET}\") }");
+    let rust = lower("fn main() { comptime GREET = \"hallo\"\nprintln(f\"{GREET}\") }");
     assert!(rust.contains("const GREET: &str = \"hallo\";"), "{rust}");
 }
 

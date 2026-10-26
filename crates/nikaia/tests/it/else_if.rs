@@ -120,7 +120,8 @@ fn the_http_examples_status_line_is_one_decision() {
 /// became the keyword would be a second spelling nobody decided on.
 #[test]
 fn else_and_if_are_two_words() {
-    let source = "fn f(n: i64) -> i64 { if n > 0 { return 1 } elseif n < 0 { return 2 } return 3 }";
+    let source =
+        "fn f(n: i64) -> i64 { if n > 0 { return 1 }\nelseif\nn < 0\n{ return 2 }\nreturn 3 }";
     let parsed = parse_to_ast(source).expect("it parses - `elseif` is a name");
     let own = nikaia::contracts::Ledger::infer(&parsed);
     let library = nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std's ledger");

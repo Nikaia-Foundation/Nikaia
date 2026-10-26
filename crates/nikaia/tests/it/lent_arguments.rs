@@ -59,7 +59,7 @@ fn refused(source: &str) -> bool {
 fn the_declaration_and_the_call_gain_the_reference_together() {
     let rust = lowered(
         "fn width(text: String) -> i64 { return text.len() as i64 }\n\
-         fn main() { let t: String = f\"hi\" println(f\"{width(t)}\") }\n",
+         fn main() { let t: String = f\"hi\"\nprintln(f\"{width(t)}\") }\n",
     );
     // A `String` the body only reads is a `&str` below (ADR-282 D5), and
     // the caller's `&t` reaches it the way it reached a `&String`.
@@ -73,14 +73,14 @@ fn the_declaration_and_the_call_gain_the_reference_together() {
 fn a_written_ampersand_at_a_lending_call_is_refused() {
     assert!(refused(
         "fn width(text: String) -> i64 { return text.len() as i64 }\n\
-         fn main() { let t = \"hi\" println(f\"{width(ref t)}\") }\n"
+         fn main() { let t = \"hi\"\nprintln(f\"{width(ref t)}\") }\n"
     ));
 
     // And the same call without it is not refused, which is the half that says
     // the rule is about the `&` and not about the call.
     assert!(!refused(
         "fn width(text: String) -> i64 { return text.len() as i64 }\n\
-         fn main() { let t: String = \"hi\" println(f\"{width(t)}\") }\n"
+         fn main() { let t: String = \"hi\"\nprintln(f\"{width(t)}\") }\n"
     ));
 }
 
@@ -93,7 +93,7 @@ fn a_kept_parameter_keeps_its_owned_argument() {
     let rust = lowered(
         "struct Row { counts: Vec[i64] }\n\
          fn wrap(counts: Vec[i64]) -> Row { return Row { counts: counts } }\n\
-         fn main() { let n: Vec[i64] = [1, 2] let r = wrap(n) println(f\"{r.counts.len()}\") }\n",
+         fn main() { let n: Vec[i64] = [1, 2]\nlet r = wrap(n)\nprintln(f\"{r.counts.len()}\") }\n",
     );
     assert!(rust.contains("fn wrap(counts: Vec<i64>)"), "{rust}");
     assert!(!rust.contains("wrap(&n)"), "{rust}");
@@ -102,7 +102,7 @@ fn a_kept_parameter_keeps_its_owned_argument() {
     assert!(!refused(
         "struct Row { counts: Vec[i64] }\n\
          fn wrap(counts: Vec[i64]) -> Row { return Row { counts: counts } }\n\
-         fn main() { let n: Vec[i64] = [1, 2] let r = wrap(n) println(f\"{r.counts.len()}\") }\n"
+         fn main() { let n: Vec[i64] = [1, 2]\nlet r = wrap(n)\nprintln(f\"{r.counts.len()}\") }\n"
     ));
 }
 
@@ -279,7 +279,7 @@ fn a_parameter_a_method_changes_in_place_is_not_lent() {
     // is about *changing* the receiver and not about calling a method on one.
     let rust = lowered(
         "fn width(xs: Vec[i64]) -> i64 { return xs.len() as i64 }\n\
-         fn main() { let xs = Vec() println(f\"{width(xs)}\") }\n",
+         fn main() { let xs = Vec()\nprintln(f\"{width(xs)}\") }\n",
     );
     // A list the body only reads is a slice below (0.0.373).
     assert!(rust.contains("fn width(xs: &[i64])"), "{rust}");

@@ -46,7 +46,7 @@ fn a_character_literal_is_kept_as_written() {
 /// A quote and a backslash are characters like any other.
 #[test]
 fn the_awkward_characters_are_characters() {
-    let emitted = emit("fn main() { let q = '\\'' let b = '\\\\' let s = ' ' }");
+    let emitted = emit("fn main() { let q = '\\''\nlet b = '\\\\'\nlet s = ' ' }");
     assert!(emitted.contains("let q = '\\'';"), "{emitted}");
     assert!(emitted.contains("let b = '\\\\';"), "{emitted}");
     assert!(emitted.contains("let s = ' ';"), "{emitted}");
@@ -88,7 +88,10 @@ fn a_unicode_escape_is_not_a_hole() {
 /// … and a hole beside one is still a hole.
 #[test]
 fn an_escape_does_not_swallow_the_interpolation_after_it() {
-    let emitted = emit(r#"fn main() { let x = 1 println(f"\u{0041}{x}\n") }"#);
+    let emitted = emit(
+        r#"fn main() { let x = 1
+println(f"\u{0041}{x}\n") }"#,
+    );
     assert!(
         emitted.contains(r#"println!("\u{0041}{}\n", x)"#),
         "{emitted}"
@@ -99,7 +102,10 @@ fn an_escape_does_not_swallow_the_interpolation_after_it() {
 /// piece needs - a pretty-printer cannot put one after every fragment.
 #[test]
 fn print_is_a_macro_like_println() {
-    let emitted = emit(r#"fn main() { print("a") eprint("b") }"#);
+    let emitted = emit(
+        r#"fn main() { print("a")
+eprint("b") }"#,
+    );
     assert!(emitted.contains(r#"print!("a")"#), "{emitted}");
     assert!(emitted.contains(r#"eprint!("b")"#), "{emitted}");
 }
@@ -152,10 +158,16 @@ fn an_escape_is_not_a_brace_to_double() {
 /// `f"…"` is what says there is code in here (ADR-309 D1).
 #[test]
 fn an_f_string_interpolates_and_a_plain_one_does_not() {
-    let woven = emit(r#"fn main() { let n = 1 let s = f"n is {n}" }"#);
+    let woven = emit(
+        r#"fn main() { let n = 1
+let s = f"n is {n}" }"#,
+    );
     assert!(woven.contains(r#"format!("n is {}", n)"#), "{woven}");
 
-    let plain = emit(r#"fn main() { let n = 1 let s = "n is {n}" }"#);
+    let plain = emit(
+        r#"fn main() { let n = 1
+let s = "n is {n}" }"#,
+    );
     assert!(plain.contains(r#"let s = "n is {n}";"#), "{plain}");
 }
 
@@ -179,7 +191,11 @@ fn an_f_string_is_a_string_even_with_no_hole_in_it() {
 /// an interpolation that lost its nerve.
 #[test]
 fn a_space_after_the_f_is_not_an_interpolation() {
-    let parsed = parse_to_ast(r#"fn main() { let f = 1 let s = "{f}" }"#).expect("parses");
+    let parsed = parse_to_ast(
+        r#"fn main() { let f = 1
+let s = "{f}" }"#,
+    )
+    .expect("parses");
     let Item::Fn { body, .. } = &parsed.program.items[1 - 1].node else {
         panic!("expected a function");
     };
@@ -664,7 +680,7 @@ fn an_error_a_number_a_bool_a_char_and_text_in_a_hole_run() {
 fn the_tree_holds_the_parts_of_an_interpolation() {
     use nikaia::ast::{Expr, FPart, Item, Stmt};
     let parsed = nikaia::parser::parse_to_ast(
-        "fn main() { let n = 3 println(f\"a {n:>4} b {g(\"x\")} {{c}}\") }",
+        "fn main() { let n = 3\nprintln(f\"a {n:>4} b {g(\"x\")} {{c}}\") }",
     )
     .expect("it parses");
     let Item::Fn { body, .. } = &parsed.program.items[0].node else {
@@ -706,7 +722,7 @@ fn the_tree_holds_the_parts_of_an_interpolation() {
     // **And the emitter builds the format string from them** (D5).
     let emitted = emit(
         "fn g(s: ref String) -> String { return s.clone() }\n\
-         fn main() { let n = 3 println(f\"a {n:>4} b {g(\"x\")} {{c}}\") }",
+         fn main() { let n = 3\nprintln(f\"a {n:>4} b {g(\"x\")} {{c}}\") }",
     );
     assert!(emitted.contains(r#"a {:>4} b {} {{c}}"#), "{emitted}");
 }
@@ -723,7 +739,7 @@ fn a_broken_hole_is_refused_by_the_parser() {
     };
     let escaped = said("fn main() { println(f\"{g(\\\"a\\\")}\") }");
     assert!(escaped.contains("plain quotes"), "{escaped}");
-    let unclosed = said("fn main() { let n = 1 println(f\"x {n\") }");
+    let unclosed = said("fn main() { let n = 1\n    println(f\"x {n\") }");
     assert!(unclosed.contains("is never closed"), "{unclosed}");
     let stray = said("fn main() { println(f\"x } y\") }");
     assert!(stray.contains("has no `{` before it"), "{stray}");

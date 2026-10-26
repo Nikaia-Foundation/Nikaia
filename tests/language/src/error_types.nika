@@ -103,7 +103,8 @@ fn error_types_again() -> i64 throws {
 
 test "a handler may pass the error on" {
     let mut said = ""
-    let port = error_types_again() catch { said = f"{error.full()}" 8080 }
+    let port = error_types_again() catch { said = f"{error.full()}"
+    8080 }
     let site = said.contains("raised at error_types_load")
     assert(site)
     assert(port == 8080)

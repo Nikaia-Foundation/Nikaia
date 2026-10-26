@@ -648,7 +648,7 @@ fn a_parameter_handed_to_a_method_on_self_is_kept_only_if_that_method_keeps_it()
     assert!(rust.contains("fn put(&mut self, e: &'a E)"), "{rust}");
     assert!(rust.contains("fn walk(&mut self, e: &'a E)"), "{rust}");
     // Two methods calling each other that only read keep nothing.
-    let mutual = "impl Walk {\n    fn even(ref self, e: ref E, d: i64) -> i64 { if d == 0 { return e.k } return self.odd(e, d - 1) }\n    fn odd(ref self, e: ref E, d: i64) -> i64 { if d == 0 { return self.n } return self.even(e, d - 1) }\n}\n";
+    let mutual = "impl Walk {\n    fn even(ref self, e: ref E, d: i64) -> i64 { if d == 0 { return e.k }\nreturn self.odd(e, d - 1) }\n    fn odd(ref self, e: ref E, d: i64) -> i64 { if d == 0 { return self.n }\nreturn self.even(e, d - 1) }\n}\n";
     let rust = lowered(&format!("{head}{mutual}\nfn main() {{}}\n"));
     assert!(rust.contains("fn even(&self, e: &E, d: i64)"), "{rust}");
     assert!(rust.contains("fn odd(&self, e: &E, d: i64)"), "{rust}");
@@ -764,7 +764,37 @@ fn a_view_read_through_a_coalesce_is_watched_across_a_mut_call() {
             r#"
 use std::collections
 
-struct Fun {{ result: String? }}
+struct Fun {{ result
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+: String? }}
 struct Walk {{ fns: collections::HashMap[String, Fun], list: Vec[Fun], seen: Vec[String], n: i64 }}
 
 fn bump(mut walk: Walk) -> i64 {{

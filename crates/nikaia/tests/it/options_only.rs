@@ -195,7 +195,7 @@ fn a_method_call_of_options_alone_needs_no_semicolon() {
 fn a_literal_written_like_a_call_names_the_braces() {
     let found: Vec<_> = findings(
         "struct Stats { min: i64, max: i64 }\n\
-         fn main() { let s = Stats(min: 1, max: 2) println(f\"{s.min}\") }",
+         fn main() { let s = Stats(min: 1, max: 2)\nprintln(f\"{s.min}\") }",
     )
     .into_iter()
     .filter(|f| f.code == "NK1146")
@@ -211,7 +211,7 @@ fn a_literal_written_like_a_call_names_the_braces() {
 fn a_declared_structs_brace_literal_is_not_refused() {
     let found: Vec<_> = findings(
         "struct Stats { min: i64, max: i64 }\n\
-         fn main() { let s = Stats { min: 1, max: 2 } println(f\"{s.min}\") }",
+         fn main() { let s = Stats { min: 1, max: 2 }\nprintln(f\"{s.min}\") }",
     )
     .into_iter()
     .filter(|f| f.code == "NK1146" || f.code == "NK1135")
@@ -228,7 +228,7 @@ fn the_anonymous_constructor_is_still_a_call() {
          impl Stats {\n\
              pub fn(first: i64) -> Stats { return Stats { n: first } }\n\
          }\n\
-         fn main() { let s = Stats(1) println(f\"{s.n}\") }",
+         fn main() { let s = Stats(1)\nprintln(f\"{s.n}\") }",
     )
     .expect("it lowers");
     assert!(rust.contains("Stats::new(1)"), "{rust}");
@@ -241,7 +241,7 @@ fn the_anonymous_constructor_is_still_a_call() {
 fn a_brace_literal_naming_a_function_says_so() {
     let found: Vec<_> = findings(
         "fn execute(target_age: i64 = 0) -> i64 { return target_age }\n\
-         fn main() { let a = execute { target_age: 30 } println(f\"{a}\") }",
+         fn main() { let a = execute { target_age: 30 }\nprintln(f\"{a}\") }",
     )
     .into_iter()
     .filter(|f| f.code == "NK1135")
@@ -259,14 +259,14 @@ fn a_brace_literal_naming_a_function_says_so() {
 /// claim, which is where it belongs.
 #[test]
 fn a_call_naming_nothing_is_silent_and_the_brace_form_is_not() {
-    let call: Vec<_> = findings("fn main() { let w = Widgit(size: 3) println(f\"{w.size}\") }")
+    let call: Vec<_> = findings("fn main() { let w = Widgit(size: 3)\nprintln(f\"{w.size}\") }")
         .into_iter()
         .filter(|f| f.code == "NK1135" || f.code == "NK1146")
         .collect();
     assert!(call.is_empty(), "{call:#?}");
 
     let braces: Vec<_> =
-        findings("fn main() { let w = Widgit { size: 3 } println(f\"{w.size}\") }")
+        findings("fn main() { let w = Widgit { size: 3 }\nprintln(f\"{w.size}\") }")
             .into_iter()
             .filter(|f| f.code == "NK1135")
             .collect();

@@ -130,12 +130,12 @@ fn a_higher_order_method_hands_on_what_its_lambda_does() {
 #[test]
 fn from_does_not_let_io_into_a_sync_function() {
     let clean =
-        violations("fn scale(xs: Vec[i64]) -> i64 sync { xs.sort_by_key fn { a } return 1 }");
+        violations("fn scale(xs: Vec[i64]) -> i64 sync { xs.sort_by_key fn { a }\nreturn 1 }");
     assert!(clean.is_empty(), "{clean:?}");
 
     let dirty = violations(
         "use std::io\n\
-         fn scale(xs: Vec[i64]) -> i64 sync { xs.sort_by_key fn { io::read() catch { } } return 1 }",
+         fn scale(xs: Vec[i64]) -> i64 sync { xs.sort_by_key fn { io::read() catch { } }\nreturn 1 }",
     );
     assert_eq!(dirty.len(), 1, "{dirty:?}");
     assert_eq!(dirty[0].callee, "io::read");
@@ -203,8 +203,8 @@ fn a_throwing_lambda_is_already_in_the_enclosing_functions_error_set() {
 fn a_while_body_is_walked_like_any_other() {
     let l = ledger(
         "use std::io\n\
-         fn reads() -> i64 throws { let mut n = 0 while n < 3 { let t = io::read_to_string() n += 1 } return n }\n\
-         fn counts(n: i64) -> i64 { let mut i = 0 while i < n { i += 1 } return i }",
+         fn reads() -> i64 throws { let mut n = 0\nwhile n < 3 { let t = io::read_to_string()\nn += 1 }\nreturn n }\n\
+         fn counts(n: i64) -> i64 { let mut i = 0\nwhile i < n { i += 1 }\nreturn i }",
     );
 
     assert_eq!(l.functions["reads"].sync_claim, Sync::No);
@@ -231,7 +231,7 @@ fn a_while_body_is_walked_like_any_other() {
 /// definition.
 #[test]
 fn an_asserted_sync_does_not_survive_an_unresolvable_call() {
-    let source = "fn versprochen(n: i64) -> i64 sync { fremd::macht_irgendwas(n) return n + 1 }";
+    let source = "fn versprochen(n: i64) -> i64 sync { fremd::macht_irgendwas(n)\nreturn n + 1 }";
 
     let found = violations(source);
     assert_eq!(found.len(), 1, "{found:?}");
@@ -250,7 +250,7 @@ fn an_asserted_sync_does_not_survive_an_unresolvable_call() {
 /// as making every unresolved thing an error.
 #[test]
 fn a_method_call_is_asked_elsewhere_rather_than_refused_here() {
-    let source = "fn ordne(xs: Vec[i64]) -> i64 { xs.sort_by_key fn { a } return 1 }\n\
+    let source = "fn ordne(xs: Vec[i64]) -> i64 { xs.sort_by_key fn { a }\nreturn 1 }\n\
                   fn im_lock(xs: Vec[i64]) -> i64 sync { return ordne(xs) }";
     assert!(violations(source).is_empty());
 }
@@ -271,7 +271,7 @@ fn a_method_call_is_asked_elsewhere_rather_than_refused_here() {
 /// ledger simply had no way to say so.
 #[test]
 fn a_helper_that_uses_an_iterator_method_may_be_called_from_a_lock() {
-    let source = "fn ordne(xs: Vec[i64]) -> i64 { xs.sort_by_key fn { a } return 1 }\n\
+    let source = "fn ordne(xs: Vec[i64]) -> i64 { xs.sort_by_key fn { a }\nreturn 1 }\n\
                   fn im_lock(xs: Vec[i64]) -> i64 sync { return ordne(xs) }";
 
     assert_eq!(ledger(source).functions["ordne"].sync_claim, Sync::Inferred);
@@ -321,7 +321,7 @@ fn a_map_of_structs_types_its_lambda_all_the_way_down() {
 /// variable says what flows *out*; `?` stays for what flows *in*.
 #[test]
 fn a_key_may_be_given_as_something_it_borrows_as() {
-    let source = "use std::collections\n\n                  fn find(m: collections::HashMap[String, i64]) -> i64 { let hit = m.get(\"x\") return 1 }";
+    let source = "use std::collections\n\n                  fn find(m: collections::HashMap[String, i64]) -> i64 { let hit = m.get(\"x\")\nreturn 1 }";
     let parsed = parse_to_ast(source).expect("the source parses");
     let library = Ledger::parse(STD).expect("std's ledger parses");
     let own = Ledger::infer(&parsed);
@@ -339,7 +339,7 @@ fn a_key_may_be_given_as_something_it_borrows_as() {
 #[test]
 fn an_unknown_element_type_does_not_become_a_claim() {
     let l = ledger(
-        "use std::collections\n\n         fn build() { let m = collections::HashMap() m.entry(\"x\").and_modify fn { a.whatever() } }",
+        "use std::collections\n\n         fn build() { let m = collections::HashMap()\nm.entry(\"x\").and_modify fn { a.whatever() } }",
     );
 
     // `a.whatever()` cannot be resolved, so the claim is refused - and refused
@@ -494,8 +494,8 @@ fn a_sync_function_may_call_a_helper_that_never_said_sync() {
 #[test]
 fn mutual_recursion_between_pure_functions_stays_sync() {
     let l = ledger(
-        "fn even(n: i32) -> bool { if n == 0 { return true } return odd(n - 1) }\n\
-         fn odd(n: i32) -> bool { if n == 0 { return false } return even(n - 1) }",
+        "fn even(n: i32) -> bool { if n == 0 { return true }\nreturn odd(n - 1) }\n\
+         fn odd(n: i32) -> bool { if n == 0 { return false }\nreturn even(n - 1) }",
     );
 
     assert_eq!(l.functions["even"].sync_claim, Sync::Inferred);
@@ -507,7 +507,7 @@ fn mutual_recursion_between_pure_functions_stays_sync() {
 fn mutual_recursion_that_reaches_io_is_not_sync() {
     let l = ledger(
         "use std::io\n\
-         fn ping(n: i32) -> i32 throws { if n == 0 { return io::read_to_string().len() } return pong(n - 1) }\n\
+         fn ping(n: i32) -> i32 throws { if n == 0 { return io::read_to_string().len() }\nreturn pong(n - 1) }\n\
          fn pong(n: i32) -> i32 throws { return ping(n - 1) }",
     );
 
@@ -840,7 +840,7 @@ fn violations(source: &str) -> Vec<sync::Violation> {
 fn a_sync_function_may_not_call_into_std_io() {
     let found = violations(
         "use std::io\n\
-         fn tally() -> i64 sync { let t = io::read_to_string() catch { return 0 } return 1 }",
+         fn tally() -> i64 sync { let t = io::read_to_string() catch { return 0 }\nreturn 1 }",
     );
 
     assert_eq!(found.len(), 1, "{found:?}");
@@ -864,7 +864,7 @@ fn a_sync_function_may_call_a_sync_one() {
 fn a_function_that_is_not_sync_may_call_anything() {
     let found = violations(
         "use std::io\n\
-         fn read() -> i64 { let t = io::read_to_string() catch { return 0 } return 1 }",
+         fn read() -> i64 { let t = io::read_to_string() catch { return 0 }\nreturn 1 }",
     );
     assert!(found.is_empty(), "{found:?}");
 }
@@ -897,7 +897,7 @@ fn a_constructor_makes_the_same_promise_or_does_not() {
     let pausing = "use std::io\n\
                    pub struct S { n: i64 }\n\
                    impl S {\n\
-                       pub fn(n: i64) -> S throws { let t = io::read_to_string() return S { n: n } }\n\
+                       pub fn(n: i64) -> S throws { let t = io::read_to_string()\nreturn S { n: n } }\n\
                        fn use_it(ref self) sync { let x = S(1) }\n\
                    }";
     let found = violations(pausing);
@@ -912,7 +912,7 @@ fn a_constructor_makes_the_same_promise_or_does_not() {
 fn a_lambda_is_part_of_the_function_that_writes_it() {
     let found = violations(
         "use std::io\n\
-         fn f(xs: Vec[i32]) -> i32 sync { xs.map fn { io::read() catch { 0 } } return 1 }",
+         fn f(xs: Vec[i32]) -> i32 sync { xs.map fn { io::read() catch { 0 } }\nreturn 1 }",
     );
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].callee, "io::read");
@@ -986,7 +986,7 @@ fn one_untrusted_source_decides() {
 
     let parsed = parse_to_ast(
         "use std::fs\n\
-         fn main() throws { let a = fs::map(\"x\", fs::Root::Anywhere) let b = http::body() }",
+         fn main() throws { let a = fs::map(\"x\", fs::Root::Anywhere)\nlet b = http::body() }",
     )
     .expect("parses");
 
@@ -1280,8 +1280,8 @@ fn a_pausing_call_inside_a_hole_costs_the_sync_claim() {
     let l = ledger(
         "use std::io\n\
          pub fn hidden() -> String { return f\"hello {io::read_to_string()}\" }\n\
-         pub fn plain() -> String { let who = io::read_to_string() return f\"hello {who}\" }\n\
-         pub fn pure() -> String { let n = 1 return f\"hello {n}\" }",
+         pub fn plain() -> String { let who = io::read_to_string()\nreturn f\"hello {who}\" }\n\
+         pub fn pure() -> String { let n = 1\nreturn f\"hello {n}\" }",
     );
 
     assert!(
@@ -1526,7 +1526,7 @@ fn a_grammar_rules_entry_carries_what_its_actions_reach() {
 fn a_grammar_rule_that_prints_carries_the_touch() {
     let own = ledger(
         "grammar Noisy {\n\
-         \x20   entry rule one -> i64 = n:dec[i64](digit+) { println(\"seen\") n }\n\
+         \x20   entry rule one -> i64 = n:dec[i64](digit+) { println(\"seen\")\n n }\n\
          }\n\
          \n\
          pub fn read(data: ref String) -> i64 throws { return Noisy::one(data) }\n",
@@ -1553,7 +1553,7 @@ fn a_grammar_rule_that_prints_carries_the_touch() {
 fn a_rule_carries_what_the_grammar_beside_it_reaches() {
     let own = ledger(
         "grammar Mixed {\n\
-         \x20   rule LOUD -> i64 = n:dec[i64](digit+) { println(\"seen\") n }\n\
+         \x20   rule LOUD -> i64 = n:dec[i64](digit+) { println(\"seen\")\n n }\n\
          \x20   entry rule quiet -> i64 = n:LOUD { n }\n\
          }\n\
          \n\

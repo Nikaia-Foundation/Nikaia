@@ -420,7 +420,7 @@ fn a_build_time_index_the_array_does_not_have_is_named() {
 #[test]
 fn a_forbidden_callee_is_also_said_once() {
     let source = "use std::fs\n\
-                  fn read() -> i64 { let t = fs::read_to_string(\"x\", fs::Root::Anywhere) catch { \"\" } return t.len() }\n\
+                  fn read() -> i64 { let t = fs::read_to_string(\"x\", fs::Root::Anywhere) catch { \"\" }\nreturn t.len() }\n\
                   comptime N: i64 = read()\n\
                   fn main() { println(f\"{N}\") }\n";
     let found = findings(source);
@@ -671,7 +671,7 @@ fn an_interpolation_is_built_from_what_the_build_knows() {
 fn the_escapes_are_the_ones_the_source_wrote() {
     let source = "comptime GREETING: ref String = \"a\\tb\\nc \\\"quoted\\\" {brace}\"\n\
                   comptime JOINED: ref String = \"left\" + \"/\" + \"right\"\n\
-                  fn main() { println(GREETING) println(JOINED) }\n";
+                  fn main() { println(GREETING)\nprintln(JOINED) }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(

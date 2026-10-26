@@ -302,7 +302,7 @@ fn a_branch_is_not_a_task_and_moves_nothing() {
 /// branches than `std` has a vehicle for says so rather than miscompiling.
 #[test]
 fn a_block_too_small_or_too_large_is_refused_with_its_reason() {
-    let parsed = parse_to_ast("fn main() { let r = overlap {\n    1\n} println(f\"{r}\") }")
+    let parsed = parse_to_ast("fn main() { let r = overlap {\n    1\n}\nprintln(f\"{r}\") }")
         .expect("the source parses");
     let refused = emit::emit_program(&parsed, Default::default()).expect_err("refused");
     let said = format!("{refused:#}");
@@ -310,7 +310,7 @@ fn a_block_too_small_or_too_large_is_refused_with_its_reason() {
 
     let many: String = (0..9).map(|n| format!("        {n}\n")).collect();
     let parsed = parse_to_ast(&format!(
-        "fn main() {{ let r = overlap {{\n{many}}} println(f\"{{r.0}}\") }}"
+        "fn main() {{ let r = overlap {{\n{many}}}\nprintln(f\"{{r.0}}\") }}"
     ))
     .expect("the source parses");
     let refused = emit::emit_program(&parsed, Default::default()).expect_err("refused");

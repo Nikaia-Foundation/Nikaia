@@ -67,7 +67,7 @@ fn the_hex_digits_take_either_case_and_the_prefix_does_not() {
     assert!(rust.contains("let a = 255;"), "{rust}");
     assert!(rust.contains("let b = 255;"), "{rust}");
 
-    let found: Vec<_> = findings("fn main() {\n    let n = 0X10\n    println(f\"{n}\")\n}\n")
+    let found: Vec<_> = findings("fn main() {\n    let n = 0\nX10\n    println(f\"{n}\")\n}\n")
         .into_iter()
         .filter(|f| f.code == "NK1117")
         .collect();
@@ -317,7 +317,7 @@ fn a_scaled_number_is_typed_by_its_use() {
 /// a name, as `0X10` is.
 #[test]
 fn a_scale_followed_by_a_name_is_a_name() {
-    let found: Vec<_> = findings("fn main() {\n    let n = 1Gx\n    println(f\"{n}\")\n}\n")
+    let found: Vec<_> = findings("fn main() {\n    let n = 1\nGx\n    println(f\"{n}\")\n}\n")
         .into_iter()
         .filter(|f| f.code == "NK1117")
         .collect();

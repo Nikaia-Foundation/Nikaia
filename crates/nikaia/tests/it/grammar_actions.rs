@@ -35,7 +35,7 @@ fn ledger_for(source: &str) -> Ledger {
 fn a_pausing_call_in_an_action_is_refused() {
     let found: Vec<_> = findings(
         "use std::io\n\ngrammar Nums {\n\
-         \x20   entry rule number -> i64 = d:dec[i64](digit+) { let t = io::read_to_string() return d }\n\
+         \x20   entry rule number -> i64 = d:dec[i64](digit+) { let t = io::read_to_string()\n return d }\n\
          }\n\
          fn read(text: ref String) -> i64 { return Nums::number(text) catch { 0 } }\n",
     )
@@ -63,7 +63,7 @@ fn a_pausing_call_in_a_folds_step_is_refused() {
     let found: Vec<_> = findings(
         "use std::io\n\ngrammar Nums {\n\
          \x20   rule N -> i64 = d:dec[i64](digit+) { d }\n\
-         \x20   entry rule file -> i64 = fold(N, zero, fn(acc, m) { io::read_to_string() acc })\n\
+         \x20   entry rule file -> i64 = fold(N, zero, fn(acc, m) { io::read_to_string()\n acc })\n\
          }\n\
          fn zero() -> i64 { return 0 }\n",
     )
@@ -95,9 +95,11 @@ fn a_pause_through_the_accumulators_method_is_refused() {
              pub struct Tally {{ sum: i64 }}
              impl Tally {{
                  pub fn() -> Tally sync {{ return Tally {{ sum: 0 }} }}
-                 fn record(ref mut self, m: i64) {{ {record} self.sum += m }}
+                 fn record(ref mut self, m: i64) {{ {record}
+ self.sum += m }}
                  fn merge(ref mut self, other: Tally) {{ self.sum += other.sum }}
-                 fn wait(ref mut self, other: Tally) {{ let t = fs::read_to_string(\"t\", fs::Root::Anywhere) catch {{ \"\" }} self.sum += other.sum }}
+                 fn wait(ref mut self, other: Tally) {{ let t = fs::read_to_string(\"t\", fs::Root::Anywhere) catch {{ \"\" }}
+ self.sum += other.sum }}
              }}
 "
         )
