@@ -1,0 +1,290 @@
+// One driver for a whole batch: builders and the architect, until an escalation.
+//
+//     nikaia run scripts/drive.nika -- DIR [--max N] [--dry-run] [--lines FILE]
+//
+// Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time:
+//
+//     NEXT <brief> ...            agent.nika -- <brief> --dir DIR, then the
+//                                 run's files are committed and pushed
+//     BUMP pending, CI green      cycle.nika -- DIR --apply
+//     CUT, RED, BATCH DONE        the architect: agent.nika -- DIR/architect-task.md,
+//                                 the stop line (and failing jobs) in
+//                                 DIR/architect-input.txt
+//
+// Output: one line per agent run (`builder done ...`, `architect done ...`).
+// Escalation: one final line, exit 2, on an OWNER line, an ESCALATE of
+// agent.nika, an architect report whose `Owner:` is not `none` or whose
+// `Result:` is not `done`, the same stop line after an architect run, a RED sha
+// seen before with no builder to run, `--max` agent runs (default 8), a push
+// rejected after one rebase.
+// `--dry-run` runs one step of the loop and prints the commands it would run
+// and the final line `DRY-RUN <action>`; `--lines FILE` takes the cycle's
+// output from FILE instead of running `cycle.nika` (for tests).
+// The scripts are run as programs: a script cannot `use` another.
+
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+fn drive_exe() -> String throws {
+    for exe in ["target/fast/nikaia", "target/release/nikaia"] {
+        if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
+    }
+    return ""
+}
+
+fn drive_escalate(why: String) throws {
+    println(f"ESCALATE drive: {why}")
+    process::exit(2)
+}
+
+// The brief's name: the last path component without `.md`.
+fn drive_stem(path: String) -> String throws {
+    let parts = path.split("/").collect()
+    let last = parts[parts.len() - 1].clone()
+    return last.replace(".md", "")
+}
+
+// The first word of the value after `key:` in a report, "" if absent.
+fn drive_field(body: String, key: String) -> String {
+    let prefix = key.clone() + ":"
+    for line in body.split("\n") {
+        let t = line.trim()
+        if t.starts_with(prefix.clone()) { return (t.strip_prefix(prefix.clone()) ?? "").trim().clone() }
+    }
+    return ""
+}
+
+fn drive_word(value: String) -> String {
+    return value.split(" ").collect()[0].replace(".", "").clone()
+}
+
+// Which action a cycle's output leads to, as one line:
+//   ESCALATE <why> | RED <line> | BUMP | NEXT <abs brief> | ARCHITECT <stop line>
+// `red_seen`: " sha " for each RED already handed to the architect;
+// `last_stop`: the stop line of the last architect run.
+fn drive_action(lines: Vec[String], red_seen: String, last_stop: String) -> String {
+    let mut ci: String = ""
+    let mut red: String = ""
+    let mut batch: String = ""
+    let mut bump: String = ""
+    for i in 0..<lines.len() {
+        let l = lines[i].trim().clone()
+        if l.starts_with("OWNER ") { return f"ESCALATE {l}" }
+        if l.starts_with("CI ") { ci = l.clone() }
+        if l.starts_with("RED ") { red = l.clone() }
+        if l.starts_with("NEXT ") || l.starts_with("CUT") || l.starts_with("BATCH") { batch = l.clone() }
+        if l.starts_with("BUMP pending") { bump = l.clone() }
+    }
+    if red != "" {
+        let sha = red.split(" ").collect()[1].clone()
+        if !red_seen.contains(f" {sha} ") { return f"RED {red}" }
+        if !batch.starts_with("NEXT ") { return f"ESCALATE second RED on {sha}" }
+    }
+    if bump != "" && ci.ends_with("green") && !batch.starts_with("NEXT ") { return "BUMP" }
+    if batch.starts_with("NEXT ") { return f"NEXT {batch.split(" ").collect()[1]}" }
+    if batch.starts_with("CUT") || batch.starts_with("BATCH DONE") {
+        if batch == last_stop { return f"ESCALATE architect left the same stop line: {batch}" }
+        return f"ARCHITECT {batch}"
+    }
+    return f"ESCALATE no action for: {batch}"
+}
+
+// The files of the main session's commit for one run, those that exist.
+fn drive_paths(dir: String, brief: String) -> Vec[String] throws {
+    let stem = (brief.strip_suffix(".md") ?? "").clone()
+    let mut out: Vec[String] = []
+    let mut all: Vec[String] = []
+    all.push(f"{brief}.report.md")
+    if stem != "" { all.push(f"{stem}.report.md") }
+    all.push(f"{brief}.run.json")
+    all.push(f"{dir}/cost.txt")
+    all.push(f"{dir}/tokens.txt")
+    all.push("docs/tokenspeed.md")
+    for i in 0..<all.len() {
+        if fs::exists(all[i].clone(), fs::Root::Anywhere) { out.push(all[i].clone()) }
+    }
+    return out
+}
+
+fn drive_say(dry: bool, line: String) {
+    if dry { println(f"would run: {line}") }
+}
+
+fn drive_push(dry: bool) throws {
+    drive_say(dry, "git push origin develop")
+    if dry { return }
+    let first = process::run("git", ["push", "origin", "develop"])
+    if first.ok { return }
+    let pulled = process::run("git", ["pull", "--rebase", "origin", "develop"])
+    if !pulled.ok { drive_escalate("push rejected, and git pull --rebase failed") }
+    let second = process::run("git", ["push", "origin", "develop"])
+    if !second.ok { drive_escalate("push rejected after one rebase") }
+}
+
+fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throws {
+    let mut paths = drive_paths(dir, brief.clone())
+    for i in 0..<extra.len() {
+        if fs::exists(extra[i].clone(), fs::Root::Anywhere) { paths.push(extra[i].clone()) }
+    }
+    if paths.len() == 0 { return }
+    let name = drive_stem(brief)
+    let msg = f"briefs: {name} report"
+    let trailer = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq"
+    drive_say(dry, "git add " + paths.join(" "))
+    drive_say(dry, f"git commit -m '{msg}' -m <Attribution> -- " + paths.join(" "))
+    if dry {
+        drive_push(true)
+        return
+    }
+    let mut add: Vec[String] = ["add"]
+    for i in 0..<paths.len() { add.push(paths[i].clone()) }
+    process::run("git", add)
+    let mut status: Vec[String] = ["status", "--porcelain", "--"]
+    for i in 0..<paths.len() { status.push(paths[i].clone()) }
+    let changed = process::run("git", status).stdout.trim().clone()
+    if changed == "" { return }
+    let mut commit: Vec[String] = ["commit", "-m", msg, "-m", trailer, "--"]
+    for i in 0..<paths.len() { commit.push(paths[i].clone()) }
+    let made = process::run("git", commit)
+    if !made.ok { drive_escalate(f"git commit failed for {name}") }
+    drive_push(false)
+}
+
+// Runs one agent; prints `<role> done ...`; escalates on anything else.
+fn drive_agent(exe: String, dry: bool, dir: String, brief: String, role: String) throws {
+    drive_say(dry, f"{exe} run scripts/agent.nika -- {brief} --dir {dir}")
+    if dry { return }
+    let out = process::run(exe, ["run", "scripts/agent.nika", "--", brief.clone(), "--dir", dir.clone()])
+    let mut done: String = ""
+    let mut first: String = ""
+    for l in out.stdout.trim().split("\n") {
+        if first == "" { first = l.clone() }
+        if l.starts_with("done ") { done = l.clone() }
+    }
+    if done == "" || !out.ok {
+        if first == "" { first = f"agent.nika exited with code {out.code}" }
+        drive_escalate(first)
+    }
+    println(f"{role} {done}")
+}
+
+fn drive_read(path: String) -> String throws {
+    if !fs::exists(path.clone(), fs::Root::Anywhere) { return "" }
+    return fs::read_to_string(path, fs::Root::Anywhere)
+}
+
+fn drive_cycle(exe: String, dir: String, lines_file: String) -> String throws {
+    if lines_file != "" { return drive_read(lines_file) }
+    let c = process::run(exe, ["run", "scripts/cycle.nika", "--", dir])
+    if !c.ok { drive_escalate("cycle.nika failed") }
+    return c.stdout.clone()
+}
+
+fn main() throws {
+    let mut dir: String = ""
+    let mut max: i64 = 8
+    let mut dry = false
+    let mut lines_file: String = ""
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let mut i = 1
+    while i < args.len() {
+        if args[i] == "--dry-run" {
+            dry = true
+        } else if args[i] == "--max" && i + 1 < args.len() {
+            max = text::parse_i64(args[i + 1].clone()) ?? 8
+            i += 1
+        } else if args[i] == "--lines" && i + 1 < args.len() {
+            lines_file = args[i + 1].clone()
+            dry = true
+            i += 1
+        } else {
+            dir = args[i].clone()
+        }
+        i += 1
+    }
+    if dir == "" {
+        println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--dry-run] [--lines FILE]")
+        process::exit(2)
+    }
+    let exe = drive_exe()
+    if exe == "" {
+        println("BUILD cargo build --profile fast -p nikaia")
+        process::exit(1)
+    }
+    let task = f"{dir}/architect-task.md"
+    let mut runs: i64 = 0
+    let mut bumps: i64 = 0
+    let mut red_seen: String = ""
+    let mut last_stop: String = ""
+    while runs <= max {
+        let cyc = drive_cycle(exe.clone(), dir.clone(), lines_file.clone())
+        let mut lines: Vec[String] = []
+        for l in cyc.trim().split("\n") {
+            if l.trim() != "" { lines.push(l.trim().clone()) }
+        }
+        if lines.len() == 0 { drive_escalate("cycle.nika printed nothing") }
+        let action = drive_action(lines.clone(), red_seen.clone(), last_stop.clone())
+        if action.starts_with("ESCALATE ") {
+            println(f"ESCALATE {(action.strip_prefix("ESCALATE ") ?? "").clone()}")
+            process::exit(2)
+        }
+        if action == "BUMP" {
+            bumps += 1
+            if bumps > 3 { drive_escalate("BUMP pending persists after --apply") }
+            drive_say(dry, f"{exe} run scripts/cycle.nika -- {dir} --apply")
+            if dry {
+                println("DRY-RUN BUMP")
+                return
+            }
+            let rel = process::run(exe.clone(), ["run", "scripts/cycle.nika", "--", dir.clone(), "--apply"])
+            if rel.stdout.contains("PUSH REJECTED") { drive_escalate("bump push rejected") }
+            continue
+        }
+        if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
+        if action.starts_with("NEXT ") {
+            let brief = (action.strip_prefix("NEXT ") ?? "").clone()
+            drive_agent(exe.clone(), dry, dir.clone(), brief.clone(), "builder")
+            runs += 1
+            drive_commit(dry, dir.clone(), brief, [])
+            if dry {
+                println(f"DRY-RUN NEXT {drive_stem(action.clone())}")
+                return
+            }
+            continue
+        }
+        // RED or ARCHITECT: the stop line goes to the architect.
+        let mut stop = (action.strip_prefix("ARCHITECT ") ?? "").clone()
+        let mut input: String = stop.clone() + "\n"
+        if action.starts_with("RED ") {
+            stop = (action.strip_prefix("RED ") ?? "").clone()
+            let sha = stop.split(" ").collect()[1].clone()
+            red_seen = red_seen + f" {sha} "
+            input = f"{stop}\nThe failing jobs are named in the line above; fix forward or revert.\n"
+        }
+        drive_say(dry, f"write {dir}/architect-input.txt: {stop}")
+        drive_say(dry, f"rm -f {task}.report.md")
+        if !dry {
+            fs::write(f"{dir}/architect-input.txt", fs::Root::Anywhere, input)
+            process::run("rm", ["-f", f"{task}.report.md"])
+        }
+        drive_agent(exe.clone(), dry, dir.clone(), task.clone(), "architect")
+        runs += 1
+        let mut extra: Vec[String] = []
+        extra.push(f"{dir}/architect-input.txt")
+        drive_commit(dry, dir.clone(), task.clone(), extra)
+        if dry {
+            println(f"DRY-RUN ARCHITECT {stop}")
+            return
+        }
+        let report = drive_read(f"{task}.report.md")
+        if report == "" { drive_escalate("the architect wrote no report") }
+        let result = drive_word(drive_field(report.clone(), "Result"))
+        let owner = drive_field(report.clone(), "Owner")
+        if result != "done" { drive_escalate(f"architect Result: {result}") }
+        if owner != "none" && owner != "" { drive_escalate(f"architect Owner: {owner}") }
+        last_stop = stop
+    }
+}

@@ -1,0 +1,37 @@
+// scripts/drive.nika: which cycle line leads to which action, and which paths a
+// run's commit takes. Each case is one `--dry-run` step on a scratch directory.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, cycle: String) throws {
+    fs::write(f"{tmp}/lines", fs::Root::Anywhere, cycle.replace("%T", tmp.clone()) + "\n")
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines"]; dir: repo)
+    println(f"== {name} (exit {out.code})")
+    println(out.stdout.trim().replace(tmp, "T"))
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = process::run("realpath", [f"{repo}/target/fast/nikaia"]).stdout.trim().clone()
+    fs::write(f"{tmp}/b1.md", fs::Root::Anywhere, "x\n")
+    fs::write(f"{tmp}/b1.md.report.md", fs::Root::Anywhere, "Result: done\n")
+    fs::write(f"{tmp}/b1.md.run.json", fs::Root::Anywhere, "{}\n")
+    fs::write(f"{tmp}/cost.txt", fs::Root::Anywhere, "2026-10-26 1.0\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "next", "CI aaaa1111 green\nNEXT %T/b1.md builder sonnet 80 12\nBUMP pending 2 changelog lines")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "batch done", "CI aaaa1111 green\nBATCH DONE")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "cut", "CI aaaa1111 running\nCUT b1: too big -> ARCHITECT")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "red", "CI aaaa1111 red\nRED aaaa1111 test -> ARCHITECT\nNEXT %T/b1.md builder sonnet 80 12")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "bump green", "CI aaaa1111 green\nBATCH DONE\nBUMP pending 3 changelog lines")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "owner", "CI aaaa1111 green\nNEXT %T/b1.md builder sonnet 80 12\nOWNER b0: which model?")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "unknown", "CI aaaa1111 green\nBATCH none (no batch.txt)")
+    process::run("rm", ["-rf", tmp])
+}

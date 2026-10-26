@@ -179,13 +179,11 @@ What the architect hands the main session for a builder, in this form:
 
 ## The main session's cycle
 
-1. `nikaia run scripts/cycle.nika -- DIR` (`--apply` raises the version, `--done N` clears an OWNER line). Nothing else is checked.
-2. `NEXT <brief> <agent> <model> <turns> <budget>`: run `nikaia run scripts/agent.nika -- <brief>` as is with `run_in_background`, not the Agent tool (the frontmatter decides model and limits; the extra fields only show what it will use). It records tokens and cost itself; its one line is `done <sha8> report <path> cost <usd> turns <n>`. An `ESCALATE` file in DIR or exit 2 is read like a failed builder (step 4).
-3. A builder's one-line answer (`--tokens` is already done by `agent.nika`): back to 1. Read nothing else.
-4. `CUT`, `RED`, `BLOCKED`, `BATCH DONE`, or an owner message: start a fresh architect with that line, the token figures and the owner's words verbatim.
-5. `BUMP pending` and CI green: `cycle.nika --apply` .
-6. `OWNER` lines: ask the owner in German, per *Decision rounds*; his answer goes to the architect.
-7. Stop hook: the fixed answer below. An architect past 80 turns / 150k: restart fresh.
+1. `nikaia run scripts/drive.nika -- docs/briefs` with `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the next step). It loops on `cycle.nika`: runs each `NEXT` builder through `agent.nika` and commits the run's files (report, `.run.json`, `cost.txt`, `tokens.txt`, `tokenspeed.md`), applies `BUMP pending` when CI is green, and starts the architect (`docs/briefs/architect-task.md`, the stop line in `architect-input.txt`) on `CUT`, `RED` and `BATCH DONE`. It prints one line per agent run and stops with one final line, exit 2, on an escalation: an `OWNER` line, `ESCALATE` of `agent.nika`, an architect report with `Owner:` not `none` or `Result:` not `done`, the same stop line after an architect run, a RED sha already handed over, `--max` reached, a push rejected after one rebase.
+2. The main session acts only on that final line. `cycle.nika -- DIR --done N` clears an OWNER line; after the owner's answer, start `drive.nika` again.
+3. A failed run (`ESCALATE`, a file in DIR) is read like a failed builder; restart a fresh architect past 80 turns / 150k.
+4. `OWNER` lines: ask the owner in German, per *Decision rounds*; his answer goes to the architect.
+5. Stop hook: the fixed answer below.
 
 ## Handover to a new main session
 
