@@ -9,10 +9,39 @@
 # something this compiler cannot name.
 version = 4
 
+[fn."ConvertError::message"]
+sync = "inferred"
+touches = []
+signature = "(ref self) -> String"
+
 [fn."Error::message"]
 sync = "inferred"
 touches = []
 signature = "(ref self) -> String"
+
+[fn."as_f64"]
+pub = true
+sync = "inferred"
+throws = ["ConvertError"]
+touches = []
+views = ["v: borrowed"]
+signature = "(v: ref Value) -> f64"
+
+[fn."as_i64"]
+pub = true
+sync = "inferred"
+throws = ["ConvertError"]
+touches = []
+views = ["v: borrowed"]
+signature = "(v: ref Value) -> i64"
+
+[fn."as_u64"]
+pub = true
+sync = "inferred"
+throws = ["ConvertError"]
+touches = []
+views = ["v: borrowed"]
+signature = "(v: ref Value) -> u64"
 
 [fn."at_end"]
 sync = "inferred"
@@ -51,12 +80,25 @@ sync = "inferred"
 touches = []
 signature = "(c: scalar) -> bool"
 
+[fn."kind_of"]
+sync = "inferred"
+touches = []
+views = ["v: borrowed"]
+signature = "(v: ref Value) -> ref String"
+
 [fn."number"]
 sync = "inferred"
 throws = ["Error"]
 touches = []
 views = ["path: borrowed"]
 signature = "(mut r: Reader, path: String) -> Value"
+
+[fn."number_text"]
+sync = "inferred"
+throws = ["ConvertError"]
+touches = []
+views = ["v: borrowed", "asked: borrowed"]
+signature = "(v: ref Value, asked: String) -> String"
 
 [fn."parse"]
 pub = true
@@ -72,14 +114,6 @@ touches = []
 views = ["r: borrowed"]
 signature = "(r: ref Reader) -> scalar"
 
-[fn."push_code_point"]
-sync = "inferred"
-throws = ["Error"]
-keeps = ["path"]
-touches = []
-views = ["r: borrowed"]
-signature = "(mut out: String, cp: i64, r: ref Reader, path: String)"
-
 [fn."string"]
 sync = "inferred"
 throws = ["Error"]
@@ -94,7 +128,19 @@ touches = []
 views = ["path: borrowed"]
 signature = "(mut r: Reader, path: String, depth: i64) -> Value"
 
+[fn."zero_fraction"]
+sync = "inferred"
+touches = []
+views = ["text: borrowed"]
+signature = "(text: String) -> String?"
+
+[impl."Error for ConvertError"]
+
 [impl."Error for Error"]
+
+[type."ConvertError"]
+pub = true
+fields = ["pub message: String"]
 
 [type."Error"]
 pub = true
@@ -109,4 +155,4 @@ fields = ["cs: Vec[scalar]", "pos: i64"]
 
 [type."Value"]
 pub = true
-variants = ["Null", "Bool(bool)", "Int(i64)", "Float(f64)", "Str(String)", "Array(Vec[Value])", "Object(Vec[Member])"]
+variants = ["Null", "Bool(bool)", "Number(String)", "Str(String)", "Array(Vec[Value])", "Object(Vec[Member])"]

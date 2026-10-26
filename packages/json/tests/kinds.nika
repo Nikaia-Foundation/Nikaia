@@ -4,8 +4,7 @@ fn show(v: ref json::Value) -> String {
     return match v {
         json::Value::Null => "null"
         json::Value::Bool(b) => f"bool({b})"
-        json::Value::Int(n) => f"int({n})"
-        json::Value::Float(x) => f"float({x})"
+        json::Value::Number(t) => f"number({t})"
         json::Value::Str(s) => f"str({s})"
         json::Value::Array(items) => {
             let mut out = String()

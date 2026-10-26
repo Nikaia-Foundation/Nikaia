@@ -1,0 +1,50 @@
+use json
+
+fn number(text: String) -> json::Value {
+    return json::parse(text) catch {
+        println(f"parse failed: {error.message}")
+        return json::Value::Null
+    }
+}
+
+fn as_integer(text: String) {
+    let v = number(text.clone())
+    let n = json::as_i64(v) catch {
+        println(f"{text} as i64: {error.message}")
+        return
+    }
+    println(f"{text} as i64: {n}")
+}
+
+fn as_float(text: String) {
+    let v = number(text.clone())
+    let x = json::as_f64(v) catch {
+        println(f"{text} as f64: {error.message}")
+        return
+    }
+    println(f"{text} as f64: {x}")
+}
+
+fn main() {
+    as_integer("12")
+    as_integer("12.0")
+    as_integer("12.5")
+    as_integer("1e3")
+    as_integer("-0")
+    as_integer("9223372036854775807")
+    as_integer("9223372036854775808")
+    as_integer("\"12\"")
+    as_integer("null")
+    as_float("12.0")
+    as_float("1e3")
+    as_float("9223372036854775808")
+    as_float("1e999")
+    as_float("[1]")
+    let big = json::as_u64(number("18446744073709551615")) catch { 0 }
+    println(f"u64 {big}")
+    let neg = json::as_u64(number("-1")) catch {
+        println(f"-1 as u64: {error.message}")
+        return
+    }
+    println(f"{neg}")
+}

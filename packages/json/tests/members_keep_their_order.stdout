@@ -1,2 +1,2 @@
-{z: int(1), a: int(2), m: {y: int(0), b: int(1)}}
-{a: int(1), a: int(2)}
+{z: number(1), a: number(2), m: {y: number(0), b: number(1)}}
+{a: number(1), a: number(2)}

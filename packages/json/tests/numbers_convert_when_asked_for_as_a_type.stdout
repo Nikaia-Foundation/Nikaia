@@ -1,0 +1,16 @@
+12 as i64: 12
+12.0 as i64: 12
+12.5 as i64: `12.5` is not a whole number that fits in an i64
+1e3 as i64: 1000
+-0 as i64: 0
+9223372036854775807 as i64: 9223372036854775807
+9223372036854775808 as i64: `9223372036854775808` does not fit in an i64
+"12" as i64: expected a number to read as an i64, found a string
+null as i64: expected a number to read as an i64, found null
+12.0 as f64: 12
+1e3 as f64: 1000
+9223372036854775808 as f64: 9223372036854776000
+1e999 as f64: `1e999` does not fit in an f64
+[1] as f64: expected a number to read as an f64, found an array
+u64 18446744073709551615
+-1 as u64: `-1` does not fit in a u64

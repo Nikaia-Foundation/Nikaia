@@ -7,8 +7,11 @@ use std::text
 //
 // A program takes it in by path: `json = { path = "../packages/json" }`.
 //
-// `1` is an `Int`; `1.0`, `1e3` and a whole number outside `i64` are `Float`.
-// An object keeps its members in the order the text gives them, and a member
+// A number is kept as its text, exactly as written (`12.0`, `1e3`, `-0`, a
+// whole number outside `i64`): many writers put `12.0` where an integer is
+// meant, so the reader does not choose. `as_i64`, `as_u64` and `as_f64` convert
+// it when the caller names the type, and throw a `ConvertError` that says what
+// was asked for when the text does not fit. An object keeps its members in the order the text gives them, and a member
 // given twice stays twice. A failure is an `Error`: the line and the column
 // (from 1, in characters) where reading stopped, and the path of the value
 // being read there (`$.contacts[3].email`).
@@ -16,8 +19,7 @@ use std::text
 pub enum Value {
     Null,
     Bool(bool),
-    Int(i64),
-    Float(f64),
+    Number(String),
     Str(String),
     Array(Vec[Value]),
     Object(Vec[Member]),
@@ -38,6 +40,17 @@ pub struct Error {
 impl Error for Error {
     fn message(ref self) -> String {
         return f"{self.line}:{self.column}: {self.message} at {self.path}"
+    }
+}
+
+// A number asked for as a type it does not fit, or a value that is none.
+pub struct ConvertError {
+    pub message: String,
+}
+
+impl Error for ConvertError {
+    fn message(ref self) -> String {
+        return self.message.clone()
     }
 }
 
@@ -97,29 +110,6 @@ fn expect_word(mut r: Reader, word: String, path: String) throws {
         }
         r.pos += 1
     }
-}
-
-// Appends the character of code point `cp` (not a surrogate) to `out`. There
-// is no number-to-`scalar` cast (only `u8 as scalar`), so the UTF-8 bytes are
-// written out and read back as text.
-fn push_code_point(mut out: String, cp: i64, r: ref Reader, path: String) throws {
-    let mut v: Vec[u8] = []
-    if cp < 128 {
-        v.push(cp as u8)
-    } else if cp < 2048 {
-        v.push((192 + cp / 64) as u8)
-        v.push((128 + cp % 64) as u8)
-    } else if cp < 65536 {
-        v.push((224 + cp / 4096) as u8)
-        v.push((128 + cp / 64 % 64) as u8)
-        v.push((128 + cp % 64) as u8)
-    } else {
-        v.push((240 + cp / 262144) as u8)
-        v.push((128 + cp / 4096 % 64) as u8)
-        v.push((128 + cp / 64 % 64) as u8)
-        v.push((128 + cp % 64) as u8)
-    }
-    out.push_str(Bytes(v).text() catch { throw fail(r, "not a character", path) })
 }
 
 fn hex4(mut r: Reader, path: String) -> i64 throws {
@@ -203,7 +193,7 @@ fn string(mut r: Reader, path: String) -> String throws {
                 r.pos = start
                 throw fail(r, "lone surrogate", path.clone())
             }
-            push_code_point(out, cp, r, path.clone())
+            out.push(cp as scalar)
             continue
         }
         if e == 'n' {
@@ -233,7 +223,6 @@ fn is_digit(c: scalar) -> bool {
 
 fn number(mut r: Reader, path: String) -> Value throws {
     let start = r.pos
-    let mut whole = true
     if peek(r) == '-' {
         r.pos += 1
     }
@@ -247,7 +236,6 @@ fn number(mut r: Reader, path: String) -> Value throws {
         throw fail(r, "expected a digit", path.clone())
     }
     if peek(r) == '.' {
-        whole = false
         r.pos += 1
         if !is_digit(peek(r)) {
             throw fail(r, "expected a digit after `.`", path.clone())
@@ -257,7 +245,6 @@ fn number(mut r: Reader, path: String) -> Value throws {
         }
     }
     if peek(r) == 'e' || peek(r) == 'E' {
-        whole = false
         r.pos += 1
         if peek(r) == '+' || peek(r) == '-' {
             r.pos += 1
@@ -275,13 +262,7 @@ fn number(mut r: Reader, path: String) -> Value throws {
         text.push(r.cs[i])
         i += 1
     }
-    if whole {
-        let n = text::parse_i64(text)
-        if n != null {
-            return Value::Int(n ?? 0)
-        }
-    }
-    return Value::Float(text::parse_f64(text) ?? 0.0)
+    return Value::Number(text)
 }
 
 fn value(mut r: Reader, path: String, depth: i64) -> Value throws {
@@ -388,4 +369,101 @@ pub fn parse(text: String) -> Value throws {
         throw fail(r, "unexpected character after the value", "$")
     }
     return v
+}
+
+fn kind_of(v: ref Value) -> String {
+    return match v {
+        Value::Null => "null"
+        Value::Bool(_) => "a bool"
+        Value::Number(_) => "a number"
+        Value::Str(_) => "a string"
+        Value::Array(_) => "an array"
+        Value::Object(_) => "an object"
+    }
+}
+
+fn number_text(v: ref Value, asked: String) -> String throws {
+    return match v {
+        Value::Number(t) => t.clone()
+        else => throw ConvertError { message: f"expected a number to read as {asked}, found {kind_of(v)}" }
+    }
+}
+
+// Whether `text` is a whole number written with a zero fraction (`12.0`, `-3.00`)
+// and no exponent; `whole` is then the part before the point.
+fn zero_fraction(text: String) -> String? {
+    let mut whole = String()
+    let mut seen = false
+    for c in text.chars() {
+        if c == 'e' || c == 'E' {
+            return null
+        }
+        if c == '.' {
+            seen = true
+            continue
+        }
+        if seen {
+            if c != '0' {
+                return null
+            }
+        } else {
+            whole.push(c)
+        }
+    }
+    return whole
+}
+
+// The number as an `i64`: `12`, `12.0` and `1e3` are 12 and 1000, `12.5` and a
+// number beyond `i64` are not.
+pub fn as_i64(v: ref Value) -> i64 throws {
+    let t = number_text(v, "an i64")
+    let direct = text::parse_i64(t.clone())
+    if direct != null {
+        return direct ?? 0
+    }
+    let whole = zero_fraction(t.clone())
+    if whole != null {
+        let n = text::parse_i64(whole ?? "")
+        if n != null {
+            return n ?? 0
+        }
+        throw ConvertError { message: f"`{t}` does not fit in an i64" }
+    }
+    let x = text::parse_f64(t.clone()) ?? 0.0
+    if x == x.trunc() && x.abs() < 9007199254740992.0 {
+        return x as i64
+    }
+    throw ConvertError { message: f"`{t}` is not a whole number that fits in an i64" }
+}
+
+// As `as_i64`, for a `u64`.
+pub fn as_u64(v: ref Value) -> u64 throws {
+    let t = number_text(v, "a u64")
+    let direct = text::parse_u64(t.clone())
+    if direct != null {
+        return direct ?? 0
+    }
+    let whole = zero_fraction(t.clone())
+    if whole != null {
+        let n = text::parse_u64(whole ?? "")
+        if n != null {
+            return n ?? 0
+        }
+        throw ConvertError { message: f"`{t}` does not fit in a u64" }
+    }
+    let x = text::parse_f64(t.clone()) ?? 0.0
+    if x == x.trunc() && x >= 0.0 && x < 9007199254740992.0 {
+        return x as u64
+    }
+    throw ConvertError { message: f"`{t}` is not a whole number that fits in a u64" }
+}
+
+// The number as an `f64`; one beyond the range of an `f64` (`1e999`) is not.
+pub fn as_f64(v: ref Value) -> f64 throws {
+    let t = number_text(v, "an f64")
+    let x = text::parse_f64(t.clone()) ?? 0.0
+    if x - x != 0.0 {
+        throw ConvertError { message: f"`{t}` does not fit in an f64" }
+    }
+    return x
 }
