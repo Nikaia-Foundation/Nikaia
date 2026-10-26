@@ -88,6 +88,10 @@
   agent goes on committing. No separate worktrees with
   `develop` checked out: a commit in one moves the branch under the others,
   and their index then shows the reverse of that commit as staged changes.
+  **Stop hook:** while agents run, the tree is dirty and the stop hook
+  (`stop-hook-git-check.sh`) complains about uncommitted changes. Those files
+  are the agents' to commit. The supervisor answers the hook with a single
+  `.` and neither commits nor pushes them.
 * **Version raises and new error codes are the supervisor's.** An agent
   commits its change without touching the version lines, `CHANGELOG.md` or
   the badges, and names in its report what the change decided, for the
