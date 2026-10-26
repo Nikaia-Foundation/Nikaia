@@ -24,8 +24,11 @@ Score: S=1 (tooling, no program meaning), O=1 M (every main-session restart: the
 3. `cycle.nika`: with no binary, print `BUILD cargo build --profile fast -p nikaia (first build about 3 min, run it in the background)` and exit 1.
 4. Tests: extend `batch_frontmatter.nika` (or a new `batch_lines.nika` beside it, same pattern) with: no batch.txt; a missing brief; `Result: done. text`; `Gate: red x`; `Gate: green`. Run it with `target/fast/nikaia test` on that file; gate; commit `scripts: batch, status and cycle name what is missing` with `Fixes #862`.
 
+5. (main session, 2026-10-26, from two runs) `agent.nika` (about line 202) looks for `<stem>.report.md` only, but briefs name `<brief>.md.report.md` (`docs/architect.md`), so every run wrote a false `ESCALATE no report`. Accept both (as `batch.nika` does), prefer `<brief>.md.report.md`.
+6. `batch.nika`: `Owner:` counts as empty when it is `none` or starts with `none`; a report whose `Result:` first word is `noop` (nothing to change, e.g. a fix-forward that does not reproduce) counts as done. Add `noop` to the report form in `docs/briefs/common.part` and `docs/architect.md` (*Briefs and reports*: `Result: done | noop | partial | blocked`), and one line there: `Owner:` is a question for the owner or `none`, never a role. Tests as step 4.
+
 ## Files you may change
-`scripts/batch.nika`, `scripts/status.nika`, `scripts/cycle.nika`, `tests/compiler/tests/batch_frontmatter.*` or the new `batch_lines.*`. The main session runs these scripts between builders: keep their output lines' first words (`NEXT`, `CUT`, `OWNER`, `BATCH DONE`, `CI`, `BUMP`) unchanged.
+`scripts/batch.nika`, `scripts/status.nika`, `scripts/cycle.nika`, `scripts/agent.nika`, `docs/briefs/common.part`, `docs/architect.md` (*Briefs and reports* only), `tests/compiler/tests/batch_frontmatter.*` or the new `batch_lines.*`. The main session runs these scripts between builders: keep their output lines' first words (`NEXT`, `CUT`, `OWNER`, `BATCH DONE`, `CI`, `BUMP`) unchanged.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

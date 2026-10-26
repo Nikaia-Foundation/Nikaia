@@ -1,4 +1,3 @@
-b-fixforward-compiler-tests.md
 b861-ci-docs-only-base.md
-b848-map-get-tuple-text.md
 b-batch-status-lines.md
+b848-map-get-tuple-text.md
