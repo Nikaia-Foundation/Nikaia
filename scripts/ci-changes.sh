@@ -23,7 +23,9 @@
 #   docs/specification/, CHANGELOG.md and the code trees (crates/, packages/,
 #   examples/, benches/, tools/, scripts/, tests/), guide/, and the website's
 #   own files. Then every build and test job is off (nothing there can break
-#   them); the `changes` job runs the cheap checks itself.
+#   them); the `changes` job runs the cheap checks itself. On a push to develop
+#   the comparison is with `git merge-base origin/main HEAD`, so every change
+#   since the last tested commit counts (#861); pull requests and main use $BASE.
 #
 # Everything is on for a manual run, a scheduled one, a first push of a branch
 # (nothing to compare against), and when the workflow itself changed.
@@ -43,6 +45,14 @@ esac
 case "$BASE" in
 "" | 0000000000000000000000000000000000000000) all ;;
 esac
+# A push to develop is compared with what main already holds (the last tested
+# commit), not with the previous push: a docs-only push on top of an untested
+# code commit must run everything, or `promote` would move main onto it.
+if [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/develop" ]; then
+    if mb=$(git merge-base origin/main HEAD 2>/dev/null) && [ -n "$mb" ]; then
+        BASE=$mb
+    fi
+fi
 changed=$(git diff --name-only "$BASE" HEAD) || all
 echo "changed since $BASE:"
 echo "$changed" | sed 's/^/  /'
