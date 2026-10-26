@@ -1,5 +1,5 @@
 Result: done
-Batch: b864-plus-local-view.md, b863-exit-code.md
+Batch: b865-to-string-local-view.md b863-exit-code.md
 Owner: none
-Note: the cut at b848 was false (`Deviation: none (note)`); #848 done in 39ebe78. Report rule fixed at the source (common.part, architect.md report form, the two batch briefs): Deviation/Found take the bare word `none`.
-Changelog (for the supervisor): std: m.get(k) ?? (tuple) answers views for every tuple of arity 2 and 3 that holds text (#848).
+Filed: #865 (ready), from b864's Found, reproduced on d33d355.
+Changelog owed (supervisor): #864, "A view of a local built with `+` can be returned from a `String` function; the local lives in the caller's keep".
