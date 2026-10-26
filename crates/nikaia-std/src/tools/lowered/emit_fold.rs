@@ -41,7 +41,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_fold_step<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, step: &Expr) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_fold_step<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, step: &Expr) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match step {
             Expr::Closure { params, body, .. } => {
                 if params.len() == 2 && !body.stmts.is_empty() {

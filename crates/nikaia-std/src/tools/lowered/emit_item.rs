@@ -111,7 +111,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_item_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &Spanned<Item>, lifetimes: EmitLifetimes, target: &str, declared_by: Option<String>, bridged: Option<bool>) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_item_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &Spanned<Item>, lifetimes: EmitLifetimes, target: &str, declared_by: Option<String>, bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let carries = self.emit_item_carries(i64::from(method.span.start));
         let st = out.mark();
         out.push("    ");

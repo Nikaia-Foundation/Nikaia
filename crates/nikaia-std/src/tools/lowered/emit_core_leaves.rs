@@ -43,7 +43,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_hole<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: i64, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_hole<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: i64, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.hole_wraps.contains_key(&at) {
             let wraps = match self.hole_wraps.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let wrapped = host.wrap_hole(node, &wraps);
@@ -56,7 +56,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_key<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, form: FactKeyForm, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_key<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, form: FactKeyForm, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let kind = match form {
             FactKeyForm::Either => 1,
             FactKeyForm::Lent => 2,
@@ -89,7 +89,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_postfix_base<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_postfix_base<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mut parenthesise = false;
         if !flow.in_a_place {
             parenthesise = match node {
@@ -125,7 +125,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_nested<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, needs: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_nested<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, needs: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let parenthesise = match node {
             Expr::Binary { op, .. } => precedence(*op) < needs || needs == precedence(BinaryOp::Lt) && self.ends_in_a_cast(world, node),
             _ => self.emits_as_cast(world, node) && (needs == 255 || needs == precedence(BinaryOp::Lt)),
@@ -138,7 +138,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_concatenated<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, side: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_concatenated<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, side: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let indexed = matches!(side, Expr::Index { .. });
         if indexed {
             out.push("::core::convert::AsRef::<str>::as_ref(&");
@@ -152,7 +152,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_handed_back<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, at: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_handed_back<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, at: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_sites, at, value);
         out.push(&before);
         let is_null = matches!(value, Expr::LitNull(_));
@@ -167,7 +167,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_joined_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], names: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_joined_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], names: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         out.push("nikaia_std::fs::path::joined(&[");
         let mut hole: i64 = 0;
         let mut n = 0;
@@ -195,7 +195,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_format_string<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_format_string<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mut head: String = String::from("\"");
         head.push_str(&format_of(parts));
         head.push_str("\"");
@@ -215,7 +215,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_string<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_string<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match node {
             Expr::LitStr { text, .. } => { if self.facts.owned_texts.contains(&node_key(node)) { out.push(&format!("String::from(\"{}\")", text)); } else { out.push(&format!("\"{}\"", text)); } },
             Expr::LitInterpolated { parts, .. } => {
@@ -232,14 +232,14 @@ impl EmitState {
                 self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)?;
                 out.push(")");
             },
-            _ => { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("not a string literal"), at: None }, &"emit_core_string")); },
+            _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("not a string literal"), at: None }, &"emit_core_string")); },
         }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_dsl_parameters<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_dsl_parameters<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if config.is_empty() || !self.dsl_drivers.contains(callee) { return Ok(()); }
         let mut names: Vec<String> = vec![];
         for a in config.iter() { names.push(emit_text(world, a.name)); }
@@ -258,7 +258,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_method_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: winnow_grammar::Symbol, on_node: i64, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_method_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: winnow_grammar::Symbol, on_node: i64, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let name = emit_text(world, method);
         if self.dsl_drivers.contains(&name) { return Ok(()); }
         let options = match self.facts.method_options.get(&(on_node, name.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -280,7 +280,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_guard_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, guard: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_guard_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, guard: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let reopening = self.emit_core_guard_reopening(world, host, pattern, guard);
         if reopening.is_empty() {
             self.emit_expr(world, walk, out, host, guard, depth, flow, scope)?;
@@ -295,13 +295,13 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_grammar_entry<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: &Expr, parallelism: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_grammar_entry<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: &Expr, parallelism: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let question = match flow.caught {
             true => "",
             false => "?",
         };
         let name = emit_text(world, grammar_symbol);
-        if !self.grammars.contains_key(&name.to_owned()) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("There's no grammar called `{}` in this file.", name), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
+        if !self.grammars.contains_key(&name.to_owned()) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("There's no grammar called `{}` in this file.", name), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
         let def = match self.grammars.get(&name.to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let mut found = false;
         let mut parallel = false;
@@ -317,8 +317,8 @@ impl EmitState {
         }
         if !found {
             let rule = emit_text(world, entry);
-            if named { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` in grammar `{}` isn't an entry, so the program can't call it. Write `entry rule {}`.", rule, name, rule), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
-            return Err(nikaia_std::error::raise(EmitRefused { message: format!("Grammar `{}` has no entry called `{}`.", name, rule), at: Some(flow.statement) }, &"emit_core_grammar_entry"));
+            if named { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` in grammar `{}` isn't an entry, so the program can't call it. Write `entry rule {}`.", rule, name, rule), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
+            return Err(nikaia_std::error::throwing(EmitRefused { message: format!("Grammar `{}` has no entry called `{}`.", name, rule), at: Some(flow.statement) }, &"emit_core_grammar_entry"));
         }
         let mut over = "";
         let mut lowered: String = name.to_owned();
@@ -342,7 +342,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_template_segments<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, site: i64, segments: &[Segment], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_template_segments<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, site: i64, segments: &[Segment], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let pad = "    ".repeat(nikaia_std::count::of(depth));
         for segment in segments.iter() {
             match segment {
@@ -350,7 +350,7 @@ impl EmitState {
                 Segment::Hole { expr, .. } => {
                     if !self.template_holes.contains_key(&(site, expr.to_owned())) {
                         let said = nikaia_std::index::or(self.template_errors.get(&(site, expr.to_owned())), || "");
-                        return Err(nikaia_std::error::raise(EmitRefused { message: format!("The template hole `{{{}}}` can't be read. {}", expr, said), at: Some(flow.statement) }, &"emit_core_template_segments"));
+                        return Err(nikaia_std::error::throwing(EmitRefused { message: format!("The template hole `{{{}}}` can't be read. {}", expr, said), at: Some(flow.statement) }, &"emit_core_template_segments"));
                     }
                     let parsed = match self.template_holes.get(&(site, expr.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                     out.push(&format!("{}__html.push_str(&::nikaia_std::html::Render::render(&", pad));
@@ -369,27 +369,27 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_template<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, context: Option<winnow_grammar::Symbol>, content: &str, site: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_template<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, context: Option<winnow_grammar::Symbol>, content: &str, site: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if is_deferred(name, content) {
             if context.is_some() {
                 let given = match context { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                return Err(nikaia_std::error::raise(EmitRefused { message: format!("`dsl {} {{ … }}` with `:name` holes can't take a context, but `{}` was given.", name, emit_text(world, given)), at: Some(flow.statement) }, &"emit_core_template"));
+                return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`dsl {} {{ … }}` with `:name` holes can't take a context, but `{}` was given.", name, emit_text(world, given)), at: Some(flow.statement) }, &"emit_core_template"));
             }
             let trimmed: String = content.trim().to_owned();
             out.push(&rust_string(&trimmed));
             return Ok(());
         }
-        if name != "html" { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`dsl {} {{ … }}` has no `:name` holes, and `{}` isn't a language the compiler knows. Add `:name` holes for the parameters, or use `dsl html`.", name, name), at: Some(flow.statement) }, &"emit_core_template")); }
+        if name != "html" { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`dsl {} {{ … }}` has no `:name` holes, and `{}` isn't a language the compiler knows. Add `:name` holes for the parameters, or use `dsl html`.", name, name), at: Some(flow.statement) }, &"emit_core_template")); }
         if context.is_some() {
             let given = match context { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-            return Err(nikaia_std::error::raise(EmitRefused { message: format!("`dsl html` can't take a context, but `{}` was given.", emit_text(world, given)), at: Some(flow.statement) }, &"emit_core_template"));
+            return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`dsl html` can't take a context, but `{}` was given.", emit_text(world, given)), at: Some(flow.statement) }, &"emit_core_template"));
         }
         let framed: String = content.trim().to_owned();
         let segments = match split(&framed) {
             Ok(value) => value,
             Err(error) => {
                 let (error, __nikaia_site) = error.split();
-                return Err(nikaia_std::error::raise(EmitRefused { message: format!("{}", error), at: Some(flow.statement) }, &"emit_core_template"))
+                return Err(nikaia_std::error::throwing(EmitRefused { message: format!("{}", error), at: Some(flow.statement) }, &"emit_core_template"))
             },
         };
         let unsafe_holes = illegal(&segments);
@@ -399,7 +399,7 @@ impl EmitState {
                 let at = *at;
                 message.push_str(&format!("  {}\n", illegal_message(expr, &at)));
             }
-            return Err(nikaia_std::error::raise(EmitRefused { message, at: None }, &"emit_core_template"));
+            return Err(nikaia_std::error::throwing(EmitRefused { message, at: None }, &"emit_core_template"));
         }
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let close = "    ".repeat(nikaia_std::count::of(depth));
@@ -411,14 +411,14 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, flow, scope, tail, None)?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_if_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, condition: &Expr, then_block: &Block, else_block: Option<&Block>, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_if_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, condition: &Expr, then_block: &Block, else_block: Option<&Block>, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         out.push("if ");
         self.emit_expr(world, walk, out, host, condition, depth, flow, scope)?;
         out.push(" ");

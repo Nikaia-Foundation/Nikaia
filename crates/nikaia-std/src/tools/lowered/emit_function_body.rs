@@ -32,14 +32,14 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_function_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail, settled: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_function_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail, settled: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if settled { self.emit_stmt_block_plain(world, walk, out, host, body, depth, flow, scope, tail, None)?; } else { self.emit_core_block(world, walk, out, host, body, depth, flow, scope, tail)?; }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_function_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, throws_: bool, returns_value: bool, awaited: &[winnow_grammar::Symbol], key: &str, channel: &str, counts_steps: bool, skip_free_at_exit: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_function_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, throws_: bool, returns_value: bool, awaited: &[winnow_grammar::Symbol], key: &str, channel: &str, counts_steps: bool, skip_free_at_exit: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         walk.keep_function = key.to_owned();
         let mut locals: collections::BTreeSet<String> = collections::BTreeSet::new();
         let known = host.known_nonnegative(body);

@@ -155,7 +155,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<String>, owner_declared_by: Option<String>, owner_bridged: Option<bool>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<String>, owner_declared_by: Option<String>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let __keep_frame = nikaia_std::tether::Keep::new();
         match &written.node {
             Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
@@ -429,8 +429,8 @@ impl EmitState {
                         if emit_text(world, ty.name) == "Self::dsl" {
                             if !has_dsl {
                                 let message = "`Self::dsl` stands for the function's `...args: Self::dsl` parameters, but this function has none.";
-                                if !body.stmts.is_empty() { return Err(nikaia_std::error::raise(EmitRefused { message: message.to_owned(), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
-                                return Err(nikaia_std::error::raise(EmitRefused { message: message.to_owned(), at: None }, &"emit_function"));
+                                if !body.stmts.is_empty() { return Err(nikaia_std::error::throwing(EmitRefused { message: message.to_owned(), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
+                                return Err(nikaia_std::error::throwing(EmitRefused { message: message.to_owned(), at: None }, &"emit_function"));
                             }
                             returned = String::from("NikaiaDsl");
                         } else {
@@ -638,7 +638,7 @@ impl EmitState {
                     None => { out.push("\n"); },
                 }
             },
-            _ => { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("not a function"), at: None }, &"emit_function")); },
+            _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("not a function"), at: None }, &"emit_function")); },
         }
         Ok(())
     }

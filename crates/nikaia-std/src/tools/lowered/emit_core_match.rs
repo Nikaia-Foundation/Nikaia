@@ -53,7 +53,7 @@ pub(crate) fn emit_match_yes_or_no(arms: &[MatchArm]) -> Option<bool> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_match_subject<H: EmitHost>(state: &EmitState, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope, deref: &str, text: bool, copied_view: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn emit_match_subject<H: EmitHost>(state: &EmitState, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope, deref: &str, text: bool, copied_view: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
     if text {
         let plain = matches!(value, Expr::Variable(..) | Expr::Field { .. });
         out.push("&*");
@@ -119,7 +119,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, Box<dyn std::error::Error>> {
+    pub fn emit_core_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, nikaia_std::error::Thrown<EmitRefused>> {
         let mut n = found;
         match pattern {
             MatchPattern::Otherwise => { out.push("_"); },
@@ -215,7 +215,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_nest_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, Box<dyn std::error::Error>> {
+    pub fn emit_core_nest_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, nikaia_std::error::Thrown<EmitRefused>> {
         let mut n = before;
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -240,7 +240,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mut taken_apart = lead.to_owned();
         for at in 0..nest_count {
             let mut written = EmitOut::empty();
@@ -303,9 +303,9 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match_over_a_sum<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, sum: &str, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_match_over_a_sum<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, sum: &str, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let listed = self.sum_members(sum);
-        if listed.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: format!("There's no error set called `{}`.", sum), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); }
+        if listed.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("There's no error set called `{}`.", sum), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); }
         let members = match listed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let mut home: Vec<i64> = vec![];
         let mut catch_all = 0;
@@ -325,7 +325,7 @@ impl EmitState {
         }
         if catch_all == 0 {
             let covered = if members.len() > 1 { members.len() as i64 } else { 1 };
-            return Err(nikaia_std::error::raise(EmitRefused { message: format!("This `match error` needs an `else` arm: it covers {} error types, but other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.", covered), at: Some(flow.statement) }, &"emit_core_match_over_a_sum"));
+            return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `match error` needs an `else` arm: it covers {} error types, but other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.", covered), at: Some(flow.statement) }, &"emit_core_match_over_a_sum"));
         }
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let inner = "    ".repeat(nikaia_std::count::of(depth + 2));
@@ -388,7 +388,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let __keep_frame = nikaia_std::tether::Keep::new();
         let mut members: Vec<String> = vec![];
         let mut home: Vec<i64> = vec![];
@@ -465,7 +465,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if scope.caught_sum.is_some() && emit_match_is_caught(world, value) {
             let sum = match match scope.caught_sum.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
