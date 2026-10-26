@@ -63,3 +63,5 @@ Re-scored 2026-10-26 (c6a6bdd3): #853 #856 #857 #855 done; #851 is `decision`.
 | #863 `process::exit(2)` in a `throws` helper exits 1 (reduce first) | 3 | 0.2 | 4 | 7.6 | bugs 2 (after #862: unreduced) |
 | C-7 rest, `check/mod.rs` (#584): research brief first | 2 | 1 | 15 | 1.4 | self-hosting 1 |
 | `emit/seeds.rs` (951) | 2 | 0.5 | 10 | 2.1 | self-hosting 2 |
+
+Re-scored 2026-10-26 (f691147): #861 #848 #862 #863-#866 #706 done or closed. Bugs 1: #665 (S 3, C 5, 6.0); self-hosting 1: #867 `emit/seeds.rs` (S 2, C 10, 2.1); then C-7 rest (1.4).
