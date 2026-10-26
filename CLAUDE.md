@@ -1,5 +1,11 @@
 # Working in this repository
 
+**Session hooks are the sessions' to maintain** (owner, 2026-10-26): a session
+may create and change the project's hooks in `.claude/settings.json` and
+`.claude/hooks/`, and delete one that gets in the way of the work, without
+asking first. `.claude/hooks/session-start.sh` builds `target/fast/nikaia` in
+the background in a cloud session.
+
 ## Trunk-based: everyone pushes to `develop`, `main` only gets what was tested (#437)
 
 * **`main` is the default branch, and what the outside sees: the last tested
