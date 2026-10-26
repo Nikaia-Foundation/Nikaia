@@ -5,3 +5,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1337421 33
 /home/user/Nikaia/docs/briefs/b848-map-get-tuple-text.md 279369 11
 /home/user/Nikaia/docs/briefs/architect-task.md 257766 10
+/home/user/Nikaia/docs/briefs/b864-plus-local-view.md 3270070 59
