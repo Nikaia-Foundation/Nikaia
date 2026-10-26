@@ -1,2 +1,3 @@
 /home/user/Nikaia/docs/briefs/b-fixforward-compiler-tests.md 111555 6
 /home/user/Nikaia/docs/briefs/b861-ci-docs-only-base.md 120649 7
+/home/user/Nikaia/docs/briefs/b-batch-status-lines.md 360596 12
