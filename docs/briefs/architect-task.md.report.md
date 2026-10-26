@@ -1,4 +1,4 @@
 Result: done
-Batch: b645-overlap-shared-mut.md, b867-seeds-tables.md
+Batch: b867-seeds-tables.md b655-mut-param-coalesce.md
 Owner: none
-Notes: #689 closed by hand (refused at the push, per Part I's lending `for`). #645 item 1 specified in Part I (NK2104 for a binding one branch changes and another names): version raise owed with the build. Rule: no optional steps in a brief (architect.md).
+Notes: cut at b645 was false (verification note under Deviation); rule fixed in common.part. #645 done (3ec1f1e, 1702057), Changelog line in its report, version raise owed. Filed #868 (lowered.sh bench dead `ordering` key). #655 item 2 reproduced on fbc9bfd.
