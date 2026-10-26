@@ -28,3 +28,4 @@
 /home/user/Nikaia/docs/briefs/b867-seeds-reader.md 540076 9
 /home/user/Nikaia/docs/briefs/architect-task.md 1390450 33
 /home/user/Nikaia/docs/briefs/b655-one-statement-a-line.md 1499394 40
+/home/user/Nikaia/docs/briefs/architect-task.md 421476 14
