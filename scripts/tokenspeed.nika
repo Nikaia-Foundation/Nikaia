@@ -1,0 +1,505 @@
+// Ledger of what the agents cost against what they moved (#858).
+//
+// Two sources: an agent's transcript (tokens, turns, active time) and the git
+// history of `origin/develop` (Rust lines gone per commit). A line is counted as
+// `scripts/self_hosting.py` counts it: not blank, not only a comment. Counts, not
+// clocks: the minutes are the agent's active minutes (gaps over 10 minutes, a
+// build waiting, are cut).
+//
+//     nikaia run scripts/tokenspeed.nika -- AGENTS_DIR [SINCE_COMMIT]   the two tables
+//     nikaia run scripts/tokenspeed.nika -- --short DIR|FILE            one Runs row
+//
+// AGENTS_DIR is a session's `subagents` directory under ~/.claude/projects;
+// FILE is one transcript (a headless run's `<session_id>.jsonl`). With a DIR,
+// `--short` prints the row of the agent that ended last.
+
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+struct TsAgent {
+    id: String,
+    full: String,
+    module: String,
+    start: i64,
+    end: i64,
+    turns: i64,
+    ctx: i64,
+    late300: i64,
+    late150: i64,
+    out: i64,
+    ms: i64,
+    files: Vec[String],
+}
+
+// Seconds to wait between two stamps before the gap counts as a stop.
+fn ts_gap_ms() -> i64 {
+    return 600000
+}
+
+fn ts_git(root: String, args: Vec[String]) -> String throws {
+    let mut all: Vec[String] = ["-C", root.clone()]
+    for a in args { all.push(a.clone()) }
+    return process::run("git", all).stdout.clone()
+}
+
+// Code lines as `scripts/self_hosting.py` counts them.
+fn ts_code_lines(body: String) -> i64 {
+    let mut n = 0
+    for line in body.split("\n") {
+        let l = line.trim()
+        if l != "" && !l.starts_with("//") { n += 1 }
+    }
+    return n
+}
+
+// num / den rounded to the nearest integer, a tie to the even one (what a
+// float format does); num >= 0, den > 0.
+fn ts_div(num: i64, den: i64) -> i64 {
+    let q = num / den
+    let twice = (num % den) * 2
+    if twice > den { return q + 1 }
+    if twice == den && q % 2 == 1 { return q + 1 }
+    return q
+}
+
+// 1234567 -> "1,234,567".
+fn ts_commas(n: i64) -> String throws {
+    let s = f"{n}"
+    let mut out: String = ""
+    for i in 0..<s.len() {
+        if i > 0 && (s.len() - i) % 3 == 0 { out = out + "," }
+        out = out + s.bytes[i..<i + 1].text()
+    }
+    return out
+}
+
+// 12 tenths -> "1.2".
+fn ts_tenths(t: i64) -> String {
+    return f"{t / 10}.{t % 10}"
+}
+
+// Tokens per moved line, "-" when nothing moved.
+fn ts_per(ctx: i64, gone: i64) -> String throws {
+    if gone <= 0 { return "-" }
+    return ts_commas(ts_div(ctx, gone))
+}
+
+// The one place a Runs row is formatted.
+fn ts_row(day: String, id: String, module: String, turns: i64, ctx: i64, gone: i64) -> String throws {
+    return f"| {day} | {id} | {module} | {turns} | {ts_tenths(ts_div(ctx, 100000))} | {gone} | {ts_per(ctx, gone)} | |"
+}
+
+fn ts_percent(part: i64, whole: i64) -> String {
+    if whole == 0 { return "-" }
+    return f"{ts_div(100 * part, whole)} %"
+}
+
+fn ts_digit(c: scalar) -> bool {
+    return c >= '0' && c <= '9'
+}
+
+fn ts_word(c: scalar) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || ts_digit(c) || c == '_'
+}
+
+fn ts_path_char(c: scalar) -> bool {
+    return ts_word(c) || c == '.' || c == '/' || c == '-'
+}
+
+// The byte at `i`, as a scalar (the text around may hold wider characters).
+fn ts_at(s: ref String, i: i64) -> scalar {
+    return s.bytes[i] as scalar
+}
+
+fn ts_unescape(s: String) -> String throws {
+    let mut out: String = ""
+    let mut i = 0
+    let n = s.len()
+    while i < n {
+        let at = s.find("\\"; from: i) ?? -1
+        if at < 0 || at + 1 >= n {
+            out = out + s.bytes[i..<n].text()
+            break
+        }
+        out = out + s.bytes[i..<at].text()
+        let c = s.bytes[at + 1..<at + 2].text()
+        if c == "n" { out = out + "\n" }
+        else if c == "t" { out = out + "\t" }
+        else if c == "r" { out = out + "\r" }
+        else { out = out + c }
+        i = at + 2
+    }
+    return out
+}
+
+// The string after `marker` up to its closing quote, unescaped; "" if absent.
+fn ts_value(line: String, marker: String) -> String throws {
+    let at = line.find(marker.clone(); from: 0) ?? -1
+    if at < 0 { return "" }
+    let start = at + marker.len()
+    let mut j = start
+    while j < line.len() {
+        let q = line.find("\""; from: j) ?? -1
+        if q < 0 { break }
+        let mut slashes = 0
+        let mut k = q - 1
+        while k >= start && ts_at(line, k) == '\\' {
+            slashes += 1
+            k -= 1
+        }
+        if slashes % 2 == 0 { return ts_unescape(line.bytes[start..<q].text()) }
+        j = q + 1
+    }
+    return ts_unescape(line.bytes[start..<line.len()].text())
+}
+
+// The integer after `marker`; 0 if absent.
+fn ts_int(line: String, marker: String) -> i64 throws {
+    let at = line.find(marker.clone(); from: 0) ?? -1
+    if at < 0 { return 0 }
+    let start = at + marker.len()
+    let mut j = start
+    while j < line.len() && ts_digit(ts_at(line, j)) { j += 1 }
+    return text::parse_i64(line.bytes[start..<j].text()) ?? 0
+}
+
+fn ts_days(y: i64, m: i64, d: i64) -> i64 {
+    let yy = if m <= 2 { y - 1 } else { y }
+    let era = yy / 400
+    let yoe = yy - era * 400
+    let mp = (m + 9) % 12
+    let doy = (153 * mp + 2) / 5 + d - 1
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+// "2026-10-25T18:48:05.812Z" in milliseconds since the epoch; 0 if malformed.
+fn ts_millis(s: String) -> i64 throws {
+    if s.len() < 20 { return 0 }
+    let y = text::parse_i64(s.bytes[0..<4].text()) ?? 0
+    let mo = text::parse_i64(s.bytes[5..<7].text()) ?? 0
+    let d = text::parse_i64(s.bytes[8..<10].text()) ?? 0
+    let h = text::parse_i64(s.bytes[11..<13].text()) ?? 0
+    let mi = text::parse_i64(s.bytes[14..<16].text()) ?? 0
+    let sec = text::parse_i64(s.bytes[17..<19].text()) ?? 0
+    let mut frac = 0
+    if s.bytes[19..<20].text() == "." {
+        let mut digits: String = ""
+        let mut j = 20
+        while j < s.len() && ts_digit(ts_at(s, j)) {
+            digits = digits + s.bytes[j..<j + 1].text()
+            j += 1
+        }
+        digits = digits + "000"
+        frac = text::parse_i64(digits.bytes[0..<3].text()) ?? 0
+    }
+    return (ts_days(y, mo, d) * 86400 + h * 3600 + mi * 60 + sec) * 1000 + frac
+}
+
+// Every `[\w./-]+\.\w+` in the text: the file names a `git add` lists.
+fn ts_words(s: String) -> Vec[String] throws {
+    let mut found: Vec[String] = []
+    let n = s.len()
+    let mut i = 0
+    while i < n {
+        if !ts_path_char(ts_at(s, i)) {
+            i += 1
+            continue
+        }
+        let mut j = i
+        while j < n && ts_path_char(ts_at(s, j)) { j += 1 }
+        // the run is s[i..<j]; the match ends in a dot followed by word characters
+        let mut end = -1
+        let mut k = j - 1
+        while k > i {
+            if ts_at(s, k) == '.' && k + 1 < j && ts_word(ts_at(s, k + 1)) {
+                let mut e = k + 1
+                while e < j && ts_word(ts_at(s, e)) { e += 1 }
+                end = e
+                break
+            }
+            k -= 1
+        }
+        if end > 0 {
+            found.push(s.bytes[i..<end].text())
+            i = end
+        } else {
+            i = j
+        }
+    }
+    return found
+}
+
+fn ts_find_or(s: String, needle: String, none: i64) -> i64 {
+    let at = s.find(needle.clone(); from: 0) ?? -1
+    if at < 0 || at + needle.len() > 500 { return none }
+    return at
+}
+
+fn ts_module(first: String) -> String {
+    if ts_find_or(first.clone(), "READ-ONLY", -1) >= 0 { return "plan" }
+    let i = ts_find_or(first.clone(), "emit", -1)
+    let j = ts_find_or(first, "check", -1)
+    if i < 0 && j < 0 { return "plan" }
+    if j < 0 || (i >= 0 && i < j) { return "emit" }
+    return "check"
+}
+
+// One transcript; `ms == 0 && end == 0` when it holds no stamps.
+fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
+    let body = fs::read_to_string(path, fs::Root::Anywhere)
+    let mut stamps: Vec[i64] = []
+    let mut turns = 0
+    let mut ctx = 0
+    let mut out = 0
+    let mut late300 = 0
+    let mut late150 = 0
+    let mut first: String = ""
+    let mut files: Vec[String] = []
+    let mut adds: Vec[String] = []
+    for line in body.split("\n") {
+        // a line cut off, or two lines written into one, is not JSON
+        if !line.ends_with("}") || (line.find("{\"parentUuid\""; from: 1) ?? -1) >= 0 { continue }
+        let stamp = ts_value(line.clone(), "\"timestamp\":\"")
+        if stamp != "" { stamps.push(ts_millis(stamp)) }
+        if first == "" && line.contains("\"role\":\"user\",\"content\":\"") {
+            first = ts_value(line.clone(), "\"role\":\"user\",\"content\":\"")
+        }
+        if !line.contains("\"role\":\"assistant\"") { continue }
+        turns += 1
+        let at = line.find("\"usage\":{"; from: 0) ?? -1
+        if at >= 0 {
+            let tail = line.bytes[at..<line.len()].text()
+            let t = ts_int(tail.clone(), "\"input_tokens\":") + ts_int(tail.clone(), "\"cache_read_input_tokens\":") + ts_int(tail.clone(), "\"cache_creation_input_tokens\":")
+            ctx += t
+            if t > 300000 { late300 += t }
+            if t > 150000 { late150 += t }
+            out += ts_int(tail, "\"output_tokens\":")
+        }
+        let chunks = line.split("\"type\":\"tool_use\"").collect()
+        for c in 1..<chunks.len() {
+            let chunk = chunks[c].clone()
+            let tool = ts_value(chunk.clone(), "\"name\":\"")
+            if tool == "Edit" || tool == "Write" {
+                let f = ts_value(chunk.clone(), "\"file_path\":\"")
+                if f != "" { files.push(f.replace(root.clone() + "/", "")) }
+            } else if tool == "Bash" {
+                let cmd = ts_value(chunk.clone(), "\"command\":\"")
+                if cmd.contains("git add") { adds.push(cmd) }
+            }
+        }
+    }
+    let mut ms = 0
+    let mut lo = 0
+    let mut hi = 0
+    let mut i = 0
+    while i < stamps.len() {
+        if i == 0 || stamps[i] < lo { lo = stamps[i] }
+        if i == 0 || stamps[i] > hi { hi = stamps[i] }
+        if i > 0 {
+            let gap = stamps[i] - stamps[i - 1]
+            ms += if gap < ts_gap_ms() { gap } else { ts_gap_ms() }
+        }
+        i += 1
+    }
+    for cmd in adds {
+        let after = (cmd.split("git add").collect()[1].clone()).split("&&").collect()[0].clone()
+        for w in ts_words(after) { files.push(w.clone()) }
+    }
+    let full = if name.starts_with("agent-") { f"{name.bytes[6..<name.len()].text()}" } else { f"{name}" }
+    let id = f"{full.bytes[0..<(if full.len() < 6 { full.len() } else { 6 })].text()}"
+    return TsAgent {
+        id: id,
+        full: full,
+        module: ts_module(first),
+        start: lo,
+        end: hi,
+        turns: turns,
+        ctx: ctx,
+        late300: late300,
+        late150: late150,
+        out: out,
+        ms: ms,
+        files: files,
+    }
+}
+
+fn ts_agents(location: String, root: String) -> Vec[TsAgent] throws {
+    let mut found: Vec[TsAgent] = []
+    if fs::metadata(location.clone(), fs::Root::Anywhere).is_file() {
+        let base = process::run("basename", [location.clone()]).stdout.trim().clone()
+        let stem = if base.ends_with(".jsonl") { f"{base.bytes[0..<base.len() - 6].text()}" } else { f"{base}" }
+        found.push(ts_agent(location, stem, root))
+        return found
+    }
+    for entry in fs::read_dir(location.clone(), fs::Root::Anywhere) {
+        let name = entry.to_text()
+        let jsonl = name.starts_with("agent-") && name.ends_with(".jsonl")
+        if !jsonl && !name.ends_with(".output") { continue }
+        let stem = if jsonl { name.bytes[0..<name.len() - 6].text().clone() } else { name.bytes[0..<name.len() - 7].text().clone() }
+        let a = ts_agent(f"{location}/{name}", stem, root.clone())
+        if a.end != 0 { found.push(a) }
+    }
+    return found
+}
+
+// Rust code lines gone (net) from crates/nikaia/src by one commit.
+fn ts_commit_gone(root: String, h: String) -> i64 throws {
+    let mut gone = 0
+    for n in ts_git(root.clone(), ["show", "--format=", "--name-only", h.clone()]).split_whitespace() {
+        if n.starts_with("crates/nikaia/src/") && n.ends_with(".rs") {
+            gone += ts_code_lines(ts_git(root.clone(), ["show", f"{h}~1:{n}"]))
+            gone -= ts_code_lines(ts_git(root.clone(), ["show", f"{h}:{n}"]))
+        }
+    }
+    return gone
+}
+
+// Rust lines moved by the commits attributed to the agent: those in its window
+// (start .. end + 60 s) that changed a file it edited, or whose subject names it.
+fn ts_gone_in(a: ref TsAgent, root: String) -> i64 throws {
+    if a.module == "plan" { return 0 }
+    let mut total = 0
+    let listed = ts_git(root.clone(), ["log", "--format=%h %ct %s", f"--since={a.start / 1000}", f"--until={a.end / 1000 + 60}", "origin/develop"])
+    for line in listed.split("\n") {
+        if line.trim() == "" { continue }
+        let parts = line.split(" ").collect()
+        let h = parts[0].clone()
+        let subj = line.strip_prefix(parts[0].clone() + " " + parts[1].clone() + " ") ?? ""
+        let mut mine = subj.contains(a.full.bytes[0..<(if a.full.len() < 6 { a.full.len() } else { 6 })].text())
+        if !mine {
+            for n in ts_git(root.clone(), ["show", "--format=", "--name-only", h.clone()]).split_whitespace() {
+                if a.files.contains(n.clone()) { mine = true }
+            }
+        }
+        if mine { total += ts_commit_gone(root.clone(), h) }
+    }
+    return total
+}
+
+fn ts_attribution() -> String {
+    return "Attribution: a commit on `origin/develop` inside the agent's window belongs to the agent when it changed a file the agent edited (Edit/Write/`git add` in its transcript) or its subject names the agent id; moved = Rust code lines gone net from crates/nikaia/src by those commits. Late share = part of the context read in turns whose context was over 150k / 300k tokens."
+}
+
+// The file names of `COMPILER_NIKA` in scripts/self_hosting.py.
+fn ts_compiler_nika(root: String) -> String throws {
+    let mut names: String = "|"
+    let mut inside = false
+    for line in fs::read_to_string(f"{root}/scripts/self_hosting.py", fs::Root::Anywhere).split("\n") {
+        if line.starts_with("COMPILER_NIKA = {") { inside = true; continue }
+        if inside && line.starts_with("}") { break }
+        if inside && line.starts_with("    \"") {
+            let rest = (line.strip_prefix("    \"") ?? "").clone()
+            let at = rest.find("\""; from: 0) ?? -1
+            if at > 0 { names = names + rest.bytes[0..<at].text() + "|" }
+        }
+    }
+    return names
+}
+
+// (Rust, Nikaia) code lines at a commit.
+fn ts_counts(root: String, commit: String, compiler: String) -> Vec[i64] throws {
+    let mut rust = 0
+    let mut nika = 0
+    let tree = ts_git(root.clone(), ["ls-tree", "-r", commit, "--", "crates/nikaia/src", "crates/nikaia-std/src/tools"])
+    for line in tree.split("\n") {
+        let cut = line.split("\t").collect()
+        if cut.len() < 2 { continue }
+        let path = cut[1].clone()
+        let blob = cut[0].split_whitespace().collect()[2].clone()
+        if path.starts_with("crates/nikaia/src/") && path.ends_with(".rs") {
+            rust += ts_code_lines(ts_git(root.clone(), ["cat-file", "-p", blob]))
+        } else if path.ends_with(".nika") && path.contains("/tools/") && compiler.contains("|" + path.split("/").collect()[path.split("/").collect().len() - 1].clone() + "|") {
+            nika += ts_code_lines(ts_git(root.clone(), ["cat-file", "-p", blob]))
+        }
+    }
+    return [rust, nika]
+}
+
+fn ts_version(subject: String) -> String throws {
+    let mut from = 0
+    while from < subject.len() {
+        let at = subject.find("0.0."; from: from) ?? -1
+        if at < 0 { break }
+        let mut j = at + 4
+        while j < subject.len() && ts_digit(ts_at(subject, j)) { j += 1 }
+        if j > at + 4 { return f"{subject.bytes[at..<j].text()}" }
+        from = at + 1
+    }
+    return ""
+}
+
+fn ts_progress(root: String, since: String) -> Vec[String] throws {
+    let compiler = ts_compiler_nika(root.clone())
+    let mut rows: Vec[String] = []
+    let listed = ts_git(root.clone(), ["log", "--reverse", "--format=%h %ct %s", f"{since}..origin/develop"])
+    let mut prev = ts_counts(root.clone(), since, compiler.clone())[0]
+    for line in listed.split("\n") {
+        if line.trim() == "" { continue }
+        let parts = line.split(" ").collect()
+        let subject = (line.strip_prefix(parts[0].clone() + " " + parts[1].clone() + " ") ?? "").clone()
+        let paren = subject.find("(0.0."; from: 0) ?? -1
+        if paren < 0 || ts_version(subject.bytes[paren..<subject.len()].text()) == "" { continue }
+        let h = parts[0].clone()
+        let c = ts_counts(root.clone(), h.clone(), compiler.clone())
+        let module = if subject.starts_with("emit") { "emit" } else if subject.starts_with("check") { "check" } else { "other" }
+        let share = ts_div(1000 * c[1], c[0] + c[1])
+        rows.push(f"| {h} | {ts_version(subject)} | {module} | {c[0]} | {c[1]} | {ts_tenths(share)} % | {prev - c[0]} |")
+        prev = c[0]
+    }
+    return rows
+}
+
+fn ts_day(end_ms: i64) -> String throws {
+    return process::run("date", ["-d", f"@{end_ms / 1000}", "+%F"]).stdout.trim().clone()
+}
+
+fn ts_short(location: String, root: String) throws {
+    let agents = ts_agents(location, root.clone())
+    if agents.len() == 0 {
+        println("no transcript with a timestamp")
+        process::exit(1)
+    }
+    let mut best = 0
+    for i in 0..<agents.len() {
+        if agents[i].end > agents[best].end { best = i }
+    }
+    let a = agents[best]
+    let gone = ts_gone_in(a, root)
+    println(ts_row(ts_day(a.end), a.id.clone(), a.module.clone(), a.turns, a.ctx, gone))
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    if args.len() < 2 {
+        println("usage: nikaia run scripts/tokenspeed.nika -- AGENTS_DIR [SINCE_COMMIT] | --short DIR|FILE")
+        process::exit(2)
+    }
+    let root = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+    if args[1] == "--short" && args.len() > 2 {
+        ts_short(args[2].clone(), root)
+        return
+    }
+    let since = if args.len() > 2 { args[2].clone() } else { "d927f6e~1".clone() }
+    println("### Progress per commit (code lines, `scripts/self_hosting.py` rule)\n")
+    println("| commit | version | module | Rust | Nikaia | share | moved (Rust gone) |")
+    println("| :--- | :--- | :--- | ---: | ---: | ---: | ---: |")
+    for row in ts_progress(root.clone(), since.clone()) { println(row.clone()) }
+    println("\n### Agents\n")
+    println(ts_attribution() + "\n")
+    println("| agent | module | turns | context tokens read (M) | written (k) | active min | Rust lines moved (attributed) | tokens per moved line | read after 150k | read after 300k |")
+    println("| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    let agents = ts_agents(args[1].clone(), root.clone())
+    let mut tot = 0
+    let mut over = 0
+    for a in agents {
+        let gone = ts_gone_in(a, root.clone())
+        println(f"| {a.id} | {a.module} | {a.turns} | {ts_tenths(ts_div(a.ctx, 100000))} | {ts_tenths(ts_div(a.out, 100))} | {ts_div(a.ms, 60000)} | {gone} | {ts_per(a.ctx, gone)} | {ts_percent(a.late150, a.ctx)} | {ts_percent(a.late300, a.ctx)} |")
+        tot += a.ctx
+        if a.turns > 120 { over += a.ctx }
+    }
+    println(f"\n{agents.len()} agents, {ts_div(tot, 1000000)} M read, agents over 120 turns = {ts_div(100 * over, tot)} % of reads.")
+}

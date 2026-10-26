@@ -1,0 +1,47 @@
+// The Runs row of scripts/tokenspeed.nika (#858). A test program cannot `use` a
+// script, so these functions are a copy of the script's; keep them equal.
+
+fn ts_div(num: i64, den: i64) -> i64 {
+    let q = num / den
+    let twice = (num % den) * 2
+    if twice > den { return q + 1 }
+    if twice == den && q % 2 == 1 { return q + 1 }
+    return q
+}
+
+fn ts_commas(n: i64) -> String throws {
+    let s = f"{n}"
+    let mut out: String = ""
+    for i in 0..<s.len() {
+        if i > 0 && (s.len() - i) % 3 == 0 { out = out + "," }
+        out = out + s.bytes[i..<i + 1].text()
+    }
+    return out
+}
+
+fn ts_tenths(t: i64) -> String {
+    return f"{t / 10}.{t % 10}"
+}
+
+fn ts_per(ctx: i64, gone: i64) -> String throws {
+    if gone <= 0 { return "-" }
+    return ts_commas(ts_div(ctx, gone))
+}
+
+fn ts_row(day: String, id: String, module: String, turns: i64, ctx: i64, gone: i64) -> String throws {
+    return f"| {day} | {id} | {module} | {turns} | {ts_tenths(ts_div(ctx, 100000))} | {gone} | {ts_per(ctx, gone)} | |"
+}
+
+fn main() throws {
+    // moved lines, thousands separator
+    println(ts_row("2026-10-26", "a66fd3", "check", 185, 14400000, 1346))
+    // nothing moved: "-"
+    println(ts_row("2026-10-24", "a312a5", "fmt", 38, 1200000, 0))
+    // a ten-million-token run, a million tokens per line
+    println(ts_row("2026-10-26", "b00001", "emit", 120, 123456789, 100))
+    // ties go to the even tenth, as a float format does
+    println(ts_row("2026-10-26", "b00002", "emit", 1, 1250000, 1))
+    println(ts_row("2026-10-26", "b00003", "emit", 1, 1350000, 1))
+    println(ts_per(5, 2))
+    println(ts_per(7, 2))
+}

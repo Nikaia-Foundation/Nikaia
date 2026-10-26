@@ -11,7 +11,11 @@
 // DIR/tokens.txt (through `batch.nika --tokens`) and DIR/cost.txt, and prints
 // `done <sha8> report <path> cost <usd> turns <n>`. A failed run writes
 // DIR/ESCALATE (one line) and exits 2. A report with `Gate: red ...` writes
-// DIR/RED (empty again after a green one); a second red in a row escalates. `--dry-run` prints the command only.
+// DIR/RED (empty again after a green one); a second red in a row escalates. After
+// the gate step it appends the run's row (`tokenspeed.nika --short`, read from the
+// run's transcript under ~/.claude/projects) to the Runs table of
+// docs/tokenspeed.md, once per agent id; it does not commit the file, the
+// supervisor's commit takes it. `--dry-run` prints the command only.
 
 use std::cli
 use std::fs
@@ -57,7 +61,6 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
     v.push(agent_front(body, "budget_usd".to_string(), "20".to_string()))
     v.push("--output-format".to_string())
     v.push("json".to_string())
-    v.push("--no-session-persistence".to_string())
     v.push("--session-id".to_string())
     v.push(session.clone())
     v.push("--allowedTools".to_string())
@@ -101,6 +104,29 @@ fn agent_gate(report: String) -> String throws {
         if line.trim().starts_with("Gate: red") { return line.trim().clone() }
     }
     return ""
+}
+
+// `doc` with `row` added after the last row of the Runs table; unchanged when a
+// row of the same agent id (the second field) is already there.
+fn agent_runs_insert(doc: String, row: String) -> String {
+    let id = row.split("|").collect()[2].trim().clone()
+    let lines = doc.split("\n").collect()
+    for line in lines {
+        let fields = line.split("|").collect()
+        if line.starts_with("| ") && fields.len() > 2 && fields[2].trim() == id { return doc.clone() }
+    }
+    let mut out: Vec[String] = []
+    let mut in_runs = false
+    let mut added = false
+    for i in 0..<lines.len() {
+        out.push(lines[i].clone())
+        if lines[i].starts_with("## Runs") { in_runs = true }
+        else if in_runs && !added && lines[i].starts_with("|") && !(i + 1 < lines.len() && lines[i + 1].starts_with("|")) {
+            out.push(row.clone())
+            added = true
+        }
+    }
+    return out.join("\n")
 }
 
 fn agent_exe() -> String throws {
@@ -192,6 +218,16 @@ fn main() throws {
     } else {
         fs::write(f"{dir}/RED", fs::Root::Anywhere, f"{abs}: {gate}\n")
         if before != "" { agent_escalate(dir.clone(), f"two red gates in a row: {before} / {abs}: {gate}") }
+    }
+    // The run's row for the Runs table of docs/tokenspeed.md (#858), once per agent
+    // id. This only writes the file; the supervisor's commit takes it.
+    let transcript = process::run("sh", ["-c", f"echo $HOME/.claude/projects/$(pwd | tr / -)/{session}.jsonl"]).stdout.trim().clone()
+    if exe != "" && fs::exists(transcript.clone(), fs::Root::Anywhere) && fs::exists("docs/tokenspeed.md", fs::Root::Anywhere) {
+        let row = process::run(exe, ["run", "scripts/tokenspeed.nika", "--", "--short", transcript.clone()]).stdout.trim().clone()
+        if row.starts_with("| ") {
+            let doc = fs::read_to_string("docs/tokenspeed.md", fs::Root::Anywhere)
+            fs::write("docs/tokenspeed.md", fs::Root::Anywhere, agent_runs_insert(doc, row))
+        }
     }
     let sha = process::run("git", ["rev-parse", "--short=8", "HEAD"]).stdout.trim().clone()
     println(f"done {sha} report {report} cost {cost} turns {turns}")

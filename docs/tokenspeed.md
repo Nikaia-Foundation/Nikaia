@@ -10,7 +10,7 @@ for why the context read is the cost.
 ## How to add a snapshot
 
 ```
-scripts/tokenspeed.py ~/.claude/projects/<project>/<session>/subagents <since-commit> > snapshot.md
+nikaia run scripts/tokenspeed.nika -- ~/.claude/projects/<project>/<session>/subagents <since-commit> > snapshot.md
 ```
 
 Paste it under a new `## YYYY-MM-DD` heading and add the reading. The agent
@@ -101,7 +101,7 @@ understand a result before quoting it).
 
 Share 43.8 % -> 54.3 % (`scripts/self_hosting.py`), 35k Rust and 41.5k Nikaia
 code lines. The agents table of this snapshot (the per-commit table is
-`scripts/tokenspeed.py`'s first table, rerun it; the plan agents are "plan"):
+`scripts/tokenspeed.nika`'s first table, rerun it; the plan agents are "plan"):
 
 #### Agents
 
@@ -154,8 +154,10 @@ code lines. The agents table of this snapshot (the per-commit table is
 
 ## Runs
 
-One row per agent, from `scripts/tokenspeed.py --short AGENTS_DIR` after it
-ends, with the builder's rs2nika line.
+One row per agent, from `nikaia run scripts/tokenspeed.nika -- --short DIR|FILE`
+after it ends, with the builder's rs2nika line. `scripts/agent.nika` appends the
+row of a headless run itself, once per agent id, and leaves the file to the
+supervisor's commit.
 
 | date | agent | module | turns | context M | Rust lines moved | tokens per moved line | rs2nika |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | :--- |
@@ -164,8 +166,81 @@ ends, with the builder's rs2nika line.
 | 2026-10-24 | af07ce | check | 99 | 8.5 | 1024 | 8,295 | - |
 | 2026-10-24 | adc4be | check | 89 | 6.4 | 569 | 11,185 | - |
 | 2026-10-24 | a88404 | check | 75 | 5.3 | 353 | 14,935 | - |
+| 2026-10-25 | aea287 | plan | 18 | 0.5 | 0 | - | |
+| 2026-10-25 | aeec17 | check | 49 | 1.7 | 0 | - | |
+| 2026-10-25 | aa6c52 | plan | 53 | 2.1 | 0 | - | |
+| 2026-10-25 | ad0a4a | plan | 96 | 4.8 | 0 | - | |
+| 2026-10-25 | a5accf | plan | 113 | 5.3 | 0 | - | |
+| 2026-10-25 | a3e74c | plan | 39 | 1.2 | 0 | - | |
+| 2026-10-25 | ad8596 | plan | 97 | 4.2 | 0 | - | |
+| 2026-10-25 | a6769c | check | 6 | 0.1 | 0 | - | |
+| 2026-10-25 | ac9ecc | plan | 87 | 3.5 | 0 | - | |
+| 2026-10-25 | a5076c | plan | 43 | 1.3 | 0 | - | |
+| 2026-10-25 | af6027 | plan | 40 | 1.2 | 0 | - | |
+| 2026-10-25 | a075fd | plan | 57 | 1.9 | 0 | - | |
+| 2026-10-25 | a83dd5 | plan | 85 | 3.4 | 0 | - | |
+| 2026-10-25 | aa3864 | plan | 81 | 3.7 | 0 | - | |
+| 2026-10-25 | a7703d | plan | 90 | 4.6 | 0 | - | |
+| 2026-10-25 | a7e681 | plan | 46 | 1.4 | 0 | - | |
+| 2026-10-25 | ac6c2d | plan | 14 | 0.3 | 0 | - | |
+| 2026-10-25 | a61b24 | plan | 42 | 1.2 | 0 | - | |
+| 2026-10-25 | a74df2 | plan | 97 | 4.7 | 0 | - | |
+| 2026-10-25 | a4d319 | plan | 47 | 1.4 | 0 | - | |
+| 2026-10-25 | a35370 | plan | 66 | 2.3 | 0 | - | |
+| 2026-10-25 | a4eb3c | plan | 39 | 1.1 | 0 | - | |
+| 2026-10-25 | adaa0f | plan | 28 | 0.7 | 0 | - | |
+| 2026-10-25 | a60438 | plan | 37 | 1.1 | 0 | - | |
+| 2026-10-25 | a9ca25 | plan | 16 | 0.4 | 0 | - | |
+| 2026-10-25 | a1a5a4 | plan | 80 | 3.8 | 0 | - | |
+| 2026-10-25 | a16a41 | plan | 12 | 0.3 | 0 | - | |
+| 2026-10-25 | aab2b7 | plan | 14 | 0.3 | 0 | - | |
+| 2026-10-25 | a8729c | plan | 74 | 3.3 | 0 | - | |
+| 2026-10-25 | ae403c | plan | 6 | 0.1 | 0 | - | |
+| 2026-10-25 | a38d1b | plan | 31 | 0.9 | 0 | - | |
+| 2026-10-25 | a4faed | plan | 90 | 4.2 | 0 | - | |
+| 2026-10-25 | a56e7e | plan | 24 | 0.7 | 0 | - | |
+| 2026-10-25 | a6b640 | plan | 40 | 1.6 | 0 | - | |
+| 2026-10-25 | ad7b87 | plan | 22 | 0.6 | 0 | - | |
+| 2026-10-25 | ad8efa | plan | 58 | 2.3 | 0 | - | |
+| 2026-10-25 | aa6cf8 | plan | 60 | 2.6 | 0 | - | |
+| 2026-10-25 | aa55e9 | plan | 89 | 4.0 | 0 | - | |
+| 2026-10-25 | ab930a | plan | 16 | 0.4 | 0 | - | |
+| 2026-10-25 | a6522e | plan | 53 | 2.5 | 0 | - | |
+| 2026-10-25 | a3d6ba | plan | 5 | 0.1 | 0 | - | |
+| 2026-10-25 | ac63e0 | plan | 33 | 0.9 | 0 | - | |
+| 2026-10-25 | a2df21 | plan | 23 | 0.6 | 0 | - | |
+| 2026-10-25 | ab6922 | plan | 24 | 0.8 | 0 | - | |
+| 2026-10-25 | a716d4 | plan | 151 | 13.0 | 0 | - | |
+| 2026-10-25 | ac5139 | plan | 36 | 1.2 | 0 | - | |
+| 2026-10-25 | a43a1a | plan | 46 | 1.8 | 0 | - | |
+| 2026-10-25 | a26a97 | plan | 28 | 0.7 | 0 | - | |
+| 2026-10-25 | a1f058 | plan | 40 | 1.7 | 0 | - | |
+| 2026-10-25 | ad08fe | plan | 71 | 3.0 | 0 | - | |
+| 2026-10-25 | a78616 | plan | 46 | 1.6 | 0 | - | |
+| 2026-10-25 | a84b54 | plan | 35 | 1.0 | 0 | - | |
+| 2026-10-25 | aef9cb | plan | 89 | 5.7 | 0 | - | |
+| 2026-10-25 | a27430 | plan | 17 | 0.4 | 0 | - | |
+| 2026-10-25 | a43297 | plan | 20 | 0.5 | 0 | - | |
+| 2026-10-25 | aee4d5 | plan | 15 | 0.4 | 0 | - | |
+| 2026-10-25 | a47ce2 | plan | 22 | 0.6 | 0 | - | |
+| 2026-10-25 | a4414d | plan | 24 | 0.7 | 0 | - | |
+| 2026-10-25 | a507ee | plan | 24 | 0.8 | 0 | - | |
+| 2026-10-25 | a3e613 | plan | 78 | 3.5 | 0 | - | |
+| 2026-10-25 | a7576b | plan | 16 | 0.4 | 0 | - | |
+| 2026-10-25 | a7a9b0 | plan | 12 | 0.4 | 0 | - | |
+| 2026-10-25 | acc659 | plan | 36 | 1.2 | 0 | - | |
+| 2026-10-25 | a34db0 | plan | 161 | 16.6 | 0 | - | |
+| 2026-10-25 | a692ae | plan | 35 | 1.1 | 0 | - | |
+| 2026-10-25 | adf20a | plan | 82 | 4.4 | 0 | - | |
+| 2026-10-25 | a87370 | check | 5 | 0.1 | 0 | - | |
+| 2026-10-25 | acbf6e | plan | 66 | 2.8 | 0 | - | |
+| 2026-10-25 | af574d | plan | 73 | 3.0 | 0 | - | |
+| 2026-10-25 | a58c58 | emit | 8 | 0.2 | 0 | - | |
+| 2026-10-25 | a42845 | plan | 44 | 1.3 | 0 | - | |
+| 2026-10-25 | a78edf | plan | 168 | 11.0 | 0 | - | |
+| 2026-10-25 | affcb1 | emit | 87 | 5.8 | 0 | - | |
 
-Moved lines are attributed by `scripts/tokenspeed.py`: commits in the agent's
+Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
 or whose subject names its id. Files edited by two agents in one window are
 counted for both, so a row can be too high; the 0 rows are agents that
