@@ -1,3 +1,4 @@
 b861-ci-docs-only-base.md
 b-batch-status-lines.md
+b-drive-loop.md
 b848-map-get-tuple-text.md
