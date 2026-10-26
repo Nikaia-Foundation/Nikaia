@@ -155,6 +155,22 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
     drive_push(false)
 }
 
+// What a run leaves behind that no commit takes: the converter's lock file a
+// build rewrote, and untracked step reports (`*.step<N>.report.md`) beside the
+// briefs. Runs after the run's own commit, so nothing it commits is lost.
+fn drive_tidy(dry: bool, dir: String) throws {
+    drive_say(dry, "git checkout -- crates/rs2nika/convert/nikaia.lock")
+    let left = process::run("git", ["ls-files", "--others", "--exclude-standard", "--", dir])
+    let mut stray: Vec[String] = []
+    for l in left.stdout.trim().split("\n") {
+        if l.contains(".step") && l.ends_with(".report.md") { stray.push(l.clone()) }
+    }
+    if stray.len() > 0 { drive_say(dry, "rm -f " + stray.join(" ")) }
+    if dry { return }
+    process::run("git", ["checkout", "--", "crates/rs2nika/convert/nikaia.lock"])
+    for i in 0..<stray.len() { process::run("rm", ["-f", stray[i].clone()]) }
+}
+
 // Runs one agent; prints `<role> done ...`; escalates on anything else.
 fn drive_agent(exe: String, dry: bool, dir: String, brief: String, role: String) throws {
     drive_say(dry, f"{exe} run scripts/agent.nika -- {brief} --dir {dir}")
@@ -252,6 +268,7 @@ fn main() throws {
             drive_agent(exe.clone(), dry, dir.clone(), brief.clone(), "builder")
             runs += 1
             drive_commit(dry, dir.clone(), brief, [])
+            drive_tidy(dry, dir.clone())
             if dry {
                 println(f"DRY-RUN NEXT {drive_stem(action.clone())}")
                 return
@@ -278,6 +295,7 @@ fn main() throws {
         // architect-input.txt is session state (.gitignore), never committed.
         let extra: Vec[String] = []
         drive_commit(dry, dir.clone(), task.clone(), extra)
+        drive_tidy(dry, dir.clone())
         if dry {
             println(f"DRY-RUN ARCHITECT {stop}")
             return
