@@ -75,3 +75,10 @@ node_modules/
 
 # A package built in place keeps its build tree beside it.
 packages/*/target
+
+# Session state of the main-session scripts (agent.nika, cycle.nika, drive.nika)
+docs/briefs/RED
+docs/briefs/ESCALATE
+docs/briefs/QUESTION
+docs/briefs/STOP
+docs/briefs/architect-input.txt
