@@ -1,0 +1,36 @@
+fn g() -> i64 {
+    return 42
+}
+
+fn from_len(t: String) -> String {
+    let s = t.len().to_string()
+    return s.trim()
+}
+
+fn from_literal() -> String {
+    let s = 5.to_string()
+    return s.trim()
+}
+
+fn from_sum(n: i64) -> String {
+    let s = (n + 1).to_string()
+    return s.trim()
+}
+
+fn from_bool() -> String {
+    let s = true.to_string()
+    return s.trim()
+}
+
+fn from_call() -> String {
+    let s = g().to_string()
+    return s.trim()
+}
+
+fn main() {
+    println(from_len("abc"))
+    println(from_literal())
+    println(from_sum(6))
+    println(from_bool())
+    println(from_call())
+}

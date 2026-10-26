@@ -421,6 +421,43 @@ pub(crate) fn text_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>
 pub(crate) fn formats(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {
         Expr::Variable(name, _) => { let name = *name; formats_local(ask.names.resolve(name), ask, walk) },
+        _ => formats_a_number(receiver, ask, walk),
+    }
+}
+
+pub(crate) fn formats_a_number(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    match value {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(..) => true,
+        Expr::LitBool(..) => true,
+        Expr::Variable(name, _) => { let name = *name; formats_local(ask.names.resolve(name), ask, walk) },
+        Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); match op {
+            BinaryOp::Add => formats_a_number(lhs, ask, walk) || formats_a_number(rhs, ask, walk),
+            _ => true,
+        } },
+        Expr::MethodCall { method, .. } => { let method = *method; ask.names.resolve(method) == "len" },
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); formats_a_called_number(func, ask) },
+        _ => false,
+    }
+}
+
+pub(crate) fn formats_a_called_number(func: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>) -> bool {
+    match func {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let named = ask.names.resolve(name);
+            let contract = match *nikaia_std::index::get(&ask.own.functions, named) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+            match result {
+                Ty::Named { name, args, view } => {
+                    let view = *view;
+                    let w = name;
+                    !view && args.is_empty() && (w == "i8" || w == "i16" || w == "i32" || w == "i64" || w == "isize" || w == "u8" || w == "u16" || w == "u32" || w == "u64" || w == "usize" || w == "f32" || w == "f64" || w == "bool")
+                },
+                _ => false,
+            }
+        },
         _ => false,
     }
 }

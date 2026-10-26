@@ -535,6 +535,46 @@ fn text_local(name: ref String, ask: ref BufferAsk, walk: ref BufferWalk) -> boo
 fn formats(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
     return match receiver {
         Expr::Variable(name, _) => formats_local(ask.names.resolve(name), ask, walk),
+        else => formats_a_number(receiver, ask, walk),
+    }
+}
+
+// **Whether an expression is a number or a `bool`** (#865), so its `to_string`
+// is the text form of ADR-282 D3 and a buffer of its own: a literal, a
+// comparison or arithmetic, a `+` with a number on a side, a `len`, and a call
+// of a function that declares a number as its result. What may be text (a
+// field, a method call, a call of a generic) is #851's question and is not one.
+fn formats_a_number(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match value {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(..) => true,
+        Expr::LitBool(..) => true,
+        Expr::Variable(name, _) => formats_local(ask.names.resolve(name), ask, walk),
+        Expr::Binary { op, lhs, rhs, .. } => match op {
+            BinaryOp::Add => formats_a_number(lhs, ask, walk) || formats_a_number(rhs, ask, walk),
+            else => true,
+        },
+        Expr::MethodCall { method, .. } => ask.names.resolve(method) == "len",
+        Expr::Call { func, .. } => formats_a_called_number(func, ask),
+        else => false,
+    }
+}
+
+fn formats_a_called_number(func: ref Expr, ask: ref BufferAsk) -> bool {
+    return match func {
+        Expr::Variable(name, _) => {
+            let named = ask.names.resolve(name)
+            let contract = ask.own.functions[named] ?? return false
+            let signature = contract.signature ?? return false
+            let result = signature.result ?? return false
+            match result {
+                Ty::Named { name, args, view } => {
+                    let w = name
+                    !view && args.len() == 0 && (w == "i8" || w == "i16" || w == "i32" || w == "i64" || w == "isize" || w == "u8" || w == "u16" || w == "u32" || w == "u64" || w == "usize" || w == "f32" || w == "f64" || w == "bool")
+                },
+                else => false,
+            }
+        },
         else => false,
     }
 }
