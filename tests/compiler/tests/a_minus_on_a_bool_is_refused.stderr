@@ -1,0 +1,8 @@
+error[NK1191]: You can't use `-` on `bool`.
+  --> tests/a_minus_on_a_bool_is_refused.nika:2:5
+   |
+ 2 |     let a = -true
+   |     ^^^^^^^^^^^^^
+   |
+   = note: `-` negates a number.
+1 type error

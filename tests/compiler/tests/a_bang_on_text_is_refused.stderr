@@ -1,0 +1,8 @@
+error[NK1191]: You can't use `!` on `String`.
+  --> tests/a_bang_on_text_is_refused.nika:2:5
+   |
+ 2 |     let a = !"x"
+   |     ^^^^^^^^^^^^
+   |
+   = note: `!` flips a `bool`, the bits of an integer or the lanes of a vector or a mask.
+1 type error

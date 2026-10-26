@@ -1074,7 +1074,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     // **`NK1191` for `-=` as for `-`**.
     if check_core_stmt_arithmetic(op) {
         let arithmetic: ref BinaryOp = op ?? return check_core_stmt_unit()
-        if !(arithmetic == BinaryOp::Add && is_text_type(into)) && (check_core_stmt_has_no_arithmetic(world, into) || check_core_stmt_has_no_arithmetic(world, found)) {
+        if !(arithmetic == BinaryOp::Add && is_text_type(into)) && (check_core_stmt_has_no_arithmetic(world, into) || check_core_stmt_has_no_arithmetic(world, found) || text_or_bool_in_arithmetic(arithmetic.clone(), into, found)) {
             state.arithmetic_on_something_that_has_none(world, arithmetic.clone(), target, into, value, found, true, span)
         }
     }

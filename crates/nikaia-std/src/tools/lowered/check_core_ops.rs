@@ -226,6 +226,8 @@ pub(crate) fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: 
     check_core_ops_named("bool")
 }
 
+pub(crate) fn check_core_ops_number_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)) }
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
@@ -256,6 +258,14 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
         state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at);
         if is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { let added = state.facts.ordered_texts.insert(at.start as i64); }
         return check_core_ops_named("bool");
+    }
+    let mut number_left = left.clone();
+    if check_core_ops_number_literal(lhs) { number_left = check_core_ops_named("i64"); }
+    let mut number_right = right.clone();
+    if check_core_ops_number_literal(rhs) { number_right = check_core_ops_named("i64"); }
+    if check_core_ops_arithmetic(op) && text_or_bool_in_arithmetic(&op, &number_left, &number_right) {
+        state.arithmetic_on_something_that_has_none(world, op, lhs, &number_left, rhs, &number_right, false, span);
+        return Ty::Unknown;
     }
     if check_core_ops_add(op) && (is_text_type(left) || is_text_type(right)) {
         state.facts.concatenations.insert(at.start as i64);

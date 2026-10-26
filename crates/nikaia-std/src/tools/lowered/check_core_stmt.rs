@@ -782,7 +782,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     }
     if check_core_stmt_arithmetic(op) {
         let arithmetic: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-        if !(*arithmetic == BinaryOp::Add && is_text_type(&into)) && (check_core_stmt_has_no_arithmetic(world, &into) || check_core_stmt_has_no_arithmetic(world, &found)) { state.arithmetic_on_something_that_has_none(world, arithmetic.clone(), target, &into, value, &found, true, span); }
+        if !(*arithmetic == BinaryOp::Add && is_text_type(&into)) && (check_core_stmt_has_no_arithmetic(world, &into) || check_core_stmt_has_no_arithmetic(world, &found) || text_or_bool_in_arithmetic(&arithmetic.clone(), &into, &found)) { state.arithmetic_on_something_that_has_none(world, arithmetic.clone(), target, &into, value, &found, true, span); }
     }
     if op.is_none() {
         check_core_stmt_wraps_into_nullable(state, world, host, &found, &into, value, span);

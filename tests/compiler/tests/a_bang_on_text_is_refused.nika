@@ -1,0 +1,4 @@
+fn main() {
+    let a = !"x"
+    println(f"{a}")
+}

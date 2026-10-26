@@ -1966,7 +1966,7 @@ pub mod check_arguments {
 }
 pub mod check_arith {
     #[allow(unused_imports)]
-    pub use super::{an_or_a_named};
+    pub use super::{an_or_a_named, is_a_bool_type, text_or_bool_in_arithmetic};
 }
 pub mod check_arm_leaves {
     #[allow(unused_imports)]

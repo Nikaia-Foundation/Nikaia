@@ -309,6 +309,36 @@ fn arith_shown(written: ref String) -> String {
     return shown
 }
 
+/// A `bool`, viewed or not.
+pub fn is_a_bool_type(ty: ref Ty) -> bool {
+    return match ty.unseen() {
+        Ty::Named { name, args, .. } => args.len() == 0 && name == "bool",
+        else => false,
+    }
+}
+
+/// **Text or a `bool` in arithmetic** (`NK1191`): `+` joins two texts and
+/// nothing else; a text beside a number or a `bool` is no join.
+pub fn text_or_bool_in_arithmetic(op: BinaryOp, left: ref Ty, right: ref Ty) -> bool {
+    let left_text = is_text_type(left.unseen())
+    let right_text = is_text_type(right.unseen())
+    if is_a_bool_type(left) || is_a_bool_type(right) {
+        return true
+    }
+    if op == BinaryOp::Add {
+        let left_number = match left.unseen() {
+            Ty::Named { name, args, .. } => args.len() == 0 && a_number_name(name),
+            else => false,
+        }
+        let right_number = match right.unseen() {
+            Ty::Named { name, args, .. } => args.len() == 0 && a_number_name(name),
+            else => false,
+        }
+        return (left_text && right_number) || (right_text && left_number)
+    }
+    return left_text || right_text
+}
+
 impl CheckState {
     /// **`NK1191`: arithmetic on a list, a map, a set, a `struct` or an `enum`.**
     /// `compound` says the operator was written with `=` after it.
@@ -320,6 +350,18 @@ impl CheckState {
                 self.arithmetic_on_a_declared_type(world, symbol, left_expr, left, right_expr, right, 0, compound, span)
             } else if declared_with_no_arithmetic(world.here, right) != null {
                 self.arithmetic_on_a_declared_type(world, symbol, right_expr, right, left_expr, left, 1, compound, span)
+            } else if text_or_bool_in_arithmetic(op, left, right) {
+                let mut culprit = left.text()
+                if is_text_type(left.unseen()) {
+                    culprit = "String"
+                } else if !is_a_bool_type(left) {
+                    culprit = right.text()
+                    if is_text_type(right.unseen()) {
+                        culprit = "String"
+                    }
+                }
+                let note: String = "Operators belong to numbers, and `+` joins two texts; text and `bool` have no other arithmetic."
+                self.findings.push(check_refusal("NK1191", span, f"You can't use `{symbol}` on `{culprit}`.", [note], null))
             }
             return
         }
@@ -350,6 +392,34 @@ impl CheckState {
             help = f"To add one list's elements to the end of another, write `{extend}`."
         }
         self.findings.push(check_refusal("NK1191", span, message, [note], help))
+    }
+
+    /// **`NK1191` for `-` or `!` on a type that does not take it**: `-` wants a
+    /// number, `!` a `bool`, an integer, a vector or a mask. An unknown type is
+    /// `NK1245`'s.
+    pub fn a_unary_operator_on_the_wrong_type(ref mut self, world: ref CheckWorld, negation: bool, found: ref Ty, span: ref Span) sync {
+        if found.is_unknown() {
+            return
+        }
+        let seen = found.unseen()
+        let mut wrong = is_text_type(seen) || is_a_collection_type(seen) || declared_with_no_arithmetic(world.here, seen) != null
+        if negation && is_a_bool_type(seen) {
+            wrong = true
+        }
+        if !wrong {
+            return
+        }
+        let mut symbol: String = "!"
+        let mut note: String = "`!` flips a `bool`, the bits of an integer or the lanes of a vector or a mask."
+        if negation {
+            symbol = "-"
+            note = "`-` negates a number."
+        }
+        let mut shown = seen.text()
+        if is_text_type(seen) {
+            shown = "String"
+        }
+        self.findings.push(check_refusal("NK1191", span, f"You can't use `{symbol}` on `{shown}`.", [note], null))
     }
 
     /// `NK1191` for a `struct` or an `enum`, the side at `at` being one.

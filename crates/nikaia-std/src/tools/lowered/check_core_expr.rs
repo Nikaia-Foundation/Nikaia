@@ -376,6 +376,11 @@ pub(crate) fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world:
     let found = check_core_expr(state, world, host, inner, span);
     state.reading_only = outer;
     match op {
+        UnaryOp::Neg => { state.a_unary_operator_on_the_wrong_type(world, true, &found, span); },
+        UnaryOp::Not => { if !found.fits(&check_core_expr_named("bool")) { state.a_unary_operator_on_the_wrong_type(world, false, &found, span); } },
+        _ => { },
+    }
+    match op {
         UnaryOp::Neg => {
             let literal = matches!(inner, Expr::LitInt { .. });
             match value_of_a_copy(&found.unseen()) {

@@ -489,6 +489,15 @@ fn check_core_expr_unary[H: CheckHost](mut state: CheckState, world: ref CheckWo
     state.reading_only = looks
     let found = check_core_expr(state, world, host, inner, span)
     state.reading_only = outer
+    match op {
+        UnaryOp::Neg => state.a_unary_operator_on_the_wrong_type(world, true, found, span),
+        UnaryOp::Not => {
+            if !found.fits(check_core_expr_named("bool")) {
+                state.a_unary_operator_on_the_wrong_type(world, false, found, span)
+            }
+        },
+        else => {},
+    }
     return match op {
         UnaryOp::Neg => {
             let literal = match inner {

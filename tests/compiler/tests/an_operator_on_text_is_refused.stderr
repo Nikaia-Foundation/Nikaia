@@ -1,0 +1,8 @@
+error[NK1191]: You can't use `-` on `String`.
+  --> tests/an_operator_on_text_is_refused.nika:2:5
+   |
+ 2 |     let a = "a" - 1
+   |     ^^^^^^^^^^^^^^^
+   |
+   = note: Operators belong to numbers, and `+` joins two texts; text and `bool` have no other arithmetic.
+1 type error

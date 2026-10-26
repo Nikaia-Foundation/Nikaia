@@ -366,6 +366,15 @@ fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWor
 }
 
 /// What an operation comes to, before the common type and the stamp.
+/// A written number: `1` or `1.5`.
+fn check_core_ops_number_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        else => false,
+    }
+}
+
 fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span, span: ref Span) -> Ty sync {
     // **`&`, `|`, `^` and the shifts take integers** (ADR-285 D3).
     if check_core_ops_bits(op) {
@@ -408,6 +417,20 @@ fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckW
             let added = state.facts.ordered_texts.insert(at.start as i64)
         }
         return check_core_ops_named("bool")
+    }
+    // **`NK1191`: text or a `bool` in arithmetic.**
+    // An integer literal has no type of its own yet; beside a text it is a number.
+    let mut number_left = left.clone()
+    if check_core_ops_number_literal(lhs) {
+        number_left = check_core_ops_named("i64")
+    }
+    let mut number_right = right.clone()
+    if check_core_ops_number_literal(rhs) {
+        number_right = check_core_ops_named("i64")
+    }
+    if check_core_ops_arithmetic(op) && text_or_bool_in_arithmetic(op, number_left, number_right) {
+        state.arithmetic_on_something_that_has_none(world, op, lhs, number_left, rhs, number_right, false, span)
+        return Ty::Unknown
     }
     // **A `+` where either side is text is a concatenation** (ADR-081 D2).
     if check_core_ops_add(op) && (is_text_type(left) || is_text_type(right)) {

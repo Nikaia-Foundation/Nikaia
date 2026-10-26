@@ -218,6 +218,31 @@ pub(crate) fn arith_shown(written: &str) -> String {
     shown
 }
 
+pub fn is_a_bool_type(ty: &Ty) -> bool {
+    match ty.unseen() {
+        Ty::Named { ref name, ref args, .. } => args.is_empty() && name == "bool",
+        _ => false,
+    }
+}
+
+pub fn text_or_bool_in_arithmetic(op: &BinaryOp, left: &Ty, right: &Ty) -> bool {
+    let left_text = is_text_type(&left.unseen());
+    let right_text = is_text_type(&right.unseen());
+    if is_a_bool_type(left) || is_a_bool_type(right) { return true; }
+    if *op == BinaryOp::Add {
+        let left_number = match left.unseen() {
+            Ty::Named { ref name, ref args, .. } => args.is_empty() && a_number_name(name),
+            _ => false,
+        };
+        let right_number = match right.unseen() {
+            Ty::Named { ref name, ref args, .. } => args.is_empty() && a_number_name(name),
+            _ => false,
+        };
+        return left_text && right_number || right_text && left_number;
+    }
+    left_text || right_text
+}
+
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -226,7 +251,15 @@ impl CheckState {
         let symbol = arith_symbol(op);
         let left_collection = is_a_collection_type(left);
         if !left_collection && !is_a_collection_type(right) {
-            if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); }
+            if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); } else if text_or_bool_in_arithmetic(&op, left, right) {
+                let mut culprit = left.text();
+                if is_text_type(&left.unseen()) { culprit = String::from("String"); } else if !is_a_bool_type(left) {
+                    culprit = right.text();
+                    if is_text_type(&right.unseen()) { culprit = String::from("String"); }
+                }
+                let note: String = String::from("Operators belong to numbers, and `+` joins two texts; text and `bool` have no other arithmetic.");
+                self.findings.push(check_refusal("NK1191", span, format!("You can't use `{}` on `{}`.", symbol, culprit), vec![note], None));
+            }
             return;
         }
         let mut side = right.text();
@@ -248,6 +281,24 @@ impl CheckState {
         let mut help: Option<String> = None;
         if joining { help = Some(format!("To add one list's elements to the end of another, write `{}`.", extend)); }
         self.findings.push(check_refusal("NK1191", span, message, vec![note], help));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_unary_operator_on_the_wrong_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, negation: bool, found: &Ty, span: &Span) {
+        if found.is_unknown() { return; }
+        let seen = found.unseen();
+        let mut wrong = is_text_type(&seen) || is_a_collection_type(&seen) || declared_with_no_arithmetic(&world.here, &seen).is_some();
+        if negation && is_a_bool_type(&seen) { wrong = true; }
+        if !wrong { return; }
+        let mut symbol: &'static str = "!";
+        let mut note: String = String::from("`!` flips a `bool`, the bits of an integer or the lanes of a vector or a mask.");
+        if negation {
+            symbol = "-";
+            note = String::from("`-` negates a number.");
+        }
+        let mut shown = seen.text();
+        if is_text_type(&seen) { shown = String::from("String"); }
+        self.findings.push(check_refusal("NK1191", span, format!("You can't use `{}` on `{}`.", symbol, shown), vec![note], None));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
