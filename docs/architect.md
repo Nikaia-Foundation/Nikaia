@@ -82,7 +82,7 @@ The builder writes its report to exactly `<full brief path>.report.md`, beside t
     Pushed: <sha> | rejected | none
     Tests: <test filters run> - pass | <failing names>
     Gate: green | red <tests>   (#852; batch.nika cuts on red, #862)
-    Deviation: none | <one sentence>
+    Deviation: none | <one sentence>   (bare `none`, no note after it: batch.nika cuts on anything else)
     Found: none | <one sentence, issue number if filed>
     Needs: none | <NK code, owner decision, help from main session>
     Changelog: none | <one sentence for the version heading>
@@ -250,6 +250,8 @@ performance*).
 ## State
 
 *Updated by the architect when it ends.*
+**2026-10-26 (architect after 1db1a4e, cut at b848 on `Deviation: none (note)`, a false cut):** #848 done (39ebe78, closes on promote). Rule fixed in `common.part` and the report form: bare `none`. Batch: `b864-plus-local-view.md`, `b863-exit-code.md`. Then: the self-hosting lane (C-7 rest research brief, `emit/seeds.rs`), #851 `decision`.
+
 **2026-10-26 (architect after 8335430, drive.nika cut at b-drive-loop on Found):** #861, #862, drive.nika done (close on promote). Found filed as #864 (`+` local returned as a view lowers to `&'static str`; matrix in the issue). Batch: `b848-map-get-tuple-text.md`, `b864-plus-local-view.md`, `b863-exit-code.md` (#863 did not reproduce in two probes: brief allows `noop`). Then: the self-hosting lane (C-7 rest research brief, `emit/seeds.rs`), #851 `decision`.
 
 **2026-10-26 (restart, develop c6a6bdd3):** develop red on befae38b/830d1970 (`nikaia_test::the_compiler_test_package_passes_at_both_settings`), fix-forward `docs/briefs/b-fixforward-compiler-tests.md` running. `main` sits on c6a6bdd3, untested (#861 fired twice). Next batch, in order: `b861-ci-docs-only-base.md`, `b848-map-get-tuple-text.md`, `b-batch-status-lines.md` (#862), all Sonnet. Then: #863 (process::exit code, reduce first), the self-hosting lane (C-7 rest `check/mod.rs` research brief, `emit/seeds.rs`; `priorities.md` table), #851 is `decision`. Process fixes of this restart: briefs in `docs/briefs/`, `common.part`, `Gate:` in the report form, fresh-container build.

@@ -1,3 +1,2 @@
-b848-map-get-tuple-text.md
 b864-plus-local-view.md
 b863-exit-code.md
