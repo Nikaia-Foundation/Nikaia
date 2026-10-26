@@ -16,7 +16,7 @@ main session only (`.claude/agents/consultant.md`).
    Where it argues against its own favourite, it says so.
 
 The main session passes the recommendations to the owner (in German, one
-topic at a time, with an introduction from zero, as in `CLAUDE.md`). The
+topic at a time, with an introduction from zero, as in `docs/supervisor.md`). The
 architect turns an accepted one into an issue, an ADR or a brief.
 
 ## Not the consultant's job

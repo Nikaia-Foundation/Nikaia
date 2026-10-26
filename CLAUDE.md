@@ -61,10 +61,6 @@ the background in a cloud session.
   older pending one, so most commits never got an answer.) `promote` skips a
   commit `main` already contains, so runs finishing out of order are safe. A
   docs-only push skips the build and test jobs (`scripts/ci-changes.sh`).
-* **The supervisor checks CI on `develop` with `nikaia run scripts/release.nika -- --loop 20 DIR` in the background, or `scripts/status.nika` by hand.**
-  A red run is fixed forward at once (a fix-forward builder), because `main`
-  and everything that hangs on it (the website, `promote`) stands still while
-  `develop` is red.
 * **The commit that finishes an issue says `Fixes #N`.** `promote` closes an
   issue only when a commit it brings to `main` names it with `Fixes`, `Closes`
   or `Resolves` (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close
@@ -79,8 +75,10 @@ the background in a cloud session.
   to need the owner makes it `decision`, a blocker built frees what it blocked.
   A new issue gets its label when it is filed.
 * **A red `develop` is fixed forward.** Whoever finds it red fixes it with the
-  next commit, or reverts the commit that broke it. Until then `main` stays
-  where it was, and work on `develop` goes on.
+  next commit, or reverts the commit that broke it, at once: until then `main`
+  and everything that hangs on it (the website, `promote`) stand still, and
+  work on `develop` goes on. How the main session watches CI:
+  `docs/supervisor.md`.
 * **Order of work: the architect's score (`docs/priorities.md`), delegated by
   the owner (2026-10-25).** Bugs before moving is the default: as a rule one
   builder works on compiler bugs and one on self-hosting, and self-hosting
@@ -96,16 +94,10 @@ the background in a cloud session.
   agent goes on committing. No separate worktrees with
   `develop` checked out: a commit in one moves the branch under the others,
   and their index then shows the reverse of that commit as staged changes.
-  **Stop hook:** while agents run, the tree is dirty and the stop hook
-  (`stop-hook-git-check.sh`) complains about uncommitted changes. Those files
-  are the agents' to commit. The supervisor answers the hook with a single
-  `.` and neither commits nor pushes them.
 * **Version raises and new error codes are the supervisor's.** An agent
-  commits its change without touching the version lines, `CHANGELOG.md` or
-  the badges, and names in its report what the change decided, for the
-  supervisor's heading; the supervisor raises the version once per finished
-  package. A new `NK` code is taken only from the block the supervisor
-  reserved for that agent; one that needs more asks for it in its report.
+  commits without touching the version lines, `CHANGELOG.md` or the badges,
+  names in its report what the change decided, and takes a new `NK` code only
+  from the block the supervisor reserved for it.
 * **An error in another agent's file is not touched, it is escalated.** A
   failing build, test or lint that comes from a file another agent changed is
   reported to the supervisor (the session that started the agents), not
@@ -128,50 +120,14 @@ the background in a cloud session.
   or file it, and wait for the fix; do not write the Rust test as the way
   around.
 
-## Decision rounds with the owner
+## Who reads what else
 
-Some sessions only prepare and take decisions; another session builds them.
-What the owner expects from such a round:
-
-* **Start every topic with an introduction from zero**, before any table,
-  option or error code: what the feature is, a small example, what the
-  program or the user sees today, and why a question arises at all. Never
-  open with the question or the options.
-* **Say where the question comes from**: which issue or record asks it, who
-  wrote it, and whether anything concrete needs the answer now (a program,
-  a user, a measurement) or it is bookkeeping. A question nothing needs may
-  be answered *as it is today, until someone needs more*.
-* **Check what is already decided before asking.** Read the records the issue
-  cites (they may have been merged into another record since) and the code.
-  Do not ask again what a record already settles, and do not take a record's
-  *deferred* for the owner's current view either - say which it is.
-* **Facts before options, checked in the code**: what the compiler does today
-  (try it), what is measured and what is not, what goes wrong if the
-  decision is wrong and how badly (a wrong value, a refusal, undefined
-  behaviour). Name the risk honestly, also where it argues against the
-  recommendation.
-* **A topic that is not prepared well enough is not asked yet.** Say what is
-  missing and prepare a decision basis first: the problem, today's state,
-  how other languages and tools do it, options with their consequences, the
-  measurements still owed, and a recommendation.
-* **Do not ask which issue to take next**: the order is arbitrary, pick one.
-* **What the language offers is decided from what it is for**, the coherence of
-  its types and what other languages count as basic - never from what this
-  repository's programs happen to call (ADR-288 D11 is about how a `std` entry
-  is made, not about what exists). *Waits for a program that needs it* is not a
-  reason; say *not decided here* and why.
-* **A decision lands in three places, each with its own job: the ADR says
-  why, the specification says what, the issue tells the history.** The
-  deciding session writes the ADR (a new D, or a new record) and the
-  specification's text (including Part III's code table) itself, in the same
-  round - not left to whoever builds it. An ADR states the reasons and the
-  rejected alternatives, not how the question was found or what was broken
-  before; that is the issue's. The specification states the rule and nothing
-  else: no status, no history, no reasons, no padding.
-* **The issue gets the history and the build order**: how the question came up,
-  what was checked, the decision in short with links to the ADR and the
-  specification, and a numbered *To build* list with tests that another session
-  can build from. Leave the issue open until it is built.
+* **The main session** (supervisor: starts agents, talks to the owner, raises
+  versions, watches CI, runs decision rounds): `docs/supervisor.md`, and
+  `docs/architect.md` for the architect and the hand-over.
+* **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
+  `docs/builder-facts.md` (where things live, traps, and the self-hosting
+  rules: slices, syntax gaps of `tools/*.nika`, lowering).
 
 ## Measuring performance
 
@@ -199,94 +155,6 @@ What the owner expects from such a round:
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 
-Rules from the sessions that moved the most; they save tokens, not just time.
-
-* **Pick the slice by the call graph, leaves first.** The `Checker` and the
-  emitter's state become Nikaia structs (#558, owner's direction: C directly,
-  no described Rust type in between). Rust's struct holds the Nikaia state as
-  one field and a method moves into an `impl` in Nikaia once everything it
-  calls has moved; the large recursive core (`value_of`, `stmt`, `call`;
-  `expr_as_written`, `a_stmt`) moves in one step. `grep 'Finding {'` and
-  `format!(` find the cheap message-building first. A walk that cannot move yet
-  takes a callback (`fn(ref Expr) -> i64 sync`; see `bounds_basic.nika`). Code
-  keyed on expression addresses waits for the expression id (#558); changing a
-  `mut` parameter in a `match` is ADR-094 D7 / #576.
-* **Copy a pattern, do not invent one.** `libraries.nika` + `libraries.rs`
-  (small), `assets.nika`, `parse_numbers.nika` (callbacks), `interpreter.nika`.
-  The Rust module stays as the adapter that calls `nikaia_std::tools::<m>::f`.
-* **Builds are the cost. Build and test with `--profile fast`** (#724):
-  release's optimisation, incremental. After a one-file change the `nikaia`
-  binary takes about 18 s instead of 70 s (a fifth of the CPU), a test binary
-  relinks in under a second, and the tests run as fast as at release. A first
-  `fast` build is about 2 minutes. `cargo build --profile fast -p nikaia`, then
-  `target/fast/nikaia lower-std` (cold 181 G instructions, one body changed 60 G, unchanged 1.3 G; it lowers the checkout the binary
-  was built in). Keep the Rust compiling until the binary exists: loop on
-  `cargo check --release -p nikaia --message-format short` (under a minute);
-  build once at the end. Run the touched tests as one `cargo test --profile
-  fast -p nikaia --test it -- a:: b::` (one binary, files in
-  `crates/nikaia/tests/it/`; grep the NK codes you touched there), in the background. `--release` is CI's and the
-  benchmarks'. No foreground `sleep`; poll with a bounded loop. The linker is
-  already LLD (rustc's own `rust-lld`, the default on x86-64 Linux since Rust
-  1.90).
-* **One namespace for all `tools/*.nika`.** Type and function names are global
-  (`Decision` clashed): prefix them with the module.
-* **Syntax gaps** (each cost a build cycle):
-  * no `if let`: use `x ?? default`, or `starts_with` then `strip_prefix(..) ?? ""`;
-  * no `*x`; loop variables over a `ref Vec` are values;
-  * `.to_owned()` is `NK1189`: write `.clone()`;
-  * text is `String` (ADR-282 D2); never `ref` on a number, `bool` or a
-    data-less enum (`NK1257`). Until #654 step 0 is built, `ref String` is
-    written in exactly these places and nowhere else: a field; a type argument
-    (`Vec[ref String]`, a map's key); an option after `;`; a function's or a
-    rule's result; a parameter the result points into; a parameter used as a
-    key of a map keyed by `ref String`. Everywhere else, above all a
-    parameter that is only read, it is `String`;
-  * `opt ?? ""` moves the option: `(opt ?? "").clone()` for a second use;
-    a method on a `String?` is `opt?.len() ?? 0`;
-  * f-string braces are `{{` `}}`; a plain string takes braces literally;
-  * a function parameter is `fn(ref X) -> T sync`; a `Span` that arrives by
-    reference is copied as `Span { start: s.start, end: s.end }`.
-  * `view_of` resolves to `signature::view_of`, not `check_types::view_of_type`:
-    a false `NK1104` (*returns `ref String`, but declared `ref String`*) means
-    the wrong one was called;
-  * a nested `Some(FactWrap::Widen(x))` pattern leaves `x` untyped and counts
-    as an unanswered method call (`sequences::`, ceiling 17): bind
-    `how ?? ...` first and match the plain enum;
-  * a `T?` local needs `?.clone()` (NK1125);
-  * a `ref String?` parameter does not accept a bare `String` argument: pass a `String?` local;
-  * `for mut x in v` is not accepted;
-  * `a..b` includes `b` (Part I, ranges); the half-open range is `a..<b`;
-  * the catch-all arm of a `match` is `else =>`; `_ =>` and `None =>` are refused;
-  * a `String?` field needs `x?.clone()` before it can be matched;
-  * calls to other tools files are unqualified (one global namespace);
-  * a new `.nika` needs one `lower-std` run with the old binary before `cargo build`: the module only appears in `lowered.rs` after that run.
-* **Lowered types:** `String` is `&str` where a view suffices and `String`
-  where it is owned (the compiler decides, ADR-282 D2), `ref T` is `&T`, `Vec[String]` is
-  `Vec<String>` (a `ref` one a slice), `String?` is `Option<String>`. Most Rust
-  errors after a move are `&` against owned. Check that `Display` equals
-  `Ty::text()` before replacing `{ty}` with it.
-* **Delete the dead locals** a replaced block leaves behind (`cargo check` lists
-  them as unused), and re-grep function names instead of trusting line numbers
-  from an earlier listing: every commit shifts them.
-* **Versions and badges:** compute the next version after the rebase. On a
-  conflict in the version lines, `CHANGELOG.md` or `assets/badges/*.svg`, take
-  the next free number and re-run `python3 scripts/badges.py`; never merge an
-  SVG by hand. Add each new `.nika` to the table in `scripts/self_hosting.py`.
-  The share counts code lines, not comments.
-* **Tooling traps:** complex shell (computed `sed` ranges, `awk -v`, heredocs
-  chained with `&&`) is refused in a worktree: write a small script in a file
-  and run it. Replace blocks bottom-up with exact-string asserts.
-* **Reproduce a lowering defect in seconds**, not with a cargo build:
-  `target/release/nikaia lower f.nika` or `nikaia run f.nika`. A defect that
-  shows only in `tools/*.nika` needs a throwaway probe function in a tools
-  file and `nikaia lower-std`; look at `tools/lowered/<file>.rs`, then restore both. A
-  lowering change can change the generated files: run `lower-std` after building and
-  commit the diff. `lower-std` reports every refusal of a file, in file order,
-  as `nikaia check` does: fix them all before the next cycle.
-* **A version collision on rebase is routine.** Take upstream's version files
-  and re-run `python3 scripts/badges.py` with the next free number.
-* **A worktree-isolated agent cannot run compound shell** (heredocs, `$(...)`,
-  pipes that look like git): put multi-step work in a script file and call it.
 * **Fix, do not work around** (owner's direction): a compiler or lowering
   defect met on the way is fixed in the compiler, with a test, as its own
   commit, before or alongside the move. No workaround goes into our own code
@@ -294,68 +162,9 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   this round is filed as a GitHub issue with a probe and a *To build* list
   (status label `ready`), never in a file in the repository, and the work that
   needs it waits for the fix.
-* **Known compiler defects, to fix in the compiler** (ADR-294 D3): the
-  generated files still have "never read" and unreachable-code warnings,
-  allowed on the `tools` module. The rest of this list (`f().trim_start()`,
-  an index fallback after `??`, mixed arms in a `T?` match, `strip_prefix` in a
-  loop, `mut` parameter plus `.drain()`, `Spanned(x, span)`) runs today; the
-  open ones are GitHub issues.
-* **The disk is shared and small.** It ran out twice mid-test and once for the
-  whole session (no command output at all). Delete `target/` of a worktree you
-  no longer use and `target/release/nikaia-scratch` before and after a test run;
-  keep `target/nikaia-project-tests`: it is the tests' Nikaia cache
-  (`NIKAIA_CACHE_DIR`), and the compiler prunes it itself after each build,
-  least recently used entry first, to `NIKAIA_CACHE_LIMIT` (set `4G`; the default for users stays 8 GiB);
-  delete it only when the disk has under 3 GB free, and run `cargo test --no-fail-fast` (it stops at
-  the first failing binary otherwise).
-* **Moving a resolver or a map loop:** never compare a contract by address
-  (`std::ptr::eq`): a resolver that returns an owned value breaks it silently.
-  Destructure map loops (`for (name, value) in map`), not `entry.0`/`entry.1`,
-  which the checker cannot type; a named `_` (`for (name, _) in map`) avoids the
-  unused-variable clippy error in the lowering.
-* **After any `*.nika` or `described.contracts` change**, run `lower-std` with a
-  binary built from that tree, or the sysroot test fails on a stale
-  `lowered/*.rs`. `lower-std` reads and writes the checkout the binary was
-  **built in** (`CARGO_MANIFEST_DIR`, unless `NIKAIA_SYSROOT` says otherwise),
-  not the working directory: a worktree agent running the main checkout's
-  `target/release/nikaia` lowers the main checkout's sources and rewrites its
-  `lowered/*.rs`. Use the worktree's own binary. A layout change breaks tests keyed on an address by allocator
-  luck. Never `str.replace('', ...)` in an edit script (an empty-slice replace
-  corrupted `emit/mod.rs` once). Never run the full suite locally (about 45
-  minutes here): CI runs it on every push to `develop`; run the touched tests
-  and batch the edits in between (docs/long-jobs.md, #794).
-* **Agents: few, one per large module, none on a file another one edits.**
-  Splitting one file into slices costs more in conflicts and repeated context
-  than it saves. Leaves first: a consumer moved before its dependencies finds
-  its errors late. Record the state in the commit message after each chunk.
-* **Tokens: one agent, one slice, at most 100-150 turns, then a fresh one.**
-  Build agents are started as the `builder` type (`.claude/agents/builder.md`):
-  six tools instead of about forty, which cuts the context every turn re-reads
-  from about 52 k to about 15 k tokens.
-  The cost is the context every turn re-reads, not the output; long agents
-  cost three times what restarted ones do. Scripts in files, not heredocs;
-  small reads; plan and state from the repository, not from the prompt. The
-  numbers and the rules are in `docs/tokensaverstrategy.md`; the ordered
-  steps for the core of `emit` and `check` are in `docs/selfhosting-plan.md`.
-  What agents cost against what they moved is kept in `docs/tokenspeed.md`
-  (`scripts/tokenspeed.nika`); add a snapshot when a run ends.
-  **The measure is tokens per moved line (target below 50 k); turns are the
-  guard (about 120).** A slice runs as a chain: a research agent writes a
-  brief of at most 80 lines to a file, the builder gets its path and the
-  steps. The rs2nika draft is the default start (report `rs2nika: kept N of M
-  lines`); a compiler defect is fixed first. After each agent,
-  `nikaia run scripts/tokenspeed.nika -- --short AGENTS_DIR` prints one row for the *Runs*
-  table of `docs/tokenspeed.md`. One builder at a time for now.
-  `scripts/bump.py new` raises the version everywhere (spec lines, **Date:**,
-  CHANGELOG, `self_hosting.py` row, badges); after a rebase `scripts/bump.py
-  rebase-fix` repairs a collision, `check` verifies. The converter
-  `crates/rs2nika/convert` (a Nikaia project: `nikaia build` there, then
-  `target/nikaia/bin/rs2nika [--profile check|emit] [--prefix X_] [--file] F.rs`)
-  writes a first draft of a Rust function in Nikaia (TODO markers where it
-  cannot), names on stderr the callees not yet in Nikaia and the functions
-  tools/*.nika may already have; `--rules` lists its rules, `--lint F.nika`
-  flags known defects in hand-written Nikaia, and `rs2nika.names` beside it
-  maps Rust helpers to their Nikaia names. Rust's types come from
-  rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`); open lowering defects are
-  GitHub issues, the language options
-  against the usual hurdles in `docs/history/mitigation-hurdles.md`.
+* **The disk is shared and small.** Delete `target/` of a worktree you no
+  longer use; keep `target/nikaia-project-tests` (the tests' cache, pruned by
+  the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally
+  (about 45 minutes): CI runs it on every push to `develop`.
+* The working rules for a move (slices, patterns, syntax gaps, lowered types,
+  `lower-std`, the converter) are in `docs/builder-facts.md`.

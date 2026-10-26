@@ -24,7 +24,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   plan, the call graph and the issue yourself. A research task (no edits, no
   commit) writes such a brief, at most 80 lines, and reports its path.
 * **A move starts from the rs2nika draft** (`crates/rs2nika/convert`, see
-  `CLAUDE.md`), not from an empty file. Report in one line:
+  `docs/builder-facts.md`), not from an empty file. Report in one line:
   `rs2nika: kept N of M lines; fixed by hand: ...`.
 * **A compiler defect stops the slice.** Do not work around it in the moved
   code: fix it in the compiler as its own commit if the task allows, else stop

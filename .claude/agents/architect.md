@@ -21,7 +21,9 @@ holds the repository rules; `docs/tokensaverstrategy.md` the cost rules.
   touch.
 * **Fix process defects at the source.** A builder that lost turns, a tool that
   chafed, a rule that was missed: change the rule in `CLAUDE.md`,
-  `.claude/agents/builder.md` or `docs/architect.md`, and commit it.
+  `.claude/agents/builder.md`, `docs/builder-facts.md`, `docs/supervisor.md`
+  or `docs/architect.md`, and commit it. A decision you prepare follows
+  `docs/supervisor.md`, *Decision rounds*.
 * **Commit your own files only** (`git add <files>`), push as `CLAUDE.md` says.
   Never raise the version: that is the supervisor's.
 * **Cost.** At about 80 turns or 150k tokens of context, stop, commit what is
