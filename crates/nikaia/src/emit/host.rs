@@ -21,7 +21,12 @@
 use anyhow::Result;
 use nikaia_std::tools::emit_function::{EmitSeedsBegin, EmitSeedsEnd, EmitSplit};
 use nikaia_std::tools::emit_host::EmitHost;
+use nikaia_std::tools::emit_item::emit_seeds_declared;
 use nikaia_std::tools::emit_kinds::EmitRefused;
+use nikaia_std::tools::emit_seeds::{
+    emit_seeds_declare, emit_seeds_declare_fn, emit_seeds_declare_type, emit_seeds_enter,
+    emit_seeds_finish, emit_seeds_leave, emit_seeds_within,
+};
 use nikaia_std::tools::emit_state::{EmitPair, EmitWalk};
 
 use super::{Emitter, Out};
@@ -308,7 +313,7 @@ impl EmitHost for Emitter<'_> {
                 in_seeded_impl: false,
             };
         };
-        let in_seeded_impl = self.place.borrow().within();
+        let in_seeded_impl = emit_seeds_within(&self.place.borrow());
         let base = match (&owner_target, in_seeded_impl) {
             (Some(o), true) => self.seeds.arity(o),
             _ => 0,
@@ -341,8 +346,22 @@ impl EmitHost for Emitter<'_> {
                 _ => None,
             };
             match shape {
-                Some(shape) => self.place.borrow_mut().declare_fn(base, shape),
-                None => self.place.borrow_mut().declare(base),
+                Some(shape) => {
+                    let groups: Vec<i64> = shape.groups.iter().map(|g| *g as i64).collect();
+                    let within: Vec<i64> = shape
+                        .within
+                        .iter()
+                        .map(|w| w.map_or(-1, |j| j as i64))
+                        .collect();
+                    emit_seeds_declare_fn(
+                        &mut self.place.borrow_mut(),
+                        base as i64,
+                        &groups,
+                        &within,
+                        shape.start as i64,
+                    )
+                }
+                None => emit_seeds_declare(&mut self.place.borrow_mut(), base as i64),
             }
         }
         EmitSeedsBegin {
@@ -354,14 +373,13 @@ impl EmitHost for Emitter<'_> {
 
     fn seeds_end(&self, seeded: bool, base: i64) -> EmitSeedsEnd {
         self.floor.set(false);
-        let base = base as usize;
         let hidden = match seeded {
-            true => self.place.borrow_mut().finish(base),
+            true => emit_seeds_finish(&mut self.place.borrow_mut(), base),
             false => 0,
         };
         EmitSeedsEnd {
             hidden: hidden as i64,
-            declared: super::seeds::Seeds::declared(base, hidden, false),
+            declared: emit_seeds_declared(base, hidden, false),
         }
     }
 
@@ -429,19 +447,19 @@ impl EmitHost for Emitter<'_> {
     }
 
     fn place_declare_type(&self, base: i64) {
-        self.place.borrow_mut().declare_type(base as usize);
+        emit_seeds_declare_type(&mut self.place.borrow_mut(), base);
     }
 
     fn place_finish(&self, base: i64) -> i64 {
-        self.place.borrow_mut().finish(base as usize) as i64
+        emit_seeds_finish(&mut self.place.borrow_mut(), base)
     }
 
     fn place_enter(&self, target: &str, params: &[String]) {
-        self.place.borrow_mut().enter(target, params.to_vec());
+        emit_seeds_enter(&mut self.place.borrow_mut(), target, params);
     }
 
     fn place_leave(&self) {
-        self.place.borrow_mut().leave();
+        emit_seeds_leave(&mut self.place.borrow_mut());
     }
 
     fn set_floor(&self, on: bool) {

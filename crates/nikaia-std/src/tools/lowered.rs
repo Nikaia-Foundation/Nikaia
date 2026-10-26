@@ -1191,6 +1191,14 @@ mod emit_reach_lowered {
 #[allow(unused_imports)]
 pub use emit_reach_lowered::*;
 
+mod emit_seeds_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_seeds.rs");
+}
+#[allow(unused_imports)]
+pub use emit_seeds_lowered::*;
+
 mod emit_state_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2371,6 +2379,10 @@ pub mod emit_program {}
 pub mod emit_reach {
     #[allow(unused_imports)]
     pub use super::{pausing_reach};
+}
+pub mod emit_seeds {
+    #[allow(unused_imports)]
+    pub use super::{EmitSeedsSeen, EmitSeedsPlace, emit_seeds_place, emit_seeds_declare, emit_seeds_declare_fn, emit_seeds_declare_type, emit_seeds_finish, emit_seeds_enter, emit_seeds_leave, emit_seeds_within, emit_seeds_write};
 }
 pub mod emit_state {
     #[allow(unused_imports)]

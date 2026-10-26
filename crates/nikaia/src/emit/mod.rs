@@ -1074,7 +1074,7 @@ struct Emitter<'p> {
     /// no `mut` because of it.
     give_ups: crate::view_changes::GiveUps,
     /// Where the parameters of the type being written come from.
-    place: std::cell::RefCell<seeds::Place>,
+    place: std::cell::RefCell<nikaia_std::tools::emit_seeds::EmitSeedsPlace>,
     /// A signature of a barrier is being written: its maps are the keyed ones.
     floor: std::cell::Cell<bool>,
     /// **The counters `bounds::proven` already found never negative**, by the
@@ -1600,7 +1600,7 @@ impl<'p> Emitter<'p> {
                 library,
             },
             seeds: seeds_of,
-            place: std::cell::RefCell::new(seeds::Place::default()),
+            place: std::cell::RefCell::new(nikaia_std::tools::emit_seeds::emit_seeds_place()),
             floor: std::cell::Cell::new(false),
             nonnegative_bodies: std::mem::take(&mut proven.nonnegative_locals),
             main_params: std::cell::RefCell::new(Vec::new()),

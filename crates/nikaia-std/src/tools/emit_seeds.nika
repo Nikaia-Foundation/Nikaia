@@ -1,0 +1,376 @@
+// The writer of a map position's hidden seed parameters (`__S0`, ADR-010 D9,
+// #867): where the parameters of a written type come from, and the text of one
+// written type with them put in. The reader of which `pub` items hold maps is
+// `emit/seeds.rs`.
+
+/// A type written before in the item being declared, and what was written.
+pub struct EmitSeedsSeen {
+    pub key: String,
+    pub written: String,
+}
+
+/// Where the parameters of a type being written come from.
+pub struct EmitSeedsPlace {
+    /// An item that declares parameters is being written: its positions are
+    /// numbered from `next`, and a type written twice shares them (`seen`).
+    pub declaring: bool,
+    /// A function shares one parameter between positions of one written type;
+    /// a type declares one per position, in field order.
+    pub share: bool,
+    pub next: i64,
+    pub seen: Vec[EmitSeedsSeen],
+    /// A `pub` function declares one parameter per group of positions the
+    /// body joins: the groups, the position the written types are at, and the
+    /// name each group got (empty before it has one).
+    pub has_shape: bool,
+    pub groups: Vec[i64],
+    pub at: i64,
+    pub names: Vec[String],
+    /// Inside the `impl` of a type that declares parameters: a mention of the
+    /// type is `Self`'s.
+    pub within_target: String?,
+    pub within_params: Vec[String],
+}
+
+/// What one run over a written type holds: its characters, where it is, and
+/// what is written so far.
+struct EmitSeedsRun {
+    c: Vec[scalar],
+    at: i64,
+    out: Vec[scalar],
+}
+
+pub fn emit_seeds_place() -> EmitSeedsPlace {
+    return EmitSeedsPlace { declaring: false, share: false, next: 0, seen: [], has_shape: false, groups: [], at: 0, names: [], within_target: null, within_params: [] }
+}
+
+/// An item that declares parameters starts here, after `base` of its `impl`'s.
+pub fn emit_seeds_declare(mut place: EmitSeedsPlace, base: i64) {
+    place.share = true
+    place.declaring = true
+    place.next = base
+    place.seen.clear()
+}
+
+/// A `pub` function or method declares: one parameter for each group of
+/// positions its body joins. A position of the `impl`'s own type has that
+/// type's parameter: `within` is its ordinal, -1 where it is not one.
+pub fn emit_seeds_declare_fn(mut place: EmitSeedsPlace, base: i64, groups: ref Vec[i64], within: ref Vec[i64], start: i64) {
+    emit_seeds_declare(place, base)
+    place.share = false
+    let mut names: Vec[String] = []
+    for _group in groups {
+        names.push("")
+    }
+    for at in 0..<within.len() {
+        let j = within[at]
+        if j >= 0 {
+            names[groups[at]] = f"__S{j}"
+        }
+    }
+    place.has_shape = true
+    place.groups = groups.clone()
+    place.at = start
+    place.names = names
+}
+
+/// A type declares: one parameter for each map position, in field order.
+pub fn emit_seeds_declare_type(mut place: EmitSeedsPlace, base: i64) {
+    emit_seeds_declare(place, base)
+    place.share = false
+}
+
+/// The item is written: how many parameters it declared past `base`.
+pub fn emit_seeds_finish(mut place: EmitSeedsPlace, base: i64) -> i64 {
+    let mut n = place.next - base
+    if n < 0 {
+        n = 0
+    }
+    place.declaring = false
+    place.next = 0
+    place.seen.clear()
+    place.has_shape = false
+    place.groups = []
+    place.names = []
+    place.at = 0
+    return n
+}
+
+pub fn emit_seeds_enter(mut place: EmitSeedsPlace, target: ref String, params: ref Vec[String]) {
+    place.within_target = target.clone()
+    place.within_params = params.clone()
+}
+
+pub fn emit_seeds_leave(mut place: EmitSeedsPlace) {
+    place.within_target = null
+    place.within_params = []
+}
+
+pub fn emit_seeds_within(place: ref EmitSeedsPlace) -> bool {
+    return place.within_target != null
+}
+
+/// The name of the parameter the next position has ("" where no group has
+/// one), and the position after it.
+fn emit_seeds_position(mut place: EmitSeedsPlace) -> String {
+    if !place.has_shape {
+        return ""
+    }
+    let me = place.at
+    place.at += 1
+    if me >= place.groups.len() {
+        return ""
+    }
+    let group = place.groups[me]
+    if place.names[group] == "" {
+        place.names[group] = f"__S{place.next}"
+        place.next += 1
+    }
+    return place.names[group].clone()
+}
+
+/// The next position's name, or a fresh one where no group fixes it.
+fn emit_seeds_own(mut place: EmitSeedsPlace) -> String {
+    let own = emit_seeds_position(place)
+    if own != "" {
+        return own
+    }
+    let fresh = f"__S{place.next}"
+    place.next += 1
+    return fresh
+}
+
+/// Where the last `::` segment of `name` starts.
+fn emit_seeds_last_start(c: ref Vec[scalar]) -> i64 {
+    let mut from = 0
+    let mut at = 0
+    while at + 1 < c.len() {
+        if c[at] == ':' && c[at + 1] == ':' {
+            from = at + 2
+            at += 2
+        } else {
+            at += 1
+        }
+    }
+    return from
+}
+
+fn emit_seeds_between(c: ref Vec[scalar], from: i64, to: i64) -> String {
+    let mut out: String = ""
+    for k in from..<to {
+        out.push(c[k])
+    }
+    return out
+}
+
+fn emit_seeds_last(name: ref String) -> String {
+    let c: Vec[scalar] = name.chars().collect()
+    return emit_seeds_between(c, emit_seeds_last_start(c), c.len())
+}
+
+fn emit_seeds_is_map(name: ref String) -> bool {
+    let l = emit_seeds_last(name)
+    return l == "HashMap" || l == "HashSet" || l == "TrustedMap" || l == "TrustedSet"
+}
+
+/// `TrustedMap` is `HashMap` with a hasher of its own.
+fn emit_seeds_renamed(path: ref String) -> String {
+    let c: Vec[scalar] = path.chars().collect()
+    let from = emit_seeds_last_start(c)
+    let head = emit_seeds_between(c, 0, from)
+    let word = emit_seeds_between(c, from, c.len())
+    let name = match word {
+        "TrustedMap" => "HashMap",
+        "TrustedSet" => "HashSet",
+        other => other,
+    }
+    return f"{head}{name}"
+}
+
+fn emit_seeds_within_hit(place: ref EmitSeedsPlace, path: ref String) -> bool {
+    let target = place.within_target?.clone() ?? ""
+    return place.within_target != null && emit_seeds_last(path) == target
+}
+
+/// The index just after the `>` that closes the `<` at `open`.
+fn emit_seeds_closing(c: ref Vec[scalar], open: i64) -> i64 {
+    let mut depth = 0
+    let mut at = open
+    while at < c.len() {
+        if c[at] == '<' {
+            depth += 1
+        } else if c[at] == '-' && at + 1 < c.len() && c[at + 1] == '>' {
+            at += 1
+        } else if c[at] == '>' {
+            depth -= 1
+            if depth == 0 {
+                return at + 1
+            }
+        }
+        at += 1
+    }
+    return c.len()
+}
+
+fn emit_seeds_put(mut run: EmitSeedsRun, text: ref String) {
+    for ch in text.chars() {
+        run.out.push(ch)
+    }
+}
+
+/// One written type, with the parameters in. `fast` says what the package
+/// fills an ordinary mention with; `arity` how many parameters a type name
+/// declares.
+pub fn emit_seeds_write(text: ref String, mut place: EmitSeedsPlace, fast: bool, arity: fn(ref String) -> i64 sync) -> String sync {
+    let mut run = EmitSeedsRun { c: text.chars().collect(), at: 0, out: [] }
+    emit_seeds_run(run, place, fast, arity, false)
+    let mut out: String = ""
+    for ch in run.out {
+        out.push(ch)
+    }
+    return out
+}
+
+/// Copies until the end, or until the `>` that closes the arguments being
+/// read.
+fn emit_seeds_run(mut run: EmitSeedsRun, mut place: EmitSeedsPlace, fast: bool, arity: fn(ref String) -> i64 sync, inside: bool) {
+    while run.at < run.c.len() {
+        let ch = run.c[run.at]
+        if inside && ch == '>' {
+            return
+        }
+        if ch == '-' && run.at + 1 < run.c.len() && run.c[run.at + 1] == '>' {
+            run.out.push('-')
+            run.out.push('>')
+            run.at += 2
+            continue
+        }
+        if ch == '\'' {
+            // A lifetime: the tick and its name.
+            run.out.push(ch)
+            run.at += 1
+            while run.at < run.c.len() && (run.c[run.at].is_alphanumeric() || run.c[run.at] == '_') {
+                run.out.push(run.c[run.at])
+                run.at += 1
+            }
+            continue
+        }
+        if ch.is_alphanumeric() || ch == '_' {
+            let start = run.at
+            let mut more = true
+            while more && run.at < run.c.len() {
+                let b = run.c[run.at]
+                if b.is_alphanumeric() || b == '_' {
+                    run.at += 1
+                } else if b == ':' && run.at + 2 < run.c.len() && run.c[run.at + 1] == ':' && (run.c[run.at + 2].is_alphanumeric() || run.c[run.at + 2] == '_') {
+                    run.at += 2
+                } else {
+                    more = false
+                }
+            }
+            let path = emit_seeds_between(run.c, start, run.at)
+            emit_seeds_mention(run, path, place, fast, arity)
+            continue
+        }
+        run.out.push(ch)
+        run.at += 1
+    }
+}
+
+fn emit_seeds_mention(mut run: EmitSeedsRun, path: ref String, mut place: EmitSeedsPlace, fast: bool, arity: fn(ref String) -> i64 sync) {
+    let has_args = run.at < run.c.len() && run.c[run.at] == '<'
+    let is_m = emit_seeds_is_map(path)
+    let map = is_m && has_args
+    let mut k = 0
+    if !is_m {
+        k = arity(path)
+    }
+    if !map && k == 0 {
+        emit_seeds_put(run, path)
+        return
+    }
+    // The text of the whole mention, to know a type written before.
+    let after = run.at
+    let mut end = after
+    if has_args {
+        end = emit_seeds_closing(run.c, after)
+    }
+    let hit = emit_seeds_within_hit(place, path)
+    let key = f"{emit_seeds_last(emit_seeds_renamed(path))}{emit_seeds_between(run.c, after, end)}"
+    if place.declaring && place.share && !hit {
+        for seen in place.seen {
+            if seen.key == key {
+                emit_seeds_put(run, seen.written)
+                run.at = end
+                return
+            }
+        }
+    }
+    let before = run.out.len()
+    // What this mention adds, decided before its arguments are read: the
+    // numbers go in the order the types start.
+    let mut added: Vec[String] = []
+    let mut name = path.clone()
+    if map {
+        if place.declaring {
+            added.push(emit_seeds_own(place))
+            name = emit_seeds_renamed(path)
+        }
+    } else if hit {
+        added = place.within_params.clone()
+        if place.has_shape {
+            for _step in 0..<k {
+                let skipped = emit_seeds_position(place)
+            }
+        }
+    } else if place.declaring && place.has_shape {
+        for _step in 0..<k {
+            added.push(emit_seeds_own(place))
+        }
+    } else if place.declaring {
+        for step in 0..<k {
+            added.push(f"__S{place.next + step}")
+        }
+        place.next += k
+    } else {
+        for _step in 0..<k {
+            if fast {
+                added.push("nikaia_std::hash::Fast")
+            } else {
+                added.push("nikaia_std::hash::Keyed")
+            }
+        }
+    }
+    emit_seeds_put(run, name)
+    if has_args {
+        run.out.push('<')
+        run.at += 1
+        emit_seeds_run(run, place, fast, arity, true)
+        for a in added {
+            emit_seeds_put(run, ", ")
+            emit_seeds_put(run, a)
+        }
+        if run.at < run.c.len() && run.c[run.at] == '>' {
+            run.out.push('>')
+            run.at += 1
+        }
+    } else if added.len() > 0 {
+        run.out.push('<')
+        let mut first = true
+        for a in added {
+            if !first {
+                emit_seeds_put(run, ", ")
+            }
+            first = false
+            emit_seeds_put(run, a)
+        }
+        run.out.push('>')
+    }
+    if place.declaring && place.share && !hit {
+        let mut written: String = ""
+        for at in before..<run.out.len() {
+            written.push(run.out[at])
+        }
+        place.seen.push(EmitSeedsSeen { key: key, written: written })
+    }
+}

@@ -576,3 +576,5 @@ the `Flow` struct with its `to_emit`/`from_emit` are gone. `tools/emit_tables.ni
 `names_borrowing`, `borrowing_structs_beside` and `view_slots`; `mod.rs` keeps one-line adapters. Left in Rust:
 `template_hole_tables`, `fold_callees`, `read_view_slots`, `tethered_types` (they read Rust-side `Parsed` caches and
 the ledger).
+
+Seeds writer switched (#867): `Place` and `Seeds::write` are `EmitSeedsPlace` and `emit_seeds_write` in `tools/emit_seeds.nika`; `emit/seeds.rs` keeps the reader and passes `arity` as a callback.
