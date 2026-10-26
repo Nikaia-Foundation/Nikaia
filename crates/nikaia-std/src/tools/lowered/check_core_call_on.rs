@@ -534,6 +534,11 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
         let have = nikaia_std::index::get(&found, (i) as usize);
         i += 1;
         state.a_map_read_kept(world, &have, &want, given, span);
+        if check_overflow_a_nullable(&want) && !check_overflow_a_nullable(&have) && check_core_stmt_element_view(&state, world, given, &have, &want) == 1 {
+            state.facts.lent_reads.insert(node_key(given));
+            state.facts.nullable_args.insert(id_of(given) as i64, FactWrap::Constructor);
+            continue;
+        }
         let how = check_widened_slot(state, world, host, &have, &want, Some(given), span);
         if how.is_some() {
             state.facts.nullable_args.insert(id_of(given) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue });

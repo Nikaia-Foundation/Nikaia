@@ -108,7 +108,10 @@ impl EmitState {
         for part in parts.iter() {
             if i > 0 { out.push(", "); }
             i += 1;
+            let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(part), part);
+            out.push(&before);
             self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
+            out.push(&after);
         }
         out.push(")");
         Ok(())

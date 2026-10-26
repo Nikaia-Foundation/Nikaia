@@ -215,7 +215,7 @@ pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_overflow_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+pub fn check_overflow_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.

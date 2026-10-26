@@ -441,6 +441,16 @@ impl CheckState {
             if got == null {
                 got = self.tuple_literal(world, founds[at], wants[at], parts[at])
             }
+            // **An element or a field read off a place, as a part that
+            // declares a view, is lent** (ADR-354 D1, #655): `(2, given[1])`
+            // under `(i64, ref E?)` is `(2, Some(&given[1]))`.
+            if got == null && check_core_stmt_element_view(self, world, parts[at], founds[at], wants[at]) == 1 {
+                self.facts.lent_reads.insert(node_key(parts[at]))
+                if check_overflow_a_nullable(wants[at]) {
+                    self.facts.nullable_args.insert(id_of(parts[at]) as i64, FactWrap::Constructor)
+                }
+                got = wants[at].clone()
+            }
             if got != null {
                 built = true
                 answered.push(got ?? Ty::Unknown)

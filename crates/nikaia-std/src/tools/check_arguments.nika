@@ -397,6 +397,17 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let value = given_here ?? continue
             state.a_map_read_kept(world, found_here, want, value, span)
         }
+        // **An element or a field read off a place, handed to a `ref T?`
+        // slot (a `Vec` element), is lent and goes inside the option**
+        // (ADR-354 D1, #655): `v.push(given[1])` is `v.push(Some(&given[1]))`.
+        if given_here != null && check_arguments_nullable(want) && !check_arguments_nullable(found_here) {
+            let value = given_here ?? continue
+            if check_core_stmt_element_view(state, world, value, found_here, want) == 1 {
+                state.facts.lent_reads.insert(node_key(value))
+                state.facts.nullable_args.insert(id_of(value) as i64, FactWrap::Constructor)
+                continue
+            }
+        }
         let how = check_widened_slot(state, world, host, found_here, want, given_here, span)
         if how != null {
             if given_here != null {

@@ -257,6 +257,14 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             state.a_map_read_kept(world, &found_here, &want, value, span);
         }
+        if given_here.is_some() && check_arguments_nullable(&want) && !check_arguments_nullable(&found_here) {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if check_core_stmt_element_view(&state, world, value, &found_here, &want) == 1 {
+                state.facts.lent_reads.insert(node_key(value));
+                state.facts.nullable_args.insert(id_of(value) as i64, FactWrap::Constructor);
+                continue;
+            }
+        }
         let how = check_widened_slot(state, world, host, &found_here, &want, given_here, span);
         if how.is_some() {
             if given_here.is_some() {

@@ -299,7 +299,7 @@ pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr
     return any
 }
 
-fn check_overflow_a_nullable(ty: ref Ty) -> bool sync {
+pub fn check_overflow_a_nullable(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Nullable(_) => true,
         else => false,

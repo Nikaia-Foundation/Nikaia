@@ -1,0 +1,12 @@
+struct E { n: i64 }
+
+fn f(given: ref Vec[E]) -> i64 {
+    let mut v: Vec[ref E?] = []
+    v.push(given[1])
+    return v.len()
+}
+
+fn main() {
+    let g = [E { n: 1 }, E { n: 2 }]
+    println(f"{f(g)}")
+}

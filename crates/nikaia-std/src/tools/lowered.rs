@@ -2162,7 +2162,7 @@ pub mod check_numbers5 {
 }
 pub mod check_overflow {
     #[allow(unused_imports)]
-    pub use super::{check_wrap_for, check_widened_slot, check_overflow_list_into_nullables, check_unsigned_slot_refused};
+    pub use super::{check_wrap_for, check_widened_slot, check_overflow_list_into_nullables, check_overflow_a_nullable, check_unsigned_slot_refused};
 }
 pub mod check_parts {}
 pub mod check_patterns {
