@@ -9,3 +9,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 485025 17
 /home/user/Nikaia/docs/briefs/b865-to-string-local-view.md 639869 21
 /home/user/Nikaia/docs/briefs/architect-task.md 525127 16
+/home/user/Nikaia/docs/briefs/b863-exit-code.md 365591 14
