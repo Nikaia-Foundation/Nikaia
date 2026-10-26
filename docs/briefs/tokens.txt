@@ -32,3 +32,4 @@
 /home/user/Nikaia/docs/briefs/b-revert-9936c70.md 122463 7
 /home/user/Nikaia/docs/briefs/b655-operator-types.md 463371 18
 /home/user/Nikaia/docs/briefs/b655-one-statement-a-line-redo.md 3304831 59
+/home/user/Nikaia/docs/briefs/architect-task.md 717557 21
