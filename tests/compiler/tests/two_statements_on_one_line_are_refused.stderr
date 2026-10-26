@@ -1,0 +1,6 @@
+error: Expected `}` here, but found `2`.
+  --> tests/two_statements_on_one_line_are_refused.nika:2:15
+   |
+ 2 |     let a = 1 2
+   |               ^
+   |

@@ -80,6 +80,8 @@ pub struct Trivia {
     spans: Vec<Option<ast::Span>>,
     /// The id `spans` starts at: where the parse began counting.
     spans_from: u32,
+    /// The byte after the last `;` a statement read.
+    semi_end: usize,
 }
 
 impl Default for Trivia {
@@ -89,6 +91,7 @@ impl Default for Trivia {
             next_id: 0,
             spans: Vec::new(),
             spans_from: 0,
+            semi_end: 0,
         }
     }
 }
@@ -126,6 +129,19 @@ impl Trivia {
         let first = self.next_id;
         self.next_id += u32::try_from(count).expect("a fold makes fewer nodes than a u32 counts");
         first
+    }
+
+    /// A `;` stood at this byte.
+    fn semi(&mut self, at: usize) {
+        self.semi_end = at + 1;
+    }
+
+    /// Whether a statement may start at this byte: it begins a line, or
+    /// follows a `;` (Part I 3.1).
+    fn may_begin_statement(&self, at: usize) -> bool {
+        let after_semi = self.semi_end == at
+            || (self.core.end == at as i64 && self.core.trivia_start == self.semi_end as i64);
+        self.core.began_a_line(at as i64) || after_semi
     }
 
     /// Record a run of trivia.
@@ -185,6 +201,19 @@ where
     match StateOf::<Trivia>::state(&mut i.state.user_state).began_a_line(at) {
         true => Err(ParseError::from_input(i)),
         false => Ok(()),
+    }
+}
+
+/// A token that **is** the first thing on its line: a statement begins a line
+/// (Part I 3.1). Consumes nothing; the opposite of [`same_line`].
+fn new_line<'a, S>(i: &mut ParseInput<'a, S>) -> Result<(), ParseError>
+where
+    S: Clone + std::fmt::Debug + StateOf<Trivia>,
+{
+    let at = i.current_token_start();
+    match StateOf::<Trivia>::state(&mut i.state.user_state).may_begin_statement(at) {
+        true => Ok(()),
+        false => Err(ParseError::from_input(i)),
     }
 }
 
@@ -905,6 +934,7 @@ grammar! {
         // above ([ADR-135](../../../../docs/specification/adr/adr-135.md) D3,
         // [ADR-285](../../../../docs/specification/adr/adr-285.md) D16).
         extern rule same_line -> ();
+        extern rule new_line -> ();
         extern rule number_lit -> i128;
         extern rule negative_number_lit -> i128;
         extern rule float_end -> ();
@@ -2242,8 +2272,23 @@ grammar! {
         rule block -> Block =
             "{" stmts:stmt_list "}" -> { Block { stmts } }
 
+        // A statement's own `;`, remembered so that the next statement may
+        // follow it on the same line.
+        rule semi -> () @=
+            ";" -> { _state.user().semi(_span.start) }
+
         rule stmt_list -> Vec<Spanned<Stmt>> =
-            stmts:stmt* -> { stmts }
+            first:stmt rest:next_stmt* -> {
+                let mut stmts = vec![first];
+                stmts.extend(rest);
+                stmts
+            }
+          | "" -> { Vec::new() }
+
+        // **A statement begins a line** (Part I 3.1): only the first of a
+        // block may stand on the line of its `{`.
+        rule next_stmt -> Spanned<Stmt> =
+            new_line s:stmt -> { s }
 
         rule stmt -> Spanned<Stmt> # "statement" @=
             c:comptime_stmt -> { Spanned::new(c, Span::from(_span)) }
@@ -2267,10 +2312,10 @@ grammar! {
         // follows the condition: `return if c { a } else { b }` is a `return`
         // of an `if` expression, as it always was (D2).
         rule return_stmt -> Stmt @=
-            KW_RETURN cond:exit_guard ";"? -> {
+            KW_RETURN cond:exit_guard semi? -> {
                 guarded(_state.user(), Stmt::Return(None), cond, Span::from(_span))
             }
-          | KW_RETURN value:expr? cond:exit_guard? ";"? -> {
+          | KW_RETURN value:expr? cond:exit_guard? semi? -> {
                 match cond {
                     Some(cond) => guarded(_state.user(), Stmt::Return(value), cond, Span::from(_span)),
                     None => Stmt::Return(value),
@@ -2304,16 +2349,16 @@ grammar! {
         // statement, which is the whole reason this comment is here: an ordering
         // with no reason attached is one the next person tidies.
         rule break_stmt -> Stmt =
-            KW_BREAK ";"? -> { Stmt::Break }
+            KW_BREAK semi? -> { Stmt::Break }
 
         rule continue_stmt -> Stmt =
-            KW_CONTINUE ";"? -> { Stmt::Continue }
+            KW_CONTINUE semi? -> { Stmt::Continue }
 
         // Kap 7.1: `throw` is the only way an error originates. Without it a
         // program could propagate what `std` produced and never produce one of
         // its own (ADR-023 D2).
         rule throw_stmt -> Stmt @=
-            KW_THROW value:expr cond:exit_guard? ";"? -> {
+            KW_THROW value:expr cond:exit_guard? semi? -> {
                 let jump = Stmt::Expr(Expr::Throw(Box::new(value), _state.user().id()));
                 match cond {
                     Some(cond) => guarded(_state.user(), jump, cond, Span::from(_span)),
@@ -2335,7 +2380,7 @@ grammar! {
             ty:type_annotation?
             "="
             val:expr
-            ";"?
+            semi?
             -> {
                 Stmt::Comptime { name, ty, value: val, bounds: bounds.unwrap_or_default() }
             }
@@ -2366,7 +2411,7 @@ grammar! {
             ty:type_annotation?
             "="
             val:expr
-            ";"?
+            semi?
             -> {
                 Item::Comptime {
                     name,
@@ -2384,7 +2429,7 @@ grammar! {
             ty:type_annotation?
             "="
             val:expr
-            ";"?
+            semi?
             -> {
                 let (names, shape) = head;
                 Stmt::Let {
@@ -2463,14 +2508,14 @@ grammar! {
         // exactly what happened before this rule existed: three statements, no
         // error, and `rustc` complaining about a file nobody wrote.
         rule while_stmt -> Stmt =
-            KW_WHILE cond:head_expr body:block ";"?
+            KW_WHILE cond:head_expr body:block semi?
             -> {
                 Stmt::While { cond, body }
             }
 
         rule for_stmt -> Stmt =
             KW_FOR head:let_names KW_IN
-            iter:head_expr body:block ";"?
+            iter:head_expr body:block semi?
             -> {
                 let (bindings, shape) = head;
                 Stmt::For { bindings, shape, iter, body }
@@ -2481,7 +2526,7 @@ grammar! {
         rule ident_tail -> Symbol = "," n:NAME -> { n }
 
         rule assign_stmt -> Stmt =
-            target:postfix_expr op:assign_op value:expr ";"?
+            target:postfix_expr op:assign_op value:expr semi?
             -> { Stmt::Assign { target, op, value } }
 
         // The compound forms first: a bare `=` would take the first character
@@ -2521,13 +2566,13 @@ grammar! {
         // ([ADR-276](../../../docs/specification/adr/adr-276.md) D23). Each arm
         // costs a keyword compare, and only on a statement no earlier arm took.
         rule expr_stmt -> Stmt @=
-            KW_BREAK cond:exit_guard ";"? -> {
+            KW_BREAK cond:exit_guard semi? -> {
                 guarded(_state.user(), Stmt::Break, cond, Span::from(_span))
             }
-          | KW_CONTINUE cond:exit_guard ";"? -> {
+          | KW_CONTINUE cond:exit_guard semi? -> {
                 guarded(_state.user(), Stmt::Continue, cond, Span::from(_span))
             }
-          | e:expr ";"? -> {
+          | e:expr semi? -> {
                 match e {
                     Expr::Break(_) => Stmt::Break,
                     Expr::Continue(_) => Stmt::Continue,
