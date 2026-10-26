@@ -13,3 +13,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1178796 31
 /home/user/Nikaia/docs/briefs/b-fixforward-script-tests.md 463202 16
 /home/user/Nikaia/docs/briefs/architect-task.md 418192 14
+/home/user/Nikaia/docs/briefs/b866-inferred-number-local.md 459104 16
