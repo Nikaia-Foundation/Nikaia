@@ -38,6 +38,7 @@ the same dirty lock file). Read once; the brief adds only what is specific.
 * Guard tests (`range_spelling`, `shipped_ledger`, the std ledger in
   `contracts`) scan the whole repository: a script's `a..b` or a new
   `unsafe fn` fails them. They are in the gate (builder.md) for that reason.
+* **CI has no `target/fast`.** CI builds `target/release` only; a test that runs the toolchain takes the `nikaia` that runs it (`readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe`), never a fixed `target/fast/nikaia` (four script tests kept develop red that way, 2026-10-26). A red test that passes locally: check what CI lacks first.
 
 ## Commands, exactly
 
