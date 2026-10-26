@@ -13,10 +13,20 @@ fn root() -> String throws {
     return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
 fn main() throws {
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let repo = root()
-    let nikaia = process::run("realpath", [f"{repo}/target/fast/nikaia"]).stdout.trim().clone()
+    let nikaia = toolchain(repo.clone())
     let fake = f"{tmp}/claude"
     let json = "{\"is_error\":false,\"num_turns\":3,\"session_id\":\"SID\",\"total_cost_usd\":1.5,\"terminal_reason\":\"completed\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":20,\"cache_read_input_tokens\":30,\"output_tokens\":40}" + "}"
     let script = f"#!/bin/sh\nsid=\"\"\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --session-id ]; then sid=$2; fi; shift; done\necho '{json}' | sed \"s/SID/$sid/\"\ntouch {tmp}/b.report.md\n"

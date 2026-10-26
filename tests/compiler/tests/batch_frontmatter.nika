@@ -21,10 +21,20 @@ fn pick(out: String, tmp: String) -> String {
     return kept.join(" | ")
 }
 
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
 fn main() throws {
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let repo = root()
-    let nikaia = process::run("realpath", [f"{repo}/target/fast/nikaia"]).stdout.trim().clone()
+    let nikaia = toolchain(repo.clone())
     fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "---\nagent: architect\nmodel: opus\nmax_turns: 7\nbudget_usd: 5\n---\nbody\n")
     fs::write(f"{tmp}/p.md", fs::Root::Anywhere, "no frontmatter\n")
     fs::write(f"{tmp}/batch.txt", fs::Root::Anywhere, "a.md\np.md\n")

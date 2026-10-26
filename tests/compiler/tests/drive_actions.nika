@@ -15,13 +15,23 @@ fn case(nikaia: String, repo: String, tmp: String, name: String, cycle: String) 
     fs::write(f"{tmp}/lines", fs::Root::Anywhere, cycle.replace("%T", tmp.clone()) + "\n")
     let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines"]; dir: repo)
     println(f"== {name} (exit {out.code})")
-    println(out.stdout.trim().replace(tmp, "T"))
+    println(out.stdout.trim().replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia"))
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
 }
 
 fn main() throws {
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let repo = root()
-    let nikaia = process::run("realpath", [f"{repo}/target/fast/nikaia"]).stdout.trim().clone()
+    let nikaia = toolchain(repo.clone())
     fs::write(f"{tmp}/b1.md", fs::Root::Anywhere, "x\n")
     fs::write(f"{tmp}/b1.md.report.md", fs::Root::Anywhere, "Result: done\n")
     fs::write(f"{tmp}/b1.md.run.json", fs::Root::Anywhere, "{}\n")
