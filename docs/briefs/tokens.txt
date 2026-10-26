@@ -17,3 +17,4 @@
 /home/user/Nikaia/docs/briefs/b706-views-into-param-vec.md 227500 10
 /home/user/Nikaia/docs/briefs/architect-task.md 849632 22
 /home/user/Nikaia/docs/briefs/b665-lent-let-returned.md 3333133 55
+/home/user/Nikaia/docs/briefs/b867-seeds-writer.md 1616863 31
