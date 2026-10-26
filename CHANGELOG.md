@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1223] — 2026-10-26
+
+**integer as scalar, match arm naming a struct type (#604)**
+- An integer can be cast `as scalar`; the cast aborts if the value is not a Unicode scalar value.
+- A `match` arm that names a struct type by a path matches the type whatever its fields (`json::Error =>`).
+
 ## [0.0.1222] — 2026-10-25
 
 **process::run within, option defaults, map get pair view (#846, #847, #845, #675)**
