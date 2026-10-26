@@ -330,13 +330,13 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   numbers and the rules are in `docs/tokensaverstrategy.md`; the ordered
   steps for the core of `emit` and `check` are in `docs/selfhosting-plan.md`.
   What agents cost against what they moved is kept in `docs/tokenspeed.md`
-  (`scripts/tokenspeed.py`); add a snapshot when a run ends.
+  (`scripts/tokenspeed.nika`); add a snapshot when a run ends.
   **The measure is tokens per moved line (target below 50 k); turns are the
   guard (about 120).** A slice runs as a chain: a research agent writes a
   brief of at most 80 lines to a file, the builder gets its path and the
   steps. The rs2nika draft is the default start (report `rs2nika: kept N of M
   lines`); a compiler defect is fixed first. After each agent,
-  `scripts/tokenspeed.py --short AGENTS_DIR` prints one row for the *Runs*
+  `nikaia run scripts/tokenspeed.nika -- --short AGENTS_DIR` prints one row for the *Runs*
   table of `docs/tokenspeed.md`. One builder at a time for now.
   `scripts/bump.py new` raises the version everywhere (spec lines, **Date:**,
   CHANGELOG, `self_hosting.py` row, badges); after a rebase `scripts/bump.py

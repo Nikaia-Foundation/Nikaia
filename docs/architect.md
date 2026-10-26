@@ -44,7 +44,7 @@ By `docs/priorities.md`: the score decides across areas, bugs-first is the defau
 
 ## Briefs and reports
 
-A brief is one file (`briefs/<topic>.md`); `scripts/agent.nika` starts the agent
+A brief is one file (`docs/briefs/<topic>.md`, tracked; see *Where briefs live*); `scripts/agent.nika` starts the agent
 with `Read your brief at <path>`. A brief starts with this frontmatter (all
 keys optional; defaults `builder`, `sonnet`, 120, 20):
 
@@ -71,7 +71,7 @@ title because the issue text was missing):
   touched NK code; the architect resolves them with one grep while writing.
 * **Known facts**: one line, *Read `docs/builder-facts.md`*; add a new trap
   there, not in each brief.
-* The fixed block (`common.part`): rules, disk, report form, `Attribution:`.
+* The fixed block `docs/briefs/common.part` (rules, disk, report form, `Attribution:`), pasted at the end with `<full brief path>` filled in. **Every brief has it, also a fix-forward the main session writes itself**: without the report path `batch.nika` never sees the brief done (2026-10-26).
 
 The builder writes its report to exactly `<full brief path>.report.md`, beside the brief (the brief names the path), these fields only:
 
@@ -81,6 +81,7 @@ The builder writes its report to exactly `<full brief path>.report.md`, beside t
     Fixes: #N[, #M] | Part: #N   (optional)
     Pushed: <sha> | rejected | none
     Tests: <test filters run> - pass | <failing names>
+    Gate: green | red <tests>   (#852; batch.nika cuts on red, #862)
     Deviation: none | <one sentence>
     Found: none | <one sentence, issue number if filed>
     Needs: none | <NK code, owner decision, help from main session>
@@ -151,9 +152,17 @@ What the architect hands the main session for a builder, in this form:
   order, start orders, needs). It does not open reports or quote them: it
   passes the architect only `batch done` or `cut at <brief>` with the harness
   token figures, one line per agent. Owner messages go verbatim.
-* **Where briefs live.** `briefs/` in the session's scratchpad (named in the
-  architect's task); the *State* section below names the next brief, so a
-  fresh session that lost the scratchpad starts the architect, not a builder.
+* **Where briefs live: `docs/briefs/` in the repository** (DIR of every
+  script), with the reports, `batch.txt` and `tokens.txt`; never a scratchpad,
+  which a fresh session does not have (2026-10-26: the batch was lost with it).
+  The architect writes the briefs and `batch.txt` (when a batch is still
+  running, it gives the order in its answer and the main session writes it);
+  the main session commits `batch.txt` and the reports with `git add
+  docs/briefs/<files>`. The *State* section below names the next batch.
+* **Fresh container.** There is no `nikaia` binary (`nikaia` in this file means
+  `target/fast/nikaia`). The main session's first command is
+  `cargo build --profile fast -p nikaia` with `run_in_background` (about 3
+  minutes), started while the architect works; `cycle.nika` cannot run before.
 * **Release.** `nikaia run scripts/release.nika -- [--dry-run] [--loop M] REPORTS_DIR`
   reads the new `*.report.md`, prints CI, STOP and RED lines, and raises the
   version once for the done reports' `Changelog:` lines (`bump.py new`, push).
@@ -191,7 +200,7 @@ Standing rules, for a main session that starts fresh (the state is in
 * **Decisions, one topic at a time, in German**, in the form of `CLAUDE.md`'s
   *Decision rounds*: introduction from zero, where the question comes from,
   facts checked, options, risks, recommendation, the exact question.
-* **Builders from briefs** (`briefs/<topic>.md`, started with *Read your brief
+* **Builders from briefs** (`docs/briefs/<topic>.md`, started with *Read your brief
   at <path>*, type `builder`), in batches as *Batches* above says; the
   harness figures of each (tokens, tool uses) go to the architect with the
   report path.
@@ -236,7 +245,10 @@ performance*).
 
 ## State
 
-*Updated by the architect when it ends.* 2026-10-24, develop 8d56f29c, 0.0.1204.
+*Updated by the architect when it ends.*
+**2026-10-26 (restart, develop c6a6bdd3):** develop red on befae38b/830d1970 (`nikaia_test::the_compiler_test_package_passes_at_both_settings`), fix-forward `docs/briefs/b-fixforward-compiler-tests.md` running. `main` sits on c6a6bdd3, untested (#861 fired twice). Next batch, in order: `b861-ci-docs-only-base.md`, `b848-map-get-tuple-text.md`, `b-batch-status-lines.md` (#862), all Sonnet. Then: #863 (process::exit code, reduce first), the self-hosting lane (C-7 rest `check/mod.rs` research brief, `emit/seeds.rs`; `priorities.md` table), #851 is `decision`. Process fixes of this restart: briefs in `docs/briefs/`, `common.part`, `Gate:` in the report form, fresh-container build.
+
+Older entries: 2026-10-24, develop 8d56f29c, 0.0.1204.
 Branch `wip/bounding-candidates-2026-10-19` (stash on 0.0.1080) checked
 2026-10-24: everything in it is on develop in a later form (`bounding_grew`
 returns the failed counters, `bounding_for`/`bounding_while` re-walk in a

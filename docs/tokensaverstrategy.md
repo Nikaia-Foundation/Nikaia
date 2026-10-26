@@ -18,7 +18,7 @@ is not the output but the **prefix every turn re-reads**.
 
 * **The result is judged by tokens per moved line**: context tokens read
   divided by the Rust code lines the agent's commits removed
-  (`scripts/tokenspeed.py`, the `scripts/self_hosting.py` line rule). Measured
+  (`scripts/tokenspeed.nika`, the `scripts/self_hosting.py` line rule). Measured
   so far: long agents 143 k, restarted ones 71 k, a clean slice 37-54 k, an
   entangled one 88-164 k. The target is **below 50 k**. A slice that moves no
   Rust (a compiler fix, a plan) is not given a figure; its value shows in the
@@ -30,7 +30,7 @@ is not the output but the **prefix every turn re-reads**.
   set in turns (about 120, `.claude/agents/builder.md`); the supervisor, who
   can see the transcript, checks the context (about 200 k).
 * **The measurement is cheap for the supervisor.** After each agent ends,
-  `scripts/tokenspeed.py --short AGENTS_DIR` prints one Markdown row (the
+  `nikaia run scripts/tokenspeed.nika -- --short AGENTS_DIR` prints one Markdown row (the
   latest agent, counted only over the commits of its window); the supervisor
   appends it to the *Runs* table in `docs/tokenspeed.md` with the agent's
   rs2nika line. The full tables are drawn only for a dated snapshot.
@@ -132,7 +132,7 @@ tools, the limits above in its prompt); a task names one or two steps of a
 * One builder at a time for now (above). When more run again: one per module,
   none on a file another one edits, each in its own worktree (a shared
   checkout lets one agent switch the branch under the other).
-* After each agent: `scripts/tokenspeed.py --short`, one row into
+* After each agent: `nikaia run scripts/tokenspeed.nika -- --short`, one row into
   `docs/tokenspeed.md`.
 * Uncommitted files in a worktree belong to its agent; a stopped agent cannot
   be resumed, so a fresh one starts with `git status` and `git diff`.

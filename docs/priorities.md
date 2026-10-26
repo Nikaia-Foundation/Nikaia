@@ -53,14 +53,13 @@ go before bugs; it runs in its own lane beside the bug lane and never waits
 (CLAUDE.md default: one bug builder, one self-hosting builder). The pause rule
 does not fire: the last slices found one defect each and fixed it in the run.
 
+Re-scored 2026-10-26 (c6a6bdd3): #853 #856 #857 #855 done; #851 is `decision`.
+
 | Ticket | S | O (M) | C (M) | Score | Lane, order |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| #851 `.trim().to_string()` stays `ref String` (hit in a tool) | 3 | 0.5 | 3 | 10.2 | bugs 1 |
-| #856 literal owned where text of its own is needed (D31; blocks #853) | 3 | 0.5 | 6 | 5.1 | bugs 2 |
-| #853 NK1301 literal `.to_string()` (owner), blocked by #856 | 2 | 0.3 | 4 | 5.1 | bugs 3 |
-| #848 `m.get(k) ?? (tuple)` with text | 3 | 0.3 | 5 | 6.1 | bugs 3 |
-| #857 E11-4b part 2, `a_stmt` (about 950; part 1 d1fe8d04 moved 290) | 2 | 1 | 12 | 1.8 | self-hosting 1 |
-| #854 E11-4b statements and blocks (`emit/mod.rs` 2222-3720, about 1500) | 2 | 1 | 15 | 1.4 | self-hosting 1 |
-| #855 E11-4c host callbacks go + E11-5 template tables, `view_slots` (about 450) | 2 | 1 | 6 | 3.5 | self-hosting 2 (after #854) |
-| C-7 rest, `check/mod.rs` (#584): research brief first | 2 | 1 | 15 | 1.4 | self-hosting 3 |
-| `emit/seeds.rs` (951) | 2 | 0.5 | 10 | 2.1 | self-hosting 4 |
+| #861 docs-only push promotes an untested base (main on red code twice) | 3 | 2 | 2 | 16 | CI 1 |
+| #848 `m.get(k) ?? (tuple)` with text | 3 | 0.3 | 5 | 6.1 | bugs 1 |
+| #862 batch/status/cycle lines (main-session restarts) | 1 | 1 | 2 | 5.5 | process 1 |
+| #863 `process::exit(2)` in a `throws` helper exits 1 (reduce first) | 3 | 0.2 | 4 | 7.6 | bugs 2 (after #862: unreduced) |
+| C-7 rest, `check/mod.rs` (#584): research brief first | 2 | 1 | 15 | 1.4 | self-hosting 1 |
+| `emit/seeds.rs` (951) | 2 | 0.5 | 10 | 2.1 | self-hosting 2 |
