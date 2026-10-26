@@ -8,10 +8,13 @@
 // order: no report (`BRIEF.report.md` or `BRIEF` without `.md` + `.report.md`)
 // prints `NEXT <abs path of brief> <agent> <model> <turns> <budget>` (the
 // brief's frontmatter through `agent.nika --info`, defaults for a brief
-// without); a report whose `Owner:` is neither empty nor `none` prints
-// `OWNER <brief>: <text>`; a report whose `Result:` is not `done`,
-// `Pushed:` is `rejected` or `none`, or `Found:`/`Deviation:` is not `none`
-// prints `CUT <brief>: <line>`; all done prints `BATCH DONE` and the count of
+// without); a brief that does not exist prints `CUT <brief>: brief missing`;
+// no `DIR/batch.txt` prints `BATCH none (no DIR/batch.txt)`; a report whose
+// `Owner:` is neither empty nor starts with `none` prints
+// `OWNER <brief>: <text>`; a report whose `Result:` first word (`done.` too)
+// is not `done` or `noop`, `Pushed:` is `rejected` or `none` (not for `noop`),
+// `Gate:` is present and does not start with `green`, or `Found:`/`Deviation:`
+// is not `none` prints `CUT <brief>: <line>`; all done prints `BATCH DONE` and the count of
 // `Changelog:` lines that are not `none`. `--tokens` appends
 // `BRIEF TOKENS CALLS` to `DIR/tokens.txt`.
 
@@ -55,15 +58,19 @@ fn batch_cut(text: String) -> String {
     let result = batch_field(text.clone(), "Result:")
     let pushed = batch_field(text.clone(), "Pushed:")
     let found = batch_field(text.clone(), "Found:")
-    let deviation = batch_field(text, "Deviation:")
-    if result != "done" { return f"Result: {result}" }
-    if pushed == "rejected" || pushed == "none" || pushed == "" { return f"Pushed: {pushed}" }
+    let deviation = batch_field(text.clone(), "Deviation:")
+    let gate = batch_field(text, "Gate:")
+    let word = result.split(" ").collect()[0].trim_end_matches(".").clone()
+    if word != "done" && word != "noop" { return f"Result: {result}" }
+    if word == "done" && (pushed == "rejected" || pushed == "none" || pushed == "") { return f"Pushed: {pushed}" }
+    if gate != "" && !gate.starts_with("green") { return f"Gate: {gate}" }
     if found != "none" { return f"Found: {found}" }
     if deviation != "none" { return f"Deviation: {deviation}" }
     return ""
 }
 
 fn batch_run(dir: String) -> String throws {
+    if !fs::exists(f"{dir}/batch.txt", fs::Root::Anywhere) { return "BATCH none (no DIR/batch.txt)" }
     let order = fs::read_to_string(f"{dir}/batch.txt", fs::Root::Anywhere)
     let mut changelogs = 0
     for raw in order.split("\n") {
@@ -71,13 +78,14 @@ fn batch_run(dir: String) -> String throws {
         if brief == "" { continue }
         let path = batch_report_path(dir.clone(), brief.clone())
         if path == "" {
+            if !fs::exists(f"{dir}/{brief}", fs::Root::Anywhere) { return f"CUT {brief}: brief missing" }
             let abs = process::run("realpath", [f"{dir}/{brief}"])
             let path_abs = abs.stdout.trim().clone()
             return f"NEXT {path_abs} {batch_info(path_abs.clone())}"
         }
         let text = fs::read_to_string(path, fs::Root::Anywhere)
         let question = batch_field(text.clone(), "Owner:")
-        if question != "" && question != "none" { return f"OWNER {brief}: {question}" }
+        if question != "" && !question.starts_with("none") { return f"OWNER {brief}: {question}" }
         let why = batch_cut(text.clone())
         if why != "" { return f"CUT {brief}: {why}" }
         if batch_field(text, "Changelog:") != "none" { changelogs += 1 }

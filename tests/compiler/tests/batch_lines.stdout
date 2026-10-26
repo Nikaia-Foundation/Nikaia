@@ -1,0 +1,6 @@
+no batch.txt: BATCH none (no DIR/batch.txt)
+missing brief: CUT a.md: brief missing
+done with text: BATCH DONE
+gate red: CUT a.md: Gate: red x
+gate green: BATCH DONE
+noop: BATCH DONE

@@ -75,7 +75,7 @@ title because the issue text was missing):
 
 The builder writes its report to exactly `<full brief path>.report.md`, beside the brief (the brief names the path), these fields only:
 
-    Result: done | partial | blocked
+    Result: done | noop | partial | blocked   (noop: nothing to change; batch.nika counts it done)
     Files: <paths of the commit, space-separated>   (for scripts/commit.nika)
     Commit: <subject line>
     Fixes: #N[, #M] | Part: #N   (optional)
@@ -86,7 +86,7 @@ The builder writes its report to exactly `<full brief path>.report.md`, beside t
     Found: none | <one sentence, issue number if filed>
     Needs: none | <NK code, owner decision, help from main session>
     Changelog: none | <one sentence for the version heading>
-    Owner: none | <one question for the owner>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
+    Owner: none | <one question for the owner, never a role>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
     Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
@@ -233,6 +233,12 @@ note in *State* on what it measured.
 | 1 Serial | One builder at a time. A defect found on the way is repaired first, by the same chain (architect orders, builder repairs), then the work resumes | Self-hosting forward (#125, `selfhosting-plan.md`); the right tools; the tools improved by the tools; compiler defects fixed |
 | 2 Two | A second builder works on parts the first does not touch (the architect names the files of each). Each commits only its own files; the main session rebases | Speed, once stage 1 has removed the common stalls |
 | 3 More | Decided by the owner, with the figures of stage 2 | |
+
+Owner, 2026-10-26: stage 1 stays (one agent at a time, no parallel builders);
+throughput comes from scripts, which may run cheap work in the background; the
+architect keeps one batch of 2-3 briefs; the main session is woken only on an
+escalation (`scripts/drive.nika`, brief `b-drive-loop.md`) and otherwise stays
+free for the owner.
 
 ## Self-optimisation
 

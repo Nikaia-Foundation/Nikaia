@@ -1,0 +1,37 @@
+// #862: batch.nika names what is missing and reads `Result: done. text`,
+// `Gate:`, `noop` and `Owner: none ...`.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/batch.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/batch.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn first(nikaia: String, repo: String, tmp: String) -> String throws {
+    let out = process::run(nikaia, ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo)
+    return out.stdout.trim().split("\n").collect()[0].replace(tmp, "T")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = process::run("realpath", [f"{repo}/target/fast/nikaia"]).stdout.trim().clone()
+    println(f"no batch.txt: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    fs::write(f"{tmp}/batch.txt", fs::Root::Anywhere, "a.md\n")
+    println(f"missing brief: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "body\n")
+    let tail = "Pushed: abc\nFound: none\nDeviation: none\nChangelog: none\n"
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: done. text here\n" + tail)
+    println(f"done with text: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: done\nGate: red x\n" + tail)
+    println(f"gate red: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: done\nGate: green\nOwner: none, thanks\n" + tail)
+    println(f"gate green: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: noop\nPushed: none\nFound: none\nDeviation: none\nChangelog: none\n")
+    println(f"noop: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    process::run("rm", ["-rf", tmp])
+}

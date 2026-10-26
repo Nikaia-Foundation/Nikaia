@@ -107,7 +107,7 @@ fn main() throws {
     if done > 0 { cycle_done(dir.clone(), done) }
     let exe = cycle_exe()
     if exe == "" {
-        println("no target/fast/nikaia")
+        println("BUILD cargo build --profile fast -p nikaia (first build about 3 min, run it in the background)")
         process::exit(1)
     }
     let out = process::run(exe.clone(), ["run", "scripts/status.nika", "--", dir.clone()])

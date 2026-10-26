@@ -48,6 +48,9 @@ fn status_batch(dir: String) -> String throws {
         if !fs::exists(exe, fs::Root::Anywhere) { continue }
         let out = process::run(exe, ["run", "scripts/batch.nika", "--", dir.clone()])
         if out.ok { return out.stdout.trim().split("\n").collect()[0].clone() }
+        let mut msg = out.stderr.trim().split("\n").collect()[0].clone()
+        if msg == "" { msg = out.stdout.trim().split("\n").collect()[0].clone() }
+        return f"BATCH error: {msg}"
     }
     return "BATCH unknown (no target/fast/nikaia)"
 }
