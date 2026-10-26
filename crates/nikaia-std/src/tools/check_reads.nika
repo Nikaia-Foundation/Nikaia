@@ -390,7 +390,11 @@ impl CheckState {
         let always_fits = from_name == into_name || into_name == "f64" || fits_f32 || fits_i64 || fits_from_u8 || fits_from_u32
         let checked = check_numeric(from_name) && check_numeric(into_name) && !always_fits
         let at = operand
-        if !checked {
+        let into_a_char = into_name == "scalar" || into_name == "char"
+        let int_into_char = into_a_char && !from_a_float && from_name != "u8" && from_name != "scalar" && from_name != "char" && check_numeric(from_name)
+        if int_into_char {
+            self.facts.narrowing_casts.insert(at, FactNarrowing::ToScalar)
+        } else if !checked {
             let added = self.flow.widening_casts.insert(at)
         } else if from_a_float {
             self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat)

@@ -61,6 +61,18 @@ fn to_int<T: TryFrom<i128>>(value: f64) -> T {
     }
 }
 
+/// An integer as a `scalar` (a Unicode scalar value), or an abort: a negative
+/// value, a surrogate and a value beyond U+10FFFF are no character.
+#[inline]
+#[track_caller]
+pub fn to_char<T: Into<i128> + Copy + std::fmt::Display>(value: T) -> char {
+    let wide: i128 = value.into();
+    match u32::try_from(wide).ok().and_then(char::from_u32) {
+        Some(c) => c,
+        None => panic!("the value is not a character: {value}"),
+    }
+}
+
 /// A float as an `i32`, or an abort.
 ///
 /// `#[track_caller]`, so the abort names the line the conversion was written on

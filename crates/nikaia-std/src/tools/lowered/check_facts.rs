@@ -32,6 +32,7 @@ pub enum FactViewed {
 pub enum FactNarrowing {
     Integer,
     FromFloat,
+    ToScalar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

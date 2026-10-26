@@ -418,12 +418,13 @@ impl EmitState {
     }
 
     /// 0 for a conversion that cannot lose, 1 for a narrowing integer one, 2
-    /// for one from a float.
+    /// for one from a float, 3 for an integer into a `scalar`.
     fn emit_place_narrowing(ref self, operand: ref Expr) -> i64 {
         let found = self.narrows(operand) ?? return 0
         return match found {
             FactNarrowing::Integer => 1,
             FactNarrowing::FromFloat => 2,
+            FactNarrowing::ToScalar => 3,
         }
     }
 
@@ -451,6 +452,13 @@ impl EmitState {
             out.push(").unwrap_or_else(|_| panic!(\"the value does not fit in an `")
             out.push(into)
             out.push("`\"))")
+        } else if kind == 3 {
+            // **An integer as a `scalar` is checked** like a narrowing one: a
+            // surrogate or a value beyond U+10FFFF is not a character, and
+            // aborts. Only a `u8` is always one (Rust's `as char`).
+            out.push("nikaia_std::num::to_char(")
+            self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)
+            out.push(")")
         } else if kind == 2 {
             // `i32::try_from(f64)` does not exist, so the range and "not a
             // number" are tested by a `std` helper instead.

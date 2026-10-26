@@ -1,0 +1,24 @@
+// An integer other than `u8` cast `as scalar` is a character where it is a
+// Unicode scalar value, and aborts where it is not (like a narrowing cast).
+
+fn from_i64(cp: i64) -> scalar {
+    return cp as scalar
+}
+
+fn from_i32(cp: i32) -> scalar {
+    return cp as scalar
+}
+
+fn from_u32(cp: u32) -> scalar {
+    return cp as scalar
+}
+
+fn main() {
+    let mut out = String()
+    out.push(from_i64(233))
+    out.push(from_i32(8364))
+    out.push(from_u32(128512))
+    out.push(65 as u8 as scalar)
+    println(out)
+    println(f"{from_i64(128512) as i64}")
+}

@@ -51,6 +51,9 @@ pub enum FactViewed {
 pub enum FactNarrowing {
     Integer,
     FromFloat,
+    /// An integer other than `u8` cast `as scalar`: checked to be a Unicode
+    /// scalar value, and an abort where it is not.
+    ToScalar,
 }
 
 /// What a lambda that pauses is rewritten to: the word, as a function, a lent
