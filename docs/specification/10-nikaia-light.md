@@ -3257,7 +3257,10 @@ apply.
 
 **The branches meet on nothing, and the compiler checks it.** A branch pair that
 meets on a resource is refused with `NK2104`, and the message names the
-resource. A branch that **binds** a name is refused the same way. `--overlaps`
+resource. A branch that **binds** a name is refused the same way, and so is a
+pair where one branch **changes** a binding (a `mut` method, an assignment, a
+`mut` argument) that the other names: the message names the binding. Two
+branches that only read a binding meet on nothing. `--overlaps`
 reports on the blocks a program writes.
 
 **A block that joins pauses.** An `overlap` or a `select` hands its branches to the executor and waits there, so a function holding one is not `sync`, whatever its branches do.
