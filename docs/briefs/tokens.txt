@@ -19,3 +19,4 @@
 /home/user/Nikaia/docs/briefs/b665-lent-let-returned.md 3333133 55
 /home/user/Nikaia/docs/briefs/b867-seeds-writer.md 1616863 31
 /home/user/Nikaia/docs/briefs/architect-task.md 1811254 43
+/home/user/Nikaia/docs/briefs/b645-overlap-shared-mut.md 790213 23
