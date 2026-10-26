@@ -1,0 +1,16 @@
+fn longest(a: ref String, b: ref String) -> ref String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    let x = "ab"
+    let mut y = "short"
+    let r = longest(x, y)
+    for i in 0..<3 {
+        y = f"round {i}"
+    }
+    println(f"{r} {y}")
+}

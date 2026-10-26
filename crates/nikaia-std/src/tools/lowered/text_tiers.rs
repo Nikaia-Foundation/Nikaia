@@ -730,6 +730,21 @@ pub(crate) fn bind_tuple_parts(pattern: &MatchPattern, scrutinee: &Kinds, ask: &
     }
 }
 
+pub(crate) fn bind_whole_name(pattern: &MatchPattern, subject: &Expr, null_arm: bool, scrutinee: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) {
+    if null_arm || scrutinee.either || scrutinee.owned && (scrutinee.view || scrutinee.still) { return; }
+    let from = match text_source_word(Some(subject), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    match pattern {
+        MatchPattern::Path(named) => {
+            if named.len() == 1 && !names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) {
+                let mut local = plain_local(scrutinee.clone());
+                local.from = Some(from);
+                bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
+            }
+        },
+        _ => { },
+    }
+}
+
 pub(crate) fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
     let mut bound = false;
     match pattern {
@@ -2421,6 +2436,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut T
                 open_tier_scope(walk);
                 let mut bound = bind_static_payloads(&arm.pattern, ask, walk);
                 bind_tuple_parts(&arm.pattern, &scrutinee, ask, walk);
+                bind_whole_name(&arm.pattern, value, shapes_has_a_null_arm(arms), &scrutinee, ask, walk);
                 let some_from = bind_some_payload(&arm.pattern, value, shapes_has_a_null_arm(arms), &scrutinee, ask, walk);
                 if some_from.is_some() { bound = true; }
                 if arm.guard.is_some() {

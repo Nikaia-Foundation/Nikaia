@@ -310,7 +310,7 @@ pub(crate) fn shed(root: &str, walk: &mut BufferWalk) {
 
 pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     let (names, value, ty, made) = match stmt {
-        Stmt::Let { names, value, ty, .. } => (names, value, ty, made_here(names, value, (ty).as_ref(), ask, unaliased, &walk)),
+        Stmt::Let { names, value, ty, .. } => (names, value, ty, made_here(names, value, (ty).as_ref(), span.start as i64, ask, unaliased, &walk)),
         _ => return,
     };
     let at = span.start as i64;
@@ -352,7 +352,7 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
 
 pub(crate) fn a_named_buffer(made: &Buffer) -> bool { matches!(made, Buffer::Named(_)) }
 
-pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &BufferWalk) -> Buffer {
+pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &BufferWalk) -> Buffer {
     if names.len() != 1 { return Buffer::None; }
     match value {
         Expr::MethodCall { receiver, method, .. } => {
@@ -365,6 +365,8 @@ pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Opti
     }
     let found = makes_a_buffer(value, &Asked { names: ask.names, own: ask.own, library: ask.library }, unaliased);
     if a_named_buffer(&found) { return found; }
+    let literal = matches!(value, Expr::LitStr { .. });
+    if literal && ty.is_none() && ask.given_up.contains_key(&at) { return Buffer::Named(String::from("String")); }
     if !is_the_buffer(value, ask, walk) && declares_text(ask.names, ty) { return Buffer::Named(String::from("String")); }
     found
 }

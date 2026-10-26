@@ -1,0 +1,15 @@
+fn longest(a: ref String, b: ref String) -> ref String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    let x = "ab"
+    let mut y = "short"
+    let r = longest(x, y)
+    y = "re"
+    y.push_str("placed")
+    println(f"{r} {y}")
+}

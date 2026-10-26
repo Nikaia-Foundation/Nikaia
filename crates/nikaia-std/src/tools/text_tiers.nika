@@ -1074,6 +1074,27 @@ fn bind_tuple_parts(pattern: ref MatchPattern, scrutinee: ref Kinds, ask: ref Ti
     }
 }
 
+/// **A bare name binds the whole subject** (ADR-291 D1): over a name that holds
+/// text it is that name's text, as `let t = subject` is (ADR-282 D31), so what
+/// the arm does with `t` - changes it, hands it to a `mut` or owning
+/// parameter - is asked of the subject's position.
+fn bind_whole_name(pattern: ref MatchPattern, subject: ref Expr, null_arm: bool, scrutinee: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) {
+    if null_arm || scrutinee.either || (scrutinee.owned && (scrutinee.view || scrutinee.still)) {
+        return
+    }
+    let from = text_source_word(subject, ask, walk) ?? return
+    match pattern {
+        MatchPattern::Path(named) => {
+            if named.len() == 1 && !names_a_type(ask.names.resolve(named[0])) {
+                let mut local = plain_local(scrutinee.clone())
+                local.from = from
+                bind_tier_local(ask.names.resolve(named[0]).clone(), local, walk)
+            }
+        }
+        else => {}
+    }
+}
+
 /// **A payload of static text bound in a match arm** is a view of static
 /// text read out of the payload (ADR-282 D29): where the arm hands it on
 /// beside text of its own, the payload keeps text of its own too.
@@ -3244,6 +3265,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                 open_tier_scope(walk)
                 let mut bound = bind_static_payloads(arm.pattern, ask, walk)
                 bind_tuple_parts(arm.pattern, scrutinee, ask, walk)
+                bind_whole_name(arm.pattern, value, shapes_has_a_null_arm(arms), scrutinee, ask, walk)
                 let some_from = bind_some_payload(arm.pattern, value, shapes_has_a_null_arm(arms), scrutinee, ask, walk)
                 if some_from != null {
                     bound = true

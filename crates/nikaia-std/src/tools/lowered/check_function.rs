@@ -90,6 +90,21 @@ pub(crate) fn check_function_grown_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>,
                     _ => { },
                 }
             },
+            Stmt::Expr(value) => {
+                match value {
+                    Expr::MethodCall { receiver, method, .. } => {
+                        let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                        match receiver {
+                            Expr::Variable(name, _) => {
+                                let name = *name;
+                                if changes_its_text(&here.text(method)) { out.insert(here.text(name)); }
+                            },
+                            _ => { },
+                        }
+                    },
+                    _ => { },
+                }
+            },
             _ => { },
         }
         for inner in check_visit_stmt_blocks(&stmt.node) { check_function_grown_in(here, inner, out); }

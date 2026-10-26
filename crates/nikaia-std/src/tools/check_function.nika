@@ -130,6 +130,22 @@ fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: coll
                     else => {},
                 }
             },
+            Stmt::Expr(value) => {
+                // **A method that changes the text in place grows it too** (ADR-282 D31).
+                match value {
+                    Expr::MethodCall { receiver, method, .. } => {
+                        match receiver {
+                            Expr::Variable(name, _) => {
+                                if changes_its_text(here.text(method)) {
+                                    out.insert(here.text(name))
+                                }
+                            },
+                            else => {},
+                        }
+                    },
+                    else => {},
+                }
+            },
             else => {},
         }
         for inner in check_visit_stmt_blocks(stmt.node) {

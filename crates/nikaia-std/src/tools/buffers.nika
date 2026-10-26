@@ -375,7 +375,7 @@ fn shed(root: ref String, mut walk: BufferWalk) {
 fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) {
     // What it makes is asked inside the arm, where `ty` is still the field.
     let (names, value, ty, made) = match stmt {
-        Stmt::Let { names, value, ty, .. } => (names, value, ty, made_here(names, value, ty, ask, unaliased, walk)),
+        Stmt::Let { names, value, ty, .. } => (names, value, ty, made_here(names, value, ty, span.start as i64, ask, unaliased, walk)),
         else => return,
     }
     let at = span.start as i64
@@ -432,7 +432,7 @@ fn a_named_buffer(made: ref Buffer) -> bool {
 // D9), and so is the text form of something that is not text (D3); a call
 // that hands back a buffer of its own makes one; and a name declared `String`
 // is text of this frame's own, built or moved here.
-fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Type?, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, walk: ref BufferWalk) -> Buffer {
+fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Type?, at: i64, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, walk: ref BufferWalk) -> Buffer {
     if names.len() != 1 {
         return Buffer::None
     }
@@ -451,6 +451,16 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
     let found = makes_a_buffer(value, Asked { names: ask.names, own: ask.own, library: ask.library }, unaliased)
     if a_named_buffer(found) {
         return found
+    }
+    // **A literal bound without a type, whose views are used after it is
+    // changed, is text of this frame's own** (ADR-282 D31): the checker
+    // declares it `String`, and it lives in the frame's keep like one written so.
+    let literal = match value {
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
+    if literal && ty == null && ask.given_up.contains_key(at) {
+        return Buffer::Named("String")
     }
     if !is_the_buffer(value, ask, walk) && declares_text(ask.names, ty) {
         return Buffer::Named("String")

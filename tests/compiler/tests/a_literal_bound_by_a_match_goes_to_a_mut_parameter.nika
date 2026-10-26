@@ -1,0 +1,11 @@
+fn add(mut s: String) {
+    s.push_str("!")
+    println(s)
+}
+
+fn main() {
+    let mut s: String = "hi"
+    match s {
+        t => add(t),
+    }
+}
