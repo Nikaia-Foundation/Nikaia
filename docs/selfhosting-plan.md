@@ -579,3 +579,55 @@ the ledger).
 
 Seeds writer switched (#867): `Place` and `Seeds::write` are `EmitSeedsPlace` and `emit_seeds_write` in `tools/emit_seeds.nika`; `emit/seeds.rs` keeps the reader and passes `arity` as a callback.
 Seeds tables switched (#867 part 2): `Seeds` holds `EmitSeedsTables` (types, calls, barriers, fixed, private, excluded) and the queries (`arity`, `count`, `distinct`, `key`, `mentions_a_struct`, `barrier_names`) are Nikaia's; `emit_seeds_write` takes the tables. Left in Rust: the reader walks (`read_with`, `read_barriers`, `hands`, `self_handers`, `count_types`), `root_name` (walks `Expr`) and `shapes` (the ledger's `Shape`).
+
+## C-7 rest and E12: what is left
+
+Read at 62a07a1 (`check/` 2,199 Rust lines, `emit/` 3,684). Most of it is the adapter
+and stays; what can move is about 2,450 lines in five slices. The rows are in build
+order; C7-r1 and E12-1 touch disjoint files and may run side by side, the rest one
+after the other. Line ranges are at 62a07a1: re-grep the names before cutting.
+
+| Id | Rust (file:lines) | Target (`tools/`) | Host | Prerequisite | Rust lines |
+| :--- | :--- | :--- | :--- | :--- | ---: |
+| C7-r1 | `check/mod.rs`: `refuse_unproved_claims`, `refuse_assumes_in_std` (1181-1281, `ASSERT` is dead); the `CheckState` seeds `walked` reads off the item tree: `grammars`, `std_in_scope`, `std_modules`, `opaque_handles`, `foreign_names` (393-459); `payload_of` (77-91). `check/host.rs` `place_of` (355-386, `files()` becomes `world.beside`). `check/attributes.rs` `Mark`, `PLACES`, `mark_of` (40-87; `contracts/mod.rs` keeps calling an adapter). Delete the dead `a_byte`, `byte_literal`, `an_or_a`, `boxed_member`, the two empty `impl Checker<'_> {}` and the orphaned doc comments above them (607-672, 1135) | new `check_claims.nika` (the two refusals); `check_walked.nika` (`check_walked_seed`); new `check_attributes.nika` | removed: `CheckHost::payload_of`, `place_of`, `written` (Nikaia calls `check_walked_written` with `world.words`); none added | none | ~420 |
+| E12-1 | `emit/mod.rs`: the item loop of `with_contracts` (`grammars`, `structs`, `methods`, `by_name`, `uses_std`, `fails`, 1254-1300), `structs_beside`, the `declared_errors` chain, `tethered_types`, `read_view_slots` (1950-1982), `described_maps` (806-823), `package_borrowing` (2039-2074), `Needs` with `of`/`join`/`preamble` (825-960) and `foreign_traits` (978-986; `comptime_run.rs`, `modules.rs` keep `emit::Needs` as a re-export), `abort_table` (461-529), `split_lifetimes` (1758-1827); `check/attributes.rs` `inline_written` (16-38) | `emit_tables.nika` (tables over `Ledger` and items); new `emit_needs.nika` (`Needs`, `abort_table`) | removed: `EmitHost::split_lifetimes`, `inline_written`; `abort_table` takes `SourceMap::rows` as a list | none (`Ledger` is Nikaia's, `ty.nika`) | ~470 |
+| E12-2 | `emit/mod.rs`: `template_hole_tables` (1837-1886), `literal_expressions_bound`, `hole_as_read`, `interpolated_holes`, `literal_expressions`, `template_holes` (2159-2298), `fold_callees` (1888-1944), `built_at_build_time` (1102-1170); `emit/host.rs` `names_read` (269-294) | new `emit_holes.nika` | added: `hole(site, text) -> Expr?` with its error text, `cached_holes`, `cached_kept_calls` (the parser's caches stay Rust); removed: `EmitHost::names_read`, then `CheckHost::literal_holes`/`holes_read` call Nikaia | R-6 (the `contracts/sync.rs` walkers in Nikaia), or a probe that `emit_walk::visited_in_*` visits the same nodes as `sync::visit_*` | ~350 |
+| E12-3 | `emit/seeds.rs`: `calls_of`, `impls_of`, `root_name`, `read_with`, `read_barriers`, `body`, `positions`, `shape`, `is_fixed`, `trait_maps` (52-500); `emit/host.rs` `seeds_begin`, `seeds_end`, `seeded` (296-388) | `emit_seeds.nika` (`EmitSeeds` holds the tables and the shapes); `Emitter.place`/`floor` move into `EmitState` | `contracts::maps::analyse_with` as a callback; removed: `EmitHost::seeds_begin`, `seeds_end`, `seeded`, `seeds_arity`, `place_*`, `set_floor` | one `Shape`: `contracts/maps.rs:55` is a Rust twin of `ty.nika:104`; drop it first (a small fix commit of this slice) | ~560 |
+| E12-4 | `emit/mod.rs` `Target`, `UserParallelism`, `ReentrancyCheck`, `Build` and their methods (52-430); `emit/rust_targets.rs` whole (327, a list) | new `emit_build.nika`, re-exported from `emit` as `check_state`'s `Finding` is | none | `bounds::BoundsChecks`/`OverflowChecks` move with it (two data-less enums); the lowering must derive `Copy`, `Default`, `PartialEq` for a data-less enum and a struct of them: probe first, else a compiler fix | ~700 |
+
+**Stays Rust** (each until the named module moves, not by itself):
+
+* `check`, `check_program`, `check_against`, `check_for_the_ledger`, `instantiations_in`,
+  `propagation*`, `fallible_loops*`, `unrolling_report`, `claims_report`, and the `emit_program*`,
+  `emit_std_*`, `emit_module_body_at`, `branch_starts_first`, `barrier_names` entry points: the
+  driver's API; they own `Parsed` and the ledgers' lifetimes.
+* `walked`'s `CheckWorld` (borrows `Parsed`, finds the unit by `ptr::eq`) and its run of Rust
+  analyses (`prove`, `views`, `view_changes`, `keep`, `tether`, `traits`, `types`, `dsl::check`);
+  `with_contracts`' run of `bounds`, `sharing`, `trust`, `keep`, `view_changes`, `propagation`:
+  each line moves with its analysis (`contracts/`, research brief first).
+* `dump_accepted`, `accepted_dump_dir`: process entry (environment, `current_exe`, file writes).
+* `core.rs` (`Baton`, `Core`), `Checker`, `Emitter`, `emit/host.rs` `nikaia`/`crossed`/`stash`/
+  `hosted`: the crossing itself, with the `anyhow` error that may not cross.
+* `check/host.rs`, `emit/host.rs` methods not named above: each calls a Rust module
+  (`build_time`, `comptime_run`, `text_tiers`, `contracts`, the parser's holes) and goes with it.
+* `CodeOps` (leaks a `&'static str` for Rust callers), `MultiLock`, `HULLS` (read only by Rust
+  tests: they go with #821's move of those tests), `From` for `Constant`.
+* `OutText` (`take_lend`, `insert_*_brace`): until `std` has `String::insert_str` / `pop` (the
+  owner's, undecided). `SourceMap`, `Lowered`: driver data the diagnostics read in Rust.
+* One-line adapters over Nikaia (`visit_*`, `view_slots`, `borrowing_structs*`, `pausing_reach`,
+  `format_of`, `template_holes_bound`, `dsl_name`, `escaped`, `nonnegative_*`, `ty`,
+  `common_integer`, `written`, `char_literal`): they go when their last Rust caller goes.
+
+**First slice to brief: C7-r1** (needs nothing). Known risk per slice (`docs/builder-facts.md`):
+
+* C7-r1: the map loop over `((start, _), claim)` is a nested tuple pattern in a `for`; and
+  `n if n <= 0 => continue` inside a `match` that makes a value: bind the count first.
+* E12-1: `split_lifetimes` returns early with `?` from an `Option` function, splits on a char set
+  (`split(['|', ','])`, two splits in Nikaia) and runs a union-find over a `mut Vec[i64]` with a
+  nested `fn`; `Needs::join` takes `mut self`.
+* E12-2: a different walker changes which calls are seen; the oracle is `lower-std`
+  byte-identical, so a missed node shows as a lowered diff, not a test failure.
+* E12-3: `Option<usize>` fields of `Shape` (`within`) cross as `-1`; the callback returning
+  `Vec[(String, Shape)]` from Rust is the first of its kind in `emit_seeds.nika`.
+* E12-4: a list literal of about 300 strings in a tools file (lowering cost, not seen yet);
+  `Result<Target>` becomes `throws`, with `anyhow` text kept byte for byte in the adapter.
