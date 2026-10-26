@@ -2,3 +2,4 @@
 /home/user/Nikaia/docs/briefs/b861-ci-docs-only-base.md 120649 7
 /home/user/Nikaia/docs/briefs/b-batch-status-lines.md 360596 12
 /home/user/Nikaia/docs/briefs/b-drive-loop.md 1059322 23
+/home/user/Nikaia/docs/briefs/architect-task.md 1337421 33
