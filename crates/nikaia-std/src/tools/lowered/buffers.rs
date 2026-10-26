@@ -68,6 +68,8 @@ pub(crate) struct Local {
     pub(crate) keeps: bool,
     pub(crate) buffer: bool,
     pub(crate) text: bool,
+    pub(crate) number: bool,
+    pub(crate) parts: Vec<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,7 +149,7 @@ pub(crate) fn bind_local(name: String, local: Local, walk: &mut BufferWalk) {
     }
 }
 
-pub(crate) fn a_local(at: i64, path: &[(i64, bool)], origins: collections::BTreeSet<(i64, String)>, ty: Option<Type>, buffer: bool, text: bool) -> Local { Local { at, path: path.to_owned(), origins, ty, parameter: false, keeps: false, buffer, text } }
+pub(crate) fn a_local(at: i64, path: &[(i64, bool)], origins: collections::BTreeSet<(i64, String)>, ty: Option<Type>, buffer: bool, text: bool) -> Local { Local { at, path: path.to_owned(), origins, ty, parameter: false, keeps: false, buffer, text, number: false, parts: vec![] } }
 
 pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Vec<BufferPlan> {
     let mut out: Vec<BufferPlan> = vec![];
@@ -180,7 +182,7 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
     let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new() };
     open_scope(&mut walk);
     for arg in args.iter() {
-        let parameter = Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: Some(arg.ty.clone()), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, &arg.ty), buffer: false, text: false };
+        let parameter = Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: Some(arg.ty.clone()), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, &arg.ty), buffer: false, text: false, number: false, parts: vec![] };
         bind_local(ask.names.resolve(arg.name).to_owned(), parameter, &mut walk);
     }
     if receiver.is_some() {
@@ -189,7 +191,7 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into()));
-        bind_local(String::from("self"), Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: None, parameter: true, keeps, buffer: false, text: false }, &mut walk);
+        bind_local(String::from("self"), Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: None, parameter: true, keeps, buffer: false, text: false, number: false, parts: vec![] }, &mut walk);
     }
     for _ in 0..2 {
         while walk.frames.len() > 1 { close_scope(&mut walk); }
@@ -341,12 +343,23 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
         },
         _ => { origins = origins_of(value, ask, holes_of, unaliased, walk); },
     }
+    let number = names.len() == 1 && ty.is_none() && formats_a_number(value, ask, &walk);
+    let mut parts: Vec<bool> = vec![];
+    if names.len() == 1 && ty.is_none() {
+        match value {
+            Expr::Tuple(items, _) => { for item in items.iter() { parts.push(formats_a_number(item, ask, &walk)); } },
+            _ => { },
+        }
+    }
     for bound in names.iter() {
         let bound = *bound;
-        bind_local(ask.names.resolve(bound).to_owned(), a_local(at, &walk.path, origins.to_owned(), match ty {
+        let mut local = a_local(at, &walk.path, origins.to_owned(), match ty {
             Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
             None => None,
-        }, is_buffer, text), walk);
+        }, is_buffer, text);
+        local.number = number;
+        local.parts = parts.to_owned();
+        bind_local(ask.names.resolve(bound).to_owned(), local, walk);
     }
 }
 
@@ -437,6 +450,19 @@ pub(crate) fn formats_a_number(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_,
         } },
         Expr::MethodCall { method, .. } => { let method = *method; ask.names.resolve(method) == "len" },
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); formats_a_called_number(func, ask) },
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; formats_a_tuple_number(base, ask.names.resolve(name), ask, walk) },
+        _ => false,
+    }
+}
+
+pub(crate) fn formats_a_tuple_number(base: &Expr, field: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    match base {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = match local_of(ask.names.resolve(name), walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let index = check_core_places_position(field);
+            index >= 0 && index < local.parts.len() as i64 && *nikaia_std::index::get(&local.parts, nikaia_std::index::at(index))
+        },
         _ => false,
     }
 }
@@ -464,6 +490,7 @@ pub(crate) fn formats_a_called_number(func: &Expr, ask: &BufferAsk<'_, '_, '_, '
 
 pub(crate) fn formats_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if local.number { return true; }
     let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return false };
     let written = ask.names.resolve(ty.name);
     written != "String" && written != "str"

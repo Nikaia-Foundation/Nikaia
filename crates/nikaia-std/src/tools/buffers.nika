@@ -104,6 +104,8 @@ struct Local {
     keeps: bool,
     buffer: bool,
     text: bool,
+    number: bool,
+    parts: Vec[bool],
 }
 
 // A buffer made in the body and the blocks it was made inside.
@@ -186,7 +188,7 @@ fn bind_local(name: String, local: Local, mut walk: BufferWalk) {
 }
 
 fn a_local(at: i64, path: ref Vec[(i64, bool)], origins: collections::BTreeSet[(i64, String)], ty: Type?, buffer: bool, text: bool) -> Local {
-    return Local { at: at, path: path.clone(), origins: origins, ty: ty, parameter: false, keeps: false, buffer: buffer, text: text }
+    return Local { at: at, path: path.clone(), origins: origins, ty: ty, parameter: false, keeps: false, buffer: buffer, text: text, number: false, parts: [] }
 }
 
 /// Every function of one unit, planned against the ledger as it stands.
@@ -226,13 +228,13 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
     let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap() }
     open_scope(walk)
     for arg in args {
-        let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false }
+        let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
         bind_local(ask.names.resolve(arg.name).clone(), parameter, walk)
     }
     if receiver != null {
         let subject = receiver ?? return null
         let keeps = subject.is_mut && walk.target != null && ask.context.borrowing.contains(walk.target?.clone() ?? "")
-        bind_local("self", Local { at: 0, path: [], origins: collections::BTreeSet(), ty: null, parameter: true, keeps: keeps, buffer: false, text: false }, walk)
+        bind_local("self", Local { at: 0, path: [], origins: collections::BTreeSet(), ty: null, parameter: true, keeps: keeps, buffer: false, text: false, number: false, parts: [] }, walk)
     }
     for _ in 0..<2 {
         // Back to the parameters' scope, the body's own scope open for its
@@ -416,8 +418,25 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
             origins = origins_of(value, ask, holes_of, unaliased, walk)
         }
     }
+    // A number with no type written (#866): `let n = 3`, or the elements of
+    // `let p = (3, 4)` that are numbers.
+    let number = names.len() == 1 && ty == null && formats_a_number(value, ask, walk)
+    let mut parts: Vec[bool] = []
+    if names.len() == 1 && ty == null {
+        match value {
+            Expr::Tuple(items, _) => {
+                for item in items {
+                    parts.push(formats_a_number(item, ask, walk))
+                }
+            }
+            else => {}
+        }
+    }
     for bound in names {
-        bind_local(ask.names.resolve(bound).clone(), a_local(at, walk.path, origins.clone(), ty?.clone(), is_buffer, text), walk)
+        let mut local = a_local(at, walk.path, origins.clone(), ty?.clone(), is_buffer, text)
+        local.number = number
+        local.parts = parts.clone()
+        bind_local(ask.names.resolve(bound).clone(), local, walk)
     }
 }
 
@@ -556,6 +575,19 @@ fn formats_a_number(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -
         },
         Expr::MethodCall { method, .. } => ask.names.resolve(method) == "len",
         Expr::Call { func, .. } => formats_a_called_number(func, ask),
+        Expr::Field { base, name, .. } => formats_a_tuple_number(base, ask.names.resolve(name), ask, walk),
+        else => false,
+    }
+}
+
+// `p.0` of a local bound to a tuple literal: whether that element was a number.
+fn formats_a_tuple_number(base: ref Expr, field: ref String, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match base {
+        Expr::Variable(name, _) => {
+            let local = local_of(ask.names.resolve(name), walk) ?? return false
+            let index = check_core_places_position(field)
+            index >= 0 && index < local.parts.len() && local.parts[index]
+        },
         else => false,
     }
 }
@@ -581,6 +613,9 @@ fn formats_a_called_number(func: ref Expr, ask: ref BufferAsk) -> bool {
 
 fn formats_local(name: ref String, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
     let local = local_of(name, walk) ?? return false
+    if local.number {
+        return true
+    }
     let ty = local.ty ?? return false
     let written = ask.names.resolve(ty.name)
     return written != "String" && written != "str"

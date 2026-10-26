@@ -1,0 +1,23 @@
+fn from_local() -> String {
+    let n = 3
+    let s = n.to_string()
+    return s.trim()
+}
+
+fn from_tuple() -> String {
+    let p = (3, 4)
+    let s = p.0.to_string()
+    return s.trim()
+}
+
+fn from_mixed() -> String {
+    let q = ("a", 4)
+    let s = q.1.to_string()
+    return s.trim()
+}
+
+fn main() {
+    println(from_local())
+    println(from_tuple())
+    println(from_mixed())
+}
