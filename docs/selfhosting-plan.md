@@ -578,3 +578,4 @@ the `Flow` struct with its `to_emit`/`from_emit` are gone. `tools/emit_tables.ni
 the ledger).
 
 Seeds writer switched (#867): `Place` and `Seeds::write` are `EmitSeedsPlace` and `emit_seeds_write` in `tools/emit_seeds.nika`; `emit/seeds.rs` keeps the reader and passes `arity` as a callback.
+Seeds tables switched (#867 part 2): `Seeds` holds `EmitSeedsTables` (types, calls, barriers, fixed, private, excluded) and the queries (`arity`, `count`, `distinct`, `key`, `mentions_a_struct`, `barrier_names`) are Nikaia's; `emit_seeds_write` takes the tables. Left in Rust: the reader walks (`read_with`, `read_barriers`, `hands`, `self_handers`, `count_types`), `root_name` (walks `Expr`) and `shapes` (the ledger's `Shape`).

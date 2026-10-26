@@ -1,7 +1,170 @@
 // The writer of a map position's hidden seed parameters (`__S0`, ADR-010 D9,
 // #867): where the parameters of a written type come from, and the text of one
-// written type with them put in. The reader of which `pub` items hold maps is
-// `emit/seeds.rs`.
+// written type with them put in, and the tables the reader fills (which `pub`
+// structs hold maps, which functions are barriers) with the queries on them.
+// The reader of which `pub` items hold maps is `emit/seeds.rs`.
+
+use std::collections
+
+/// What the packages read declare (`emit/seeds.rs` fills it).
+pub struct EmitSeedsTables {
+    /// The hidden parameters of each `pub` struct, by name.
+    pub types: collections::BTreeMap[String, i64],
+    /// Calls that have to be filled by hand: a `pub` function with no type
+    /// parameter of its own whose hidden parameters are not all fixed by an
+    /// argument, with their number.
+    pub calls: collections::BTreeMap[String, (i64, i64)],
+    /// Some `pub` function holds a map position.
+    pub functions: bool,
+    /// The names of the methods of a trait that hold a map position in their
+    /// signature, and of the functions of a described Rust crate that do.
+    pub barriers: collections::BTreeSet[String],
+    /// The `pub` functions that hand a map position they were given to a
+    /// barrier: their positions are the keyed map.
+    pub fixed: collections::BTreeSet[String],
+    /// Some trait of the units, or an `impl` of one, holds a map position.
+    pub trait_maps: bool,
+    /// Private functions with a map of their own in the signature.
+    pub private: collections::BTreeSet[String],
+    /// `pub` types that declare no parameters because a method hands a map of
+    /// theirs to a barrier: their maps are the keyed one.
+    pub excluded: collections::BTreeSet[String],
+}
+
+pub fn emit_seeds_tables() -> EmitSeedsTables {
+    return EmitSeedsTables { types: collections::BTreeMap(), calls: collections::BTreeMap(), functions: false, barriers: collections::BTreeSet(), fixed: collections::BTreeSet(), trait_maps: false, private: collections::BTreeSet(), excluded: collections::BTreeSet() }
+}
+
+impl EmitSeedsTables {
+    /// Whether a `pub` struct of this name declares parameters, and how many.
+    pub fn arity(ref self, name: ref String) -> i64 {
+        let l = emit_seeds_last(name)
+        return self.types.get(l) ?? 0
+    }
+
+    pub fn is_empty(ref self) -> bool {
+        return self.types.len() == 0 && !self.functions
+    }
+
+    /// Whether a `pub` function's positions are the keyed map (a barrier).
+    pub fn is_fixed(ref self, name: ref String) -> bool {
+        return self.fixed.contains(name)
+    }
+
+    /// The names a call must not hand a fast map to.
+    pub fn barrier_names(ref self) -> collections::BTreeSet[String] {
+        let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+        for n in self.barriers {
+            out.insert(n.clone())
+        }
+        for n in self.fixed {
+            out.insert(n.clone())
+        }
+        return out
+    }
+
+    /// The map positions of a type, a `pub` struct's counted.
+    pub fn count(ref self, words: ref winnow_grammar::InternerContext, ty: ref Type) -> i64 {
+        let name = words.resolve(ty.name).clone()
+        let mut sum = 0
+        if ty.code == null && !ty.is_tuple {
+            if emit_seeds_is_map(name) {
+                sum = 1
+            } else {
+                sum = self.arity(name)
+            }
+        }
+        for g in ty.generics {
+            sum += self.count(words, g)
+        }
+        return sum
+    }
+
+    /// The parameters a type needs beyond those `seen` already has: a type
+    /// written twice in one item is one position's worth.
+    pub fn distinct(ref self, words: ref winnow_grammar::InternerContext, ty: ref Type, mut seen: collections::BTreeSet[String]) -> i64 {
+        let name = words.resolve(ty.name).clone()
+        let mut own = 0
+        if ty.code == null && !ty.is_tuple {
+            if emit_seeds_is_map(name) {
+                own = 1
+            } else {
+                own = self.arity(name)
+            }
+        }
+        if own > 0 {
+            let k = emit_seeds_key(words, ty, true)
+            if seen.contains(k) {
+                return 0
+            }
+            seen.insert(k)
+        }
+        let mut sum = own
+        for g in ty.generics {
+            sum += self.distinct(words, g, seen)
+        }
+        return sum
+    }
+
+    /// Whether a type mentions a `pub` struct that declares parameters.
+    pub fn mentions_a_struct(ref self, words: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+        let name = words.resolve(ty.name).clone()
+        if !ty.is_tuple && ty.code == null && !emit_seeds_is_map(name) && self.arity(name) > 0 {
+            return true
+        }
+        for g in ty.generics {
+            if self.mentions_a_struct(words, g) {
+                return true
+            }
+        }
+        return false
+    }
+}
+
+/// The map types written in a type itself, a struct that holds some not
+/// counted.
+pub fn emit_seeds_bare(words: ref winnow_grammar::InternerContext, ty: ref Type) -> i64 {
+    let mut sum = 0
+    if ty.code == null && !ty.is_tuple && emit_seeds_is_map(words.resolve(ty.name).clone()) {
+        sum = 1
+    }
+    for g in ty.generics {
+        sum += emit_seeds_bare(words, g)
+    }
+    return sum
+}
+
+/// A type as the key of one written type: the same text for the same type.
+pub fn emit_seeds_key(words: ref winnow_grammar::InternerContext, ty: ref Type, top: bool) -> String {
+    let word = emit_seeds_last(words.resolve(ty.name).clone())
+    let name = match word {
+        "TrustedMap" => "HashMap",
+        "TrustedSet" => "HashSet",
+        other => other,
+    }
+    let mut inner: String = ""
+    let mut first = true
+    for g in ty.generics {
+        if !first {
+            inner = f"{inner},"
+        }
+        first = false
+        inner = f"{inner}{emit_seeds_key(words, g, false)}"
+    }
+    let mut flags: String = ""
+    if !top {
+        if ty.is_view {
+            flags = f"{flags}&"
+        }
+        if ty.is_nullable {
+            flags = f"{flags}?"
+        }
+        if ty.is_slice {
+            flags = f"{flags}[]"
+        }
+    }
+    return f"{flags}{name}<{inner}>"
+}
 
 /// A type written before in the item being declared, and what was written.
 pub struct EmitSeedsSeen {
@@ -163,12 +326,12 @@ fn emit_seeds_between(c: ref Vec[scalar], from: i64, to: i64) -> String {
     return out
 }
 
-fn emit_seeds_last(name: ref String) -> String {
+pub fn emit_seeds_last(name: ref String) -> String {
     let c: Vec[scalar] = name.chars().collect()
     return emit_seeds_between(c, emit_seeds_last_start(c), c.len())
 }
 
-fn emit_seeds_is_map(name: ref String) -> bool {
+pub fn emit_seeds_is_map(name: ref String) -> bool {
     let l = emit_seeds_last(name)
     return l == "HashMap" || l == "HashSet" || l == "TrustedMap" || l == "TrustedSet"
 }
@@ -219,11 +382,11 @@ fn emit_seeds_put(mut run: EmitSeedsRun, text: ref String) {
 }
 
 /// One written type, with the parameters in. `fast` says what the package
-/// fills an ordinary mention with; `arity` how many parameters a type name
+/// fills an ordinary mention with; `tables` how many parameters a type name
 /// declares.
-pub fn emit_seeds_write(text: ref String, mut place: EmitSeedsPlace, fast: bool, arity: fn(ref String) -> i64 sync) -> String sync {
+pub fn emit_seeds_write(text: ref String, mut place: EmitSeedsPlace, fast: bool, tables: ref EmitSeedsTables) -> String {
     let mut run = EmitSeedsRun { c: text.chars().collect(), at: 0, out: [] }
-    emit_seeds_run(run, place, fast, arity, false)
+    emit_seeds_run(run, place, fast, tables, false)
     let mut out: String = ""
     for ch in run.out {
         out.push(ch)
@@ -233,7 +396,7 @@ pub fn emit_seeds_write(text: ref String, mut place: EmitSeedsPlace, fast: bool,
 
 /// Copies until the end, or until the `>` that closes the arguments being
 /// read.
-fn emit_seeds_run(mut run: EmitSeedsRun, mut place: EmitSeedsPlace, fast: bool, arity: fn(ref String) -> i64 sync, inside: bool) {
+fn emit_seeds_run(mut run: EmitSeedsRun, mut place: EmitSeedsPlace, fast: bool, tables: ref EmitSeedsTables, inside: bool) {
     while run.at < run.c.len() {
         let ch = run.c[run.at]
         if inside && ch == '>' {
@@ -269,7 +432,7 @@ fn emit_seeds_run(mut run: EmitSeedsRun, mut place: EmitSeedsPlace, fast: bool, 
                 }
             }
             let path = emit_seeds_between(run.c, start, run.at)
-            emit_seeds_mention(run, path, place, fast, arity)
+            emit_seeds_mention(run, path, place, fast, tables)
             continue
         }
         run.out.push(ch)
@@ -277,13 +440,13 @@ fn emit_seeds_run(mut run: EmitSeedsRun, mut place: EmitSeedsPlace, fast: bool, 
     }
 }
 
-fn emit_seeds_mention(mut run: EmitSeedsRun, path: ref String, mut place: EmitSeedsPlace, fast: bool, arity: fn(ref String) -> i64 sync) {
+fn emit_seeds_mention(mut run: EmitSeedsRun, path: ref String, mut place: EmitSeedsPlace, fast: bool, tables: ref EmitSeedsTables) {
     let has_args = run.at < run.c.len() && run.c[run.at] == '<'
     let is_m = emit_seeds_is_map(path)
     let map = is_m && has_args
     let mut k = 0
     if !is_m {
-        k = arity(path)
+        k = tables.arity(path)
     }
     if !map && k == 0 {
         emit_seeds_put(run, path)
@@ -345,7 +508,7 @@ fn emit_seeds_mention(mut run: EmitSeedsRun, path: ref String, mut place: EmitSe
     if has_args {
         run.out.push('<')
         run.at += 1
-        emit_seeds_run(run, place, fast, arity, true)
+        emit_seeds_run(run, place, fast, tables, true)
         for a in added {
             emit_seeds_put(run, ", ")
             emit_seeds_put(run, a)

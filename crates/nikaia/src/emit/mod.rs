@@ -1506,11 +1506,7 @@ impl<'p> Emitter<'p> {
             trusted_lets: plan.lets.clone(),
             escaped_lets: plan.escaped.clone(),
             fast_slots: plan.slots.clone(),
-            seeded_calls: seeds_of
-                .calls()
-                .iter()
-                .map(|(name, (n, fixed))| (name.clone(), (*n as i64, *fixed as i64)))
-                .collect(),
+            seeded_calls: seeds_of.calls().clone(),
             proven_indices: propagation
                 .list_indices
                 .iter()

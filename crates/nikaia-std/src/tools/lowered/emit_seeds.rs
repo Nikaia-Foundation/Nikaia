@@ -2,6 +2,91 @@
 // Edit emit_seeds.nika in the directory above, not this file.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitSeedsTables {
+    pub types: collections::BTreeMap<String, i64>,
+    pub calls: collections::BTreeMap<String, (i64, i64)>,
+    pub functions: bool,
+    pub barriers: collections::BTreeSet<String>,
+    pub fixed: collections::BTreeSet<String>,
+    pub trait_maps: bool,
+    pub private: collections::BTreeSet<String>,
+    pub excluded: collections::BTreeSet<String>,
+}
+
+pub fn emit_seeds_tables() -> EmitSeedsTables { EmitSeedsTables { types: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), functions: false, barriers: collections::BTreeSet::new(), fixed: collections::BTreeSet::new(), trait_maps: false, private: collections::BTreeSet::new(), excluded: collections::BTreeSet::new() } }
+
+impl EmitSeedsTables {
+    pub fn arity(&self, name: &str) -> i64 {
+        let l = emit_seeds_last(name);
+        nikaia_std::index::or(self.types.get(&l), || 0)
+    }
+    pub fn is_empty(&self) -> bool { self.types.is_empty() && !self.functions }
+    pub fn is_fixed(&self, name: &str) -> bool { self.fixed.contains(name) }
+    pub fn barrier_names(&self) -> collections::BTreeSet<String> {
+        let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for n in self.barriers.iter() { out.insert(n.to_owned()); }
+        for n in self.fixed.iter() { out.insert(n.to_owned()); }
+        out
+    }
+    pub fn count(&self, words: &winnow_grammar::InternerContext, ty: &Type) -> i64 {
+        let name = words.resolve(ty.name).to_owned();
+        let mut sum: i64 = 0;
+        if (*ty.code).is_none() && !ty.is_tuple { if emit_seeds_is_map(&name) { sum = 1; } else { sum = self.arity(&name); } }
+        for g in ty.generics.iter() { sum += self.count(words, g); }
+        sum
+    }
+    pub fn distinct(&self, words: &winnow_grammar::InternerContext, ty: &Type, seen: &mut collections::BTreeSet<String>) -> i64 {
+        let name = words.resolve(ty.name).to_owned();
+        let mut own: i64 = 0;
+        if (*ty.code).is_none() && !ty.is_tuple { if emit_seeds_is_map(&name) { own = 1; } else { own = self.arity(&name); } }
+        if own > 0 {
+            let k = emit_seeds_key(words, ty, true);
+            if seen.contains(&k) { return 0; }
+            seen.insert(k);
+        }
+        let mut sum: i64 = own;
+        for g in ty.generics.iter() { sum += self.distinct(words, g, seen); }
+        sum
+    }
+    pub fn mentions_a_struct(&self, words: &winnow_grammar::InternerContext, ty: &Type) -> bool {
+        let name = words.resolve(ty.name).to_owned();
+        if !ty.is_tuple && (*ty.code).is_none() && !emit_seeds_is_map(&name) && self.arity(&name) > 0 { return true; }
+        for g in ty.generics.iter() { if self.mentions_a_struct(words, g) { return true; } }
+        false
+    }
+}
+
+pub fn emit_seeds_bare(words: &winnow_grammar::InternerContext, ty: &Type) -> i64 {
+    let mut sum: i64 = 0;
+    if (*ty.code).is_none() && !ty.is_tuple && emit_seeds_is_map(&words.resolve(ty.name).to_owned()) { sum = 1; }
+    for g in ty.generics.iter() { sum += emit_seeds_bare(words, g); }
+    sum
+}
+
+pub fn emit_seeds_key(words: &winnow_grammar::InternerContext, ty: &Type, top: bool) -> String {
+    let word = emit_seeds_last(&words.resolve(ty.name).to_owned());
+    let name = match &*word {
+        "TrustedMap" => "HashMap",
+        "TrustedSet" => "HashSet",
+        other => other,
+    };
+    let mut inner: String = String::from("");
+    let mut first = true;
+    for g in ty.generics.iter() {
+        if !first { inner = format!("{},", inner); }
+        first = false;
+        inner = format!("{}{}", inner, emit_seeds_key(words, g, false));
+    }
+    let mut flags: String = String::from("");
+    if !top {
+        if ty.is_view { flags = format!("{}&", flags); }
+        if ty.is_nullable { flags = format!("{}?", flags); }
+        if ty.is_slice { flags = format!("{}[]", flags); }
+    }
+    format!("{}{}<{}>", flags, name, inner)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmitSeedsSeen {
     pub key: String,
     pub written: String,
@@ -124,12 +209,12 @@ pub(crate) fn emit_seeds_between(c: &[scalar], from: i64, to: i64) -> String {
     out
 }
 
-pub(crate) fn emit_seeds_last(name: &str) -> String {
+pub fn emit_seeds_last(name: &str) -> String {
     let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
     emit_seeds_between(&c, emit_seeds_last_start(&c), c.len() as i64)
 }
 
-pub(crate) fn emit_seeds_is_map(name: &str) -> bool {
+pub fn emit_seeds_is_map(name: &str) -> bool {
     let l = emit_seeds_last(name);
     l == "HashMap" || l == "HashSet" || l == "TrustedMap" || l == "TrustedSet"
 }
@@ -170,11 +255,9 @@ pub(crate) fn emit_seeds_closing(c: &[scalar], open: i64) -> i64 {
 
 pub(crate) fn emit_seeds_put(run: &mut EmitSeedsRun, text: &str) { for ch in text.chars() { run.out.push(ch); } }
 
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub fn emit_seeds_write(text: &str, place: &mut EmitSeedsPlace, fast: bool, arity: &impl Fn(&str) -> i64) -> String {
+pub fn emit_seeds_write(text: &str, place: &mut EmitSeedsPlace, fast: bool, tables: &EmitSeedsTables) -> String {
     let mut run = EmitSeedsRun { c: nikaia_std::list::chars(text.chars()), at: 0, out: vec![] };
-    emit_seeds_run(&mut run, place, fast, arity, false);
+    emit_seeds_run(&mut run, place, fast, tables, false);
     let mut out: String = String::from("");
     for ch in run.out.iter() {
         let ch = nikaia_std::num::value(ch);
@@ -183,7 +266,7 @@ pub fn emit_seeds_write(text: &str, place: &mut EmitSeedsPlace, fast: bool, arit
     out
 }
 
-pub(crate) fn emit_seeds_run(run: &mut EmitSeedsRun, place: &mut EmitSeedsPlace, fast: bool, arity: &impl Fn(&str) -> i64, inside: bool) {
+pub(crate) fn emit_seeds_run(run: &mut EmitSeedsRun, place: &mut EmitSeedsPlace, fast: bool, tables: &EmitSeedsTables, inside: bool) {
     while run.at < run.c.len() as i64 {
         let ch = *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at));
         if inside && ch == '>' { return; }
@@ -210,7 +293,7 @@ pub(crate) fn emit_seeds_run(run: &mut EmitSeedsRun, place: &mut EmitSeedsPlace,
                 if b.is_alphanumeric() || b == '_' { run.at += 1; } else if b == ':' && run.at + 2 < run.c.len() as i64 && *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at + 1)) == ':' && ((*nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at + 2))).is_alphanumeric() || *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at + 2)) == '_') { run.at += 2; } else { more = false; }
             }
             let path = emit_seeds_between(&run.c, start, run.at);
-            emit_seeds_mention(run, &path, place, fast, arity);
+            emit_seeds_mention(run, &path, place, fast, tables);
             continue;
         }
         run.out.push(ch);
@@ -218,12 +301,12 @@ pub(crate) fn emit_seeds_run(run: &mut EmitSeedsRun, place: &mut EmitSeedsPlace,
     }
 }
 
-pub(crate) fn emit_seeds_mention(run: &mut EmitSeedsRun, path: &str, place: &mut EmitSeedsPlace, fast: bool, arity: &impl Fn(&str) -> i64) {
+pub(crate) fn emit_seeds_mention(run: &mut EmitSeedsRun, path: &str, place: &mut EmitSeedsPlace, fast: bool, tables: &EmitSeedsTables) {
     let has_args = run.at < run.c.len() as i64 && *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at)) == '<';
     let is_m = emit_seeds_is_map(path);
     let map = is_m && has_args;
     let mut k: i64 = 0;
-    if !is_m { k = arity(path); }
+    if !is_m { k = tables.arity(path); }
     if !map && k == 0 {
         emit_seeds_put(run, path);
         return;
@@ -261,7 +344,7 @@ pub(crate) fn emit_seeds_mention(run: &mut EmitSeedsRun, path: &str, place: &mut
     if has_args {
         run.out.push('<');
         run.at += 1;
-        emit_seeds_run(run, place, fast, arity, true);
+        emit_seeds_run(run, place, fast, tables, true);
         for a in added.iter() {
             emit_seeds_put(run, ", ");
             emit_seeds_put(run, a);

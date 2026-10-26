@@ -19,41 +19,31 @@ use std::collections::BTreeMap;
 use crate::ast::{Item, Type};
 use crate::contracts::maps::Shape;
 use crate::parser::Parsed;
-use nikaia_std::tools::emit_seeds::{EmitSeedsPlace, emit_seeds_write};
+use nikaia_std::tools::emit_seeds::{
+    EmitSeedsPlace, EmitSeedsTables, emit_seeds_bare, emit_seeds_key, emit_seeds_last,
+    emit_seeds_tables, emit_seeds_write,
+};
 
 /// What the packages read declare: which `pub` structs hold maps (and how
 /// many positions, nested structs counted), and which `pub` functions have
-/// positions no argument can fix.
-#[derive(Debug, Clone, Default)]
+/// positions no argument can fix. The tables and their queries are Nikaia's
+/// (`tools/emit_seeds.nika`).
+#[derive(Debug, Clone)]
 pub struct Seeds {
-    /// The hidden parameters of each `pub` struct, by name.
-    types: BTreeMap<String, usize>,
-    /// Calls that have to be filled by hand: a `pub` function with no type
-    /// parameter of its own whose hidden parameters are not all fixed by an
-    /// argument, with their number.
-    calls: BTreeMap<String, (usize, usize)>,
-    /// Some `pub` function holds a map position.
-    functions: bool,
-    /// **Barriers** (ADR-010 D9, #581 step 7): the names of the methods of a
-    /// trait that hold a map position in their signature, and of the functions
-    /// of a described Rust crate that do. The map there is the keyed one
-    /// whatever the program is, so a map handed to one of them is keyed too.
-    barriers: std::collections::BTreeSet<String>,
-    /// The `pub` functions that hand a map position they were given to a
-    /// barrier: their positions are the keyed map, not a hidden parameter
-    /// (`Seed` cannot be proved to be `RandomState`).
-    fixed: std::collections::BTreeSet<String>,
-    /// Some trait of the units, or an `impl` of one, holds a map position.
-    trait_maps: bool,
+    tables: EmitSeedsTables,
     /// The hidden parameters of each `pub` function and method, by the key
     /// the ledger gives it: one per group of positions its body joins
     /// (`contracts::maps`, Part III 17.1).
     shapes: BTreeMap<String, Shape>,
-    /// Private functions with a map of their own in the signature.
-    private: std::collections::BTreeSet<String>,
-    /// `pub` types that declare no parameters because a method hands a map of
-    /// theirs to a barrier: their maps are the keyed one.
-    excluded: std::collections::BTreeSet<String>,
+}
+
+impl Default for Seeds {
+    fn default() -> Seeds {
+        Seeds {
+            tables: emit_seeds_tables(),
+            shapes: BTreeMap::new(),
+        }
+    }
 }
 
 /// The variable a value is a field chain of: `m`, `t.counts`.
@@ -63,24 +53,6 @@ fn root_name(parsed: &Parsed, e: &crate::ast::Expr) -> Option<String> {
         crate::ast::Expr::Field { base, .. } => root_name(parsed, base),
         _ => None,
     }
-}
-
-/// The map types written in a type itself, a struct that holds some not
-/// counted.
-fn bare(parsed: &Parsed, ty: &Type) -> usize {
-    let own = usize::from(ty.code.is_none() && !ty.is_tuple && is_map(parsed.text(ty.name)));
-    own + ty.generics.iter().map(|g| bare(parsed, g)).sum::<usize>()
-}
-
-fn last(name: &str) -> &str {
-    name.rsplit("::").next().unwrap_or(name)
-}
-
-fn is_map(name: &str) -> bool {
-    matches!(
-        last(name),
-        "HashMap" | "HashSet" | "TrustedMap" | "TrustedSet"
-    )
 }
 
 impl Seeds {
@@ -93,7 +65,7 @@ impl Seeds {
     /// crates that hold a map position (barriers too).
     pub fn read_with(units: &[&Parsed], described: &[String]) -> Seeds {
         let mut seeds = Seeds::default();
-        seeds.barriers.extend(described.iter().cloned());
+        seeds.tables.barriers.extend(described.iter().cloned());
         // Fields of every public struct, then the count of each, until the
         // counts stop growing (a struct holds another one that holds a map).
         let mut declared: Vec<(String, Vec<(&Parsed, &Type)>)> = Vec::new();
@@ -138,8 +110,8 @@ impl Seeds {
                 break;
             }
             for name in bad {
-                seeds.excluded.insert(name.clone());
-                seeds.barriers.insert(name);
+                seeds.tables.excluded.insert(name.clone());
+                seeds.tables.barriers.insert(name);
             }
             seeds.count_types(&declared);
             seeds.read_barriers(units);
@@ -180,9 +152,9 @@ impl Seeds {
                             .map(|t| seeds.distinct(parsed, t, &mut seen))
                             .sum::<usize>();
                     if total > 0 {
-                        seeds.functions = true;
+                        seeds.tables.functions = true;
                     }
-                    if seeds.fixed.contains(parsed.text(*name)) {
+                    if seeds.tables.fixed.contains(parsed.text(*name)) {
                         continue;
                     }
                     // A `pub` function declares one parameter for each group
@@ -194,9 +166,12 @@ impl Seeds {
                     if total > fixed {
                         // A type parameter of its own comes first, and nothing
                         // fixes it from here: the call leaves it to `_`.
-                        seeds.calls.insert(
+                        seeds.tables.calls.insert(
                             parsed.text(*name).to_string(),
-                            (total + generics.len(), fixed + generics.len()),
+                            (
+                                (total + generics.len()) as i64,
+                                (fixed + generics.len()) as i64,
+                            ),
                         );
                     }
                 }
@@ -208,21 +183,24 @@ impl Seeds {
     /// The hidden parameters of each `pub` struct, until the counts stop
     /// growing (a struct holds another one that holds a map).
     fn count_types(&mut self, declared: &[(String, Vec<(&Parsed, &Type)>)]) {
-        self.types.clear();
+        self.tables.types.clear();
         for (name, _) in declared {
-            if !self.excluded.contains(name) {
-                self.types.insert(name.clone(), 0);
+            if !self.tables.excluded.contains(name) {
+                self.tables.types.insert(name.clone(), 0);
             }
         }
         for _ in 0..8 {
             let mut changed = false;
             for (name, fields) in declared {
-                if self.excluded.contains(name) {
+                if self.tables.excluded.contains(name) {
                     continue;
                 }
-                let n: usize = fields.iter().map(|(p, t)| self.count(p, t)).sum();
-                if self.types.get(name) != Some(&n) {
-                    self.types.insert(name.clone(), n);
+                let n: i64 = fields
+                    .iter()
+                    .map(|(p, t)| self.tables.count(&p.interner, t))
+                    .sum();
+                if self.tables.types.get(name) != Some(&n) {
+                    self.tables.types.insert(name.clone(), n);
                     changed = true;
                 }
             }
@@ -230,7 +208,7 @@ impl Seeds {
                 break;
             }
         }
-        self.types.retain(|_, n| *n > 0);
+        self.tables.types.retain(|_, n| *n > 0);
     }
 
     /// Whether a body hands one of `held` (a name, or a field of one) to a
@@ -253,9 +231,9 @@ impl Seeds {
                 },
                 _ => return,
             };
-            if (self.barriers.contains(&callee)
-                || self.fixed.contains(&callee)
-                || self.private.contains(&callee))
+            if (self.tables.barriers.contains(&callee)
+                || self.tables.fixed.contains(&callee)
+                || self.tables.private.contains(&callee))
                 && given
                     .iter()
                     .any(|a| root_name(parsed, a).is_some_and(|n| held.contains(&n)))
@@ -280,7 +258,7 @@ impl Seeds {
                 else {
                     continue;
                 };
-                let name = last(parsed.text(target.name)).to_string();
+                let name = emit_seeds_last(parsed.text(target.name));
                 if self.arity(&name) == 0 || out.contains(&name) {
                     continue;
                 }
@@ -319,8 +297,10 @@ impl Seeds {
                                 .chain(m.node.ret_type.iter())
                                 .any(|t| self.count(parsed, t) > 0);
                             if held {
-                                self.trait_maps = true;
-                                self.barriers.insert(parsed.text(m.node.name).to_string());
+                                self.tables.trait_maps = true;
+                                self.tables
+                                    .barriers
+                                    .insert(parsed.text(m.node.name).to_string());
                             }
                         }
                     }
@@ -342,8 +322,8 @@ impl Seeds {
                                     .chain(ret_type.iter())
                                     .any(|t| self.count(parsed, t) > 0)
                             {
-                                self.trait_maps = true;
-                                self.barriers.insert(parsed.text(*name).to_string());
+                                self.tables.trait_maps = true;
+                                self.tables.barriers.insert(parsed.text(*name).to_string());
                             }
                         }
                     }
@@ -381,8 +361,8 @@ impl Seeds {
                         .map(|a| self.distinct(parsed, &a.ty, &mut seen))
                         .sum();
                     if self.distinct(parsed, ret, &mut seen) > 0 && given == 0 {
-                        self.fixed.insert(parsed.text(*name).to_string());
-                        self.functions = true;
+                        self.tables.fixed.insert(parsed.text(*name).to_string());
+                        self.tables.functions = true;
                     }
                 }
             }
@@ -392,7 +372,7 @@ impl Seeds {
         // that hands it a map it was given cannot say that the two are one
         // type, so its positions are the keyed map, as a trait method's are
         // (the package writes the keyed map in its own bodies, `seeded()`).
-        self.private.clear();
+        self.tables.private.clear();
         for parsed in units {
             for item in &parsed.program.items {
                 if let Item::Fn {
@@ -407,9 +387,9 @@ impl Seeds {
                         .iter()
                         .map(|a| &a.ty)
                         .chain(ret_type.iter())
-                        .any(|t| bare(parsed, t) > 0)
+                        .any(|t| emit_seeds_bare(&parsed.interner, t) > 0)
                 {
-                    self.private.insert(parsed.text(*name).to_string());
+                    self.tables.private.insert(parsed.text(*name).to_string());
                 }
             }
         }
@@ -429,7 +409,7 @@ impl Seeds {
                         continue;
                     };
                     let fname = parsed.text(*name).to_string();
-                    if self.fixed.contains(&fname) {
+                    if self.tables.fixed.contains(&fname) {
                         continue;
                     }
                     let held: Vec<String> = args
@@ -442,8 +422,8 @@ impl Seeds {
                     }
                     let hands = self.hands(parsed, body, &held);
                     if hands {
-                        self.fixed.insert(fname);
-                        self.functions = true;
+                        self.tables.fixed.insert(fname);
+                        self.tables.functions = true;
                         changed = true;
                     }
                 }
@@ -472,7 +452,7 @@ impl Seeds {
                             continue;
                         };
                         let fname = parsed.text(*name).to_string();
-                        if self.fixed.contains(&fname) {
+                        if self.tables.fixed.contains(&fname) {
                             continue;
                         }
                         let held: Vec<String> = args
@@ -481,8 +461,8 @@ impl Seeds {
                             .map(|a| parsed.text(a.name).to_string())
                             .collect();
                         if !held.is_empty() && self.hands(parsed, body, &held) {
-                            self.fixed.insert(fname);
-                            self.functions = true;
+                            self.tables.fixed.insert(fname);
+                            self.tables.functions = true;
                             changed = true;
                         }
                     }
@@ -496,95 +476,41 @@ impl Seeds {
 
     /// Whether a `pub` function's positions are the keyed map (a barrier).
     pub fn is_fixed(&self, name: &str) -> bool {
-        self.fixed.contains(name)
+        self.tables.is_fixed(name)
     }
 
     /// The names a call must not hand a fast map to: calling one makes the
     /// program no more trusted than the keyed hash.
     pub fn barrier_names(&self) -> std::collections::BTreeSet<String> {
-        self.barriers.union(&self.fixed).cloned().collect()
+        self.tables.barrier_names()
     }
 
     /// Whether the units declare a trait method, or implement one, with a map
     /// in its signature.
     pub fn trait_maps(&self) -> bool {
-        self.trait_maps
+        self.tables.trait_maps
     }
 
     fn count(&self, parsed: &Parsed, ty: &Type) -> usize {
-        let name = parsed.text(ty.name);
-        let own = if ty.code.is_some() || ty.is_tuple {
-            0
-        } else if is_map(name) {
-            1
-        } else {
-            self.types.get(last(name)).copied().unwrap_or(0)
-        };
-        own + ty
-            .generics
-            .iter()
-            .map(|g| self.count(parsed, g))
-            .sum::<usize>()
+        self.tables.count(&parsed.interner, ty) as usize
     }
 
-    /// The parameters a type needs beyond those `seen` already has: a type
-    /// written twice in one item is one position's worth.
     fn distinct(
         &self,
         parsed: &Parsed,
         ty: &Type,
         seen: &mut std::collections::BTreeSet<String>,
     ) -> usize {
-        let name = parsed.text(ty.name);
-        let own = if ty.code.is_some() || ty.is_tuple {
-            0
-        } else if is_map(name) {
-            1
-        } else {
-            self.types.get(last(name)).copied().unwrap_or(0)
-        };
-        if own > 0 && !seen.insert(self.key(parsed, ty, true)) {
-            return 0;
-        }
-        own + ty
-            .generics
-            .iter()
-            .map(|g| self.distinct(parsed, g, seen))
-            .sum::<usize>()
+        self.tables.distinct(&parsed.interner, ty, seen) as usize
     }
 
     pub(crate) fn key(&self, parsed: &Parsed, ty: &Type, top: bool) -> String {
-        let name = last(parsed.text(ty.name));
-        let name = match name {
-            "TrustedMap" => "HashMap",
-            "TrustedSet" => "HashSet",
-            other => other,
-        };
-        let inner: Vec<String> = ty
-            .generics
-            .iter()
-            .map(|g| self.key(parsed, g, false))
-            .collect();
-        let flags = match top {
-            true => String::new(),
-            false => format!(
-                "{}{}{}",
-                if ty.is_view { "&" } else { "" },
-                if ty.is_nullable { "?" } else { "" },
-                if ty.is_slice { "[]" } else { "" }
-            ),
-        };
-        format!("{flags}{name}<{}>", inner.join(","))
+        emit_seeds_key(&parsed.interner, ty, top)
     }
 
     /// Whether a type mentions a `pub` struct that declares parameters.
     pub fn mentions_a_struct(&self, parsed: &Parsed, ty: &Type) -> bool {
-        let name = parsed.text(ty.name);
-        (!ty.is_tuple && ty.code.is_none() && !is_map(name) && self.arity(name) > 0)
-            || ty
-                .generics
-                .iter()
-                .any(|g| self.mentions_a_struct(parsed, g))
+        self.tables.mentions_a_struct(&parsed.interner, ty)
     }
 
     /// The positions of a type, for the item that declares them.
@@ -599,17 +525,17 @@ impl Seeds {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.types.is_empty() && !self.functions
+        self.tables.is_empty()
     }
 
     /// The `pub` functions a call has to fill, and how many positions each has.
-    pub fn calls(&self) -> &BTreeMap<String, (usize, usize)> {
-        &self.calls
+    pub fn calls(&self) -> &BTreeMap<String, (i64, i64)> {
+        &self.tables.calls
     }
 
     /// Whether a `pub` struct of this name declares parameters.
     pub fn arity(&self, name: &str) -> usize {
-        self.types.get(last(name)).copied().unwrap_or(0)
+        self.tables.arity(name) as usize
     }
 
     /// One written type, with the parameters in. `fast` says what the package
@@ -618,6 +544,6 @@ impl Seeds {
         if self.is_empty() && !place.declaring {
             return text.to_string();
         }
-        emit_seeds_write(text, place, fast, &|name: &str| self.arity(name) as i64)
+        emit_seeds_write(text, place, fast, &self.tables)
     }
 }
