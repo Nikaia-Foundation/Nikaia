@@ -1,4 +1,4 @@
 Result: done
-Batch: b-revert-9936c70.md b655-operator-types.md b655-one-statement-a-line-redo.md
+Batch: b655-push-local-view.md, c7-rest-plan.md
 Owner: none
-RED 7280a0b: cause 9936c70 (#655 4a), one-line programs in `it` tests now parse errors; revert first, redo with the whole `it` binary. Rule added to builder-facts. b655-one-statement-a-line report's Changelog set to none (no version raise for it). c7-rest-plan.md deferred to the next batch.
+Notes: #655 step 4 done (deed9ad, f4dfb8c; Changelog lines in their reports, version raise owed). Items 1, 2, 5 reproduce; step 1 briefed. #868 commented (dead key fixed in 356a2e3; only the Nikaia move left). State updated in docs/architect.md.

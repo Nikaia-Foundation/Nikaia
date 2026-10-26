@@ -1,3 +1,2 @@
-b-revert-9936c70.md
-b655-operator-types.md
-b655-one-statement-a-line-redo.md
+b655-push-local-view.md
+c7-rest-plan.md
