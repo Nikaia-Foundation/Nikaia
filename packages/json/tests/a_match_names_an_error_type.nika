@@ -1,0 +1,13 @@
+use json
+
+fn main() {
+    let v = json::parse("[1,") catch {
+        match error {
+            json::Error => {
+                println("matched")
+                return
+            }
+            else => { return }
+        }
+    }
+}

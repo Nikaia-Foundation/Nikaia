@@ -145,7 +145,15 @@ impl EmitState {
                         let one = *one;
                         out.push(&self.emit_match_bound(world, one, wild, lent_key));
                     }
-                } else { out.push(&emit_match_path(world, p)); }
+                } else {
+                    let named = emit_match_path(world, p);
+                    let kind = self.own_contracts.types.get(&named);
+                    let whole = match kind {
+                        Some(entry) => entry.variants.is_empty(),
+                        None => false,
+                    };
+                    out.push(&if whole { format!("{} {{ .. }}", named) } else { named.to_owned() });
+                }
             },
             MatchPattern::Tuple { path, parts } => {
                 out.push(&emit_match_path(world, path));

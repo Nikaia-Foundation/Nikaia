@@ -248,7 +248,16 @@ impl EmitState {
                         out.push(self.emit_match_bound(world, one, wild, lent_key))
                     }
                 } else {
-                    out.push(emit_match_path(world, p))
+                    // **A struct's name as a pattern** (`json::Error =>` over a
+                    // `match error`) matches the type whatever its fields: Rust
+                    // reads a bare path as a unit struct, so it is `Path { .. }`.
+                    let named = emit_match_path(world, p)
+                    let kind = self.own_contracts.types.get(named)
+                    let whole = match kind {
+                        entry => entry.variants.len() == 0,
+                        null => false,
+                    }
+                    out.push(if whole { f"{named} {{ .. }}" } else { named.clone() })
                 }
             },
             // **The parts are patterns**, so this recurses (ADR-291 D10). An empty
