@@ -22,3 +22,4 @@
 /home/user/Nikaia/docs/briefs/b645-overlap-shared-mut.md 790213 23
 /home/user/Nikaia/docs/briefs/architect-task.md 835500 23
 /home/user/Nikaia/docs/briefs/b867-seeds-tables.md 1010616 24
+/home/user/Nikaia/docs/briefs/architect-task.md 455507 16

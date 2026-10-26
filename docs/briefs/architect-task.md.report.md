@@ -1,4 +1,4 @@
 Result: done
-Batch: b867-seeds-tables.md b655-mut-param-coalesce.md
+Batch: b-fixforward-drive-tidy.md, b655-mut-param-coalesce.md, b867-seeds-reader.md
 Owner: none
-Notes: cut at b645 was false (verification note under Deviation); rule fixed in common.part. #645 done (3ec1f1e, 1702057), Changelog line in its report, version raise owed. Filed #868 (lowered.sh bench dead `ordering` key). #655 item 2 reproduced on fbc9bfd.
+Notes: develop red since 7970db8 (drive_actions.stdout lacks drive.nika's tidy line), fixed forward first. b867 tables done (6cd8fea, Part #867); reader brief is #867's last step (Opus). New builder-facts rule: a change to scripts/X.nika runs the tests that name it. Commit d1d5a84.
