@@ -35,7 +35,7 @@ To build: 1. Generalise the fix to every tuple that holds text. 2. One `tests/co
 * Disk: `NIKAIA_CACHE_LIMIT=2G`; at most two clones with `target/` in the machine; delete your own clone's `target/` and `target/release/nikaia-scratch` at the end; report GB freed.
 
 ## Report (at most 15 lines, to exactly `/home/user/Nikaia/docs/briefs/b848-map-get-tuple-text.md.report.md`)
-Fields of `docs/architect.md`, *Briefs and reports*: `Result: done|partial|blocked` (the bare word first), Files, Commit, Fixes, Pushed, Tests, Gate (green|red), Deviation, Found, Needs, Changelog, Owner, Disk freed. `none` where nothing. Final answer, one line: `done <sha>, report <path>` (or `BLOCKED: ...` / `PUSH REJECTED ...`).
+Fields of `docs/architect.md`, *Briefs and reports*: `Result: done|noop|partial|blocked` (the bare word first; `Owner:` is a question for the owner or `none`, never a role), Files, Commit, Fixes, Pushed, Tests, Gate (green|red), Deviation, Found, Needs, Changelog, Owner, Disk freed. `none` where nothing. Final answer, one line: `done <sha>, report <path>` (or `BLOCKED: ...` / `PUSH REJECTED ...`).
 
 Attribution:
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
