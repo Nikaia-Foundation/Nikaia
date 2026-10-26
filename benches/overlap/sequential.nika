@@ -1,0 +1,17 @@
+// `pair.nika` without the `overlap` block: the same two reads, one after the
+// other. `lowered.sh` counts the two against each other.
+use std::cli
+use std::text
+use std::fs
+
+fn main() throws {
+    let runden = cli::args().nth(1) ?? "200000"
+    let n = text::parse_i32(runden) ?? 200000
+    let mut gesamt = 0
+    for _runde in 0..<n {
+        let a = fs::read_to_string("eins.txt", fs::Root::Anywhere) catch { "" }
+        let b = fs::read_to_string("zwei.txt", fs::Root::Anywhere) catch { "" }
+        gesamt = gesamt + a.len() + b.len()
+    }
+    println(f"{gesamt}")
+}

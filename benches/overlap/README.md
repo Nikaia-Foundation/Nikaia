@@ -50,21 +50,24 @@ difference is the finding. The numbers, the method and the confound are in
 
 Everything above measures `nikaia_std` from Rust.
 [ADR-292](../../docs/specification/adr/adr-292.md) D6 is a **lowering**: at
-`user_parallelism = no` a pair of `std` file reads is emitted as
-`nikaia_std::task::read_pair`. `lowered.sh` measures that, through the whole
-pipeline and not a reduction of it:
+`user_parallelism = no` the branches of an `overlap { … }` block (Part I 8.1.2)
+are emitted onto `nikaia_std::task::overlap2`. `lowered.sh` counts that, through
+the whole pipeline and not a reduction of it:
 
 | what | how |
 |---|---|
-| `pair.nika` | two reads in a loop at `user-parallelism = "no"`. `lowered.sh` still builds it twice with the manifest key `ordering`, which the manifest no longer takes (the build fails, `docs/specification/30-nikaia-tooling.md`), so it measures nothing until it is rewritten for a build with and without the lowering |
+| `pair.nika` | two reads in an `overlap` block, in a loop, at `user-parallelism = "no"` |
+| `sequential.nika` | the same two reads one after the other |
 
 ```sh
-benches/overlap/lowered.sh                          # both mechanisms, 200 000 pairs, 9 repeats
-benches/overlap/lowered.sh /tmp/somewhere 20000 3   # …quicker, in a named directory
+benches/overlap/lowered.sh                          # both mechanisms, 20 000 pairs
+benches/overlap/lowered.sh /tmp/somewhere 2000      # ...quicker, in a named directory
+NIKAIA=target/fast/nikaia benches/overlap/lowered.sh  # with a compiler already built
 ```
 
-It greps the emitted Rust and prints which lowering each binary got, because two
-identical binaries would measure a very stable nothing. Both mechanisms again,
-and here the fallback's column is the *decision* rather than the finding: D10
-performs the pair in written order where overlapping is not free, so that column
-should be zero and not +38 µs. The numbers are `docs/history/runtime-cost.md` §6.
+It greps the emitted Rust and stops unless `pair` holds `task::overlap2` and
+`sequential` does not, because two identical binaries would count a very stable
+nothing; it compares the two outputs byte for byte, then counts instructions and
+mispredicted branches per pair with callgrind, for `io-method = "auto"` (the
+completion path) and `"blocking"` (ADR-303 D3's fallback, where D10 performs the
+pair in written order).
