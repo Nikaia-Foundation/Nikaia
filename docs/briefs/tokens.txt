@@ -29,3 +29,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1390450 33
 /home/user/Nikaia/docs/briefs/b655-one-statement-a-line.md 1499394 40
 /home/user/Nikaia/docs/briefs/architect-task.md 421476 14
+/home/user/Nikaia/docs/briefs/b-revert-9936c70.md 122463 7
