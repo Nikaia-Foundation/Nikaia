@@ -43,7 +43,9 @@
   A change that does not raise the version gets no `CHANGELOG.md` heading or
   entry either: its commit message is its record. It touches neither the
   version lines nor the badges, so it does not collide with other sessions.
-* **Nobody pushes to `main`.** CI runs everything on each push to `develop`.
+* **Nobody pushes to `main`, and nobody resets or force-pushes it** (owner,
+  2026-10-26): a `main` that moved onto an untested commit is fixed forward on
+  `develop`, and the process that let it move is repaired (#861). CI runs everything on each push to `develop`.
   When every job passes, the `promote` job fast-forwards `main` to that commit
   (`.github/workflows/nikaia.yml`) - that commit, not `develop`'s tip, which
   may have moved on during the run. `main` is always a commit that passed.
