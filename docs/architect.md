@@ -250,6 +250,7 @@ performance*).
 ## State
 
 *Updated by the architect when it ends.*
+**2026-10-26 (architect after d33d355, cut at b864 on Found):** #864 done (6ba5c74, closes on promote; Changelog line in its report). Found filed as #865 (`ready`: `let s = t.len().to_string(); return s.trim()` fails in rustc; `formats` in `buffers.nika`). Batch: `b865-to-string-local-view.md`, `b863-exit-code.md`. Then: the self-hosting lane (C-7 rest research brief, `emit/seeds.rs`), #851 `decision`.
 **2026-10-26 (architect after 1db1a4e, cut at b848 on `Deviation: none (note)`, a false cut):** #848 done (39ebe78, closes on promote). Rule fixed in `common.part` and the report form: bare `none`. Batch: `b864-plus-local-view.md`, `b863-exit-code.md`. Then: the self-hosting lane (C-7 rest research brief, `emit/seeds.rs`), #851 `decision`.
 
 **2026-10-26 (architect after 8335430, drive.nika cut at b-drive-loop on Found):** #861, #862, drive.nika done (close on promote). Found filed as #864 (`+` local returned as a view lowers to `&'static str`; matrix in the issue). Batch: `b848-map-get-tuple-text.md`, `b864-plus-local-view.md`, `b863-exit-code.md` (#863 did not reproduce in two probes: brief allows `noop`). Then: the self-hosting lane (C-7 rest research brief, `emit/seeds.rs`), #851 `decision`.
