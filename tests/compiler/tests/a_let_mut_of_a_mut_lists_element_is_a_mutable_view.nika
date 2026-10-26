@@ -7,7 +7,7 @@ struct Entry {
 
 fn add(mut v: Vec[Entry?], at: i64) {
     let mut x = v[at] ?? return
-    x.names.push("n".clone())
+    x.names.push("n")
 }
 
 fn main() {

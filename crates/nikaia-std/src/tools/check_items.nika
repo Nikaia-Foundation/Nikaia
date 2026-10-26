@@ -306,7 +306,7 @@ impl CheckState {
         if !imports_a_package(view, name) {
             return false
         }
-        self.findings.push(check_refusal("NK1228", span, f"`{name}` is a package, and a `dsl` block names a grammar.", ["A grammar from a package is named with its package, as every name from one is.".clone()], f"Write `dsl {name}::Grammar`, naming the grammar `{name}` offers."))
+        self.findings.push(check_refusal("NK1228", span, f"`{name}` is a package, and a `dsl` block names a grammar.", ["A grammar from a package is named with its package, as every name from one is."], f"Write `dsl {name}::Grammar`, naming the grammar `{name}` offers."))
         return true
     }
 
@@ -458,7 +458,7 @@ fn item_placeholder_of_enum(view: ref ParsedView, name: ref String, variants: re
                 let mut holes: Vec[String] = []
                 for t in types {
                     tys.push(written_ty(view.words, view.aliases, t))
-                    holes.push("Default::default()".clone())
+                    holes.push("Default::default()")
                 }
                 if !item_all_default(tys) {
                     usable = false
@@ -609,14 +609,14 @@ impl CheckState {
                 known.push(key.clone())
             }
         }
-        known.push("panic".clone())
+        known.push("panic")
         let near = nearest_name(name, known)
         let mut help: String = f"Declare it with `fn {name}(…)`, or call it through the package that has it."
         if near != null {
             let close = near ?? return
             help = f"Did you mean `{close}`?"
         }
-        self.findings.push(check_refusal("NK1117", span, f"There's no function called `{name}`.", ["A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.".clone()], help))
+        self.findings.push(check_refusal("NK1117", span, f"There's no function called `{name}`.", ["A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`."], help))
     }
 
     /// `NK1117`/`NK1181`: an `impl` names a trait nothing declares.
@@ -643,7 +643,7 @@ impl CheckState {
         let mut help: String = f"Declare `trait {written}`, or name the package that declares it: `package::{written}`."
         if shape {
             because = f"A type is a `{written}` by how it's declared, not by an `impl`: every `struct` is already a `Struct` and every `enum` an `Enum`."
-            help = "Leave the `impl` out: that's already covered.".clone()
+            help = "Leave the `impl` out: that's already covered."
         }
         self.findings.push(check_refusal("NK1117", span, f"There's no trait called `{written}`.", [because], help))
     }

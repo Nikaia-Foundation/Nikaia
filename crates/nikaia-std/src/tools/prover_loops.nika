@@ -133,7 +133,7 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
     let mut ends: Vec[LoopEnd] = []
     let live = loop_block(arena, body, [first], ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
     for path in live {
-        ends.push(LoopEnd { kind: "turn".clone(), path: path.clone() })
+        ends.push(LoopEnd { kind: "turn", path: path.clone() })
     }
     // A `for`'s binding goes up by one at the end of every turn.
     if counter != "" {
@@ -163,7 +163,7 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
         let not_c = arena.not(c)
         same.insert(0, not_c)
     }
-    exits.push(LgExit { kind: "condition".clone(), relation: arena.and(same) })
+    exits.push(LgExit { kind: "condition", relation: arena.and(same) })
     let mut steps: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
     let mut unsteady: collections::BTreeSet[String] = collections::BTreeSet()
     for end in ends {
@@ -300,7 +300,7 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
                     }
                     let name = match target {
                         Expr::Variable(s, _) => words.resolve(s).clone(),
-                        else => "".clone(),
+                        else => "",
                     }
                     if name != "" && p.values.contains_key(name) {
                         let read = loop_read(arena, value, p, ints, pinned, words, false)
@@ -437,11 +437,11 @@ fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, St
         let here = arena.var(name)
         let before = arena.var(loop_before_name(name, start))
         if k == 0 {
-            found.push((arena.equal(here, before), "closed forms".clone()))
+            found.push((arena.equal(here, before), "closed forms"))
         } else if k > 0 {
-            found.push((arena.ge(here, before), "closed forms".clone()))
+            found.push((arena.ge(here, before), "closed forms"))
         } else {
-            found.push((arena.le(here, before), "closed forms".clone()))
+            found.push((arena.le(here, before), "closed forms"))
         }
     }
     for i in 0..<steady.len() {
@@ -454,7 +454,7 @@ fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, St
             // ky · (x - x@) == kx · (y - y@)
             let left = loop_scaled_offset(arena, record, x, ky)
             let right = loop_scaled_offset(arena, record, y, kx)
-            found.push((arena.equal(left, right), "closed forms".clone()))
+            found.push((arena.equal(left, right), "closed forms"))
         }
     }
     // A counter against its bound: it ends within one step past it, or
@@ -484,9 +484,9 @@ fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, St
                 near = arena.ge(here, reach)
             }
             let n = near ?? continue
-            found.push((n, "closed forms".clone()))
+            found.push((n, "closed forms"))
             let unmoved = arena.equal(here, before)
-            found.push((arena.or([n, unmoved]), "closed forms".clone()))
+            found.push((arena.or([n, unmoved]), "closed forms"))
         }
     }
     // Intervals, widened to what the condition stops: a name whose every
@@ -519,7 +519,7 @@ fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, St
         let at_start = arena.int(known)
         let limit = loop_constant_limit(arena, c, name)
         if up {
-            found.push((arena.ge(here, at_start), "intervals".clone()))
+            found.push((arena.ge(here, at_start), "intervals"))
             let found_limit = limit ?? continue
             let op = found_limit.op.clone()
             let value = found_limit.value
@@ -532,9 +532,9 @@ fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, St
             let t = top ?? continue
             let highest = if t > known { t } else { known }
             let h = arena.int(highest)
-            found.push((arena.le(here, h), "intervals".clone()))
+            found.push((arena.le(here, h), "intervals"))
         } else {
-            found.push((arena.le(here, at_start), "intervals".clone()))
+            found.push((arena.le(here, at_start), "intervals"))
             let found_limit = limit ?? continue
             let op = found_limit.op.clone()
             let value = found_limit.value
@@ -547,7 +547,7 @@ fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, St
             let b = bottom ?? continue
             let lowest = if b < known { b } else { known }
             let l = arena.int(lowest)
-            found.push((arena.ge(here, l), "intervals".clone()))
+            found.push((arena.ge(here, l), "intervals"))
         }
     }
     return found
@@ -579,10 +579,10 @@ fn loop_scaled_offset(mut arena: TermArena, record: ref LoopRecord, name: ref St
 /// stands on the right.
 fn loop_bound_of(arena: ref TermArena, c: i64, name: ref String, state: ref Vec[String]) -> LoopBound? {
     let (op, left, right) = match arena.at(c) {
-        SolverTerm::Lt(a, b) => ("<".clone(), a, b),
-        SolverTerm::Le(a, b) => ("<=".clone(), a, b),
-        SolverTerm::Gt(a, b) => (">".clone(), a, b),
-        SolverTerm::Ge(a, b) => (">=".clone(), a, b),
+        SolverTerm::Lt(a, b) => ("<", a, b),
+        SolverTerm::Le(a, b) => ("<=", a, b),
+        SolverTerm::Gt(a, b) => (">", a, b),
+        SolverTerm::Ge(a, b) => (">=", a, b),
         else => return null,
     }
     let mut other = right
@@ -601,7 +601,7 @@ fn loop_bound_of(arena: ref TermArena, c: i64, name: ref String, state: ref Vec[
         }
     }
     if !turned {
-        return LoopBound { op: op, value: other }
+        return LoopBound { op: op.clone(), value: other }
     }
     let flipped = if op == "<" { ">" } else if op == "<=" { ">=" } else if op == ">" { "<" } else { "<=" }
     return LoopBound { op: flipped.clone(), value: other }

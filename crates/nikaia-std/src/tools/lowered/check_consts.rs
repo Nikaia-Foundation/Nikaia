@@ -92,7 +92,7 @@ pub fn rust_array_type(items: &[BuildValue]) -> Option<String> {
         if !seen {
             found = ty;
             seen = true;
-        } else if found != ty { found = "i64".to_owned(); }
+        } else if found != ty { found = String::from("i64"); }
     }
     if !seen { return None; }
     Some(found)

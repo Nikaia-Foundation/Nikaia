@@ -205,7 +205,7 @@ impl CheckState {
         }
         let mut notes: Vec<String> = vec![];
         if function.is_some() { notes.push(format!("It stopped in `{}`, in another file of the program.", nikaia_std::index::or(function, || ""))); }
-        notes.push("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs.".to_owned());
+        notes.push(String::from("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs."));
         let mut help: String = String::from("Fix it as you would fix the program stopping there, or compute the value while the program runs, with `let` instead of `comptime`.");
         if self.computing_default { help = String::from("Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."); }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1244"), message: format!("`{}` stopped while the program was built: {}.", bound, why), notes, help: Some(help), labels });

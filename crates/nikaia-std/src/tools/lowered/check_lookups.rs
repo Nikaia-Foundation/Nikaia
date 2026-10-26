@@ -167,7 +167,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn warn_migration(&mut self, span: &Span, message: String, help: String) { self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1111".to_owned(), message, notes: vec!["Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are.".to_owned()], help: Some(help), labels: vec![] }); }
+    pub fn warn_migration(&mut self, span: &Span, message: String, help: String) { self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1111"), message, notes: vec![String::from("Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are.")], help: Some(help), labels: vec![] }); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn spelling(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) {
@@ -175,7 +175,7 @@ impl CheckState {
             let held = nikaia_std::index::get(&ty.generics, 0);
             let mut inside: String = String::from("T");
             if !held.generics.is_empty() { inside = world.words.resolve(nikaia_std::index::get(&held.generics, 0).name).to_owned(); }
-            self.findings.push(check_refusal("NK1123", span, format!("Write `SharedMut[{}]` instead of a `Shared` around a lock.", inside), vec!["The common case has a short name, and it's the only way to write it: one type, one spelling.".to_owned()], Some(format!("Write `SharedMut[{}]`.", inside))));
+            self.findings.push(check_refusal("NK1123", span, format!("Write `SharedMut[{}]` instead of a `Shared` around a lock.", inside), vec![String::from("The common case has a short name, and it's the only way to write it: one type, one spelling.")], Some(format!("Write `SharedMut[{}]`.", inside))));
         }
         for inner in ty.generics.iter() { self.spelling(world, inner, span); }
     }

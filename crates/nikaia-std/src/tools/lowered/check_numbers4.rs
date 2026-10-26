@@ -339,12 +339,12 @@ pub(crate) fn a_lit_int(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn number_position_code(what: &str) -> Option<String> {
-    if what == "let" { return Some("NK1103".to_owned()); }
-    if what == "returns" { return Some("NK1104".to_owned()); }
-    if what == "assign" { return Some("NK1105".to_owned()); }
-    if what == "field" { return Some("NK1106".to_owned()); }
-    if what == "argument" { return Some("NK1102".to_owned()); }
+pub(crate) fn number_position_code(what: &str) -> Option<&'static str> {
+    if what == "let" { return Some("NK1103"); }
+    if what == "returns" { return Some("NK1104"); }
+    if what == "assign" { return Some("NK1105"); }
+    if what == "field" { return Some("NK1106"); }
+    if what == "argument" { return Some("NK1102"); }
     None
 }
 
@@ -463,7 +463,7 @@ impl CheckState {
         let text = said.replace(&format!("`{}`", hole), "a number");
         let mut note: String = String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.");
         if a_float_type(want) { note = String::from("A number nothing typed takes one of the integer types its uses ask for, and a float is none of them (Part I 2.4)."); }
-        self.findings.push(check_refusal(&code, span, text, vec![note], Some(format!("Make it a `{}`, or give the number to a place that holds one.", wanted))));
+        self.findings.push(check_refusal(code, span, text, vec![note], Some(format!("Make it a `{}`, or give the number to a place that holds one.", wanted))));
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -559,7 +559,7 @@ pub(crate) fn open_walk_hands_back(ty: &Ty, name: &str) -> bool {
         }, || Ty::Unknown) },
         _ => Ty::Unknown,
     };
-    let handed: String = nikaia_std::index::or(open_walk_named(&result), || "".to_owned().into());
+    let handed: String = nikaia_std::index::or(open_walk_named(&result), || "".into());
     handed == name
 }
 

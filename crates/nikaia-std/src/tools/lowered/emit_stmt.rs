@@ -35,7 +35,7 @@ pub(crate) fn emit_stmt_tuple_part(names: &[String], shape: &[i64], at: &mut i64
     if *at < shape.len() as i64 { width = *nikaia_std::index::get(&shape, nikaia_std::index::at(*at)); }
     *at += 1;
     if width <= 0 {
-        let mut name = "_".to_owned();
+        let mut name: String = String::from("_");
         if *next < names.len() as i64 { name = (*nikaia_std::index::get(&names, nikaia_std::index::at(*next))).to_owned(); }
         *next += 1;
         return name;
@@ -635,7 +635,7 @@ impl EmitState {
             let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_owned();
             let fields = self.unrolls_here(world, &parameter, &on, iter);
             if fields.is_some() {
-                let mut first = "".to_owned();
+                let mut first: String = String::from("");
                 if !bindings.is_empty() { first = emit_text(world, *nikaia_std::index::get(&bindings, 0)); }
                 let list = match fields { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 for field in list.iter() {

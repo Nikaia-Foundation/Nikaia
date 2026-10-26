@@ -89,7 +89,7 @@ pub fn check_simd_bytes(ty: ref Ty) -> i64 sync {
 
 /// `simd::Fixed[lane, count]`.
 fn check_simd_fixed(lane: ref String, count: i64) -> Ty sync {
-    return Ty::Named { name: "simd::Fixed".clone(), args: [Ty::Named { name: lane.clone(), args: [], view: false }, Ty::Count(count)], view: false }
+    return Ty::Named { name: "simd::Fixed", args: [Ty::Named { name: lane.clone(), args: [], view: false }, Ty::Count(count)], view: false }
 }
 
 /// **The lane twice as wide**, signed where it was; `""` past 64 bits.
@@ -206,7 +206,7 @@ pub fn check_simd_made(wanted: ref Ty?, name: ref String, args: ref Vec[Expr]) -
     }
     if name == "simd::Fixed::from" && args.len() == 1 {
         return match args[0] {
-            Expr::ListLit { items, .. } => Ty::Named { name: "simd::Fixed".clone(), args: [Ty::Unknown, Ty::Count(items.len() as i64)], view: false },
+            Expr::ListLit { items, .. } => Ty::Named { name: "simd::Fixed", args: [Ty::Unknown, Ty::Count(items.len() as i64)], view: false },
             else => Ty::Unknown,
         }
     }
@@ -238,12 +238,12 @@ impl CheckState {
             }
             let mut help: String = f"Name what a lane does where the result does not fit: `a.{wrapping}(b)` wraps, `a.{saturating}(b)` stops at the nearest value a lane holds."
             if op == BinaryOp::Mul {
-                help = "Name what a lane does where the result does not fit: `a.wrapping_mul(b)` keeps the low bits.".clone()
+                help = "Name what a lane does where the result does not fit: `a.wrapping_mul(b)` keeps the low bits."
             }
             if wrapping.len() == 0 {
-                help = "A vector has no lane by lane division; divide the lanes one by one with `lane(i)`.".clone()
+                help = "A vector has no lane by lane division; divide the lanes one by one with `lane(i)`."
             }
-            self.findings.push(check_refusal("NK1296", at, f"`{written}` is not a lane operation, and this is a `{shown}`.", ["A lane's `+` would either check every lane, which costs the compare and branch the vector exists to avoid, or wrap, which `+` never does elsewhere in Nikaia (ADR-377 D4).".clone()], help))
+            self.findings.push(check_refusal("NK1296", at, f"`{written}` is not a lane operation, and this is a `{shown}`.", ["A lane's `+` would either check every lane, which costs the compare and branch the vector exists to avoid, or wrap, which `+` never does elsewhere in Nikaia (ADR-377 D4)."], help))
             return vector
         }
         let bits = match op {
@@ -282,7 +282,7 @@ impl CheckState {
         let count = check_simd_count_of(on)
         let indices = check_simd_constant_indices(world, args[0])
         if indices == null {
-            self.findings.push(check_refusal("NK1298", span, "A shuffle's indices are written as constants.".clone(), ["The indices of a shuffle become part of the instruction: a `pshufb` takes them as a constant table, and the checker proves each within the lanes.".clone()], "Write them as `simd::Fixed::from([…])` of literals, each below the lane count.".clone()))
+            self.findings.push(check_refusal("NK1298", span, "A shuffle's indices are written as constants.", ["The indices of a shuffle become part of the instruction: a `pshufb` takes them as a constant table, and the checker proves each within the lanes."], "Write them as `simd::Fixed::from([…])` of literals, each below the lane count."))
             return
         }
         for index in indices ?? [] {

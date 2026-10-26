@@ -2,8 +2,8 @@
 // Edit check_references.nika in the directory above, not this file.
 
 pub(crate) fn check_reference_opened(opened: &str) -> String {
-    if opened == ".as_deref()" { return ".as_deref()".to_owned(); }
-    ".as_ref()".to_owned()
+    if opened == ".as_deref()" { return String::from(".as_deref()"); }
+    String::from(".as_ref()")
 }
 
 pub(crate) fn check_reference_written(expr: &Expr) -> bool {
@@ -100,7 +100,7 @@ impl CheckState {
                 let mut under = false;
                 for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { under = true; } }
                 if under {
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137".to_owned(), message: "You don't need the `ref` here: the compiler lends where it's needed.".to_owned(), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some("Remove the `ref`.".to_owned()), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![] });
                     return true;
                 }
             }
@@ -147,7 +147,7 @@ impl CheckState {
                 _ => { },
             }
             if takes_a_receiver { return true; }
-            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137".to_owned(), message: "You don't need the `ref` here: the compiler lends where it's needed.".to_owned(), notes: vec![format!("`{}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call.", written)], help: Some("Remove the `ref`.".to_owned()), labels: vec![] });
+            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![] });
             return true;
         }
         let found_nullable = check_reference_nullable(found);

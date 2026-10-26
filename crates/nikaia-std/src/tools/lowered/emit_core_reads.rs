@@ -86,8 +86,8 @@ impl EmitState {
                     let receiver = nikaia_std::index::or(bare.strip_suffix(".len()"), || "").to_owned();
                     let empty = emit_read_emptiness(emit_read_turned(op, counter_first), value);
                     if empty.is_some() {
-                        let mut not: String = String::from("!");
-                        if nikaia_std::index::or(empty, || false) { not = "".to_owned(); }
+                        let mut not: &'static str = "!";
+                        if nikaia_std::index::or(empty, || false) { not = ""; }
                         out.push(&format!("{}{}.is_empty()", not, receiver));
                         return Ok(true);
                     }
@@ -148,7 +148,7 @@ impl EmitState {
             let safe = *nikaia_std::index::get(&walked.safe, (k) as usize);
             k += 1;
             if !self.facts.held_reaches.contains(&node_key(receiver)) { continue; }
-            if !safe || !holdable { return Err(nikaia_std::error::raise(EmitRefused { message: "This `?.` returns a view of a value that's gone at the end of this line. Put the value in a `let` on the line before, and use `?.` on that name.".to_owned(), at: Some(span.start as i64) }, &"emit_core_hold_found")); }
+            if !safe || !holdable { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("This `?.` returns a view of a value that's gone at the end of this line. Put the value in a `let` on the line before, and use `?.` on that name."), at: Some(span.start as i64) }, &"emit_core_hold_found")); }
             let name = format!("__nikaia_held_{}", walk.held.len() as i64);
             out.push(&format!("let {} = ", name));
             host.expr(walk, out, receiver, depth, flow, scope)?;
@@ -389,7 +389,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_overlap<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let count = block.stmts.len() as i64;
-        if count < 2 { return Err(nikaia_std::error::raise(EmitRefused { message: "An `overlap` block needs at least two branches to run at the same time.".to_owned(), at: Some(flow.statement) }, &"emit_core_overlap")); }
+        if count < 2 { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("An `overlap` block needs at least two branches to run at the same time."), at: Some(flow.statement) }, &"emit_core_overlap")); }
         if count > 8 { return Err(nikaia_std::error::raise(EmitRefused { message: format!("This `overlap` block has {} branches, but at most 8 are supported.", count), at: Some(flow.statement) }, &"emit_core_overlap")); }
         let mut pauses: Vec<bool> = vec![];
         let mut any_fails = false;
@@ -482,7 +482,7 @@ impl EmitState {
                 if fallible { out.push(")"); }
                 if queued { if wrapper.contains("branch_after") { out.push(&format!(" }}, &\"{}\").await", scope.origin)); } else { out.push(" }).await"); } }
             },
-            _ => { return Err(nikaia_std::error::raise(EmitRefused { message: "Each branch of an `overlap` has to be an expression.".to_owned(), at: Some(flow.statement) }, &"emit_read_branch")); },
+            _ => { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("Each branch of an `overlap` has to be an expression."), at: Some(flow.statement) }, &"emit_read_branch")); },
         }
         out.push(" },\n");
         Ok(())
@@ -492,7 +492,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_select<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[SelectArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let count = arms.len() as i64;
-        if count < 2 { return Err(nikaia_std::error::raise(EmitRefused { message: "A `select` needs at least two arms to choose between.".to_owned(), at: Some(flow.statement) }, &"emit_core_select")); }
+        if count < 2 { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("A `select` needs at least two arms to choose between."), at: Some(flow.statement) }, &"emit_core_select")); }
         if count > 8 { return Err(nikaia_std::error::raise(EmitRefused { message: format!("This `select` has {} arms, but at most 8 are supported.", count), at: Some(flow.statement) }, &"emit_core_select")); }
         let mut any_fails = false;
         let values = emit_arm_values(arms);
@@ -519,7 +519,7 @@ impl EmitState {
             let mut named: String = String::from("_");
             if arm.binding.is_some() { named = emit_text(world, match arm.binding { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }); }
             let mut bound = named.to_owned();
-            if fallible { bound = "__nikaia_won".to_owned(); }
+            if fallible { bound = String::from("__nikaia_won"); }
             out.push(&format!("{}nikaia_std::task::Race{}::{}({}) => ", inner, count, self.emit_read_ordinal(at), bound));
             at += 1;
             if fallible && flow.handled_here {
@@ -531,7 +531,7 @@ impl EmitState {
                 continue;
             }
             let mut opening: Option<String> = None;
-            if fallible { if arm.binding.is_some() { opening = Some(format!("let {} = __nikaia_won?;", named)); } else { opening = Some("__nikaia_won?;".to_owned()); } }
+            if fallible { if arm.binding.is_some() { opening = Some(format!("let {} = __nikaia_won?;", named)); } else { opening = Some(String::from("__nikaia_won?;")); } }
             let st = out.mark();
             host.block_opening_with(walk, out, &arm.body, depth + 1, flow, scope, EmitTail::Value, opening)?;
             out.record(&Span { start: arm.at, end: arm.at }, st);

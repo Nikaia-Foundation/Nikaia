@@ -10,8 +10,8 @@ pub struct CheckRaised {
 pub(crate) fn kind_a_bound_name(name: &str) -> bool { name == "steps" || name == "ram" }
 
 pub(crate) fn kind_unknown_bound_help(name: &str) -> String {
-    let among: Vec<String> = vec!["steps".to_owned(), "ram".to_owned()];
-    let near = match nearest_name(name, &among) { Some(__nikaia_value) => __nikaia_value, None => return "Name `steps` or `ram`, like `comptime(steps: 50G) …`.".to_owned() };
+    let among: Vec<String> = vec![String::from("steps"), String::from("ram")];
+    let near = match nearest_name(name, &among) { Some(__nikaia_value) => __nikaia_value, None => return String::from("Name `steps` or `ram`, like `comptime(steps: 50G) …`.") };
     format!("Did you mean `{}`?", near)
 }
 
@@ -187,14 +187,14 @@ impl CheckState {
         for bound in bounds.iter() {
             let name = world.words.resolve(bound.name).to_owned();
             if !kind_a_bound_name(&name) {
-                self.findings.push(check_refusal("NK1109", span, format!("A `comptime` has no bound called `{}`.", name), vec!["Its bounds are `steps` and `ram`.".to_owned()], Some(kind_unknown_bound_help(&name))));
+                self.findings.push(check_refusal("NK1109", span, format!("A `comptime` has no bound called `{}`.", name), vec![String::from("Its bounds are `steps` and `ram`.")], Some(kind_unknown_bound_help(&name))));
                 refused = true;
                 continue;
             }
             let value = kind_bound_value((self.constant_of(world, &bound.value)).as_ref());
             if value.is_none() {
-                let mut help: String = "Write a number of bytes, like `ram: 16Gi`.".to_owned();
-                if name == "steps" { help = "Write a number, like `steps: 50G`.".to_owned(); }
+                let mut help: String = String::from("Write a number of bytes, like `ram: 16Gi`.");
+                if name == "steps" { help = String::from("Write a number, like `steps: 50G`."); }
                 self.findings.push(check_refusal("NK1102", span, format!("`{}` takes a whole number the build knows, and this is not one.", name), vec![], Some(help)));
                 refused = true;
                 continue;
@@ -234,7 +234,7 @@ impl CheckState {
         for param in params.iter() {
             let param = *param;
             let name = world.words.resolve(param).to_owned();
-            if kind_an_update_only_replaces(world, &name, body) { self.findings.push(check_refusal("NK2207", span, format!("This `update` block replaces `{}` without reading it, which is what `set` is for.", name), vec!["`update` is for changes that depend on the current value. Just storing a new value is what `set` does.".to_owned()], Some("Use `set` if the value is computed outside, or use the old value here: `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`.".to_owned()))); }
+            if kind_an_update_only_replaces(world, &name, body) { self.findings.push(check_refusal("NK2207", span, format!("This `update` block replaces `{}` without reading it, which is what `set` is for.", name), vec![String::from("`update` is for changes that depend on the current value. Just storing a new value is what `set` does.")], Some(String::from("Use `set` if the value is computed outside, or use the old value here: `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`.")))); }
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -247,7 +247,7 @@ impl CheckState {
         }
         if !shapes_has_a_null_arm(arms) { return; }
         let written = written_expression(world.words, value);
-        self.findings.push(check_refusal("NK1256", span, format!("`{}` is a `{}`, which is never `null`, so a `null` arm can't match.", written, on.text()), vec![format!("A `null` arm belongs to a `match` over a `T?`; `{}` always has a value.", written)], Some("Remove the `null` arm.".to_owned())));
+        self.findings.push(check_refusal("NK1256", span, format!("`{}` is a `{}`, which is never `null`, so a `null` arm can't match.", written, on.text()), vec![format!("A `null` arm belongs to a `match` over a `T?`; `{}` always has a value.", written)], Some(String::from("Remove the `null` arm."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -270,7 +270,7 @@ impl CheckState {
             if self.kind_a_misfit(world, &arm.pattern, &kind) {
                 let written = written_expression(world.words, value);
                 let pattern = written_pattern(world.words, &arm.pattern);
-                self.findings.push(check_refusal("NK1103", span, format!("`{}` is {}, so the pattern `{}` can't match it.", written, shown, pattern), vec!["An arm's pattern is a value of the type the `match` is over.".to_owned()], Some("Write a pattern of that type, or convert the value before the `match`.".to_owned())));
+                self.findings.push(check_refusal("NK1103", span, format!("`{}` is {}, so the pattern `{}` can't match it.", written, shown, pattern), vec![String::from("An arm's pattern is a value of the type the `match` is over.")], Some(String::from("Write a pattern of that type, or convert the value before the `match`."))));
                 return;
             }
         }
@@ -328,11 +328,11 @@ impl CheckState {
             if which == "Some" && !some_seen {
                 some_seen = true;
                 let bound = kind_some_binding(world, &arm.pattern);
-                self.findings.push(check_refusal("NK2704", span, format!("`Some({})` is not a pattern of `{}`, a `{}`.", bound, written, on.text()), vec!["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.".to_owned()], Some(format!("Write the name alone: `{} => …`, with `null => …` beside it.", bound))));
+                self.findings.push(check_refusal("NK2704", span, format!("`Some({})` is not a pattern of `{}`, a `{}`.", bound, written, on.text()), vec![String::from("A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.")], Some(format!("Write the name alone: `{} => …`, with `null => …` beside it.", bound))));
             }
             if which == "None" && !none_seen {
                 none_seen = true;
-                self.findings.push(check_refusal("NK2705", span, format!("`None` is not a pattern of `{}`, a `{}`.", written, on.text()), vec!["A `T?` has no `None`: its nothing is written `null`.".to_owned()], Some(String::from("Write `null => …`."))));
+                self.findings.push(check_refusal("NK2705", span, format!("`None` is not a pattern of `{}`, a `{}`.", written, on.text()), vec![String::from("A `T?` has no `None`: its nothing is written `null`.")], Some(String::from("Write `null => …`."))));
             }
         }
         some_seen || none_seen

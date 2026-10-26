@@ -12,13 +12,13 @@ pub enum CheckCopyable {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_asset_outside_a_comptime(&mut self, span: &Span) { self.findings.push(check_refusal("NK1177", span, "`asset` reads a file while the program is built, so it only works in a `comptime`.".to_owned(), vec!["`comptime` says when, `asset(\"…\")` says where the bytes come from, and the call around it says what to do with them.".to_owned()], Some("Write `comptime NAME = …` to build the bytes into the program, or `fs::read(…, root)` to read the file while it runs.".to_owned()))); }
+    pub fn an_asset_outside_a_comptime(&mut self, span: &Span) { self.findings.push(check_refusal("NK1177", span, String::from("`asset` reads a file while the program is built, so it only works in a `comptime`."), vec![String::from("`comptime` says when, `asset(\"…\")` says where the bytes come from, and the call around it says what to do with them.")], Some(String::from("Write `comptime NAME = …` to build the bytes into the program, or `fs::read(…, root)` to read the file while it runs.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_path_that_is_not_a_literal(&mut self, span: &Span) { self.findings.push(check_refusal("NK1176", span, "`asset` needs the path written out, not computed.".to_owned(), vec!["The list of files a build may read is checked against the path as written, so a reader can see from the line which file is read.".to_owned()], Some("Write the path out. For two files, write two `asset(\"…\")` calls.".to_owned()))); }
+    pub fn a_path_that_is_not_a_literal(&mut self, span: &Span) { self.findings.push(check_refusal("NK1176", span, String::from("`asset` needs the path written out, not computed."), vec![String::from("The list of files a build may read is checked against the path as written, so a reader can see from the line which file is read.")], Some(String::from("Write the path out. For two files, write two `asset(\"…\")` calls.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_with_that_changes_nothing(&mut self, ty: &str, span: &Span) { self.findings.push(check_refusal("NK1174", span, format!("This `with` changes no field, so it's just a copy of the `{}`.", ty), vec!["`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there.".to_owned()], Some("Name the fields that change, or remove the `with`.".to_owned()))); }
+    pub fn a_with_that_changes_nothing(&mut self, ty: &str, span: &Span) { self.findings.push(check_refusal("NK1174", span, format!("This `with` changes no field, so it's just a copy of the `{}`.", ty), vec![String::from("`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there.")], Some(String::from("Name the fields that change, or remove the `with`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_with_over_something_else(&mut self, ty: &str, why: CheckCopyable, span: &Span) {
@@ -29,7 +29,7 @@ impl CheckState {
             CheckCopyable::AnEnum => {
                 message = format!("`with` copies a struct, but `{}` is an `enum`.", ty);
                 note = format!("`{}` is an `enum`, and which fields it has depends on the variant.", ty);
-                way_out = "`match` on it first, and build the new value in the arm for its variant.".to_owned();
+                way_out = String::from("`match` on it first, and build the new value in the arm for its variant.");
             },
             CheckCopyable::AView => {
                 message = format!("`with` needs the value itself, but this is only a view of a `{}`.", ty);
@@ -39,12 +39,12 @@ impl CheckState {
             CheckCopyable::NotAStruct => {
                 message = format!("`with` copies a struct, but this is a `{}`.", ty);
                 note = format!("`with` copies a struct field by field, and `{}` isn't a struct with fields.", ty);
-                way_out = "Make the value with the type's constructor instead.".to_owned();
+                way_out = String::from("Make the value with the type's constructor instead.");
             },
             CheckCopyable::Unnamed => {
-                message = "`with` copies a struct, but the type of this value couldn't be worked out.".to_owned();
-                note = "`with` needs to know the value's type, and the type of this value couldn't be worked out.".to_owned();
-                way_out = "Write the type on the `let` this reads, or write the value out with every field.".to_owned();
+                message = String::from("`with` copies a struct, but the type of this value couldn't be worked out.");
+                note = String::from("`with` needs to know the value's type, and the type of this value couldn't be worked out.");
+                way_out = String::from("Write the type on the `let` this reads, or write the value out with every field.");
             },
         }
         self.findings.push(check_refusal("NK1173", span, message, vec![note], Some(way_out)));
@@ -63,7 +63,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn nothing_here_can_fail(&mut self, guarded: &CheckGuarded, span: &Span) {
         if guarded.fallible || guarded.unanswered { return; }
-        self.findings.push(check_refusal("NK1134", span, "Nothing here can fail, so the `catch` has nothing to handle.".to_owned(), vec!["Only a call to a function declared with `throws` can fail.".to_owned(), "None of the calls here is declared with `throws`.".to_owned(), "(A call the compiler knows nothing about would not be reported here.)".to_owned()], Some("Remove the `catch` and its handler.".to_owned())));
+        self.findings.push(check_refusal("NK1134", span, String::from("Nothing here can fail, so the `catch` has nothing to handle."), vec![String::from("Only a call to a function declared with `throws` can fail."), String::from("None of the calls here is declared with `throws`."), String::from("(A call the compiler knows nothing about would not be reported here.)")], Some(String::from("Remove the `catch` and its handler."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -73,7 +73,7 @@ impl CheckState {
             _ => false,
         };
         if !written { return; }
-        self.findings.push(check_refusal("NK1137", span, "You don't need the `ref` here: the compiler lends where it's needed.".to_owned(), vec!["`after:` is only read, so it's lent already.".to_owned()], Some("Remove the `ref`.".to_owned())));
+        self.findings.push(check_refusal("NK1137", span, String::from("You don't need the `ref` here: the compiler lends where it's needed."), vec![String::from("`after:` is only read, so it's lent already.")], Some(String::from("Remove the `ref`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

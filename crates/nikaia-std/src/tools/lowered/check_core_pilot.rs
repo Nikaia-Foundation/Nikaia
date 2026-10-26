@@ -54,7 +54,7 @@ pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut Check
             let nullable = matches!(read, Ty::Nullable(_));
             if !nullable { return; }
             let slot = format!("{}[{}]", host.written(base), host.written(index));
-            let notes: Vec<String> = vec!["A missing key is normal, not a bug, so this line has to say what a missing key counts as.".to_owned()];
+            let notes: Vec<String> = vec![String::from("A missing key is normal, not a bug, so this line has to say what a missing key counts as.")];
             let help: String = format!("Write it out with a fallback for a missing key: `{} = ({} ?? 0) + 1`.", slot, slot);
             state.findings.push(check_refusal("NK1162", span, format!("`{}` reads the map before writing it, and the key might not be there yet.", slot), notes, Some(help)));
         },
@@ -96,8 +96,8 @@ pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckStat
         return;
     }
     if ty.is_unknown() || state.copied(world, &ty) { return; }
-    let mut way: String = "".to_owned();
-    if what == "handed back" { way = " to return".to_owned(); }
+    let mut way: &'static str = "";
+    if what == "handed back" { way = " to return"; }
     let notes: Vec<String> = vec![format!("`mut {}` is passed as `ref mut`, so the caller's `{}` is changed in place and stays the caller's. Giving it away would take it from them.", name, ty.text())];
     let help: String = format!("Write `{}.clone()` for a copy{}, or drop the `mut` if the function is meant to use up its value.", name, way);
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: a `mut` parameter is only borrowed.", name), notes, Some(help)));
@@ -105,8 +105,8 @@ pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckStat
 
 pub(crate) fn check_core_grammar_input_refused(key: &str, given: &Ty, span: &Span) -> CheckFinding {
     let message = format!("`{}` parses a `String` or a `Bytes`, and is handed a `{}`.", key, given.text());
-    let notes: Vec<String> = vec!["A grammar reads text or bytes; the argument decides which.".to_owned()];
-    let help = "Hand it the text or the bytes to parse.".to_owned();
+    let notes: Vec<String> = vec![String::from("A grammar reads text or bytes; the argument decides which.")];
+    let help: String = String::from("Hand it the text or the bytes to parse.");
     check_refusal("NK1282", span, message, notes, Some(help))
 }
 

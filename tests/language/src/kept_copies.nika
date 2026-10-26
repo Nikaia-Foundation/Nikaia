@@ -26,7 +26,7 @@ test "a cloned view is returned as text of its own" {
 }
 
 test "a cloned view is assigned and kept in a field" {
-    let mut s = "x".clone()
+    let mut s: String = "x"
     assert(s == "x")
     s = "// y".trim_start_matches("// ").clone()
     let kept = Kept { text: "q--".trim_end_matches("-").clone() }

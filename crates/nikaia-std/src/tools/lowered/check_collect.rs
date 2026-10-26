@@ -2,9 +2,9 @@
 // Edit check_collect.nika in the directory above, not this file.
 
 pub(crate) fn collect_default_written(default: Option<&FieldDefault>) -> String {
-    let given = match default { Some(__nikaia_value) => __nikaia_value, None => return "".to_owned() };
+    let given = match default { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     if a_literal(&given.value) { return default_text(&given.value); }
-    "computed".to_owned()
+    String::from("computed")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -35,7 +35,7 @@ impl CheckState {
                     match &variant.fields {
                         VariantFields::Named(fields) => {
                             let mut held: Vec<FieldContract> = vec![];
-                            for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty), public: true, default: "".to_owned(), attributes: vec![] }); }
+                            for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty), public: true, default: String::from(""), attributes: vec![] }); }
                             self.variant_owner.insert(key.to_owned(), owner.to_owned());
                             self.structs.insert(key, held);
                         },
@@ -98,7 +98,7 @@ impl CheckState {
                     let mut held: Vec<FieldContract> = vec![];
                     for field in fields.iter() {
                         let ty = self.collect_declared(world, beside, &field.ty, &field.span);
-                        held.push(FieldContract { name: world.here.text(field.name), ty, public: true, default: "".to_owned(), attributes: vec![] });
+                        held.push(FieldContract { name: world.here.text(field.name), ty, public: true, default: String::from(""), attributes: vec![] });
                     }
                     let key = format!("{}::{}", own, world.here.text(variant.name));
                     self.variant_owner.insert(key.to_owned(), own.to_owned());

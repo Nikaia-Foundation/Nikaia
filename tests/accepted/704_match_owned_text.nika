@@ -29,10 +29,10 @@ fn main() {
     println(pick("number"))
     println(pick("str"))
     println(pick("char"))
-    let owner = Named { name: "b".clone() }
+    let owner = Named { name: "b" }
     let r = match owner.name { "a" => 1, "b" => 2, else => 3 }
     let m = match made(1) { "n1" => true, else => false }
-    let k = "x".clone()
+    let k = "x"
     let o = match k { "x" => "found", other => other }
     println(f"{r} {m} {o} {direct("a")}")
 }

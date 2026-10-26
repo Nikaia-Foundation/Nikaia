@@ -24,9 +24,9 @@ fn either(ask: Ask, name: String) -> i64 {
 
 fn main() {
     let mut a: collections::BTreeMap[String, E] = collections::BTreeMap()
-    a.insert("j", E { n: 4, tags: ["j".clone()] })
+    a.insert("j", E { n: 4, tags: ["j"] })
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
-    b.insert("k", E { n: 3, tags: ["k".clone(), "k2".clone()] })
+    b.insert("k", E { n: 3, tags: ["k", "k2"] })
     let ask = Ask { own: L { types: a }, library: L { types: b } }
     let k = f"k"
     println(f"{either(ask, "j")} {either(ask, k)} {either(ask, "z")} {ask.own.types.len()}")

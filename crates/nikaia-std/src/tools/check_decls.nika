@@ -200,7 +200,7 @@ impl CheckState {
         if !a_number_name(name) {
             return
         }
-        let mut help: String = "Write the computation with the operators, or in a function of your own that takes the number.".clone()
+        let mut help: String = "Write the computation with the operators, or in a function of your own that takes the number."
         let bits = check_decls_bits_as(name, method)
         if bits != null {
             let named = bits ?? ""
@@ -217,7 +217,7 @@ impl CheckState {
         if name != "Vec" || method != "collect" || args.len() != 0 {
             return
         }
-        self.findings.push(check_refusal("NK1210", span, "A list has no method called `collect`.".clone(), ["`map` and `filter` on a list hand back a list already; `collect` makes a list of a sequence, such as `keys()` or `io::lines()`.".clone()], "Leave out `.collect()`.".clone()))
+        self.findings.push(check_refusal("NK1210", span, "A list has no method called `collect`.", ["`map` and `filter` on a list hand back a list already; `collect` makes a list of a sequence, such as `keys()` or `io::lines()`."], "Leave out `.collect()`."))
     }
 
     /// **`NK1131`: a field of a borrowed subject, handed out by value.**
@@ -301,7 +301,7 @@ impl CheckState {
     /// rewrite — and so that a method call on an ordinary value named like a
     /// grammar is untouched.
     pub fn a_grammar_reached_through_a_dot(ref mut self, owner: ref String, rule: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1147", span, f"Reach a rule of `{owner}` with `::`, not with a dot.", ["A owner is a name like a module, and its rules are reached the same way. The dot is only for a value's fields and methods.".clone()], f"Write `{owner}::{rule}(…)`."))
+        self.findings.push(check_refusal("NK1147", span, f"Reach a rule of `{owner}` with `::`, not with a dot.", ["A owner is a name like a module, and its rules are reached the same way. The dot is only for a value's fields and methods."], f"Write `{owner}::{rule}(…)`."))
     }
 
     /// What kind of type a name is, for the sentence about a shape bound.
@@ -312,7 +312,7 @@ impl CheckState {
         if self.enums.contains_key(ty) {
             return f"an `enum`, so the bound it matches is `[{ty}: Enum]`"
         }
-        return "a built-in type, which is neither".clone()
+        return "a built-in type, which is neither"
     }
 
     /// Whether `ty` answers to a bound the program wrote: a shape bound by the
@@ -375,11 +375,11 @@ impl CheckState {
     /// later, which is why it is made now rather than when somebody depends on
     /// the hole.
     pub fn cast_names_a_foreign_type(ref mut self, into: ref String, span: ref Span) sync {
-        let mut help: String = "Convert to one of the types above, or leave the cast out.".clone()
+        let mut help: String = "Convert to one of the types above, or leave the cast out."
         if into == "usize" || into == "isize" || into == "u16" || into == "u32" || into == "u64" || into == "u128" || into == "i8" || into == "i16" || into == "i128" {
-            help = "Lengths and indexes are `i64`, and the compiler converts them for the machine itself, so just remove the cast. To cut a number down to a narrower type, use `truncating_i32`.".clone()
+            help = "Lengths and indexes are `i64`, and the compiler converts them for the machine itself, so just remove the cast. To cut a number down to a narrower type, use `truncating_i32`."
         }
-        self.findings.push(check_refusal("NK1122", span, f"You can't convert to `{into}` with `as`: Nikaia has no such type.", ["The number types are `i32`, `i64`, `u8`, `u32`, `u64`, `f32` and `f64`.".clone()], help))
+        self.findings.push(check_refusal("NK1122", span, f"You can't convert to `{into}` with `as`: Nikaia has no such type.", ["The number types are `i32`, `i64`, `u8`, `u32`, `u64`, `f32` and `f64`."], help))
     }
 
     /// Whether `variant` is a variant of the enum `ty`.

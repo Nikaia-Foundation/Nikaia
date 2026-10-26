@@ -178,7 +178,7 @@ fn split_once_and_rsplit_once_cut_at_one_separator() {
 fn min_and_max_by_key_pick_by_the_key_and_are_null_when_empty() {
     let out = run(
         "seq-by-key",
-        "    let near = xs.iter().min_by_key(fn(x) { (x - 5).abs() }) ?? -1\n    let high = xs.iter().max_by_key(fn(x) { x % 5 }) ?? -1\n    let first = xs.iter().min_by_key(fn(x) { x % 2 }) ?? -1\n    let lost = none.iter().min_by_key(fn(x) { x }) ?? -1\n    let gone = none.iter().max_by_key(fn(x) { x }) ?? -1\n    let words: Vec[String] = [\"bb\".clone(), \"a\".clone(), \"ccc\".clone()]\n    let short = words.iter().min_by_key(fn(w) { w.len() }) ?? \"none\"\n    let long = words.iter().max_by_key(fn(w) { w.len() }) ?? \"none\"\n    println(f\"{near} {high} {first} {lost} {gone} {short} {long}\")",
+        "    let near = xs.iter().min_by_key(fn(x) { (x - 5).abs() }) ?? -1\n    let high = xs.iter().max_by_key(fn(x) { x % 5 }) ?? -1\n    let first = xs.iter().min_by_key(fn(x) { x % 2 }) ?? -1\n    let lost = none.iter().min_by_key(fn(x) { x }) ?? -1\n    let gone = none.iter().max_by_key(fn(x) { x }) ?? -1\n    let words: Vec[String] = [\"bb\", \"a\", \"ccc\"]\n    let short = words.iter().min_by_key(fn(w) { w.len() }) ?? \"none\"\n    let long = words.iter().max_by_key(fn(w) { w.len() }) ?? \"none\"\n    println(f\"{near} {high} {first} {lost} {gone} {short} {long}\")",
     );
     assert_eq!(out, "4 4 8 -1 -1 a ccc\n");
 }

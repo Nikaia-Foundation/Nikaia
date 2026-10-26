@@ -18,8 +18,8 @@ fn apply(op: Op, a: i64, b: i64) -> i64 {
 
 fn describe(op: Op) -> String {
     match op {
-        Op::Add => "add".clone()
-        Op::Sub => "sub".clone()
+        Op::Add => "add"
+        Op::Sub => "sub"
     }
 }
 

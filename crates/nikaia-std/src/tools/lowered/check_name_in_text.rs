@@ -103,7 +103,7 @@ impl CheckState {
             Expr::Field { .. } => written.to_owned(),
             _ => format!("({})", written),
         };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1201".to_owned(), message: format!("You can't put the file name `{}` in an `f\"…\"` that is text.", written), notes: vec!["A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.".to_owned()], help: Some(format!("Write `{{{}.to_text()}}` to use it as text where it is text, or `{{{}.display()}}` to show it.", shown, shown)), labels: vec![] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1201"), message: format!("You can't put the file name `{}` in an `f\"…\"` that is text.", written), notes: vec![String::from("A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.")], help: Some(format!("Write `{{{}.to_text()}}` to use it as text where it is text, or `{{{}.display()}}` to show it.", shown, shown)), labels: vec![] });
     }
 }
 

@@ -1951,7 +1951,7 @@ pub(crate) fn late_arms(program: &Program, ask: &TierAsk<'_, '_, '_, '_>) -> Tie
 pub(crate) fn late_function(item: &Item, ask: &TierAsk<'_, '_, '_, '_>, late: &mut TierLate) {
     match item {
         Item::Fn { args, body, .. } => {
-            let mut names: Vec<String> = vec!["self".to_owned()];
+            let mut names: Vec<String> = vec![String::from("self")];
             for arg in args.iter() { names.push(ask.names.resolve(arg.name).to_owned()); }
             late_body(body, &names, ask, late);
         },
@@ -2085,7 +2085,7 @@ pub(crate) fn late_stmt(stmt: &Stmt, leaf: bool, ask: &TierAsk<'_, '_, '_, '_>, 
             late_expr(value, false, ask, late);
             let assigned = match target {
                 Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
-                _ => "".to_owned(),
+                _ => String::from(""),
             };
             if op.is_some() || assigned == "" { late_expr(target, false, ask, late); } else { late_written(&assigned, late); }
         },

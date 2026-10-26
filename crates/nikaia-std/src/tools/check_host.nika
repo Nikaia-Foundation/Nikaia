@@ -525,7 +525,7 @@ impl CheckState {
     pub fn unmarked_hole[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, text: ref String, span: ref Span) sync {
         if text.contains("{{") || text.contains("}}") {
             let single = text.replace("{{", "{").replace("}}", "}")
-            self.warn_migration(span, "`{{{{` in a plain string is now two braces.".clone(), f"Braces in a plain string don't need escaping any more: write `\"{single}\"`.")
+            self.warn_migration(span, "`{{{{` in a plain string is now two braces.", f"Braces in a plain string don't need escaping any more: write `\"{single}\"`.")
             return
         }
         for hole in brace_groups(text) {
@@ -686,7 +686,7 @@ impl CheckState {
         if self.computing_default {
             help = f"Check it with `nikaia check` or `nikaia build`, which have one, or make `{bound}` a `T?` and compute it in the body."
         }
-        self.findings.push(check_refusal("NK1127", span, f"`{bound}` can't be computed while the program is built.", ["This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it.".clone()], help))
+        self.findings.push(check_refusal("NK1127", span, f"`{bound}` can't be computed while the program is built.", ["This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it."], help))
     }
 
     /// **`NK1127` where this compiler builds no program for a value** (ADR-321

@@ -14,19 +14,19 @@ use std::collections
 /// none of them.
 pub fn check_not_pure_because(contract: ref FnContract) -> String? {
     if !contract.sync_claim.is_sync() {
-        return "can pause".clone()
+        return "can pause"
     }
     if contract.fails_with.len() > 0 {
-        return "can fail".clone()
+        return "can fail"
     }
     if contract.mutates {
-        return "changes what it is called on".clone()
+        return "changes what it is called on"
     }
     if !contract.touches_known || contract.touches.len() > 0 {
-        return "touches something outside the program's values".clone()
+        return "touches something outside the program's values"
     }
     if contract.touches_a_lock.holds() {
-        return "takes a lock".clone()
+        return "takes a lock"
     }
     return null
 }
@@ -63,7 +63,7 @@ impl CheckState {
                         bound.push(world.words.resolve(name).clone())
                     }
                     let name = bound.join("`, `")
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104".clone(), message: f"A branch of an `overlap` can't declare `{name}`.", notes: ["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.".clone()], help: f"Take the value from the block instead: `let ({name}, …) = overlap {{ … }}`.", labels: [] })
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104", message: f"A branch of an `overlap` can't declare `{name}`.", notes: ["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written."], help: f"Take the value from the block instead: `let ({name}, …) = overlap {{ … }}`.", labels: [] })
                 },
                 else => {},
             }
@@ -78,7 +78,7 @@ impl CheckState {
                 if clash != null {
                     let verdict = clash ?? Verdict::NotAccountedFor
                     let why = capitalised(verdict.why())
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104".clone(), message: "These two branches can't run at the same time.".clone(), notes: [f"{why}.", "`overlap` runs its branches at once, so they can't depend on each other.".clone()], help: "If they should run in order, write them as ordinary statements.".clone(), labels: [] })
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104", message: "These two branches can't run at the same time.", notes: [f"{why}.", "`overlap` runs its branches at once, so they can't depend on each other."], help: "If they should run in order, write them as ordinary statements.", labels: [] })
                     // One finding per branch: a branch that meets two others has
                     // one thing wrong with it, and three messages about it is
                     // the same mistake told three times.
@@ -152,7 +152,7 @@ impl CheckState {
     }
 
     fn a_claim_names(ref self, world: ref CheckWorld, func: ref Expr, mut found: Vec[String]) sync {
-        let mut name: String = "".clone()
+        let mut name: String = ""
         match func {
             Expr::Variable(symbol, _) => {
                 name = world.words.resolve(symbol).clone()
@@ -166,7 +166,7 @@ impl CheckState {
                 name = world.here.unaliased(joined)
             },
             else => {
-                found.push("The condition calls something that isn't a plain name.".clone())
+                found.push("The condition calls something that isn't a plain name.")
                 return
             },
         }
@@ -193,7 +193,7 @@ impl CheckState {
         let call = resolved ?? return
         let why = check_not_pure_because(call.contract)
         if why != null {
-            let because = why ?? "".clone()
+            let because = why ?? ""
             found.push(f"`{name}` {because}")
         }
     }

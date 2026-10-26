@@ -144,7 +144,7 @@ impl CheckState {
                     return
                 }
                 name = match item {
-                    Ty::Unknown => "a sequence".clone(),
+                    Ty::Unknown => "a sequence",
                     else => f"a sequence of `{item.text()}`",
                 }
             }
@@ -154,14 +154,14 @@ impl CheckState {
         // also unwrapping a failure is a shape to design rather than to guess
         // at (ADR-025 §7).
         if bindings != 1 {
-            self.findings.push(check_refusal("NK2701", span, f"A `for` over {name} gives one value at a time, but you're binding {bindings}.", [f"Each turn of {name} can fail, and the loop variable is what's left once that's checked."], "Bind one name and take the pair apart inside the loop.".clone()))
+            self.findings.push(check_refusal("NK2701", span, f"A `for` over {name} gives one value at a time, but you're binding {bindings}.", [f"Each turn of {name} can fail, and the loop variable is what's left once that's checked."], "Bind one name and take the pair apart inside the loop."))
             return
         }
         let added = self.facts.fallible_loops.insert(span.start as i64)
         if self.flow.throwing {
             return
         }
-        self.findings.push(check_refusal("NK2701", span, "This function can fail, because a turn of this loop can fail.".clone(), [f"{capitalised(name)} reads as it goes, and a read can fail, so the failure passes through this function like a failing call's would."], "Add `throws` to this function, or handle the failure inside the loop.".clone()))
+        self.findings.push(check_refusal("NK2701", span, "This function can fail, because a turn of this loop can fail.", [f"{capitalised(name)} reads as it goes, and a read can fail, so the failure passes through this function like a failing call's would."], "Add `throws` to this function, or handle the failure inside the loop."))
     }
 
     /// Whether this method call is an **eager** walk of a sequence whose step

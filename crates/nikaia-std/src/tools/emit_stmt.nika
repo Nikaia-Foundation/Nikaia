@@ -57,7 +57,7 @@ fn emit_stmt_tuple_part(names: ref Vec[String], shape: ref Vec[i64], mut at: i64
     }
     at += 1
     if width <= 0 {
-        let mut name = "_".clone()
+        let mut name: String = "_"
         if next < names.len() {
             name = names[next].clone()
         }
@@ -863,7 +863,7 @@ impl EmitState {
             let on = (walk.specialising?.second ?? "").clone()
             let fields = self.unrolls_here(world, parameter, on, iter)
             if fields != null {
-                let mut first = "".clone()
+                let mut first: String = ""
                 if bindings.len() != 0 {
                     first = emit_text(world, bindings[0])
                 }

@@ -13,7 +13,7 @@ impl CheckState {
         if self.computing_default {
             help = f"Make `{callee}` `sync` so it touches nothing outside the program, or make the option a `T?` and call it in the body."
         }
-        self.findings.push(check_refusal("NK1152", span, f"You can't call `{callee}` while the program is built.", [because.clone(), "At build time only functions that never pause and touch nothing outside the program can run.".clone()], help))
+        self.findings.push(check_refusal("NK1152", span, f"You can't call `{callee}` while the program is built.", [because.clone(), "At build time only functions that never pause and touch nothing outside the program can run."], help))
     }
 
     /// `NK1152`: a `comptime` that ran past a bound of the build - memory,
@@ -41,7 +41,7 @@ impl CheckState {
         let mut note: String = "Each turn of a loop and each call is a step, and the count is the same on every machine."
         if kind == "memory" {
             message = f"`{bound}` held more than {limit} bytes at once while the program was built."
-            note = "What it holds is counted as it asks for it, the same on every machine.".clone()
+            note = "What it holds is counted as it asks for it, the same on every machine."
         } else if kind == "depth" {
             message = f"`{bound}` went more than {limit} calls deep while the program was built."
         }
@@ -63,7 +63,7 @@ impl CheckState {
         notes.push(note)
         let mut help: String = "Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`."
         if self.computing_default {
-            help = "Look for a loop or a recursion that does not end, or make the option a `T?` and compute the value in the body.".clone()
+            help = "Look for a loop or a recursion that does not end, or make the option a `T?` and compute the value in the body."
         }
         self.findings.push(check_refusal("NK1152", span, message, notes, help))
     }
@@ -90,7 +90,7 @@ impl CheckState {
         }
         // **The constant on this line**, which is the one the reader declared;
         // the ring says where it goes.
-        self.findings.push(check_refusal("NK1168", span, f"`{bound}` depends on itself.", [f"The chain is {named.join(" → ")}, and a `comptime` has to be computable while the program is built."], "Give one of them a value that doesn't depend on the others, or make it a `let` so it's computed while the program runs.".clone()))
+        self.findings.push(check_refusal("NK1168", span, f"`{bound}` depends on itself.", [f"The chain is {named.join(" → ")}, and a `comptime` has to be computable while the program is built."], "Give one of them a value that doesn't depend on the others, or make it a `let` so it's computed while the program runs."))
     }
 
     /// `NK1127`: a `comptime` whose value needs something the build does not

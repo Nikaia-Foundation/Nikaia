@@ -225,17 +225,17 @@ impl CheckFacts {
 }
 
 pub(crate) fn check_claim_held(held: Option<&ClaimHeld>) -> String {
-    let given = match held { Some(__nikaia_value) => __nikaia_value, None => return "refused: a claim about data from outside the program".to_owned() };
+    let given = match held { Some(__nikaia_value) => __nikaia_value, None => return String::from("refused: a claim about data from outside the program") };
     match given {
-        ClaimHeld::Proved => "proved".to_owned(),
+        ClaimHeld::Proved => String::from("proved"),
         ClaimHeld::ProvedThrough(how) => how.to_owned(),
         ClaimHeld::Precondition(f, n) => {
             let n = *n;
-            if f == "main" { "precondition of `main`, checked where the words arrive".to_owned() } else if n == 0 { format!("precondition of `{}`: proved at every call the compiler sees; any other reaches the entry that checks it", f) } else if n == 1 { format!("precondition of `{}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it", f) } else { format!("precondition of `{}`: {} calls check it when they run; any other call proves it or reaches the entry that checks it", f, n) }
+            if f == "main" { String::from("precondition of `main`, checked where the words arrive") } else if n == 0 { format!("precondition of `{}`: proved at every call the compiler sees; any other reaches the entry that checks it", f) } else if n == 1 { format!("precondition of `{}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it", f) } else { format!("precondition of `{}`: {} calls check it when they run; any other call proves it or reaches the entry that checks it", f, n) }
         },
         ClaimHeld::AtRunTime(why) => format!("checked at run time: {}", why),
-        ClaimHeld::ByTheTest => "checked when the test runs".to_owned(),
-        ClaimHeld::Refused => "refused: a claim about data from outside the program".to_owned(),
+        ClaimHeld::ByTheTest => String::from("checked when the test runs"),
+        ClaimHeld::Refused => String::from("refused: a claim about data from outside the program"),
     }
 }
 

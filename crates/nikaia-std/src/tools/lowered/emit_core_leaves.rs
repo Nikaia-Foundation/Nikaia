@@ -232,7 +232,7 @@ impl EmitState {
                 self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)?;
                 out.push(")");
             },
-            _ => { return Err(nikaia_std::error::raise(EmitRefused { message: "not a string literal".to_owned(), at: None }, &"emit_core_string")); },
+            _ => { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("not a string literal"), at: None }, &"emit_core_string")); },
         }
         Ok(())
     }
@@ -297,8 +297,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_grammar_entry<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: &Expr, parallelism: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let question = match flow.caught {
-            true => "".to_owned(),
-            false => "?".to_owned(),
+            true => "",
+            false => "?",
         };
         let name = emit_text(world, grammar_symbol);
         if !self.grammars.contains_key(&name.to_owned()) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("There's no grammar called `{}` in this file.", name), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }

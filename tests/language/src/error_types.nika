@@ -131,7 +131,7 @@ test "a failure from std is matched by variant" {
     let text = error_types_read("nope.txt") catch {
         match error {
             io::IoError::NotFound(p) => f"no file: {p.display()}"
-            else => "other".clone()
+            else => "other"
         }
     }
     assert(text == "no file: nope.txt")
@@ -145,7 +145,7 @@ test "the long form says there is no site" {
     let mut said = ""
     let text = error_types_read("nope.txt") catch {
         said = f"{error.full()}"
-        "fallback".clone()
+        "fallback"
     }
     let named = said.contains("nope.txt")
     let no_site = said.contains("no site recorded")

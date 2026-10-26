@@ -28,7 +28,7 @@ fn main() {
             println(f"{x}")
         }
     }
-    let s = "hi".clone()
+    let s = f"hi"
     match s {
         t => {
             shout(t)

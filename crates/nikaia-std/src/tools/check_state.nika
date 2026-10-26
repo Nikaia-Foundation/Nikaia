@@ -277,13 +277,13 @@ pub struct CheckRepeats {
 
 impl CheckRepeats {
     pub fn a_loop(words: ref winnow_grammar::InternerContext, frame: i64, body: ref Block) -> CheckRepeats {
-        let mut found = CheckRepeats { frame: frame, what: "loop".clone(), revived: collections::BTreeSet(), leaves: false }
+        let mut found = CheckRepeats { frame: frame, what: "loop", revived: collections::BTreeSet(), leaves: false }
         what_a_loop_does(words, body, found)
         return found
     }
 
     pub fn a_lambda(frame: i64) -> CheckRepeats {
-        return CheckRepeats { frame: frame, what: "lambda".clone(), revived: collections::BTreeSet(), leaves: false }
+        return CheckRepeats { frame: frame, what: "lambda", revived: collections::BTreeSet(), leaves: false }
     }
 
     /// Whether the body takes `name` again on its next turn.

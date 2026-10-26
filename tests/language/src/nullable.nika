@@ -666,8 +666,8 @@ fn nullable_pick_name(user: ref NullablePerson?, who: ref String) -> i64 {
 test "the text form of text beside a view is the text itself" {
     let user: NullablePerson? = NullablePerson { name: "Ada" }
     let none: NullablePerson? = null
-    let name = user?.name ?? "nobody".to_string()
-    let other = none?.name ?? "nobody".to_string()
+    let name = user?.name ?? "nobody"
+    let other = none?.name ?? "nobody"
     let who: String = "someone"
     let line = f"{name} {other} {nullable_pick_name(none, who)}"
     assert(line == "Ada nobody 7")

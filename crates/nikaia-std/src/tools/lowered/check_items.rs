@@ -202,7 +202,7 @@ impl CheckState {
         let name = view.text(target);
         if name == "html" || self.grammars.contains_key(&name) { return false; }
         if !imports_a_package(view, &name) { return false; }
-        self.findings.push(check_refusal("NK1228", span, format!("`{}` is a package, and a `dsl` block names a grammar.", name), vec!["A grammar from a package is named with its package, as every name from one is.".to_owned()], Some(format!("Write `dsl {}::Grammar`, naming the grammar `{}` offers.", name, name))));
+        self.findings.push(check_refusal("NK1228", span, format!("`{}` is a package, and a `dsl` block names a grammar.", name), vec![String::from("A grammar from a package is named with its package, as every name from one is.")], Some(format!("Write `dsl {}::Grammar`, naming the grammar `{}` offers.", name, name))));
         true
     }
     pub fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
@@ -312,10 +312,10 @@ pub(crate) fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>
             VariantFields::Unit => { },
             VariantFields::Tuple(types) => {
                 let mut tys: Vec<Ty> = vec![];
-                let mut holes: Vec<String> = vec![];
+                let mut holes: Vec<&'static str> = vec![];
                 for t in types.iter() {
                     tys.push(written_ty(view.words, view.aliases, t));
-                    holes.push("Default::default()".to_owned());
+                    holes.push("Default::default()");
                 }
                 if !item_all_default(&tys) { usable = false; } else {
                     let joined = holes.join(", ");
@@ -417,14 +417,14 @@ impl CheckState {
         let mut known: Vec<String> = vec![];
         for key in world.own.functions.keys() { if !key.contains("::") { known.push(key.to_owned()); } }
         for key in world.library.functions.keys() { if !key.contains("::") { known.push(key.to_owned()); } }
-        known.push("panic".to_owned());
+        known.push(String::from("panic"));
         let near = nearest_name(name, &known);
         let mut help: String = format!("Declare it with `fn {}(…)`, or call it through the package that has it.", name);
         if near.is_some() {
             let close = match near { Some(__nikaia_value) => __nikaia_value, None => return };
             help = format!("Did you mean `{}`?", close);
         }
-        self.findings.push(check_refusal("NK1117", span, format!("There's no function called `{}`.", name), vec!["A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.".to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK1117", span, format!("There's no function called `{}`.", name), vec![String::from("A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.")], Some(help)));
     }
     pub fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
         let at = nikaia_std::search::find(&written, &"::", 0);
@@ -443,7 +443,7 @@ impl CheckState {
         let mut help: String = format!("Declare `trait {}`, or name the package that declares it: `package::{}`.", written, written);
         if shape {
             because = format!("A type is a `{}` by how it's declared, not by an `impl`: every `struct` is already a `Struct` and every `enum` an `Enum`.", written);
-            help = "Leave the `impl` out: that's already covered.".to_owned();
+            help = String::from("Leave the `impl` out: that's already covered.");
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no trait called `{}`.", written), vec![because], Some(help)));
     }

@@ -189,7 +189,7 @@ impl CheckState {
             return
         }
         let message = f"The two sides of `??` don't match: the left is a `{viewed.text()}`, the fallback a `{owned.text()}`."
-        let notes: Vec[String] = ["A view and the value it points into are different types, and `??` has to give back one type.".clone(), "Nikaia never makes a copy behind your back, so it can't make the two agree on its own.".clone()]
+        let notes: Vec[String] = ["A view and the value it points into are different types, and `??` has to give back one type.", "Nikaia never makes a copy behind your back, so it can't make the two agree on its own."]
         let help = f"Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{owned.text()}`, put the value in a name of its own first."
         self.findings.push(check_refusal("NK1185", span, message, notes, help))
     }

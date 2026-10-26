@@ -79,7 +79,7 @@ pub(crate) fn loop_record_of(arena: &mut TermArena, start: i64, outer: &[String]
     let first = LoopPath { constraints: vec![], values: head, unread: collections::BTreeSet::new() };
     let mut ends: Vec<LoopEnd> = vec![];
     let live = match loop_block(arena, body, &vec![first], &mut ends, &state, ints, pinned, words, claims, throwing, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    for path in live.iter() { ends.push(LoopEnd { kind: "turn".to_owned(), path: path.clone() }); }
+    for path in live.iter() { ends.push(LoopEnd { kind: String::from("turn"), path: path.clone() }); }
     if counter != "" {
         let one = arena.int(1);
         let mut stepped: Vec<LoopEnd> = vec![];
@@ -107,7 +107,7 @@ pub(crate) fn loop_record_of(arena: &mut TermArena, start: i64, outer: &[String]
         let not_c = arena.not(c);
         same.insert(0, not_c);
     }
-    exits.push(LgExit { kind: "condition".to_owned(), relation: arena.and(same) });
+    exits.push(LgExit { kind: String::from("condition"), relation: arena.and(same) });
     let mut steps: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
     let mut unsteady: collections::BTreeSet<String> = collections::BTreeSet::new();
     for end in ends.iter() {
@@ -203,7 +203,7 @@ pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath
                     if leaves_stmt(&stmt.node, throwing, holes_of, true) { return None; }
                     let name = match target {
                         Expr::Variable(s, _) => { let s = *s; words.resolve(s).to_owned() },
-                        _ => "".to_owned(),
+                        _ => String::from(""),
                     };
                     if name != "" && p.values.contains_key(&name) {
                         let read = loop_read(arena, value, &p, ints, pinned, words, false);
@@ -297,7 +297,7 @@ pub(crate) fn loop_candidates(arena: &mut TermArena, record: &LoopRecord) -> Vec
         let k = nikaia_std::num::value(k);
         let here = arena.var(name);
         let before = arena.var(&loop_before_name(name, start));
-        if k == 0 { found.push((arena.equal(here, before), "closed forms".to_owned())); } else if k > 0 { found.push((arena.ge(here, before), "closed forms".to_owned())); } else { found.push((arena.le(here, before), "closed forms".to_owned())); }
+        if k == 0 { found.push((arena.equal(here, before), String::from("closed forms"))); } else if k > 0 { found.push((arena.ge(here, before), String::from("closed forms"))); } else { found.push((arena.le(here, before), String::from("closed forms"))); }
     }
     for i in 0..steady.len() as i64 {
         for j in i + 1..steady.len() as i64 {
@@ -306,7 +306,7 @@ pub(crate) fn loop_candidates(arena: &mut TermArena, record: &LoopRecord) -> Vec
             if kx == 0 || ky == 0 { continue; }
             let left = loop_scaled_offset(arena, record, &x, ky);
             let right = loop_scaled_offset(arena, record, &y, kx);
-            found.push((arena.equal(left, right), "closed forms".to_owned()));
+            found.push((arena.equal(left, right), String::from("closed forms")));
         }
     }
     let c = nikaia_std::index::or(record.problem.condition, || -1);
@@ -325,9 +325,9 @@ pub(crate) fn loop_candidates(arena: &mut TermArena, record: &LoopRecord) -> Vec
             let mut near: Option<i64> = None;
             if k > 0 && op == "<" { near = Some(arena.lt(here, reach)); } else if k > 0 && op == "<=" { near = Some(arena.le(here, reach)); } else if k < 0 && op == ">" { near = Some(arena.gt(here, reach)); } else if k < 0 && op == ">=" { near = Some(arena.ge(here, reach)); }
             let n = match near { Some(__nikaia_value) => __nikaia_value, None => continue };
-            found.push((n, "closed forms".to_owned()));
+            found.push((n, String::from("closed forms")));
             let unmoved = arena.equal(here, before);
-            found.push((arena.or(vec![n, unmoved]), "closed forms".to_owned()));
+            found.push((arena.or(vec![n, unmoved]), String::from("closed forms")));
         }
     }
     for (name, deltas) in record.steps.iter() {
@@ -349,7 +349,7 @@ pub(crate) fn loop_candidates(arena: &mut TermArena, record: &LoopRecord) -> Vec
         let at_start = arena.int(known);
         let limit = loop_constant_limit(&arena, c, name);
         if up {
-            found.push((arena.ge(here, at_start), "intervals".to_owned()));
+            found.push((arena.ge(here, at_start), String::from("intervals")));
             let found_limit = match limit { Some(__nikaia_value) => __nikaia_value, None => continue };
             let op = found_limit.op.to_owned();
             let value = found_limit.value;
@@ -358,9 +358,9 @@ pub(crate) fn loop_candidates(arena: &mut TermArena, record: &LoopRecord) -> Vec
             let t = match top { Some(__nikaia_value) => __nikaia_value, None => continue };
             let highest = if t > known { t } else { known };
             let h = arena.int(highest);
-            found.push((arena.le(here, h), "intervals".to_owned()));
+            found.push((arena.le(here, h), String::from("intervals")));
         } else {
-            found.push((arena.le(here, at_start), "intervals".to_owned()));
+            found.push((arena.le(here, at_start), String::from("intervals")));
             let found_limit = match limit { Some(__nikaia_value) => __nikaia_value, None => continue };
             let op = found_limit.op.to_owned();
             let value = found_limit.value;
@@ -369,7 +369,7 @@ pub(crate) fn loop_candidates(arena: &mut TermArena, record: &LoopRecord) -> Vec
             let b = match bottom { Some(__nikaia_value) => __nikaia_value, None => continue };
             let lowest = if b < known { b } else { known };
             let l = arena.int(lowest);
-            found.push((arena.ge(here, l), "intervals".to_owned()));
+            found.push((arena.ge(here, l), String::from("intervals")));
         }
     }
     found
@@ -394,10 +394,10 @@ pub(crate) fn loop_scaled_offset(arena: &mut TermArena, record: &LoopRecord, nam
 
 pub(crate) fn loop_bound_of(arena: &TermArena, c: i64, name: &str, state: &[String]) -> Option<LoopBound> {
     let (op, left, right) = match arena.at(c) {
-        SolverTerm::Lt(a, b) => ("<".to_owned(), a, b),
-        SolverTerm::Le(a, b) => ("<=".to_owned(), a, b),
-        SolverTerm::Gt(a, b) => (">".to_owned(), a, b),
-        SolverTerm::Ge(a, b) => (">=".to_owned(), a, b),
+        SolverTerm::Lt(a, b) => ("<", a, b),
+        SolverTerm::Le(a, b) => ("<=", a, b),
+        SolverTerm::Gt(a, b) => (">", a, b),
+        SolverTerm::Ge(a, b) => (">=", a, b),
         _ => return None,
     };
     let mut other = right;
@@ -407,7 +407,7 @@ pub(crate) fn loop_bound_of(arena: &TermArena, c: i64, name: &str, state: &[Stri
         turned = true;
     } else { return None; }
     for s in state.iter() { if arena.mentions(other, s) { return None; } }
-    if !turned { return Some(LoopBound { op, value: other }); }
+    if !turned { return Some(LoopBound { op: op.to_owned(), value: other }); }
     let flipped = if op == "<" { ">" } else if op == "<=" { ">=" } else if op == ">" { "<" } else { "<=" };
     Some(LoopBound { op: flipped.to_owned(), value: other })
 }

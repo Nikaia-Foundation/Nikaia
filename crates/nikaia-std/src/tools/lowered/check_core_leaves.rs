@@ -353,7 +353,7 @@ pub fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>, tail:
             if !check_core_lambda_results_agree(other, &one.ty) {
                 let was = one.ty.text();
                 let wanted = other.text();
-                state.findings.push(check_refusal("NK1104", &one.at, format!("You're returning `{}`, but this lambda's other result is `{}`.", was, wanted), vec!["A lambda's `return`s and its last value are its result, so they are of one type.".to_owned()], Some(format!("Make it a `{}`, or the others a `{}`.", wanted, was))));
+                state.findings.push(check_refusal("NK1104", &one.at, format!("You're returning `{}`, but this lambda's other result is `{}`.", was, wanted), vec![String::from("A lambda's `return`s and its last value are its result, so they are of one type.")], Some(format!("Make it a `{}`, or the others a `{}`.", wanted, was))));
             }
         }
         seen.push(one.ty.clone());
@@ -506,7 +506,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
     let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
     let at = check_span_at(world, &condition, span);
     state.expect_bool(&found, &at, "An `assert` checks a `bool`.");
-    if is_a_literal_other_than(&condition, "bool") { state.an_assert_of_another_shape("An `assert` checks a `bool`, but this is a literal of another type.".to_owned(), span); }
+    if is_a_literal_other_than(&condition, "bool") { state.an_assert_of_another_shape(String::from("An `assert` checks a `bool`, but this is a literal of another type."), span); }
     let owned = Ty::Named { name: String::from("String"), args: vec![], view: false };
     let viewed = Ty::Named { name: String::from("str"), args: vec![], view: true };
     let mut message: i64 = -1;
@@ -525,7 +525,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
         }
         let not_text = is_a_literal_other_than(&option.value, "text") || !given.is_unknown() && !given.fits(&owned) && !given.fits(&viewed);
         if not_text {
-            let mut said: String = "An `assert`'s `message:` has to be text, but this is a literal of another type.".to_owned();
+            let mut said: String = String::from("An `assert`'s `message:` has to be text, but this is a literal of another type.");
             if !given.is_unknown() { said = format!("An `assert`'s `message:` has to be text, but this is `{}`.", given.text()); }
             state.an_assert_of_another_shape(said, span);
         }
@@ -533,7 +533,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
         index += 1;
     }
     let mut not_pure: Vec<String> = vec![];
-    if frame.unresolved { not_pure.push("It calls a method the compiler knows nothing about, so it might change something.".to_owned()); }
+    if frame.unresolved { not_pure.push(String::from("It calls a method the compiler knows nothing about, so it might change something.")); }
     for key in frame.resolved.iter() {
         let resolved = resolve_method(world, key);
         if resolved.is_some() {
@@ -547,8 +547,8 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
     }
     state.a_claim_reaches(world, host, &condition, &mut not_pure);
     if !not_pure.is_empty() {
-        not_pure.push("An `assert` states something that's true. Its condition may not pause, fail, touch the outside world or change a value.".to_owned());
-        state.findings.push(check_refusal("NK1194", span, "An `assert` condition can't change anything.".to_owned(), not_pure, Some("Compute the value first with `let`, then `assert` something about it.".to_owned())));
+        not_pure.push(String::from("An `assert` states something that's true. Its condition may not pause, fail, touch the outside world or change a value."));
+        state.findings.push(check_refusal("NK1194", span, String::from("An `assert` condition can't change anything."), not_pure, Some(String::from("Compute the value first with `let`, then `assert` something about it."))));
     }
     let mut left: Option<String> = None;
     let mut right: Option<String> = None;

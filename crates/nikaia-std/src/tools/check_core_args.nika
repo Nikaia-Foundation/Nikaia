@@ -293,7 +293,7 @@ pub fn check_core_fold_form(mut state: CheckState, world: ref CheckWorld, part: 
         if have == "" {
             have = written
         }
-        state.findings.push(check_refusal("NK1102", at, f"`{owner}` expects `{role}` to hand back `{wanted}` or nothing, but it hands back `{have}`.", ["A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).".clone()], f"Hand back the `{wanted}`, or change it in place and hand back nothing.".clone()))
+        state.findings.push(check_refusal("NK1102", at, f"`{owner}` expects `{role}` to hand back `{wanted}` or nothing, but it hands back `{have}`.", ["A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9)."], f"Hand back the `{wanted}`, or change it in place and hand back nothing.".clone()))
         return
     }
     let mut lent = false
@@ -308,7 +308,7 @@ pub fn check_core_fold_form(mut state: CheckState, world: ref CheckWorld, part: 
             changes = signature.mutable.contains(signature.params[0].0)
         }
         if !changes {
-            state.findings.push(check_refusal("NK1102", at, f"`{owner}` expects `{role}` to hand back `{wanted}`, or to change its first argument in place, but `{key}` does neither.", ["A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).".clone()], f"Hand back the `{wanted}`, or take the first parameter as `mut`.".clone()))
+            state.findings.push(check_refusal("NK1102", at, f"`{owner}` expects `{role}` to hand back `{wanted}`, or to change its first argument in place, but `{key}` does neither.", ["A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9)."], f"Hand back the `{wanted}`, or take the first parameter as `mut`.".clone()))
             return
         }
         if params.len() > 1 {
@@ -345,24 +345,24 @@ fn check_core_fold_form_key(world: ref CheckWorld, part: ref Expr) -> String {
             }
             names.join("::")
         },
-        else => "".clone(),
+        else => "",
     }
 }
 
 /// The name a door over several locks is written with.
 fn check_core_args_door(writing: bool) -> String {
     if writing {
-        return "update_all".clone()
+        return "update_all"
     }
-    return "access_all".clone()
+    return "access_all"
 }
 
 /// The shape a door over several locks is written in.
 fn check_core_args_door_shape(writing: bool) -> String {
     if writing {
-        return "update_all(a, b) fn(x, y) { … }".clone()
+        return "update_all(a, b) fn(x, y) { … }"
     }
-    return "access_all(a, b) fn(x, y) { … }".clone()
+    return "access_all(a, b) fn(x, y) { … }"
 }
 
 /// The one message shape for a door written wrong.
@@ -403,7 +403,7 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
             held.push(Ty::Unknown)
         } else {
             let door = check_core_args_door(writing)
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124".clone(), message: f"`{door}` takes locks, but this is a `{found.text()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken.".clone()], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.".clone(), labels: [] })
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124", message: f"`{door}` takes locks, but this is a `{found.text()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken."], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.", labels: [] })
             held.push(Ty::Unknown)
         }
         at += 1
@@ -479,8 +479,8 @@ fn check_core_args_an_integer(name: ref String) -> bool {
 /// The name of a plain named type, or "" for any other.
 fn check_core_args_plain_name(ty: ref Ty) -> String {
     return match ty {
-        Ty::Named { name, args, view } => if !view && args.len() == 0 { name.clone() } else { "".clone() },
-        else => "".clone(),
+        Ty::Named { name, args, view } => if !view && args.len() == 0 { name.clone() } else { "" },
+        else => "",
     }
 }
 
@@ -547,7 +547,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
         let met = state.arms_meet_at_null(world, arms)
         if met != null {
             let element_ty: Ty = met ?? Ty::Unknown
-            return Ty::Named { name: "Vec".clone(), args: [element_ty], view: false }
+            return Ty::Named { name: "Vec", args: [element_ty], view: false }
         }
     }
     // **A text literal takes its neighbours' text** (ADR-282 D4).
@@ -592,7 +592,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
             match item {
                 Expr::LitStr { .. } => {
                     state.facts.owned_texts.insert(id_of(item) as i64)
-                    found = Ty::Named { name: "String".clone(), args: [], view: false }
+                    found = Ty::Named { name: "String", args: [], view: false }
                 }
                 else => {}
             }
@@ -695,7 +695,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
     if said {
         return Ty::Unknown
     }
-    return Ty::Named { name: "Vec".clone(), args: [agreed], view: false }
+    return Ty::Named { name: "Vec", args: [agreed], view: false }
 }
 
 /// **`[v; n]`, `n` copies of `v`** (ADR-362 D1, D3): a `Vec` of what `v` is,
@@ -717,7 +717,7 @@ pub fn check_core_list_repeat[H: CheckHost](mut state: CheckState, world: ref Ch
     if !inner_array && !element.is_unknown() && state.takes_away(world, element) {
         state.findings.push(a_repeated_value_that_does_not_copy(world.words, value, count, element, span))
     }
-    return Ty::Named { name: "Vec".clone(), args: [element], view: false }
+    return Ty::Named { name: "Vec", args: [element], view: false }
 }
 
 /// Record that the function being walked calls the field `key`.
@@ -782,7 +782,7 @@ pub fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref
             if fails {
                 state.flow.fallible_methods.insert(id_of(receiver) as i64)
             }
-            return result?.clone() ?? Ty::Named { name: "()".clone(), args: [], view: false }
+            return result?.clone() ?? Ty::Named { name: "()", args: [], view: false }
         }
         else => {}
     }
@@ -805,7 +805,7 @@ fn check_core_args_tuple_texts(mut state: CheckState, parts: ref Vec[Expr], foun
         let mut ty = each[p].clone()
         if p < texts_at.len() && texts_at[p] && a_text_literal_expr(parts[p]) {
             state.facts.owned_texts.insert(id_of(parts[p]) as i64)
-            ty = Ty::Named { name: "String".clone(), args: [], view: false }
+            ty = Ty::Named { name: "String", args: [], view: false }
         }
         out.push(ty)
         p += 1
@@ -823,7 +823,7 @@ pub fn check_core_fold_option(mut state: CheckState, world: ref CheckWorld, name
     if written == "order" {
         wanted = "par::Order"
     } else if written != "workers" && written != "piece" {
-        state.findings.push(check_refusal("NK1109", at, f"`par_fold` has no option called `{written}`.", ["Its options are `order:`, `workers:` and `piece:`, as `Par::fold`'s are.".clone()], "Use one of the options it has.".clone()))
+        state.findings.push(check_refusal("NK1109", at, f"`par_fold` has no option called `{written}`.", ["Its options are `order:`, `workers:` and `piece:`, as `Par::fold`'s are."], "Use one of the options it has."))
         return
     }
     if found.is_unknown() {
@@ -838,5 +838,5 @@ pub fn check_core_fold_option(mut state: CheckState, world: ref CheckWorld, name
     if have == "" {
         have = written_ty
     }
-    state.findings.push(check_refusal("NK1102", at, f"`par_fold`'s option `{written}:` expects `{wanted}`, but it is handed `{have}`.", ["`order:` says how the pieces' results are merged; `workers:` and `piece:` tune how many fold at once and how large a piece is.".clone()], f"Hand `{written}:` a `{wanted}`.".clone()))
+    state.findings.push(check_refusal("NK1102", at, f"`par_fold`'s option `{written}:` expects `{wanted}`, but it is handed `{have}`.", ["`order:` says how the pieces' results are merged; `workers:` and `piece:` tune how many fold at once and how large a piece is."], f"Hand `{written}:` a `{wanted}`.".clone()))
 }

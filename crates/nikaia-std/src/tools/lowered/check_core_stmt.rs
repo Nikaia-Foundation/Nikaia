@@ -266,15 +266,15 @@ pub(crate) fn check_core_stmt_read_shown(world: &CheckWorld<'_, '_, '_, '_, '_, 
     match value {
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-            let held = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return "…".to_owned() };
+            let held = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return String::from("…") };
             let at: String = match index {
                 Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
                 Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if negative { format!("-{}", value) } else { format!("{}", value) } },
-                _ => "…".to_owned(),
+                _ => String::from("…"),
             };
             format!("{}[{}]", held, at)
         },
-        _ => nikaia_std::index::or(dotted_path(world, value), || "…".to_owned().into()),
+        _ => nikaia_std::index::or(dotted_path(world, value), || "…".into()),
     }
 }
 
@@ -403,7 +403,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         if element_view == 1 { found_kept = want.clone(); } else if element_view == 2 {
             let shown = found.unseen().text();
             let written = check_core_stmt_read_shown(world, value);
-            state.findings.push(check_refusal("NK1257", span, format!("A `{}` read out of a place is a copy, so it can't be bound as a `ref {}`.", shown, shown), vec!["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep.".to_owned()], Some(format!("an `{}` is copied at a read; write `let {} = {}`.", shown, name, written))));
+            state.findings.push(check_refusal("NK1257", span, format!("A `{}` read out of a place is a copy, so it can't be bound as a `ref {}`.", shown, shown), vec![String::from("A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep.")], Some(format!("an `{}` is copied at a read; write `let {} = {}`.", shown, name, written))));
             found_kept = want.clone();
         }
         state.expect_kept_asked(world, &found_kept, &want, Some(value), "the `let` declares a `String`, which is text of its own", span, "let", &|was, wanted| { format!("This value is `{}`, but the `let` declares `{}`.", was, wanted) });
@@ -684,7 +684,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         let rooted = state.rooted_at(world, target);
         if rooted.is_some() {
             let root: String = nikaia_std::index::or(rooted.as_deref(), || "").to_owned();
-            let how: String = if check_core_stmt_a_name(target) { "changed here".to_owned() } else { "one of its parts is changed here".to_owned() };
+            let how: String = if check_core_stmt_a_name(target) { String::from("changed here") } else { String::from("one of its parts is changed here") };
             state.a_changed_binding_says_mut(&root, &how, Span { start: span.start, end: span.end });
             state.a_shared_name_changed_in_parallel(&root, span);
         }
@@ -728,7 +728,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     if op.is_none() {
         let lent = check_core_stmt_a_name(target) && into.is_a_view() && state.lent_views_assigned(world, value, &found);
         if lent { found = Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true }; } else {
-            let to: String = if check_core_stmt_an_index(target) { "written into a container".to_owned() } else { "assigned to another name".to_owned() };
+            let to: String = if check_core_stmt_an_index(target) { String::from("written into a container") } else { String::from("assigned to another name") };
             state.hands_over(world, value, &found, &to, span);
         }
     }
@@ -784,7 +784,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
             return check_core_stmt_unit();
         }
         let mut assigned: Ty = found.clone();
-        if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(&into) { assigned = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
+        if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(&into) { assigned = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
         state.expect_type(world, &assigned, &into, span, "assign", &|was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
         state.findings_moved(span, &at, pushed, &waiting);
     }

@@ -59,7 +59,7 @@ fn refused(source: &str) -> bool {
 fn the_declaration_and_the_call_gain_the_reference_together() {
     let rust = lowered(
         "fn width(text: String) -> i64 { return text.len() as i64 }\n\
-         fn main() { let t: String = \"hi\".clone() println(f\"{width(t)}\") }\n",
+         fn main() { let t: String = f\"hi\" println(f\"{width(t)}\") }\n",
     );
     // A `String` the body only reads is a `&str` below (ADR-282 D5), and
     // the caller's `&t` reaches it the way it reached a `&String`.
@@ -340,7 +340,7 @@ fn push_str_takes_a_view_and_says_so() {
     let found = findings(
         "fn main() {\n\
          \x20   let mut out: String = \"a\"\n\
-         \x20   let name = \"b\".clone()\n\
+         \x20   let name = f\"b\"\n\
          \x20   out.push_str(name)\n\
          \x20   println(out)\n\
          }\n",
@@ -349,7 +349,7 @@ fn push_str_takes_a_view_and_says_so() {
     let rust = lowered(
         "fn main() {\n\
          \x20   let mut out: String = \"a\"\n\
-         \x20   let name = \"b\".clone()\n\
+         \x20   let name = f\"b\"\n\
          \x20   out.push_str(name)\n\
          \x20   out.push_str(ref name)\n\
          \x20   out.push_str(ref f\"{name.len()}\")\n\

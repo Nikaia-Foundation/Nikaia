@@ -45,7 +45,7 @@ fn width_dependent(world: ref CheckWorld, value: ref Expr, into: ref String) -> 
             []
         },
         Expr::Unary { op, expr, .. } => if op == UnaryOp::Not {
-            ["`!`".clone(), f"!({written_expression(world.words, expr)} as {into})"]
+            ["`!`", f"!({written_expression(world.words, expr)} as {into})"]
         } else {
             []
         },
@@ -111,7 +111,7 @@ impl CheckState {
         }
         let compared = binary_op_text(op)
         let note = "Nikaia binds `&`, `|`, `^` and the shifts tighter than a comparison, and C binds them looser, so without parentheses the line can be read two ways."
-        self.findings.push(check_refusal("NK1197", at, "Put parentheses around a bit operation next to a comparison.".clone(), [note.clone()], f"Write `{left} {compared} {right}`."))
+        self.findings.push(check_refusal("NK1197", at, "Put parentheses around a bit operation next to a comparison.", [note.clone()], f"Write `{left} {compared} {right}`."))
     }
 
     /// `NK1201`: a list, map or set in an `f"…"` hole, which has no text form.
@@ -278,7 +278,7 @@ impl CheckState {
         }
         let written = written_expression(world.words, read)
         let message = f"The two sides of `??` don't match: the left is a view of the `{held.text()}` in the map, the fallback a value of its own."
-        let notes: Vec[String] = ["The map keeps its values, so reading one gives a view of it, and `??` has to give back one type.".clone(), "Nikaia never makes a copy behind your back.".clone()]
+        let notes: Vec[String] = ["The map keeps its values, so reading one gives a view of it, and `??` has to give back one type.", "Nikaia never makes a copy behind your back."]
         let help = f"Copy the map's value when you need a `{held.text()}` of your own: `{written}?.clone() ?? …`."
         self.findings.push(check_refusal("NK1185", span, message, notes, help))
     }
@@ -375,7 +375,7 @@ impl CheckState {
         let cost = "Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens."
         let said = capitalised(keeper)
         if named == null {
-            return CheckKept { notes: ["This is a view: it points into text that something else owns.".clone(), f"{said}, so it needs text of its own.", cost.clone()], help: "Write `.clone()` to copy it here." }
+            return CheckKept { notes: ["This is a view: it points into text that something else owns.", f"{said}, so it needs text of its own.", cost.clone()], help: "Write `.clone()` to copy it here." }
         }
         let name = (named ?? "").clone()
         let local = self.binding(name)
@@ -394,7 +394,7 @@ impl CheckState {
                 return CheckKept { notes: [first, f"{said}, so it needs text of its own.", cost.clone()], help: way }
             }
         }
-        return CheckKept { notes: ["This is a view: it points into text that something else owns.".clone(), f"{said}, so it needs text of its own.", cost.clone()], help: "Write `.clone()` to copy it here." }
+        return CheckKept { notes: ["This is a view: it points into text that something else owns.", f"{said}, so it needs text of its own.", cost.clone()], help: "Write `.clone()` to copy it here." }
     }
 }
 

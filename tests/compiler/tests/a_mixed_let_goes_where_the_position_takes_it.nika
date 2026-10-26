@@ -20,7 +20,7 @@ fn n(s: ref String, c: bool) -> i64 {
 }
 
 fn main() {
-    let a = "hi".clone()
+    let a = "hi"
     println(r(a, true))
     println(n(a, false))
 }

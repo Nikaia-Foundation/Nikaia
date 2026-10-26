@@ -44,7 +44,7 @@ impl CheckState {
                     match part {
                         MatchPattern::RestNamed(name) => {
                             let name = *name;
-                            out.insert(world.words.resolve(name).to_owned(), Ty::Named { name: "Array".to_owned(), args: vec![element.clone()], view: true });
+                            out.insert(world.words.resolve(name).to_owned(), Ty::Named { name: String::from("Array"), args: vec![element.clone()], view: true });
                         },
                         MatchPattern::Rest => { },
                         _ => { self.bind_a_part(world, part, &element, &mut out); },
@@ -201,7 +201,7 @@ impl CheckState {
         }
         let owner = match on {
             Ty::Named { name, .. } => name.to_owned(),
-            _ => "".to_owned(),
+            _ => String::from(""),
         };
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -255,9 +255,9 @@ impl CheckState {
                 for field in declared.iter() { if !named.contains(&field.name) { missing.push(format!("`{}`", field.name)); } }
                 if missing.is_empty() { return; }
                 let shown = written.join("::");
-                let mut one: String = "field".to_owned();
-                if missing.len() > 1 { one = "fields".to_owned(); }
-                self.findings.push(check_refusal("NK1234", span, format!("This `{}` pattern leaves out the {} {}.", shown, one, missing.join(", ")), vec!["A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4).".to_owned()], Some(format!("Name them, or end the pattern with `..`: `{} {{ …, .. }}`.", shown))));
+                let mut one: &'static str = "field";
+                if missing.len() > 1 { one = "fields"; }
+                self.findings.push(check_refusal("NK1234", span, format!("This `{}` pattern leaves out the {} {}.", shown, one, missing.join(", ")), vec![String::from("A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4).")], Some(format!("Name them, or end the pattern with `..`: `{} {{ …, .. }}`.", shown))));
             },
             _ => { },
         }

@@ -346,7 +346,7 @@ struct Address { city: String }
 struct User { name: String, home: Address? }
 
 fn main() {
-    let home = Address { city: \"Bletchley\".clone() }
+    let home = Address { city: f\"Bletchley\" }
     let u = User { name: \"Ada\", home: home }
     let city = u.home?.city ?? \"nowhere\"
     println(f\"{city}\")
@@ -409,7 +409,7 @@ fn main() {
 fn reaching_through_a_list_index_is_refused() {
     let found = findings(
         "struct User { name: String }\n\
-         fn first(users: ref Vec[User]) -> String {\n    return users[2]?.name ?? \"-\".clone()\n}\n\
+         fn first(users: ref Vec[User]) -> String {\n    return users[2]?.name ?? \"-\"\n}\n\
          fn main() {}\n",
     );
     let it = found
@@ -429,7 +429,7 @@ fn reaching_through_a_list_index_is_refused() {
 /// on a `String` is `s.len()`.
 #[test]
 fn a_reached_method_on_a_plain_text_runs_as_the_plain_call() {
-    let source = "fn main() {\n    let s: String = \"abc\".clone()\n    let n = s?.len()\n    println(f\"{n}\")\n}\n";
+    let source = "fn main() {\n    let s: String = \"abc\"\n    let n = s?.len()\n    println(f\"{n}\")\n}\n";
     let codes: Vec<&str> = findings(source).iter().map(|f| f.code_str()).collect();
     assert_eq!(codes, vec!["NK1217"]);
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -858,7 +858,7 @@ fn a_reached_field_over_a_temporary_still_takes_it() {
 struct User { name: String }
 
 fn find(id: i64) -> User? {
-    if id > 0 { return User { name: \"Ada\".clone() } }
+    if id > 0 { return User { name: f\"Ada\" } }
     return null
 }
 
@@ -1046,7 +1046,7 @@ fn a_literal_matched_on_a_nullable_is_refused() {
 #[test]
 fn a_name_given_to_a_coalesce_is_handed_over() {
     let taken = findings(
-        "fn find(n: i64) -> String? {\n    if n > 0 {\n        return \"some\".clone()\n    }\n    return null\n}\n\n\
+        "fn find(n: i64) -> String? {\n    if n > 0 {\n        return f\"some\"\n    }\n    return null\n}\n\n\
          fn main() {\n    let viewed = find(1)\n    let first = viewed ?? \"none\"\n    println(first)\n    \
          if viewed != null {\n        println(\"again\")\n    }\n}\n",
     );
@@ -1210,7 +1210,7 @@ impl Tag {
 
 fn find(n: i64) -> String? {
     if n > 0 {
-        return "found".clone()
+        return f"found"
     }
     return null
 }
@@ -1442,8 +1442,8 @@ fn the_text_form_of_text_beside_a_view_is_the_text_itself() {
 struct User { name: String }
 
 fn main() {
-    let user: User? = User { name: \"Ada\".clone() }
-    let nobody: String = \"nobody\".clone()
+    let user: User? = User { name: f\"Ada\" }
+    let nobody: String = f\"nobody\"
     let name = user?.name ?? nobody.to_string()
     println(f\"{name}\")
 }
@@ -1540,7 +1540,7 @@ fn none_is_answered_with_null() {
 fn a_maybe_is_refused_as_an_operand_and_as_a_hole() {
     let refused = [
         "fn main() {\n    let o: i64? = 3\n    if o == null { print(o + 1) }\n}\n",
-        "fn f(x: i64?) -> String {\n    return match x {\n        n if n > 3 => \"big\".clone(),\n        else => \"small\".clone(),\n    }\n}\nfn main() { print(f(5)) }\n",
+        "fn f(x: i64?) -> String {\n    return match x {\n        n if n > 3 => \"big\",\n        else => \"small\",\n    }\n}\nfn main() { print(f(5)) }\n",
         "fn main() {\n    let o: i64? = 3\n    println(f\"{o}\")\n}\n",
     ];
     for source in refused {
@@ -1553,7 +1553,7 @@ fn a_maybe_is_refused_as_an_operand_and_as_a_hole() {
             found.iter().map(|f| &f.message).collect::<Vec<_>>()
         );
     }
-    let fixed = "fn f(x: i64?) -> String {\n    return match x {\n        n if (n ?? 0) > 3 => \"big\".clone(),\n        n => f\"small {n ?? 0}\",\n    }\n}\nfn main() {\n    let o: i64? = 3\n    if o != null { println((o ?? 0) + 1) }\n    println(f(5))\n    println(f(1))\n}\n";
+    let fixed = "fn f(x: i64?) -> String {\n    return match x {\n        n if (n ?? 0) > 3 => \"big\",\n        n => f\"small {n ?? 0}\",\n    }\n}\nfn main() {\n    let o: i64? = 3\n    if o != null { println((o ?? 0) + 1) }\n    println(f(5))\n    println(f(1))\n}\n";
     assert!(findings(fixed).is_empty(), "{:?}", findings(fixed));
     assert_eq!(ran("maybe-operand", fixed), "4\nbig\nsmall 1\n");
 }
@@ -1739,7 +1739,7 @@ fn shout(s: String?) -> String {
     if s != null && s.len() > 0 {
         return f"{s}!"
     }
-    return "-".clone()
+    return f"-"
 }
 fn count_down(start: i64?) -> i64 {
     let mut x = start
@@ -1759,7 +1759,7 @@ fn main() {
     println(f"{absent_or_big(null)} {absent_or_big(1)} {absent_or_big(9)}")
     println(f"{twice(4)} {twice(null)} {early(2)} {early(null)}")
     println(f"{nested(2, 5)} {nested(2, 1)} {nested(null, 1)}")
-    let t: String? = "hi".clone()
+    let t: String? = f"hi"
     println(f"{shout(t)} {shout(null)}")
     println(f"{count_down(3)} {count_down(null)} {keep(4) ?? 0}")
 }

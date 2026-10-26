@@ -20,7 +20,7 @@ impl CheckState {
         if letters.len() > 0 && letters[0].to_ascii_lowercase() != letters[0] {
             written = method.clone()
         }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2203".clone(), message: f"`{written}` takes a lock, but you're already holding one here.", notes: ["This block runs while a lock is held, so taking a second lock inside it can deadlock.".clone()], help: "Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.".clone(), labels: [CheckLabel { span: span.clone(), word: method, text: "takes a second lock".clone(), main: true }] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2203", message: f"`{written}` takes a lock, but you're already holding one here.", notes: ["This block runs while a lock is held, so taking a second lock inside it can deadlock."], help: "Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.", labels: [CheckLabel { span: span.clone(), word: method, text: "takes a second lock", main: true }] })
     }
 
     /// `NK2201`: a read of a mapped file while a lock is held. A block that
@@ -48,7 +48,7 @@ impl CheckState {
         if !touched {
             return
         }
-        self.findings.push(check_refusal("NK2201", span, f"{capitalised(what)} reads a file, but you're holding a lock here.", [f"`{name}` is a file mapped into memory, so reading it can wait on the disk, and a block that holds a lock must never wait.", "This wait doesn't show up as a pause or a second lock, which is why it gets its own message.".clone()], "Read what you need before taking the lock, and pass the value in.".clone()))
+        self.findings.push(check_refusal("NK2201", span, f"{capitalised(what)} reads a file, but you're holding a lock here.", [f"`{name}` is a file mapped into memory, so reading it can wait on the disk, and a block that holds a lock must never wait.", "This wait doesn't show up as a pause or a second lock, which is why it gets its own message."], "Read what you need before taking the lock, and pass the value in."))
     }
 
     /// `NK1141`: an `update` block that hands a value back.
@@ -76,7 +76,7 @@ impl CheckState {
         if !hands_back {
             return
         }
-        self.findings.push(check_refusal("NK1141", span, "An `update` changes the value in place, so it has nothing to return.".clone(), ["The block gets the value itself and changes it where it is, so a value it returns would go nowhere.".clone()], "Change it instead: write `fn(mut v) { v += 1 }`, not `fn(v) { v + 1 }`.".clone()))
+        self.findings.push(check_refusal("NK1141", span, "An `update` changes the value in place, so it has nothing to return.", ["The block gets the value itself and changes it where it is, so a value it returns would go nowhere."], "Change it instead: write `fn(mut v) { v += 1 }`, not `fn(v) { v + 1 }`."))
     }
 
     /// `NK2107`: a name declared outside a lambda that runs on several cores (or
@@ -124,7 +124,7 @@ impl CheckState {
         if (name != "a" && name != "b" && name != "c") || !in_a_lambda {
             return false
         }
-        self.findings.push(check_refusal("NK1117", span, f"`{name}` isn't declared anywhere.", ["A lambda's arguments have to be named: `a`, `b` and `c` are no longer there automatically.".clone()], f"Name the argument: `fn ({name}) {{ … }}`, or better, a name that says what it is: `fn (user) {{ user.id }}`."))
+        self.findings.push(check_refusal("NK1117", span, f"`{name}` isn't declared anywhere.", ["A lambda's arguments have to be named: `a`, `b` and `c` are no longer there automatically."], f"Name the argument: `fn ({name}) {{ … }}`, or better, a name that says what it is: `fn (user) {{ user.id }}`."))
         return true
     }
 
@@ -133,7 +133,7 @@ impl CheckState {
         if self.inside_unsafe || !self.foreign_names.contains(name) {
             return
         }
-        self.findings.push(check_refusal("NK1143", span, f"`{name}` is a C function, so calling it has to happen inside an `unsafe` block.", ["C isn't memory-safe, so every call into it is marked where it happens.".clone(), "Everything inside the block is still checked as usual.".clone()], f"Write `unsafe {{ {name}(…) }}`."))
+        self.findings.push(check_refusal("NK1143", span, f"`{name}` is a C function, so calling it has to happen inside an `unsafe` block.", ["C isn't memory-safe, so every call into it is marked where it happens.", "Everything inside the block is still checked as usual."], f"Write `unsafe {{ {name}(…) }}`."))
     }
 
     /// `NK1294`: an `assume` outside an `unsafe` block (ADR-376 D1).
@@ -141,7 +141,7 @@ impl CheckState {
         if self.inside_unsafe {
             return
         }
-        self.findings.push(check_refusal("NK1294", span, "`assume` is written only inside an `unsafe` block.".clone(), ["An `assume` is a claim the program vouches for: the compiler takes it as a fact without a proof, and a build that removes checks does not check it.".clone(), "`unsafe` marks the place that has to be right; `assert` is the claim that is proved or checked.".clone()], "Write `unsafe { assume(…) }`, or `assert(…)` to have the claim checked.".clone()))
+        self.findings.push(check_refusal("NK1294", span, "`assume` is written only inside an `unsafe` block.", ["An `assume` is a claim the program vouches for: the compiler takes it as a fact without a proof, and a build that removes checks does not check it.", "`unsafe` marks the place that has to be right; `assert` is the claim that is proved or checked."], "Write `unsafe { assume(…) }`, or `assert(…)` to have the claim checked."))
     }
 
     /// `NK2208`: `set_after`, which is written `set(…; after: …)`.
@@ -156,8 +156,8 @@ impl CheckState {
         if !is_a_hull(held) {
             return
         }
-        let container = self.set_receiver?.clone() ?? "this lock".clone()
-        self.findings.push(check_refusal("NK2208", span, f"`{container}` has no `set_after`. Write `set(…; after: …)` instead.", ["`set` with `after:` compares and stores while holding the lock once.".clone(), "Written like this, a failure would be silently dropped.".clone()], f"Write `{container}.set(neu; after: seen)`, where `seen` is the value you read from the lock."))
+        let container = self.set_receiver?.clone() ?? "this lock"
+        self.findings.push(check_refusal("NK2208", span, f"`{container}` has no `set_after`. Write `set(…; after: …)` instead.", ["`set` with `after:` compares and stores while holding the lock once.", "Written like this, a failure would be silently dropped."], f"Write `{container}.set(neu; after: seen)`, where `seen` is the value you read from the lock."))
     }
 
     /// `NK2205`: a `set` of a value, or under a condition, that was read from the
@@ -175,7 +175,7 @@ impl CheckState {
         if !is_a_hull(held) {
             return
         }
-        let container = self.set_receiver?.clone() ?? "this lock".clone()
+        let container = self.set_receiver?.clone() ?? "this lock"
         // **The value**, wherever it was read.
         let mut stale = false
         for ty in found {
@@ -184,13 +184,13 @@ impl CheckState {
             }
         }
         if stale {
-            self.findings.push(check_refusal("NK2205", span, f"This `set` stores a value that was read from `{container}` earlier, so the lock is taken twice.", ["A value read from a lock is out of date as soon as the lock is released: anything can change between the read and the store.".clone(), "This is found wherever the value was read: on the line above, in another function, or in another request.".clone()], f"Write `{container}.update fn(mut v) {{ … }}`, which reads and changes the value while holding the lock."))
+            self.findings.push(check_refusal("NK2205", span, f"This `set` stores a value that was read from `{container}` earlier, so the lock is taken twice.", ["A value read from a lock is out of date as soon as the lock is released: anything can change between the read and the store.", "This is found wherever the value was read: on the line above, in another function, or in another request."], f"Write `{container}.update fn(mut v) {{ … }}`, which reads and changes the value while holding the lock."))
             return
         }
         // **And the decision.** The value stored is plain; what is stale is the
         // condition this stands under.
         if self.stamped_condition != null {
-            self.findings.push(check_refusal("NK2205", span, f"This `set` depends on a condition read from `{container}` earlier, so the lock is taken twice.", ["What the lock held may have changed before this line runs.".clone()], f"Write `{container}.update fn(mut v) {{ … }}` and make the decision inside the lock."))
+            self.findings.push(check_refusal("NK2205", span, f"This `set` depends on a condition read from `{container}` earlier, so the lock is taken twice.", ["What the lock held may have changed before this line runs."], f"Write `{container}.update fn(mut v) {{ … }}` and make the decision inside the lock."))
         }
     }
 }

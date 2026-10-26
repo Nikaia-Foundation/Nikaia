@@ -549,14 +549,14 @@ impl CheckFacts {
 
 /// How the compiler holds one `assert`, as `--asserts` says it (ADR-269 D7).
 fn check_claim_held(held: ref ClaimHeld?) -> String {
-    let given = held ?? return "refused: a claim about data from outside the program".clone()
+    let given = held ?? return "refused: a claim about data from outside the program"
     return match given {
-        ClaimHeld::Proved => "proved".clone(),
+        ClaimHeld::Proved => "proved",
         ClaimHeld::ProvedThrough(how) => how.clone(),
         ClaimHeld::Precondition(f, n) => {
             // **`main`'s caller is the command line** (ADR-360 D4).
             if f == "main" {
-                "precondition of `main`, checked where the words arrive".clone()
+                "precondition of `main`, checked where the words arrive"
             } else if n == 0 {
                 f"precondition of `{f}`: proved at every call the compiler sees; any other reaches the entry that checks it"
             } else if n == 1 {
@@ -566,8 +566,8 @@ fn check_claim_held(held: ref ClaimHeld?) -> String {
             }
         }
         ClaimHeld::AtRunTime(why) => f"checked at run time: {why}",
-        ClaimHeld::ByTheTest => "checked when the test runs".clone(),
-        ClaimHeld::Refused => "refused: a claim about data from outside the program".clone(),
+        ClaimHeld::ByTheTest => "checked when the test runs",
+        ClaimHeld::Refused => "refused: a claim about data from outside the program",
     }
 }
 

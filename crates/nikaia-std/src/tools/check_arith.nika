@@ -43,7 +43,7 @@ fn arith_env_name_fault[H: CheckHost](host: ref H, expr: ref Expr) -> String? sy
 /// What is wrong with an environment name, or null where nothing is.
 fn arith_env_name_says(name: String) -> String? sync {
     if name == "" {
-        return "An environment name is empty.".clone()
+        return "An environment name is empty."
     }
     let shown = name.replace("\0", "\\0")
     if name.contains("=") {
@@ -92,7 +92,7 @@ impl CheckState {
         }
         let code = arith_exit_code_outside(args[0]) ?? return
         let note: String = "An exit status is one byte; the system would keep only part of it."
-        self.findings.push(check_refusal("NK1116", span, f"The exit code {code} is not in 0..=255.", [note], "Give `process::exit` a code from 0 to 255.".clone()))
+        self.findings.push(check_refusal("NK1116", span, f"The exit code {code} is not in 0..=255.", [note], "Give `process::exit` a code from 0 to 255."))
     }
 
     /// **`NK1286`: an environment entry no platform accepts, written as a
@@ -116,7 +116,7 @@ impl CheckState {
                         let message = fault ?? continue
                         let at = check_span_at(world, item, span)
                         let note: String = "The operating system keeps the environment as `NAME=value` entries ended by a NUL, so a name holding `=` or a NUL, or a value holding a NUL, would be cut into another variable."
-                        self.findings.push(check_refusal("NK1286", at, message, [note], "An environment name is not empty and holds no `=` and no NUL; its value holds no NUL.".clone()))
+                        self.findings.push(check_refusal("NK1286", at, message, [note], "An environment name is not empty and holds no `=` and no NUL; its value holds no NUL."))
                     }
                 },
                 else => {},
@@ -136,7 +136,7 @@ impl CheckState {
                 if items.len() == 0 {
                     let at = check_span_at(world, args[0], span)
                     let note: String = "A set with no bytes finds nothing: `find` is `null`, `find_all` yields nothing, `split` yields the whole as its one piece."
-                    self.findings.push(check_refusal("NK1287", at, "This `bytes::ByteSet` is written empty, so every search with it finds nothing.".clone(), [note], "Name the bytes to search for, `bytes::ByteSet([';', '\\n'])`. A set computed at run time may be empty, and then finds nothing.".clone()))
+                    self.findings.push(check_refusal("NK1287", at, "This `bytes::ByteSet` is written empty, so every search with it finds nothing.", [note], "Name the bytes to search for, `bytes::ByteSet([';', '\\n'])`. A set computed at run time may be empty, and then finds nothing."))
                 }
             },
             else => {},
@@ -148,8 +148,8 @@ impl CheckState {
         let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge
         for ty in [left.clone(), right.clone()] {
             let name: String = match ty {
-                Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { "".clone() },
-                else => "".clone(),
+                Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { "" },
+                else => "",
             }
             if name == "" {
                 continue
@@ -167,15 +167,15 @@ impl CheckState {
             let mut symbol: String = "=="
             let mut needs: String = "Eq"
             if ordering {
-                needs = "Ord".clone()
+                needs = "Ord"
                 symbol = match op {
-                    BinaryOp::Lt => "<".clone(),
-                    BinaryOp::Le => "<=".clone(),
-                    BinaryOp::Gt => ">".clone(),
-                    else => ">=".clone(),
+                    BinaryOp::Lt => "<",
+                    BinaryOp::Le => "<=",
+                    BinaryOp::Gt => ">",
+                    else => ">=",
                 }
             } else if op == BinaryOp::Ne {
-                symbol = "!=".clone()
+                symbol = "!="
             }
             self.findings.push(check_refusal("NK1248", at, f"`{symbol}` needs `{name}: {needs}`.", [f"`{name}` can be any type the caller picks, so it can only be compared where a bound says how."], f"Write `[{name}: {needs}]`."))
             return
@@ -187,29 +187,29 @@ impl CheckState {
 /// rule). A `u` is said *you*, so it takes `a`; the other vowels take `an`.
 pub fn an_or_a_named(ty: ref String) -> String {
     if ty.starts_with("i") || ty.starts_with("a") || ty.starts_with("e") || ty.starts_with("o") || ty.starts_with("I") || ty.starts_with("A") || ty.starts_with("E") || ty.starts_with("O") {
-        return "an".clone()
+        return "an"
     }
-    return "a".clone()
+    return "a"
 }
 
 fn arith_symbol(op: BinaryOp) -> String {
     return match op {
-        BinaryOp::Add => "+".clone(),
-        BinaryOp::Sub => "-".clone(),
-        BinaryOp::Mul => "*".clone(),
-        BinaryOp::Div => "/".clone(),
-        else => "%".clone(),
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        else => "%",
     }
 }
 
 /// `xs += [3]` is the one shape whose way out can be written whole.
 fn arith_extend_text(world: ref CheckWorld, target: ref Expr, value: ref Expr, compound: bool) -> String {
     if !compound {
-        return "a.extend(b)".clone()
+        return "a.extend(b)"
     }
     return match target {
         Expr::Variable(bound, _) => f"{world.words.resolve(bound)}.extend({written_expression(world.words, value)})",
-        else => "a.extend(b)".clone(),
+        else => "a.extend(b)",
     }
 }
 
@@ -297,7 +297,7 @@ fn arith_shown(written: ref String) -> String {
     if written.chars().count() <= 60 {
         return written.clone()
     }
-    let mut shown: String = "".clone()
+    let mut shown: String = ""
     let mut count = 0
     for c in written.chars() {
         if count < 57 {
@@ -341,9 +341,9 @@ impl CheckState {
         }
         let mut note: String = f"Lists, maps and sets have no arithmetic. The other side is `{other}`."
         if joining {
-            note = "Lists have no operators: `+` doesn't join two lists.".clone()
+            note = "Lists have no operators: `+` doesn't join two lists."
         } else if other_unknown {
-            note = "Lists, maps and sets have no arithmetic.".clone()
+            note = "Lists, maps and sets have no arithmetic."
         }
         let mut help: String? = null
         if joining {
@@ -373,7 +373,7 @@ impl CheckState {
         if numeric.len() == 1 && declared_with_no_arithmetic(world.here, other) == null {
             let bound = arith_a_variable(side, world)
             if bound != null {
-                field = f"{bound ?? "".clone()}.{numeric[0]}"
+                field = f"{bound ?? ""}.{numeric[0]}"
             }
         }
         let mut help: String = f"Write a method that says what `{symbol}` means for it."
@@ -381,7 +381,7 @@ impl CheckState {
             help = f"Do the arithmetic on one of its fields, or write a method that says what `{symbol}` means for it."
         }
         if field != null {
-            let shown = field ?? "".clone()
+            let shown = field ?? ""
             let rhs = written_expression(world.words, other_side)
             let mut line: String = f"{shown} {symbol} {rhs}"
             if compound {
@@ -424,7 +424,7 @@ impl CheckState {
         }
         let shown = arith_shown(written_expression(world.words, expr))
         self.flow.unknown_said += 1
-        self.findings.push(check_refusal("NK1245", span, f"The compiler can't tell what type `{shown}` is.", ["What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.".clone()], "Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one.".clone()))
+        self.findings.push(check_refusal("NK1245", span, f"The compiler can't tell what type `{shown}` is.", ["What is not known is not checked, so a type nothing can tell is refused rather than left to the language below."], "Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one."))
     }
 
     fn a_name_of_an_open_comptime(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
@@ -489,7 +489,7 @@ impl CheckState {
         }
         let removed = self.flow.unknown_lambda_params.remove(local.id)
         self.flow.unknown_said += 1
-        self.findings.push(check_refusal("NK1245", span, f"The compiler can't tell what type `{name}` is.", [f"`{name}` is a lambda's parameter, and what it is handed has no known type, so a member of it can't be checked.", "What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.".clone()], "Write the type down where the value is made, such as `let m: collections::HashMap[String, T] = collections::HashMap()`.".clone()))
+        self.findings.push(check_refusal("NK1245", span, f"The compiler can't tell what type `{name}` is.", [f"`{name}` is a lambda's parameter, and what it is handed has no known type, so a member of it can't be checked.", "What is not known is not checked, so a type nothing can tell is refused rather than left to the language below."], "Write the type down where the value is made, such as `let m: collections::HashMap[String, T] = collections::HashMap()`."))
     }
 
     fn is_an_unknown_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {

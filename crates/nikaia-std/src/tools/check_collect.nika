@@ -11,11 +11,11 @@ use std::collections
 /// **A field's default as the ledger writes it**: a literal's text, or
 /// `computed`.
 fn collect_default_written(default: ref FieldDefault?) -> String {
-    let given = default ?? return "".clone()
+    let given = default ?? return ""
     if a_literal(given.value) {
         return default_text(given.value)
     }
-    return "computed".clone()
+    return "computed"
 }
 
 /// **`NK1247` for a type a declaration writes** (ADR-010 D10): the
@@ -51,7 +51,7 @@ impl CheckState {
                         VariantFields::Named(fields) => {
                             let mut held: Vec[FieldContract] = []
                             for field in fields {
-                                held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, field.ty), public: true, default: "".clone(), attributes: [] })
+                                held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, field.ty), public: true, default: "", attributes: [] })
                             }
                             self.variant_owner.insert(key.clone(), owner.clone())
                             self.structs.insert(key, held)
@@ -127,7 +127,7 @@ impl CheckState {
                     let mut held: Vec[FieldContract] = []
                     for field in fields {
                         let ty = self.collect_declared(world, beside, field.ty, field.span)
-                        held.push(FieldContract { name: world.here.text(field.name), ty: ty, public: true, default: "".clone(), attributes: [] })
+                        held.push(FieldContract { name: world.here.text(field.name), ty: ty, public: true, default: "", attributes: [] })
                     }
                     let key = f"{own}::{world.here.text(variant.name)}"
                     self.variant_owner.insert(key.clone(), own.clone())

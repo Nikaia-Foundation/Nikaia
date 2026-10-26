@@ -37,7 +37,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn tuple_let(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
-        if written { self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.".to_owned(), vec!["The names are taken apart by position, and one type can't say which name it belongs to.".to_owned()], Some("Remove the type, or bind one name and read the parts from it.".to_owned()))); }
+        if written { self.findings.push(check_refusal("NK1136", span, String::from("A `let` that binds several names can't have a type."), vec![String::from("The names are taken apart by position, and one type can't say which name it belongs to.")], Some(String::from("Remove the type, or bind one name and read the parts from it.")))); }
         let mut parts = binds_tuple_parts(found, names.len() as i64);
         if shape.is_empty() { let refused = self.a_tuple_pattern_that_does_not_fit(found, names.len() as i64, "A `let`", span); }
         if !shape.is_empty() {
@@ -64,7 +64,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_tuple_pattern_that_does_not_fit(&mut self, found: &Ty, width: i64, site: &str, span: &Span) -> bool {
         let what: String = match self.binds_no_tuple_of(found, width) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        self.findings.push(check_refusal("NK1283", span, format!("{} takes {} parts apart, but the value is {}.", site, width, what), vec!["A tuple pattern names one part of a tuple each, so the value has to be a tuple of exactly that many.".to_owned()], Some("Bind one name and read the value from it, or write as many names as the tuple has parts.".to_owned())));
+        self.findings.push(check_refusal("NK1283", span, format!("{} takes {} parts apart, but the value is {}.", site, width, what), vec![String::from("A tuple pattern names one part of a tuple each, so the value has to be a tuple of exactly that many.")], Some(String::from("Bind one name and read the value from it, or write as many names as the tuple has parts."))));
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -82,7 +82,7 @@ impl CheckState {
     pub fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, top: Vec<Ty>, shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
         let mut out: Vec<Ty> = vec![];
         if shape.len() == 1 && *nikaia_std::index::get(&shape, 0) == -1 {
-            self.findings.push(check_refusal("NK1259", span, format!("{} can't take a variant apart.", site), vec!["A variant may not be the one the value holds, and a binding has no other branch to go to.".to_owned()], Some("Take the value apart with a `match`, which has an arm for each case.".to_owned())));
+            self.findings.push(check_refusal("NK1259", span, format!("{} can't take a variant apart.", site), vec![String::from("A variant may not be the one the value holds, and a binding has no other branch to go to.")], Some(String::from("Take the value apart with a `match`, which has an arm for each case."))));
             for _ in 0..count { out.push(Ty::Unknown); }
             return out;
         }

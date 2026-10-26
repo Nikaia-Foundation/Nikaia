@@ -19,9 +19,9 @@ impl CheckState {
                 let verdict = crossing(&each.1, &Walking { own: world.own, library: world.library, into: Going::Ours });
                 if verdict.refused_part().is_some() {
                     let name = each.0.to_owned();
-                    let mut notes: Vec<String> = vec!["A value a task still needs after a pause is kept inside the task, and the task can move to another thread.".to_owned()];
+                    let mut notes: Vec<String> = vec![String::from("A value a task still needs after a pause is kept inside the task, and the task can move to another thread.")];
                     let note = verdict.note();
-                    if note.is_some() { notes.push(nikaia_std::index::or(note, || "".to_owned().into())); }
+                    if note.is_some() { notes.push(nikaia_std::index::or(note, || "".into())); }
                     notes.push(same_at_both());
                     self.findings.push(check_refusal("NK2501", span, format!("This task keeps `{}` while it pauses, and `{}` can't be passed to a task.", name, name), notes, verdict.way_out()));
                 }

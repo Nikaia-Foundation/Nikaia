@@ -19,7 +19,7 @@ pub(crate) fn check_core_flow_unknown(ty: &Ty) -> bool { matches!(ty, Ty::Unknow
 pub(crate) fn check_core_flow_variable(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> String {
     match value {
         Expr::Variable(name, _) => { let name = *name; format!("{}", world.words.resolve(name)) },
-        _ => "".to_owned(),
+        _ => String::from(""),
     }
 }
 
@@ -733,7 +733,7 @@ pub(crate) fn check_core_flow_caught_type(guarded: &CheckGuarded) -> Ty {
     if thrown.len() >= 2 {
         let mut args: Vec<Ty> = vec![];
         for name in thrown.iter() { args.push(check_core_flow_named(name)); }
-        return Ty::Named { name: "Error".to_owned(), args, view: false };
+        return Ty::Named { name: String::from("Error"), args, view: false };
     }
     Ty::Unknown
 }
@@ -776,7 +776,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     let caught = check_core_flow_caught_type(&guarded);
     state.nothing_here_can_fail(&guarded, span);
     let id = state.a_new_binding();
-    state.scope.push(vec![CheckLocal::free("error".to_owned(), caught, id)]);
+    state.scope.push(vec![CheckLocal::free(String::from("error"), caught, id)]);
     let mut open = false;
     for thrown in guarded.thrown.iter() { if thrown == "?" || throws_given(thrown) { open = true; } }
     let arriving = state.several_arrive(world, guarded_expr) || open;

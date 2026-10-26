@@ -197,7 +197,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         }
     }
 
-    let text_view = Ty::Named { name: "str".clone(), args: [], view: true }
+    let text_view = Ty::Named { name: "str", args: [], view: true }
     // **An argument that is an `if` or a `match` whose arms did not agree
     // is its arms** (#596): each is a value handed to the parameter.
     let mut expanded: Vec[CheckArgument] = []
@@ -230,7 +230,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 else => false,
             }
             if arm.ty.is_unknown() && literal && no_number {
-                expanded.push(CheckArgument { at: at, arm: index, found: Ty::Named { name: "i64".clone(), args: [], view: false } })
+                expanded.push(CheckArgument { at: at, arm: index, found: Ty::Named { name: "i64", args: [], view: false } })
             } else {
                 expanded.push(CheckArgument { at: at, arm: index, found: arm.ty.clone() })
             }
@@ -315,7 +315,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // own type** (0.0.230, #155): a text literal is a `String`.
         let mut literal_wants = want.clone()
         if kept && state.decided_by_this_argument(signature, wanted, at) {
-            literal_wants = Ty::Named { name: "String".clone(), args: [], view: false }
+            literal_wants = Ty::Named { name: "String", args: [], view: false }
         }
         if given_here != null {
             let value = given_here ?? continue
@@ -330,7 +330,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             // **An integer literal handed where no integer goes** (#471,
             // #703) is the `i64` it would be, and the mismatch says so.
             if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(want) {
-                found_here = Ty::Named { name: "i64".clone(), args: [], view: false }
+                found_here = Ty::Named { name: "i64", args: [], view: false }
             }
         }
         // **`Bytes::find` takes a byte or a set of them** (ADR-375 D3): the
@@ -341,7 +341,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // **A view handed to a `String` the callee only reads is lent as it
         // is** (ADR-282 D11), for a function this compiler declares; **not a
         // `ref` the source wrote**, which is `NK1137`'s below.
-        let string = Ty::Named { name: "String".clone(), args: [], view: false }
+        let string = Ty::Named { name: "String", args: [], view: false }
         if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own {
             continue
         }
@@ -428,7 +428,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let mut help: String = f"Make it {an_or_a(want.text())} `{want.text()}`."
             let hull: String = match want {
                 Ty::Named { name, .. } => name.clone(),
-                else => "".clone(),
+                else => "",
             }
             if value != null {
                 let shown = (value ?? "").clone()

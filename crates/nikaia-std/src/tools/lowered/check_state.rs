@@ -147,11 +147,11 @@ pub struct CheckRepeats {
 
 impl CheckRepeats {
     pub fn a_loop(words: &winnow_grammar::InternerContext, frame: i64, body: &Block) -> CheckRepeats {
-        let mut found = CheckRepeats { frame, what: "loop".to_owned(), revived: collections::BTreeSet::new(), leaves: false };
+        let mut found = CheckRepeats { frame, what: String::from("loop"), revived: collections::BTreeSet::new(), leaves: false };
         what_a_loop_does(words, body, &mut found);
         found
     }
-    pub fn a_lambda(frame: i64) -> CheckRepeats { CheckRepeats { frame, what: "lambda".to_owned(), revived: collections::BTreeSet::new(), leaves: false } }
+    pub fn a_lambda(frame: i64) -> CheckRepeats { CheckRepeats { frame, what: String::from("lambda"), revived: collections::BTreeSet::new(), leaves: false } }
     pub fn takes_again(&self, name: &str) -> bool { !(self.leaves || self.revived.contains(name)) }
 }
 

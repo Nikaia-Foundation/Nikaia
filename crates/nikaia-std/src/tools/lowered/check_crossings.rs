@@ -149,7 +149,7 @@ pub fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &C
         if spawned.is_some() {
             let name: String = nikaia_std::index::or(spawned, || "".into());
             let flow = check_crossings_path(world, &name, &block.stmts, at, false);
-            if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone { state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: "NK2109".to_owned(), message: format!("The task handle `{}` is never joined, cancelled or detached.", name), notes: vec!["An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends.".to_owned()], help: Some(format!("Write `{}.join()` to wait for the task, or `{}.detach()` if nobody waits for it.", name, name)), labels: vec![] }); }
+            if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone { state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: String::from("NK2109"), message: format!("The task handle `{}` is never joined, cancelled or detached.", name), notes: vec![String::from("An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends.")], help: Some(format!("Write `{}.join()` to wait for the task, or `{}.detach()` if nobody waits for it.", name, name)), labels: vec![] }); }
         }
     }
 }
@@ -249,26 +249,26 @@ pub fn check_crossings_a_scope_that_pauses(state: &mut CheckState, args: &[Expr]
 // this was written - see `contracts::sync`.
 pub(crate) fn check_crossings_entry(state: &CheckState, key: &str, chained: bool) -> Option<FactPausing> {
     if key == "Seq::map" {
-        if chained { return Some(FactPausing::Method("then".to_owned())); }
-        return Some(FactPausing::Function("then".to_owned()));
+        if chained { return Some(FactPausing::Method(String::from("then"))); }
+        return Some(FactPausing::Function(String::from("then")));
     }
     if key == "Seq::filter" {
-        if chained { return Some(FactPausing::Method("then_filter".to_owned())); }
-        return Some(FactPausing::Function("then_filter".to_owned()));
+        if chained { return Some(FactPausing::Method(String::from("then_filter"))); }
+        return Some(FactPausing::Function(String::from("then_filter")));
     }
-    if key == "list::ListExt::map" { return Some(FactPausing::Function("map_list".to_owned())); }
+    if key == "list::ListExt::map" { return Some(FactPausing::Function(String::from("map_list"))); }
     if key == "Vec::sort_by_key" {
         let named: String = nikaia_std::index::or(match state.flow.receiver_name.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
-        let local = match state.binding(&named) { Some(__nikaia_value) => __nikaia_value, None => return Some(FactPausing::Lent("sort_by_key".to_owned())) };
-        if local.changing { return Some(FactPausing::Function("sort_by_key".to_owned())); }
-        return Some(FactPausing::Lent("sort_by_key".to_owned()));
+        let local = match state.binding(&named) { Some(__nikaia_value) => __nikaia_value, None => return Some(FactPausing::Lent(String::from("sort_by_key"))) };
+        if local.changing { return Some(FactPausing::Function(String::from("sort_by_key"))); }
+        return Some(FactPausing::Lent(String::from("sort_by_key")));
     }
-    if key == "Entry::or_insert_with" { return Some(FactPausing::Function("or_insert_with".to_owned())); }
-    if key == "task::Scope::spawn" { return Some(FactPausing::Method("spawn_paused".to_owned())); }
-    if key == "Entry::and_modify" { return Some(FactPausing::Function("and_modify".to_owned())); }
+    if key == "Entry::or_insert_with" { return Some(FactPausing::Function(String::from("or_insert_with"))); }
+    if key == "task::Scope::spawn" { return Some(FactPausing::Method(String::from("spawn_paused"))); }
+    if key == "Entry::and_modify" { return Some(FactPausing::Function(String::from("and_modify"))); }
     None
 }
 

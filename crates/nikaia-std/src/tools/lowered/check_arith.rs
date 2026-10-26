@@ -28,7 +28,7 @@ pub(crate) fn arith_env_name_fault<H: CheckHost>(host: &H, expr: &Expr) -> Optio
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn arith_env_name_says(name: &str) -> Option<String> {
-    if name == "" { return Some("An environment name is empty.".to_owned()); }
+    if name == "" { return Some(String::from("An environment name is empty.")); }
     let shown = name.replace("\0", "\\0");
     if name.contains('=') { return Some(format!("The environment name `{}` holds `=`.", shown)); }
     if name.contains("\0") { return Some(format!("The environment name `{}` holds a NUL.", shown)); }
@@ -67,7 +67,7 @@ impl CheckState {
         if key != "process::exit" || args.is_empty() { return; }
         let code = match arith_exit_code_outside(nikaia_std::index::get(&args, 0)) { Some(__nikaia_value) => __nikaia_value, None => return };
         let note: String = String::from("An exit status is one byte; the system would keep only part of it.");
-        self.findings.push(check_refusal("NK1116", span, format!("The exit code {} is not in 0..=255.", code), vec![note], Some("Give `process::exit` a code from 0 to 255.".to_owned())));
+        self.findings.push(check_refusal("NK1116", span, format!("The exit code {} is not in 0..=255.", code), vec![note], Some(String::from("Give `process::exit` a code from 0 to 255."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -83,7 +83,7 @@ impl CheckState {
                         let message = match fault { Some(__nikaia_value) => __nikaia_value, None => continue };
                         let at = check_span_at(world, item, span);
                         let note: String = String::from("The operating system keeps the environment as `NAME=value` entries ended by a NUL, so a name holding `=` or a NUL, or a value holding a NUL, would be cut into another variable.");
-                        self.findings.push(check_refusal("NK1286", &at, message, vec![note], Some("An environment name is not empty and holds no `=` and no NUL; its value holds no NUL.".to_owned())));
+                        self.findings.push(check_refusal("NK1286", &at, message, vec![note], Some(String::from("An environment name is not empty and holds no `=` and no NUL; its value holds no NUL."))));
                     }
                 },
                 _ => { },
@@ -99,7 +99,7 @@ impl CheckState {
                 if items.is_empty() {
                     let at = check_span_at(world, nikaia_std::index::get(&args, 0), span);
                     let note: String = String::from("A set with no bytes finds nothing: `find` is `null`, `find_all` yields nothing, `split` yields the whole as its one piece.");
-                    self.findings.push(check_refusal("NK1287", &at, "This `bytes::ByteSet` is written empty, so every search with it finds nothing.".to_owned(), vec![note], Some("Name the bytes to search for, `bytes::ByteSet([';', '\\n'])`. A set computed at run time may be empty, and then finds nothing.".to_owned())));
+                    self.findings.push(check_refusal("NK1287", &at, String::from("This `bytes::ByteSet` is written empty, so every search with it finds nothing."), vec![note], Some(String::from("Name the bytes to search for, `bytes::ByteSet([';', '\\n'])`. A set computed at run time may be empty, and then finds nothing."))));
                 }
             },
             _ => { },
@@ -109,25 +109,25 @@ impl CheckState {
         let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge;
         for ty in [left.clone(), right.clone()] {
             let name: String = match ty {
-                Ty::Named { ref name, ref args, .. } => if args.is_empty() { name.to_owned() } else { "".to_owned() },
-                _ => "".to_owned(),
+                Ty::Named { ref name, ref args, .. } => if args.is_empty() { name.to_owned() } else { String::from("") },
+                _ => String::from(""),
             };
             if name == "" { continue; }
             let bounds = match self.type_parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut allowed = false;
             for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && (bound == "Ord" || !ordering && bound == "Eq") { allowed = true; } }
             if allowed { return; }
-            let mut symbol: String = String::from("==");
-            let mut needs: String = String::from("Eq");
+            let mut symbol: &'static str = "==";
+            let mut needs: &'static str = "Eq";
             if ordering {
-                needs = "Ord".to_owned();
+                needs = "Ord";
                 symbol = match op {
-                    BinaryOp::Lt => "<".to_owned(),
-                    BinaryOp::Le => "<=".to_owned(),
-                    BinaryOp::Gt => ">".to_owned(),
-                    _ => ">=".to_owned(),
+                    BinaryOp::Lt => "<",
+                    BinaryOp::Le => "<=",
+                    BinaryOp::Gt => ">",
+                    _ => ">=",
                 };
-            } else if op == BinaryOp::Ne { symbol = "!=".to_owned(); }
+            } else if op == BinaryOp::Ne { symbol = "!="; }
             self.findings.push(check_refusal("NK1248", at, format!("`{}` needs `{}: {}`.", symbol, name, needs), vec![format!("`{}` can be any type the caller picks, so it can only be compared where a bound says how.", name)], Some(format!("Write `[{}: {}]`.", name, needs))));
             return;
         }
@@ -135,25 +135,25 @@ impl CheckState {
 }
 
 pub fn an_or_a_named(ty: &str) -> String {
-    if ty.starts_with('i') || ty.starts_with('a') || ty.starts_with('e') || ty.starts_with('o') || ty.starts_with('I') || ty.starts_with('A') || ty.starts_with('E') || ty.starts_with('O') { return "an".to_owned(); }
-    "a".to_owned()
+    if ty.starts_with('i') || ty.starts_with('a') || ty.starts_with('e') || ty.starts_with('o') || ty.starts_with('I') || ty.starts_with('A') || ty.starts_with('E') || ty.starts_with('O') { return String::from("an"); }
+    String::from("a")
 }
 
 pub(crate) fn arith_symbol(op: BinaryOp) -> String {
     match op {
-        BinaryOp::Add => "+".to_owned(),
-        BinaryOp::Sub => "-".to_owned(),
-        BinaryOp::Mul => "*".to_owned(),
-        BinaryOp::Div => "/".to_owned(),
-        _ => "%".to_owned(),
+        BinaryOp::Add => String::from("+"),
+        BinaryOp::Sub => String::from("-"),
+        BinaryOp::Mul => String::from("*"),
+        BinaryOp::Div => String::from("/"),
+        _ => String::from("%"),
     }
 }
 
 pub(crate) fn arith_extend_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, compound: bool) -> String {
-    if !compound { return "a.extend(b)".to_owned(); }
+    if !compound { return String::from("a.extend(b)"); }
     match target {
         Expr::Variable(bound, _) => { let bound = *bound; format!("{}.extend({})", world.words.resolve(bound), written_expression(world.words, value)) },
-        _ => "a.extend(b)".to_owned(),
+        _ => String::from("a.extend(b)"),
     }
 }
 
@@ -208,7 +208,7 @@ pub(crate) fn arith_a_name(expr: &Expr) -> bool { matches!(expr, Expr::Variable(
 
 pub(crate) fn arith_shown(written: &str) -> String {
     if (written.chars().count() as i64) <= 60 { return written.to_owned(); }
-    let mut shown: String = "".to_owned();
+    let mut shown: String = String::from("");
     let mut count = 0;
     for c in written.chars() {
         if count < 57 { shown.push_str(&c.to_string()); }
@@ -244,7 +244,7 @@ impl CheckState {
         let mut message: String = format!("You can't use `{}` on `{}`.", symbol, side);
         if side_is_a_list { message = format!("You can't use `{}` on a list.", symbol); }
         let mut note: String = format!("Lists, maps and sets have no arithmetic. The other side is `{}`.", other);
-        if joining { note = "Lists have no operators: `+` doesn't join two lists.".to_owned(); } else if other_unknown { note = "Lists, maps and sets have no arithmetic.".to_owned(); }
+        if joining { note = String::from("Lists have no operators: `+` doesn't join two lists."); } else if other_unknown { note = String::from("Lists, maps and sets have no arithmetic."); }
         let mut help: Option<String> = None;
         if joining { help = Some(format!("To add one list's elements to the end of another, write `{}`.", extend)); }
         self.findings.push(check_refusal("NK1191", span, message, vec![note], help));
@@ -264,12 +264,12 @@ impl CheckState {
         let mut field: Option<String> = None;
         if numeric.len() == 1 && declared_with_no_arithmetic(&world.here, other).is_none() {
             let bound = arith_a_variable(side, world);
-            if bound.is_some() { field = Some(format!("{}.{}", nikaia_std::index::or(bound, || "".to_owned().into()), *nikaia_std::index::get(&numeric, 0))); }
+            if bound.is_some() { field = Some(format!("{}.{}", nikaia_std::index::or(bound.as_deref(), || ""), *nikaia_std::index::get(&numeric, 0))); }
         }
         let mut help: String = format!("Write a method that says what `{}` means for it.", symbol);
         if kind == "struct" { help = format!("Do the arithmetic on one of its fields, or write a method that says what `{}` means for it.", symbol); }
         if field.is_some() {
-            let shown = nikaia_std::index::or(field, || "".to_owned().into());
+            let shown = nikaia_std::index::or(field, || "".into());
             let rhs = written_expression(world.words, other_side);
             let mut line: String = format!("{} {} {}", shown, symbol, rhs);
             if compound { line = format!("{} {}= {}", shown, symbol, rhs); } else if at != 0 { line = format!("{} {} {}", rhs, symbol, shown); }
@@ -298,7 +298,7 @@ impl CheckState {
         }
         let shown = arith_shown(&written_expression(world.words, expr));
         self.flow.unknown_said += 1;
-        self.findings.push(check_refusal("NK1245", span, format!("The compiler can't tell what type `{}` is.", shown), vec!["What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.".to_owned()], Some("Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one.".to_owned())));
+        self.findings.push(check_refusal("NK1245", span, format!("The compiler can't tell what type `{}` is.", shown), vec![String::from("What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.")], Some(String::from("Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -357,7 +357,7 @@ impl CheckState {
         if !self.flow.unknown_lambda_params.contains(&local.id) || self.number_shaped(world, base) || self.an_error_stands_at(span) { return; }
         let removed = self.flow.unknown_lambda_params.remove(&local.id);
         self.flow.unknown_said += 1;
-        self.findings.push(check_refusal("NK1245", span, format!("The compiler can't tell what type `{}` is.", name), vec![format!("`{}` is a lambda's parameter, and what it is handed has no known type, so a member of it can't be checked.", name), "What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.".to_owned()], Some("Write the type down where the value is made, such as `let m: collections::HashMap[String, T] = collections::HashMap()`.".to_owned())));
+        self.findings.push(check_refusal("NK1245", span, format!("The compiler can't tell what type `{}` is.", name), vec![format!("`{}` is a lambda's parameter, and what it is handed has no known type, so a member of it can't be checked.", name), String::from("What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.")], Some(String::from("Write the type down where the value is made, such as `let m: collections::HashMap[String, T] = collections::HashMap()`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

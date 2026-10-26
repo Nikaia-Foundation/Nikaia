@@ -78,7 +78,7 @@ enum Refused {{
 
 impl Error for Refused {{
     fn message(ref self) -> String {{
-        return "empty".clone()
+        return f"empty"
     }}
 }}
 
@@ -126,7 +126,7 @@ enum Refused {
 
 impl Error for Refused {
     fn message(ref self) -> String {
-        return "empty".clone()
+        return f"empty"
     }
 }
 
@@ -175,7 +175,7 @@ enum Refused {
 
 impl Error for Refused {
     fn message(ref self) -> String {
-        return "empty".clone()
+        return f"empty"
     }
 }
 
@@ -229,7 +229,7 @@ enum Refused {
 
 impl Error for Refused {
     fn message(ref self) -> String {
-        return "empty".clone()
+        return f"empty"
     }
 }
 

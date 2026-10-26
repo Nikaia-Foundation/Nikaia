@@ -19,7 +19,7 @@ impl Error for ErrorSumsConfig {
     fn message(ref self) -> String {
         match self {
             ErrorSumsConfig::Empty(p) => f"config at {p} is empty"
-            ErrorSumsConfig::Unnamed => "config has no name".clone()
+            ErrorSumsConfig::Unnamed => "config has no name"
         }
     }
 }
@@ -39,7 +39,7 @@ test "a library's member is matched by variant" {
         match error {
             ErrorSumsConfig::Empty(p) => f"empty: {p}"
             io::IoError::NotFound(p) => f"missing: {p.display()}"
-            else => "other".clone()
+            else => "other"
         }
     }
     assert(text == "missing: nope.txt")
@@ -53,8 +53,8 @@ test "the program's own member is matched and keeps its site" {
     let text = error_sums_load("") catch {
         said = f"{error.full()}"
         match error {
-            ErrorSumsConfig::Unnamed => "unnamed".clone()
-            else => "other".clone()
+            ErrorSumsConfig::Unnamed => "unnamed"
+            else => "other"
         }
     }
     let message = said.contains("has no name")
@@ -90,7 +90,7 @@ test "a member the handler ignores falls through" {
     let text = error_sums_load("nope.txt") catch {
         match error {
             ErrorSumsConfig::Empty(p) => f"empty: {p}"
-            else => "fell through".clone()
+            else => "fell through"
         }
     }
     assert(text == "fell through")
@@ -104,7 +104,7 @@ test "an error of several answers its message without a match" {
         let said: String = error.message()
         let long: String = error.full()
         let found = said.contains("nope.txt") && long.contains("nope.txt")
-        if found { "both".clone() } else { said }
+        if found { "both" } else { said }
     }
     assert(text == "both")
     let empty = error_sums_load("") catch {

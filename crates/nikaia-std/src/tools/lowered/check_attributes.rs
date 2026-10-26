@@ -13,7 +13,7 @@ pub(crate) fn check_attributes_inline_name() -> &'static str { "inline" }
 
 pub(crate) fn check_attributes_trait_fn() -> String { String::from("trait fn") }
 
-pub(crate) fn check_attributes_places() -> Vec<String> { vec!["field".to_owned(), "struct".to_owned(), "enum".to_owned(), "variant".to_owned(), "fn".to_owned(), "parameter".to_owned(), "trait".to_owned(), "impl".to_owned()] }
+pub(crate) fn check_attributes_places() -> Vec<&'static str> { vec!["field", "struct", "enum", "variant", "fn", "parameter", "trait", "impl"] }
 
 pub(crate) fn check_attributes_places_text() -> String {
     let mut text: String = String::from("");
@@ -243,10 +243,10 @@ pub(crate) fn check_attributes_inline_refusal(world: &CheckWorld<'_, '_, '_, '_,
                 if spelled == "always" || spelled == "never" { return None; }
                 return Some(format!("`@inline` takes `always` or `never`, and `{}` is neither.", spelled));
             },
-            _ => { return Some("`@inline` takes `always` or `never`, and this is neither.".to_owned()); },
+            _ => { return Some(String::from("`@inline` takes `always` or `never`, and this is neither.")); },
         }
     }
-    Some("`@inline` takes one word at most: `always` or `never`.".to_owned())
+    Some(String::from("`@inline` takes one word at most: `always` or `never`."))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -265,11 +265,11 @@ pub(crate) fn check_attributes_the_inline(state: &mut CheckState, world: &CheckW
         state.findings.push(check_refusal("NK1235", &attribute.span, message, vec![note], Some(help)));
         return;
     }
-    if count == 2 { state.findings.push(check_refusal("NK1236", &attribute.span, "`@inline` stands twice before one function.".to_owned(), vec!["A function is inlined, always inlined or never: one of them.".to_owned()], Some("Remove one.".to_owned()))); }
+    if count == 2 { state.findings.push(check_refusal("NK1236", &attribute.span, String::from("`@inline` stands twice before one function."), vec![String::from("A function is inlined, always inlined or never: one of them.")], Some(String::from("Remove one.")))); }
     let refused = check_attributes_inline_refusal(world, attribute);
     if refused.is_some() {
         let message = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
-        state.findings.push(check_refusal("NK1293", &attribute.span, message, vec!["`@inline` asks, `@inline(always)` insists, `@inline(never)` forbids.".to_owned()], Some("Write `@inline`, `@inline(always)` or `@inline(never)`.".to_owned())));
+        state.findings.push(check_refusal("NK1293", &attribute.span, message, vec![String::from("`@inline` asks, `@inline(always)` insists, `@inline(never)` forbids.")], Some(String::from("Write `@inline`, `@inline(always)` or `@inline(never)`."))));
     }
 }
 
@@ -281,24 +281,24 @@ pub(crate) fn check_attributes_the_mark(state: &mut CheckState, world: &CheckWor
         check_attributes_out_of_place(state, &mark_name, place, None, &attribute.span);
         return;
     }
-    if attribute.args.is_empty() { state.findings.push(check_refusal("NK1101", &attribute.span, "`@meta::Attribute` names where the attribute may stand, and this names no place.".to_owned(), vec![format!("The places are {}.", check_attributes_places_text())], Some("Write `@meta::Attribute(field)`.".to_owned()))); }
+    if attribute.args.is_empty() { state.findings.push(check_refusal("NK1101", &attribute.span, String::from("`@meta::Attribute` names where the attribute may stand, and this names no place."), vec![format!("The places are {}.", check_attributes_places_text())], Some(String::from("Write `@meta::Attribute(field)`.")))); }
     let known = check_attributes_places();
     for arg in attribute.args.iter() {
         let word = check_attributes_place_word(&world.here, arg);
         if !nikaia_std::list::contains(&known, &word) {
             let mut message: String = format!("`@meta::Attribute` takes places, and `{}` is not one.", word);
             if word == "" { message = String::from("`@meta::Attribute` takes places, and this is not one."); }
-            state.findings.push(check_refusal("NK1102", &attribute.span, message, vec![format!("The places are {}.", check_attributes_places_text())], Some("Name a place by its word alone: `field`.".to_owned())));
+            state.findings.push(check_refusal("NK1102", &attribute.span, message, vec![format!("The places are {}.", check_attributes_places_text())], Some(String::from("Name a place by its word alone: `field`."))));
         }
     }
     for option in attribute.config.iter() {
         let option_name = world.here.text(option.name);
         if option_name != "repeatable" {
-            state.findings.push(check_refusal("NK1109", &attribute.span, format!("`@meta::Attribute` has no option called `{}`.", option_name), vec!["Its one option is `repeatable: bool`.".to_owned()], Some("Write `repeatable: true`, or leave it out.".to_owned())));
+            state.findings.push(check_refusal("NK1109", &attribute.span, format!("`@meta::Attribute` has no option called `{}`.", option_name), vec![String::from("Its one option is `repeatable: bool`.")], Some(String::from("Write `repeatable: true`, or leave it out."))));
             continue;
         }
         let is_bool = matches!(option.value, Expr::LitBool(_, _));
-        if !is_bool { state.findings.push(check_refusal("NK1102", &attribute.span, "`repeatable` is `true` or `false`.".to_owned(), vec![], Some("Write `repeatable: true`.".to_owned()))); }
+        if !is_bool { state.findings.push(check_refusal("NK1102", &attribute.span, String::from("`repeatable` is `true` or `false`."), vec![], Some(String::from("Write `repeatable: true`.")))); }
     }
 }
 
@@ -318,7 +318,7 @@ pub(crate) fn check_attributes_arguments<H: CheckHost>(state: &mut CheckState, w
         if required.len() == 1 { plural = ""; }
         let mut note: String = format!("They are the fields without a default, in the order `{}` declares them: {}.", name, wanted);
         if required.is_empty() { note = format!("Every field of `{}` has a default, so each is named after the `;`.", name); }
-        state.findings.push(check_refusal("NK1101", &attribute.span, format!("`@{}` takes {} argument{} before the `;`, and this gives {}.", name, required.len() as i64, plural, attribute.args.len() as i64), vec![note], Some("Give one value for each, by position.".to_owned())));
+        state.findings.push(check_refusal("NK1101", &attribute.span, format!("`@{}` takes {} argument{} before the `;`, and this gives {}.", name, required.len() as i64, plural, attribute.args.len() as i64), vec![note], Some(String::from("Give one value for each, by position."))));
     }
     let mut at: i64 = 0;
     while at < required.len() as i64 && at < attribute.args.len() as i64 {
@@ -432,7 +432,7 @@ pub fn check_attributes_an_attribute_read(state: &mut CheckState, world: &CheckW
         }
     }
     if !one {
-        state.findings.push(check_refusal("NK1101", span, "`.attribute(X)` takes one type, the attribute to read.".to_owned(), vec![], Some("Write `field.attribute(json::Name)`.".to_owned())));
+        state.findings.push(check_refusal("NK1101", span, String::from("`.attribute(X)` takes one type, the attribute to read."), vec![], Some(String::from("Write `field.attribute(json::Name)`."))));
         return None;
     }
     let name = world.here.unaliased(&written);
@@ -475,7 +475,7 @@ pub(crate) fn check_attributes_variants_of_type(state: &CheckState, world: &Chec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_nothing_declares(state: &mut CheckState, name: &str, span: &Span) { state.findings.push(check_refusal("NK1135", span, format!("There's no struct called `{}`.", name), vec!["An attribute is a value of a struct that `@meta::Attribute` marks, declared here or in a package you use.".to_owned()], Some("Declare the struct, or fix the name.".to_owned()))); }
+pub(crate) fn check_attributes_nothing_declares(state: &mut CheckState, name: &str, span: &Span) { state.findings.push(check_refusal("NK1135", span, format!("There's no struct called `{}`.", name), vec![String::from("An attribute is a value of a struct that `@meta::Attribute` marks, declared here or in a package you use.")], Some(String::from("Declare the struct, or fix the name.")))); }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -484,11 +484,11 @@ pub(crate) fn check_attributes_out_of_place(state: &mut CheckState, name: &str, 
     if place == "" { here = String::from("this declaration"); }
     let mark_name = check_attributes_mark_name();
     if name == mark_name {
-        state.findings.push(check_refusal("NK1235", span, format!("`@{}` marks a struct, and this is {}.", mark_name, here), vec!["It makes the struct after it an attribute.".to_owned()], Some("Move it before a `struct`.".to_owned())));
+        state.findings.push(check_refusal("NK1235", span, format!("`@{}` marks a struct, and this is {}.", mark_name, here), vec![String::from("It makes the struct after it an attribute.")], Some(String::from("Move it before a `struct`."))));
         return;
     }
     if mark.is_none() {
-        state.findings.push(check_refusal("NK1235", span, format!("`{}` is not an attribute: `@{}` does not mark it.", name, mark_name), vec!["An attribute is a struct marked with `@meta::Attribute(…)`, naming where it may stand.".to_owned()], Some(format!("Write `@meta::Attribute({})` before `struct {}`.", check_attributes_place_or_field(place), name))));
+        state.findings.push(check_refusal("NK1235", span, format!("`{}` is not an attribute: `@{}` does not mark it.", name, mark_name), vec![String::from("An attribute is a struct marked with `@meta::Attribute(…)`, naming where it may stand.")], Some(format!("Write `@meta::Attribute({})` before `struct {}`.", check_attributes_place_or_field(place), name))));
         return;
     }
     let known = match mark { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -519,10 +519,10 @@ pub(crate) fn check_attributes_misfit_named(literal: &Expr, name: &str, plain: b
         other => other,
     };
     match inner {
-        Expr::LitInt { .. } if !number => Some("a whole number".to_owned()),
-        Expr::LitFloat(_, _) if !float => Some("a number with a fraction".to_owned()),
-        Expr::LitBool(_, _) if name != "bool" => Some("a `bool`".to_owned()),
-        Expr::LitStr { .. } if name != "String" && name != "str" => Some("text".to_owned()),
+        Expr::LitInt { .. } if !number => Some(String::from("a whole number")),
+        Expr::LitFloat(_, _) if !float => Some(String::from("a number with a fraction")),
+        Expr::LitBool(_, _) if name != "bool" => Some(String::from("a `bool`")),
+        Expr::LitStr { .. } if name != "String" && name != "str" => Some(String::from("text")),
         _ => None,
     }
 }

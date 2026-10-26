@@ -75,7 +75,7 @@ impl EmitState {
     /// written as an option's is, or `None`.
     fn emit_place_default(ref self, world: ref EmitWorld, owner: ref String, field: ref String) -> String {
         let found = self.field_contract(world, owner, field)
-        let contract = found ?? return "None".clone()
+        let contract = found ?? return "None"
         if contract.default != "" {
             let nullable = Ty::Nullable(contract.ty.clone())
             return held_literal(contract.default, nullable)
@@ -86,7 +86,7 @@ impl EmitState {
     /// What a plain value in a field the struct declares nullable is put
     /// between (Part I 2.3), by the value's id.
     fn emit_place_around(ref self, node: ref Expr, field: ref String, value: ref Expr?) -> (String, String) {
-        let held = self.facts.nullable_fields.get((node_key(node), field.clone())) ?? return ("".clone(), "".clone())
+        let held = self.facts.nullable_fields.get((node_key(node), field.clone())) ?? return ("", "")
         // A conversion of a compound value is parenthesised: `(a - 1).into()`.
         // A field written by its name alone (`R { x }`) is a name.
         let present = value ?? return emit_around_held(held)
@@ -103,7 +103,7 @@ impl EmitState {
             else => false,
         }
         if compound && conversion {
-            return ("(".clone(), ").into()".clone())
+            return ("(", ").into()")
         }
         return emit_around_held(held)
     }
@@ -133,7 +133,7 @@ impl EmitState {
         // reach needs the state that is not built.
         let mut lent: String = ""
         if self.facts.lent_reaches.contains(node_key(receiver)) && !emit_place_already_lent(world, receiver) {
-            lent = ".as_ref()".clone()
+            lent = ".as_ref()"
         }
         out.push("match ")
         let name = (walk.held.get(node_key(receiver)) ?? "").clone()
@@ -322,7 +322,7 @@ impl EmitState {
         let flattens = self.facts.flattened_reaches.contains(node_key(base))
         let mut how: String = "map"
         if flattens {
-            how = "and_then".clone()
+            how = "and_then"
         }
         // **The receiver is lent where the member copies** (ADR-278 D18), and
         // **where it comes out as a view** (0.0.244): a view of the member is a
@@ -331,7 +331,7 @@ impl EmitState {
         let viewed = self.facts.viewed_reaches.contains_key(node_key(base))
         let mut lent: String = ""
         if copies || viewed {
-            lent = ".as_ref()".clone()
+            lent = ".as_ref()"
         }
         // **A boxed field is reached through its box** (ADR-246 D2).
         let mut place = f"__nikaia_it.{field}"
@@ -626,7 +626,7 @@ impl EmitState {
     pub fn emit_core_with[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, fields: ref Vec[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let known = self.facts.with_types.get(node_key(node))
         if known == null {
-            throw EmitRefused { message: "The type of this `with` is unknown. This is a compiler bug: the check should have reported it first.".clone(), at: at as i64 }
+            throw EmitRefused { message: "The type of this `with` is unknown. This is a compiler bug: the check should have reported it first.", at: at as i64 }
         }
         let owner = (known ?? "").clone()
         // **A `with` that names every field takes nothing from a named base**

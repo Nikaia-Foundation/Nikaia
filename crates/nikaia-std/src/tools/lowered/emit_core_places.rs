@@ -44,7 +44,7 @@ impl EmitState {
     }
     pub(crate) fn emit_place_default(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: &str) -> String {
         let found = self.field_contract(world, owner, field);
-        let contract = match found { Some(__nikaia_value) => __nikaia_value, None => return "None".to_owned() };
+        let contract = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("None") };
         if contract.default != "" {
             let nullable = Ty::Nullable(Box::new(contract.ty.clone()));
             return held_literal(&contract.default, &nullable);
@@ -52,11 +52,11 @@ impl EmitState {
         format!("None::<{}>", plain_rust_spelling(&contract.ty))
     }
     pub(crate) fn emit_place_around(&self, node: &Expr, field: &str, value: Option<&Expr>) -> (String, String) {
-        let held = match self.facts.nullable_fields.get(&(node_key(node), field.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return ("".to_owned(), "".to_owned()) };
+        let held = match self.facts.nullable_fields.get(&(node_key(node), field.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
         let present = match value { Some(__nikaia_value) => __nikaia_value, None => return emit_around_held(&held) };
         let compound = matches!(present, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Cast { .. } | Expr::Range { .. } | Expr::Coalesce { .. });
         let conversion = matches!(held, FactWrap::Conversion);
-        if compound && conversion { return ("(".to_owned(), ").into()".to_owned()); }
+        if compound && conversion { return (String::from("("), String::from(").into()")); }
         emit_around_held(&held)
     }
     pub(crate) fn a_list_read(&self, node: &Expr) -> bool {
@@ -70,15 +70,15 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_safe_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let flattens = self.facts.flattened_reaches.contains(&node_key(receiver));
-        let mut lent: String = String::from("");
-        if self.facts.lent_reaches.contains(&node_key(receiver)) && !emit_place_already_lent(world, receiver) { lent = ".as_ref()".to_owned(); }
+        let mut lent: &'static str = "";
+        if self.facts.lent_reaches.contains(&node_key(receiver)) && !emit_place_already_lent(world, receiver) { lent = ".as_ref()"; }
         out.push("match ");
         let name = nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_owned();
         if walk.held.contains_key(&node_key(receiver)) { out.push(&name); } else if lent == "" && emit_place_an_index(receiver) {
             if self.a_list_read(receiver) { out.push("&"); }
             host.expr(walk, out, receiver, depth, flow, scope)?;
         } else { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; }
-        out.push(&lent);
+        out.push(lent);
         let inner = "    ".repeat(nikaia_std::count::of(depth + 1));
         let outer = "    ".repeat(nikaia_std::count::of(depth));
         out.push(&format!(" {{\n{}", inner));
@@ -206,12 +206,12 @@ impl EmitState {
     pub fn emit_core_safe_field<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let field = emit_text(world, name);
         let flattens = self.facts.flattened_reaches.contains(&node_key(base));
-        let mut how: String = String::from("map");
-        if flattens { how = "and_then".to_owned(); }
+        let mut how: &'static str = "map";
+        if flattens { how = "and_then"; }
         let copies = self.facts.copied_reaches.contains(&node_key(base));
         let viewed = self.facts.viewed_reaches.contains_key(&node_key(base));
-        let mut lent: String = String::from("");
-        if copies || viewed { lent = ".as_ref()".to_owned(); }
+        let mut lent: &'static str = "";
+        if copies || viewed { lent = ".as_ref()"; }
         let mut place = format!("__nikaia_it.{}", field);
         if self.facts.boxed_reads.contains(&node_key(node)) { place = format!("(*__nikaia_it.{})", field); }
         let reach = self.emit_place_reach(base, &place, flattens);
@@ -405,7 +405,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_with<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, fields: &[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let known = self.facts.with_types.get(&node_key(node));
-        if known.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: "The type of this `with` is unknown. This is a compiler bug: the check should have reported it first.".to_owned(), at: Some(at as i64) }, &"emit_core_with")); }
+        if known.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The type of this `with` is unknown. This is a compiler bug: the check should have reported it first."), at: Some(at as i64) }, &"emit_core_with")); }
         let owner = nikaia_std::index::or(known, || "").to_owned();
         let a_name = matches!(base, Expr::Variable(_, _));
         let whole = a_name && emit_core_with_names_every_field(world, &owner, fields.len() as i64);

@@ -4,10 +4,10 @@
 
 // All four shapes, run. Three of them did not compile at all.
 test "every shape concatenates and prints" {
-    let s = "left-".to_string()
-    let t = "right".to_string()
-    let u = "p".to_string()
-    let v = "q".to_string()
+    let s = "left-"
+    let t = "right"
+    let u = "p"
+    let v = "q"
 
     let both_literals = "x" + "y"
     let literal_left = "x" + t

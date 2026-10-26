@@ -73,7 +73,7 @@ impl CheckState {
         // **An open number pins nothing yet** (ADR-285 D25): its uses have not
         // all been seen, and what it comes to is held to the type they decide.
         if local.open_number != null {
-            return Folded::Value(Constant { value: value.clone(), pinned: "".clone() })
+            return Folded::Value(Constant { value: value.clone(), pinned: "" })
         }
         // **A name pins, and a literal does not** (ADR-285 D26). A declaration
         // pins what it says; a bare `let` pins the type its own value took,
@@ -83,9 +83,9 @@ impl CheckState {
             return Folded::Value(Constant { value: value.clone(), pinned: declared ?? return Folded::Nothing })
         }
         if integer_fits(value, "i32") {
-            return Folded::Value(Constant { value: value.clone(), pinned: "i32".clone() })
+            return Folded::Value(Constant { value: value.clone(), pinned: "i32" })
         }
-        return Folded::Value(Constant { value: value.clone(), pinned: "i64".clone() })
+        return Folded::Value(Constant { value: value.clone(), pinned: "i64" })
     }
 
     /// The first integer `comptime` with no written type in `expr`, by name and
@@ -262,7 +262,7 @@ impl CheckState {
             return (folded.pinned ?? return null).clone()
         }
         if folded.beyond || !integer_fits(folded.value, "i64") {
-            return "i64".clone()
+            return "i64"
         }
         return null
     }

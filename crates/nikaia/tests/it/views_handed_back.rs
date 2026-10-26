@@ -23,7 +23,7 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
 
 const OWNED: &str = "\
 fn d() -> ref String {
-    let s: String = \"x\".clone()
+    let s: String = f\"x\"
     return ref s
 }
 
@@ -60,8 +60,8 @@ fn label(a: String, b: String) -> ref String {
 }
 
 fn main() {
-    let t: String = \"y\".clone()
-    let row = Row { name: \"z\".clone() }
+    let t: String = f\"y\"
+    let row = Row { name: f\"z\" }
     println(f\"{e(t)} {c(row)} {first(\"long\", \"x\")} {label(\"a\", \"b\")}\")
 }
 ";
@@ -95,7 +95,7 @@ fn tethers_names_the_keep() {
 fn following_nk1104s_help_is_a_program() {
     let refused = "\
 fn d() -> ref String {
-    let s: String = \"x\".clone()
+    let s: String = f\"x\"
     return s
 }
 
@@ -126,7 +126,7 @@ fn e(t: String) -> ref String {
 }
 
 fn g() -> ref String {
-    return e(\"y\".clone())
+    return e(f\"y\")
 }
 
 fn main() {

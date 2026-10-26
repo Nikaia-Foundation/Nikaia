@@ -50,7 +50,7 @@ impl CheckState {
     /// is bound, as a loop binding is.
     pub fn tuple_let(ref mut self, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], written: bool, found: ref Ty, value: ref Expr, span: ref Span) -> Ty sync {
         if written {
-            self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.".clone(), ["The names are taken apart by position, and one type can't say which name it belongs to.".clone()], "Remove the type, or bind one name and read the parts from it.".clone()))
+            self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.", ["The names are taken apart by position, and one type can't say which name it belongs to."], "Remove the type, or bind one name and read the parts from it."))
         }
         let mut parts = binds_tuple_parts(found, names.len())
         if shape.len() == 0 {
@@ -85,7 +85,7 @@ impl CheckState {
     /// `String`. A value whose type is not known stays `?` (ADR-291 D3).
     pub fn a_tuple_pattern_that_does_not_fit(ref mut self, found: ref Ty, width: i64, site: ref String, span: ref Span) -> bool sync {
         let what: String = self.binds_no_tuple_of(found, width) ?? return false
-        self.findings.push(check_refusal("NK1283", span, f"{site} takes {width} parts apart, but the value is {what}.", ["A tuple pattern names one part of a tuple each, so the value has to be a tuple of exactly that many.".clone()], "Bind one name and read the value from it, or write as many names as the tuple has parts.".clone()))
+        self.findings.push(check_refusal("NK1283", span, f"{site} takes {width} parts apart, but the value is {what}.", ["A tuple pattern names one part of a tuple each, so the value has to be a tuple of exactly that many."], "Bind one name and read the value from it, or write as many names as the tuple has parts."))
         return true
     }
 
@@ -115,7 +115,7 @@ impl CheckState {
     pub fn nested_pattern_parts(ref mut self, world: ref CheckWorld, top: Vec[Ty], shape: ref Vec[i64], count: i64, site: ref String, span: ref Span) -> Vec[Ty] sync {
         let mut out: Vec[Ty] = []
         if shape.len() == 1 && shape[0] == -1 {
-            self.findings.push(check_refusal("NK1259", span, f"{site} can't take a variant apart.", ["A variant may not be the one the value holds, and a binding has no other branch to go to.".clone()], "Take the value apart with a `match`, which has an arm for each case.".clone()))
+            self.findings.push(check_refusal("NK1259", span, f"{site} can't take a variant apart.", ["A variant may not be the one the value holds, and a binding has no other branch to go to."], "Take the value apart with a `match`, which has an arm for each case."))
             for _ in 0..<count {
                 out.push(Ty::Unknown)
             }

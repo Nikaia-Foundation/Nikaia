@@ -109,7 +109,7 @@ impl CheckState {
             if types.len() > 0 {
                 decided = types[0].0.clone()
             } else if indexed {
-                decided = "i64".clone()
+                decided = "i64"
             }
             // **Where no use asks, the first type that holds what it is given**
             // (D3, ADR-285 D21) - `i32`, else `i64`.

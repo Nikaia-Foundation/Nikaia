@@ -52,20 +52,20 @@ impl CheckState {
         let has = match note_seq_shape(actual) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let missing = has.missing(&wanted);
         if missing.is_empty() { return false; }
-        let mut needs: String = "walks the sequence more than once".to_owned();
-        let mut lacks: String = "this one is used up by the first walk".to_owned();
-        let mut way: String = "Collect it into a list first.".to_owned();
+        let mut needs: &'static str = "walks the sequence more than once";
+        let mut lacks: &'static str = "this one is used up by the first walk";
+        let mut way: String = String::from("Collect it into a list first.");
         if *nikaia_std::index::get(&missing, 0) == ENDS {
-            needs = "walks a sequence from the back".to_owned();
-            lacks = "this one can only be walked from the front".to_owned();
-            way = "Collect it into a list first, and walk the list from the back: `….collect()` and then `list.iter().rev()`.".to_owned();
+            needs = "walks a sequence from the back";
+            lacks = "this one can only be walked from the front";
+            way = String::from("Collect it into a list first, and walk the list from the back: `….collect()` and then `list.iter().rev()`.");
         } else if *nikaia_std::index::get(&missing, 0) == SIZED {
-            needs = "needs to know how long the sequence is".to_owned();
-            lacks = "this one doesn't know until it has been walked".to_owned();
-            way = "Collect it into a list first with `….collect()`: a list knows its length.".to_owned();
+            needs = "needs to know how long the sequence is";
+            lacks = "this one doesn't know until it has been walked";
+            way = String::from("Collect it into a list first with `….collect()`: a list knows its length.");
         }
         let item = note_seq_item(actual);
-        let mut what: String = "a sequence".to_owned();
+        let mut what: String = String::from("a sequence");
         if !item.is_unknown() { what = format!("a sequence of `{}`", item.text()); }
         let notes: Vec<String> = vec![format!("This is {}. Ranges, a list's `iter()`, `chars()` and `drain()` can be walked from either end; a map's `keys()` and `io::lines()` only from the front, and a `filter` doesn't know its length.", what)];
         self.findings.push(check_refusal("NK2703", span, format!("`{}` {}, but {}.", written, needs, lacks), notes, Some(way)));
@@ -76,8 +76,8 @@ impl CheckState {
     pub fn newly_reaches_a_handler(&mut self, key: &str, gained: &[String], span: &Span) {
         if self.flow.guarded.is_none() || gained.is_empty() { return; }
         let named = names_listed(gained);
-        let notes: Vec<String> = vec![format!("`{}` couldn't throw {} when this handler was written. A `catch` takes everything that reaches it, so it handles the new error the same way as the others.", key, named), "Nothing is wrong: this is just to let you know. Once the updated `nikaia.contracts` is committed, you won't see this note again.".to_owned()];
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK2402".to_owned(), message: format!("This `catch` now also receives {} from `{}`.", named, key), notes, help: Some("Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.".to_owned()), labels: vec![] });
+        let notes: Vec<String> = vec![format!("`{}` couldn't throw {} when this handler was written. A `catch` takes everything that reaches it, so it handles the new error the same way as the others.", key, named), String::from("Nothing is wrong: this is just to let you know. Once the updated `nikaia.contracts` is committed, you won't see this note again.")];
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK2402"), message: format!("This `catch` now also receives {} from `{}`.", named, key), notes, help: Some(String::from("Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.")), labels: vec![] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -89,9 +89,9 @@ impl CheckState {
             _ => return,
         };
         let how = match self.tears_down(world, want, &mut collections::BTreeSet::new()) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let mut message: String = "".to_owned();
-        let mut before: String = "".to_owned();
-        let mut help: String = "".to_owned();
+        let mut message: String = String::from("");
+        let mut before: String = String::from("");
+        let mut help: String = String::from("");
         if moved_now {
             message = format!("`{}` now keeps `{}`, so `{}` is cleaned up when `{}` is done with it, not at the end of this block.", key, param, value, key);
             before = format!("`{}` only read its `{}` when this call was written", key, param);
@@ -101,8 +101,8 @@ impl CheckState {
             before = format!("`{}` kept its `{}` when this call was written", key, param);
             help = format!("If the cleanup belongs inside `{}`, change it back to keeping what it's given. Otherwise there's nothing to do.", key);
         }
-        let notes: Vec<String> = vec![format!("{}, and a `{}` does something when it's cleaned up ({}).", capitalised(&before), moved_ty, how), "Nothing is wrong: this is just to let you know, since the call itself doesn't show it. Once the updated `nikaia.contracts` is committed, you won't see this note again.".to_owned()];
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK2403".to_owned(), message, notes, help: Some(help), labels: vec![] });
+        let notes: Vec<String> = vec![format!("{}, and a `{}` does something when it's cleaned up ({}).", capitalised(&before), moved_ty, how), String::from("Nothing is wrong: this is just to let you know, since the call itself doesn't show it. Once the updated `nikaia.contracts` is committed, you won't see this note again.")];
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK2403"), message, notes, help: Some(help), labels: vec![] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -110,9 +110,9 @@ impl CheckState {
         if !note_a_division(&op) { return; }
         let divisor = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         if divisor.beyond || divisor.value.magnitude != 0u64 { return; }
-        let mut what: String = "takes the remainder".to_owned();
-        if op == BinaryOp::Div { what = "divides".to_owned(); }
-        self.findings.push(check_refusal("NK1118", span, format!("This {} by zero.", what), vec!["Dividing by zero would stop the program, and here it's certain to happen.".to_owned()], Some("If the divisor can really be zero, check it before dividing.".to_owned())));
+        let mut what: &'static str = "takes the remainder";
+        if op == BinaryOp::Div { what = "divides"; }
+        self.findings.push(check_refusal("NK1118", span, format!("This {} by zero.", what), vec![String::from("Dividing by zero would stop the program, and here it's certain to happen.")], Some(String::from("If the divisor can really be zero, check it before dividing."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -131,8 +131,8 @@ impl CheckState {
             return;
         }
         let ty: String = match left {
-            Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && note_an_integer(name) { name.to_owned() } else { "i64".to_owned() } },
-            _ => "i64".to_owned(),
+            Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && note_an_integer(name) { name.to_owned() } else { String::from("i64") } },
+            _ => String::from("i64"),
         };
         self.a_shift_too_far(&ty, &count, span);
     }
@@ -172,7 +172,7 @@ impl CheckState {
         if count.value.negative { written = format!("-{}", count.value.magnitude); }
         let article = if an_or_a(ty) == "an" { "an" } else { "a" };
         let last = width - 1u64;
-        self.findings.push(check_refusal("NK1116", span, format!("This shifts {} `{}` by {} places, and it has {} bits.", article, ty, written, width), vec!["A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen.".to_owned()], Some(format!("Shift by 0 to {} places.", last).to_owned())));
+        self.findings.push(check_refusal("NK1116", span, format!("This shifts {} `{}` by {} places, and it has {} bits.", article, ty, written, width), vec![String::from("A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen.")], Some(format!("Shift by 0 to {} places.", last).to_owned())));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

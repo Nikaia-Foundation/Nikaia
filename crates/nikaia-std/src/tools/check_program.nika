@@ -22,14 +22,14 @@ fn check_program_body[H: CheckHost](mut state: CheckState, world: ref CheckWorld
 /// **`NK1227`: the convention is not written** (ADR-324 D6).
 fn check_program_extern_convention(mut state: CheckState, abi: ref String, span: ref Span) sync {
     let shown = f"\"{abi}\""
-    let note = "`extern` is the C calling convention, the only one on every target, so it is not written.".clone()
+    let note: String = "`extern` is the C calling convention, the only one on every target, so it is not written."
     state.findings.push(CheckFinding {
         severity: CheckSeverity::Error,
         span: span.clone(),
-        code: "NK1227".clone(),
+        code: "NK1227",
         message: f"`extern` takes no convention, and this names `{shown}`.",
         notes: [note],
-        help: "Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.".clone(),
+        help: "Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.",
         labels: [],
     })
 }
@@ -192,7 +192,7 @@ fn check_program_turns[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             member = "variants"
             one = "variant"
         }
-        let walker = state.walks_fields.get(name)?.clone() ?? "T".clone()
+        let walker = state.walks_fields.get(name)?.clone() ?? "T"
         let said = f"This happened while going through `{walker}::{member}` for `{on}`, at the {one} `{field.name}`."
         let mut fresh: Vec[CheckFinding] = []
         let mut next = before

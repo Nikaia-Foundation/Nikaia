@@ -138,7 +138,7 @@ pub fn compare_refusal(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, lef
     if !asking.of(left) { found = left.text(); } else if !asking.of(right) { found = right.text(); }
     if found == "" { return None; }
     let note: String = String::from("A `struct` or an `enum` can be compared when all of its parts can. Locks, mapped files, sockets and task handles can't be compared.");
-    Some(check_refusal("NK1188", span, format!("You can't compare two `{}` values with `==`.", found), vec![note], Some("Compare the parts that matter, or give the type a method that says what being equal means for it.".to_owned())))
+    Some(check_refusal("NK1188", span, format!("You can't compare two `{}` values with `==`.", found), vec![note], Some(String::from("Compare the parts that matter, or give the type a method that says what being equal means for it."))))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,9 +190,9 @@ impl CheckState {
     }
     pub fn a_failing_cleanup_undeclared(&mut self, name: &str, ty: &Ty, owner: &str, span: &Span) {
         if self.flow.throwing || self.flow.caught || self.current.is_none() { return; }
-        let mut is: String = String::from("holds");
+        let mut is: &'static str = "holds";
         match ty.unseen() {
-            Ty::Named { ref name, .. } => { if compare_base(name) == compare_base(owner) { is = "is".to_owned(); }; },
+            Ty::Named { ref name, .. } => { if compare_base(name) == compare_base(owner) { is = "is"; }; },
             _ => { },
         }
         let mut help: String = format!("Declare the function with `throws`, or close the `{}` it holds yourself, with `close() catch {{ … }}`.", owner);
@@ -242,8 +242,8 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
             if own_bounds.len() == 1 && *nikaia_std::index::get(&own_bounds, 0) == "?" { if ordered { met = asking.orders(&held); } else { met = asking.totally(&held); } } else { for own in own_bounds.iter() { if own == "Ord" || !ordered && own == "Eq" { met = true; } } }
             if met { continue; }
             let shown = held.text();
-            let mut what: String = String::from("an equality that is an equivalence");
-            if ordered { what = "an order".to_owned(); }
+            let mut what: &'static str = "an equality that is an equivalence";
+            if ordered { what = "an order"; }
             let mut help: String = String::from("Pass a type that has one: a number, `String`, `bool`, `char`, or a tuple, list or option of those, or a type you declare with an `impl`.");
             if asking.structs.contains_key(&shown) || asking.enums.contains_key(&shown) { help = format!("Write `impl {} for {} {{ … }}`, or pass a type that already has one.", wanted_trait, shown); }
             refused.push(check_refusal("NK1164", span, format!("`{}` needs a `{}` here, but `{}` isn't one.", key, wanted_trait, shown), vec![format!("`{}` declares `[{}: {}]`, so the type passed has to have {}, and `{}` hasn't.", key, parameter, wanted_trait, what, shown)], Some(help)));
@@ -263,7 +263,7 @@ pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '
                 if (last == "BTreeMap" || last == "BTreeSet") && !args.is_empty() && !asking.orders(nikaia_std::index::get(&args, 0)) {
                     let key = (*nikaia_std::index::get(&args, 0)).text();
                     let note: String = String::from("A number, a `String`, a `bool`, a `char`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`.");
-                    refused.push(check_refusal("NK1247", span, format!("`{}` keeps its keys in order, and `{}` has no order.", last, key), vec![note], Some("Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first.".to_owned())));
+                    refused.push(check_refusal("NK1247", span, format!("`{}` keeps its keys in order, and `{}` has no order.", last, key), vec![note], Some(String::from("Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first."))));
                 }
                 for arg in args.iter() { stack.push(arg.clone()); }
             },
@@ -277,10 +277,10 @@ pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '
 
 pub(crate) fn compare_parameter_bounds(ty: &Ty, parameters: &collections::BTreeMap<String, Vec<String>>) -> Vec<String> {
     let name = match ty {
-        Ty::Named { name, args, .. } => if args.is_empty() { name.to_owned() } else { "".to_owned() },
-        _ => "".to_owned(),
+        Ty::Named { name, args, .. } => if args.is_empty() { name.to_owned() } else { String::from("") },
+        _ => String::from(""),
     };
-    let bounds = match parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec!["?".to_owned()] };
+    let bounds = match parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec![String::from("?")] };
     bounds.to_owned()
 }
 

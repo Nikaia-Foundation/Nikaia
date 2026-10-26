@@ -124,7 +124,7 @@ impl EmitState {
                     if empty != null {
                         let mut not: String = "!"
                         if empty ?? false {
-                            not = "".clone()
+                            not = ""
                         }
                         out.push(f"{not}{receiver}.is_empty()")
                         return true
@@ -206,7 +206,7 @@ impl EmitState {
                 continue
             }
             if !safe || !holdable {
-                throw EmitRefused { message: "This `?.` returns a view of a value that's gone at the end of this line. Put the value in a `let` on the line before, and use `?.` on that name.".clone(), at: span.start as i64 }
+                throw EmitRefused { message: "This `?.` returns a view of a value that's gone at the end of this line. Put the value in a `let` on the line before, and use `?.` on that name.", at: span.start as i64 }
             }
             let name = f"__nikaia_held_{walk.held.len()}"
             out.push(f"let {name} = ")
@@ -552,7 +552,7 @@ impl EmitState {
     pub fn emit_core_overlap[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let count = block.stmts.len()
         if count < 2 {
-            throw EmitRefused { message: "An `overlap` block needs at least two branches to run at the same time.".clone(), at: flow.statement }
+            throw EmitRefused { message: "An `overlap` block needs at least two branches to run at the same time.", at: flow.statement }
         }
         if count > 8 {
             throw EmitRefused { message: f"This `overlap` block has {count} branches, but at most 8 are supported.", at: flow.statement }
@@ -720,7 +720,7 @@ impl EmitState {
                 }
             },
             else => {
-                throw EmitRefused { message: "Each branch of an `overlap` has to be an expression.".clone(), at: flow.statement }
+                throw EmitRefused { message: "Each branch of an `overlap` has to be an expression.", at: flow.statement }
             }
         }
         out.push(" },\n")
@@ -734,7 +734,7 @@ impl EmitState {
     pub fn emit_core_select[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arms: ref Vec[SelectArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let count = arms.len()
         if count < 2 {
-            throw EmitRefused { message: "A `select` needs at least two arms to choose between.".clone(), at: flow.statement }
+            throw EmitRefused { message: "A `select` needs at least two arms to choose between.", at: flow.statement }
         }
         if count > 8 {
             throw EmitRefused { message: f"This `select` has {count} arms, but at most 8 are supported.", at: flow.statement }
@@ -785,7 +785,7 @@ impl EmitState {
             }
             let mut bound = named.clone()
             if fallible {
-                bound = "__nikaia_won".clone()
+                bound = "__nikaia_won"
             }
             out.push(f"{inner}nikaia_std::task::Race{count}::{self.emit_read_ordinal(at)}({bound}) => ")
             at += 1
@@ -808,7 +808,7 @@ impl EmitState {
                 if arm.binding != null {
                     opening = f"let {named} = __nikaia_won?;"
                 } else {
-                    opening = "__nikaia_won?;".clone()
+                    opening = "__nikaia_won?;"
                 }
             }
             let st = out.mark()

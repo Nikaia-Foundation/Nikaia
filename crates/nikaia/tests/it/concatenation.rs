@@ -109,7 +109,7 @@ fn greet(name: String) -> String {
 }
 
 fn main() {
-    println(greet("Ada".to_string()))
+    println(greet(f"Ada"))
 }
 "#,
     );
@@ -151,7 +151,7 @@ fn the_lowering_is_the_trait_and_not_a_format() {
         "no format",
         r#"
 fn main() {
-    let s = "left-".to_string()
+    let s = f"left-"
     println(s + "right")
 }
 "#,

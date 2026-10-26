@@ -26,7 +26,7 @@ impl CheckState {
     /// message says what a file read **while the program runs** is called —
     /// because that is what a reader who wrote it here almost certainly meant.
     pub fn an_asset_outside_a_comptime(ref mut self, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1177", span, "`asset` reads a file while the program is built, so it only works in a `comptime`.".clone(), ["`comptime` says when, `asset(\"…\")` says where the bytes come from, and the call around it says what to do with them.".clone()], "Write `comptime NAME = …` to build the bytes into the program, or `fs::read(…, root)` to read the file while it runs.".clone()))
+        self.findings.push(check_refusal("NK1177", span, "`asset` reads a file while the program is built, so it only works in a `comptime`.", ["`comptime` says when, `asset(\"…\")` says where the bytes come from, and the call around it says what to do with them."], "Write `comptime NAME = …` to build the bytes into the program, or `fs::read(…, root)` to read the file while it runs."))
     }
 
     /// **`NK1176`: a path that is not a literal**
@@ -38,7 +38,7 @@ impl CheckState {
     /// looking at the line — which is the whole of D3, and which a path assembled
     /// from a constant would quietly take away.
     pub fn a_path_that_is_not_a_literal(ref mut self, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1176", span, "`asset` needs the path written out, not computed.".clone(), ["The list of files a build may read is checked against the path as written, so a reader can see from the line which file is read.".clone()], "Write the path out. For two files, write two `asset(\"…\")` calls.".clone()))
+        self.findings.push(check_refusal("NK1176", span, "`asset` needs the path written out, not computed.", ["The list of files a build may read is checked against the path as written, so a reader can see from the line which file is read."], "Write the path out. For two files, write two `asset(\"…\")` calls."))
     }
 
     /// **`NK1174`: a `with` that names no field**
@@ -50,7 +50,7 @@ impl CheckState {
     /// for an afternoon; its caret landed on the line *after* the braces,
     /// because by then it had consumed them and the whitespace behind them.
     pub fn a_with_that_changes_nothing(ref mut self, ty: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1174", span, f"This `with` changes no field, so it's just a copy of the `{ty}`.", ["`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there.".clone()], "Name the fields that change, or remove the `with`.".clone()))
+        self.findings.push(check_refusal("NK1174", span, f"This `with` changes no field, so it's just a copy of the `{ty}`.", ["`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there."], "Name the fields that change, or remove the `with`."))
     }
 
     /// **`NK1173`: a `with` over a value it cannot copy**
@@ -70,7 +70,7 @@ impl CheckState {
             CheckCopyable::AnEnum => {
                 message = f"`with` copies a struct, but `{ty}` is an `enum`."
                 note = f"`{ty}` is an `enum`, and which fields it has depends on the variant."
-                way_out = "`match` on it first, and build the new value in the arm for its variant.".clone()
+                way_out = "`match` on it first, and build the new value in the arm for its variant."
             }
             CheckCopyable::AView => {
                 message = f"`with` needs the value itself, but this is only a view of a `{ty}`."
@@ -80,15 +80,15 @@ impl CheckState {
             CheckCopyable::NotAStruct => {
                 message = f"`with` copies a struct, but this is a `{ty}`."
                 note = f"`with` copies a struct field by field, and `{ty}` isn't a struct with fields."
-                way_out = "Make the value with the type's constructor instead.".clone()
+                way_out = "Make the value with the type's constructor instead."
             }
             // A type this compiler could not work out prints as `?`, which is a
             // headline about nothing. What the reader needs to know is that it
             // is the *type* that is missing, not the value.
             CheckCopyable::Unnamed => {
-                message = "`with` copies a struct, but the type of this value couldn't be worked out.".clone()
-                note = "`with` needs to know the value's type, and the type of this value couldn't be worked out.".clone()
-                way_out = "Write the type on the `let` this reads, or write the value out with every field.".clone()
+                message = "`with` copies a struct, but the type of this value couldn't be worked out."
+                note = "`with` needs to know the value's type, and the type of this value couldn't be worked out."
+                way_out = "Write the type on the `let` this reads, or write the value out with every field."
             }
         }
         self.findings.push(check_refusal("NK1173", span, message, [note], way_out))
@@ -133,7 +133,7 @@ impl CheckState {
         if guarded.fallible || guarded.unanswered {
             return
         }
-        self.findings.push(check_refusal("NK1134", span, "Nothing here can fail, so the `catch` has nothing to handle.".clone(), ["Only a call to a function declared with `throws` can fail.".clone(), "None of the calls here is declared with `throws`.".clone(), "(A call the compiler knows nothing about would not be reported here.)".clone()], "Remove the `catch` and its handler.".clone()))
+        self.findings.push(check_refusal("NK1134", span, "Nothing here can fail, so the `catch` has nothing to handle.", ["Only a call to a function declared with `throws` can fail.", "None of the calls here is declared with `throws`.", "(A call the compiler knows nothing about would not be reported here.)"], "Remove the `catch` and its handler."))
     }
 
     /// **The witness takes no `&`, and a written one is `NK1137`**
@@ -159,7 +159,7 @@ impl CheckState {
         if !written {
             return
         }
-        self.findings.push(check_refusal("NK1137", span, "You don't need the `ref` here: the compiler lends where it's needed.".clone(), ["`after:` is only read, so it's lent already.".clone()], "Remove the `ref`.".clone()))
+        self.findings.push(check_refusal("NK1137", span, "You don't need the `ref` here: the compiler lends where it's needed.", ["`after:` is only read, so it's lent already."], "Remove the `ref`."))
     }
 
     /// `NK1133`: a statement after a `break` or a `continue`, in the same block.

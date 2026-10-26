@@ -150,7 +150,7 @@ fn a_one_variant_member_draws_no_warning() {
          \x20   let text = load(\"x\") catch {{\n\
          \x20       match error {{\n\
          \x20           ConfigError::Empty(p) => f\"empty: {{p}}\"\n\
-         \x20           else => \"other\".clone()\n\
+         \x20           else => \"other\"\n\
          \x20       }}\n\
          \x20   }}\n\
          \x20   println(f\"{{text}}\")\n\

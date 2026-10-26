@@ -25,7 +25,7 @@ fn a_member_nothing_writes_down_is_refused() {
             "a Rust associated function",
             "fn main() {\n    let t = String::from(\"x\")\n    println(t)\n}\n",
             "`String` has no function called `from`.",
-            "Write the text itself, `\"x\"`, or `\"x\".clone()` for text of its own.",
+            "Write the text itself, `\"x\"`, or `f\"x\"` for text of its own.",
         ),
         (
             "a method of text",

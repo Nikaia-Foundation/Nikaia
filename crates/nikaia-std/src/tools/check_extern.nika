@@ -14,11 +14,11 @@ fn ext_a_text(base: ref String) -> bool {
 }
 
 fn ext_a_struct_note() -> String {
-    return "An `extern` struct has C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, other `extern` structs and `Array[T, N]` of these.".clone()
+    return "An `extern` struct has C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, other `extern` structs and `Array[T, N]` of these."
 }
 
 fn ext_an_enum_note() -> String {
-    return "An `extern` enum is a tagged union in C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, `extern` structs and enums, and `Array[T, N]` of these.".clone()
+    return "An `extern` enum is a tagged union in C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, `extern` structs and enums, and `Array[T, N]` of these."
 }
 
 impl CheckState {
@@ -37,32 +37,32 @@ impl CheckState {
     }
 
     fn an_entry_point_of(ref mut self, world: ref CheckWorld, name: winnow_grammar::Symbol?, generics: ref Vec[GenericParam], args: ref Vec[FnArg], ret_type: ref Type?, is_public: bool, span: ref Span, of_a_trait: bool) sync {
-        let mut written: String = "new".clone()
+        let mut written: String = "new"
         if name != null {
             written = world.words.resolve(name ?? return).clone()
         }
         // `NK1237`: an entry point is the package's surface.
         if !is_public {
-            self.findings.push(check_refusal("NK1237", span, f"`{written}` is `extern` but not `pub`.", ["`extern` before a function with a body exports it to C, and what a package exports is part of its surface.".clone()], f"Write `pub extern fn {written}`, or leave out `extern` for a function only this program calls."))
+            self.findings.push(check_refusal("NK1237", span, f"`{written}` is `extern` but not `pub`.", ["`extern` before a function with a body exports it to C, and what a package exports is part of its surface."], f"Write `pub extern fn {written}`, or leave out `extern` for a function only this program calls."))
         }
         // `NK1238`: a function C calls needs a library for C to call into.
-        self.findings.push(check_refusal("NK1238", span, f"`{written}` is an entry point, and this build makes no library.", ["Only a build with `artifact = \"c-library\"` in `[build]` exports its `extern` functions, as a shared and a static library and a header.".clone()], f"Set `artifact = \"c-library\"` in `[build]`, or leave out `extern`: `{written}` is an ordinary function without it."))
+        self.findings.push(check_refusal("NK1238", span, f"`{written}` is an entry point, and this build makes no library.", ["Only a build with `artifact = \"c-library\"` in `[build]` exports its `extern` functions, as a shared and a static library and a header."], f"Set `artifact = \"c-library\"` in `[build]`, or leave out `extern`: `{written}` is an ordinary function without it."))
         // `NK1239`: C has neither generics nor traits.
         if generics.len() > 0 || of_a_trait {
-            let mut what: String = "generic".clone()
+            let mut what: String = "generic"
             let mut help: String = f"Export one function for each type `{written}` is called with, each calling it."
             if of_a_trait {
-                what = "a trait's method".clone()
+                what = "a trait's method"
                 help = f"Export a plain function that calls `{written}`."
             }
-            self.findings.push(check_refusal("NK1239", span, f"`{written}` is {what}, and C cannot call one.", ["A C function has one signature and no dispatch: what a generic function or a trait's method stands for is decided in Nikaia, not by the caller.".clone()], help))
+            self.findings.push(check_refusal("NK1239", span, f"`{written}` is {what}, and C cannot call one.", ["A C function has one signature and no dispatch: what a generic function or a trait's method stands for is decided in Nikaia, not by the caller."], help))
         }
         // `NK1240`: what crosses is D5's table, both ways.
         for arg in args {
             let way = self.crosses_to_c(world, arg.ty, false)
             if way != null {
                 let param = world.words.resolve(arg.name).clone()
-                self.findings.push(check_refusal("NK1240", span, f"`{param}` of `{written}` cannot cross to C.", ["An entry point takes numbers, `bool` and `scalar` by value, text and bytes as a view, a list of numbers, a struct or an enum of the package, an optional of those, and a callback that does not pause (Part III 15.1).".clone()], way))
+                self.findings.push(check_refusal("NK1240", span, f"`{param}` of `{written}` cannot cross to C.", ["An entry point takes numbers, `bool` and `scalar` by value, text and bytes as a view, a list of numbers, a struct or an enum of the package, an optional of those, and a callback that does not pause (Part III 15.1)."], way))
             }
         }
         self.what_an_entry_point_hands_back(world, written, ret_type, span)
@@ -72,7 +72,7 @@ impl CheckState {
         let result = ret_type ?? return
         let way = self.crosses_to_c(world, result, true)
         if way != null {
-            self.findings.push(check_refusal("NK1240", span, f"What `{written}` hands back cannot cross to C.", ["An entry point hands back numbers, `bool` and `scalar`, text and bytes into the caller's buffer, a struct or an enum of the package, or an optional of those (Part III 15.1).".clone()], way))
+            self.findings.push(check_refusal("NK1240", span, f"What `{written}` hands back cannot cross to C.", ["An entry point hands back numbers, `bool` and `scalar`, text and bytes into the caller's buffer, a struct or an enum of the package, or an optional of those (Part III 15.1)."], way))
         }
     }
 
@@ -149,7 +149,7 @@ impl CheckState {
             return
         }
         let shown = world.words.resolve(ty.name).clone()
-        self.findings.push(check_refusal("NK1145", at, f"`{written}::{variant_name}.{field}` is a `{shown}`, which is not a C value.", [ext_an_enum_note()], "Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field.".clone()))
+        self.findings.push(check_refusal("NK1145", at, f"`{written}::{variant_name}.{field}` is a `{shown}`, which is not a C value.", [ext_an_enum_note()], "Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field."))
     }
 
     /// Whether `ty` crosses to C at an entry point (ADR-284 D5), `out` for a
@@ -160,7 +160,7 @@ impl CheckState {
             return self.a_callback_crosses(world, ty, out)
         }
         if ty.is_tuple {
-            return "Hand a tuple's parts over one by one, or as a `pub extern struct`.".clone()
+            return "Hand a tuple's parts over one by one, or as a `pub extern struct`."
         }
         let mut args: Vec[String] = []
         for generic in ty.generics {
@@ -174,11 +174,11 @@ impl CheckState {
     /// parts as a parameter would and does not pause.
     fn a_callback_crosses(ref self, world: ref CheckWorld, ty: ref Type, out: bool) -> String? sync {
         if out {
-            return "Hand back a value; a function is a parameter's shape: a callback.".clone()
+            return "Hand back a value; a function is a parameter's shape: a callback."
         }
         let code = ty.code ?? return null
         if !code.is_sync {
-            return "Write the callback `sync`: C calls it on its own thread, where nothing may pause.".clone()
+            return "Write the callback `sync`: C calls it on its own thread, where nothing may pause."
         }
         for part in ty.generics {
             let way = self.crosses_to_c(world, part, false)
@@ -202,10 +202,10 @@ impl CheckState {
             return null
         }
         if base == "String" && plain && !view && !out {
-            return "Take `ref String`: C keeps the text and lends it for the call.".clone()
+            return "Take `ref String`: C keeps the text and lends it for the call."
         }
         if ext_a_text(base) && plain && view && out {
-            return "Hand back `String`: it is written into the caller's buffer.".clone()
+            return "Hand back `String`: it is written into the caller's buffer."
         }
         if base == "Bytes" && plain {
             return null
@@ -222,7 +222,7 @@ impl CheckState {
             return null
         }
         if (base == "Vec" || base == "Array") && !out {
-            return "Take `ref Array[T]` of a number: C keeps the array and lends it for the call.".clone()
+            return "Take `ref Array[T]` of a number: C keeps the array and lends it for the call."
         }
         if plain && declared {
             return null
@@ -231,10 +231,10 @@ impl CheckState {
             return f"Keep the `{name}` inside the package, in a `pub struct` C holds as a handle."
         }
         if base == "HashMap" || base == "BTreeMap" || base == "Map" {
-            return "Keep the map in a `pub struct` C holds as a handle, or hand its entries to a callback.".clone()
+            return "Keep the map in a `pub struct` C holds as a handle, or hand its entries to a callback."
         }
         if base == "Vec" || base == "Array" {
-            return "Hand many results to a callback, or put them in a `pub struct` C holds as a handle.".clone()
+            return "Hand many results to a callback, or put them in a `pub struct` C holds as a handle."
         }
         return f"Declare `{name}` in the package as a `pub struct`, which C holds as a handle."
     }

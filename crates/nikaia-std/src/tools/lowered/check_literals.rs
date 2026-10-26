@@ -4,10 +4,10 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_table_with_one_key_twice(&mut self, bound: &str, key: &str, first: i64, again: i64, span: &Span) { self.findings.push(check_refusal("NK1169", span, format!("`{}` has the key `{}` twice.", bound, key), vec![format!("Pairs {} and {} both use it, and a table holds one value per key.", first + 1, again + 1)], Some("Remove one of them, or give them different keys.".to_owned()))); }
+    pub fn a_table_with_one_key_twice(&mut self, bound: &str, key: &str, first: i64, again: i64, span: &Span) { self.findings.push(check_refusal("NK1169", span, format!("`{}` has the key `{}` twice.", bound, key), vec![format!("Pairs {} and {} both use it, and a table holds one value per key.", first + 1, again + 1)], Some(String::from("Remove one of them, or give them different keys.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_table_key_that_is_not_text(&mut self, bound: &str, key: &str, span: &Span) { self.findings.push(check_refusal("NK1170", span, format!("`{}` uses `{}` as its keys, but a fixed table's keys are text.", bound, key), vec!["A fixed table looks up text keys. Numbers or `bool`s as keys need a different kind of table, which isn't available yet.".to_owned()], Some("Write the keys as text, or use a `collections::HashMap` built while the program runs.".to_owned()))); }
+    pub fn a_table_key_that_is_not_text(&mut self, bound: &str, key: &str, span: &Span) { self.findings.push(check_refusal("NK1170", span, format!("`{}` uses `{}` as its keys, but a fixed table's keys are text.", bound, key), vec![String::from("A fixed table looks up text keys. Numbers or `bool`s as keys need a different kind of table, which isn't available yet.")], Some(String::from("Write the keys as text, or use a `collections::HashMap` built while the program runs.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_build_time_index_is_not_there(&mut self, at: &Integer, len: i64, span: &Span) {
@@ -15,20 +15,20 @@ impl CheckState {
             0 => String::from("The array is empty, so there's nothing to read."),
             _ => format!("The indexes go from 0 to {}.", len - 1),
         };
-        self.findings.push(check_refusal("NK1165", span, format!("This reads element {}, but there are only {}.", integer_text(at), counted(len, "element")), vec!["This is computed while the program is built, so the read would fail right here.".to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK1165", span, format!("This reads element {}, but there are only {}.", integer_text(at), counted(len, "element")), vec![String::from("This is computed while the program is built, so the read would fail right here.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_thrown_value_that_is_not_an_error(&mut self, value: &Expr, thrown: &Ty, span: &Span) {
         let what = match element_kind(value, thrown) { Some(__nikaia_value) => __nikaia_value, None => return };
-        self.findings.push(check_refusal("NK1161", span, format!("You can only throw an error, and this throws {}.", what), vec!["An error is a type with an `impl Error` for it, which says what its message is.".to_owned()], Some("Declare one, such as `enum Refused { NotFound }` with `impl Error for Refused { fn message(ref self) -> String { … } }`, and throw a value of it.".to_owned())));
+        self.findings.push(check_refusal("NK1161", span, format!("You can only throw an error, and this throws {}.", what), vec![String::from("An error is a type with an `impl Error` for it, which says what its message is.")], Some(String::from("Declare one, such as `enum Refused { NotFound }` with `impl Error for Refused { fn message(ref self) -> String { … } }`, and throw a value of it."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, thrown: &Ty, span: &Span) {
         let name: String = match thrown {
-            Ty::Named { name, view, .. } => { let view = *view; if view { "".to_owned() } else { name.to_owned() } },
-            _ => "".to_owned(),
+            Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else { name.to_owned() } },
+            _ => String::from(""),
         };
         if name == "" || name.contains("::") || name == "Self" { return; }
         let declared = self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name);
@@ -43,11 +43,11 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.contains(&name)),
             None => None,
         }, || false) { return; }
-        self.findings.push(check_refusal("NK1161", span, format!("You can only throw an error, and `{}` has no `impl Error`.", name), vec!["What is thrown implements `Error`, and the `impl` line says so (Part I 7.1). No file of this package writes one for it.".to_owned()], Some(format!("Add `impl Error for {} {{ fn message(ref self) -> String {{ … }} }}` beside it.", name))));
+        self.findings.push(check_refusal("NK1161", span, format!("You can only throw an error, and `{}` has no `impl Error`.", name), vec![String::from("What is thrown implements `Error`, and the `impl` line says so (Part I 7.1). No file of this package writes one for it.")], Some(format!("Add `impl Error for {} {{ fn message(ref self) -> String {{ … }} }}` beside it.", name))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_handle_has_nothing_inside(&mut self, handle: &str, what: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't look inside `{}`: it's a handle, and {} reaches into it.", handle, what), vec![format!("`{}` is declared `opaque`: what it points at belongs to the C library that made it.", handle)], Some("Pass the handle to a function declared in the `extern \"C\"` block.".to_owned()))); }
+    pub fn a_handle_has_nothing_inside(&mut self, handle: &str, what: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't look inside `{}`: it's a handle, and {} reaches into it.", handle, what), vec![format!("`{}` is declared `opaque`: what it points at belongs to the C library that made it.", handle)], Some(String::from("Pass the handle to a function declared in the `extern \"C\"` block.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_handle_is_not_made_here(&mut self, handle: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't make a `{}` yourself: it's a handle a C library gives you.", handle), vec![format!("`{}` is declared `opaque`: only a C function can hand one out.", handle)], Some(format!("Call the function in the `extern \"C\"` block that returns a `{}`.", handle)))); }
@@ -58,7 +58,7 @@ impl CheckState {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
             _ => String::from("the buffer"),
         };
-        self.findings.push(check_refusal("NK1159", span, format!("`{}` takes this as the length of `{}`, but it might be longer than the buffer.", written, named), vec!["C trusts the count completely, so a count longer than the buffer would read or write past its end.".to_owned()], Some(format!("Pass `{}.len()`, or a constant no bigger than the buffer. An `Array[T, N]` knows its length; a `Vec[T]` doesn't until the program runs.", named))));
+        self.findings.push(check_refusal("NK1159", span, format!("`{}` takes this as the length of `{}`, but it might be longer than the buffer.", written, named), vec![String::from("C trusts the count completely, so a count longer than the buffer would read or write past its end.")], Some(format!("Pass `{}.len()`, or a constant no bigger than the buffer. An `Array[T, N]` knows its length; a `Vec[T]` doesn't until the program runs.", named))));
     }
 }
 

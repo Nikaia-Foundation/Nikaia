@@ -125,19 +125,19 @@ fn check_core_call_on_type_name(on: ref Ty) -> String {
     match on {
         Ty::Seq { parallel, .. } => {
             if parallel {
-                return "Par".clone()
+                return "Par"
             }
-            return "Seq".clone()
+            return "Seq"
         }
         Ty::Named { name, .. } => return name.clone(),
         Ty::Pointed { slice, .. } => {
             if slice {
-                return "Array".clone()
+                return "Array"
             }
         }
         else => {}
     }
-    return "".clone()
+    return ""
 }
 
 /// Whether the receiver's type has a ledger name at all.
@@ -262,9 +262,9 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
             let code = check_core_call_on_view(on) + check_core_call_on_view(given) * 2
             state.facts.standard_compares.insert(id_of(receiver) as i64, code)
             if wants_order {
-                check_core_call_on_reached(state, "Ord::compare".clone())
+                check_core_call_on_reached(state, "Ord::compare")
             } else {
-                check_core_call_on_reached(state, "Eq::eq".clone())
+                check_core_call_on_reached(state, "Eq::eq")
             }
             check_core_call_on_quiet(state, receiver)
             if wants_order {
@@ -353,7 +353,7 @@ fn check_core_call_on_part_text(held: ref Ty, given: ref Ty) -> String {
     if !given.is_unknown() {
         return check_core_call_on_map_held(given).text()
     }
-    return "i64".clone()
+    return "i64"
 }
 
 /// What a map holds of a type written into it: text as owned text (D43), a
@@ -627,7 +627,7 @@ fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, recei
         let ty: String? = integer_named(value_of_a_copy(found[0].unseen()))
         if ty != null {
             if state.flow.open_numbers.contains_key(open) {
-                check_core_call_on_ask(state, open, ty ?? "".clone(), span)
+                check_core_call_on_ask(state, open, ty ?? "", span)
             }
         } else if state.number_shaped(world, args[0]) {
             state.open_number_given(world, open, args[0], span)
@@ -638,7 +638,7 @@ fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, recei
     let mut elements: Vec[Ty] = []
     if entry == "push" && found.len() == 1 && !found[0].is_unknown() {
         have = true
-        kind = "Vec".clone()
+        kind = "Vec"
         elements = [value_of_a_copy(found[0])]
     }
     if !have {
@@ -652,7 +652,7 @@ fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, recei
             at = at - 1
             if state.scope[frame][at].name == pushed_name {
                 let mut is_named = false
-                let mut new_name: String = "".clone()
+                let mut new_name: String = ""
                 let mut new_view = false
                 match state.scope[frame][at].ty {
                     Ty::Named { name, view, .. } => {
@@ -695,7 +695,7 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         if !is_a_literal(given) && an_integer_that_does_not_widen(have, want) {
             let at = check_span_at(world, given, span)
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102".clone(), message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
         }
     }
 }
@@ -714,7 +714,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     }
     if known_text {
         state.facts.path_methods.insert(node, true)
-        check_core_call_on_reached(state, "fs::Path::text_of".clone())
+        check_core_call_on_reached(state, "fs::Path::text_of")
     } else {
         check_core_call_on_reached(state, key.clone())
     }
@@ -910,7 +910,23 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     for given in args {
         // **And a tuple with text literals beside other parts** (#750).
         if i < expected.len() as i64 && state.text_literal(world, expected[i], given, true) == null && i < found.len() as i64 {
-            state.tuple_literal(world, found[i], expected[i], given)
+            // **A lookup's key is `?`** in the ledger, and a tuple with text in it
+            // is looked up by the tuple the collection holds: its text is
+            // built, as a pushed one's is (#853).
+            let by_map: Ty = bound.get("K")?.clone() ?? Ty::Unknown
+            let by_item: Ty = bound.get("T")?.clone() ?? Ty::Unknown
+            let wanted: Ty = if !is_a_lookup(key) {
+                expected[i].clone()
+            } else if by_map != Ty::Unknown {
+                by_map
+            } else if by_item != Ty::Unknown {
+                by_item
+            } else {
+                expected[i].clone()
+            }
+            if state.tuple_literal(world, found[i], wanted, given) == null {
+                state.list_of_tuple_literals(world, found[i], wanted, given)
+            }
         }
         i += 1
     }
@@ -980,7 +996,7 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
             return check_core_call_on_named("String")
         }
         let listed = members_named(members)
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1171".clone(), message: f"This is an error, one of {listed}, and an error has no method called `{entry}`.", notes: ["What every error has is `message()` and `full()`; what one of them has is reached once a `match` has said which it is.".clone()], help: f"Take it apart first: `match error {{ … }}`, and call `{entry}` in the arm of the type that has it.", labels: [] })
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1171", message: f"This is an error, one of {listed}, and an error has no method called `{entry}`.", notes: ["What every error has is `message()` and `full()`; what one of them has is reached once a `match` has said which it is."], help: f"Take it apart first: `match error {{ … }}`, and call `{entry}` in the arm of the type that has it.", labels: [] })
         return Ty::Unknown
     }
     // **A produced sequence answers under its own word** (ADR-105 D1), and a
@@ -1049,10 +1065,10 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
         state.the_witness_takes_no_reference(config[witness].value, span)
         state.facts.witnessed_sets.insert(span.start as i64)
         given.push(config[witness].value.clone())
-        written = "set(after)".clone()
+        written = "set(after)"
     } else if within {
         given.push(config[witness].value.clone())
-        written = "join(within)".clone()
+        written = "join(within)"
     }
     // **The receiver is lent to the call where the call changes nothing**
     // (ADR-278 D2, D16, D3): asked of every candidate for the name.

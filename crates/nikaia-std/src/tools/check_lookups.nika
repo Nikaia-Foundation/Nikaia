@@ -220,7 +220,7 @@ impl CheckState {
     /// `NK1111`: braces in a plain string that look like a hole. A warning, and
     /// not an error, because `"{ margin: 0 }"` is correct CSS.
     pub fn warn_migration(ref mut self, span: ref Span, message: String, help: String) sync {
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1111".clone(), message: message, notes: ["Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are.".clone()], help: help, labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1111", message: message, notes: ["Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are."], help: help, labels: [] })
     }
 
     /// The walk under [`Checker::declared`], over a written type and everything
@@ -232,7 +232,7 @@ impl CheckState {
             if held.generics.len() > 0 {
                 inside = world.words.resolve(held.generics[0].name).clone()
             }
-            self.findings.push(check_refusal("NK1123", span, f"Write `SharedMut[{inside}]` instead of a `Shared` around a lock.", ["The common case has a short name, and it's the only way to write it: one type, one spelling.".clone()], f"Write `SharedMut[{inside}]`."))
+            self.findings.push(check_refusal("NK1123", span, f"Write `SharedMut[{inside}]` instead of a `Shared` around a lock.", ["The common case has a short name, and it's the only way to write it: one type, one spelling."], f"Write `SharedMut[{inside}]`."))
         }
         for inner in ty.generics {
             self.spelling(world, inner, span)

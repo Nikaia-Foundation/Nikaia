@@ -250,7 +250,7 @@ fn size[T: Struct](value: T) -> i64 {
 }
 
 fn main() {
-    let r = size(User { name: "ada".clone(), age: 36 }) * 10 + size(Point { x: 1, y: 2, z: 3 })
+    let r = size(User { name: f"ada", age: 36 }) * 10 + size(Point { x: 1, y: 2, z: 3 })
     println(f"{r}")
 }
 "#,
@@ -542,7 +542,7 @@ fn main() {
     for i in 0..<3 {
         text += f"a{i}\n"
     }
-    let other = "zz".clone()
+    let other = f"zz"
     text += "lit"
     text += other
     text.push_str("p")

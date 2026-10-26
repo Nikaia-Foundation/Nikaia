@@ -4,7 +4,7 @@ fn size(x: String) -> i64 {
 }
 
 fn main() {
-    let owned = "abc".clone()
+    let owned = "abc"
     let s = owned[..<(owned.find("c") ?? return)]
     println(f"{size(s)}")
 }

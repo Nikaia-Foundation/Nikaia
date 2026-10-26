@@ -26,7 +26,7 @@ impl CheckState {
         let mut quoted: Vec<String> = vec![];
         for error in passing.iter() { quoted.push(format!("`{}`", error)); }
         let list = quoted.join(", ");
-        self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because {} passes this `catch`.", list), vec![format!("{} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not.", list)], Some("Add `throws` to the function, or name the type in a `match error` arm of the handler.".to_owned())));
+        self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because {} passes this `catch`.", list), vec![format!("{} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not.", list)], Some(String::from("Add `throws` to the function, or name the type in a `match error` arm of the handler."))));
     }
 }
 
@@ -76,7 +76,7 @@ impl CheckState {
         let mut errors: Vec<String> = vec![];
         for error in contract.fails_with.iter() { errors.push(format!("`{}`", error)); }
         let list = errors.join(", ");
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605".to_owned(), message: format!("This function can fail, because `{}` can fail.", key), notes: vec![format!("`{}` can fail with {}.", key, list), "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.".to_owned()], help: Some(format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function)), labels: vec![] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2605"), message: format!("This function can fail, because `{}` can fail.", key), notes: vec![format!("`{}` can fail with {}.", key, list), String::from("A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.")], help: Some(format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function)), labels: vec![] });
     }
 }
 

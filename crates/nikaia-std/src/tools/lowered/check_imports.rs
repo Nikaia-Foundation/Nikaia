@@ -70,7 +70,7 @@ impl CheckState {
         let written = segments.join("::");
         let near = nearest_name(module, &offered);
         let mut why: String = format!("`{}` is not one of the modules `std` offers.", module);
-        if module == "tools" { why = "`tools` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach".to_owned(); }
+        if module == "tools" { why = String::from("`tools` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"); }
         let mut help: String = format!("`std` offers: {}.", offered.join(", "));
         if near.is_some() { help = format!("Did you mean `use std::{}`?", nikaia_std::index::or(near.as_deref(), || "")); }
         self.findings.push(check_refusal("NK1186", span, format!("`std` has no module called `{}`.", written), vec![why], Some(help)));
@@ -82,8 +82,8 @@ impl CheckState {
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
                 let written = world.words.resolve(name).to_owned();
-                if written == "tag" { self.findings.push(check_refusal("NK1187", &pattern.span, format!("`{}` is not something a grammar can use.", written), vec![capitalised("a literal is written as itself")], Some("Write `\"x\"` instead.".to_owned()))); }
-                if written == "digit1" { self.findings.push(check_refusal("NK1187", &pattern.span, format!("`{}` is not something a grammar can use.", written), vec![capitalised("one or more characters of a class are written as the class and a `+`, which gives the text it matched")], Some("Write `digit+` instead.".to_owned()))); }
+                if written == "tag" { self.findings.push(check_refusal("NK1187", &pattern.span, format!("`{}` is not something a grammar can use.", written), vec![capitalised("a literal is written as itself")], Some(String::from("Write `\"x\"` instead.")))); }
+                if written == "digit1" { self.findings.push(check_refusal("NK1187", &pattern.span, format!("`{}` is not something a grammar can use.", written), vec![capitalised("one or more characters of a class are written as the class and a `+`, which gives the text it matched")], Some(String::from("Write `digit+` instead.")))); }
                 for arg in args.iter() { self.a_name_the_page_does_not_have(world, arg); }
             },
             Pattern::Seq(parts) => { for part in parts.iter() { self.a_name_the_page_does_not_have(world, part); } },
@@ -115,7 +115,7 @@ impl CheckState {
         }
         if !found { why = Some(format!("`{}` has no parameter `{}`", key, named)); }
         let reason = match why { Some(__nikaia_value) => __nikaia_value, None => return };
-        self.findings.push(check_refusal("NK2210", at, format!("`sync({})` names `{}`, but `{}` doesn't run it as code.", named, named, key), vec![reason, "`sync(f)` promises the function pauses only where the lambda passed as `f` does, so `f` has to be a lambda the function itself calls.".to_owned()], Some(format!("Name a parameter of `{}` that takes a function and calls it, or write plain `sync` if nothing it's given can pause.", key))));
+        self.findings.push(check_refusal("NK2210", at, format!("`sync({})` names `{}`, but `{}` doesn't run it as code.", named, named, key), vec![reason, String::from("`sync(f)` promises the function pauses only where the lambda passed as `f` does, so `f` has to be a lambda the function itself calls.")], Some(format!("Name a parameter of `{}` that takes a function and calls it, or write plain `sync` if nothing it's given can pause.", key))));
     }
 }
 

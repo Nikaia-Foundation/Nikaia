@@ -26,21 +26,21 @@ impl CheckState {
         self.a_pause(&pause, span);
     }
     pub(crate) fn a_pause(&mut self, pause: &CheckPause, span: &Span) {
-        let mut pauses: String = String::from("can pause");
+        let mut pauses: &'static str = "can pause";
         let mut notes: Vec<String> = vec![];
         let mut why: String = String::from("");
         if pause.unpromised.is_some() {
-            pauses = "doesn't promise that it never pauses".to_owned();
+            pauses = "doesn't promise that it never pauses";
             why = not_promised_note(nikaia_std::index::or(pause.unpromised.as_deref(), || ""));
         }
         self.note_a_pause();
         if self.in_parallel.is_some() && !self.scoped_task {
-            let mut parallel: Vec<String> = vec!["A `par_iter()` lambda runs on every core at once, and a core that waits holds up its share of the work, so the lambda must never pause.".to_owned()];
+            let mut parallel: Vec<String> = vec![String::from("A `par_iter()` lambda runs on every core at once, and a core that waits holds up its share of the work, so the lambda must never pause.")];
             if pause.unpromised.is_some() { parallel.push(why.to_owned()); }
             self.findings.push(check_refusal("NK2209", span, format!("{} {}, but this runs on several cores at once.", capitalised(&pause.what), pauses), parallel, Some(pause.before_walk.to_owned())));
         }
         if !self.inside_a_door { return; }
-        notes.push("While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too.".to_owned());
+        notes.push(String::from("While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too."));
         if pause.unpromised.is_some() { notes.push(why); }
         self.findings.push(check_refusal("NK2202", span, format!("{} {}, but you're holding a lock here.", capitalised(&pause.what), pauses), notes, Some(pause.before_door.to_owned())));
     }
@@ -62,13 +62,13 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
-        let mut notes: Vec<String> = vec!["A grammar's actions may never pause: a parser works on text that's already there, which is what lets `@frame` parse in parallel.".to_owned()];
-        let mut pauses: String = String::from("can pause");
+        let mut notes: Vec<String> = vec![String::from("A grammar's actions may never pause: a parser works on text that's already there, which is what lets `@frame` parse in parallel.")];
+        let mut pauses: &'static str = "can pause";
         if contract.sync_claim == Sync::Unpromised {
-            pauses = "doesn't promise that it never pauses".to_owned();
+            pauses = "doesn't promise that it never pauses";
             notes.push(not_promised_note(callee));
         }
-        self.findings.push(check_refusal("NK2209", span, format!("The action of `{}` calls `{}`, which {}.", rule, callee, pauses), notes, Some("Read what the parser needs before parsing and pass it in, or process the result after the parse.".to_owned())));
+        self.findings.push(check_refusal("NK2209", span, format!("The action of `{}` calls `{}`, which {}.", rule, callee, pauses), notes, Some(String::from("Read what the parser needs before parsing and pass it in, or process the result after the parse."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -78,13 +78,13 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
-        let mut pauses: String = String::from("can pause");
+        let mut pauses: &'static str = "can pause";
         let mut why: String = format!("`{}` isn't `sync`.", callee);
         if contract.sync_claim == Sync::Unpromised {
-            pauses = "doesn't promise that it never pauses".to_owned();
+            pauses = "doesn't promise that it never pauses";
             why = not_promised_note(callee);
         }
-        self.findings.push(check_refusal("NK2202", span, format!("`{}` is `sync`, but it calls `{}`, which {}.", caller, callee, pauses), vec!["A `sync` function promises never to pause or do I/O.".to_owned(), why], Some(format!("Remove `sync` from `{}`, or move the call out of it.", caller))));
+        self.findings.push(check_refusal("NK2202", span, format!("`{}` is `sync`, but it calls `{}`, which {}.", caller, callee, pauses), vec![String::from("A `sync` function promises never to pause or do I/O."), why], Some(format!("Remove `sync` from `{}`, or move the call out of it.", caller))));
     }
 }
 

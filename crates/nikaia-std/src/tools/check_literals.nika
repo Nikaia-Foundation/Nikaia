@@ -7,12 +7,12 @@ impl CheckState {
     /// `NK1169`: a fixed table that holds a key twice. `first` and `again` are
     /// the places of the two pairs, counted from 0.
     pub fn a_table_with_one_key_twice(ref mut self, bound: ref String, key: ref String, first: i64, again: i64, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1169", span, f"`{bound}` has the key `{key}` twice.", [f"Pairs {first + 1} and {again + 1} both use it, and a table holds one value per key."], "Remove one of them, or give them different keys.".clone()))
+        self.findings.push(check_refusal("NK1169", span, f"`{bound}` has the key `{key}` twice.", [f"Pairs {first + 1} and {again + 1} both use it, and a table holds one value per key."], "Remove one of them, or give them different keys."))
     }
 
     /// `NK1170`: a fixed table whose keys are not text.
     pub fn a_table_key_that_is_not_text(ref mut self, bound: ref String, key: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1170", span, f"`{bound}` uses `{key}` as its keys, but a fixed table's keys are text.", ["A fixed table looks up text keys. Numbers or `bool`s as keys need a different kind of table, which isn't available yet.".clone()], "Write the keys as text, or use a `collections::HashMap` built while the program runs.".clone()))
+        self.findings.push(check_refusal("NK1170", span, f"`{bound}` uses `{key}` as its keys, but a fixed table's keys are text.", ["A fixed table looks up text keys. Numbers or `bool`s as keys need a different kind of table, which isn't available yet."], "Write the keys as text, or use a `collections::HashMap` built while the program runs."))
     }
 
     /// **`NK1165`: a build-time index the array does not have.**
@@ -28,7 +28,7 @@ impl CheckState {
             0 => "The array is empty, so there's nothing to read.",
             else => f"The indexes go from 0 to {len - 1}.",
         }
-        self.findings.push(check_refusal("NK1165", span, f"This reads element {integer_text(at)}, but there are only {counted(len, "element")}.", ["This is computed while the program is built, so the read would fail right here.".clone()], help))
+        self.findings.push(check_refusal("NK1165", span, f"This reads element {integer_text(at)}, but there are only {counted(len, "element")}.", ["This is computed while the program is built, so the read would fail right here."], help))
     }
 
     /// `NK1161`: a `throw` of something that is not an error (Part I 7.1).
@@ -54,7 +54,7 @@ impl CheckState {
     /// program in the tree had written one.
     pub fn a_thrown_value_that_is_not_an_error(ref mut self, value: ref Expr, thrown: ref Ty, span: ref Span) sync {
         let what = element_kind(value, thrown) ?? return
-        self.findings.push(check_refusal("NK1161", span, f"You can only throw an error, and this throws {what}.", ["An error is a type with an `impl Error` for it, which says what its message is.".clone()], "Declare one, such as `enum Refused { NotFound }` with `impl Error for Refused { fn message(ref self) -> String { … } }`, and throw a value of it.".clone()))
+        self.findings.push(check_refusal("NK1161", span, f"You can only throw an error, and this throws {what}.", ["An error is a type with an `impl Error` for it, which says what its message is."], "Declare one, such as `enum Refused { NotFound }` with `impl Error for Refused { fn message(ref self) -> String { … } }`, and throw a value of it."))
     }
 
     /// **`NK1161` for a type of the program's own** (Part I 7.1, D11b): a
@@ -63,8 +63,8 @@ impl CheckState {
     /// another file counts; a type from another package is left alone (C.4).
     pub fn a_thrown_type_with_no_error(ref mut self, world: ref CheckWorld, thrown: ref Ty, span: ref Span) sync {
         let name: String = match thrown {
-            Ty::Named { name, view, .. } => if view { "".clone() } else { name.clone() },
-            else => "".clone(),
+            Ty::Named { name, view, .. } => if view { "" } else { name.clone() },
+            else => "",
         }
         if name == "" || name.contains("::") || name == "Self" {
             return
@@ -81,7 +81,7 @@ impl CheckState {
         if library != null && (library?.contains(name) ?? false) {
             return
         }
-        self.findings.push(check_refusal("NK1161", span, f"You can only throw an error, and `{name}` has no `impl Error`.", ["What is thrown implements `Error`, and the `impl` line says so (Part I 7.1). No file of this package writes one for it.".clone()], f"Add `impl Error for {name} {{ fn message(ref self) -> String {{ … }} }}` beside it."))
+        self.findings.push(check_refusal("NK1161", span, f"You can only throw an error, and `{name}` has no `impl Error`.", ["What is thrown implements `Error`, and the `impl` line says so (Part I 7.1). No file of this package writes one for it."], f"Add `impl Error for {name} {{ fn message(ref self) -> String {{ … }} }}` beside it."))
     }
 
     /// `NK1160`: a field or an index reached on an **opaque handle**
@@ -98,7 +98,7 @@ impl CheckState {
     /// is about a file nobody wrote, and it would name the wrapper rather than
     /// the handle.
     pub fn a_handle_has_nothing_inside(ref mut self, handle: ref String, what: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1160", span, f"You can't look inside `{handle}`: it's a handle, and {what} reaches into it.", [f"`{handle}` is declared `opaque`: what it points at belongs to the C library that made it."], "Pass the handle to a function declared in the `extern \"C\"` block.".clone()))
+        self.findings.push(check_refusal("NK1160", span, f"You can't look inside `{handle}`: it's a handle, and {what} reaches into it.", [f"`{handle}` is declared `opaque`: what it points at belongs to the C library that made it."], "Pass the handle to a function declared in the `extern \"C\"` block."))
     }
 
     /// `NK1160`, the third shape: a **handle** written as a call
@@ -132,7 +132,7 @@ impl CheckState {
             Expr::Variable(name, _) => world.words.resolve(name).clone(),
             else => "the buffer",
         }
-        self.findings.push(check_refusal("NK1159", span, f"`{written}` takes this as the length of `{named}`, but it might be longer than the buffer.", ["C trusts the count completely, so a count longer than the buffer would read or write past its end.".clone()], f"Pass `{named}.len()`, or a constant no bigger than the buffer. An `Array[T, N]` knows its length; a `Vec[T]` doesn't until the program runs."))
+        self.findings.push(check_refusal("NK1159", span, f"`{written}` takes this as the length of `{named}`, but it might be longer than the buffer.", ["C trusts the count completely, so a count longer than the buffer would read or write past its end."], f"Pass `{named}.len()`, or a constant no bigger than the buffer. An `Array[T, N]` knows its length; a `Vec[T]` doesn't until the program runs."))
     }
 }
 

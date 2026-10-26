@@ -2,11 +2,11 @@
 // Edit check_walks.nika in the directory above, not this file.
 
 pub fn check_not_pure_because(contract: &FnContract) -> Option<String> {
-    if !contract.sync_claim.is_sync() { return Some("can pause".to_owned()); }
-    if !contract.fails_with.is_empty() { return Some("can fail".to_owned()); }
-    if contract.mutates { return Some("changes what it is called on".to_owned()); }
-    if !contract.touches_known || !contract.touches.is_empty() { return Some("touches something outside the program's values".to_owned()); }
-    if contract.touches_a_lock.holds() { return Some("takes a lock".to_owned()); }
+    if !contract.sync_claim.is_sync() { return Some(String::from("can pause")); }
+    if !contract.fails_with.is_empty() { return Some(String::from("can fail")); }
+    if contract.mutates { return Some(String::from("changes what it is called on")); }
+    if !contract.touches_known || !contract.touches.is_empty() { return Some(String::from("touches something outside the program's values")); }
+    if contract.touches_a_lock.holds() { return Some(String::from("takes a lock")); }
     None
 }
 
@@ -37,7 +37,7 @@ impl CheckState {
                         bound.push(world.words.resolve(name).to_owned());
                     }
                     let name = bound.join("`, `");
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104".to_owned(), message: format!("A branch of an `overlap` can't declare `{}`.", name), notes: vec!["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.".to_owned()], help: Some(format!("Take the value from the block instead: `let ({}, …) = overlap {{ … }}`.", name)), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: String::from("NK2104"), message: format!("A branch of an `overlap` can't declare `{}`.", name), notes: vec![String::from("Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.")], help: Some(format!("Take the value from the block instead: `let ({}, …) = overlap {{ … }}`.", name)), labels: vec![] });
                 },
                 _ => { },
             }
@@ -50,7 +50,7 @@ impl CheckState {
                 if clash.is_some() {
                     let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
                     let why = capitalised(&verdict.why());
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).span.clone(), code: "NK2104".to_owned(), message: "These two branches can't run at the same time.".to_owned(), notes: vec![format!("{}.", why), "`overlap` runs its branches at once, so they can't depend on each other.".to_owned()], help: Some("If they should run in order, write them as ordinary statements.".to_owned()), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![format!("{}.", why), String::from("`overlap` runs its branches at once, so they can't depend on each other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
                     break;
                 }
             }
@@ -103,7 +103,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_claim_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr, found: &mut Vec<String>) {
-        let mut name: String = "".to_owned();
+        let mut name: String = String::from("");
         match func {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -119,7 +119,7 @@ impl CheckState {
                 name = world.here.unaliased(&joined);
             },
             _ => {
-                found.push("The condition calls something that isn't a plain name.".to_owned());
+                found.push(String::from("The condition calls something that isn't a plain name."));
                 return;
             },
         }
@@ -142,7 +142,7 @@ impl CheckState {
         let call = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
         let why = check_not_pure_because(call.contract);
         if why.is_some() {
-            let because = nikaia_std::index::or(why, || "".to_owned().into());
+            let because = nikaia_std::index::or(why, || "".into());
             found.push(format!("`{}` {}", name, because));
         }
     }

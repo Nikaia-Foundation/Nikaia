@@ -492,8 +492,8 @@ impl EmitState {
         // a type only the language below knows, beside a number, is read as the
         // number** (#531): `num::value` is the identity on a number and reads one
         // out of a view.
-        let number_left = self.facts.compared_numbers.contains((site, "lhs".clone()))
-        let number_right = self.facts.compared_numbers.contains((site, "rhs".clone()))
+        let number_left = self.facts.compared_numbers.contains((site, "lhs"))
+        let number_right = self.facts.compared_numbers.contains((site, "rhs"))
         let symbol = binary_op(op)
         if number_left {
             out.push("nikaia_std::num::value(")
@@ -513,7 +513,7 @@ impl EmitState {
         // what `==` means, and two short runs of bytes or texts a word at a
         // time, without the call into `memcmp` that a hot loop pays for in
         // the registers the call clobbers.
-        let viewed = self.facts.compared_views.contains((site, "lhs".clone())) || self.facts.compared_views.contains((site, "rhs".clone()))
+        let viewed = self.facts.compared_views.contains((site, "lhs")) || self.facts.compared_views.contains((site, "rhs"))
         if (op == BinaryOp::Eq || op == BinaryOp::Ne) && !viewed && emit_flow_is_cut(lhs) && emit_flow_is_cut(rhs) {
             if op == BinaryOp::Ne {
                 out.push("!")
@@ -525,7 +525,7 @@ impl EmitState {
             out.push(")")
             return
         }
-        if self.facts.compared_views.contains((site, "lhs".clone())) {
+        if self.facts.compared_views.contains((site, "lhs")) {
             out.push("*")
         }
         // **A conversion left of `<<` keeps its parentheses** (#474), as one left of
@@ -540,7 +540,7 @@ impl EmitState {
             out.push(")")
         }
         out.push(f" {symbol} ")
-        if self.facts.compared_views.contains((site, "rhs".clone())) {
+        if self.facts.compared_views.contains((site, "rhs")) {
             out.push("*")
         }
         self.emit_core_nested(world, walk, out, host, rhs, here + 1, depth, wide, scope)
@@ -585,7 +585,7 @@ impl EmitState {
 
     /// The opened option of a `??` that lends its left side, or nothing.
     fn emit_flow_opened(ref self, node: ref Expr) -> String {
-        let found = self.facts.lent_coalesces.get(node_key(node)) ?? return "".clone()
+        let found = self.facts.lent_coalesces.get(node_key(node)) ?? return ""
         return found.clone()
     }
 
@@ -883,7 +883,7 @@ impl EmitState {
         // **A handler that does not read the error binds `_error`** (ADR-308).
         let mut bound: String = "_error"
         if host.block_mentions(handler, "error") {
-            bound = "error".clone()
+            bound = "error"
         }
         // **What the handler was handed** (ADR-280 D10). A named channel hands it an
         // **envelope** - the author's error plus the site it was raised at - so the
@@ -900,7 +900,7 @@ impl EmitState {
         // is opened by the type each arm names (`""` says the box).
         let mut boxed = false
         if caught && a_scope {
-            sum = "".clone()
+            sum = ""
             boxed = true
             named = false
         }
@@ -909,7 +909,7 @@ impl EmitState {
             if own_sum != null {
                 sum = own_sum
             } else if scope.channel == "Box<dyn std::error::Error>" {
-                sum = "".clone()
+                sum = ""
                 boxed = true
             } else if scope.channel.starts_with("nikaia_std::error::Thrown<") {
                 named = true
@@ -922,11 +922,11 @@ impl EmitState {
         // (ADR-351 D4): its channel varies with the caller, so it is the box,
         // opened by the type each arm names.
         if caught && sum == null && !named && (self.emit_catch_is_a_field_call(guarded_expr) || self.emit_catch_calls_given_code(world, guarded_expr)) {
-            sum = "".clone()
+            sum = ""
             boxed = true
         }
         if caught && nested {
-            sum = "".clone()
+            sum = ""
             boxed = true
             named = false
         }
@@ -1077,7 +1077,7 @@ impl EmitState {
     pub fn emit_core_jump(ref self, mut out: EmitOut, is_break: bool, flow: EmitFlow) sync throws {
         let mut word: String = "continue"
         if is_break {
-            word = "break".clone()
+            word = "break"
         }
         if !flow.in_loop {
             throw EmitRefused { message: f"`{word}` only works inside a loop, and there's none here.", at: flow.statement }
@@ -1102,7 +1102,7 @@ impl EmitState {
             // a sum's member arm (ADR-280 D17).
             let mut held: String = "error"
             if flow.caught_named {
-                held = "__nikaia_site.refill(error)".clone()
+                held = "__nikaia_site.refill(error)"
             }
             if scope.caught_sum != null && scope.caught_member != null {
                 let sum = (scope.caught_sum ?? "").clone()
@@ -1156,7 +1156,7 @@ impl EmitState {
         match lambda {
             Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope),
             else => {
-                throw EmitRefused { message: "`spawn` takes a lambda. Write `spawn fn { … }`.".clone(), at: flow.statement }
+                throw EmitRefused { message: "`spawn` takes a lambda. Write `spawn fn { … }`.", at: flow.statement }
             }
         }
     }
@@ -1233,9 +1233,9 @@ fn emit_join_receiver(world: ref EmitWorld, guarded: ref Expr) -> String {
     return match guarded {
         Expr::MethodCall { receiver, config, .. } => match receiver {
             Expr::Variable(name, _) if config.len() == 0 => emit_text(world, name).clone(),
-            else => "".clone(),
+            else => "",
         },
-        else => "".clone(),
+        else => "",
     }
 }
 

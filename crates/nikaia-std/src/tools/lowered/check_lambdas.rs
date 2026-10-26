@@ -92,7 +92,7 @@ impl CheckState {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
                 if is_a_handle(&local.ty) || !self.takes_away(world, &local.ty) { continue; }
                 owned.push(name.to_owned());
-                self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, "a function kept for later".to_owned()));
+                self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, String::from("a function kept for later")));
             }
         }
         if pauses && !owned.is_empty() { self.facts.kept_owned.insert(id_of(value) as i64, owned); }
@@ -108,7 +108,7 @@ impl CheckState {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
                 if is_a_handle(&local.ty) { self.facts.task_handles.insert((task, name.to_owned())); }
                 if !self.takes_away(world, &local.ty) { continue; }
-                self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, "a background task".to_owned()));
+                self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, String::from("a background task")));
             }
         }
     }
@@ -134,7 +134,7 @@ impl CheckState {
             let found = self.binding(name);
             if found.is_some() {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-                if local.written_mut { self.findings.push(check_refusal("NK1229", span, format!("This child captures `{}`, which is `mut`, so its next attempt would not start fresh.", name), vec!["A supervisor calls a child's function again for every attempt (Part II 12.8). What one attempt changed in a captured `mut` binding would still be there.".to_owned()], Some(format!("Build `{}` inside the child's function, or take `{}.clone()` there.", name, name)))); }
+                if local.written_mut { self.findings.push(check_refusal("NK1229", span, format!("This child captures `{}`, which is `mut`, so its next attempt would not start fresh.", name), vec![String::from("A supervisor calls a child's function again for every attempt (Part II 12.8). What one attempt changed in a captured `mut` binding would still be there.")], Some(format!("Build `{}` inside the child's function, or take `{}.clone()` there.", name, name)))); }
             }
         }
     }

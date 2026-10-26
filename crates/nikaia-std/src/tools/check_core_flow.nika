@@ -38,7 +38,7 @@ fn check_core_flow_unknown(ty: ref Ty) -> bool sync {
 fn check_core_flow_variable(world: ref CheckWorld, value: ref Expr) -> String sync {
     return match value {
         Expr::Variable(name, _) => f"{world.words.resolve(name)}",
-        else => "".clone(),
+        else => "",
     }
 }
 
@@ -949,7 +949,7 @@ fn check_core_flow_caught_type(guarded: ref CheckGuarded) -> Ty sync {
         for name in thrown {
             args.push(check_core_flow_named(name))
         }
-        return Ty::Named { name: "Error".clone(), args: args, view: false }
+        return Ty::Named { name: "Error", args: args, view: false }
     }
     return Ty::Unknown
 }
@@ -993,7 +993,7 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     let caught = check_core_flow_caught_type(guarded)
     state.nothing_here_can_fail(guarded, span)
     let id = state.a_new_binding()
-    state.scope.push([CheckLocal::free("error".clone(), caught, id)])
+    state.scope.push([CheckLocal::free("error", caught, id)])
     // **A set that cannot be named is open** (ADR-351 D4): a `match` over it
     // covers nothing without `else`, as one over several types does.
     let mut open = false

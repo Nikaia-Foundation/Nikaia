@@ -44,8 +44,8 @@ pub(crate) fn check_core_comptime_tuple_parts(found: &Ty, evaluated: Option<&Bui
 }
 
 pub(crate) fn check_core_comptime_first_type(n: &Integer, beyond: bool) -> String {
-    if !beyond && integer_fits(n, "i32") { return "i32".to_owned(); }
-    "i64".to_owned()
+    if !beyond && integer_fits(n, "i32") { return String::from("i32"); }
+    String::from("i64")
 }
 
 pub(crate) fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> { nikaia_std::index::or_maybe(rust_constant_type(world.library, want), || nikaia_std::index::or_maybe(state.declared_below(world, want), || check_core_comptime_struct_named(want, evaluated))) }
@@ -73,8 +73,8 @@ pub(crate) fn check_core_comptime_struct_named(want: &Ty, evaluated: Option<&Bui
 pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
     let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return None };
     match value {
-        BuildValue::Float(_) => { return Some("f64".to_owned()); },
-        BuildValue::Bool(_) => { return Some("bool".to_owned()); },
+        BuildValue::Float(_) => { return Some(String::from("f64")); },
+        BuildValue::Bool(_) => { return Some(String::from("bool")); },
         BuildValue::Int(n) => {
             let named = integer_named(found);
             if named.is_some() { return std::convert::identity(named); }
@@ -86,7 +86,7 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
             let ty = match element { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(format!("[{}; {}]", ty, items.len() as i64));
         },
-        BuildValue::Text(_) => { return Some("&str".to_owned()); },
+        BuildValue::Text(_) => { return Some(String::from("&str")); },
         BuildValue::Tuple(parts) => {
             let declared: Vec<Ty> = match found {
                 Ty::Tuple(each) => each.to_owned(),
@@ -147,7 +147,7 @@ pub(crate) fn check_core_comptime_other(state: &mut CheckState, world: &CheckWor
         if r#unsized.is_some() {
             let element = match r#unsized { Some(__nikaia_value) => __nikaia_value, None => return };
             let items = check_core_comptime_items(evaluated);
-            let notes: Vec<String> = vec!["An `Array` built into the program carries its length in its type.".to_owned()];
+            let notes: Vec<String> = vec![String::from("An `Array` built into the program carries its length in its type.")];
             state.findings.push(check_refusal("NK1166", span, format!("`{}` is an `Array[{}]` with no length, which a `comptime` needs.", bound, element), notes, Some(format!("Declare it as `Array[{}, {}]`: the build computed {}.", element, items.len() as i64, counted(items.len() as i64, "element")))));
             return;
         }
@@ -289,7 +289,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         let text = match written { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         state.facts.comptime_values.insert(span.start as i64, (spelled, text));
     } else if !(said || said_a_type || said_a_table || said_a_part || said_a_name) {
-        let notes: Vec<String> = vec!["A `comptime` has to be computed while the program is built.".to_owned(), "At build time the compiler can compute numbers, `bool`s, text, lists, structs and enum variants: literals, `f\"…\"`, arithmetic and comparisons, `if`, `for` over a range, `while`, and calls to your own functions and methods made of those.".to_owned()];
+        let notes: Vec<String> = vec![String::from("A `comptime` has to be computed while the program is built."), String::from("At build time the compiler can compute numbers, `bool`s, text, lists, structs and enum variants: literals, `f\"…\"`, arithmetic and comparisons, `if`, `for` over a range, `while`, and calls to your own functions and methods made of those.")];
         state.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), notes, Some(format!("Write `let {} = …` to compute it while the program runs instead.", bound))));
     }
     let shape = check_core_comptime_shape((evaluated).as_ref());

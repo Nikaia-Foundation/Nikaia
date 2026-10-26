@@ -94,7 +94,7 @@ fn an_owned_text_is_looked_up_in_an_array_of_views() {
     let source = "comptime NAMES: Array[ref String, 2] = [\"a\", \"b\"]\n\
          \n\
          fn known(x: i64) -> bool {\n\
-         \x20   let name = if x > 0 { \"b\".to_string() } else { return false }\n\
+         \x20   let name = if x > 0 { \"b\" } else { return false }\n\
          \x20   return NAMES.contains(name)\n\
          }\n\
          \n\

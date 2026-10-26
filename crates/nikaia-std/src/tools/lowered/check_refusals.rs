@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_assert_of_another_shape(&mut self, message: String, span: &Span) { self.findings.push(check_refusal("NK1195", span, message, vec!["Write it as `assert(cond)` or `assert(cond; message: \"…\")`.".to_owned()], None)); }
+    pub fn an_assert_of_another_shape(&mut self, message: String, span: &Span) { self.findings.push(check_refusal("NK1195", span, message, vec![String::from("Write it as `assert(cond)` or `assert(cond; message: \"…\")`.")], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_maybe_compared_with_a_value(&mut self, left: &Ty, right: &Ty, span: &Span) {
@@ -17,7 +17,7 @@ impl CheckState {
             maybe = right.clone();
             value = left.clone();
         }
-        self.findings.push(check_refusal("NK1102", span, format!("This compares `{}` with `{}`.", maybe.text(), value.text()), vec!["A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`.".to_owned()], Some("Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first.".to_owned())));
+        self.findings.push(check_refusal("NK1102", span, format!("This compares `{}` with `{}`.", maybe.text(), value.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`.")], Some(String::from("Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -28,13 +28,13 @@ impl CheckState {
             maybe = right.clone();
         }
         let symbol = binary_op_text(op);
-        self.findings.push(check_refusal("NK1102", span, format!("`{}` is given `{}`, which may be `null`.", symbol, maybe.text()), vec!["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.".to_owned()], Some("Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.".to_owned())));
+        self.findings.push(check_refusal("NK1102", span, format!("`{}` is given `{}`, which may be `null`.", symbol, maybe.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.")], Some(String::from("Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_maybe_in_a_hole(&mut self, held: &Ty, span: &Span) {
         if !a_known_maybe(held) { return; }
-        self.findings.push(check_refusal("NK1102", span, format!("A hole of this `f\"…\"` is `{}`, which may be `null`.", held.text()), vec!["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.".to_owned()], Some("Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`.".to_owned())));
+        self.findings.push(check_refusal("NK1102", span, format!("A hole of this `f\"…\"` is `{}`, which may be `null`.", held.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -49,7 +49,7 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.contains(target)),
             None => None,
         }, || false) { return; }
-        self.findings.push(check_refusal("NK1164", span, format!("`{}` is made `Fatal`, but it has no `impl Error`.", target), vec!["A fatal error is an error first (ADR-345 D1): it is thrown, travels with `throws` and is caught like any other, and only an `Error` can be.".to_owned()], Some(format!("Add `impl Error for {} {{ fn message(ref self) -> String {{ … }} }}` beside it.", target))));
+        self.findings.push(check_refusal("NK1164", span, format!("`{}` is made `Fatal`, but it has no `impl Error`.", target), vec![String::from("A fatal error is an error first (ADR-345 D1): it is thrown, travels with `throws` and is caught like any other, and only an `Error` can be.")], Some(format!("Add `impl Error for {} {{ fn message(ref self) -> String {{ … }} }}` beside it.", target))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -63,7 +63,7 @@ impl CheckState {
             them = "it";
             has = "has";
         }
-        self.findings.push(check_refusal("NK1234", span, format!("This `{}` literal leaves out the {} {}, which {} no default.", owner, one, listed, has), vec!["A literal may leave out only a field declared with a default (`size: i64 = 50`).".to_owned()], Some(format!("Give {} in the literal, or declare a default for {} in `{}`.", them, them, owner))));
+        self.findings.push(check_refusal("NK1234", span, format!("This `{}` literal leaves out the {} {}, which {} no default.", owner, one, listed, has), vec![String::from("A literal may leave out only a field declared with a default (`size: i64 = 50`).")], Some(format!("Give {} in the literal, or declare a default for {} in `{}`.", them, them, owner))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -79,9 +79,9 @@ impl CheckState {
             _ => { },
         }
         let mut help: String = format!("Write `{}`, which gives `null` when the value is missing, or give a fallback with `??` first and reach into that.", safe);
-        if kind == "method" && name == "is_some" { help = "Compare with `null`: `value != null`.".to_owned(); }
-        if kind == "method" && name == "is_none" { help = "Compare with `null`: `value == null`.".to_owned(); }
-        self.findings.push(check_refusal("NK1125", span, message, vec!["A `T?` is its own type, not a `T` that might be missing, so it doesn't have `T`'s members. That's why a missing value can never crash here.".to_owned()], Some(help)));
+        if kind == "method" && name == "is_some" { help = String::from("Compare with `null`: `value != null`."); }
+        if kind == "method" && name == "is_none" { help = String::from("Compare with `null`: `value == null`."); }
+        self.findings.push(check_refusal("NK1125", span, message, vec![String::from("A `T?` is its own type, not a `T` that might be missing, so it doesn't have `T`'s members. That's why a missing value can never crash here.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -91,7 +91,7 @@ impl CheckState {
             _ => false,
         };
         if !written { return; }
-        self.findings.push(check_refusal("NK1137", span, "You don't need the `ref` here: the compiler lends where it's needed.".to_owned(), vec![format!("{}, so it's lent already.", capitalised(because))], Some("Remove the `ref`.".to_owned())));
+        self.findings.push(check_refusal("NK1137", span, String::from("You don't need the `ref` here: the compiler lends where it's needed."), vec![format!("{}, so it's lent already.", capitalised(because))], Some(String::from("Remove the `ref`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -120,7 +120,7 @@ impl CheckState {
         let declared = self.lookup(&name).is_some() || resolve_call(world, &name).is_some() || self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name) || self.modules.contains(&name) || self.grammars.contains_key(&name);
         if declared { return; }
         let help = nikaia_std::index::or(reserved_elsewhere(&name), || format!("If `{}` is meant to be a value, declare it with `let`. If you meant a keyword, Nikaia doesn't have one called `{}`.", name, name).into());
-        self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't declared anywhere.", name), vec!["A word the language doesn't know is read as a name, and a name has to be declared before it's used.".to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't declared anywhere.", name), vec![String::from("A word the language doesn't know is read as a name, and a name has to be declared before it's used.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -144,7 +144,7 @@ impl CheckState {
                         }
                         if shaped { continue; }
                         message = format!("`cleanup` of `{}` has to take `ref mut self`, nothing else, and return nothing.", target);
-                        help = "Write it as `fn cleanup(ref mut self)`, with `throws` if it can fail.".to_owned();
+                        help = String::from("Write it as `fn cleanup(ref mut self)`, with `throws` if it can fail.");
                     } else if written == "drop" {
                         message = format!("`drop` doesn't belong in `impl Cleanup for {}`.", target);
                         help = format!("Put it in its own `impl Drop for {} {{ fn drop(ref mut self) {{ … }} }}`, which runs after `cleanup`, or alone where `cleanup` can't run.", target);
@@ -154,7 +154,7 @@ impl CheckState {
                 _ => { },
             }
         }
-        if !wrote_cleanup { self.findings.push(check_refusal("NK2601", span, format!("`impl Cleanup for {}` is missing its `cleanup` method.", target), vec![note.to_owned()], Some("Add `fn cleanup(ref mut self) { … }`.".to_owned()))); }
+        if !wrote_cleanup { self.findings.push(check_refusal("NK2601", span, format!("`impl Cleanup for {}` is missing its `cleanup` method.", target), vec![note.to_owned()], Some(String::from("Add `fn cleanup(ref mut self) { … }`.")))); }
     }
 }
 

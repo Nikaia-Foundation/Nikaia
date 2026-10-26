@@ -236,7 +236,7 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
     let how = check_wrap_for(found, want, literal) ?? return null
     let widen: String = match how {
         FactWrap::Widen(into) => into.clone(),
-        else => "".clone(),
+        else => "",
     }
     if !widen.is_empty() && value != null {
         let given = value ?? return null

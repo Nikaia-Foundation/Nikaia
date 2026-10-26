@@ -850,7 +850,7 @@ impl FbWalk {
         self.stack.push(at)
         let mut env: collections::BTreeMap[String, FbTy] = collections::BTreeMap()
         if fun.has_receiver && fun.owner != null {
-            env.insert("self".clone(), (fun.owner ?? return).clone())
+            env.insert("self", (fun.owner ?? return).clone())
         }
         for arg in fun.args {
             env.insert(ix.text(arg.name), FbTy::of(ix.words, arg.ty))
@@ -1094,7 +1094,7 @@ impl FbWalk {
                 let mut ty = ix.text(name)
                 if ty == "Self" {
                     ty = ""
-                    let own = env.get("self".clone())
+                    let own = env.get("self")
                     if own != null {
                         ty = (own ?? return).name.clone()
                     }
@@ -1248,7 +1248,7 @@ impl FbMerge {
             }
             let mut walk = fb_new_walk()
             let mut env: collections::BTreeMap[String, FbTy] = collections::BTreeMap()
-            env.insert("self".clone(), owner.clone())
+            env.insert("self", owner.clone())
             env.insert(other.clone(), FbTy::of(ix.words, fun.args[0].ty))
             walk.stmt(host, ix, stmt, env, false)
             for name in walk.touched() {
@@ -1279,7 +1279,7 @@ impl FbMerge {
                         match value {
                             Expr::Field { base: from, name: read, .. } => {
                                 let field = ix.text(name)
-                                if fb_named(ix.words, into, "self".clone()) && fb_named(ix.words, from, other) && ix.text(read) == field {
+                                if fb_named(ix.words, into, "self") && fb_named(ix.words, from, other) && ix.text(read) == field {
                                     return field
                                 }
                                 return null
@@ -1369,7 +1369,7 @@ impl FbMerge {
                 match into_field {
                     Expr::Field { base, name, .. } => {
                         let map = ix.field_type(owner, ix.text(name)) ?? return false
-                        if !map.is_map() || !fb_named(ix.words, base, "self".clone()) {
+                        if !map.is_map() || !fb_named(ix.words, base, "self") {
                             return false
                         }
                         if modify.len() == 0 {
@@ -1733,7 +1733,7 @@ pub fn fb_fold_counters[H: FbHost](host: ref H, ix: ref FbIndex, uses: ref FbUse
     match spec.init {
         Expr::Variable(..) => {
             let mut starts: Vec[i64] = []
-            for at in fb_vec_of(ix.methods, fb_key(acc.name.clone(), "".clone())) {
+            for at in fb_vec_of(ix.methods, fb_key(acc.name.clone(), "")) {
                 let fun = ix.fns.get(at) ?? continue
                 if fun.args.len() == 0 {
                     starts.push(at)

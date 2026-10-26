@@ -138,9 +138,9 @@ fn check_core_method_an_empty_map_read(state: ref CheckState, world: ref CheckWo
 fn check_core_method_witness(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg]) -> i64 sync {
     let mut wanted: String = ""
     if method == "set" {
-        wanted = "after".clone()
+        wanted = "after"
     } else if method == "join" {
-        wanted = "within".clone()
+        wanted = "within"
     } else {
         return -1
     }
@@ -170,9 +170,9 @@ fn check_core_method_literal(mut state: CheckState, receiver: ref Expr, on: Ty) 
             let mut ty: String = "u64"
             if integer_fits(number, "i64") {
                 if integer_fits(number, "i32") {
-                    ty = "i32".clone()
+                    ty = "i32"
                 } else {
-                    ty = "i64".clone()
+                    ty = "i64"
                 }
             }
             state.facts.unsigned_literals.insert(id_of(receiver) as i64, ty.clone())
@@ -211,10 +211,10 @@ fn check_core_method_ledger_type(on: ref Ty, bytes: bool) -> String {
             if args.len() == 0 && is_whole_number(name) {
                 name.clone()
             } else {
-                "".clone()
+                ""
             }
         },
-        else => "".clone(),
+        else => "",
     }
 }
 
@@ -226,10 +226,10 @@ fn check_core_method_own_type(world: ref CheckWorld, on: ref Ty, written: ref St
             if args.len() == 0 && resolve_method(world, f"{name}::{written}") != null {
                 name.clone()
             } else {
-                "".clone()
+                ""
             }
         },
-        else => "".clone(),
+        else => "",
     }
 }
 
@@ -301,7 +301,7 @@ fn check_core_method_attribute(named: ref String, read: ref String) -> Ty {
     if named == "attribute" {
         return Ty::Nullable(check_core_method_named(read))
     }
-    return Ty::Named { name: "Vec".clone(), args: [check_core_method_named(read)], view: false }
+    return Ty::Named { name: "Vec", args: [check_core_method_named(read)], view: false }
 }
 
 /// The item of a run (ADR-184 D3, ADR-282 D9), `null` where it is none.
@@ -446,6 +446,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.inside_a_door = holding
     check_core_method_changes(state, world, receiver, name, span)
     state.a_copy_under_another_name(world, receiver, method, args, span)
+    state.a_call_on_a_literal_that_adds_nothing(world, receiver, method, args, span)
     // **The text form of text is the text** (ADR-282 D8).
     let text = match on {
         Ty::Named { name, args, .. } => args.len() == 0 && (name == "String" || name == "str"),
@@ -532,7 +533,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         state.flow.at_a_write_door = outer_door
         state.inside_a_door = outer_inside
         let item: Ty = a_run ?? Ty::Unknown
-        return Ty::Named { name: "Vec".clone(), args: [item], view: false }
+        return Ty::Named { name: "Vec", args: [item], view: false }
     }
     state.flow.last_resolved = null
     state.flow.receiver_from_text = state.made_from_text(world, receiver)
@@ -849,7 +850,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     let type_name = match on {
         Ty::Named { name, .. } => name.clone(),
-        else => "".clone(),
+        else => "",
     }
     // **`variant.is(value)`, the one method a reflected variant has**, and
     // its attributes (ADR-304, ADR-331 D6).

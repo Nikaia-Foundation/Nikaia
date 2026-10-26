@@ -332,7 +332,7 @@ pub enum Refusal {
 impl Error for Refusal {
     fn message(ref self) -> String {
         match self {
-            Refusal::Negative => \"a negative count\".clone()
+            Refusal::Negative => \"a negative count\"
             Refusal::TooLarge(n) => f\"{n} is too large\"
         }
     }

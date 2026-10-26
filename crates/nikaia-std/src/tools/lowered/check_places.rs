@@ -16,9 +16,9 @@ pub fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
         let text = one.1.text();
         let mut bare: String = text.to_owned();
         if text.starts_with("ref ") { bare = nikaia_std::index::or(text.strip_prefix("ref "), || "").to_owned(); }
-        if one.0 == "root" && bare == "fs::Root" { return ". The root is either `fs::Root::Dir(store)`, which keeps the path inside `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a reviewer will look".to_owned(); }
+        if one.0 == "root" && bare == "fs::Root" { return String::from(". The root is either `fs::Root::Dir(store)`, which keeps the path inside `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a reviewer will look"); }
     }
-    "".to_owned()
+    String::from("")
 }
 
 impl CheckState {
@@ -39,14 +39,14 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_jump_with_nowhere_to_go(&mut self, word: &str, span: &Span) {
-        let mut does: String = String::from("starts the innermost loop's next turn");
-        if word == "break" { does = "leaves the innermost loop around it".to_owned(); }
+        let mut does: &'static str = "starts the innermost loop's next turn";
+        if word == "break" { does = "leaves the innermost loop around it"; }
         if self.flow.barrier.is_some() {
             let what = nikaia_std::index::or(self.flow.barrier.as_deref(), || "").to_owned();
             self.findings.push(check_refusal("NK1132", span, format!("`{}` {}, but the nearest loop is outside this {}.", word, does, what), vec![format!("{} runs as a function of its own, and `{}` can't jump out of a function.", with_article(&what), word)], Some(format!("Decide inside the {} and act on the answer outside it: return a `bool` and test it in the loop.", what))));
             return;
         }
-        self.findings.push(check_refusal("NK1132", span, format!("`{}` {}, but this isn't inside a loop.", word, does), vec!["It only works inside a `while` or a `for`.".to_owned()], Some("To leave the function instead, write `return`.".to_owned())));
+        self.findings.push(check_refusal("NK1132", span, format!("`{}` {}, but this isn't inside a loop.", word, does), vec![String::from("It only works inside a `while` or a `for`.")], Some(String::from("To leave the function instead, write `return`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

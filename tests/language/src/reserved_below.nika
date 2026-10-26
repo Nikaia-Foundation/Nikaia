@@ -10,7 +10,7 @@ struct ReservedBelowEvent {
 // The escape is invisible to the program's own output: a field called `type`
 // still holds what was put in it.
 test "an escaped name still names the same value" {
-    let e = ReservedBelowEvent { type: "click".to_string(), at: 7 }
+    let e = ReservedBelowEvent { type: "click", at: 7 }
     let shown = f"{e.type} {e.at}"
     assert(shown == "click 7")
 }

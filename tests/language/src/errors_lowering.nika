@@ -18,7 +18,7 @@ fn errors_lowering_load(path: String) -> String throws {
 }
 
 fn errors_lowering_caught() -> String {
-    let text = errors_lowering_load("app.conf".to_string()) catch {
+    let text = errors_lowering_load("app.conf") catch {
         return f"{error}"
     }
     return f"{text}"
@@ -36,7 +36,7 @@ fn errors_lowering_ruft(path: String) -> String throws {
 }
 
 fn errors_lowering_through() -> String {
-    let text = errors_lowering_ruft("app.conf".to_string()) catch {
+    let text = errors_lowering_ruft("app.conf") catch {
         return f"{error}"
     }
     return text
@@ -53,7 +53,7 @@ test "a written call propagates its failure" {
 enum ErrorsLoweringZuVoll { Voll }
 
 impl Error for ErrorsLoweringZuVoll {
-    fn message(ref self) -> String { return "too full".to_string() }
+    fn message(ref self) -> String { return "too full" }
 }
 
 struct ErrorsLoweringStats { n: i64 }

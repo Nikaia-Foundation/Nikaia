@@ -149,18 +149,18 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
     }
     if numbers > 0 { for ty in known.iter() { if integer_named(&value_of_a_copy(ty)).is_none() { alike = false; } } }
     if alike { return None; }
-    let mut word: String = String::from("match");
-    let mut article: String = String::from("`match`");
+    let mut word: &'static str = "match";
+    let mut article: &'static str = "`match`";
     if is_if {
-        word = "if".to_owned();
-        article = "`if`".to_owned();
+        word = "if";
+        article = "`if`";
     }
     let mut shown: Vec<String> = vec![];
     for ty in known.iter() {
         let text = ty.text();
         if !nikaia_std::list::contains(&shown, &text) { shown.push(text); }
     }
-    if numbers > 0 { shown.push("a number".to_owned()); }
+    if numbers > 0 { shown.push(String::from("a number")); }
     let mut listed: String = String::from("");
     let mut index: i64 = 0;
     while index < shown.len() as i64 {

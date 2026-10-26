@@ -23,7 +23,7 @@ fn traits_shout[T: TraitsSummarize](x: T) -> String {
 // Part I 4.7's own program, declared and bound and run. D1 and D3 together:
 // the declaration parses, the bound resolves the call, and the program runs.
 test "a trait is declared bound and run" {
-    let u = TraitsUser { name: "Ada".to_string() }
+    let u = TraitsUser { name: "Ada" }
     let said = traits_shout(u)
     assert(said == "User: Ada")
 }
@@ -41,14 +41,14 @@ impl TraitsSource for TraitsFixed {
     fn load(ref self) -> String throws {
         return self.text.clone()
     }
-    fn name(ref self) -> String sync { return "fixed".to_string() }
+    fn name(ref self) -> String sync { return "fixed" }
 }
 
 // `docs/language-review.md` §1.3's probe: a trait whose method may fail and
 // pause, refused as `NK1129` before ADR-288 and a program now.
 test "a trait over a file read is a program" {
-    let s = TraitsFixed { text: "loaded".to_string() }
-    let text = s.load() catch { "".to_string() }
+    let s = TraitsFixed { text: "loaded" }
+    let text = s.load() catch { "" }
     let line = f"{s.name()}: {text}"
     assert(line == "fixed: loaded")
 }
@@ -61,7 +61,7 @@ struct TraitsDog { name: String }
 
 impl TraitsSpeaks for TraitsDog {
     fn say(ref self) -> String sync {
-        return "woof".clone()
+        return "woof"
     }
 }
 
@@ -73,7 +73,7 @@ fn traits_tell[T: TraitsSpeaks](x: T) -> String sync {
 // the bound runs: a bound that type-checks here and not below would be worth
 // nothing.
 test "the type that implements it passes and runs" {
-    let d = TraitsDog { name: "rex".clone() }
+    let d = TraitsDog { name: "rex" }
     let said = traits_tell(d)
     assert(said == "woof")
 }

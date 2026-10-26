@@ -162,7 +162,7 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     let how = match check_wrap_for(found, want, literal) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let widen: String = match how {
         FactWrap::Widen(ref into) => into.to_owned(),
-        _ => "".to_owned(),
+        _ => String::from(""),
     };
     if !widen.is_empty() && value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };

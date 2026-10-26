@@ -19,8 +19,8 @@ pub(crate) fn check_program_body<H: CheckHost>(state: &mut CheckState, world: &C
 // this was written - see `contracts::sync`.
 pub(crate) fn check_program_extern_convention(state: &mut CheckState, abi: &str, span: &Span) {
     let shown = format!("\"{}\"", abi);
-    let note = "`extern` is the C calling convention, the only one on every target, so it is not written.".to_owned();
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1227".to_owned(), message: format!("`extern` takes no convention, and this names `{}`.", shown), notes: vec![note], help: Some("Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.".to_owned()), labels: vec![] });
+    let note: String = String::from("`extern` is the C calling convention, the only one on every target, so it is not written.");
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1227"), message: format!("`extern` takes no convention, and this names `{}`.", shown), notes: vec![note], help: Some(String::from("Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.")), labels: vec![] });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -136,7 +136,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
         let walker = nikaia_std::index::or(match state.walks_fields.get(name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || "T".to_owned().into());
+        }, || "T".into());
         let said = format!("This happened while going through `{}::{}` for `{}`, at the {} `{}`.", walker, member, on, one, field.name);
         let mut fresh: Vec<CheckFinding> = vec![];
         let mut next = before;

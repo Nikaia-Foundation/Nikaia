@@ -91,13 +91,13 @@ fn check_floats_beyond_f32(value: ref Expr, want: ref Ty) -> bool {
 /// The code a position's mismatch is told with.
 fn expect_code(what: ref String) -> String sync {
     return match what {
-        "let" => "NK1103".clone(),
-        "returns" => "NK1104".clone(),
-        "assign" => "NK1105".clone(),
-        "field" => "NK1106".clone(),
-        "argument" => "NK1102".clone(),
-        "const" => "NK1166".clone(),
-        else => "NK1103".clone(),
+        "let" => "NK1103",
+        "returns" => "NK1104",
+        "assign" => "NK1105",
+        "field" => "NK1106",
+        "argument" => "NK1102",
+        "const" => "NK1166",
+        else => "NK1103",
     }
 }
 
@@ -106,7 +106,7 @@ impl CheckState {
     /// (Part I 2.2, ADR-285 D33, #737): `NK1116`, as for `as f32`.
     pub fn floats_beyond_f32(ref mut self, value: ref Expr, want: ref Ty, span: ref Span) sync {
         if check_floats_beyond_f32(value, want) {
-            self.findings.push(check_refusal("NK1116", span, "This number is beyond the range of an `f32`.", ["An `f32` holds finite values up to about 3.4e38 either side of zero.".clone()], "Keep it an `f64`, or write a number within the `f32` range.".clone()))
+            self.findings.push(check_refusal("NK1116", span, "This number is beyond the range of an `f32`.", ["An `f32` holds finite values up to about 3.4e38 either side of zero."], "Keep it an `f64`, or write a number within the `f32` range."))
         }
     }
 
@@ -152,7 +152,7 @@ impl CheckState {
         let mut help: String = way_out_of_a_mismatch(found, want)
         if members.len() > 0 {
             said = said.replace(f"`{found_text}`", f"an error, one of {members_named(members)}")
-            help = "Take it apart first: `match error { … }`, and use what each arm binds.".clone()
+            help = "Take it apart first: `match error { … }`, and use what each arm binds."
         }
         let finding = check_refusal(code, span, said, [], help)
         // **Unless the walk may still show it is not negative** (D32): the
@@ -248,7 +248,7 @@ impl CheckState {
         }
         let mut target: Ty = want.clone()
         if nullable {
-            target = Ty::Named { name: "String".clone(), args: [], view: false }
+            target = Ty::Named { name: "String", args: [], view: false }
         }
         let before = self.findings.len()
         self.expect_type(world, present, target, span, what, message)

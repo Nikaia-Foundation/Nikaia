@@ -72,7 +72,7 @@ fn check_core_call_attribute_member(state: ref CheckState, world: ref CheckWorld
         }
         else => {}
     }
-    return "".clone()
+    return ""
 }
 
 /// The name a free call reaches, unaliased, or `null` for anything but a
@@ -119,7 +119,7 @@ fn check_core_call_owner(name: ref String) -> String {
         return name.clone()
     }
     let last = parts.len() as i64 - 1
-    let mut owner: String = "".clone()
+    let mut owner: String = ""
     let mut i = 0
     for part in parts {
         if i == last {
@@ -306,13 +306,13 @@ fn check_core_call_from_given[H: CheckHost](state: ref CheckState, world: ref Ch
             i += 1
         }
         if at < 0 || at >= args.len() as i64 {
-            set.insert("?".clone())
+            set.insert("?")
             continue
         }
         let mut stored = CheckStoredCode::empty()
         check_core_places_code_into(state, world, host, args[at], stored)
         if stored.unresolved {
-            set.insert("?".clone())
+            set.insert("?")
         }
         for name in stored.free {
             check_core_call_set_into(world, name, set)
@@ -510,7 +510,7 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
                     contract.fails_with = set.clone()
                     state.may_fail_here(world, host, key, contract, span)
                 }
-                return result?.clone() ?? Ty::Named { name: "()".clone(), args: [], view: false }
+                return result?.clone() ?? Ty::Named { name: "()", args: [], view: false }
             }
             else => {}
         }
@@ -664,7 +664,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     // **A binding in scope hides an item of its name** (#451).
     let is_variable = check_core_call_is_variable(func)
     let shadowed = is_variable && state.lookup(name) != null
-    let mut key: String = "".clone()
+    let mut key: String = ""
     let mut callee: FnContract? = null
     let mut expected: Vec[Ty] = []
     if !(variant != null || is_hull(name) || shadowed) {
@@ -702,7 +702,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     let found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
     // **A name of code handed to a `mut` parameter may be changed there**
     // (ADR-351 D3): what it holds afterwards is not seen here.
-    let mut seen_key: String = "".clone()
+    let mut seen_key: String = ""
     if declared_here && !key.contains("::") {
         seen_key = key.clone()
     }
@@ -782,9 +782,9 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
         if member == "attribute" {
             return Ty::Nullable(check_core_call_named(read))
         }
-        return Ty::Named { name: "Vec".clone(), args: [check_core_call_named(read)], view: false }
+        return Ty::Named { name: "Vec", args: [check_core_call_named(read)], view: false }
     }
-    let mut written: String = "".clone()
+    let mut written: String = ""
     if check_core_call_is_variable(func) {
         match func {
             Expr::Variable(word, _) => { written = f"{world.words.resolve(word)}" },
@@ -813,7 +813,7 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     // **The callee is named and resolved before the arguments are walked**
     // (ADR-288).
-    let mut name: String = "".clone()
+    let mut name: String = ""
     match func {
         Expr::Variable(word, _) => { name = f"{world.words.resolve(word)}" },
         Expr::Path(segments, _) => { name = world.here.unaliased(check_core_call_joined(world, segments)) },
@@ -829,7 +829,7 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
             Ty::Fn { params, result, is_sync, can_throw } => {
                 let pauses_not: bool = is_sync
                 let fails: bool = can_throw
-                let gives: Ty = result?.clone() ?? Ty::Named { name: "()".clone(), args: [], view: false }
+                let gives: Ty = result?.clone() ?? Ty::Named { name: "()", args: [], view: false }
                 return check_core_call_kept(state, world, host, func, args, name, params, gives, pauses_not, fails, span)
             }
             else => {}

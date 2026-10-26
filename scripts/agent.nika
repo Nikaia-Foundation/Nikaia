@@ -40,30 +40,31 @@ fn agent_front(body: String, key: String, default: String) -> String {
 
 fn agent_tools(agent: String) -> String {
     if agent == "architect" {
-        return "Read Grep Glob Bash Edit Write mcp__github__issue_read mcp__github__issue_write mcp__github__add_issue_comment mcp__github__list_issues mcp__github__search_issues mcp__github__sub_issue_write mcp__github__get_label".to_string()
+        return "Read Grep Glob Bash Edit Write mcp__github__issue_read mcp__github__issue_write mcp__github__add_issue_comment mcp__github__list_issues mcp__github__search_issues mcp__github__sub_issue_write mcp__github__get_label"
     }
-    return "Bash Read Edit Write Grep Glob".to_string()
+    return "Bash Read Edit Write Grep Glob"
 }
 
 // The argument list of `claude`, in the order the brief names.
 fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
-    let agent = agent_front(body.clone(), "agent".to_string(), "builder".to_string())
+    let agent = agent_front(body.clone(), "agent", "builder")
     let mut v: Vec[String] = []
-    v.push("-p".to_string())
+    v.push("-p")
     v.push(f"Read your brief at {brief}")
-    v.push("--agent".to_string())
+    v.push("--agent")
     v.push(agent.clone())
-    v.push("--model".to_string())
-    v.push(agent_front(body.clone(), "model".to_string(), "sonnet".to_string()))
-    v.push("--max-turns".to_string())
-    v.push(agent_front(body.clone(), "max_turns".to_string(), "120".to_string()))
-    v.push("--max-budget-usd".to_string())
-    v.push(agent_front(body, "budget_usd".to_string(), "20".to_string()))
-    v.push("--output-format".to_string())
-    v.push("json".to_string())
-    v.push("--session-id".to_string())
+    v.push("--model")
+    v.push(agent_front(body.clone(), "model", "sonnet"))
+    v.push("--max-turns")
+    v.push(agent_front(body.clone(), "max_turns", "120"))
+    v.push("--max-budget-usd")
+    v.push(agent_front(body, "budget_usd", "20"))
+    v.push("--output-format")
+    v.push("json")
+    v.push("--no-session-persistence")
+    v.push("--session-id")
     v.push(session.clone())
-    v.push("--allowedTools".to_string())
+    v.push("--allowedTools")
     v.push(agent_tools(agent))
     return v
 }
@@ -166,7 +167,7 @@ fn main() throws {
     if dir == "" { dir = process::run("dirname", [abs.clone()]).stdout.trim().clone() }
     let text = fs::read_to_string(abs.clone(), fs::Root::Anywhere)
     if info {
-        println(agent_front(text.clone(), "agent".to_string(), "builder".to_string()) + " " + agent_front(text.clone(), "model".to_string(), "sonnet".to_string()) + " " + agent_front(text.clone(), "max_turns".to_string(), "120".to_string()) + " " + agent_front(text, "budget_usd".to_string(), "20".to_string()))
+        println(agent_front(text.clone(), "agent", "builder") + " " + agent_front(text.clone(), "model", "sonnet") + " " + agent_front(text.clone(), "max_turns", "120") + " " + agent_front(text, "budget_usd", "20"))
         return
     }
     let wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()

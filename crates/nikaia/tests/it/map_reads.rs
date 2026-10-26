@@ -467,7 +467,7 @@ fn either(ask: ref Ask, name: String) -> bool {
 
 fn main() {
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
-    b.insert(\"k\", E { n: 3, tags: [\"x\".clone()] })
+    b.insert(\"k\", E { n: 3, tags: [\"x\"] })
     let ask = Ask { own: L { types: collections::BTreeMap() }, library: L { types: b } }
     println(f\"{either(ask, \"k\")}\")
 }
@@ -500,7 +500,7 @@ fn either(a: ref collections::BTreeMap[String, E], b: ref collections::BTreeMap[
 
 fn main() {
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
-    b.insert(\"k\", E { n: 3, tags: [\"x\".clone()] })
+    b.insert(\"k\", E { n: 3, tags: [\"x\"] })
     let a: collections::BTreeMap[String, E] = collections::BTreeMap()
     println(f\"{either(a, b, \"k\")} {either(a, b, \"z\")}\")
 }
@@ -530,8 +530,8 @@ fn main() {
     let mut a: collections::BTreeMap[String, E] = collections::BTreeMap()
     a.insert(\"j\", E { n: 4, tags: [] })
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
-    b.insert(\"k\", E { n: 3, tags: [\"x\".clone()] })
-    let names: Vec[String] = [\"j\".clone(), \"k\".clone(), \"z\".clone()]
+    b.insert(\"k\", E { n: 3, tags: [\"x\"] })
+    let names: Vec[String] = [\"j\", \"k\", \"z\"]
     println(f\"{total(L { types: a }, L { types: b }, names)}\")
 }
 ";

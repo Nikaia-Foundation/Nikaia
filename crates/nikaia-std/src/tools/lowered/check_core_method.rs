@@ -97,8 +97,8 @@ pub(crate) fn check_core_method_an_empty_map_read(state: &CheckState, world: &Ch
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_method_witness(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg]) -> i64 {
-    let mut wanted: String = String::from("");
-    if method == "set" { wanted = "after".to_owned(); } else if method == "join" { wanted = "within".to_owned(); } else { return -1; }
+    let mut wanted: &'static str = "";
+    if method == "set" { wanted = "after"; } else if method == "join" { wanted = "within"; } else { return -1; }
     let mut at: i64 = 0;
     while at < config.len() as i64 {
         if world.words.resolve(nikaia_std::index::get(&config, (at) as usize).name) == wanted { return at; }
@@ -117,7 +117,7 @@ pub(crate) fn check_core_method_literal(state: &mut CheckState, receiver: &Expr,
             let negative = *negative; let value = *value;
             let number = integer(value, negative);
             let mut ty: String = String::from("u64");
-            if integer_fits(&number, "i64") { if integer_fits(&number, "i32") { ty = "i32".to_owned(); } else { ty = "i64".to_owned(); } }
+            if integer_fits(&number, "i64") { if integer_fits(&number, "i32") { ty = String::from("i32"); } else { ty = String::from("i64"); } }
             state.facts.unsigned_literals.insert(id_of(receiver) as i64, ty.to_owned());
             return check_core_method_named(&ty);
         },
@@ -141,8 +141,8 @@ pub(crate) fn check_core_method_ledger_type(on: &Ty, bytes: bool) -> String {
     if bytes { return String::from("Bytes"); }
     if check_simd_kind(on) == "Mask" { return String::from("simd::Mask"); }
     match on {
-        Ty::Named { name, args, .. } => { if args.is_empty() && is_whole_number(name) { name.to_owned() } else { "".to_owned() } },
-        _ => "".to_owned(),
+        Ty::Named { name, args, .. } => { if args.is_empty() && is_whole_number(name) { name.to_owned() } else { String::from("") } },
+        _ => String::from(""),
     }
 }
 
@@ -150,8 +150,8 @@ pub(crate) fn check_core_method_ledger_type(on: &Ty, bytes: bool) -> String {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_method_own_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, written: &str) -> String {
     match on {
-        Ty::Named { name, args, .. } => { if args.is_empty() && resolve_method(world, &format!("{}::{}", name, written)).is_some() { name.to_owned() } else { "".to_owned() } },
-        _ => "".to_owned(),
+        Ty::Named { name, args, .. } => { if args.is_empty() && resolve_method(world, &format!("{}::{}", name, written)).is_some() { name.to_owned() } else { String::from("") } },
+        _ => String::from(""),
     }
 }
 
@@ -207,7 +207,7 @@ pub(crate) fn check_core_method_either_items(which: &str, on: Ty) -> Ty {
 
 pub(crate) fn check_core_method_attribute(named: &str, read: &str) -> Ty {
     if named == "attribute" { return Ty::Nullable(Box::new(check_core_method_named(read))); }
-    Ty::Named { name: "Vec".to_owned(), args: vec![check_core_method_named(read)], view: false }
+    Ty::Named { name: String::from("Vec"), args: vec![check_core_method_named(read)], view: false }
 }
 
 pub(crate) fn check_core_method_run(on: &Ty) -> Option<Ty> {
@@ -335,6 +335,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.inside_a_door = holding;
     check_core_method_changes(state, world, receiver, &name, span);
     state.a_copy_under_another_name(world, receiver, method, args, span);
+    state.a_call_on_a_literal_that_adds_nothing(world, receiver, method, args, span);
     let text = match on {
         Ty::Named { ref name, ref args, .. } => args.is_empty() && (name == "String" || name == "str"),
         _ => false,
@@ -387,7 +388,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         state.flow.at_a_write_door = outer_door;
         state.inside_a_door = outer_inside;
         let item: Ty = nikaia_std::index::or(a_run, || Ty::Unknown);
-        return Ty::Named { name: "Vec".to_owned(), args: vec![item], view: false };
+        return Ty::Named { name: String::from("Vec"), args: vec![item], view: false };
     }
     state.flow.last_resolved = None;
     state.flow.receiver_from_text = state.made_from_text(world, receiver);
@@ -626,7 +627,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     }
     let type_name = match on {
         Ty::Named { ref name, .. } => name.to_owned(),
-        _ => "".to_owned(),
+        _ => String::from(""),
     };
     if type_name == "$Variant" {
         if name == "attribute" || name == "attributes" {

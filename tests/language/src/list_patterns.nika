@@ -8,11 +8,11 @@ enum ListPatternsHeld { Three(i64, i64, String) }
 
 fn list_patterns_shape(xs: ref Vec[i64]) -> String {
     return match xs {
-        [] => "empty".clone(),
+        [] => "empty",
         [x] => f"one {x}",
         [a, .., z] if a == z => f"same ends {a}{z}",
         [h, ..rest] => f"{h} then {rest.len()}",
-        else => "never".clone(),
+        else => "never",
     }
 }
 

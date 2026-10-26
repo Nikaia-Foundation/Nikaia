@@ -381,7 +381,7 @@ fn types_word_by_ref_here(names: ref winnow_grammar::InternerContext, ty: ref Ty
     if ty.is_nullable {
         written = f"{name}?"
     }
-    out.push(refusal("NK1257", span.clone(), f"A `{name}` is copied at a read, so a {position} can't be a `ref {written}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects.".clone()], f"Write `{written}` without `ref`; a parameter the function changes is `mut name: {written}`."))
+    out.push(refusal("NK1257", span.clone(), f"A `{name}` is copied at a read, so a {position} can't be a `ref {written}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects."], f"Write `{written}` without `ref`; a parameter the function changes is `mut name: {written}`."))
 }
 
 fn types_word_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref Type?, plain: ref collections::BTreeSet[String], span: ref Span, mut out: Vec[Finding]) {
@@ -409,7 +409,7 @@ fn types_text_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, p
     if ty.is_nullable {
         written = "String?"
     }
-    out.push(Finding { code: "NK1261", span: span.clone(), message: f"`ref` is redundant here: a {position} written `ref {written}` says what `{written}` already says.", notes: ["Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.".clone()], help: f"Write `{written}` without `ref`.", warning: true, labels: [] })
+    out.push(Finding { code: "NK1261", span: span.clone(), message: f"`ref` is redundant here: a {position} written `ref {written}` says what `{written}` already says.", notes: ["Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects."], help: f"Write `{written}` without `ref`.", warning: true, labels: [] })
 }
 
 fn types_text_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref Type?, position: String, views: ref collections::BTreeSet[String], key: String, span: ref Span, mut out: Vec[Finding]) {

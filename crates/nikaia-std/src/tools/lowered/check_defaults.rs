@@ -10,7 +10,7 @@ pub enum CheckComputing {
 
 pub(crate) fn check_defaults_as_built(ty: Ty) -> Ty {
     match ty {
-        Ty::Named { name, args, view } => { if name == "str" { Ty::Named { name: "String".to_owned(), args, view: false } } else { Ty::Named { name, args, view: false } } },
+        Ty::Named { name, args, view } => { if name == "str" { Ty::Named { name: String::from("String"), args, view: false } } else { Ty::Named { name, args, view: false } } },
         _ => ty,
     }
 }

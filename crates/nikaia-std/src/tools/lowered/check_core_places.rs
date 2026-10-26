@@ -3,7 +3,7 @@
 
 pub(crate) fn check_core_places_named(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: false } }
 
-pub(crate) fn check_core_places_str_view() -> Ty { Ty::Named { name: "str".to_owned(), args: vec![], view: true } }
+pub(crate) fn check_core_places_str_view() -> Ty { Ty::Named { name: String::from("str"), args: vec![], view: true } }
 
 pub(crate) fn check_core_places_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
@@ -77,7 +77,7 @@ pub(crate) fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty],
         if last < 0 { last = 0; }
         let mut help: String = String::from("There's nothing in it to read.");
         if count > 0 { help = format!("Use one of `.0` to `.{}`.", last); }
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107".to_owned(), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![] });
         return Ty::Unknown;
     }
     if at < 0 { return Ty::Unknown; }
@@ -172,7 +172,7 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     let members = several_errors_of(&on);
     if !members.is_empty() {
         let named = members_named(&members);
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107".to_owned(), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec!["A field belongs to one of them, and which one it is is said by a `match`.".to_owned()], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec![String::from("A field belongs to one of them, and which one it is is said by a `match`.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![] });
         return Ty::Unknown;
     }
     match on {
@@ -812,7 +812,7 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     let b = check_core_places_base(&name);
     if !a_range && check_core_places_a_list(&b) { state.number_asked(world, index, &check_core_places_named("i64"), span, false); }
     if a_range {
-        if check_core_places_a_list(&b) && !args.is_empty() { return Ty::Named { name: "Array".to_owned(), args: vec![(*nikaia_std::index::get(&args, 0)).clone()], view: true }; }
+        if check_core_places_a_list(&b) && !args.is_empty() { return Ty::Named { name: String::from("Array"), args: vec![(*nikaia_std::index::get(&args, 0)).clone()], view: true }; }
         if (b == "String" || b == "str") && args.is_empty() {
             check_core_places_text_cut(state, world, base, index, span);
             return check_core_places_str_view();

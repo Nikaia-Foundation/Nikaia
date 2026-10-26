@@ -66,7 +66,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R13  `_ =>` -> `else =>`",
         "R14  `matches!(e, P)` / `matches!(e, P if g)` -> `match e { P => true, else => false }`",
         "R15  `format!(\"..{}..\", a)` -> `f\"..{a}..\"`; `&format!` -> `f\"..\"`",
-        "R16  `.to_owned()`/`.into_owned()`/`String::from(x)` -> `.clone()`; `\"lit\".to_string()` -> `\"lit\".clone()` (a literal is a view); `.to_string()` after a name lookup -> `.clone()`",
+        "R16  `.to_owned()`/`.into_owned()`/`String::from(x)` -> `.clone()`; `\"lit\".to_string()`/`\"lit\".to_owned()` -> `\"lit\"` (a literal is the text, NK1301); `.to_string()` after a name lookup -> `.clone()`",
         "R17  `String::new()` -> `\"\"`, `Vec::new()`/`vec![]` -> `[]`, `vec![a, b]` -> `[a, b]`, `BTreeMap::new()` -> `collections::BTreeMap()`",
         "R18  `*x` deref dropped",
         "R19  `&x`/`&mut x` at a use dropped (Nikaia lends implicitly)",
@@ -1858,7 +1858,11 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     }
     s = rs2nika_capacity_char(ctx, s)
     if s.contains("\".to_string()") {
-        s = s.replace("\".to_string()", "\".clone()")
+        s = s.replace("\".to_string()", "\"")
+        rs2nika_hit(ctx, "R16")
+    }
+    if s.contains("\".to_owned()") {
+        s = s.replace("\".to_owned()", "\"")
         rs2nika_hit(ctx, "R16")
     }
     s = rs2nika_rep(ctx, s, ".to_owned()", ".clone()", "R16")
@@ -3349,7 +3353,7 @@ fn rs2nika_find_loop(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     } else if how == "find_map" {
         out.push(f"{ind}    let found = {t}")
         out.push(f"{ind}    if found != null {{")
-        found = "found".clone()
+        found = "found"
         pad = f"{ind}        "
     } else {
         out.push(f"{ind}    if {t} {{")
@@ -3458,7 +3462,7 @@ fn rs2nika_some_arm(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     }
     let mut inner: String = rs2nika_text(c, 5, at)
     if inner == "_" {
-        inner = "_value".clone()
+        inner = "_value"
     }
     rs2nika_hit(ctx, "R72")
     return f"{rs2nika_indent(line)}{inner}{rest}"
@@ -5132,6 +5136,9 @@ pub fn rs2nika_lint_line(code: ref String, params: ref Vec[String]) -> Vec[Strin
     }
     if arm.starts_with("None =>") || arm.starts_with("None if ") {
         out.push("NK2705: `None =>` is not a pattern of a `T?`; write `null =>` (ADR-352 D5)")
+    }
+    if code.contains("\".to_string()") || code.contains("\".clone()") {
+        out.push("NK1301: a text literal takes no `.to_string()` and no `.clone()`; write the literal")
     }
     if code.contains(".to_owned()") {
         out.push("NK1189: `.to_owned()` is `.clone()`")

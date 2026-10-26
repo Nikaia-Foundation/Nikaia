@@ -2037,7 +2037,7 @@ fn every_refused_arm_shape_is_pointed_at() {
 /// A number literal stands where it was written, not at its statement (#602).
 #[test]
 fn a_refused_number_literal_is_pointed_at() {
-    let source = "fn f(c: bool) -> i64 {\n    let y: String = if c { \"a\".clone() } else { 1 }\n    return y.len()\n}\n";
+    let source = "fn f(c: bool) -> i64 {\n    let y: String = if c { \"a\" } else { 1 }\n    return y.len()\n}\n";
     assert_eq!(under(source, "NK1103"), ("1".to_string(), 2));
 }
 
@@ -2051,10 +2051,10 @@ fn the_tail_if_of_a_loop_body_is_a_statement() {
          let mut m: collections::BTreeMap[i64, String] = collections::BTreeMap()\n    \
          let mut n: collections::BTreeMap[i64, i64] = collections::BTreeMap()\n    \
          let xs: Vec[i64] = [1, 2]\n    \
-         for x in xs {\n        if x == 1 { m.insert(1, \"a\".clone()) } else { n.insert(2, 3) }\n    }\n    \
+         for x in xs {\n        if x == 1 { m.insert(1, \"a\") } else { n.insert(2, 3) }\n    }\n    \
          let mut i = 0\n    \
-         while i < 2 {\n        i += 1\n        if i == 1 { m.insert(1, \"b\".clone()) } else if i == 2 { n.insert(2, 4) } else { m.insert(3, \"c\".clone()) }\n    }\n    \
-         for x in xs {\n        match x {\n            1 => m.insert(1, \"d\".clone()),\n            else => n.insert(2, 5),\n        }\n    }\n    \
+         while i < 2 {\n        i += 1\n        if i == 1 { m.insert(1, \"b\") } else if i == 2 { n.insert(2, 4) } else { m.insert(3, \"c\") }\n    }\n    \
+         for x in xs {\n        match x {\n            1 => m.insert(1, \"d\"),\n            else => n.insert(2, 5),\n        }\n    }\n    \
          println(f\"{m.len()} {n.len()}\")\n}\n",
     );
     assert!(found.is_empty(), "{found:#?}");
@@ -2195,7 +2195,7 @@ fn arms_that_disagree_under_a_written_type_ask_for_no_annotation() {
 /// `let s: String = 3` is NK1103; so is a `1` standing as an arm beside text.
 #[test]
 fn an_open_number_arm_under_written_text_is_refused() {
-    let source = "fn f(c: bool) -> i64 {\n    let y: String = if c { \"a\".clone() } else { 1 }\n    \
+    let source = "fn f(c: bool) -> i64 {\n    let y: String = if c { \"a\" } else { 1 }\n    \
                   return y.len()\n}\n\nfn main() {\n    println(f\"{f(true)}\")\n}\n";
     assert_eq!(one(source).0, "NK1103");
     assert_eq!(
@@ -2206,10 +2206,10 @@ fn an_open_number_arm_under_written_text_is_refused() {
 
 #[test]
 fn an_open_number_arm_into_a_return_or_an_argument_is_refused() {
-    let returned = "fn f(c: bool) -> String {\n    return if c { \"a\".clone() } else { 1 }\n}\n";
+    let returned = "fn f(c: bool) -> String {\n    return if c { \"a\" } else { 1 }\n}\n";
     assert_eq!(one(returned).0, "NK1104");
     let passed = "fn g(s: String) -> String {\n    return s\n}\n\n\
-                  fn f(c: bool) -> String {\n    return g(if c { \"a\".clone() } else { 1 })\n}\n";
+                  fn f(c: bool) -> String {\n    return g(if c { \"a\" } else { 1 })\n}\n";
     assert_eq!(one(passed).0, "NK1102");
 }
 
@@ -2228,7 +2228,7 @@ fn number_arms_under_a_number_still_pass() {
 #[test]
 fn a_name_of_an_open_number_as_an_arm_is_refused() {
     let source = "fn f(c: bool) -> String {\n    let n = 12\n    \
-                  let y: String = if c { \"a\".clone() } else { n }\n    return y\n}\n";
+                  let y: String = if c { \"a\" } else { n }\n    return y\n}\n";
     assert_eq!(one(source).0, "NK1103");
 }
 

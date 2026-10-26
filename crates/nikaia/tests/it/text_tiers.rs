@@ -1486,7 +1486,7 @@ fn a_variant_payload_takes_the_tier_of_what_flows_in() {
 /// **A payload of static text bound in a match arm** (ADR-282 D29, #680):
 /// handed into a result beside text of its own, the payload keeps text of its
 /// own, as a field read there does; beside literals only, the result is the
-/// static text it holds. NK1104 before, on `n` beside `"?".clone()`.
+/// static text it holds. NK1104 before, on `n` beside `f"?"`.
 #[test]
 fn a_static_payload_bound_in_a_match_arm_follows_where_it_goes() {
     let source = r##"enum T {
@@ -1496,7 +1496,7 @@ fn a_static_payload_bound_in_a_match_arm_follows_where_it_goes() {
 
 fn show(t: T) -> String {
     return match t {
-        T::Unknown => "?".clone(),
+        T::Unknown => f"?",
         T::Named(n) => n,
     }
 }
@@ -1509,7 +1509,7 @@ fn main() {
     let rust = lowered(source, Build::default());
     assert!(rust.contains("Named(String)"), "{rust}");
 
-    let lasting = source.replace("\"?\".clone()", "\"?\"");
+    let lasting = source.replace("f\"?\"", "\"?\"");
     runs("static-payload-beside-literals", &lasting, "x ?");
     let rust = lowered(&lasting, Build::default());
     assert!(rust.contains("Named(&'static str)"), "{rust}");

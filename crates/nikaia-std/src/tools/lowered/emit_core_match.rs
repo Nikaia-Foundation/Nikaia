@@ -102,7 +102,7 @@ impl EmitState {
         if !self.facts.lent_bindings.contains_key(&arm) { return String::from(""); }
         let name = match value {
             Expr::Variable(symbol, _) => { let symbol = *symbol; emit_text(world, symbol) },
-            _ => "".to_owned(),
+            _ => String::from(""),
         };
         let lent = match self.facts.lent_bindings.get(&arm) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         if name != "" && lent.contains(&name) { return String::from("*"); }

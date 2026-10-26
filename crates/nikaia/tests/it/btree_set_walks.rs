@@ -39,7 +39,7 @@ fn union_intersection_and_difference_walk_in_order() {
 fn first_and_last_are_null_when_empty() {
     let out = run(
         "set-ends",
-        "    let mut names: collections::BTreeSet[String] = collections::BTreeSet()\n    names.insert(\"b\".clone())\n    names.insert(\"a\".clone())\n    println(f\"{a.first() ?? -1} {a.last() ?? -1} {none.first() ?? -1} {none.last() ?? -1} {names.first() ?? \"none\"} {names.last() ?? \"none\"}\")",
+        "    let mut names: collections::BTreeSet[String] = collections::BTreeSet()\n    names.insert(\"b\")\n    names.insert(\"a\")\n    println(f\"{a.first() ?? -1} {a.last() ?? -1} {none.first() ?? -1} {none.last() ?? -1} {names.first() ?? \"none\"} {names.last() ?? \"none\"}\")",
     );
     assert_eq!(out, "1 5 -1 -1 a b\n");
 }

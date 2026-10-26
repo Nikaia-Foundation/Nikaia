@@ -84,14 +84,14 @@ pub(crate) fn emit_call_builds_a_hull(world: &EmitWorld<'_, '_, '_, '_>, arg: &E
 }
 
 pub(crate) fn emit_call_pausing_entry(facts: &CheckFacts, args: &[Expr]) -> (i64, String) {
-    if args.is_empty() { return (0, "".to_owned()); }
+    if args.is_empty() { return (0, String::from("")); }
     let last = (*nikaia_std::index::get(&args, nikaia_std::index::at(args.len() as i64 - 1))).clone();
     let key = match last {
         Expr::Closure { .. } => node_key(&last),
         _ => -1,
     };
-    if key < 0 || !facts.pausing_lambdas.contains_key(&key) { return (0, "".to_owned()); }
-    let entry = match facts.pausing_lambdas.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return (0, "".to_owned()) };
+    if key < 0 || !facts.pausing_lambdas.contains_key(&key) { return (0, String::from("")); }
+    let entry = match facts.pausing_lambdas.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return (0, String::from("")) };
     match entry.clone() {
         FactPausing::Function(name) => (1, name),
         FactPausing::Lent(name) => (2, name),

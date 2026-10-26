@@ -209,7 +209,7 @@ pub fn lg_horn_write(mut arena: TermArena, problem: ref LgLoop) -> String {
     let mut at_head: Vec[String] = []
     let mut after: Vec[String] = []
     for name in head {
-        sorts.push("Int".clone())
+        sorts.push("Int")
         bound.push(f"({lg_symbol(name)} Int)")
         at_head.push(lg_symbol(name))
         if primed_names.contains(lg_primed(name)) {
@@ -262,7 +262,7 @@ fn lg_horn_and(arena: ref TermArena, parts: ref Vec[i64], first: ref String) -> 
         written.push(lg_term(arena, part))
     }
     if written.is_empty() {
-        return "true".clone()
+        return "true"
     }
     if written.len() == 1 {
         return written[0].clone()

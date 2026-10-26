@@ -11,9 +11,9 @@ use std::collections
 /// How a lent `??` opens its option, as the emitter is told.
 fn check_reference_opened(opened: ref String) -> String {
     if opened == ".as_deref()" {
-        return ".as_deref()".clone()
+        return ".as_deref()"
     }
-    return ".as_ref()".clone()
+    return ".as_ref()"
 }
 
 /// Whether the source wrote the `&` itself.
@@ -142,7 +142,7 @@ impl CheckState {
                     }
                 }
                 if under {
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137".clone(), message: "You don't need the `ref` here: the compiler lends where it's needed.".clone(), notes: [f"`{written}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call."], help: "Remove the `ref`.".clone(), labels: [] })
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call."], help: "Remove the `ref`.", labels: [] })
                     return true
                 }
             }
@@ -233,7 +233,7 @@ impl CheckState {
             if takes_a_receiver {
                 return true
             }
-            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137".clone(), message: "You don't need the `ref` here: the compiler lends where it's needed.".clone(), notes: [f"`{written}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call."], help: "Remove the `ref`.".clone(), labels: [] })
+            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call."], help: "Remove the `ref`.", labels: [] })
             return true
         }
         // **A view of a nullable handed to a nullable view** is recorded, and

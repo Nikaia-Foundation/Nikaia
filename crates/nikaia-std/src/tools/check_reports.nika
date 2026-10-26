@@ -276,7 +276,7 @@ impl CheckState {
         if function != null {
             notes.push(f"It stopped in `{function ?? ""}`, in another file of the program.")
         }
-        notes.push("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs.".clone())
+        notes.push("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs.")
         let mut help: String = "Fix it as you would fix the program stopping there, or compute the value while the program runs, with `let` instead of `comptime`."
         if self.computing_default {
             help = "Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."

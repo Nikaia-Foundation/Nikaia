@@ -1,0 +1,9 @@
+// #853: a plain text literal takes no `.to_string()` and no `.clone()` (NK1301, ADR-282 D30).
+fn main() {
+    let a = "-p".to_string()
+    let b = "-q".clone()
+    let n: i64 = 5
+    let s = n.to_string()
+    let t = a.to_string()
+    println(f"{a}{b}{s}{t}")
+}

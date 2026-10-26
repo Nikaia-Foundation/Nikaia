@@ -33,10 +33,10 @@ impl CheckState {
                 let verdict = crossing(each.1, Walking { own: world.own, library: world.library, into: Going::Ours })
                 if verdict.refused_part() != null {
                     let name = each.0.clone()
-                    let mut notes: Vec[String] = ["A value a task still needs after a pause is kept inside the task, and the task can move to another thread.".clone()]
+                    let mut notes: Vec[String] = ["A value a task still needs after a pause is kept inside the task, and the task can move to another thread."]
                     let note = verdict.note()
                     if note != null {
-                        notes.push(note ?? "".clone())
+                        notes.push(note ?? "")
                     }
                     notes.push(same_at_both())
                     self.findings.push(check_refusal("NK2501", span, f"This task keeps `{name}` while it pauses, and `{name}` can't be passed to a task.", notes, verdict.way_out()))

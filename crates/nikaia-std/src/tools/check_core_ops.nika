@@ -217,12 +217,12 @@ fn check_core_ops_whole_or_open(state: ref CheckState, world: ref CheckWorld, si
 /// The whole-number type a side names, or the empty text for a literal.
 fn check_core_ops_whole_name(side: ref Expr, ty: ref Ty) -> String sync {
     if check_core_ops_lit_int(side) {
-        return "".clone()
+        return ""
     }
     let plain = ty.unseen()
     return match plain {
         Ty::Named { name, .. } => name.clone(),
-        else => "".clone(),
+        else => "",
     }
 }
 
@@ -651,10 +651,10 @@ fn check_core_ops_a_number_written(node: ref Expr) -> bool {
 /// `"float"` for `1.5` or `-1.5`, `""` for anything else (#732).
 fn check_core_ops_number_written_kind(node: ref Expr) -> String {
     return match node {
-        Expr::LitInt { .. } => "integer".clone(),
-        Expr::LitFloat { .. } => "float".clone(),
-        Expr::Unary { op, expr, .. } => if op == UnaryOp::Neg { check_core_ops_number_written_kind(expr) } else { "".clone() },
-        else => "".clone(),
+        Expr::LitInt { .. } => "integer",
+        Expr::LitFloat { .. } => "float",
+        Expr::Unary { op, expr, .. } => if op == UnaryOp::Neg { check_core_ops_number_written_kind(expr) } else { "" },
+        else => "",
     }
 }
 
@@ -764,25 +764,25 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     // ADR-282 D7): neither moved out of the list nor copied.
     if lending && !from_a_map && check_core_ops_index(value) && (state.jumps(world, fallback) || state.facts.lent_coalesces.contains_key(id_of(fallback) as i64)) && nullable && state.takes_away(world, inner.unseen()) {
         if check_core_ops_plain_text(inner) {
-            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".clone())
+            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()")
         } else {
-            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".clone())
+            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()")
         }
         return view_of_type(inner)
     }
     // **A loan on the left and a jump on the right is a view** (ADR-279 D10).
     if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && (check_core_ops_lent_root(state, world, value) || check_core_ops_behind_a_view(state, world, value)) {
         if check_core_ops_plain_text(inner) {
-            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".clone())
+            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()")
         } else {
-            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".clone())
+            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()")
         }
         return view_of_type(inner)
     }
     // **Text behind a field that is a view is read, never taken** (#735):
     // `r.c.text ?? ""` is a view of it, kept or not.
     if place && nullable && check_core_ops_plain_text(inner) && check_core_ops_lit_str(fallback) && check_core_ops_behind_a_view(state, world, value) {
-        state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".clone())
+        state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()")
         state.facts.view_fallbacks.insert(id_of(fallback) as i64)
         return check_core_ops_view("str")
     }
@@ -880,7 +880,7 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     if nullable && check_core_ops_own_type(inner) && !state.jumps(world, fallback) {
         if check_core_ops_a_number_written(fallback) {
             let held = inner.text()
-            state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is a number, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.".clone()], f"Write a `{held}` as the fallback."))
+            state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is a number, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type."], f"Write a `{held}` as the fallback."))
         } else if !other.is_unknown() && !check_core_ops_nullable(other) {
             state.expect_type(world, other, inner, span, "let", fn(found, wanted) { f"The fallback of this `??` is `{found}`, but the left side holds `{wanted}`." })
         }
@@ -892,15 +892,15 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         let held_kind = check_core_ops_kind(inner)
         let mut given_kind = check_core_ops_kind(other)
         if check_core_ops_a_number_written(fallback) {
-            given_kind = "number".clone()
+            given_kind = "number"
         }
         if held_kind != "" && given_kind != "" && held_kind != given_kind {
             let held = inner.text()
             let mut given: String = f"`{other.text()}`"
             if check_core_ops_a_number_written(fallback) {
-                given = "a number".clone()
+                given = "a number"
             }
-            state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is {given}, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5).".clone()], f"Write a `{held}` as the fallback."))
+            state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is {given}, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5)."], f"Write a `{held}` as the fallback."))
         }
         // **And one number beside another** (Part I 2.4, 3.5, #732): an
         // integer written out is not a float, a float written out is not an
@@ -911,11 +911,11 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
             let written = check_core_ops_number_written_kind(fallback)
             let held_float = a_float_type(inner)
             if (written == "integer" && held_float) || (written == "float" && !held_float) {
-                let mut given: String = "an integer".clone()
+                let mut given: String = "an integer"
                 if written == "float" {
-                    given = "a float".clone()
+                    given = "a float"
                 }
-                state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is {given}, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); an integer and a float are not made into one another (Part I 2.4).".clone()], f"Write a `{held}` as the fallback."))
+                state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is {given}, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); an integer and a float are not made into one another (Part I 2.4)."], f"Write a `{held}` as the fallback."))
             } else if written == "" && !inner.is_a_view() && !other.is_a_view() {
                 state.expect_type(world, other, inner, span, "let", fn(found, wanted) { f"The fallback of this `??` is `{found}`, but the left side holds `{wanted}`." })
             }
@@ -986,7 +986,7 @@ pub fn check_core_ops_none_named(mut state: CheckState, declared: ref Ty?, param
     if handed == 0 {
         return
     }
-    let notes: Vec[String] = ["A lambda takes the arguments it names, so `fn { … }` takes none (Part I 5.3).".clone()]
+    let notes: Vec[String] = ["A lambda takes the arguments it names, so `fn { … }` takes none (Part I 5.3)."]
     let help: String = if handed == 1 { "Name the argument, `fn(item) { … }`, or `fn(_) { … }` where the body does not use it." } else { "Name the arguments, `fn(a, b) { … }`, or `_` for one the body does not use." }
     state.findings.push(check_refusal("NK1101", span, f"This lambda takes no arguments, but it is handed {counted(handed, "argument")}.", notes, help))
 }
@@ -1084,7 +1084,7 @@ fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     state.inside_a_door = outer_inside
     let bound: Vec[(String, Ty, i64)] = state.task_bindings.pop() ?? []
     state.a_task_holds_these_across_a_pause(world, host, body, bound, span)
-    return Ty::Named { name: "TaskHandle".clone(), args: [value], view: false }
+    return Ty::Named { name: "TaskHandle", args: [value], view: false }
 }
 
 /// **`spawn`** hands back a `TaskHandle` of what the task's body comes to.

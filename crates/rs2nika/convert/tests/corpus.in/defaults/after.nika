@@ -23,7 +23,7 @@ fn check_defaults_as_built(ty: Ty) -> Ty {
         // `ref String` is read as `str`.
         Ty::Named { name, args, view } => {
             if name == "str" {
-                Ty::Named { name: "String".clone(), args: args, view: false }
+                Ty::Named { name: "String", args: args, view: false }
             } else {
                 Ty::Named { name: name, args: args, view: false }
             }

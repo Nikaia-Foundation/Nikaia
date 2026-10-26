@@ -20,7 +20,7 @@ impl CheckState {
         let mut help: String = f"Declare `{field}` with a fixed-size type (`Array[T, N]` instead of a `Vec`, `&str` instead of a `String`), or build it while the program runs instead of in a `comptime`."
         if carries {
             message = f"`{field}` carries a `{held}`, which {holder} can't hold."
-            note = "A value computed at build time can't own memory. Another variant of the same `enum` may be fine.".clone()
+            note = "A value computed at build time can't own memory. Another variant of the same `enum` may be fine."
             help = f"Declare what `{field}` carries with a fixed-size type (`Array[T, N]` instead of a `Vec`, `&str` instead of a `String`), or build it while the program runs instead of in a `comptime`."
         }
         self.findings.push(check_refusal("NK1167", span, message, [note], help))
@@ -55,8 +55,8 @@ impl CheckState {
                     }
                     else => {}
                 }
-                owns = "a `Vec`".clone()
-                fixed = "`Array[T, N]`".clone()
+                owns = "a `Vec`"
+                fixed = "`Array[T, N]`"
                 way_out = f"Declare it as `Array[{element}, {items.len()}]`: the build computed {counted(items.len(), "element")}."
             }
             else => {}
@@ -80,7 +80,7 @@ impl CheckState {
         if other_text != "?" && other_text.len() > 0 {
             two = f"`{other_text}`"
         }
-        self.findings.push(check_refusal("NK1154", span, f"This list mixes {one} and {two}, but a list holds one type.", ["The first element with a known type sets the type for the rest.".clone()], "Convert the element that doesn't fit, or use two lists.".clone()))
+        self.findings.push(check_refusal("NK1154", span, f"This list mixes {one} and {two}, but a list holds one type.", ["The first element with a known type sets the type for the rest."], "Convert the element that doesn't fit, or use two lists."))
     }
 
     /// `NK1153`: an empty list whose element type nothing ever says
@@ -100,10 +100,10 @@ impl CheckState {
     pub fn an_empty_list_with_no_element_type(ref mut self, name: ref String, span: ref Span) sync {
         // **A map nothing writes into and nothing types** (ADR-285 D43).
         if self.flow.empty_maps.contains(span.start as i64) {
-            self.findings.push(check_refusal("NK1153", span, f"`{name}` is a map, and nothing says what it holds.", ["A map gets its key and value types from what is written into it, and nothing is written into it here.".clone()], f"Write the type, `let {name}: collections::HashMap[String, i64] = collections::HashMap()`, or write a first entry into it."))
+            self.findings.push(check_refusal("NK1153", span, f"`{name}` is a map, and nothing says what it holds.", ["A map gets its key and value types from what is written into it, and nothing is written into it here."], f"Write the type, `let {name}: collections::HashMap[String, i64] = collections::HashMap()`, or write a first entry into it."))
             return
         }
-        self.findings.push(check_refusal("NK1153", span, f"`{name}` is an empty list, and nothing says what it holds.", ["An empty list gets its element type from how it's used, and it isn't used here.".clone()], f"Write the type, `let {name}: Vec[i64] = []`, or give it a first element."))
+        self.findings.push(check_refusal("NK1153", span, f"`{name}` is an empty list, and nothing says what it holds.", ["An empty list gets its element type from how it's used, and it isn't used here."], f"Write the type, `let {name}: Vec[i64] = []`, or give it a first element."))
     }
 
     /// `NK1149`: a type's constructor written `Type::new`
@@ -127,7 +127,7 @@ impl CheckState {
         if !world.own.functions.contains_key(name) && !world.library.functions.contains_key(name) {
             return
         }
-        self.findings.push(check_refusal("NK1149", span, f"Make a `{ty}` with `{ty}(…)`, not `{ty}::new`.", ["In Nikaia a type's constructor has no name: it's called as the type itself.".clone()], f"Write `{ty}(…)`, or just `{ty}` where you pass the constructor itself."))
+        self.findings.push(check_refusal("NK1149", span, f"Make a `{ty}` with `{ty}(…)`, not `{ty}::new`.", ["In Nikaia a type's constructor has no name: it's called as the type itself."], f"Write `{ty}(…)`, or just `{ty}` where you pass the constructor itself."))
     }
 
     /// **`NK1171`, for a shape member written where no bound reaches it.**
@@ -151,7 +151,7 @@ impl CheckState {
     /// `NK1144`: a `let` whose only name is the ignore pattern
     /// ([ADR-291](../../docs/specification/adr/adr-291.md) D7).
     pub fn a_let_that_binds_nothing(ref mut self, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1144", span, "`let _ = …` binds nothing, so there's no reason for the `let`.".clone(), ["A call made for its effect is written as the call on its own, `f()`.".clone(), "`_` would also throw the value away on the spot, so its cleanup would run right here instead of at the end of the block.".clone()], "Write the expression on its own, or give it a name.".clone()))
+        self.findings.push(check_refusal("NK1144", span, "`let _ = …` binds nothing, so there's no reason for the `let`.", ["A call made for its effect is written as the call on its own, `f()`.", "`_` would also throw the value away on the spot, so its cleanup would run right here instead of at the end of the block."], "Write the expression on its own, or give it a name."))
     }
 
     /// **`NK1172`: one field, named twice.**
@@ -163,7 +163,7 @@ impl CheckState {
     /// restates it for `with`, which borrows the braces; both come here, because
     /// one rule written twice is two rules waiting to disagree.
     pub fn a_field_written_twice(ref mut self, ty: ref String, field: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1172", span, f"You're setting `{ty}.{field}` twice.", ["Each field gets its value once; Nikaia won't silently pick one of the two.".clone()], f"Remove one of the two `{field}`."))
+        self.findings.push(check_refusal("NK1172", span, f"You're setting `{ty}.{field}` twice.", ["Each field gets its value once; Nikaia won't silently pick one of the two."], f"Remove one of the two `{field}`."))
     }
 
     /// **`NK1183`: a `let` that declares the element's type over a `for`
@@ -199,12 +199,12 @@ impl CheckState {
     /// **`NK1180` for a variant**: a reflected variant answers `.name` and
     /// `.is(value)`.
     pub fn a_reflected_variant_has_two_members(ref mut self, member: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1180", span, f"A variant from `T::variants` has no `{member}`.", ["A variant from `T::variants` has `.name`, its name as text, `.is(value)`, whether a value is that variant, and `.attribute(X)` and `.attributes(X)`, what its attributes say.".clone()], "Use `.name`, `.is(value)`, `.attribute(X)` or `.attributes(X)`. To read what a variant carries, use a `match`.".clone()))
+        self.findings.push(check_refusal("NK1180", span, f"A variant from `T::variants` has no `{member}`.", ["A variant from `T::variants` has `.name`, its name as text, `.is(value)`, whether a value is that variant, and `.attribute(X)` and `.attributes(X)`, what its attributes say."], "Use `.name`, `.is(value)`, `.attribute(X)` or `.attributes(X)`. To read what a variant carries, use a `match`."))
     }
 
     /// `NK1180`: a member a field from `T::fields` does not have.
     pub fn a_reflected_field_has_two_members(ref mut self, member: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1180", span, f"A field from `T::fields` has no `{member}`.", ["A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, and `.attribute(X)` and `.attributes(X)`, what its attributes say.".clone()], "Use `.name`, `.of(value)`, `.default`, `.attribute(X)` or `.attributes(X)`.".clone()))
+        self.findings.push(check_refusal("NK1180", span, f"A field from `T::fields` has no `{member}`.", ["A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, and `.attribute(X)` and `.attributes(X)`, what its attributes say."], "Use `.name`, `.of(value)`, `.default`, `.attribute(X)` or `.attributes(X)`."))
     }
 
     /// **`NK1179`: a run this body owns, put where a view of one is declared**
@@ -237,7 +237,7 @@ impl CheckState {
             owned = f"a `{held}` this body owns"
             way_out = f"Declare `{field}` as `{held}` if the program builds it while it runs, or fill it from a `comptime`, whose values are built into the program."
         }
-        self.findings.push(check_refusal("NK1179", span, f"`{owner}.{field}` only views a list something else keeps, but this is {owned}.", ["A view points at values something else keeps, and a value built on this line is gone when the line ends.".clone(), "Passing a list to a parameter lends it automatically; a field doesn't.".clone()], way_out))
+        self.findings.push(check_refusal("NK1179", span, f"`{owner}.{field}` only views a list something else keeps, but this is {owned}.", ["A view points at values something else keeps, and a value built on this line is gone when the line ends.", "Passing a list to a parameter lends it automatically; a field doesn't."], way_out))
     }
 
     /// **A parser that did not build where the program has another error is

@@ -12,7 +12,7 @@ impl CheckState {
             named.push(format!("`{}`", world.words.resolve(param)));
         }
         let first = world.words.resolve(*nikaia_std::index::get(&params, 0)).to_owned();
-        self.findings.push(check_refusal("NK2103", span, format!("This task's lambda takes {}, but a task isn't given any arguments.", named.join(", ")), vec!["`spawn` starts a body without arguments; the body takes what it needs from the code around it.".to_owned()], Some(format!("Remove the argument list: `spawn fn {{ … }}`. If `{}` is a value from here, declare it before the task and use it inside.", first))));
+        self.findings.push(check_refusal("NK2103", span, format!("This task's lambda takes {}, but a task isn't given any arguments.", named.join(", ")), vec![String::from("`spawn` starts a body without arguments; the body takes what it needs from the code around it.")], Some(format!("Remove the argument list: `spawn fn {{ … }}`. If `{}` is a value from here, declare it before the task and use it inside.", first))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -23,7 +23,7 @@ impl CheckState {
         let package = nikaia_std::index::get(&shown, nikaia_std::index::at(0..at)).to_owned();
         if !self.modules.contains(&package) { return; }
         let name = field.name.to_owned();
-        self.findings.push(check_refusal("NK1110", span, format!("You can't reach `{}.{}` from here: it's private to `{}`.", ty, name, package), vec!["A field is private to its package unless it's declared `pub`.".to_owned()], Some(format!("Write `pub {}` in `{}`, or use a public method the type offers.", name, package))));
+        self.findings.push(check_refusal("NK1110", span, format!("You can't reach `{}.{}` from here: it's private to `{}`.", ty, name, package), vec![String::from("A field is private to its package unless it's declared `pub`.")], Some(format!("Write `pub {}` in `{}`, or use a public method the type offers.", name, package))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -32,7 +32,7 @@ impl CheckState {
         let module = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_owned();
         let item = nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_owned();
         if !self.modules.contains(&module) || contract.public { return; }
-        self.findings.push(check_refusal("NK1110", span, format!("You can't use `{}` from here: it's private to `{}`.", item, module), vec!["Everything is private to its package unless it's declared `pub`.".to_owned()], Some(format!("Write `pub fn {}` in `{}`, or use something it makes public.", item, module))));
+        self.findings.push(check_refusal("NK1110", span, format!("You can't use `{}` from here: it's private to `{}`.", item, module), vec![String::from("Everything is private to its package unless it's declared `pub`.")], Some(format!("Write `pub fn {}` in `{}`, or use something it makes public.", item, module))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -45,7 +45,7 @@ impl CheckState {
             _ => format!("Its options are {}.", names_listed(&names)),
         };
         let mut help: String = String::from("Use one of the options it has.");
-        if near.is_some() { help = format!("Did you mean `{}`?", nikaia_std::index::or(near.as_deref(), || "")); } else if names.is_empty() { help = "Pass it as a plain argument, without a name.".to_owned(); }
+        if near.is_some() { help = format!("Did you mean `{}`?", nikaia_std::index::or(near.as_deref(), || "")); } else if names.is_empty() { help = String::from("Pass it as a plain argument, without a name."); }
         self.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", key, name), vec![note], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -65,7 +65,7 @@ impl CheckState {
     pub fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, config: &[ConfigArg], span: &Span) {
         let mut fields: Vec<String> = vec![];
         for setting in config.iter() { fields.push(world.words.resolve(setting.name).to_owned()); }
-        self.findings.push(check_refusal("NK1146", span, format!("Build a `{}` with braces, not parentheses.", name), vec!["Parentheses after a type call its constructor; a struct literal with field names uses braces.".to_owned()], Some(format!("Write `{} {{ {}: … }}`.", name, fields.join(": …, ")))));
+        self.findings.push(check_refusal("NK1146", span, format!("Build a `{}` with braces, not parentheses.", name), vec![String::from("Parentheses after a type call its constructor; a struct literal with field names uses braces.")], Some(format!("Write `{} {{ {}: … }}`.", name, fields.join(": …, ")))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -83,7 +83,7 @@ impl CheckState {
                         for name in first.iter() { if !names.contains(name) { missing.push(name.to_owned()); } }
                         for name in names.iter() { if !first.contains(name) { missing.push(name.to_owned()); } }
                         missing.sort();
-                        self.findings.push(check_refusal("NK1155", span, format!("The alternatives of this pattern don't all bind the same names: `{}`.", missing.join("`, `")), vec!["Every alternative of an `|` pattern has to bind the same names, because the arm's body doesn't know which one matched.".to_owned()], Some("Bind the same names in each alternative, or write a separate arm for each.".to_owned())));
+                        self.findings.push(check_refusal("NK1155", span, format!("The alternatives of this pattern don't all bind the same names: `{}`.", missing.join("`, `")), vec![String::from("Every alternative of an `|` pattern has to bind the same names, because the arm's body doesn't know which one matched.")], Some(String::from("Bind the same names in each alternative, or write a separate arm for each."))));
                         break;
                     }
                     at = at + 1;
@@ -98,7 +98,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_case_is_missing(&mut self, missing: &str, span: &Span) { self.findings.push(check_refusal("NK1151", span, format!("This `match` doesn't handle `{}`.", missing), vec!["A `match` has to handle every case, so that adding a variant to a type shows you every place that needs to know.".to_owned()], Some("Add an arm for it, or `else => …` for everything else.".to_owned()))); }
+    pub fn a_case_is_missing(&mut self, missing: &str, span: &Span) { self.findings.push(check_refusal("NK1151", span, format!("This `match` doesn't handle `{}`.", missing), vec![String::from("A `match` has to handle every case, so that adding a variant to a type shows you every place that needs to know.")], Some(String::from("Add an arm for it, or `else => …` for everything else.")))); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

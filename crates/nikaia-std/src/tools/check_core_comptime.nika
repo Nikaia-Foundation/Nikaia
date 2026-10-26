@@ -62,9 +62,9 @@ fn check_core_comptime_tuple_parts(found: ref Ty, evaluated: ref BuildValue?) ->
 /// `i64` that holds it (Part I 2.4).
 fn check_core_comptime_first_type(n: ref Integer, beyond: bool) -> String {
     if !beyond && integer_fits(n, "i32") {
-        return "i32".clone()
+        return "i32"
     }
-    return "i64".clone()
+    return "i64"
 }
 
 /// The type below for a `comptime` that declares one: Part I 2.2's, a type of
@@ -103,8 +103,8 @@ fn check_core_comptime_struct_named(want: ref Ty, evaluated: ref BuildValue?) ->
 fn check_core_comptime_value_below(world: ref CheckWorld, found: ref Ty, evaluated: ref BuildValue?) -> String? {
     let value = evaluated ?? return null
     match value {
-        BuildValue::Float(_) => { return "f64".clone() },
-        BuildValue::Bool(_) => { return "bool".clone() },
+        BuildValue::Float(_) => { return "f64" },
+        BuildValue::Bool(_) => { return "bool" },
         BuildValue::Int(n) => {
             let named = integer_named(found)
             if named != null {
@@ -120,7 +120,7 @@ fn check_core_comptime_value_below(world: ref CheckWorld, found: ref Ty, evaluat
             let ty = element ?? return null
             return f"[{ty}; {items.len()}]"
         },
-        BuildValue::Text(_) => { return "&str".clone() },
+        BuildValue::Text(_) => { return "&str" },
         BuildValue::Tuple(parts) => {
             let declared: Vec[Ty] = match found {
                 Ty::Tuple(each) => each.clone(),
@@ -188,7 +188,7 @@ fn check_core_comptime_other(mut state: CheckState, world: ref CheckWorld, bound
         if unsized != null {
             let element = unsized ?? return
             let items = check_core_comptime_items(evaluated)
-            let notes: Vec[String] = ["An `Array` built into the program carries its length in its type.".clone()]
+            let notes: Vec[String] = ["An `Array` built into the program carries its length in its type."]
             state.findings.push(check_refusal("NK1166", span, f"`{bound}` is an `Array[{element}]` with no length, which a `comptime` needs.", notes, f"Declare it as `Array[{element}, {items.len()}]`: the build computed {counted(items.len() as i64, "element")}."))
             return
         }
@@ -360,7 +360,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
         state.facts.comptime_values.insert(span.start as i64, (spelled, text))
     } else {
         if !(said || said_a_type || said_a_table || said_a_part || said_a_name) {
-            let notes: Vec[String] = ["A `comptime` has to be computed while the program is built.".clone(), "At build time the compiler can compute numbers, `bool`s, text, lists, structs and enum variants: literals, `f\"…\"`, arithmetic and comparisons, `if`, `for` over a range, `while`, and calls to your own functions and methods made of those.".clone()]
+            let notes: Vec[String] = ["A `comptime` has to be computed while the program is built.", "At build time the compiler can compute numbers, `bool`s, text, lists, structs and enum variants: literals, `f\"…\"`, arithmetic and comparisons, `if`, `for` over a range, `while`, and calls to your own functions and methods made of those."]
             state.findings.push(check_refusal("NK1127", span, f"`{bound}` can't be computed while the program is built.", notes, f"Write `let {bound} = …` to compute it while the program runs instead."))
         }
     }

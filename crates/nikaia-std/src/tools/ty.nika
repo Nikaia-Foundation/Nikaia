@@ -1148,7 +1148,7 @@ impl FnContract {
             provenance: null,
             signature: null,
             borrows: [],
-            returns: "".clone(),
+            returns: "",
             stores: [],
             keeps: [],
             mutates: false,

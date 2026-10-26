@@ -99,7 +99,7 @@ test "what is not refused runs" {
     let mut again: String = "d"
     xs.push(again)
     again = "e"
-    let served = handed_over_serve("x".clone(), 1)
+    let served = handed_over_serve("x", 1)
     let size = xs.len()
     assert(shown == "c")
     assert(again == "e")

@@ -24,7 +24,7 @@ impl CheckState {
             named.push(f"`{world.words.resolve(param)}`")
         }
         let first = world.words.resolve(params[0]).clone()
-        self.findings.push(check_refusal("NK2103", span, f"This task's lambda takes {named.join(", ")}, but a task isn't given any arguments.", ["`spawn` starts a body without arguments; the body takes what it needs from the code around it.".clone()], f"Remove the argument list: `spawn fn {{ … }}`. If `{first}` is a value from here, declare it before the task and use it inside."))
+        self.findings.push(check_refusal("NK2103", span, f"This task's lambda takes {named.join(", ")}, but a task isn't given any arguments.", ["`spawn` starts a body without arguments; the body takes what it needs from the code around it."], f"Remove the argument list: `spawn fn {{ … }}`. If `{first}` is a value from here, declare it before the task and use it inside."))
     }
 
     /// **Part I 9.2, for a field** (`NK1110`).
@@ -52,7 +52,7 @@ impl CheckState {
             return
         }
         let name = field.name.clone()
-        self.findings.push(check_refusal("NK1110", span, f"You can't reach `{ty}.{name}` from here: it's private to `{package}`.", ["A field is private to its package unless it's declared `pub`.".clone()], f"Write `pub {name}` in `{package}`, or use a public method the type offers."))
+        self.findings.push(check_refusal("NK1110", span, f"You can't reach `{ty}.{name}` from here: it's private to `{package}`.", ["A field is private to its package unless it's declared `pub`."], f"Write `pub {name}` in `{package}`, or use a public method the type offers."))
     }
 
     /// Part I 9.2: an item is private to its **package** unless it says `pub`.
@@ -79,7 +79,7 @@ impl CheckState {
         if !self.modules.contains(module) || contract.public {
             return
         }
-        self.findings.push(check_refusal("NK1110", span, f"You can't use `{item}` from here: it's private to `{module}`.", ["Everything is private to its package unless it's declared `pub`.".clone()], f"Write `pub fn {item}` in `{module}`, or use something it makes public."))
+        self.findings.push(check_refusal("NK1110", span, f"You can't use `{item}` from here: it's private to `{module}`.", ["Everything is private to its package unless it's declared `pub`."], f"Write `pub fn {item}` in `{module}`, or use something it makes public."))
     }
 
     /// `NK1109`: an option a function does not have.
@@ -97,7 +97,7 @@ impl CheckState {
         if near != null {
             help = f"Did you mean `{near ?? ""}`?"
         } else if names.len() == 0 {
-            help = "Pass it as a plain argument, without a name.".clone()
+            help = "Pass it as a plain argument, without a name."
         }
         self.findings.push(check_refusal("NK1109", span, f"`{key}` has no option called `{name}`.", [note], help))
     }
@@ -139,7 +139,7 @@ impl CheckState {
         for setting in config {
             fields.push(world.words.resolve(setting.name).clone())
         }
-        self.findings.push(check_refusal("NK1146", span, f"Build a `{name}` with braces, not parentheses.", ["Parentheses after a type call its constructor; a struct literal with field names uses braces.".clone()], f"Write `{name} {{ {fields.join(": …, ")}: … }}`."))
+        self.findings.push(check_refusal("NK1146", span, f"Build a `{name}` with braces, not parentheses.", ["Parentheses after a type call its constructor; a struct literal with field names uses braces."], f"Write `{name} {{ {fields.join(": …, ")}: … }}`."))
     }
 
     /// **`NK1155`: an or-pattern whose alternatives do not bind the same
@@ -182,7 +182,7 @@ impl CheckState {
                             }
                         }
                         missing.sort()
-                        self.findings.push(check_refusal("NK1155", span, f"The alternatives of this pattern don't all bind the same names: `{missing.join("`, `")}`.", ["Every alternative of an `|` pattern has to bind the same names, because the arm's body doesn't know which one matched.".clone()], "Bind the same names in each alternative, or write a separate arm for each.".clone()))
+                        self.findings.push(check_refusal("NK1155", span, f"The alternatives of this pattern don't all bind the same names: `{missing.join("`, `")}`.", ["Every alternative of an `|` pattern has to bind the same names, because the arm's body doesn't know which one matched."], "Bind the same names in each alternative, or write a separate arm for each."))
                         break
                     }
                     at = at + 1
@@ -213,7 +213,7 @@ impl CheckState {
     /// The message [`a_match_that_misses_a_case`] raises, with what is missing
     /// already spelled: the variants for an enum, `else` for everything else.
     pub fn a_case_is_missing(ref mut self, missing: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1151", span, f"This `match` doesn't handle `{missing}`.", ["A `match` has to handle every case, so that adding a variant to a type shows you every place that needs to know.".clone()], "Add an arm for it, or `else => …` for everything else.".clone()))
+        self.findings.push(check_refusal("NK1151", span, f"This `match` doesn't handle `{missing}`.", ["A `match` has to handle every case, so that adding a variant to a type shows you every place that needs to know."], "Add an arm for it, or `else => …` for everything else."))
     }
 }
 

@@ -56,7 +56,7 @@ fn a_value_pushed_is_given_away() {
     one_refusal(
         "fn main() {\n\
          \x20   let mut xs: Vec[String] = []\n\
-         \x20   let name: String = \"b\".clone()\n\
+         \x20   let name: String = f\"b\"\n\
          \x20   xs.push(name)\n\
          \x20   println(name)\n\
          }\n",
@@ -70,7 +70,7 @@ fn a_key_written_is_given_away() {
         "use std::collections\n\n\
          fn main() {\n\
          \x20   let mut m: collections::HashMap[String, i64] = collections::HashMap()\n\
-         \x20   let name: String = \"b\".clone()\n\
+         \x20   let name: String = f\"b\"\n\
          \x20   m[name] = 2\n\
          \x20   println(name)\n\
          }\n",
@@ -83,7 +83,7 @@ fn a_field_holds_what_it_is_given() {
     one_refusal(
         &format!(
             "{PERSON}fn main() {{\n\
-             \x20   let name: String = \"b\".clone()\n\
+             \x20   let name: String = f\"b\"\n\
              \x20   let p = Person {{ name: name }}\n\
              \x20   println(name)\n\
              }}\n"
@@ -93,7 +93,7 @@ fn a_field_holds_what_it_is_given() {
     one_refusal(
         &format!(
             "{PERSON}fn main() {{\n\
-             \x20   let name: String = \"b\".clone()\n\
+             \x20   let name: String = f\"b\"\n\
              \x20   let p = Person {{ name }}\n\
              \x20   println(name)\n\
              }}\n"
@@ -106,7 +106,7 @@ fn a_field_holds_what_it_is_given() {
 fn a_rename_moves() {
     one_refusal(
         "fn main() {\n\
-         \x20   let name: String = \"b\".clone()\n\
+         \x20   let name: String = f\"b\"\n\
          \x20   let t = name\n\
          \x20   println(name)\n\
          }\n",
@@ -119,7 +119,7 @@ fn a_loop_hands_it_over_again() {
     one_refusal(
         "fn main() {\n\
          \x20   let mut xs: Vec[String] = []\n\
-         \x20   let name: String = \"b\".clone()\n\
+         \x20   let name: String = f\"b\"\n\
          \x20   for i in 0..<3 {\n\
          \x20       xs.push(name)\n\
          \x20   }\n\
@@ -168,7 +168,7 @@ fn what_is_not_given_away_is_not_refused() {
          \x20   xs.push(again)\n\
          \x20   again = \"e\"\n\
          \x20   println(again)\n\
-         \x20   serve(\"x\".clone(), n)\n\
+         \x20   serve(\"x\", n)\n\
          }\n",
     );
     assert_eq!(codes_of(&found), Vec::<&str>::new(), "{found:#?}");
@@ -188,7 +188,7 @@ fn a_statement_that_hands_over_twice_is_refused() {
          \x20   return xs.len()\n\
          }\n\n\
          fn main() {\n\
-         \x20   let name: String = \"n\".clone()\n\
+         \x20   let name: String = f\"n\"\n\
          \x20   println(f\"{keep(name, name)}\")\n\
          }\n",
         "`name` again, but it was passed to `keep`, which keeps it",
@@ -205,7 +205,7 @@ fn a_part_handed_over_is_gone() {
         &format!(
             "{head}fn main() {{\n\
              \x20   let mut xs: Vec[String] = []\n\
-             \x20   let p = P {{ name: \"a\".clone(), x: 1 }}\n\
+             \x20   let p = P {{ name: f\"a\", x: 1 }}\n\
              \x20   xs.push(p.name)\n\
              \x20   println(p.name)\n\
              }}\n"
@@ -216,7 +216,7 @@ fn a_part_handed_over_is_gone() {
         &format!(
             "{head}fn main() {{\n\
              \x20   let mut xs: Vec[String] = []\n\
-             \x20   let p = P {{ name: \"a\".clone(), x: 1 }}\n\
+             \x20   let p = P {{ name: f\"a\", x: 1 }}\n\
              \x20   xs.push(p.name)\n\
              \x20   let q = p\n\
              }}\n"
@@ -340,7 +340,7 @@ fn insert_keeps_its_key() {
         "use std::collections\n\n\
          fn main() {\n\
          \x20   let mut m: collections::HashMap[String, i64] = collections::HashMap()\n\
-         \x20   let k: String = \"a\".clone()\n\
+         \x20   let k: String = f\"a\"\n\
          \x20   m.insert(k, 1)\n\
          \x20   println(k)\n\
          }\n",
@@ -392,7 +392,7 @@ fn a_copy_has_one_word() {
 fn the_text_form_of_text_is_the_text() {
     let rust = lowered(
         "fn main() {\n\
-         \x20   let a = \"x\".to_string()\n\
+         \x20   let a = \"x\"\n\
          \x20   let n = 3\n\
          \x20   println(f\"{a}{n.to_string()}\")\n\
          }\n",
@@ -465,7 +465,7 @@ fn a_name_bound_again_is_not_the_one_handed_over() {
 fn owned_text_into_a_literal_binding_names_the_annotation() {
     let source = "fn main() {\n\
                   \x20   let mut s = \"a\"\n\
-                  \x20   let t: String = \"q\".clone()\n\
+                  \x20   let t: String = f\"q\"\n\
                   \x20   s = t\n\
                   \x20   println(s)\n\
                   }\n";
@@ -484,7 +484,7 @@ fn owned_text_into_a_literal_binding_names_the_annotation() {
 #[test]
 fn a_printed_value_is_only_read() {
     let found = findings(
-        "fn main() {\n    let s: String = \"a\".clone()\n    print(s)\n    println(s)\n    eprintln(s)\n}\n",
+        "fn main() {\n    let s: String = \"a\"\n    print(s)\n    println(s)\n    eprintln(s)\n}\n",
     );
     assert!(found.iter().all(|f| f.code != "NK2105"), "{found:#?}");
 }
@@ -564,7 +564,7 @@ const ONLY_COMPARED: &str = "fn is_len(name: String) -> bool sync {\n    return 
 #[test]
 fn a_parameter_only_compared_in_a_match_is_read() {
     let source = format!(
-        "{ONLY_COMPARED}fn main() {{\n    let n = \"len\".clone()\n    let a = is_len(n)\n    let b = is_len(n)\n    print(a && b)\n}}\n"
+        "{ONLY_COMPARED}fn main() {{\n    let n = \"len\"\n    let a = is_len(n)\n    let b = is_len(n)\n    print(a && b)\n}}\n"
     );
     let found = findings(&source);
     assert!(found.is_empty(), "{found:#?}");
@@ -576,7 +576,7 @@ fn a_parameter_only_compared_in_a_match_is_read() {
 #[test]
 fn a_parameter_a_match_arm_returns_is_kept() {
     let found = findings(
-        "fn pick(name: String) -> String sync {\n    return match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n}\n\nfn main() {\n    let n = \"a\".clone()\n    let a = pick(n)\n    let b = pick(n)\n    print(a)\n}\n",
+        "fn pick(name: String) -> String sync {\n    return match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n}\n\nfn main() {\n    let n = \"a\"\n    let a = pick(n)\n    let b = pick(n)\n    print(a)\n}\n",
     );
     assert_eq!(codes_of(&found), ["NK2105"], "{found:#?}");
 }
@@ -586,7 +586,7 @@ fn a_parameter_a_match_arm_returns_is_kept() {
 #[test]
 fn a_value_handed_over_in_a_condition_is_gone_in_the_else_if() {
     let found = findings(
-        "fn pick(name: String) -> String sync {\n    return match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n}\n\nfn main() {\n    let n = \"a\".clone()\n    if pick(n) == \"a\" {\n        print(1)\n    } else if pick(n) == \"b\" {\n        print(2)\n    }\n}\n",
+        "fn pick(name: String) -> String sync {\n    return match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n}\n\nfn main() {\n    let n = \"a\"\n    if pick(n) == \"a\" {\n        print(1)\n    } else if pick(n) == \"b\" {\n        print(2)\n    }\n}\n",
     );
     assert_eq!(codes_of(&found), ["NK2105"], "{found:#?}");
 }

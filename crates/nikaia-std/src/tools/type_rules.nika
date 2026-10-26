@@ -30,7 +30,7 @@ use std::node_id
 /// fact at a function's entry (ADR-369 D3). A name with spaces, which no
 /// program can write.
 pub fn tr_given() -> String {
-    return "rule of the type".clone()
+    return "rule of the type"
 }
 
 /// One rule: its claim and its `message:`, as written.
@@ -222,9 +222,9 @@ pub fn tr_asserts_as(words: ref winnow_grammar::InternerContext, intern: fn(ref 
                 },
                 null => {},
             }
-            config.push(ConfigArg { name: intern("message".clone()), value: shown })
+            config.push(ConfigArg { name: intern("message"), value: shown })
         }
-        let call = Expr::Call { func: Expr::Variable(intern("assert".clone()), node_id::NodeId::fresh()), args: [condition], config: config, id: node_id::NodeId::fresh() }
+        let call = Expr::Call { func: Expr::Variable(intern("assert"), node_id::NodeId::fresh()), args: [condition], config: config, id: node_id::NodeId::fresh() }
         out.push(Spanned(Stmt::Expr(call), tr_span(span)))
     }
     return out
@@ -267,16 +267,16 @@ pub fn tr_collect(words: ref winnow_grammar::InternerContext, intern: fn(ref Str
                 for rule in rules {
                     let found = tr_a_rule(words, rule.node, tr_span(rule.span))
                     if found == null {
-                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"A rule of `{type_name}` has to be an `assert`.", help: "Write it as `assert(claim)` or `assert(claim; message: \"…\")` after the fields.".clone() } }
+                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"A rule of `{type_name}` has to be an `assert`.", help: "Write it as `assert(claim)` or `assert(claim; message: \"…\")` after the fields." } }
                     }
                     if generics.len() > 0 {
-                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"`{type_name}` is generic, and a generic struct states no rule yet.", help: "Check what the methods need with an `assert` in each of them.".clone() } }
+                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"`{type_name}` is generic, and a generic struct states no rule yet.", help: "Check what the methods need with an `assert` in each of them." } }
                     }
                     let one = found ?? continue
                     let probe = Expr::Variable(name, node_id::NodeId::fresh())
                     let mapped = tr_on(words, one.claim, probe, field_names, renew)
                     if mapped == null {
-                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"A rule of `{type_name}` may read only its fields, paths and pure methods from them, `comptime` values and literals.", help: "Compute anything else in a method, and state the rule over the fields it keeps.".clone() } }
+                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"A rule of `{type_name}` may read only its fields, paths and pure methods from them, `comptime` values and literals.", help: "Compute anything else in a method, and state the rule over the fields it keeps." } }
                     }
                     read.push(one)
                 }
@@ -778,7 +778,7 @@ pub fn tr_kept_by(words: ref winnow_grammar::InternerContext, claim: ref Expr, f
             },
             Expr::Field { .. } => {
                 let name = tr_field_of_self(expr, words)
-                if name != null && !names.contains(name ?? "".clone()) {
+                if name != null && !names.contains(name ?? "") {
                     allowed += 1
                 }
             },
@@ -786,7 +786,7 @@ pub fn tr_kept_by(words: ref winnow_grammar::InternerContext, claim: ref Expr, f
                 let called = words.resolve(method)
                 let name = tr_field_of_self(receiver, words)
                 let own_method = tr_is_self(receiver, words) && methods.contains(called)
-                let own_len = name != null && names.contains(name ?? "".clone()) && called == "len" && args.len() == 0
+                let own_len = name != null && names.contains(name ?? "") && called == "len" && args.len() == 0
                 if own_method || own_len {
                     allowed += 1
                 }
@@ -794,7 +794,7 @@ pub fn tr_kept_by(words: ref winnow_grammar::InternerContext, claim: ref Expr, f
             Expr::Index { base, .. } => {
                 let name = tr_field_of_self(base, words)
                 if name != null {
-                    let field = name ?? "".clone()
+                    let field = name ?? ""
                     if names.contains(field) && !full.contains(field) {
                         allowed += 1
                     }

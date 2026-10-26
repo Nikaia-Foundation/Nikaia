@@ -4,9 +4,9 @@
 pub(crate) fn mem_offered(head: &str) -> bool { head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f32" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par" }
 
 pub(crate) fn mem_member_under(key: &str, prefix: &str) -> String {
-    if !key.starts_with(prefix) { return "".to_owned(); }
+    if !key.starts_with(prefix) { return String::from(""); }
     let rest = nikaia_std::index::or(key.strip_prefix(prefix), || "").to_owned();
-    if rest.contains("::") { return "".to_owned(); }
+    if rest.contains("::") { return String::from(""); }
     rest
 }
 
@@ -19,11 +19,11 @@ pub(crate) fn mem_under(table: &collections::BTreeMap<String, FnContract>, prefi
     members
 }
 
-pub(crate) fn mem_also(head: &str) -> Vec<String> {
-    if head == "String" { return vec!["str".to_owned()]; }
-    if head == "str" { return vec!["String".to_owned()]; }
-    if head == "Vec" { return vec!["list::ListExt".to_owned()]; }
-    if head == "Par" { return vec!["Seq".to_owned()]; }
+pub(crate) fn mem_also(head: &str) -> Vec<&'static str> {
+    if head == "String" { return vec!["str"]; }
+    if head == "str" { return vec!["String"]; }
+    if head == "Vec" { return vec!["list::ListExt"]; }
+    if head == "Par" { return vec!["Seq"]; }
     vec![]
 }
 
@@ -102,11 +102,11 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_member_is_refused(&mut self, head: &str, member: &str, method: bool, members: &[String], span: &Span) {
         let mut shown: String = head.to_owned();
-        if head == "str" { shown = "String".to_owned(); }
+        if head == "str" { shown = String::from("String"); }
         let mut written: String = format!("{}::{}", head, member);
         if method { written = format!(".{}()", member); }
-        let mut help: String = "".to_owned();
-        if mem_text_from(head, member) { help = "Write the text itself, `\"x\"`, or `\"x\".clone()` for text of its own.".to_owned(); } else if member == "as_str" { help = "Leave it out: the text is already what is passed.".to_owned(); } else if member == "is_some" { help = "Compare with `null`: `value != null`.".to_owned(); } else if member == "is_none" { help = "Compare with `null`: `value == null`.".to_owned(); } else { help = mem_nearest_help(head, member, method, members, &shown); }
+        let mut help: String = String::from("");
+        if mem_text_from(head, member) { help = String::from("Write the text itself, `\"x\"`, or `f\"x\"` for text of its own."); } else if member == "as_str" { help = String::from("Leave it out: the text is already what is passed."); } else if member == "is_some" { help = String::from("Compare with `null`: `value != null`."); } else if member == "is_none" { help = String::from("Compare with `null`: `value == null`."); } else { help = mem_nearest_help(head, member, method, members, &shown); }
         let mut what: String = format!("`{}` has no function called `{}`.", shown, member);
         if method { what = format!("`{}` has no method called `{}`.", shown, member); }
         self.findings.push(check_refusal("NK1171", span, what, vec![format!("What can be called is what is written down: `{}` is in no declaration, ledger or description this program reads.", written)], Some(help)));
@@ -137,7 +137,7 @@ impl CheckState {
         let listed = mem_listed(&named, "");
         let mut help: String = format!("If `{}` should be a method, add it in `impl {} {{ … }}`.", member, ty);
         let near = nearest_name(member, &named);
-        if near.is_some() { help = format!("Read it from a value: `value.{}`.", nikaia_std::index::or(near, || "".to_owned().into())); }
+        if near.is_some() { help = format!("Read it from a value: `value.{}`.", nikaia_std::index::or(near.as_deref(), || "")); }
         self.findings.push(check_refusal("NK1171", span, format!("`{}` has nothing called `{}` to reach with `::`.", ty, member), vec![format!("`::` reaches a type's methods and variants. Fields are read from a value with a dot. `{}` holds {}.", ty, listed)], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -149,7 +149,7 @@ impl CheckState {
         let listed = mem_listed(&variants, &format!("{}::", ty));
         let near = nearest_name(member, &variants);
         let mut help: String = format!("Write one of {}.", listed);
-        if near.is_some() { help = format!("Did you mean `{}::{}`?", ty, nikaia_std::index::or(near, || "".to_owned().into())); } else if variants.is_empty() { help = format!("`{}` has no variants, so there's nothing to write here.", ty); }
+        if near.is_some() { help = format!("Did you mean `{}::{}`?", ty, nikaia_std::index::or(near.as_deref(), || "")); } else if variants.is_empty() { help = format!("`{}` has no variants, so there's nothing to write here.", ty); }
         self.findings.push(check_refusal("NK1171", span, format!("`{}` has no variant called `{}`.", ty, member), vec![format!("`{}` is {}.", ty, listed)], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -174,8 +174,8 @@ impl CheckState {
             None => None,
         }, || vec![].into()).len() as i64;
         if declared == written { return; }
-        let mut blanks: Vec<String> = vec![];
-        while (blanks.len() as i64) < declared { blanks.push("_".to_owned()); }
+        let mut blanks: Vec<&'static str> = vec![];
+        while (blanks.len() as i64) < declared { blanks.push("_"); }
         let shape = blanks.join(", ");
         self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s), but the variant carries {}.", key, written, declared), vec!["A pattern names every part of a positional variant, in order; `_` ignores one.".to_string()], Some(format!("Write `{}({})` and bind the parts you need.", key, shape))));
     }
@@ -187,7 +187,7 @@ impl CheckState {
         let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_owned();
         let key = format!("{}::{}", ty, member);
         if self.is_variant(&ty, &member) && !self.variant_parts.contains_key(&key) && !self.structs.contains_key(&key) {
-            self.findings.push(check_refusal("NK1255", span, format!("`{}` carries no values, so `..` in `{}(..)` has nothing to stand for.", key, key), vec!["`..` matches the values of a variant that has some.".to_owned()], Some(format!("Write `{}`.", key).to_owned())));
+            self.findings.push(check_refusal("NK1255", span, format!("`{}` carries no values, so `..` in `{}(..)` has nothing to stand for.", key, key), vec![String::from("`..` matches the values of a variant that has some.")], Some(format!("Write `{}`.", key).to_owned())));
             return;
         }
         let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.variant_parts, &key) {
@@ -195,7 +195,7 @@ impl CheckState {
             None => None,
         }, || vec![].into()).len() as i64;
         let named = parts.len() as i64 - 1;
-        if self.variant_parts.contains_key(&key) && named > declared { self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s) besides `..`, but the variant carries {}.", key, named, declared), vec!["`..` stands for the values not named; it cannot make room for more.".to_owned()], Some("Name at most as many parts as the variant carries.".to_owned()))); }
+        if self.variant_parts.contains_key(&key) && named > declared { self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s) besides `..`, but the variant carries {}.", key, named, declared), vec![String::from("`..` stands for the values not named; it cannot make room for more.")], Some(String::from("Name at most as many parts as the variant carries.")))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -203,7 +203,7 @@ impl CheckState {
         let mut rests = 0;
         for part in parts.iter() { if pattern_is_rest(part) { rests += 1; } }
         if rests > 1 {
-            self.findings.push(check_refusal("NK1258", span, "A pattern has more than one `..`.".to_owned(), vec!["One `..` stands for the values between those named before and after it; with two, which values each one takes is not said.".to_owned()], Some("Keep one `..`, and name the other values: `[first, .., last]`.".to_owned())));
+            self.findings.push(check_refusal("NK1258", span, String::from("A pattern has more than one `..`."), vec![String::from("One `..` stands for the values between those named before and after it; with two, which values each one takes is not said.")], Some(String::from("Keep one `..`, and name the other values: `[first, .., last]`."))));
             return false;
         }
         true
@@ -244,7 +244,7 @@ pub(crate) fn mem_text_from(head: &str, member: &str) -> bool { (head == "String
 pub(crate) fn mem_nearest_help(head: &str, member: &str, method: bool, members: &[String], shown: &str) -> String {
     let near = nearest_name(member, members);
     if near.is_none() { return format!("Only what is written down for `{}` can be called; a Rust function or method of the same name is not reached.", shown); }
-    let name = nikaia_std::index::or(near, || "".to_owned().into());
+    let name = nikaia_std::index::or(near, || "".into());
     if method { return format!("Did you mean `.{}()`?", name); }
     format!("Did you mean `{}::{}`?", head, name)
 }

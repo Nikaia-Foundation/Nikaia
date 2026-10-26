@@ -26,14 +26,14 @@ pub fn common_integer(a: &str, b: &str) -> Option<String> {
     if low == 0 { return Some((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_owned()); }
     if low == 1 {
         if high <= 2 { return Some((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_owned()); }
-        return Some("i64".to_owned());
+        return Some(String::from("i64"));
     }
     if low == 2 {
-        if high == 2 { return Some("u64".to_owned()); }
+        if high == 2 { return Some(String::from("u64")); }
         return None;
     }
-    if high == 3 { return Some("i32".to_owned()); }
-    Some("i64".to_owned())
+    if high == 3 { return Some(String::from("i32")); }
+    Some(String::from("i64"))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -88,8 +88,8 @@ pub fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<String> {
         _ => false,
     };
     if !held || !wanted { return None; }
-    if (from == "i64" || from == "i32") && into == "u64" { return Some("u64".to_owned()); }
-    if from == "i32" && into == "u32" { return Some("u32".to_owned()); }
+    if (from == "i64" || from == "i32") && into == "u64" { return Some(String::from("u64")); }
+    if from == "i32" && into == "u32" { return Some(String::from("u32")); }
     None
 }
 
@@ -239,20 +239,20 @@ pub fn a_number_asked_for_two_types(name: &str, element: bool, first: &str, seco
         message = format!("You're using `{}` as {} `{}` and here as {} `{}`.", name, an_or_a(first), first, an_or_a(second), second);
         help = format!("Declare its type, `let {}: {} = …`, and convert with `as` where the other one is needed.", name, first);
     }
-    let notes: Vec<String> = vec!["A number takes its type from how it's used, and these uses want two different types.".to_owned()];
+    let notes: Vec<String> = vec![String::from("A number takes its type from how it's used, and these uses want two different types.")];
     check_refusal("NK1200", at, message, notes, Some(help))
 }
 
 pub fn a_map_number_asked_for_two_types(name: &str, keys: bool, other: &str, first: &str, second: &str, at: &Span) -> CheckFinding {
-    let mut part: String = String::from("values");
+    let mut part: &'static str = "values";
     let mut written: String = format!("{}, {}", other, first);
     if keys {
-        part = "keys".to_owned();
+        part = "keys";
         written = format!("{}, {}", first, other);
     }
     let message = format!("You're using the {} of `{}` as `{}`s and here as `{}`s.", part, name, first, second);
     let help = format!("Declare its type, `let {}: collections::HashMap[{}] = …`, and convert with `as` where the other one is needed.", name, written);
-    let notes: Vec<String> = vec!["A number takes its type from how it's used, and these uses want two different types.".to_owned()];
+    let notes: Vec<String> = vec![String::from("A number takes its type from how it's used, and these uses want two different types.")];
     check_refusal("NK1200", at, message, notes, Some(help))
 }
 
@@ -270,14 +270,14 @@ pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: &S
         message = format!("This has {}, but the array holds {}.", has, wanted);
         help = format!("Write {}, or change the array's declared length to match.", had);
     }
-    let notes: Vec<String> = vec!["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.".to_owned()];
+    let notes: Vec<String> = vec![String::from("The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.")];
     check_refusal("NK1157", span, message, notes, Some(help))
 }
 
 pub fn a_repeat_count_unknown_for_its_array(written: &str, wanted: i64, span: &Span) -> CheckFinding {
     let message = format!("This has `{}` elements, a number the build doesn't know, but the array holds {}.", written, wanted);
     let help = format!("Write the length as a number the build knows, `[…; {}]`, or make it a `Vec`.", wanted);
-    let notes: Vec<String> = vec!["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.".to_owned()];
+    let notes: Vec<String> = vec![String::from("The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.")];
     check_refusal("NK1157", span, message, notes, Some(help))
 }
 
@@ -286,13 +286,13 @@ pub fn a_repeated_value_that_does_not_copy(names: &winnow_grammar::InternerConte
     let n = written_expression(names, count);
     let message = format!("`[{}; {}]` copies `{}`, and a `{}` doesn't copy.", v, n, v, ty.text());
     let help = format!("Write each copy: `(0..<{}).map(fn(_i) {{ {}.clone() }}).collect()`.", n, v);
-    let notes: Vec<String> = vec!["`[v; n]` copies a number, a `bool`, a `char`, an `Array` or a value struct of them; a value that owns memory is duplicated where `.clone()` says so.".to_owned()];
+    let notes: Vec<String> = vec![String::from("`[v; n]` copies a number, a `bool`, a `char`, an `Array` or a value struct of them; a value that owns memory is duplicated where `.clone()` says so.")];
     check_refusal("NK1280", span, message, notes, Some(help))
 }
 
 pub fn two_integer_types_for_one_variable(key: &str, variable: &str, bound: &str, ty: &str, name: &str, wide: &str, span: &Span) -> CheckFinding {
     let message = format!("`{}` takes one type for `{}`, but you're passing `{}` and `{}`.", key, variable, bound, ty);
-    let notes: Vec<String> = vec!["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.".to_owned()];
+    let notes: Vec<String> = vec![String::from("A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.")];
     check_refusal("NK1102", span, message, notes, Some(format!("Convert one of them: `{} as {}`.", name, wide)))
 }
 
@@ -333,7 +333,7 @@ impl CheckState {
                 if wide != bound { narrow = there; }
             }
             let mut name: String = String::from("…");
-            if narrow < given.len() as i64 { name = nikaia_std::index::or(names_of(world, nikaia_std::index::get(&given, nikaia_std::index::at(narrow))), || "…".to_owned().into()); }
+            if narrow < given.len() as i64 { name = nikaia_std::index::or(names_of(world, nikaia_std::index::get(&given, nikaia_std::index::at(narrow))), || "…".into()); }
             self.findings.push(two_integer_types_for_one_variable(key, &variable, &bound, &ty, &name, &wide, span));
             return;
         }

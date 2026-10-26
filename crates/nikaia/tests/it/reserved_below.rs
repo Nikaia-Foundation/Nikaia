@@ -206,7 +206,7 @@ struct Event {
 }
 
 fn main() {
-    let e = Event { type: "click".clone(), at: 7 }
+    let e = Event { type: f"click", at: 7 }
     println(f"{e.type} {e.at}")
 }
 "#;

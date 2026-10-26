@@ -346,15 +346,15 @@ pub fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld
 fn check_core_stmt_read_shown(world: ref CheckWorld, value: ref Expr) -> String sync {
     return match value {
         Expr::Index { base, index, .. } => {
-            let held = dotted_path(world, base) ?? return "…".clone()
+            let held = dotted_path(world, base) ?? return "…"
             let at: String = match index {
                 Expr::Variable(name, _) => world.words.resolve(name).clone(),
                 Expr::LitInt { value, negative, .. } => if negative { f"-{value}" } else { f"{value}" },
-                else => "…".clone(),
+                else => "…",
             }
             f"{held}[{at}]"
         }
-        else => dotted_path(world, value) ?? "…".clone(),
+        else => dotted_path(world, value) ?? "…",
     }
 }
 
@@ -545,7 +545,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             // declare** (ADR-354 D2).
             let shown = found.unseen().text()
             let written = check_core_stmt_read_shown(world, value)
-            state.findings.push(check_refusal("NK1257", span, f"A `{shown}` read out of a place is a copy, so it can't be bound as a `ref {shown}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep.".clone()], f"an `{shown}` is copied at a read; write `let {name} = {written}`."))
+            state.findings.push(check_refusal("NK1257", span, f"A `{shown}` read out of a place is a copy, so it can't be bound as a `ref {shown}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep."], f"an `{shown}` is copied at a read; write `let {name} = {written}`."))
             found_kept = want.clone()
         }
         state.expect_kept_asked(world, found_kept, want, value, "the `let` declares a `String`, which is text of its own", span, "let", fn(was, wanted) { f"This value is `{was}`, but the `let` declares `{wanted}`." })
@@ -921,7 +921,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         let rooted = state.rooted_at(world, target)
         if rooted != null {
             let root: String = (rooted ?? "").clone()
-            let how: String = if check_core_stmt_a_name(target) { "changed here".clone() } else { "one of its parts is changed here".clone() }
+            let how: String = if check_core_stmt_a_name(target) { "changed here" } else { "one of its parts is changed here" }
             state.a_changed_binding_says_mut(root, how, Span { start: span.start, end: span.end })
             state.a_shared_name_changed_in_parallel(root, span)
         }
@@ -992,7 +992,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         if lent {
             found = Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
         } else {
-            let to: String = if check_core_stmt_an_index(target) { "written into a container".clone() } else { "assigned to another name".clone() }
+            let to: String = if check_core_stmt_an_index(target) { "written into a container" } else { "assigned to another name" }
             state.hands_over(world, value, found, to, span)
         }
     }
@@ -1086,7 +1086,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         }
         let mut assigned: Ty = found.clone()
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(into) {
-            assigned = Ty::Named { name: "i64".clone(), args: [], view: false }
+            assigned = Ty::Named { name: "i64", args: [], view: false }
         }
         state.expect_type(world, assigned, into, span, "assign", fn(was, wanted) { f"You're assigning `{was}` to something that holds `{wanted}`." })
         state.findings_moved(span, at, pushed, waiting)

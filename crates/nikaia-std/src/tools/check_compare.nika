@@ -231,7 +231,7 @@ pub fn compare_refusal(asking: ref CheckComparable, left: ref Ty, right: ref Ty,
         return null
     }
     let note: String = "A `struct` or an `enum` can be compared when all of its parts can. Locks, mapped files, sockets and task handles can't be compared."
-    return check_refusal("NK1188", span, f"You can't compare two `{found}` values with `==`.", [note], "Compare the parts that matter, or give the type a method that says what being equal means for it.".clone())
+    return check_refusal("NK1188", span, f"You can't compare two `{found}` values with `==`.", [note], "Compare the parts that matter, or give the type a method that says what being equal means for it.")
 }
 
 /// What `compare_declared` found: the declared types that compare, and those
@@ -319,7 +319,7 @@ impl CheckState {
         let mut is: String = "holds"
         match ty.unseen() {
             Ty::Named { name, .. } => if compare_base(name) == compare_base(owner) {
-                is = "is".clone()
+                is = "is"
             },
             else => {},
         }
@@ -411,7 +411,7 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
             let shown = held.text()
             let mut what: String = "an equality that is an equivalence"
             if ordered {
-                what = "an order".clone()
+                what = "an order"
             }
             let mut help: String = "Pass a type that has one: a number, `String`, `bool`, `char`, or a tuple, list or option of those, or a type you declare with an `impl`."
             if asking.structs.contains_key(shown) || asking.enums.contains_key(shown) {
@@ -436,7 +436,7 @@ pub fn compare_keys_with_no_order(asking: ref CheckComparable, ty: ref Ty, span:
                 if (last == "BTreeMap" || last == "BTreeSet") && args.len() > 0 && !asking.orders(args[0]) {
                     let key = args[0].text()
                     let note: String = "A number, a `String`, a `bool`, a `char`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`."
-                    refused.push(check_refusal("NK1247", span, f"`{last}` keeps its keys in order, and `{key}` has no order.", [note], "Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first.".clone()))
+                    refused.push(check_refusal("NK1247", span, f"`{last}` keeps its keys in order, and `{key}` has no order.", [note], "Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first."))
                 }
                 for arg in args {
                     stack.push(arg.clone())
@@ -457,10 +457,10 @@ pub fn compare_keys_with_no_order(asking: ref CheckComparable, ty: ref Ty, span:
 /// The bounds of a type parameter in scope, or `["?"]` where `ty` is not one.
 fn compare_parameter_bounds(ty: ref Ty, parameters: ref collections::BTreeMap[String, Vec[String]]) -> Vec[String] {
     let name = match ty {
-        Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { "".clone() },
-        else => "".clone(),
+        Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { "" },
+        else => "",
     }
-    let bounds = parameters.get(name) ?? return ["?".clone()]
+    let bounds = parameters.get(name) ?? return ["?"]
     return bounds.clone()
 }
 

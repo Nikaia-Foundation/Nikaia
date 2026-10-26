@@ -109,7 +109,7 @@ impl CheckState {
                     continue
                 }
                 owned.push(name.clone())
-                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, "a function kept for later".clone()))
+                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, "a function kept for later"))
             }
         }
         if pauses && owned.len() > 0 {
@@ -136,7 +136,7 @@ impl CheckState {
                 if !self.takes_away(world, local.ty) {
                     continue
                 }
-                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, "a background task".clone()))
+                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, "a background task"))
             }
         }
     }
@@ -167,7 +167,7 @@ impl CheckState {
             if found != null {
                 let local = found ?? return
                 if local.written_mut {
-                    self.findings.push(check_refusal("NK1229", span, f"This child captures `{name}`, which is `mut`, so its next attempt would not start fresh.", ["A supervisor calls a child's function again for every attempt (Part II 12.8). What one attempt changed in a captured `mut` binding would still be there.".clone()], f"Build `{name}` inside the child's function, or take `{name}.clone()` there."))
+                    self.findings.push(check_refusal("NK1229", span, f"This child captures `{name}`, which is `mut`, so its next attempt would not start fresh.", ["A supervisor calls a child's function again for every attempt (Part II 12.8). What one attempt changed in a captured `mut` binding would still be there."], f"Build `{name}` inside the child's function, or take `{name}.clone()` there."))
                 }
             }
         }

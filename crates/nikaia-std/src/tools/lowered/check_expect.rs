@@ -67,20 +67,20 @@ pub(crate) fn check_floats_beyond_f32(value: &Expr, want: &Ty) -> bool {
 // this was written - see `contracts::sync`.
 pub(crate) fn expect_code(what: &str) -> String {
     match what {
-        "let" => "NK1103".to_owned(),
-        "returns" => "NK1104".to_owned(),
-        "assign" => "NK1105".to_owned(),
-        "field" => "NK1106".to_owned(),
-        "argument" => "NK1102".to_owned(),
-        "const" => "NK1166".to_owned(),
-        _ => "NK1103".to_owned(),
+        "let" => String::from("NK1103"),
+        "returns" => String::from("NK1104"),
+        "assign" => String::from("NK1105"),
+        "field" => String::from("NK1106"),
+        "argument" => String::from("NK1102"),
+        "const" => String::from("NK1166"),
+        _ => String::from("NK1103"),
     }
 }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn floats_beyond_f32(&mut self, value: &Expr, want: &Ty, span: &Span) { if check_floats_beyond_f32(value, want) { self.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec!["An `f32` holds finite values up to about 3.4e38 either side of zero.".to_owned()], Some("Keep it an `f64`, or write a number within the `f32` range.".to_owned()))); } }
+    pub fn floats_beyond_f32(&mut self, value: &Expr, want: &Ty, span: &Span) { if check_floats_beyond_f32(value, want) { self.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec![String::from("An `f32` holds finite values up to about 3.4e38 either side of zero.")], Some(String::from("Keep it an `f64`, or write a number within the `f32` range.")))); } }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
@@ -107,7 +107,7 @@ impl CheckState {
         let mut help: String = way_out_of_a_mismatch(found, want);
         if !members.is_empty() {
             said = said.replace(&format!("`{}`", found_text), &format!("an error, one of {}", members_named(&members)));
-            help = "Take it apart first: `match error { … }`, and use what each arm binds.".to_owned();
+            help = String::from("Take it apart first: `match error { … }`, and use what each arm binds.");
         }
         let finding = check_refusal(&code, span, said, vec![], Some(help));
         if waiting >= 0 {
@@ -172,7 +172,7 @@ impl CheckState {
             nullable = true;
         }
         let mut target: Ty = want.clone();
-        if nullable { target = Ty::Named { name: "String".to_owned(), args: vec![], view: false }; }
+        if nullable { target = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
         let before = self.findings.len() as i64;
         self.expect_type(world, present, &target, span, what, &message);
         self.said_as_declared(present, value, before);

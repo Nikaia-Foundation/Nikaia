@@ -222,9 +222,9 @@ impl CheckState {
         let what = self.repeats[around].what.clone()
         let mut again: String = "a lambda may run more than once, and the second run would find it gone"
         if what == "loop" {
-            again = "the next time round the loop it would be handed over again, but it's already gone".clone()
+            again = "the next time round the loop it would be handed over again, but it's already gone"
         }
-        self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `char`s and views would be fine: they're copied.".clone()], f"Hand over a copy each time: `{path}.clone()`."))
+        self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `char`s and views would be fine: they're copied."], f"Hand over a copy each time: `{path}.clone()`."))
     }
 
     /// Every taking whose name is read again: `NK2105`, said once per site.
@@ -244,7 +244,7 @@ impl CheckState {
                 continue
             }
             said.insert(used.at)
-            found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.text()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `char`s and views would be fine: they're copied.".clone()], f"If both need it, hand over a copy: `{name}.clone()`."))
+            found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.text()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `char`s and views would be fine: they're copied."], f"If both need it, hand over a copy: `{name}.clone()`."))
         }
         self.handed = []
         for one in found {
@@ -273,10 +273,10 @@ impl CheckState {
         let mut again: String = "a lambda may run more than once, and the second run would find it used up"
         let mut help: String = f"Collect it into a list before the lambda and walk the list inside: `let {name} = {name}.collect()`."
         if what == "loop" {
-            again = "the next time round the loop would use it again, but it's already used up".clone()
+            again = "the next time round the loop would use it again, but it's already used up"
             help = f"Collect it into a list before the loop and walk the list: `let {name} = {name}.collect()`."
         }
-        self.findings.push(check_refusal("NK2702", span, f"`{name}` is a sequence, and you're using it up inside a {what} it was declared outside of.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up - and {again}.", "A `Vec` is different: it already holds its elements and can be walked as often as you like.".clone()], help))
+        self.findings.push(check_refusal("NK2702", span, f"`{name}` is a sequence, and you're using it up inside a {what} it was declared outside of.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up - and {again}.", "A `Vec` is different: it already holds its elements and can be walked as often as you like."], help))
     }
 
     /// `NK2702`: a sequence walked twice, said once per site.
@@ -292,7 +292,7 @@ impl CheckState {
             }
             said.insert(used.at)
             let item = an_item_text(taken.ty)
-            found.push(check_refusal("NK2702", Span { start: used.at as u32, end: used.at as u32 }, f"`{taken.path}` is a sequence, and it was already used up.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.", "A `Vec` is different: it already holds its elements and can be walked as often as you like.".clone()], f"Collect it first and walk the collection: `let {taken.path} = {taken.path}.collect()`."))
+            found.push(check_refusal("NK2702", Span { start: used.at as u32, end: used.at as u32 }, f"`{taken.path}` is a sequence, and it was already used up.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.", "A `Vec` is different: it already holds its elements and can be walked as often as you like."], f"Collect it first and walk the collection: `let {taken.path} = {taken.path}.collect()`."))
         }
         self.walked = []
         for one in found {
@@ -346,7 +346,7 @@ impl CheckState {
             if who != "a background task" {
                 first = f"A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `{name}` is a `{ty.text()}`, so it went to the function."
             }
-            found.push(check_refusal("NK2101", Span { start: used as u32, end: used as u32 }, f"You're using `{name}` after {who} took it.", [first, "Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.".clone()], f"Make a copy before and hand over the copy: `let copy = {name}.clone()`, then use `copy` inside."))
+            found.push(check_refusal("NK2101", Span { start: used as u32, end: used as u32 }, f"You're using `{name}` after {who} took it.", [first, "Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied."], f"Make a copy before and hand over the copy: `let copy = {name}.clone()`, then use `copy` inside."))
         }
         for one in found {
             self.findings.push(one.clone())
@@ -469,15 +469,15 @@ impl CheckState {
         let fails = some && how == "fails"
         let mut message: String = f"`{subject}` is left without {part}: it was taken out and never given back."
         let mut span = from.clone()
-        let mut label = CheckLabel { span: from.clone(), word: out.part.clone(), text: "taken out here and not given back".clone(), main: true }
+        let mut label = CheckLabel { span: from.clone(), word: out.part.clone(), text: "taken out here and not given back", main: true }
         if fails {
             message = f"`{word}` can fail, and {part} is out of `{subject}` at that point."
             span = at_the_way.clone()
-            label = CheckLabel { span: at_the_way.clone(), word: word.clone(), text: "can fail while the part is out".clone(), main: true }
+            label = CheckLabel { span: at_the_way.clone(), word: word.clone(), text: "can fail while the part is out", main: true }
         } else if some {
             message = f"This `{how}` leaves `{subject}` without {part}."
             span = at_the_way.clone()
-            label = CheckLabel { span: at_the_way.clone(), word: how.clone(), text: "leaves the function with the part still out".clone(), main: true }
+            label = CheckLabel { span: at_the_way.clone(), word: how.clone(), text: "leaves the function with the part still out", main: true }
         }
         let mut labels: Vec[CheckLabel] = [label]
         if some {
@@ -489,7 +489,7 @@ impl CheckState {
             kept = f"Between taking {part} out of `{subject}` and giving it back, no call that can fail may stand: the caller would be left a `{subject}` with a part missing."
             tail = " and move the call out from between"
         }
-        return CheckFinding { severity: CheckSeverity::Error, span: span, code: "NK2108".clone(), message: message, notes: [kept], help: f"Assign `{subject}` (or the part) before the function is left{tail}, or build the value by value with `fn f({subject}: T) -> T`.", labels: labels }
+        return CheckFinding { severity: CheckSeverity::Error, span: span, code: "NK2108", message: message, notes: [kept], help: f"Assign `{subject}` (or the part) before the function is left{tail}, or build the value by value with `fn f({subject}: T) -> T`.", labels: labels }
     }
 }
 
@@ -505,7 +505,7 @@ fn a_sequence_that_is_used_up(ty: ref Ty) -> bool {
 fn an_item_text(ty: ref Ty) -> String {
     return match ty {
         Ty::Seq { item, .. } => item.text(),
-        else => "?".clone(),
+        else => "?",
     }
 }
 

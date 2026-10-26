@@ -45,7 +45,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_ty_counted(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes, count: Count) -> String {
         let written = world.words.resolve(ty.name).to_owned();
-        let name = if written == "int" { "i64".to_owned() } else { written };
+        let name = if written == "int" { String::from("i64") } else { written };
         self.emit_core_ty_named(world, walk, crossings, overlaps, ty, &name, lifetimes, count)
     }
     #[allow(clippy::too_many_arguments)]

@@ -35,11 +35,11 @@
 use std::collections
 
 fn mp_result() -> String {
-    return "<result>".clone()
+    return "<result>"
 }
 
 fn mp_self() -> String {
-    return "self".clone()
+    return "self"
 }
 
 /// The text of a name.
@@ -314,7 +314,7 @@ impl MpBody {
     fn locate(ref mut self, e: ref Expr) -> (String, String)? {
         match e {
             Expr::Variable(n, _) => {
-                return (mp_text(self.words, n), "".clone())
+                return (mp_text(self.words, n), "")
             },
             Expr::Field { base, name, .. } => {
                 let (var, path) = self.locate(base) ?? return null
@@ -503,8 +503,8 @@ impl MpBody {
                     if self.params.contains(name) || self.roots.contains_key(name) {
                         self.doubt()
                     } else {
-                        let root = self.new_root("".clone())
-                        self.roots.insert(name, [("".clone(), root)])
+                        let root = self.new_root("")
+                        self.roots.insert(name, [("", root)])
                     }
                     return
                 }
@@ -614,7 +614,7 @@ impl MpBody {
             self.expr(e)
             return
         }
-        self.flows(e, "".clone())
+        self.flows(e, "")
     }
 
     /// The result's roots at or below `under`.
@@ -1021,7 +1021,7 @@ fn mp_lines(held: ref MpHeld, structs: ref collections::BTreeMap[String, MpStruc
     let mut of_params = 0
     for p in params {
         let before = positions.len()
-        let at = MpAt { owner: p.name.clone(), label: p.name.clone(), scope: "".clone(), path: "".clone(), within: -1 }
+        let at = MpAt { owner: p.name.clone(), label: p.name.clone(), scope: "", path: "", within: -1 }
         mp_of(g, held, structs, key, arity, unit, p.ty, at, positions, 0)
         if p.name == mp_self() {
             start = positions.len() - before
@@ -1030,7 +1030,7 @@ fn mp_lines(held: ref MpHeld, structs: ref collections::BTreeMap[String, MpStruc
         }
     }
     if ret != null {
-        let at = MpAt { owner: mp_result(), label: mp_result(), scope: "".clone(), path: "".clone(), within: -1 }
+        let at = MpAt { owner: mp_result(), label: mp_result(), scope: "", path: "", within: -1 }
         mp_of(g, held, structs, key, arity, unit, ret ?? return null, at, positions, 0)
     }
     if positions.is_empty() {
@@ -1044,7 +1044,7 @@ fn mp_lines(held: ref MpHeld, structs: ref collections::BTreeMap[String, MpStruc
     // One root per position: the ids are the positions' numbers.
     for p in positions {
         if p.owner == mp_result() {
-            let id = b.new_root("".clone())
+            let id = b.new_root("")
             b.result.push((p.path.clone(), id))
         } else {
             let id = b.new_root(p.owner.clone())
@@ -1097,7 +1097,7 @@ fn mp_lines(held: ref MpHeld, structs: ref collections::BTreeMap[String, MpStruc
                 distinct.push(l.clone())
             }
         }
-        let mut said = "keyed".clone()
+        let mut said: String = "keyed"
         let entry = how[class]?.clone()
         if !b.all_keyed && entry != null {
             let h = entry ?? MpHow { known: false, names: collections::BTreeSet() }

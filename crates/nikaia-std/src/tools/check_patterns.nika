@@ -59,7 +59,7 @@ impl CheckState {
                 for part in parts {
                     match part {
                         MatchPattern::RestNamed(name) => {
-                            out.insert(world.words.resolve(name).clone(), Ty::Named { name: "Array".clone(), args: [element.clone()], view: true })
+                            out.insert(world.words.resolve(name).clone(), Ty::Named { name: "Array", args: [element.clone()], view: true })
                         }
                         MatchPattern::Rest => {}
                         else => self.bind_a_part(world, part, element, out),
@@ -267,7 +267,7 @@ impl CheckState {
         }
         let owner = match on {
             Ty::Named { name, .. } => name.clone(),
-            else => "".clone(),
+            else => "",
         }
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -329,11 +329,11 @@ impl CheckState {
                     return
                 }
                 let shown = written.join("::")
-                let mut one: String = "field".clone()
+                let mut one: String = "field"
                 if missing.len() > 1 {
-                    one = "fields".clone()
+                    one = "fields"
                 }
-                self.findings.push(check_refusal("NK1234", span, f"This `{shown}` pattern leaves out the {one} {missing.join(", ")}.", ["A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4).".clone()], f"Name them, or end the pattern with `..`: `{shown} {{ …, .. }}`."))
+                self.findings.push(check_refusal("NK1234", span, f"This `{shown}` pattern leaves out the {one} {missing.join(", ")}.", ["A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4)."], f"Name them, or end the pattern with `..`: `{shown} {{ …, .. }}`."))
             }
             else => {}
         }

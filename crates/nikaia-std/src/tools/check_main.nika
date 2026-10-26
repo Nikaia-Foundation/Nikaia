@@ -16,7 +16,7 @@ pub fn main_word_type(name: ref String) -> bool {
 /// whether `ty` is the last subject parameter, which may be a `Vec[T]`.
 fn main_refused_type(ty: ref Type, words: ref winnow_grammar::InternerContext, last: bool) -> String? {
     if ty.is_view || ty.is_mut {
-        return "a `ref` parameter".clone()
+        return "a `ref` parameter"
     }
     let name = words.resolve(ty.name)
     if ty.is_tuple || ty.code != null || ty.count != null {
@@ -24,7 +24,7 @@ fn main_refused_type(ty: ref Type, words: ref winnow_grammar::InternerContext, l
     }
     if name == "Vec" && ty.generics.len() == 1 && !ty.is_nullable {
         if !last {
-            return "a `Vec` that is not the last subject parameter".clone()
+            return "a `Vec` that is not the last subject parameter"
         }
         let item = ty.generics[0]
         if item.is_nullable || item.generics.len() > 0 || item.is_view || item.is_tuple || !main_word_type(words.resolve(item.name)) {
@@ -55,7 +55,7 @@ impl CheckState {
                 if receiver != null || world.words.resolve(called) != "main" {
                     return
                 }
-                let note = "A parameter of `main` is a word the program is started with: `int`, a fixed-width integer, `f64`, `bool`, `String`, or one of these behind `?`; the last subject parameter may be a `Vec[T]` of one of them (Part I 5.5).".clone()
+                let note: String = "A parameter of `main` is a word the program is started with: `int`, a fixed-width integer, `f64`, `bool`, `String`, or one of these behind `?`; the last subject parameter may be a `Vec[T]` of one of them (Part I 5.5)."
                 let mut maybe: String = ""
                 for index in 0..<args.len() {
                     let arg = args[index]
@@ -63,7 +63,7 @@ impl CheckState {
                     let last = index + 1 == args.len()
                     let refused = main_refused_type(arg.ty, world.words, last)
                     if refused == null && maybe != "" && !arg.ty.is_nullable && !(last && world.words.resolve(arg.ty.name) == "Vec") {
-                        self.findings.push(check_refusal("NK1273", span, f"`{param}` of `main` is a required word after `{maybe}`, which may be left out.", ["A subject of type `T?` may be left out at the end; it stands after every required subject and before a last `Vec[T]` (Part I 5.5).".clone()], f"Move `{param}` before `{maybe}`, or make it a `T?` too."))
+                        self.findings.push(check_refusal("NK1273", span, f"`{param}` of `main` is a required word after `{maybe}`, which may be left out.", ["A subject of type `T?` may be left out at the end; it stands after every required subject and before a last `Vec[T]` (Part I 5.5)."], f"Move `{param}` before `{maybe}`, or make it a `T?` too."))
                     }
                     if arg.ty.is_nullable && maybe == "" {
                         maybe = param.clone()
@@ -79,7 +79,7 @@ impl CheckState {
                     }
                     let word = main_option_word(param)
                     if word == "help" {
-                        self.findings.push(check_refusal("NK1274", span, "`main` has an option named `help`, and `--help` prints the program's help.", ["`--help` and `-h` are the program's own: they print the `///` lines above `main` and its parameters (Part I 5.5).".clone()], "Name the option differently."))
+                        self.findings.push(check_refusal("NK1274", span, "`main` has an option named `help`, and `--help` prints the program's help.", ["`--help` and `-h` are the program's own: they print the `///` lines above `main` and its parameters (Part I 5.5)."], "Name the option differently."))
                     }
                 }
             },

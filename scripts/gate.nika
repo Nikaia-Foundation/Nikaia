@@ -25,7 +25,7 @@ fn gate_cargo(extra: Vec[String]) -> String throws {
 }
 
 fn main() throws {
-    let mut shard: String = "".to_string()
+    let mut shard: String = ""
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
     let mut i = 0

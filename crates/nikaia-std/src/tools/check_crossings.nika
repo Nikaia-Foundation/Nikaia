@@ -232,7 +232,7 @@ pub fn check_crossings_a_bound_handle_is_taken(mut state: CheckState, world: ref
             let name: String = spawned ?? ""
             let flow = check_crossings_path(world, name, block.stmts, at, false)
             if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone {
-                state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: "NK2109".clone(), message: f"The task handle `{name}` is never joined, cancelled or detached.", notes: ["An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends.".clone()], help: f"Write `{name}.join()` to wait for the task, or `{name}.detach()` if nobody waits for it.", labels: [] })
+                state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: "NK2109", message: f"The task handle `{name}` is never joined, cancelled or detached.", notes: ["An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends."], help: f"Write `{name}.join()` to wait for the task, or `{name}.detach()` if nobody waits for it.", labels: [] })
             }
         }
     }
@@ -358,39 +358,39 @@ pub fn check_crossings_a_scope_that_pauses(mut state: CheckState, args: ref Vec[
 fn check_crossings_entry(state: ref CheckState, key: ref String, chained: bool) -> FactPausing? sync {
     if key == "Seq::map" {
         if chained {
-            return FactPausing::Method("then".clone())
+            return FactPausing::Method("then")
         }
-        return FactPausing::Function("then".clone())
+        return FactPausing::Function("then")
     }
     if key == "Seq::filter" {
         if chained {
-            return FactPausing::Method("then_filter".clone())
+            return FactPausing::Method("then_filter")
         }
-        return FactPausing::Function("then_filter".clone())
+        return FactPausing::Function("then_filter")
     }
     if key == "list::ListExt::map" {
-        return FactPausing::Function("map_list".clone())
+        return FactPausing::Function("map_list")
     }
     // A `mut` parameter is a `&mut Vec` already, and handed on as it is: a
     // second `&mut` may not be taken of it (ADR-094 D3).
     if key == "Vec::sort_by_key" {
         let named: String = state.flow.receiver_name?.clone() ?? ""
-        let local = state.binding(named) ?? return FactPausing::Lent("sort_by_key".clone())
+        let local = state.binding(named) ?? return FactPausing::Lent("sort_by_key")
         if local.changing {
-            return FactPausing::Function("sort_by_key".clone())
+            return FactPausing::Function("sort_by_key")
         }
-        return FactPausing::Lent("sort_by_key".clone())
+        return FactPausing::Lent("sort_by_key")
     }
     if key == "Entry::or_insert_with" {
-        return FactPausing::Function("or_insert_with".clone())
+        return FactPausing::Function("or_insert_with")
     }
     // **A task of `task::scope` that pauses** (ADR-328 D10): handed to the
     // scope to poll, and the scope around it pauses.
     if key == "task::Scope::spawn" {
-        return FactPausing::Method("spawn_paused".clone())
+        return FactPausing::Method("spawn_paused")
     }
     if key == "Entry::and_modify" {
-        return FactPausing::Function("and_modify".clone())
+        return FactPausing::Function("and_modify")
     }
     return null
 }

@@ -188,7 +188,7 @@ fn a_field_of_a_get_local_past_a_jump_runs() {
 #[test]
 fn a_cloned_get_with_a_fallback_runs() {
     let dir = common::scratch_dir("cloned-get");
-    std::fs::write(dir.join("main.nika"), "use std::collections\n\nenum T {\n    Unknown,\n    Named(String),\n}\n\nfn pick(m: ref collections::BTreeMap[String, T], k: ref String) -> T {\n    return m.get(k)?.clone() ?? T::Unknown\n}\n\nfn show(t: T) -> String {\n    return match t {\n        T::Unknown => \"?\".clone(),\n        T::Named(n) => n,\n    }\n}\n\nfn main() {\n    let mut m: collections::BTreeMap[String, T] = collections::BTreeMap()\n    m.insert(\"a\", T::Named(\"x\"))\n    let mut args: Vec[T] = []\n    args.push(m.get(\"a\")?.clone() ?? T::Unknown)\n    let o: String? = \"y\".clone()\n    let w = o?.clone() ?? \"z\".clone()\n    println(f\"{show(pick(m, \"a\"))} {show(pick(m, \"b\"))} {args.len()} {w} {o ?? \"\"}\")\n}\n").expect("the source");
+    std::fs::write(dir.join("main.nika"), "use std::collections\n\nenum T {\n    Unknown,\n    Named(String),\n}\n\nfn pick(m: ref collections::BTreeMap[String, T], k: ref String) -> T {\n    return m.get(k)?.clone() ?? T::Unknown\n}\n\nfn show(t: T) -> String {\n    return match t {\n        T::Unknown => \"?\",\n        T::Named(n) => n,\n    }\n}\n\nfn main() {\n    let mut m: collections::BTreeMap[String, T] = collections::BTreeMap()\n    m.insert(\"a\", T::Named(\"x\"))\n    let mut args: Vec[T] = []\n    args.push(m.get(\"a\")?.clone() ?? T::Unknown)\n    let o: String? = \"y\"\n    let w = o?.clone() ?? \"z\"\n    println(f\"{show(pick(m, \"a\"))} {show(pick(m, \"b\"))} {args.len()} {w} {o ?? \"\"}\")\n}\n").expect("the source");
     let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(&dir)
         .arg("run")
@@ -486,7 +486,7 @@ fn resolve(w: ref W, key: String) -> R? sync {
     print(f"{a.sig ?? ""} ")
     let rest = f"{key}"
     let c = lookup(w.fns, rest) ?? return null
-    return R { key: "".clone(), c: c }
+    return R { key: f"", c: c }
 }
 
 fn main() {

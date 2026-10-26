@@ -31,7 +31,7 @@ fn run(purpose: &str, body: &str) -> String {
 fn retain_keeps_what_the_function_says_yes_to() {
     let out = run(
         "vec-retain",
-        "    let mut seen = 0\n    xs.retain fn(x) {\n        seen = seen + 1\n        x % 2 == 0\n    }\n    none.retain(fn(x) { x > 0 })\n    let mut words: Vec[String] = [\"ab\".clone(), \"c\".clone(), \"de\".clone()]\n    words.retain(fn(w) { w.len() > 1 })\n    println(f\"{show(xs)} {seen} {show(none)} {words.len()} {words[1]}\")",
+        "    let mut seen = 0\n    xs.retain fn(x) {\n        seen = seen + 1\n        x % 2 == 0\n    }\n    none.retain(fn(x) { x > 0 })\n    let mut words: Vec[String] = [\"ab\", \"c\", \"de\"]\n    words.retain(fn(w) { w.len() > 1 })\n    println(f\"{show(xs)} {seen} {show(none)} {words.len()} {words[1]}\")",
     );
     assert_eq!(out, "[ 8 8 8 4 4 ] 8 [ ] 2 de\n");
 }
@@ -58,7 +58,7 @@ fn reverse_turns_the_list_around() {
 fn dedup_drops_equal_neighbours_only() {
     let out = run(
         "vec-dedup",
-        "    xs.dedup()\n    none.dedup()\n    let mut words: Vec[String] = [\"a\".clone(), \"a\".clone(), \"b\".clone()]\n    words.dedup()\n    println(f\"{show(xs)} {show(none)} {words.len()}\")",
+        "    xs.dedup()\n    none.dedup()\n    let mut words: Vec[String] = [\"a\", \"a\", \"b\"]\n    words.dedup()\n    println(f\"{show(xs)} {show(none)} {words.len()}\")",
     );
     assert_eq!(out, "[ 3 8 1 8 9 4 ] [ ] 2\n");
 }
@@ -76,7 +76,7 @@ fn clamp_holds_a_number_between_bounds() {
 fn first_of_text_takes_a_text_fallback() {
     let out = run(
         "vec-first-text",
-        "    let names: Vec[String] = [\"b\".clone(), \"c\".clone()]\n    let empty: Vec[String] = []\n    println(f\"{names.first() ?? \"none\"} {names.last() ?? \"none\"} {empty.first() ?? \"none\"}\")",
+        "    let names: Vec[String] = [\"b\", \"c\"]\n    let empty: Vec[String] = []\n    println(f\"{names.first() ?? \"none\"} {names.last() ?? \"none\"} {empty.first() ?? \"none\"}\")",
     );
     assert_eq!(out, "b c none\n");
 }

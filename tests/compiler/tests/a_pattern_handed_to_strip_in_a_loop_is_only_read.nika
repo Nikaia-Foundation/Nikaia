@@ -16,7 +16,7 @@ fn published(name: ref String, errors: ref Vec[String]) -> Vec[String] {
 }
 
 fn main() {
-    let errors: Vec[String] = ["from(f::p)".clone(), "from(g::q)".clone(), "from(f::r)".clone()]
+    let errors: Vec[String] = ["from(f::p)", "from(g::q)", "from(f::r)"]
     let n: String = "f"
     println(published(n, errors).join(" "))
 }

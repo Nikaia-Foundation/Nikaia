@@ -285,11 +285,11 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
         return check_narrow_read_as_proved(state, expr, &name, &ty, span);
     }
     if check_core_call_the_prelude_claim(&state, world, expr, "assert") {
-        state.an_assert_of_another_shape("`assert` is a function, and is called: write `assert(cond)`".to_owned(), span);
+        state.an_assert_of_another_shape(String::from("`assert` is a function, and is called: write `assert(cond)`"), span);
         return Ty::Unknown;
     }
     if check_core_call_the_prelude_claim(&state, world, expr, "assume") {
-        state.an_assert_of_another_shape("`assume` is a function, and is called: write `unsafe { assume(cond) }`".to_owned(), span);
+        state.an_assert_of_another_shape(String::from("`assume` is a function, and is called: write `unsafe { assume(cond) }`"), span);
         return Ty::Unknown;
     }
     let as_value: Option<Ty> = state.function_as_a_value(world, &name);
@@ -302,7 +302,7 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
     if state.structs.contains_key(&name) || state.enums.contains_key(&name) {
         let mut help: String = format!("Build one with `{} {{ … }}`, or give `{}` a constructor, `pub fn() -> {}`, in its `impl`.", name, name, name);
         if state.enums.contains_key(&name) { help = format!("Name one of its variants: `{}::…`.", name); }
-        state.findings.push(check_refusal("NK1230", span, format!("`{}` is a type, not a value.", name), vec!["A type stands for a value only through its constructor, and this one has none.".to_owned()], Some(help)));
+        state.findings.push(check_refusal("NK1230", span, format!("`{}` is a type, not a value.", name), vec![String::from("A type stands for a value only through its constructor, and this one has none.")], Some(help)));
         return Ty::Unknown;
     }
     if !state.withdrawn_automatic_name(&name, span) { state.nothing_declares_it(world, expr, span); }
@@ -343,7 +343,7 @@ pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_
         for (_, walked) in state.walks_fields.iter() { if *walked == ty { walks = true; } }
         if walks {
             let element = check_core_expr_shape_element(&state, &ty, &member);
-            if element != "" { return Ty::Named { name: "Vec".to_owned(), args: vec![check_core_expr_named(&element)], view: false }; }
+            if element != "" { return Ty::Named { name: String::from("Vec"), args: vec![check_core_expr_named(&element)], view: false }; }
         }
         state.a_member_this_type_does_not_have(world, &ty, &member, span);
         return Ty::Unknown;

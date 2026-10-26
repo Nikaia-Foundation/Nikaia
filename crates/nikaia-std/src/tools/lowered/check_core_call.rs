@@ -36,7 +36,7 @@ pub(crate) fn check_core_call_attribute_member(state: &CheckState, world: &Check
         },
         _ => { },
     }
-    "".to_owned()
+    String::from("")
 }
 
 pub(crate) fn check_core_call_free_callee(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
@@ -72,7 +72,7 @@ pub(crate) fn check_core_call_owner(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return name.to_owned(); }
     let last = parts.len() as i64 - 1;
-    let mut owner: String = "".to_owned();
+    let mut owner: String = String::from("");
     let mut i: i64 = 0;
     for part in parts.iter() {
         let part = *part;
@@ -215,12 +215,12 @@ pub(crate) fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world
             i += 1;
         }
         if at < 0 || at >= args.len() as i64 {
-            set.insert("?".to_owned());
+            set.insert(String::from("?"));
             continue;
         }
         let mut stored = CheckStoredCode::empty();
         check_core_places_code_into(state, world, host, nikaia_std::index::get(&args, nikaia_std::index::at(at)), &mut stored);
-        if stored.unresolved { set.insert("?".to_owned()); }
+        if stored.unresolved { set.insert(String::from("?")); }
         for name in stored.free.iter() { check_core_call_set_into(world, name, &mut set); }
         for name in stored.resolved.iter() { check_core_call_set_into(world, name, &mut set); }
     }
@@ -376,7 +376,7 @@ pub(crate) fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, w
                 return nikaia_std::index::or(match result.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                }, || Ty::Named { name: "()".to_owned(), args: vec![], view: false });
+                }, || Ty::Named { name: String::from("()"), args: vec![], view: false });
             },
             _ => { },
         }
@@ -507,7 +507,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     let variant: Option<String> = check_core_call_variant(&state, name);
     let is_variable = check_core_call_is_variable(func);
     let shadowed = is_variable && state.lookup(name).is_some();
-    let mut key: String = "".to_owned();
+    let mut key: String = String::from("");
     let mut callee: Option<FnContract> = None;
     let mut expected: Vec<Ty> = vec![];
     if !(variant.is_some() || is_hull(name) || shadowed) {
@@ -538,7 +538,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     let feeds = declared_here && !key.contains("::") && check_core_call_takes_code((callee).as_ref());
     if feeds { state.stored_frames.push(CheckStoredCode::empty()); }
     let found = check_core_arguments_given(state, world, host, args, &expected, declared_here, (callee).as_ref(), span);
-    let mut seen_key: String = "".to_owned();
+    let mut seen_key: String = String::from("");
     if declared_here && !key.contains("::") { seen_key = key.to_owned(); }
     check_core_call_mut_args(state, world, (callee).as_ref(), &seen_key, args);
     if feeds {
@@ -600,9 +600,9 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
     if member != "" {
         let read: String = match check_attributes_an_attribute_read(state, world, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         if member == "attribute" { return Ty::Nullable(Box::new(check_core_call_named(&read))); }
-        return Ty::Named { name: "Vec".to_owned(), args: vec![check_core_call_named(&read)], view: false };
+        return Ty::Named { name: String::from("Vec"), args: vec![check_core_call_named(&read)], view: false };
     }
-    let mut written: String = "".to_owned();
+    let mut written: String = String::from("");
     if check_core_call_is_variable(func) {
         match func {
             Expr::Variable(word, _) => {
@@ -625,7 +625,7 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
             state.a_lock_inside_a_lock(&called, &holds, span);
         }
     }
-    let mut name: String = "".to_owned();
+    let mut name: String = String::from("");
     match func {
         Expr::Variable(word, _) => {
             let word = *word;
@@ -647,7 +647,7 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
                 let gives: Ty = nikaia_std::index::or(match result.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                }, || Ty::Named { name: "()".to_owned(), args: vec![], view: false });
+                }, || Ty::Named { name: String::from("()"), args: vec![], view: false });
                 return check_core_call_kept(state, world, host, func, args, &name, params, gives, pauses_not, fails, span);
             },
             _ => { },

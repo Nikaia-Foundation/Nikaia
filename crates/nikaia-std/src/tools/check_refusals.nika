@@ -9,7 +9,7 @@ impl CheckState {
     /// `NK1195`: an `assert` written in a shape other than `assert(cond)` or
     /// `assert(cond; message: "…")`.
     pub fn an_assert_of_another_shape(ref mut self, message: String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1195", span, message, ["Write it as `assert(cond)` or `assert(cond; message: \"…\")`.".clone()], null))
+        self.findings.push(check_refusal("NK1195", span, message, ["Write it as `assert(cond)` or `assert(cond; message: \"…\")`."], null))
     }
 
     /// **A view of a copied value compared with the value** (0.0.238).
@@ -39,7 +39,7 @@ impl CheckState {
             maybe = right.clone()
             value = left.clone()
         }
-        self.findings.push(check_refusal("NK1102", span, f"This compares `{maybe.text()}` with `{value.text()}`.", ["A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`.".clone()], "Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first.".clone()))
+        self.findings.push(check_refusal("NK1102", span, f"This compares `{maybe.text()}` with `{value.text()}`.", ["A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`."], "Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first."))
     }
 
     /// **`NK1102`: a `T?` as an operand of arithmetic, of an ordering or of a bit
@@ -56,7 +56,7 @@ impl CheckState {
             maybe = right.clone()
         }
         let symbol = binary_op_text(op)
-        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.".clone()], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.".clone()))
+        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`."], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))
     }
 
     /// **`NK1102`: a `T?` as a hole of an `f"…"`** (Part I 2.3): it has no text
@@ -65,7 +65,7 @@ impl CheckState {
         if !a_known_maybe(held) {
             return
         }
-        self.findings.push(check_refusal("NK1102", span, f"A hole of this `f\"…\"` is `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.".clone()], "Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`.".clone()))
+        self.findings.push(check_refusal("NK1102", span, f"A hole of this `f\"…\"` is `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))
     }
 
     /// **`NK1164`: `impl Fatal for T` where `T` has no `impl Error`**
@@ -80,7 +80,7 @@ impl CheckState {
         if library != null && (library?.contains(target) ?? false) {
             return
         }
-        self.findings.push(check_refusal("NK1164", span, f"`{target}` is made `Fatal`, but it has no `impl Error`.", ["A fatal error is an error first (ADR-345 D1): it is thrown, travels with `throws` and is caught like any other, and only an `Error` can be.".clone()], f"Add `impl Error for {target} {{ fn message(ref self) -> String {{ … }} }}` beside it."))
+        self.findings.push(check_refusal("NK1164", span, f"`{target}` is made `Fatal`, but it has no `impl Error`.", ["A fatal error is an error first (ADR-345 D1): it is thrown, travels with `throws` and is caught like any other, and only an `Error` can be."], f"Add `impl Error for {target} {{ fn message(ref self) -> String {{ … }} }}` beside it."))
     }
 
     /// **`NK1234`: a struct literal leaves out a field that has no default**
@@ -95,7 +95,7 @@ impl CheckState {
             them = "it"
             has = "has"
         }
-        self.findings.push(check_refusal("NK1234", span, f"This `{owner}` literal leaves out the {one} {listed}, which {has} no default.", ["A literal may leave out only a field declared with a default (`size: i64 = 50`).".clone()], f"Give {them} in the literal, or declare a default for {them} in `{owner}`."))
+        self.findings.push(check_refusal("NK1234", span, f"This `{owner}` literal leaves out the {one} {listed}, which {has} no default.", ["A literal may leave out only a field declared with a default (`size: i64 = 50`)."], f"Give {them} in the literal, or declare a default for {them} in `{owner}`."))
     }
 
     /// **Part I 2.3: a `T?` is a type of its own, and `.` is not one of its
@@ -136,12 +136,12 @@ impl CheckState {
         // D36): `is_some` and `is_none` are no method of a `T?`.
         let mut help: String = f"Write `{safe}`, which gives `null` when the value is missing, or give a fallback with `??` first and reach into that."
         if kind == "method" && name == "is_some" {
-            help = "Compare with `null`: `value != null`.".clone()
+            help = "Compare with `null`: `value != null`."
         }
         if kind == "method" && name == "is_none" {
-            help = "Compare with `null`: `value == null`.".clone()
+            help = "Compare with `null`: `value == null`."
         }
-        self.findings.push(check_refusal("NK1125", span, message, ["A `T?` is its own type, not a `T` that might be missing, so it doesn't have `T`'s members. That's why a missing value can never crash here.".clone()], help))
+        self.findings.push(check_refusal("NK1125", span, message, ["A `T?` is its own type, not a `T` that might be missing, so it doesn't have `T`'s members. That's why a missing value can never crash here."], help))
     }
 
     /// **`NK1137`: the `&` is the compiler's to write**
@@ -176,7 +176,7 @@ impl CheckState {
         if !written {
             return
         }
-        self.findings.push(check_refusal("NK1137", span, "You don't need the `ref` here: the compiler lends where it's needed.".clone(), [f"{capitalised(because)}, so it's lent already."], "Remove the `ref`.".clone()))
+        self.findings.push(check_refusal("NK1137", span, "You don't need the `ref` here: the compiler lends where it's needed.", [f"{capitalised(because)}, so it's lent already."], "Remove the `ref`."))
     }
 
     /// **`NK1190`: a `std` type called as its constructor, where nothing
@@ -262,7 +262,7 @@ impl CheckState {
         // **What each word used to be told a reserved one, this tells a stray
         // one** (ADR-298 D2).
         let help = reserved_elsewhere(name) ?? f"If `{name}` is meant to be a value, declare it with `let`. If you meant a keyword, Nikaia doesn't have one called `{name}`."
-        self.findings.push(check_refusal("NK1117", span, f"`{name}` isn't declared anywhere.", ["A word the language doesn't know is read as a name, and a name has to be declared before it's used.".clone()], help))
+        self.findings.push(check_refusal("NK1117", span, f"`{name}` isn't declared anywhere.", ["A word the language doesn't know is read as a name, and a name has to be declared before it's used."], help))
     }
 
     /// **`NK2601`: an `impl Cleanup` is the one method `fn cleanup(ref mut
@@ -293,7 +293,7 @@ impl CheckState {
                             continue
                         }
                         message = f"`cleanup` of `{target}` has to take `ref mut self`, nothing else, and return nothing."
-                        help = "Write it as `fn cleanup(ref mut self)`, with `throws` if it can fail.".clone()
+                        help = "Write it as `fn cleanup(ref mut self)`, with `throws` if it can fail."
                     } else if written == "drop" {
                         message = f"`drop` doesn't belong in `impl Cleanup for {target}`."
                         help = f"Put it in its own `impl Drop for {target} {{ fn drop(ref mut self) {{ … }} }}`, which runs after `cleanup`, or alone where `cleanup` can't run."
@@ -304,7 +304,7 @@ impl CheckState {
             }
         }
         if !wrote_cleanup {
-            self.findings.push(check_refusal("NK2601", span, f"`impl Cleanup for {target}` is missing its `cleanup` method.", [note.clone()], "Add `fn cleanup(ref mut self) { … }`.".clone()))
+            self.findings.push(check_refusal("NK2601", span, f"`impl Cleanup for {target}` is missing its `cleanup` method.", [note.clone()], "Add `fn cleanup(ref mut self) { … }`."))
         }
     }
 }

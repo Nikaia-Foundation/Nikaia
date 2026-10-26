@@ -59,11 +59,11 @@ impl CheckState {
         };
         if known.is_none() { known = self.followed_here(local.id, written); }
         let value = match known { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };
-        if local.open_number.is_some() { return Folded::Value(Constant { value: value.clone(), pinned: "".to_owned() }); }
+        if local.open_number.is_some() { return Folded::Value(Constant { value: value.clone(), pinned: String::from("") }); }
         let declared = integer_named(&local.ty);
         if declared.is_some() { return Folded::Value(Constant { value: value.clone(), pinned: match declared { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing } }); }
-        if integer_fits(&value, "i32") { return Folded::Value(Constant { value: value.clone(), pinned: "i32".to_owned() }); }
-        Folded::Value(Constant { value: value.clone(), pinned: "i64".to_owned() })
+        if integer_fits(&value, "i32") { return Folded::Value(Constant { value: value.clone(), pinned: String::from("i32") }); }
+        Folded::Value(Constant { value: value.clone(), pinned: String::from("i64") })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -183,7 +183,7 @@ impl CheckState {
     pub(crate) fn type_it_answers_to(&self, named: Option<&str>, folded: &CheckConstant) -> Option<String> {
         if named.is_some() { return Some(match named { Some(__nikaia_value) => __nikaia_value, None => return None }.to_owned()); }
         if folded.pinned.is_some() { return Some(match folded.pinned.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None }.to_owned()); }
-        if folded.beyond || !integer_fits(&folded.value, "i64") { return Some("i64".to_owned()); }
+        if folded.beyond || !integer_fits(&folded.value, "i64") { return Some(String::from("i64")); }
         None
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

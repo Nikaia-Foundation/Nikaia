@@ -50,8 +50,8 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
 
 pub(crate) fn language_trait(names: &winnow_grammar::InternerContext, own: &Ledger, trait_name: &str, target: &str, methods: &[Spanned<Item>], span: Span) -> Vec<Finding> {
     let mut found: Vec<Finding> = vec![];
-    let mut wanted: String = String::from("eq");
-    if trait_name == "Ord" { wanted = "compare".to_owned(); }
+    let mut wanted: &'static str = "eq";
+    if trait_name == "Ord" { wanted = "compare"; }
     let mut given = false;
     for method in methods.iter() {
         match &method.node {

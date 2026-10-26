@@ -77,7 +77,7 @@ pub fn check_core_a_compound_write_to_a_map_slot[H: CheckHost](mut state: CheckS
                 return
             }
             let slot = f"{host.written(base)}[{host.written(index)}]"
-            let notes: Vec[String] = ["A missing key is normal, not a bug, so this line has to say what a missing key counts as.".clone()]
+            let notes: Vec[String] = ["A missing key is normal, not a bug, so this line has to say what a missing key counts as."]
             let help: String = f"Write it out with a fallback for a missing key: `{slot} = ({slot} ?? 0) + 1`."
             state.findings.push(check_refusal("NK1162", span, f"`{slot}` reads the map before writing it, and the key might not be there yet.", notes, help))
         }
@@ -136,9 +136,9 @@ pub fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState
     if ty.is_unknown() || state.copied(world, ty) {
         return
     }
-    let mut way: String = "".clone()
+    let mut way: String = ""
     if what == "handed back" {
-        way = " to return".clone()
+        way = " to return"
     }
     let notes: Vec[String] = [f"`mut {name}` is passed as `ref mut`, so the caller's `{ty.text()}` is changed in place and stays the caller's. Giving it away would take it from them."]
     let help: String = f"Write `{name}.clone()` for a copy{way}, or drop the `mut` if the function is meant to use up its value."
@@ -149,7 +149,7 @@ pub fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState
 /// checked text, ADR-016 D1) nor a `Bytes` (ADR-366 D1).
 fn check_core_grammar_input_refused(key: ref String, given: ref Ty, span: ref Span) -> CheckFinding {
     let message = f"`{key}` parses a `String` or a `Bytes`, and is handed a `{given.text()}`."
-    let notes: Vec[String] = ["A grammar reads text or bytes; the argument decides which.".clone()]
-    let help = "Hand it the text or the bytes to parse.".clone()
+    let notes: Vec[String] = ["A grammar reads text or bytes; the argument decides which."]
+    let help: String = "Hand it the text or the bytes to parse."
     return check_refusal("NK1282", span, message, notes, help)
 }

@@ -134,12 +134,12 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
     for name in problem.state.iter() { primed_names.insert(lg_primed(name)); }
     let mut head: Vec<String> = vec![];
     for name in read.iter() { if !primed_names.contains(name) { head.push(name.to_owned()); } }
-    let mut sorts: Vec<String> = vec![];
+    let mut sorts: Vec<&'static str> = vec![];
     let mut bound: Vec<String> = vec![];
     let mut at_head: Vec<String> = vec![];
     let mut after: Vec<String> = vec![];
     for name in head.iter() {
-        sorts.push("Int".to_owned());
+        sorts.push("Int");
         bound.push(format!("({} Int)", lg_symbol(name)));
         at_head.push(lg_symbol(name));
         if primed_names.contains(&lg_primed(name)) { after.push(lg_symbol(&lg_primed(name))); } else { after.push(lg_symbol(name)); }
@@ -181,7 +181,7 @@ pub(crate) fn lg_horn_and(arena: &TermArena, parts: &[i64], first: &str) -> Stri
         let part = nikaia_std::num::value(part);
         written.push(lg_term(arena, part));
     }
-    if written.is_empty() { return "true".to_owned(); }
+    if written.is_empty() { return String::from("true"); }
     if written.len() == 1 { return (*nikaia_std::index::get(&written, 0)).to_owned(); }
     format!("(and {})", written.join(" "))
 }

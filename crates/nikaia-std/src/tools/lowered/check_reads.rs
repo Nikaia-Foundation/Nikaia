@@ -69,7 +69,7 @@ impl CheckState {
             let added = self.facts.copied_reads.insert(node);
             return;
         }
-        self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", want.text()), vec!["Nikaia never makes a copy behind your back, so the copy is written where it happens.".to_owned()], Some("Write `?.clone()` after the read: `m[k]?.clone()`.".to_owned())));
+        self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", want.text()), vec![String::from("Nikaia never makes a copy behind your back, so the copy is written where it happens.")], Some(String::from("Write `?.clone()` after the read: `m[k]?.clone()`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -83,7 +83,7 @@ impl CheckState {
                     let added = self.facts.copied_reads.insert(node);
                     return;
                 }
-                self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", into.text()), vec!["Nikaia never makes a copy behind your back, so the copy is written where it happens.".to_owned()], Some("Write `?.clone()` after the read: `m[k]?.clone()`.".to_owned())));
+                self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", into.text()), vec![String::from("Nikaia never makes a copy behind your back, so the copy is written where it happens.")], Some(String::from("Write `?.clone()` after the read: `m[k]?.clone()`."))));
             },
             _ => { },
         }
@@ -150,10 +150,10 @@ impl CheckState {
         let number_left = left.is_unknown() && self.a_lent_name(world, lhs) && self.a_number_beside(world, rhs, right);
         let number_right = right.is_unknown() && self.a_lent_name(world, rhs) && self.a_number_beside(world, lhs, left);
         let here = at.start as i64;
-        if number_left { let added = self.facts.compared_numbers.insert((here, "lhs".to_owned())); }
-        if number_right { let added = self.facts.compared_numbers.insert((here, "rhs".to_owned())); }
-        if read_left { let added = self.facts.compared_views.insert((here, "lhs".to_owned())); }
-        if read_right { let added = self.facts.compared_views.insert((here, "rhs".to_owned())); }
+        if number_left { let added = self.facts.compared_numbers.insert((here, String::from("lhs"))); }
+        if number_right { let added = self.facts.compared_numbers.insert((here, String::from("rhs"))); }
+        if read_left { let added = self.facts.compared_views.insert((here, String::from("lhs"))); }
+        if read_right { let added = self.facts.compared_views.insert((here, String::from("rhs"))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

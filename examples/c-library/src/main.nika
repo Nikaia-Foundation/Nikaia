@@ -20,7 +20,7 @@ pub struct Tally {
 
 impl Tally {
     pub extern fn() -> Tally sync {
-        return Tally { words: 0, longest: "".clone() }
+        return Tally { words: 0, longest: "" }
     }
 
     /// Counts the words of `text`, and hands back how many there are now.

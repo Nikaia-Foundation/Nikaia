@@ -3,7 +3,7 @@
 // view, through `filter`, `map` and the chains between; a tuple the walk made
 // is the lambda's own, and so are its parts.
 fn main() {
-    let pairs: Vec[(String, i64)] = [("a".clone(), 1), ("b".clone(), 2)]
+    let pairs: Vec[(String, i64)] = [("a", 1), ("b", 2)]
     let n = pairs.iter().filter(fn(pair) {
         let (name, v) = pair
         v > 1
@@ -30,7 +30,8 @@ fn main() {
     let owned: Vec[String] = pairs.iter().map(fn(pair) { (pair.0.clone(), pair.1 * 2) }).map(fn(pair) {
         let (name, v) = pair
         if v > 2 { return name }
-        "small".clone()
+        let small = "small"
+        small.clone()
     }).collect()
     println(owned.join(" "))
     let found: i64 = pairs.iter().filter(fn(pair) {

@@ -84,7 +84,7 @@ impl CheckState {
                 continue;
             }
             let mut decided: Option<String> = None;
-            if !types.is_empty() { decided = Some(nikaia_std::index::get(&types, 0).0.to_owned()); } else if indexed { decided = Some("i64".to_owned()); }
+            if !types.is_empty() { decided = Some(nikaia_std::index::get(&types, 0).0.to_owned()); } else if indexed { decided = Some(String::from("i64")); }
             let mut held: String = String::from("i32");
             if decided.is_some() { held = nikaia_std::index::or(decided.as_deref(), || "").to_owned(); } else {
                 for member in members.iter() {

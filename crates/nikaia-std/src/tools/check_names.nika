@@ -10,7 +10,7 @@ impl CheckState {
         if name != "self" {
             return
         }
-        self.findings.push(check_refusal("NK1119", span, f"You can't call {what} `self`: that name is reserved.", ["`self` always means the value a method was called on.".clone()], "Pick another name, such as `it`, `this` or `me`.".clone()))
+        self.findings.push(check_refusal("NK1119", span, f"You can't call {what} `self`: that name is reserved.", ["`self` always means the value a method was called on."], "Pick another name, such as `it`, `this` or `me`."))
     }
 
     /// **`NK1128`: a name the language below reserves and cannot escape.**
@@ -39,7 +39,7 @@ impl CheckState {
         if name == "super" {
             instead = "parent"
         }
-        self.findings.push(check_refusal("NK1128", span, f"You can't call {what} `{name}`: that name is reserved.", ["Most reserved words are fine as names - a field called `type` works. `crate`, `super` and `Self` are the three that can't be used.".clone()], f"Pick another name, such as `{instead}`."))
+        self.findings.push(check_refusal("NK1128", span, f"You can't call {what} `{name}`: that name is reserved.", ["Most reserved words are fine as names - a field called `type` works. `crate`, `super` and `Self` are the three that can't be used."], f"Pick another name, such as `{instead}`."))
     }
 
     /// Every question about whether a name may be one, in one place.
@@ -80,7 +80,7 @@ impl CheckState {
         if self.modules.contains(module) {
             return
         }
-        self.findings.push(check_refusal("NK1117", span, f"You're using `{module}` without a `use` line for it.", ["A file lists the modules it uses at the top, `std`'s included.".clone()], f"Write `use std::{module}` at the top of the file."))
+        self.findings.push(check_refusal("NK1117", span, f"You're using `{module}` without a `use` line for it.", ["A file lists the modules it uses at the top, `std`'s included."], f"Write `use std::{module}` at the top of the file."))
     }
 
     /// **`NK1163`: a name that needs no `use`, written with a module in front
@@ -114,7 +114,7 @@ impl CheckState {
         if world.library.functions.contains_key(name) || !world.library.functions.contains_key(last) {
             return
         }
-        self.findings.push(check_refusal("NK1163", span, f"`{last}` isn't in `{module}`: it's always available on its own.", [f"`{last}` needs no `use` and no module in front of it.", "Every other `std` name is reached through its module.".clone()], f"Write `{last}(…)` without the `{module}::`."))
+        self.findings.push(check_refusal("NK1163", span, f"`{last}` isn't in `{module}`: it's always available on its own.", [f"`{last}` needs no `use` and no module in front of it.", "Every other `std` name is reached through its module."], f"Write `{last}(…)` without the `{module}::`."))
     }
 
     /// **`NK1198`: `&`, `|`, `^` or a shift on something that is not an
@@ -145,18 +145,18 @@ impl CheckState {
             if a_bool {
                 match op {
                     BinaryOp::BitAnd => {
-                        help = "`&&` joins two `bool`s".clone()
+                        help = "`&&` joins two `bool`s"
                     }
                     BinaryOp::BitOr => {
-                        help = "`||` joins two `bool`s".clone()
+                        help = "`||` joins two `bool`s"
                     }
                     BinaryOp::BitXor => {
-                        help = "to ask whether two `bool`s differ, write `a != b`".clone()
+                        help = "to ask whether two `bool`s differ, write `a != b`"
                     }
                     else => {}
                 }
             }
-            self.findings.push(check_refusal("NK1198", at, f"`{written}` works on integers, but this is a `{side.text()}`.", ["Bit operators work on the bits of an integer.".clone()], help))
+            self.findings.push(check_refusal("NK1198", at, f"`{written}` works on integers, but this is a `{side.text()}`.", ["Bit operators work on the bits of an integer."], help))
             return
         }
     }

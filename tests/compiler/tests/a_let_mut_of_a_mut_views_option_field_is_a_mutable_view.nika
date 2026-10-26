@@ -19,7 +19,7 @@ struct C {
 fn add(mut m: collections::HashMap[String, C], k: ref String) {
     let mut c = m[k] ?? return
     let mut s = c.sig ?? return
-    s.names.push("n".clone())
+    s.names.push("n")
 }
 
 fn main() {

@@ -49,18 +49,18 @@ pub fn common_integer(a: ref String, b: ref String) -> String? sync {
         if high <= 2 {
             return names[high].clone()
         }
-        return "i64".clone()
+        return "i64"
     }
     if low == 2 {
         if high == 2 {
-            return "u64".clone()
+            return "u64"
         }
         return null
     }
     if high == 3 {
-        return "i32".clone()
+        return "i32"
     }
-    return "i64".clone()
+    return "i64"
 }
 
 /// The name of a type that is one integer type, held and not viewed.
@@ -122,10 +122,10 @@ pub fn unsigned_from_signed(found: ref Ty, want: ref Ty) -> String? sync {
         return null
     }
     if (from == "i64" || from == "i32") && into == "u64" {
-        return "u64".clone()
+        return "u64"
     }
     if from == "i32" && into == "u32" {
-        return "u32".clone()
+        return "u32"
     }
     return null
 }
@@ -303,7 +303,7 @@ pub fn a_number_asked_for_two_types(name: ref String, element: bool, first: ref 
         message = f"You're using `{name}` as {an_or_a(first)} `{first}` and here as {an_or_a(second)} `{second}`."
         help = f"Declare its type, `let {name}: {first} = …`, and convert with `as` where the other one is needed."
     }
-    let notes: Vec[String] = ["A number takes its type from how it's used, and these uses want two different types.".clone()]
+    let notes: Vec[String] = ["A number takes its type from how it's used, and these uses want two different types."]
     return check_refusal("NK1200", at, message, notes, help)
 }
 
@@ -313,12 +313,12 @@ pub fn a_map_number_asked_for_two_types(name: ref String, keys: bool, other: ref
     let mut part: String = "values"
     let mut written: String = f"{other}, {first}"
     if keys {
-        part = "keys".clone()
+        part = "keys"
         written = f"{first}, {other}"
     }
     let message = f"You're using the {part} of `{name}` as `{first}`s and here as `{second}`s."
     let help = f"Declare its type, `let {name}: collections::HashMap[{written}] = …`, and convert with `as` where the other one is needed."
-    let notes: Vec[String] = ["A number takes its type from how it's used, and these uses want two different types.".clone()]
+    let notes: Vec[String] = ["A number takes its type from how it's used, and these uses want two different types."]
     return check_refusal("NK1200", at, message, notes, help)
 }
 
@@ -342,7 +342,7 @@ pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: re
         message = f"This has {has}, but the array holds {wanted}."
         help = f"Write {had}, or change the array's declared length to match."
     }
-    let notes: Vec[String] = ["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.".clone()]
+    let notes: Vec[String] = ["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements."]
     return check_refusal("NK1157", span, message, notes, help)
 }
 
@@ -351,7 +351,7 @@ pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: re
 pub fn a_repeat_count_unknown_for_its_array(written: ref String, wanted: i64, span: ref Span) -> CheckFinding {
     let message = f"This has `{written}` elements, a number the build doesn't know, but the array holds {wanted}."
     let help = f"Write the length as a number the build knows, `[…; {wanted}]`, or make it a `Vec`."
-    let notes: Vec[String] = ["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.".clone()]
+    let notes: Vec[String] = ["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements."]
     return check_refusal("NK1157", span, message, notes, help)
 }
 
@@ -362,7 +362,7 @@ pub fn a_repeated_value_that_does_not_copy(names: ref winnow_grammar::InternerCo
     let n = written_expression(names, count)
     let message = f"`[{v}; {n}]` copies `{v}`, and a `{ty.text()}` doesn't copy."
     let help = f"Write each copy: `(0..<{n}).map(fn(_i) {{ {v}.clone() }}).collect()`."
-    let notes: Vec[String] = ["`[v; n]` copies a number, a `bool`, a `char`, an `Array` or a value struct of them; a value that owns memory is duplicated where `.clone()` says so.".clone()]
+    let notes: Vec[String] = ["`[v; n]` copies a number, a `bool`, a `char`, an `Array` or a value struct of them; a value that owns memory is duplicated where `.clone()` says so."]
     return check_refusal("NK1280", span, message, notes, help)
 }
 
@@ -370,7 +370,7 @@ pub fn a_repeated_value_that_does_not_copy(names: ref winnow_grammar::InternerCo
 /// `wide` is the type to convert to, `name` the argument to convert.
 pub fn two_integer_types_for_one_variable(key: ref String, variable: ref String, bound: ref String, ty: ref String, name: ref String, wide: ref String, span: ref Span) -> CheckFinding {
     let message = f"`{key}` takes one type for `{variable}`, but you're passing `{bound}` and `{ty}`."
-    let notes: Vec[String] = ["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.".clone()]
+    let notes: Vec[String] = ["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree."]
     return check_refusal("NK1102", span, message, notes, f"Convert one of them: `{name} as {wide}`.")
 }
 
@@ -422,7 +422,7 @@ impl CheckState {
             }
             let mut name: String = "…"
             if narrow < given.len() {
-                name = names_of(world, given[narrow]) ?? "…".clone()
+                name = names_of(world, given[narrow]) ?? "…"
             }
             self.findings.push(two_integer_types_for_one_variable(key, variable, bound, ty, name, wide, span))
             return

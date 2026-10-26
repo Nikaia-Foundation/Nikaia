@@ -84,7 +84,7 @@ fn language_trait(names: ref winnow_grammar::InternerContext, own: ref Ledger, t
     let mut found: Vec[Finding] = []
     let mut wanted: String = "eq"
     if trait_name == "Ord" {
-        wanted = "compare".clone()
+        wanted = "compare"
     }
     let mut given = false
     for method in methods {

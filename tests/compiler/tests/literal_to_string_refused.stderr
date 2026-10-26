@@ -1,0 +1,17 @@
+error[NK1301]: `.to_string()` on a text literal adds nothing.
+  --> tests/literal_to_string_refused.nika:3:5
+   |
+ 3 |     let a = "-p".to_string()
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A text literal is already the text wherever text is wanted.
+   = help: Drop `.to_string()`.
+error[NK1301]: `.clone()` on a text literal adds nothing.
+  --> tests/literal_to_string_refused.nika:4:5
+   |
+ 4 |     let b = "-q".clone()
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A text literal is already the text wherever text is wanted.
+   = help: Drop `.clone()`.
+2 type errors

@@ -408,7 +408,7 @@ pub fn check_core_lambda_leave(mut state: CheckState, outer: ref Ty?, tail: ref 
             if !check_core_lambda_results_agree(other, one.ty) {
                 let was = one.ty.text()
                 let wanted = other.text()
-                state.findings.push(check_refusal("NK1104", one.at, f"You're returning `{was}`, but this lambda's other result is `{wanted}`.", ["A lambda's `return`s and its last value are its result, so they are of one type.".clone()], f"Make it a `{wanted}`, or the others a `{was}`."))
+                state.findings.push(check_refusal("NK1104", one.at, f"You're returning `{was}`, but this lambda's other result is `{wanted}`.", ["A lambda's `return`s and its last value are its result, so they are of one type."], f"Make it a `{wanted}`, or the others a `{was}`."))
             }
         }
         seen.push(one.ty.clone())
@@ -607,7 +607,7 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
     let at = check_span_at(world, condition, span)
     state.expect_bool(found, at, "An `assert` checks a `bool`.")
     if is_a_literal_other_than(condition, "bool") {
-        state.an_assert_of_another_shape("An `assert` checks a `bool`, but this is a literal of another type.".clone(), span)
+        state.an_assert_of_another_shape("An `assert` checks a `bool`, but this is a literal of another type.", span)
     }
     let owned = Ty::Named { name: "String", args: [], view: false }
     let viewed = Ty::Named { name: "str", args: [], view: true }
@@ -629,7 +629,7 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         let not_text = is_a_literal_other_than(option.value, "text") || (!given.is_unknown() && !given.fits(owned) && !given.fits(viewed))
         if not_text {
-            let mut said: String = "An `assert`'s `message:` has to be text, but this is a literal of another type.".clone()
+            let mut said: String = "An `assert`'s `message:` has to be text, but this is a literal of another type."
             if !given.is_unknown() {
                 said = f"An `assert`'s `message:` has to be text, but this is `{given.text()}`."
             }
@@ -640,7 +640,7 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     let mut not_pure: Vec[String] = []
     if frame.unresolved {
-        not_pure.push("It calls a method the compiler knows nothing about, so it might change something.".clone())
+        not_pure.push("It calls a method the compiler knows nothing about, so it might change something.")
     }
     for key in frame.resolved {
         let resolved = resolve_method(world, key)
@@ -655,8 +655,8 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     state.a_claim_reaches(world, host, condition, not_pure)
     if not_pure.len() > 0 {
-        not_pure.push("An `assert` states something that's true. Its condition may not pause, fail, touch the outside world or change a value.".clone())
-        state.findings.push(check_refusal("NK1194", span, "An `assert` condition can't change anything.".clone(), not_pure, "Compute the value first with `let`, then `assert` something about it.".clone()))
+        not_pure.push("An `assert` states something that's true. Its condition may not pause, fail, touch the outside world or change a value.")
+        state.findings.push(check_refusal("NK1194", span, "An `assert` condition can't change anything.", not_pure, "Compute the value first with `let`, then `assert` something about it."))
     }
     let mut left: String? = null
     let mut right: String? = null

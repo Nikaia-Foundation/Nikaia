@@ -37,7 +37,7 @@ fn check_attributes_trait_fn() -> String {
 
 /// Where an attribute may stand, as the mark's arguments spell them (D2).
 fn check_attributes_places() -> Vec[String] {
-    return ["field".clone(), "struct".clone(), "enum".clone(), "variant".clone(), "fn".clone(), "parameter".clone(), "trait".clone(), "impl".clone()]
+    return ["field", "struct", "enum", "variant", "fn", "parameter", "trait", "impl"]
 }
 
 fn check_attributes_places_text() -> String {
@@ -322,10 +322,10 @@ fn check_attributes_inline_refusal(world: ref CheckWorld, attribute: ref Attribu
                 }
                 return f"`@inline` takes `always` or `never`, and `{spelled}` is neither."
             },
-            else => return "`@inline` takes `always` or `never`, and this is neither.".clone(),
+            else => return "`@inline` takes `always` or `never`, and this is neither.",
         }
     }
-    return "`@inline` takes one word at most: `always` or `never`.".clone()
+    return "`@inline` takes one word at most: `always` or `never`."
 }
 
 /// **`@inline`, `@inline(always)`, `@inline(never)`** (ADR-370 D1): before a
@@ -348,12 +348,12 @@ fn check_attributes_the_inline(mut state: CheckState, world: ref CheckWorld, att
         return
     }
     if count == 2 {
-        state.findings.push(check_refusal("NK1236", attribute.span, "`@inline` stands twice before one function.".clone(), ["A function is inlined, always inlined or never: one of them.".clone()], "Remove one.".clone()))
+        state.findings.push(check_refusal("NK1236", attribute.span, "`@inline` stands twice before one function.", ["A function is inlined, always inlined or never: one of them."], "Remove one."))
     }
     let refused = check_attributes_inline_refusal(world, attribute)
     if refused != null {
         let message = refused ?? return
-        state.findings.push(check_refusal("NK1293", attribute.span, message, ["`@inline` asks, `@inline(always)` insists, `@inline(never)` forbids.".clone()], "Write `@inline`, `@inline(always)` or `@inline(never)`.".clone()))
+        state.findings.push(check_refusal("NK1293", attribute.span, message, ["`@inline` asks, `@inline(always)` insists, `@inline(never)` forbids."], "Write `@inline`, `@inline(always)` or `@inline(never)`."))
     }
 }
 
@@ -366,7 +366,7 @@ fn check_attributes_the_mark(mut state: CheckState, world: ref CheckWorld, attri
         return
     }
     if attribute.args.len() == 0 {
-        state.findings.push(check_refusal("NK1101", attribute.span, "`@meta::Attribute` names where the attribute may stand, and this names no place.".clone(), [f"The places are {check_attributes_places_text()}."], "Write `@meta::Attribute(field)`.".clone()))
+        state.findings.push(check_refusal("NK1101", attribute.span, "`@meta::Attribute` names where the attribute may stand, and this names no place.", [f"The places are {check_attributes_places_text()}."], "Write `@meta::Attribute(field)`."))
     }
     let known = check_attributes_places()
     for arg in attribute.args {
@@ -376,13 +376,13 @@ fn check_attributes_the_mark(mut state: CheckState, world: ref CheckWorld, attri
             if word == "" {
                 message = "`@meta::Attribute` takes places, and this is not one."
             }
-            state.findings.push(check_refusal("NK1102", attribute.span, message, [f"The places are {check_attributes_places_text()}."], "Name a place by its word alone: `field`.".clone()))
+            state.findings.push(check_refusal("NK1102", attribute.span, message, [f"The places are {check_attributes_places_text()}."], "Name a place by its word alone: `field`."))
         }
     }
     for option in attribute.config {
         let option_name = world.here.text(option.name)
         if option_name != "repeatable" {
-            state.findings.push(check_refusal("NK1109", attribute.span, f"`@meta::Attribute` has no option called `{option_name}`.", ["Its one option is `repeatable: bool`.".clone()], "Write `repeatable: true`, or leave it out.".clone()))
+            state.findings.push(check_refusal("NK1109", attribute.span, f"`@meta::Attribute` has no option called `{option_name}`.", ["Its one option is `repeatable: bool`."], "Write `repeatable: true`, or leave it out."))
             continue
         }
         let is_bool = match option.value {
@@ -390,7 +390,7 @@ fn check_attributes_the_mark(mut state: CheckState, world: ref CheckWorld, attri
             else => false,
         }
         if !is_bool {
-            state.findings.push(check_refusal("NK1102", attribute.span, "`repeatable` is `true` or `false`.".clone(), [], "Write `repeatable: true`.".clone()))
+            state.findings.push(check_refusal("NK1102", attribute.span, "`repeatable` is `true` or `false`.", [], "Write `repeatable: true`."))
         }
     }
 }
@@ -425,7 +425,7 @@ fn check_attributes_arguments[H: CheckHost](mut state: CheckState, world: ref Ch
         if required.len() == 0 {
             note = f"Every field of `{name}` has a default, so each is named after the `;`."
         }
-        state.findings.push(check_refusal("NK1101", attribute.span, f"`@{name}` takes {required.len()} argument{plural} before the `;`, and this gives {attribute.args.len()}.", [note], "Give one value for each, by position.".clone()))
+        state.findings.push(check_refusal("NK1101", attribute.span, f"`@{name}` takes {required.len()} argument{plural} before the `;`, and this gives {attribute.args.len()}.", [note], "Give one value for each, by position."))
     }
     let mut at: i64 = 0
     while at < required.len() as i64 && at < attribute.args.len() as i64 {
@@ -572,7 +572,7 @@ pub fn check_attributes_an_attribute_read(mut state: CheckState, world: ref Chec
         }
     }
     if !one {
-        state.findings.push(check_refusal("NK1101", span, "`.attribute(X)` takes one type, the attribute to read.".clone(), [], "Write `field.attribute(json::Name)`.".clone()))
+        state.findings.push(check_refusal("NK1101", span, "`.attribute(X)` takes one type, the attribute to read.", [], "Write `field.attribute(json::Name)`."))
         return null
     }
     let name = world.here.unaliased(written)
@@ -629,7 +629,7 @@ fn check_attributes_variants_of_type(state: ref CheckState, world: ref CheckWorl
 }
 
 fn check_attributes_nothing_declares(mut state: CheckState, name: ref String, span: ref Span) sync {
-    state.findings.push(check_refusal("NK1135", span, f"There's no struct called `{name}`.", ["An attribute is a value of a struct that `@meta::Attribute` marks, declared here or in a package you use.".clone()], "Declare the struct, or fix the name.".clone()))
+    state.findings.push(check_refusal("NK1135", span, f"There's no struct called `{name}`.", ["An attribute is a value of a struct that `@meta::Attribute` marks, declared here or in a package you use."], "Declare the struct, or fix the name."))
 }
 
 /// `NK1235`: a struct the mark does not make an attribute, or a place its mark
@@ -641,11 +641,11 @@ fn check_attributes_out_of_place(mut state: CheckState, name: ref String, place:
     }
     let mark_name = check_attributes_mark_name()
     if name == mark_name {
-        state.findings.push(check_refusal("NK1235", span, f"`@{mark_name}` marks a struct, and this is {here}.", ["It makes the struct after it an attribute.".clone()], "Move it before a `struct`.".clone()))
+        state.findings.push(check_refusal("NK1235", span, f"`@{mark_name}` marks a struct, and this is {here}.", ["It makes the struct after it an attribute."], "Move it before a `struct`."))
         return
     }
     if mark == null {
-        state.findings.push(check_refusal("NK1235", span, f"`{name}` is not an attribute: `@{mark_name}` does not mark it.", ["An attribute is a struct marked with `@meta::Attribute(…)`, naming where it may stand.".clone()], f"Write `@meta::Attribute({check_attributes_place_or_field(place)})` before `struct {name}`."))
+        state.findings.push(check_refusal("NK1235", span, f"`{name}` is not an attribute: `@{mark_name}` does not mark it.", ["An attribute is a struct marked with `@meta::Attribute(…)`, naming where it may stand."], f"Write `@meta::Attribute({check_attributes_place_or_field(place)})` before `struct {name}`."))
         return
     }
     let known = mark ?? return
@@ -685,10 +685,10 @@ fn check_attributes_misfit_named(literal: ref Expr, name: ref String, plain: boo
         other => other,
     }
     return match inner {
-        Expr::LitInt { .. } if !number => "a whole number".clone(),
-        Expr::LitFloat(_, _) if !float => "a number with a fraction".clone(),
-        Expr::LitBool(_, _) if name != "bool" => "a `bool`".clone(),
-        Expr::LitStr { .. } if name != "String" && name != "str" => "text".clone(),
+        Expr::LitInt { .. } if !number => "a whole number",
+        Expr::LitFloat(_, _) if !float => "a number with a fraction",
+        Expr::LitBool(_, _) if name != "bool" => "a `bool`",
+        Expr::LitStr { .. } if name != "String" && name != "str" => "text",
         else => null,
     }
 }

@@ -95,7 +95,7 @@ impl CheckState {
         }
         if a_list {
             let method = (key.strip_prefix("str::") ?? "").clone()
-            self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{param}` to be text or a character, but you're passing a list.", ["What it looks for is one view of text or one character; a list of them is neither.".clone()], f"Ask once per character: `x.{method}('a') || x.{method}('i')`."))
+            self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{param}` to be text or a character, but you're passing a list.", ["What it looks for is one view of text or one character; a list of them is neither."], f"Ask once per character: `x.{method}('a') || x.{method}('i')`."))
             return
         }
         let owned = match found[0] {
@@ -138,7 +138,7 @@ impl CheckState {
 
     /// The refusal [`Checker::a_view_of_what_does_not_copy`] answers with.
     pub fn a_view_kept_whole(ref mut self, key: ref String, name: ref String, found: ref Ty, want: ref Ty, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{name}` to be `{want.text()}` here, but you're passing `{found.text()}`.", [f"This is a view: it points into a `{want.text()}` that something else owns.", f"`{key}` keeps its `{name}` after the call returns, so it needs a `{want.text()}` of its own."], "Write `.clone()` to copy it here.".clone()))
+        self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{name}` to be `{want.text()}` here, but you're passing `{found.text()}`.", [f"This is a view: it points into a `{want.text()}` that something else owns.", f"`{key}` keeps its `{name}` after the call returns, so it needs a `{want.text()}` of its own."], "Write `.clone()` to copy it here."))
     }
 
     /// **`NK2206` and `NK2606`: a handler that does more than its type allows**
@@ -165,10 +165,10 @@ impl CheckState {
     /// the two mistakes.
     pub fn a_handler_that_does_more_than_the_type_allows(ref mut self, promised: ref CheckPromises, seen: ref CheckHanded, span: ref Span) sync {
         if seen.pauses && !promised.may_pause {
-            self.findings.push(check_refusal("NK2206", span, "This lambda can pause, but the parameter it's passed to is `sync`.".clone(), ["A function type says what the code passed in may do, and `sync` means it must never pause.".clone(), "A lambda that does less fits a type that allows more, never the other way round.".clone()], "Do the pausing work outside the lambda and pass the result in, or remove `sync` from the parameter's type.".clone()))
+            self.findings.push(check_refusal("NK2206", span, "This lambda can pause, but the parameter it's passed to is `sync`.", ["A function type says what the code passed in may do, and `sync` means it must never pause.", "A lambda that does less fits a type that allows more, never the other way round."], "Do the pausing work outside the lambda and pass the result in, or remove `sync` from the parameter's type."))
         }
         if seen.fails && !promised.may_fail {
-            self.findings.push(check_refusal("NK2606", span, "This lambda can fail, but the parameter it's passed to doesn't say `throws`.".clone(), ["A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.".clone()], "Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.".clone()))
+            self.findings.push(check_refusal("NK2606", span, "This lambda can fail, but the parameter it's passed to doesn't say `throws`.", ["A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails."], "Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type."))
         }
     }
 
@@ -197,7 +197,27 @@ impl CheckState {
             Expr::Variable(name, _) => world.words.resolve(name).clone(),
             else => "…",
         }
-        self.findings.push(check_refusal("NK1189", span, f"To copy a value, write `.clone()`, not `.{written}()`.", ["Nikaia has one word for a copy, for text and for everything else.".clone()], f"Write `{shown}.clone()`."))
+        self.findings.push(check_refusal("NK1189", span, f"To copy a value, write `.clone()`, not `.{written}()`.", ["Nikaia has one word for a copy, for text and for everything else."], f"Write `{shown}.clone()`."))
+    }
+
+    /// **`NK1301`: `.to_string()` or `.clone()` on a plain text literal**
+    /// ([ADR-282](../../docs/specification/adr/adr-282.md) D30).
+    ///
+    /// The literal is already the text wherever text is wanted; the call adds
+    /// nothing. An f-string with holes and a local are not this.
+    pub fn a_call_on_a_literal_that_adds_nothing(ref mut self, world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], span: ref Span) sync {
+        let written = world.words.resolve(method).clone()
+        if args.len() != 0 || (written != "to_string" && written != "clone") {
+            return
+        }
+        let plain = match receiver {
+            Expr::LitStr { .. } => true,
+            else => false,
+        }
+        if !plain || ledger_candidates(world.own, world.own_methods, written).len() != 0 {
+            return
+        }
+        self.findings.push(check_refusal("NK1301", span, f"`.{written}()` on a text literal adds nothing.", ["A text literal is already the text wherever text is wanted."], f"Drop `.{written}()`."))
     }
 
     /// **`NK2106`: a part of something lent, handed to what keeps it**
@@ -207,7 +227,7 @@ impl CheckState {
     /// body does not own: the language below said *cannot move out of
     /// `p.name` which is behind a shared reference*, about a file nobody wrote.
     pub fn a_part_of_a_loan_handed_over(ref mut self, path: ref String, root: ref String, to: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK2106", span, f"`{path}` is {to}, but `{root}` is only borrowed here.", [f"`{root}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.", "Nikaia never makes a copy behind your back.".clone()], f"Hand over a copy: `{path}.clone()`."))
+        self.findings.push(check_refusal("NK2106", span, f"`{path}` is {to}, but `{root}` is only borrowed here.", [f"`{root}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.", "Nikaia never makes a copy behind your back."], f"Hand over a copy: `{path}.clone()`."))
     }
 }
 

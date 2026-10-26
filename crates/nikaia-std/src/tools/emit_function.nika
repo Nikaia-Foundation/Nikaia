@@ -260,7 +260,7 @@ impl EmitState {
                 // The key the ledger records this function under.
                 let own_name: String = match name {
                     each => emit_text(world, each),
-                    null => "new".clone(),
+                    null => "new",
                 }
                 let key: String = if has_owner { f"{target}::{own_name}" } else { own_name.clone() }
 
@@ -273,11 +273,11 @@ impl EmitState {
                     let is_ref = receiver?.is_ref ?? false
                     let is_mut = receiver?.is_mut ?? false
                     if is_ref && is_mut {
-                        params.push("&mut self".clone())
+                        params.push("&mut self")
                     } else if is_ref {
-                        params.push("&self".clone())
+                        params.push("&self")
                     } else {
-                        params.push("self".clone())
+                        params.push("self")
                     }
                 }
                 let kept = self.kept_lifetimes(key, lifetimes)
@@ -414,7 +414,7 @@ impl EmitState {
                     }
                 }
                 if receiver != null && !several_at.is_empty() && named.contains("self") && params[0] == "&self" {
-                    params[0] = "&'r self".clone()
+                    params[0] = "&'r self"
                 }
                 // **An option is a parameter too**: a view among them is the
                 // source where the body hands it back.
@@ -482,7 +482,7 @@ impl EmitState {
                         lengths.push(f"__NIKAIA_N{at}")
                         open.push(f"const __NIKAIA_N{at}: usize")
                     } else {
-                        lengths.push("".clone())
+                        lengths.push("")
                     }
                     at += 1
                 }
@@ -560,9 +560,9 @@ impl EmitState {
                     let by_four = reference == "&" || reference == "&'r " || reference == "&'k " || reference == "&'a "
                     let by_three = reference == "&" || reference == "&'r " || reference == "&'k "
                     if by_four && plain_bytes {
-                        spelled = "[u8]".clone()
+                        spelled = "[u8]"
                     } else if by_four && plain_text {
-                        spelled = "str".clone()
+                        spelled = "str"
                     } else if by_three && plain_list && spelled.starts_with("Vec<") {
                         let inner = (spelled.strip_prefix("Vec<") ?? "").strip_suffix(">") ?? ""
                         spelled = f"[{inner}]"
@@ -638,7 +638,7 @@ impl EmitState {
                 let mut declared: Vec[String] = []
                 if walk.specialising != null {
                     if has_dsl {
-                        declared.push("NikaiaDsl".clone())
+                        declared.push("NikaiaDsl")
                     }
                     for each in open {
                         declared.push(each.clone())
@@ -648,26 +648,26 @@ impl EmitState {
                         declared.push(emit_bounded(world, each))
                     }
                     if has_dsl {
-                        declared.push("NikaiaDsl".clone())
+                        declared.push("NikaiaDsl")
                     }
                     for each in open {
                         declared.push(each.clone())
                     }
                 }
                 if has_kept && emit_is_kept(kept_lt) {
-                    declared.insert(0, "'k".clone())
+                    declared.insert(0, "'k")
                 }
                 // **The buffer a struct parameter carries is named on the
                 // function** where no `impl` names it already.
                 if emit_is_elided(lifetimes) && (!input_empty || inner_views != null || !stores.is_empty()) {
-                    declared.insert(0, "'a".clone())
+                    declared.insert(0, "'a")
                 }
                 if shared {
-                    declared.insert(0, "'r".clone())
+                    declared.insert(0, "'r")
                 }
                 // The lifetime a published parameter's `EitherText` is of.
                 if !either_first.is_empty() {
-                    declared.insert(0, "'e".clone())
+                    declared.insert(0, "'e")
                 }
                 walk.either_prelude = either_first.clone()
 
@@ -869,7 +869,7 @@ impl EmitState {
                 let written_hint: String? = host.inline_written(written.attributes)
                 let mut hint: String? = written_hint?.clone()
                 if hint == null && self.fold_callees.contains(own_name) {
-                    hint = "#[inline(always)]".clone()
+                    hint = "#[inline(always)]"
                 }
                 match hint {
                     text => {
@@ -932,7 +932,7 @@ impl EmitState {
                     out.push(emit_fn_signature(vis, pausing, emitted, declared, params, ret))
                     out.push("{ ")
                     out.push(check_lines)
-                    pending = "}".clone()
+                    pending = "}"
                 } else {
                     out.push(emit_fn_signature(vis, pausing, emitted, declared, params, ret))
                 }
@@ -999,7 +999,7 @@ impl EmitState {
                 }
             },
             else => {
-                throw EmitRefused { message: "not a function".clone(), at: null }
+                throw EmitRefused { message: "not a function", at: null }
             },
         }
     }

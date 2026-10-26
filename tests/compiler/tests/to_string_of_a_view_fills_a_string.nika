@@ -15,12 +15,15 @@ fn copied(ws: ref Vec[String]) -> i64 {
 }
 
 fn main() {
-    let words: Vec[String] = ["abc".to_string(), "d".to_string()]
+    let abc = "abc"
+    let d = "d"
+    let words: Vec[String] = [abc.to_string(), d.to_string()]
     println(words.len())
     println(words[1])
     let lit: Vec[String] = ["p", "q"]
     println(first(lit))
     println(copied(lit))
-    let name = "xyz".to_string()
+    let xyz = "xyz"
+    let name = xyz.to_string()
     println(name)
 }

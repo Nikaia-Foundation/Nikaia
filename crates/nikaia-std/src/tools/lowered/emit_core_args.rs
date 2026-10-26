@@ -532,7 +532,7 @@ impl EmitState {
                         let tried = EmitScope { tasks_channel: channel.to_owned(), tasks_function: owner, ..scope.clone() };
                         let mut probe = EmitOut::empty();
                         self.emit_core_args(world, walk, &mut probe, host, &self.emit_call_callee(world, func), args, &self.takes_a_handle_at(world, func), depth, flow, &tried)?;
-                        if !probe.buf.contains('?') { channel = "nikaia_std::task::Crashed".to_owned(); }
+                        if !probe.buf.contains('?') { channel = String::from("nikaia_std::task::Crashed"); }
                     }
                     out.push(&format!("::<_, {}>", emit_call_scope_channel(&channel)));
                     tasks = Some(channel);
@@ -688,7 +688,7 @@ impl EmitState {
                     let mut probe = EmitOut::empty();
                     let tried = EmitScope { changed: scope.changed.to_owned(), tasks_channel: channel.to_owned(), tasks_function: owner.to_owned(), ..EmitScope::plain() };
                     self.emit_core_block(world, walk, &mut probe, host, body, depth, EmitFlow::plain().at(flow.statement), &tried, EmitTail::Return)?;
-                    if !probe.buf.contains('?') { channel = "nikaia_std::task::Crashed".to_owned(); }
+                    if !probe.buf.contains('?') { channel = String::from("nikaia_std::task::Crashed"); }
                 }
                 let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
                 out.push(&format!("{{ let {} = &nikaia_std::task::{}::<{}>::new(); nikaia_std::task::{}({}, async ", named, made, emit_call_scope_channel(&channel), run, named));
@@ -821,7 +821,7 @@ impl EmitState {
             return Ok(true);
         }
         if world.library.functions.contains_key(&format!("{}::new", text)) {
-            out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![text.to_owned(), "new".to_owned()]));
+            out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![text.to_owned(), String::from("new")]));
             out.push("(");
             let takes = self.takes_a_handle(world, &format!("{}::new", text));
             self.emit_core_args(world, walk, out, host, text, args, &takes, depth, flow, scope)?;
@@ -877,7 +877,7 @@ impl EmitState {
             let name = emit_text(world, *nikaia_std::index::get(&segments, 1));
             let key = format!("{}::{}::new", module, name);
             if world.library.functions.contains_key(&key) {
-                out.push(&format!("{}::{}", module, self.path(world, walk.trusting, walk.unpinned, &vec![name.to_owned(), "new".to_owned()])));
+                out.push(&format!("{}::{}", module, self.path(world, walk.trusting, walk.unpinned, &vec![name.to_owned(), String::from("new")])));
                 out.push("(");
                 let takes = self.takes_a_handle(world, &key);
                 self.emit_core_args(world, walk, out, host, &key, args, &takes, depth, flow, scope)?;

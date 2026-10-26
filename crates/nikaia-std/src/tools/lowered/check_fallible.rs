@@ -91,19 +91,19 @@ impl CheckState {
                 let item = nikaia_std::boxed::open(item); let can_throw = *can_throw;
                 if !can_throw { return; }
                 name = match item {
-                    Ty::Unknown => "a sequence".to_owned(),
+                    Ty::Unknown => String::from("a sequence"),
                     _ => format!("a sequence of `{}`", item.text()),
                 };
             },
             _ => { return; },
         }
         if bindings != 1 {
-            self.findings.push(check_refusal("NK2701", span, format!("A `for` over {} gives one value at a time, but you're binding {}.", name, bindings), vec![format!("Each turn of {} can fail, and the loop variable is what's left once that's checked.", name)], Some("Bind one name and take the pair apart inside the loop.".to_owned())));
+            self.findings.push(check_refusal("NK2701", span, format!("A `for` over {} gives one value at a time, but you're binding {}.", name, bindings), vec![format!("Each turn of {} can fail, and the loop variable is what's left once that's checked.", name)], Some(String::from("Bind one name and take the pair apart inside the loop."))));
             return;
         }
         let added = self.facts.fallible_loops.insert(span.start as i64);
         if self.flow.throwing { return; }
-        self.findings.push(check_refusal("NK2701", span, "This function can fail, because a turn of this loop can fail.".to_owned(), vec![format!("{} reads as it goes, and a read can fail, so the failure passes through this function like a failing call's would.", capitalised(&name))], Some("Add `throws` to this function, or handle the failure inside the loop.".to_owned())));
+        self.findings.push(check_refusal("NK2701", span, String::from("This function can fail, because a turn of this loop can fail."), vec![format!("{} reads as it goes, and a read can fail, so the failure passes through this function like a failing call's would.", capitalised(&name))], Some(String::from("Add `throws` to this function, or handle the failure inside the loop."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

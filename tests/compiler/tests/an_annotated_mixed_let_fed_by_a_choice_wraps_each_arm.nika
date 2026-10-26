@@ -44,7 +44,7 @@ fn maybe_call(s: ref String, n: i64) -> i64 {
 }
 
 fn main() {
-    let a = "hi".clone()
+    let a = "hi"
     println(f"{annotated(a, true)} {annotated(a, false)}")
     println(f"{by_match(a, 0)} {by_match(a, 12)}")
     println(f"{maybe(a, 0)} {maybe(a, 1)} {maybe(a, 2)}")

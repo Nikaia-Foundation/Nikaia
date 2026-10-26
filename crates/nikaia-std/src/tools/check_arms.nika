@@ -252,8 +252,8 @@ pub fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) 
     let mut word: String = "match"
     let mut article: String = "`match`"
     if is_if {
-        word = "if".clone()
-        article = "`if`".clone()
+        word = "if"
+        article = "`if`"
     }
     let mut shown: Vec[String] = []
     for ty in known {
@@ -263,7 +263,7 @@ pub fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) 
         }
     }
     if numbers > 0 {
-        shown.push("a number".clone())
+        shown.push("a number")
     }
     let mut listed: String = ""
     let mut index = 0

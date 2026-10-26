@@ -1106,10 +1106,10 @@ fn bounding_element_written(expr: ref Expr, words: ref winnow_grammar::InternerC
             let list = path_of(base, words)
             if list == null {
                 let root = bounding_root_of(base, words) ?? return null
-                return (root, "".clone(), "".clone())
+                return (root, "", "")
             }
             let at = bounding_variable(index, words) ?? ""
-            return ((list ?? "").clone(), at.clone(), "".clone())
+            return ((list ?? "").clone(), at.clone(), "")
         },
         else => return null,
     }
@@ -2288,7 +2288,7 @@ fn bounding_loop_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFac
         if frame.failed.is_empty() && frame.jumps.len() == ways && bounding_proven_count(walk.proven) > bounding_proven_count(after_proven) {
             let mut parts: Vec[(i64, String)] = []
             for guess in guesses {
-                parts.push((guess, "guess and check".clone()))
+                parts.push((guess, "guess and check"))
             }
             walk.proven.loops.insert(start, loop_parts_text(walk.arena, LoopFound { parts: parts }))
             facts.facts = here.facts.clone()

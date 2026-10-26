@@ -43,7 +43,7 @@ impl CheckState {
             quoted.push(f"`{error}`")
         }
         let list = quoted.join(", ")
-        self.findings.push(check_refusal("NK2605", span, f"This function can fail, because {list} passes this `catch`.", [f"{list} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not."], "Add `throws` to the function, or name the type in a `match error` arm of the handler.".clone()))
+        self.findings.push(check_refusal("NK2605", span, f"This function can fail, because {list} passes this `catch`.", [f"{list} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not."], "Add `throws` to the function, or name the type in a `match error` arm of the handler."))
     }
 }
 
@@ -120,6 +120,6 @@ impl CheckState {
             errors.push(f"`{error}`")
         }
         let list = errors.join(", ")
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605".clone(), message: f"This function can fail, because `{key}` can fail.", notes: [f"`{key}` can fail with {list}.", "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.".clone()], help: f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`.", labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605", message: f"This function can fail, because `{key}` can fail.", notes: [f"`{key}` can fail with {list}.", "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it."], help: f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`.", labels: [] })
     }
 }

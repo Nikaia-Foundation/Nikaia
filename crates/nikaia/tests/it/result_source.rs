@@ -352,10 +352,10 @@ pub fn three(x: ref String, y: ref String, z: ref String) -> ref String {
     return longest(longest(x, y), z)
 }
 pub fn use_all() -> i64 {
-    let x = "ab".clone()
-    let y = "abc".clone()
-    let z = "a".clone()
-    let h = Holder { name: "abcd".clone() }
+    let x = f"ab"
+    let y = f"abc"
+    let z = f"a"
+    let h = Holder { name: f"abcd" }
     let r = longest(longest(x, y), z)
     return three(x, y, z).len() + r.len() + h.pick(y).len() + x.len()
 }
@@ -968,10 +968,10 @@ fn a_caller_may_change_the_argument_the_result_does_not_point_into() {
     return a.trim()
 }
 fn main() {
-    let x = " ab ".clone()
-    let mut y = "c".clone()
+    let x = f" ab "
+    let mut y = f"c"
     let r = pick(x, y)
-    y = "dd".clone()
+    y = f"dd"
     println(r)
     println(y)
 }
@@ -1059,7 +1059,7 @@ fn per_view_sources_are_read_across_files() {
     let helper = "pub struct Pair { pub left: ref String, pub right: ref String }\n\
         pub fn pair(a: ref String, b: ref String) -> Pair {\n    return Pair { left: a, right: b }\n}\n";
     let main = "fn swapped(x: ref String, y: ref String) -> Pair {\n    let p = pair(x, y)\n    return Pair { left: p.right, right: p.left }\n}\n\
-        fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = swapped(x, y)\n    println(f\"{t.left} {t.right}\")\n}\n";
+        fn main() {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = swapped(x, y)\n    println(f\"{t.left} {t.right}\")\n}\n";
     let (dir, program) = package("per-view", &[("helper.nika", helper), ("main.nika", main)]);
     let found = package_findings(&program);
     assert!(found.is_empty(), "{found:#?}");
@@ -1080,7 +1080,7 @@ const HELPER: &str = "pub struct Txt { pub n: ref String }\n\
 #[test]
 fn a_foreign_struct_result_with_two_sources_is_accepted() {
     let main = "fn hole(a: ref String, b: ref String) -> Txt {\n    if a.len() > 9 {\n        return Txt { n: a }\n    }\n    return mk(b)\n}\n\
-        fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = hole(x, y)\n    println(t.n)\n}\n";
+        fn main() {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = hole(x, y)\n    println(t.n)\n}\n";
     let (dir, program) = package("xfile-two", &[("helper.nika", HELPER), ("main.nika", main)]);
     let found = package_findings(&program);
     assert!(found.is_empty(), "{found:#?}");
@@ -1092,7 +1092,7 @@ fn a_foreign_struct_result_with_two_sources_is_accepted() {
 #[test]
 fn a_foreign_struct_result_with_one_source_is_accepted() {
     let main = "fn hole(a: ref String, b: ref String) -> Txt {\n    if b.len() > 9 {\n        return mk(a)\n    }\n    return Txt { n: a }\n}\n\
-        fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = hole(x, y)\n    println(t.n)\n}\n";
+        fn main() {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = hole(x, y)\n    println(t.n)\n}\n";
     let (dir, program) = package("xfile-one", &[("helper.nika", HELPER), ("main.nika", main)]);
     let found = package_findings(&program);
     assert!(found.is_empty(), "{found:#?}");
@@ -1106,7 +1106,7 @@ fn a_foreign_struct_result_with_one_source_is_accepted() {
 fn a_foreign_struct_without_views_is_accepted() {
     let helper = "pub struct Pair { pub n: String, pub k: i64 }\n";
     let main = "fn both(a: ref String, b: ref String) -> Pair {\n    return Pair { n: a.clone(), k: b.len() }\n}\n\
-        fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = both(x, y)\n    println(t.n)\n}\n";
+        fn main() {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = both(x, y)\n    println(t.n)\n}\n";
     let (dir, program) = package(
         "xfile-plain",
         &[("helper.nika", helper), ("main.nika", main)],
@@ -1127,10 +1127,10 @@ fn pair(a: ref String, b: ref String) -> Pair {
     return Pair { left: a, right: b }
 }
 pub fn keep_left() -> String {
-    let x = "left".clone()
-    let mut y = "right".clone()
+    let x = f"left"
+    let mut y = f"right"
     let l = pair(x, y).left
-    y = "replaced".clone()
+    y = f"replaced"
     return f"{l} {y}"
 }
 "#;
@@ -1167,10 +1167,10 @@ fn changed_under(source: &str) -> Vec<Finding> {
 fn a_reassigned_argument_keeps_its_old_data_for_the_view() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let mut y = \"short\".clone()
+    let x = \"ab\"
+    let mut y = \"short\"
     let r = longest(x, y)
-    y = \"replaced\".clone()
+    y = \"replaced\"
     return f\"{{r}} {{y}}\"
 }}
 "
@@ -1192,10 +1192,10 @@ fn a_reassigned_argument_keeps_its_old_data_for_the_view() {
 fn a_reassigned_argument_may_be_changed_afterwards() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let mut y = \"short\".clone()
+    let x = f\"ab\"
+    let mut y = f\"short\"
     let r = longest(x, y)
-    y = \"re\".clone()
+    y = f\"re\"
     y.push_str(\"placed\")
     return f\"{{r}} {{y}}\"
 }}
@@ -1212,11 +1212,11 @@ fn a_reassigned_argument_may_be_changed_afterwards() {
 fn a_reassigned_list_keeps_the_element_a_view_points_into() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let mut ys = [\"short\".clone()]
+    let x = \"ab\"
+    let mut ys = [\"short\"]
     let r = longest(x, ys[0])
     let e = ys[0]
-    ys = [\"other\".clone()]
+    ys = [\"other\"]
     return f\"{{r}} {{e}} {{ys[0]}}\"
 }}
 "
@@ -1235,7 +1235,7 @@ fn an_argument_whose_scope_ends_lives_in_the_keep() {
         "{LONGEST}pub fn outer(x: ref String) -> String {{
     let mut r: ref String = \"none\"
     if x.len() > 0 {{
-        let y = \"short\".clone()
+        let y = f\"short\"
         r = longest(x, y)
     }}
     return f\"{{r}}\"
@@ -1255,8 +1255,8 @@ fn an_argument_moved_into_a_reading_function() {
     return s.len()
 }}
 pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let y = \"short\".clone()
+    let x = \"ab\"
+    let y = \"short\"
     let r = longest(x, y)
     let n = size(y)
     return f\"{{r}} {{n}}\"
@@ -1271,8 +1271,8 @@ pub fn both() -> String {{
 fn a_change_in_place_under_a_view_is_nk2305() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let mut y = \"short\".clone()
+    let x = \"ab\"
+    let mut y = \"short\"
     let r = longest(x, y)
     y.push_str(\"er\")
     return f\"{{r}}\"
@@ -1315,8 +1315,8 @@ fn a_change_in_place_under_a_view_is_nk2305() {
 fn a_change_after_the_last_use_compiles() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let mut y = \"short\".clone()
+    let x = \"ab\"
+    let mut y = \"short\"
     let r = longest(x, y)
     let said = f\"{{r}}\"
     y.push_str(\"er\")
@@ -1333,17 +1333,17 @@ fn a_change_after_the_last_use_compiles() {
 #[test]
 fn a_change_under_an_element_view_or_in_a_loop_is_nk2305() {
     let element = "pub fn first() -> String {
-    let mut ys = [\"short\".clone()]
+    let mut ys = [f\"short\"]
     let e = ys[0]
-    ys.push(\"x\".clone())
+    ys.push(f\"x\")
     return f\"{e}\"
 }
 ";
     assert_eq!(changed_under(element).len(), 1);
     let looping = format!(
         "{LONGEST}pub fn twice() {{
-    let x = \"ab\".clone()
-    let mut y = \"short\".clone()
+    let x = \"ab\"
+    let mut y = \"short\"
     let r = longest(x, y)
     for i in 0..<2 {{
         println(r)
@@ -1373,11 +1373,11 @@ fn a_change_under_an_element_view_or_in_a_loop_is_nk2305() {
 fn a_reassignment_in_a_nested_block_keeps_the_old_data() {
     let source = format!(
         "{LONGEST}pub fn both(c: bool) -> String {{
-    let x = \"ab\".clone()
-    let mut y = \"short\".clone()
+    let x = \"ab\"
+    let mut y = \"short\"
     let r = longest(x, y)
     if c {{
-        y = \"replaced\".clone()
+        y = \"replaced\"
     }}
     return f\"{{r}} {{y}}\"
 }}
@@ -1419,8 +1419,8 @@ fn a_reassignment_in_a_nested_block_keeps_the_old_data() {
 fn a_reassignment_in_a_loop_keeps_the_old_data() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let mut y = \"short\".clone()
+    let x = \"ab\"
+    let mut y = \"short\"
     let r = longest(x, y)
     for i in 0..<3 {{
         y = f\"round {{i}}\"
@@ -1450,11 +1450,11 @@ fn pick(a: ref String, b: ref String, c: ref String) -> Pick {
 }
 
 pub fn run() -> String {
-    let x = "ab".clone()
-    let y = "short".clone()
-    let mut z = "zed".clone()
+    let x = f"ab"
+    let y = f"short"
+    let mut z = f"zed"
     let best = pick(x, y, z).best
-    z = "replaced".clone()
+    z = f"replaced"
     return f"{best} {z}"
 }
 "#;
@@ -1482,8 +1482,8 @@ fn show(s: ref String) -> i64 {
 fn a_hand_over_under_a_view_is_nk2305() {
     let source = format!(
         "{LONGEST}{TAKE}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let y = \"short\".clone()
+    let x = f\"ab\"
+    let y = f\"short\"
     let r = longest(x, y)
     let n = take(y)
     return f\"{{r}} {{n}}\"
@@ -1523,8 +1523,8 @@ fn a_hand_over_under_a_view_is_nk2305() {
 fn a_push_under_a_view_is_nk2305() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let y = \"short\".clone()
+    let x = \"ab\"
+    let y = \"short\"
     let r = longest(x, y)
     let mut v: Vec[String] = []
     v.push(y)
@@ -1547,16 +1547,16 @@ fn a_push_under_a_view_is_nk2305() {
 fn a_hand_over_after_the_last_use_or_to_a_view_compiles() {
     let source = format!(
         "{LONGEST}{TAKE}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let y = \"short\".clone()
+    let x = \"ab\"
+    let y = \"short\"
     let r = longest(x, y)
     let said = f\"{{r}}\"
     let n = take(y)
     return f\"{{said}} {{n}}\"
 }}
 pub fn shown() -> String {{
-    let x = \"ab\".clone()
-    let y = \"short\".clone()
+    let x = \"ab\"
+    let y = \"short\"
     let r = longest(x, y)
     let n = show(y)
     return f\"{{r}} {{n}}\"
@@ -1575,8 +1575,8 @@ pub fn shown() -> String {{
 fn a_move_into_a_local_keeps_the_data() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let y = \"short\".clone()
+    let x = \"ab\"
+    let y = \"short\"
     let r = longest(x, y)
     let z = y
     let said = f\"{{r}}\"
@@ -1596,8 +1596,8 @@ fn a_move_into_a_local_keeps_the_data() {
 fn a_change_to_the_local_moved_into_is_nk2305() {
     let source = format!(
         "{LONGEST}pub fn both() -> String {{
-    let x = \"ab\".clone()
-    let y = \"short\".clone()
+    let x = \"ab\"
+    let y = \"short\"
     let r = longest(x, y)
     let mut z = y
     z.push_str(\"!\")
@@ -1625,10 +1625,10 @@ const PUB_PAIR: &str = "pub struct Pair { pub left: ref String, pub right: ref S
 fn a_pub_struct_keeps_a_place_per_view_field() {
     let source = format!(
         "{PUB_PAIR}pub fn both() -> String {{
-    let x = \"left\".clone()
-    let mut y = \"right\".clone()
+    let x = \"left\"
+    let mut y = \"right\"
     let l = pair(x, y).left
-    y = \"replaced\".clone()
+    y = \"replaced\"
     return f\"{{l}} {{y}}\"
 }}
 "
@@ -1645,13 +1645,13 @@ fn a_nested_view_struct_is_one_place_and_an_enum_one() {
         "{PUB_PAIR}pub struct Outer {{ pub inner: Pair, pub name: ref String }}
 pub enum Either {{ Both {{ a: ref String, b: ref String }}, None }}
 pub fn both() -> String {{
-    let x = \"l\".clone()
-    let y = \"r\".clone()
+    let x = \"l\"
+    let y = \"r\"
     let o = Outer {{ inner: pair(x, y), name: x }}
     let e = Either::Both {{ a: x, b: y }}
     let said = match e {{
         Either::Both {{ a, b }} => f\"{{a}}{{b}}\",
-        Either::None => \"\".clone(),
+        Either::None => \"\",
     }}
     return f\"{{o.inner.left}} {{o.name}} {{said}}\"
 }}
@@ -1669,7 +1669,7 @@ pub fn both() -> String {{
 fn a_pub_struct_keeps_its_places_across_packages() {
     let dir = common::scratch_dir("d7-across");
     let lib = format!("{PUB_PAIR}\nfn main() {{\n}}\n");
-    let app = "use lib\n\nfn main() {\n    let x = \"left\".clone()\n    let mut y = \"right\".clone()\n    let l = lib::pair(x, y).left\n    y = \"replaced\".clone()\n    println(l)\n    println(y)\n}\n";
+    let app = "use lib\n\nfn main() {\n    let x = \"left\"\n    let mut y = \"right\"\n    let l = lib::pair(x, y).left\n    y = \"replaced\"\n    println(l)\n    println(y)\n}\n";
     for (package, source, manifest) in [
         (
             "lib",

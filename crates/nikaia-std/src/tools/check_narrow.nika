@@ -357,7 +357,7 @@ pub fn check_narrow_a_proof_taken_back(mut state: CheckState, lhs: ref Expr, rhs
         state.findings[last].labels.push(CheckLabel {
             span: Span { start: at as u32, end: at as u32 + name.len() as u32 },
             word: name.clone(),
-            text: "assigned here, after the test".clone(),
+            text: "assigned here, after the test",
             main: false,
         })
     }

@@ -7,7 +7,7 @@ use std::process::Command;
 fn run(purpose: &str, call: &str, extra: &str) -> String {
     let source = format!(
         "struct Alt {{\n    action: String?,\n}}\n\nstruct Rule {{\n    alts: Vec[Alt],\n}}\n\n{extra}\n\
-         fn main() {{\n    let r = Rule {{ alts: [Alt {{ action: \"go\".clone() }}] }}\n    print({call})\n}}\n"
+         fn main() {{\n    let r = Rule {{ alts: [Alt {{ action: \"go\" }}] }}\n    print({call})\n}}\n"
     );
     let dir = crate::common::scratch_dir(&format!("match-element-{purpose}"));
     std::fs::write(dir.join("program.nika"), source).expect("write the source");
@@ -40,5 +40,5 @@ fn a_match_over_a_part_of_an_indexed_element_borrows() {
 #[test]
 fn a_match_over_an_owned_local_still_moves() {
     let f = "fn take(text: String) -> String {\n    let own = Alt { action: text }\n    return match own.action {\n        a => a,\n        null => \"none\",\n    }\n}\n";
-    assert_eq!(run("owned", "take(\"go\".clone())", f), "go");
+    assert_eq!(run("owned", "take(f\"go\")", f), "go");
 }

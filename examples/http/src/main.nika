@@ -134,23 +134,23 @@ impl File {
     pub fn content_type(ref self) -> String {
         let name = self.path.to_lowercase()
         if name.ends_with(".html") || name.ends_with(".htm") {
-            return "text/html; charset=utf-8".clone()
+            return "text/html; charset=utf-8"
         } else if name.ends_with(".txt") || name.ends_with(".nika") || name.ends_with(".toml") {
-            return "text/plain; charset=utf-8".clone()
+            return "text/plain; charset=utf-8"
         } else if name.ends_with(".css") {
-            return "text/css; charset=utf-8".clone()
+            return "text/css; charset=utf-8"
         } else if name.ends_with(".js") {
-            return "text/javascript; charset=utf-8".clone()
+            return "text/javascript; charset=utf-8"
         } else if name.ends_with(".json") {
-            return "application/json".clone()
+            return "application/json"
         } else if name.ends_with(".svg") {
-            return "image/svg+xml".clone()
+            return "image/svg+xml"
         } else if name.ends_with(".png") {
-            return "image/png".clone()
+            return "image/png"
         } else if name.ends_with(".jpg") || name.ends_with(".jpeg") {
-            return "image/jpeg".clone()
+            return "image/jpeg"
         }
-        return "application/octet-stream".clone()
+        return "application/octet-stream"
     }
 }
 

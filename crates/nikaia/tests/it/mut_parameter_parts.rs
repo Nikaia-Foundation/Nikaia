@@ -36,7 +36,7 @@ enum Oops {
 
 impl Error for Oops {
     fn message(ref self) -> String {
-        return \"bad\".clone()
+        return \"bad\"
     }
 }
 

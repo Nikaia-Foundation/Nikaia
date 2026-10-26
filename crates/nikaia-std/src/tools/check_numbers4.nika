@@ -435,19 +435,19 @@ fn a_lit_int(expr: ref Expr) -> bool sync {
 /// The code of the position a number was put where none fits.
 fn number_position_code(what: ref String) -> String? sync {
     if what == "let" {
-        return "NK1103".clone()
+        return "NK1103"
     }
     if what == "returns" {
-        return "NK1104".clone()
+        return "NK1104"
     }
     if what == "assign" {
-        return "NK1105".clone()
+        return "NK1105"
     }
     if what == "field" {
-        return "NK1106".clone()
+        return "NK1106"
     }
     if what == "argument" {
-        return "NK1102".clone()
+        return "NK1102"
     }
     return null
 }
@@ -701,7 +701,7 @@ fn open_walk_hands_back(ty: ref Ty, name: ref String) -> bool sync {
         Ty::Fn { result, .. } => result?.clone() ?? Ty::Unknown,
         else => Ty::Unknown,
     }
-    let handed: String = open_walk_named(result) ?? "".clone()
+    let handed: String = open_walk_named(result) ?? ""
     return handed == name
 }
 

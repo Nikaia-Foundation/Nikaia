@@ -104,7 +104,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn no_number_has_this_method(&mut self, name: &str, method: &str, span: &Span) {
         if !a_number_name(name) { return; }
-        let mut help: String = "Write the computation with the operators, or in a function of your own that takes the number.".to_owned();
+        let mut help: String = String::from("Write the computation with the operators, or in a function of your own that takes the number.");
         let bits = check_decls_bits_as(name, method);
         if bits.is_some() {
             let named = nikaia_std::index::or(bits, || "".into());
@@ -116,7 +116,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_list_collected(&mut self, name: &str, method: &str, args: &[Expr], span: &Span) {
         if name != "Vec" || method != "collect" || !args.is_empty() { return; }
-        self.findings.push(check_refusal("NK1210", span, "A list has no method called `collect`.".to_owned(), vec!["`map` and `filter` on a list hand back a list already; `collect` makes a list of a sequence, such as `keys()` or `io::lines()`.".to_owned()], Some("Leave out `.collect()`.".to_owned())));
+        self.findings.push(check_refusal("NK1210", span, String::from("A list has no method called `collect`."), vec![String::from("`map` and `filter` on a list hand back a list already; `collect` makes a list of a sequence, such as `keys()` or `io::lines()`.")], Some(String::from("Leave out `.collect()`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -144,13 +144,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_grammar_reached_through_a_dot(&mut self, owner: &str, rule: &str, span: &Span) { self.findings.push(check_refusal("NK1147", span, format!("Reach a rule of `{}` with `::`, not with a dot.", owner), vec!["A owner is a name like a module, and its rules are reached the same way. The dot is only for a value's fields and methods.".to_owned()], Some(format!("Write `{}::{}(…)`.", owner, rule)))); }
+    pub fn a_grammar_reached_through_a_dot(&mut self, owner: &str, rule: &str, span: &Span) { self.findings.push(check_refusal("NK1147", span, format!("Reach a rule of `{}` with `::`, not with a dot.", owner), vec![String::from("A owner is a name like a module, and its rules are reached the same way. The dot is only for a value's fields and methods.")], Some(format!("Write `{}::{}(…)`.", owner, rule)))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn what_shape_it_is(&self, ty: &str) -> String {
         if self.structs.contains_key(ty) { return format!("a `struct`, so the bound it matches is `[{}: Struct]`", ty); }
         if self.enums.contains_key(ty) { return format!("an `enum`, so the bound it matches is `[{}: Enum]`", ty); }
-        "a built-in type, which is neither".to_owned()
+        String::from("a built-in type, which is neither")
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -178,9 +178,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn cast_names_a_foreign_type(&mut self, into: &str, span: &Span) {
-        let mut help: String = "Convert to one of the types above, or leave the cast out.".to_owned();
-        if into == "usize" || into == "isize" || into == "u16" || into == "u32" || into == "u64" || into == "u128" || into == "i8" || into == "i16" || into == "i128" { help = "Lengths and indexes are `i64`, and the compiler converts them for the machine itself, so just remove the cast. To cut a number down to a narrower type, use `truncating_i32`.".to_owned(); }
-        self.findings.push(check_refusal("NK1122", span, format!("You can't convert to `{}` with `as`: Nikaia has no such type.", into), vec!["The number types are `i32`, `i64`, `u8`, `u32`, `u64`, `f32` and `f64`.".to_owned()], Some(help)));
+        let mut help: String = String::from("Convert to one of the types above, or leave the cast out.");
+        if into == "usize" || into == "isize" || into == "u16" || into == "u32" || into == "u64" || into == "u128" || into == "i8" || into == "i16" || into == "i128" { help = String::from("Lengths and indexes are `i64`, and the compiler converts them for the machine itself, so just remove the cast. To cut a number down to a narrower type, use `truncating_i32`."); }
+        self.findings.push(check_refusal("NK1122", span, format!("You can't convert to `{}` with `as`: Nikaia has no such type.", into), vec![String::from("The number types are `i32`, `i64`, `u8`, `u32`, `u64`, `f32` and `f64`.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

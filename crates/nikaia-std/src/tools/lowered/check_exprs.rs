@@ -24,7 +24,7 @@ pub(crate) fn a_plain_str_view(ty: &Ty) -> bool {
 pub(crate) fn width_dependent(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str) -> Vec<String> {
     match value {
         Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if op.is_bitwise() { width_of_binary(world, *op, lhs, rhs, into) } else { vec![] } },
-        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Not { vec!["`!`".to_owned(), format!("!({} as {})", written_expression(world.words, expr), into)] } else { vec![] } },
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Not { vec![String::from("`!`"), format!("!({} as {})", written_expression(world.words, expr), into)] } else { vec![] } },
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; width_of_method(world, receiver, method, into) },
         _ => vec![],
     }
@@ -71,7 +71,7 @@ impl CheckState {
         if right_bare { right = format!("({})", right); }
         let compared = binary_op_text(op);
         let note = "Nikaia binds `&`, `|`, `^` and the shifts tighter than a comparison, and C binds them looser, so without parentheses the line can be read two ways.";
-        self.findings.push(check_refusal("NK1197", at, "Put parentheses around a bit operation next to a comparison.".to_owned(), vec![note.to_owned()], Some(format!("Write `{} {} {}`.", left, compared, right))));
+        self.findings.push(check_refusal("NK1197", at, String::from("Put parentheses around a bit operation next to a comparison."), vec![note.to_owned()], Some(format!("Write `{} {} {}`.", left, compared, right))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -208,7 +208,7 @@ impl CheckState {
         if !moves(held) || self.copies_in_the_package.contains(&name) { return; }
         let written = written_expression(world.words, read);
         let message = format!("The two sides of `??` don't match: the left is a view of the `{}` in the map, the fallback a value of its own.", held.text());
-        let notes: Vec<String> = vec!["The map keeps its values, so reading one gives a view of it, and `??` has to give back one type.".to_owned(), "Nikaia never makes a copy behind your back.".to_owned()];
+        let notes: Vec<String> = vec![String::from("The map keeps its values, so reading one gives a view of it, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back.")];
         let help = format!("Copy the map's value when you need a `{}` of your own: `{}?.clone() ?? …`.", held.text(), written);
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }
@@ -283,7 +283,7 @@ impl CheckState {
         if !a_plain_str_view(found) || !a_plain_string(want) { return None; }
         let cost = "Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.";
         let said = capitalised(keeper);
-        if named.is_none() { return Some(CheckKept { notes: vec!["This is a view: it points into text that something else owns.".to_owned(), format!("{}, so it needs text of its own.", said), cost.to_owned()], help: String::from("Write `.clone()` to copy it here.") }); }
+        if named.is_none() { return Some(CheckKept { notes: vec![String::from("This is a view: it points into text that something else owns."), format!("{}, so it needs text of its own.", said), cost.to_owned()], help: String::from("Write `.clone()` to copy it here.") }); }
         let name = nikaia_std::index::or(named, || "").to_owned();
         let local = self.binding(&name);
         if local.is_some() {
@@ -301,7 +301,7 @@ impl CheckState {
                 return Some(CheckKept { notes: vec![first, format!("{}, so it needs text of its own.", said), cost.to_owned()], help: way });
             }
         }
-        Some(CheckKept { notes: vec!["This is a view: it points into text that something else owns.".to_owned(), format!("{}, so it needs text of its own.", said), cost.to_owned()], help: String::from("Write `.clone()` to copy it here.") })
+        Some(CheckKept { notes: vec![String::from("This is a view: it points into text that something else owns."), format!("{}, so it needs text of its own.", said), cost.to_owned()], help: String::from("Write `.clone()` to copy it here.") })
     }
 }
 

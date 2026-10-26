@@ -155,7 +155,7 @@ fn an_error_is_declared_raised_caught_and_printed() {
         }
 
         fn main() {
-            let text = load("app.conf".to_string()) catch {
+            let text = load(f"app.conf") catch {
                 println(f"{error}")
                 return
             }
@@ -213,7 +213,7 @@ fn a_written_call_propagates_its_failure() {
         }
 
         fn main() {
-            let text = ruft("app.conf".to_string()) catch {
+            let text = ruft(f"app.conf") catch {
                 println(f"{error}")
                 return
             }
@@ -226,7 +226,7 @@ fn a_written_call_propagates_its_failure() {
     // ...and the `catch` does not, because the `match` beside it is what
     // handles the failure.
     assert!(rust.contains("match ruft("), "{rust}");
-    assert!(!rust.contains("ruft(\"app.conf\".to_string())?"), "{rust}");
+    assert!(!rust.contains("ruft(\"app.conf\")?"), "{rust}");
 }
 
 /// The same, for a call on a **receiver**: `s.add(1)` takes the `?` too.
@@ -250,7 +250,7 @@ fn a_method_call_propagates_its_failure() {
         enum ZuVoll { Voll }
 
         impl Error for ZuVoll {
-            fn message(ref self) -> String { return "too full".to_string() }
+            fn message(ref self) -> String { return f"too full" }
         }
 
         struct Stats { n: i64 }
@@ -661,7 +661,7 @@ fn short_is_safe_and_full_is_asked_for() {
         }
 
         fn main() {
-            let text = load("app.conf".to_string()) catch {
+            let text = load(f"app.conf") catch {
                 println(f"short: {error}")
                 println(f"full: {error.full()}")
                 return

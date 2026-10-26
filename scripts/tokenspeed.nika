@@ -483,7 +483,7 @@ fn main() throws {
         ts_short(args[2].clone(), root)
         return
     }
-    let since = if args.len() > 2 { args[2].clone() } else { "d927f6e~1".clone() }
+    let since = if args.len() > 2 { args[2].clone() } else { "d927f6e~1" }
     println("### Progress per commit (code lines, `scripts/self_hosting.py` rule)\n")
     println("| commit | version | module | Rust | Nikaia | share | moved (Rust gone) |")
     println("| :--- | :--- | :--- | ---: | ---: | ---: | ---: |")

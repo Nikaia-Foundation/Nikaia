@@ -19,9 +19,9 @@ fn longest(a: String, b: String) -> String {
 
 fn main() {
     let x = f"abc{1}"
-    let mut y = "short".clone()
+    let mut y: String = "short"
     let r = longest(x, y)
-    y = "replaced".clone()
+    y = "replaced"
     println(r)
     let p = pair(x, y)
     println(f"{p.left} {p.right}")

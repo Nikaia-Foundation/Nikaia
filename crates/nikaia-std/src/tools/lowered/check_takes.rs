@@ -144,9 +144,9 @@ impl CheckState {
         let around = self.around_a_repeat(bound, &root);
         if around < 0 { return; }
         let what = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_owned();
-        let mut again: String = String::from("a lambda may run more than once, and the second run would find it gone");
-        if what == "loop" { again = "the next time round the loop it would be handed over again, but it's already gone".to_owned(); }
-        self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), "Numbers, `bool`s, `char`s and views would be fine: they're copied.".to_owned()], Some(format!("Hand over a copy each time: `{}.clone()`.", path))));
+        let mut again: &'static str = "a lambda may run more than once, and the second run would find it gone";
+        if what == "loop" { again = "the next time round the loop it would be handed over again, but it's already gone"; }
+        self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `char`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}.clone()`.", path))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -160,7 +160,7 @@ impl CheckState {
             if used.path == name { message = format!("You're using `{}` again, but it was {}.", name, taken.to); }
             if said.contains(&used.at) { continue; }
             said.insert(used.at);
-            found.push(check_refusal("NK2105", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, message, vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", name, taken.ty.text()), "Numbers, `bool`s, `char`s and views would be fine: they're copied.".to_owned()], Some(format!("If both need it, hand over a copy: `{}.clone()`.", name))));
+            found.push(check_refusal("NK2105", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, message, vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", name, taken.ty.text()), String::from("Numbers, `bool`s, `char`s and views would be fine: they're copied.")], Some(format!("If both need it, hand over a copy: `{}.clone()`.", name))));
         }
         self.handed = vec![];
         for one in found.iter() { self.findings.push(one.clone()); }
@@ -177,13 +177,13 @@ impl CheckState {
         if around < 0 { return; }
         let what = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_owned();
         let item = an_item_text(ty);
-        let mut again: String = String::from("a lambda may run more than once, and the second run would find it used up");
+        let mut again: &'static str = "a lambda may run more than once, and the second run would find it used up";
         let mut help: String = format!("Collect it into a list before the lambda and walk the list inside: `let {} = {}.collect()`.", name, name);
         if what == "loop" {
-            again = "the next time round the loop would use it again, but it's already used up".to_owned();
+            again = "the next time round the loop would use it again, but it's already used up";
             help = format!("Collect it into a list before the loop and walk the list: `let {} = {}.collect()`.", name, name);
         }
-        self.findings.push(check_refusal("NK2702", span, format!("`{}` is a sequence, and you're using it up inside a {} it was declared outside of.", name, what), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up - and {}.", item, again), "A `Vec` is different: it already holds its elements and can be walked as often as you like.".to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK2702", span, format!("`{}` is a sequence, and you're using it up inside a {} it was declared outside of.", name, what), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up - and {}.", item, again), String::from("A `Vec` is different: it already holds its elements and can be walked as often as you like.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -195,7 +195,7 @@ impl CheckState {
             if said.contains(&used.at) { continue; }
             said.insert(used.at);
             let item = an_item_text(&taken.ty);
-            found.push(check_refusal("NK2702", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, format!("`{}` is a sequence, and it was already used up.", taken.path), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.", item), "A `Vec` is different: it already holds its elements and can be walked as often as you like.".to_owned()], Some(format!("Collect it first and walk the collection: `let {} = {}.collect()`.", taken.path, taken.path))));
+            found.push(check_refusal("NK2702", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, format!("`{}` is a sequence, and it was already used up.", taken.path), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.", item), String::from("A `Vec` is different: it already holds its elements and can be walked as often as you like.")], Some(format!("Collect it first and walk the collection: `let {} = {}.collect()`.", taken.path, taken.path))));
         }
         self.walked = vec![];
         for one in found.iter() { self.findings.push(one.clone()); }
@@ -220,7 +220,7 @@ impl CheckState {
             if given_back { continue; }
             let mut first: String = format!("A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `{}` is a `{}`, so it went to the task.", name, ty.text());
             if who != "a background task" { first = format!("A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `{}` is a `{}`, so it went to the function.", name, ty.text()); }
-            found.push(check_refusal("NK2101", &Span { start: u32::try_from(used).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, format!("You're using `{}` after {} took it.", name, who), vec![first, "Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.".to_owned()], Some(format!("Make a copy before and hand over the copy: `let copy = {}.clone()`, then use `copy` inside.", name))));
+            found.push(check_refusal("NK2101", &Span { start: u32::try_from(used).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, format!("You're using `{}` after {} took it.", name, who), vec![first, String::from("Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.")], Some(format!("Make a copy before and hand over the copy: `let copy = {}.clone()`, then use `copy` inside.", name))));
         }
         for one in found.iter() { self.findings.push(one.clone()); }
     }
@@ -296,15 +296,15 @@ impl CheckState {
         let fails = some && how == "fails";
         let mut message: String = format!("`{}` is left without {}: it was taken out and never given back.", subject, part);
         let mut span = from.clone();
-        let mut label = CheckLabel { span: from.clone(), word: out.part.to_owned(), text: "taken out here and not given back".to_owned(), main: true };
+        let mut label = CheckLabel { span: from.clone(), word: out.part.to_owned(), text: String::from("taken out here and not given back"), main: true };
         if fails {
             message = format!("`{}` can fail, and {} is out of `{}` at that point.", word, part, subject);
             span = at_the_way.clone();
-            label = CheckLabel { span: at_the_way.clone(), word: word.to_owned(), text: "can fail while the part is out".to_owned(), main: true };
+            label = CheckLabel { span: at_the_way.clone(), word: word.to_owned(), text: String::from("can fail while the part is out"), main: true };
         } else if some {
             message = format!("This `{}` leaves `{}` without {}.", how, subject, part);
             span = at_the_way.clone();
-            label = CheckLabel { span: at_the_way.clone(), word: how.to_owned(), text: "leaves the function with the part still out".to_owned(), main: true };
+            label = CheckLabel { span: at_the_way.clone(), word: how.to_owned(), text: String::from("leaves the function with the part still out"), main: true };
         }
         let mut labels: Vec<CheckLabel> = vec![label];
         if some { labels.push(CheckLabel { span: from.clone(), word: out.part.to_owned(), text: format!("taken out of `{}` here", subject), main: false }); }
@@ -314,7 +314,7 @@ impl CheckState {
             kept = format!("Between taking {} out of `{}` and giving it back, no call that can fail may stand: the caller would be left a `{}` with a part missing.", part, subject, subject);
             tail = " and move the call out from between";
         }
-        CheckFinding { severity: CheckSeverity::Error, span, code: "NK2108".to_owned(), message, notes: vec![kept], help: Some(format!("Assign `{}` (or the part) before the function is left{}, or build the value by value with `fn f({}: T) -> T`.", subject, tail, subject)), labels }
+        CheckFinding { severity: CheckSeverity::Error, span, code: String::from("NK2108"), message, notes: vec![kept], help: Some(format!("Assign `{}` (or the part) before the function is left{}, or build the value by value with `fn f({}: T) -> T`.", subject, tail, subject)), labels }
     }
 }
 
@@ -328,7 +328,7 @@ pub(crate) fn a_sequence_that_is_used_up(ty: &Ty) -> bool {
 pub(crate) fn an_item_text(ty: &Ty) -> String {
     match ty {
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.text() },
-        _ => "?".to_owned(),
+        _ => String::from("?"),
     }
 }
 

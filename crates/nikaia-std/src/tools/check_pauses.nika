@@ -49,7 +49,7 @@ impl CheckState {
         let mut notes: Vec[String] = []
         let mut why: String = ""
         if pause.unpromised != null {
-            pauses = "doesn't promise that it never pauses".clone()
+            pauses = "doesn't promise that it never pauses"
             why = not_promised_note(pause.unpromised ?? "")
         }
         self.note_a_pause()
@@ -58,7 +58,7 @@ impl CheckState {
         // for as long as the wait takes. **A pausing task of `task::scope` is
         // polled by the scope itself** (ADR-328 D10), so it is not refused here.
         if self.in_parallel != null && !self.scoped_task {
-            let mut parallel: Vec[String] = ["A `par_iter()` lambda runs on every core at once, and a core that waits holds up its share of the work, so the lambda must never pause.".clone()]
+            let mut parallel: Vec[String] = ["A `par_iter()` lambda runs on every core at once, and a core that waits holds up its share of the work, so the lambda must never pause."]
             if pause.unpromised != null {
                 parallel.push(why.clone())
             }
@@ -67,7 +67,7 @@ impl CheckState {
         if !self.inside_a_door {
             return
         }
-        notes.push("While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too.".clone())
+        notes.push("While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too.")
         if pause.unpromised != null {
             notes.push(why)
         }
@@ -91,13 +91,13 @@ impl CheckState {
             return
         }
         let rule = self.inside_an_action?.clone() ?? return
-        let mut notes: Vec[String] = ["A grammar's actions may never pause: a parser works on text that's already there, which is what lets `@frame` parse in parallel.".clone()]
+        let mut notes: Vec[String] = ["A grammar's actions may never pause: a parser works on text that's already there, which is what lets `@frame` parse in parallel."]
         let mut pauses: String = "can pause"
         if contract.sync_claim == Sync::Unpromised {
-            pauses = "doesn't promise that it never pauses".clone()
+            pauses = "doesn't promise that it never pauses"
             notes.push(not_promised_note(callee))
         }
-        self.findings.push(check_refusal("NK2209", span, f"The action of `{rule}` calls `{callee}`, which {pauses}.", notes, "Read what the parser needs before parsing and pass it in, or process the result after the parse.".clone()))
+        self.findings.push(check_refusal("NK2209", span, f"The action of `{rule}` calls `{callee}`, which {pauses}.", notes, "Read what the parser needs before parsing and pass it in, or process the result after the parse."))
     }
 
     /// `NK2202`: a call in a `sync` function that may pause.
@@ -109,9 +109,9 @@ impl CheckState {
         let mut pauses: String = "can pause"
         let mut why: String = f"`{callee}` isn't `sync`."
         if contract.sync_claim == Sync::Unpromised {
-            pauses = "doesn't promise that it never pauses".clone()
+            pauses = "doesn't promise that it never pauses"
             why = not_promised_note(callee)
         }
-        self.findings.push(check_refusal("NK2202", span, f"`{caller}` is `sync`, but it calls `{callee}`, which {pauses}.", ["A `sync` function promises never to pause or do I/O.".clone(), why], f"Remove `sync` from `{caller}`, or move the call out of it."))
+        self.findings.push(check_refusal("NK2202", span, f"`{caller}` is `sync`, but it calls `{callee}`, which {pauses}.", ["A `sync` function promises never to pause or do I/O.", why], f"Remove `sync` from `{caller}`, or move the call out of it."))
     }
 }

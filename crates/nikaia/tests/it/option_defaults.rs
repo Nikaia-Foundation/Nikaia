@@ -428,7 +428,7 @@ fn a_text_view_option_lends_an_owned_string() {
          }\n\
          \n\
          fn main() {\n\
-         \x20   let v = \"-\".clone()\n\
+         \x20   let v = \"-\"\n\
          \x20   println(joined(1; sep: v))\n\
          \x20   println(v)\n\
          }\n";

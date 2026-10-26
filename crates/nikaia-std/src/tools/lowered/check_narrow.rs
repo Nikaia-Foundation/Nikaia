@@ -253,6 +253,6 @@ pub fn check_narrow_a_proof_taken_back(state: &mut CheckState, lhs: &Expr, rhs: 
     let at = lost.at;
     let last = state.findings.len() as i64 - 1;
     if at == -1 { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but a loop around this use assigns `{}`, so the next turn may read it `null`.", name, name)); } else { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on it is a `T?` again.", name, name)); }
-    if at >= 0 { state.findings[nikaia_std::index::at(last)].labels.push(CheckLabel { span: Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + u32::try_from(name.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, word: name.to_owned(), text: "assigned here, after the test".to_owned(), main: false }); }
+    if at >= 0 { state.findings[nikaia_std::index::at(last)].labels.push(CheckLabel { span: Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + u32::try_from(name.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, word: name.to_owned(), text: String::from("assigned here, after the test"), main: false }); }
 }
 

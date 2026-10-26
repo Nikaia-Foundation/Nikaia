@@ -8,11 +8,11 @@ struct Entry {
 fn add(m: collections::HashMap[String, Entry], keys: ref Vec[String]) {
     for k in keys {
         let mut x = m[k] ?? continue
-        x.names.push("n".clone())
+        x.names.push("n")
     }
 }
 
 fn main() {
     let mut m: collections::HashMap[String, Entry] = collections::HashMap()
-    add(m, ["a".clone()])
+    add(m, ["a"])
 }

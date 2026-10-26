@@ -30,7 +30,7 @@ fn and_modify_on_a_map_of_numbers_changes_the_number() {
 
 fn main() {
     let mut m: collections::HashMap[String, i64] = collections::HashMap()
-    let k = "a".clone()
+    let k = f"a"
     m.entry(k.clone()).and_modify(fn(v) { v += 1 }).or_insert(1)
     m.entry(k.clone()).and_modify(fn(v) { v += 1 }).or_insert(1)
     m.entry(k.clone()).and_modify(fn(v) { v = v * 2 }).or_insert(1)
@@ -79,7 +79,7 @@ fn count(k: ref String) -> i64 {
 }
 
 fn main() throws {
-    let key = "a".clone()
+    let key = f"a"
     let line = "ab;1.0"
     let mut c: collections::HashMap[String, C] = collections::HashMap()
     let name = line.bytes[0..<2].text()

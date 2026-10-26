@@ -134,9 +134,9 @@ fn a_bare_call_nothing_declares_is_refused() {
 fn a_loop_binding_is_not_the_name_it_shadows() {
     let source = "fn main() {\n\
          \x20   let mut kept: Vec[String] = []\n\
-         \x20   let k = \"b\".clone()\n\
+         \x20   let k = f\"b\"\n\
          \x20   kept.push(k)\n\
-         \x20   for (k, v) in [(\"x\".clone(), 1)] {\n\
+         \x20   for (k, v) in [(f\"x\", 1)] {\n\
          \x20       println(f\"{k} {v}\")\n\
          \x20   }\n\
          \x20   println(k)\n\
@@ -163,7 +163,7 @@ fn text_a_loop_lends_is_kept_only_as_a_copy() {
         "struct Word { text: String }\n\
          \n\
          fn main() {\n\
-         \x20   let names: Vec[String] = [\"a\".clone()]\n\
+         \x20   let names: Vec[String] = [f\"a\"]\n\
          \x20   let mut out: Vec[Word] = []\n\
          \x20   for s in names {\n\
          \x20       out.push(Word { text: s })\n\
@@ -318,7 +318,7 @@ fn a_branch_that_continues_takes_its_takings_with_it() {
     let outer = findings(
         "fn outer(names: ref Vec[String]) -> i64 {\n\
          \x20   let mut kept: Vec[String] = []\n\
-         \x20   let first: String = \"x\".clone()\n\
+         \x20   let first: String = f\"x\"\n\
          \x20   for one in names {\n\
          \x20       if one.len() > 3 {\n\
          \x20           kept.push(first)\n\
@@ -374,7 +374,7 @@ fn a_fallback_block_that_returns_takes_its_takings_with_it() {
     let leaves = "use std::collections\n\
                   \n\
                   fn f(known: i64?, mut s: collections::BTreeSet[String]) -> i64 {\n\
-                  \x20   let name: String = \"xy\".clone()\n\
+                  \x20   let name: String = f\"xy\"\n\
                   \x20   let n = known ?? {\n\
                   \x20       s.insert(name)\n\
                   \x20       return 0\n\
@@ -578,12 +578,12 @@ fn a_name_as_the_fallback_of_a_list_read_of_text_runs() {
          \x20   let mut v: Vec[String] = Vec()\n\
          \x20   println(f(v, \"z\"))\n\
          \x20   println(k(v, \"e\"))\n\
-         \x20   v.push(\"a\".clone())\n\
-         \x20   v.push(\"b\".clone())\n\
+         \x20   v.push(\"a\")\n\
+         \x20   v.push(\"b\")\n\
          \x20   println(f(v, \"z\"))\n\
          \x20   println(k(v, \"e\"))\n\
          \x20   println(h(null, \"q\"))\n\
-         \x20   println(h(\"p\".clone(), \"q\"))\n\
+         \x20   println(h(\"p\", \"q\"))\n\
          }\n",
         "z\ne\na\nb\nq\np\n",
         |_| {},
@@ -601,18 +601,18 @@ fn text_literals_beside_names_in_a_tuple_of_text_run() {
          \x20   p.0.len() as i64 + p.1.len() as i64\n\
          }\n\
          fn main() {\n\
-         \x20   let name: String = \"A\".clone()\n\
+         \x20   let name: String = \"A\"\n\
          \x20   let mut pairs: Vec[(String, String)] = Vec()\n\
          \x20   pairs.push((name, \"x\"))\n\
-         \x20   let name2: String = \"B\".clone()\n\
+         \x20   let name2: String = \"B\"\n\
          \x20   pairs.push((\"y\", name2))\n\
          \x20   println(f\"{pairs.len()}\")\n\
-         \x20   let n3: String = \"CC\".clone()\n\
+         \x20   let n3: String = \"CC\"\n\
          \x20   println(f\"{take((n3, \"y\"))}\")\n\
-         \x20   let n4: String = \"D\".clone()\n\
+         \x20   let n4: String = \"D\"\n\
          \x20   let t: (String, String) = (n4, \"w\")\n\
          \x20   println(t.1)\n\
-         \x20   let n5: String = \"E\".clone()\n\
+         \x20   let n5: String = \"E\"\n\
          \x20   let l: Vec[(String, String)] = [(n5, \"x\"), (\"F\", \"z\")]\n\
          \x20   println(f\"{l.len()}\")\n\
          }\n",
@@ -769,7 +769,7 @@ fn a_number_beside_a_struct_option_is_refused() {
 fn a_lambda_split_over_a_tuple_is_refused() {
     let found = findings(
         "fn main() {\n\
-         \x20   let pairs: Vec[(String, i64)] = [(\"a\".clone(), 1), (\"b\".clone(), 2)]\n\
+         \x20   let pairs: Vec[(String, i64)] = [(\"a\", 1), (\"b\", 2)]\n\
          \x20   let n = pairs.iter().filter(fn(name, v) { v > 1 }).count()\n\
          \x20   println(f\"{n}\")\n\
          }\n",
@@ -851,8 +851,8 @@ fn a_parameter_moved_into_a_let_mut_stays_owned() {
          \x20   println(t)\n\
          }\n\
          fn main() {\n\
-         \x20   println(take(\"hi\".clone()))\n\
-         \x20   shout(\"ho\".clone())\n\
+         \x20   println(take(\"hi\"))\n\
+         \x20   shout(\"ho\")\n\
          }\n",
         "hi!\nho!\n",
         |_| {},

@@ -11,7 +11,7 @@ impl CheckState {
         let letters: Vec<scalar> = nikaia_std::list::chars(called.chars());
         let mut written = called.to_owned();
         if !letters.is_empty() && (*nikaia_std::index::get(&letters, 0)).to_ascii_lowercase() != *nikaia_std::index::get(&letters, 0) { written = method.to_owned(); }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2203".to_owned(), message: format!("`{}` takes a lock, but you're already holding one here.", written), notes: vec!["This block runs while a lock is held, so taking a second lock inside it can deadlock.".to_owned()], help: Some("Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.".to_owned()), labels: vec![CheckLabel { span: span.clone(), word: method, text: "takes a second lock".to_owned(), main: true }] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2203"), message: format!("`{}` takes a lock, but you're already holding one here.", written), notes: vec![String::from("This block runs while a lock is held, so taking a second lock inside it can deadlock.")], help: Some(String::from("Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.")), labels: vec![CheckLabel { span: span.clone(), word: method, text: String::from("takes a second lock"), main: true }] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -25,7 +25,7 @@ impl CheckState {
         let mut touched = false;
         for (entry_name, entry_value) in world.library.types.iter() { if a_type_base(entry_name) == base && touches_a_file(entry_value) { touched = true; } }
         if !touched { return; }
-        self.findings.push(check_refusal("NK2201", span, format!("{} reads a file, but you're holding a lock here.", capitalised(what)), vec![format!("`{}` is a file mapped into memory, so reading it can wait on the disk, and a block that holds a lock must never wait.", name), "This wait doesn't show up as a pause or a second lock, which is why it gets its own message.".to_owned()], Some("Read what you need before taking the lock, and pass the value in.".to_owned())));
+        self.findings.push(check_refusal("NK2201", span, format!("{} reads a file, but you're holding a lock here.", capitalised(what)), vec![format!("`{}` is a file mapped into memory, so reading it can wait on the disk, and a block that holds a lock must never wait.", name), String::from("This wait doesn't show up as a pause or a second lock, which is why it gets its own message.")], Some(String::from("Read what you need before taking the lock, and pass the value in."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -41,7 +41,7 @@ impl CheckState {
             at = at + 1;
         }
         if !hands_back { return; }
-        self.findings.push(check_refusal("NK1141", span, "An `update` changes the value in place, so it has nothing to return.".to_owned(), vec!["The block gets the value itself and changes it where it is, so a value it returns would go nowhere.".to_owned()], Some("Change it instead: write `fn(mut v) { v += 1 }`, not `fn(v) { v + 1 }`.".to_owned())));
+        self.findings.push(check_refusal("NK1141", span, String::from("An `update` changes the value in place, so it has nothing to return."), vec![String::from("The block gets the value itself and changes it where it is, so a value it returns would go nowhere.")], Some(String::from("Change it instead: write `fn(mut v) { v += 1 }`, not `fn(v) { v + 1 }`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -70,20 +70,20 @@ impl CheckState {
         let mut in_a_lambda = false;
         for around in self.repeats.iter() { if around.what == "lambda" { in_a_lambda = true; } }
         if name != "a" && name != "b" && name != "c" || !in_a_lambda { return false; }
-        self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't declared anywhere.", name), vec!["A lambda's arguments have to be named: `a`, `b` and `c` are no longer there automatically.".to_owned()], Some(format!("Name the argument: `fn ({}) {{ … }}`, or better, a name that says what it is: `fn (user) {{ user.id }}`.", name))));
+        self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't declared anywhere.", name), vec![String::from("A lambda's arguments have to be named: `a`, `b` and `c` are no longer there automatically.")], Some(format!("Name the argument: `fn ({}) {{ … }}`, or better, a name that says what it is: `fn (user) {{ user.id }}`.", name))));
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_foreign_call_outside_unsafe(&mut self, name: &str, span: &Span) {
         if self.inside_unsafe || !self.foreign_names.contains(name) { return; }
-        self.findings.push(check_refusal("NK1143", span, format!("`{}` is a C function, so calling it has to happen inside an `unsafe` block.", name), vec!["C isn't memory-safe, so every call into it is marked where it happens.".to_owned(), "Everything inside the block is still checked as usual.".to_owned()], Some(format!("Write `unsafe {{ {}(…) }}`.", name))));
+        self.findings.push(check_refusal("NK1143", span, format!("`{}` is a C function, so calling it has to happen inside an `unsafe` block.", name), vec![String::from("C isn't memory-safe, so every call into it is marked where it happens."), String::from("Everything inside the block is still checked as usual.")], Some(format!("Write `unsafe {{ {}(…) }}`.", name))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn an_assume_outside_unsafe(&mut self, span: &Span) {
         if self.inside_unsafe { return; }
-        self.findings.push(check_refusal("NK1294", span, "`assume` is written only inside an `unsafe` block.".to_owned(), vec!["An `assume` is a claim the program vouches for: the compiler takes it as a fact without a proof, and a build that removes checks does not check it.".to_owned(), "`unsafe` marks the place that has to be right; `assert` is the claim that is proved or checked.".to_owned()], Some("Write `unsafe { assume(…) }`, or `assert(…)` to have the claim checked.".to_owned())));
+        self.findings.push(check_refusal("NK1294", span, String::from("`assume` is written only inside an `unsafe` block."), vec![String::from("An `assume` is a claim the program vouches for: the compiler takes it as a fact without a proof, and a build that removes checks does not check it."), String::from("`unsafe` marks the place that has to be right; `assert` is the claim that is proved or checked.")], Some(String::from("Write `unsafe { assume(…) }`, or `assert(…)` to have the claim checked."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -97,8 +97,8 @@ impl CheckState {
         let container = nikaia_std::index::or(match self.set_receiver.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || "this lock".to_owned().into());
-        self.findings.push(check_refusal("NK2208", span, format!("`{}` has no `set_after`. Write `set(…; after: …)` instead.", container), vec!["`set` with `after:` compares and stores while holding the lock once.".to_owned(), "Written like this, a failure would be silently dropped.".to_owned()], Some(format!("Write `{}.set(neu; after: seen)`, where `seen` is the value you read from the lock.", container))));
+        }, || "this lock".into());
+        self.findings.push(check_refusal("NK2208", span, format!("`{}` has no `set_after`. Write `set(…; after: …)` instead.", container), vec![String::from("`set` with `after:` compares and stores while holding the lock once."), String::from("Written like this, a failure would be silently dropped.")], Some(format!("Write `{}.set(neu; after: seen)`, where `seen` is the value you read from the lock.", container))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -112,14 +112,14 @@ impl CheckState {
         let container = nikaia_std::index::or(match self.set_receiver.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || "this lock".to_owned().into());
+        }, || "this lock".into());
         let mut stale = false;
         for ty in found.iter() { if ty.is_seen() { stale = true; } }
         if stale {
-            self.findings.push(check_refusal("NK2205", span, format!("This `set` stores a value that was read from `{}` earlier, so the lock is taken twice.", container), vec!["A value read from a lock is out of date as soon as the lock is released: anything can change between the read and the store.".to_owned(), "This is found wherever the value was read: on the line above, in another function, or in another request.".to_owned()], Some(format!("Write `{}.update fn(mut v) {{ … }}`, which reads and changes the value while holding the lock.", container))));
+            self.findings.push(check_refusal("NK2205", span, format!("This `set` stores a value that was read from `{}` earlier, so the lock is taken twice.", container), vec![String::from("A value read from a lock is out of date as soon as the lock is released: anything can change between the read and the store."), String::from("This is found wherever the value was read: on the line above, in another function, or in another request.")], Some(format!("Write `{}.update fn(mut v) {{ … }}`, which reads and changes the value while holding the lock.", container))));
             return;
         }
-        if self.stamped_condition.is_some() { self.findings.push(check_refusal("NK2205", span, format!("This `set` depends on a condition read from `{}` earlier, so the lock is taken twice.", container), vec!["What the lock held may have changed before this line runs.".to_owned()], Some(format!("Write `{}.update fn(mut v) {{ … }}` and make the decision inside the lock.", container)))); }
+        if self.stamped_condition.is_some() { self.findings.push(check_refusal("NK2205", span, format!("This `set` depends on a condition read from `{}` earlier, so the lock is taken twice.", container), vec![String::from("What the lock held may have changed before this line runs.")], Some(format!("Write `{}.update fn(mut v) {{ … }}` and make the decision inside the lock.", container)))); }
     }
 }
 

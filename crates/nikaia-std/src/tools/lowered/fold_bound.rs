@@ -611,7 +611,7 @@ impl FbWalk {
         self.reached.insert(at);
         self.stack.push(at);
         let mut env: collections::BTreeMap<String, FbTy> = collections::BTreeMap::new();
-        if fun.has_receiver && fun.owner.is_some() { env.insert("self".to_owned(), match fun.owner.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return }.clone()); }
+        if fun.has_receiver && fun.owner.is_some() { env.insert(String::from("self"), match fun.owner.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return }.clone()); }
         for arg in fun.args.iter() { env.insert(ix.text(arg.name), FbTy::of(ix.words, &arg.ty)); }
         self.block(host, ix, fun.body, &env, looped);
         self.stack.pop();
@@ -812,7 +812,7 @@ impl FbWalk {
                 let mut ty = ix.text(name);
                 if ty == "Self" {
                     ty = String::from("");
-                    let own = env.get(&"self".to_owned());
+                    let own = env.get("self");
                     if own.is_some() { ty = match own { Some(__nikaia_value) => __nikaia_value, None => return }.name.to_owned(); }
                 }
                 for field in ix.whole_fields(ty) {
@@ -938,7 +938,7 @@ impl FbMerge {
             if self.entry_wise(host, ix, &stmt.node, &owner, other.to_owned()) { continue; }
             let mut walk = fb_new_walk();
             let mut env: collections::BTreeMap<String, FbTy> = collections::BTreeMap::new();
-            env.insert("self".to_owned(), owner.clone());
+            env.insert(String::from("self"), owner.clone());
             env.insert(other.to_owned(), FbTy::of(ix.words, &nikaia_std::index::get(&fun.args, 0).ty));
             walk.stmt(host, ix, stmt, &env, false);
             for name in walk.touched() { self.bad.insert(name); }
@@ -962,7 +962,7 @@ impl FbMerge {
                             Expr::Field { base: from, name: read, .. } => {
                                 let from = nikaia_std::boxed::open(from); let read = *read;
                                 let field = ix.text(name);
-                                if fb_named(ix.words, into, &"self".to_owned()) && fb_named(ix.words, from, &other) && ix.text(read) == field { return Some(field); }
+                                if fb_named(ix.words, into, "self") && fb_named(ix.words, from, &other) && ix.text(read) == field { return Some(field); }
                                 return None;
                             },
                             _ => return None,
@@ -1034,7 +1034,7 @@ impl FbMerge {
                     Expr::Field { base, name, .. } => {
                         let base = nikaia_std::boxed::open(base); let name = *name;
                         let map = match ix.field_type(owner, ix.text(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
-                        if !map.is_map() || !fb_named(ix.words, base, &"self".to_owned()) { return false; }
+                        if !map.is_map() || !fb_named(ix.words, base, "self") { return false; }
                         if modify.is_empty() { return true; }
                         return self.modified(host, ix, *nikaia_std::index::get(&modify, 0), &map, value);
                     },
@@ -1301,7 +1301,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     match &spec.init {
         Expr::Variable(..) => {
             let mut starts: Vec<i64> = vec![];
-            for at in fb_vec_of(&ix.methods, &fb_key(&acc.name.to_owned(), &"".to_owned())) {
+            for at in fb_vec_of(&ix.methods, &fb_key(&acc.name.to_owned(), "")) {
                 let fun = match ix.fns.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if fun.args.is_empty() { starts.push(at); }
             }

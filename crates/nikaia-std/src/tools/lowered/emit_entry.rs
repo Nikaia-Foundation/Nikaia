@@ -45,22 +45,22 @@ impl EmitState {
                     let name = *name;
                     let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if receiver.is_some() || world.words.resolve(called) != "main" { continue; }
-                    if args.is_empty() && config.is_empty() { return ("".to_owned(), "".to_owned()); }
+                    if args.is_empty() && config.is_empty() { return (String::from(""), String::from("")); }
                     let about = nikaia_std::index::or(item.doc.as_deref(), || "").to_owned();
                     return self.main_words_of(world, args, config, &about, types, passing);
                 },
                 _ => { },
             }
         }
-        ("".to_owned(), "".to_owned())
+        (String::from(""), String::from(""))
     }
     pub(crate) fn main_words_of(&self, world: &EmitWorld<'_, '_, '_, '_>, args: &[FnArg], config: &[ConfigParam], about: &str, types: &[String], passing: &[String]) -> (String, String) {
         let __keep_frame = nikaia_std::tether::Keep::new();
         let mut checks: Vec<PreconditionCheck> = vec![];
-        if self.facts.entries.contains_key("main") { checks = match self.facts.entries.get("main") { Some(__nikaia_value) => __nikaia_value, None => return ("".to_owned(), "".to_owned()) }.to_owned(); }
+        if self.facts.entries.contains_key("main") { checks = match self.facts.entries.get("main") { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) }.to_owned(); }
         let mut options: Vec<ConfigContract> = vec![];
         if self.own_contracts.functions.contains_key("main") {
-            let contract = match self.own_contracts.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return ("".to_owned(), "".to_owned()) };
+            let contract = match self.own_contracts.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
             let signature = nikaia_std::index::or(match contract.signature.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,

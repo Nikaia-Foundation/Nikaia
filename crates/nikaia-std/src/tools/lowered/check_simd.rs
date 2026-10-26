@@ -67,7 +67,7 @@ pub fn check_simd_bytes(ty: &Ty) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_simd_fixed(lane: &str, count: i64) -> Ty { Ty::Named { name: "simd::Fixed".to_owned(), args: vec![Ty::Named { name: lane.to_owned(), args: vec![], view: false }, Ty::Count(count)], view: false } }
+pub(crate) fn check_simd_fixed(lane: &str, count: i64) -> Ty { Ty::Named { name: String::from("simd::Fixed"), args: vec![Ty::Named { name: lane.to_owned(), args: vec![], view: false }, Ty::Count(count)], view: false } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -183,7 +183,7 @@ pub fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
     if !check_simd_kind(&given).is_empty() { return given; }
     if name == "simd::Fixed::from" && args.len() == 1 {
         return match nikaia_std::index::get(&args, 0) {
-            Expr::ListLit { items, .. } => Ty::Named { name: "simd::Fixed".to_owned(), args: vec![Ty::Unknown, Ty::Count(items.len() as i64)], view: false },
+            Expr::ListLit { items, .. } => Ty::Named { name: String::from("simd::Fixed"), args: vec![Ty::Unknown, Ty::Count(items.len() as i64)], view: false },
             _ => Ty::Unknown,
         };
     }
@@ -208,9 +208,9 @@ impl CheckState {
                 _ => ("%", "", ""),
             };
             let mut help: String = format!("Name what a lane does where the result does not fit: `a.{}(b)` wraps, `a.{}(b)` stops at the nearest value a lane holds.", wrapping, saturating);
-            if op == BinaryOp::Mul { help = "Name what a lane does where the result does not fit: `a.wrapping_mul(b)` keeps the low bits.".to_owned(); }
-            if wrapping.is_empty() { help = "A vector has no lane by lane division; divide the lanes one by one with `lane(i)`.".to_owned(); }
-            self.findings.push(check_refusal("NK1296", at, format!("`{}` is not a lane operation, and this is a `{}`.", written, shown), vec!["A lane's `+` would either check every lane, which costs the compare and branch the vector exists to avoid, or wrap, which `+` never does elsewhere in Nikaia (ADR-377 D4).".to_owned()], Some(help)));
+            if op == BinaryOp::Mul { help = String::from("Name what a lane does where the result does not fit: `a.wrapping_mul(b)` keeps the low bits."); }
+            if wrapping.is_empty() { help = String::from("A vector has no lane by lane division; divide the lanes one by one with `lane(i)`."); }
+            self.findings.push(check_refusal("NK1296", at, format!("`{}` is not a lane operation, and this is a `{}`.", written, shown), vec![String::from("A lane's `+` would either check every lane, which costs the compare and branch the vector exists to avoid, or wrap, which `+` never does elsewhere in Nikaia (ADR-377 D4).")], Some(help)));
             return Some(vector);
         }
         let bits = matches!(op, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor);
@@ -235,7 +235,7 @@ impl CheckState {
         let count = check_simd_count_of(on);
         let indices = check_simd_constant_indices(world, nikaia_std::index::get(&args, 0));
         if indices.is_none() {
-            self.findings.push(check_refusal("NK1298", span, "A shuffle's indices are written as constants.".to_owned(), vec!["The indices of a shuffle become part of the instruction: a `pshufb` takes them as a constant table, and the checker proves each within the lanes.".to_owned()], Some("Write them as `simd::Fixed::from([…])` of literals, each below the lane count.".to_owned())));
+            self.findings.push(check_refusal("NK1298", span, String::from("A shuffle's indices are written as constants."), vec![String::from("The indices of a shuffle become part of the instruction: a `pshufb` takes them as a constant table, and the checker proves each within the lanes.")], Some(String::from("Write them as `simd::Fixed::from([…])` of literals, each below the lane count."))));
             return;
         }
         for index in nikaia_std::index::or(indices, || vec![].into()) {

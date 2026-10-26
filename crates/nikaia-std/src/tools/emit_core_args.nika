@@ -871,7 +871,7 @@ impl EmitState {
                         let mut probe = EmitOut::empty()
                         self.emit_core_args(world, walk, probe, host, self.emit_call_callee(world, func), args, self.takes_a_handle_at(world, func), depth, flow, tried)
                         if !probe.buf.contains("?") {
-                            channel = "nikaia_std::task::Crashed".clone()
+                            channel = "nikaia_std::task::Crashed"
                         }
                     }
                     out.push(f"::<_, {emit_call_scope_channel(channel)}>")
@@ -1089,7 +1089,7 @@ impl EmitState {
                     let tried = EmitScope::plain() with { changed: scope.changed.clone(), tasks_channel: channel.clone(), tasks_function: owner.clone() }
                     self.emit_core_block(world, walk, probe, host, body, depth, EmitFlow::plain().at(flow.statement), tried, EmitTail::Return)
                     if !probe.buf.contains("?") {
-                        channel = "nikaia_std::task::Crashed".clone()
+                        channel = "nikaia_std::task::Crashed"
                     }
                 }
                 let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
@@ -1278,7 +1278,7 @@ impl EmitState {
             // **Through `path`**, because one name below depends on more than the
             // name: a **trusted** map is `TrustedMap::default()` and not
             // `TrustedMap::new()` (ADR-010 D5).
-            out.push(self.path(world, walk.trusting, walk.unpinned, [text.clone(), "new".clone()]))
+            out.push(self.path(world, walk.trusting, walk.unpinned, [text.clone(), "new"]))
             out.push("(")
             let takes = self.takes_a_handle(world, f"{text}::new")
             self.emit_core_args(world, walk, out, host, text, args, takes, depth, flow, scope)
@@ -1337,7 +1337,7 @@ impl EmitState {
             // `::new` beside it.
             let key = f"{module}::{name}::new"
             if world.library.functions.contains_key(key) {
-                out.push(f"{module}::{self.path(world, walk.trusting, walk.unpinned, [name.clone(), "new".clone()])}")
+                out.push(f"{module}::{self.path(world, walk.trusting, walk.unpinned, [name.clone(), "new"])}")
                 out.push("(")
                 let takes = self.takes_a_handle(world, key)
                 self.emit_core_args(world, walk, out, host, key, args, takes, depth, flow, scope)

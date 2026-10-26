@@ -6,7 +6,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn not_self(&mut self, name: &str, span: &Span, what: &str) {
         if name != "self" { return; }
-        self.findings.push(check_refusal("NK1119", span, format!("You can't call {} `self`: that name is reserved.", what), vec!["`self` always means the value a method was called on.".to_owned()], Some("Pick another name, such as `it`, `this` or `me`.".to_owned())));
+        self.findings.push(check_refusal("NK1119", span, format!("You can't call {} `self`: that name is reserved.", what), vec![String::from("`self` always means the value a method was called on.")], Some(String::from("Pick another name, such as `it`, `this` or `me`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -15,7 +15,7 @@ impl CheckState {
         let mut instead: &'static str = "own";
         if name == "crate" { instead = "package"; }
         if name == "super" { instead = "parent"; }
-        self.findings.push(check_refusal("NK1128", span, format!("You can't call {} `{}`: that name is reserved.", what, name), vec!["Most reserved words are fine as names - a field called `type` works. `crate`, `super` and `Self` are the three that can't be used.".to_owned()], Some(format!("Pick another name, such as `{}`.", instead))));
+        self.findings.push(check_refusal("NK1128", span, format!("You can't call {} `{}`: that name is reserved.", what, name), vec![String::from("Most reserved words are fine as names - a field called `type` works. `crate`, `super` and `Self` are the three that can't be used.")], Some(format!("Pick another name, such as `{}`.", instead))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -31,7 +31,7 @@ impl CheckState {
         if !self.std_modules.contains(&module) || self.std_in_scope.contains(&module) { return; }
         if is_a_hull(&module) { return; }
         if self.modules.contains(&module) { return; }
-        self.findings.push(check_refusal("NK1117", span, format!("You're using `{}` without a `use` line for it.", module), vec!["A file lists the modules it uses at the top, `std`'s included.".to_owned()], Some(format!("Write `use std::{}` at the top of the file.", module))));
+        self.findings.push(check_refusal("NK1117", span, format!("You're using `{}` without a `use` line for it.", module), vec![String::from("A file lists the modules it uses at the top, `std`'s included.")], Some(format!("Write `use std::{}` at the top of the file.", module))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -41,7 +41,7 @@ impl CheckState {
         let last = nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_owned();
         if !self.std_modules.contains(&module) || self.modules.contains(&module) { return; }
         if world.library.functions.contains_key(name) || !world.library.functions.contains_key(&last) { return; }
-        self.findings.push(check_refusal("NK1163", span, format!("`{}` isn't in `{}`: it's always available on its own.", last, module), vec![format!("`{}` needs no `use` and no module in front of it.", last), "Every other `std` name is reached through its module.".to_owned()], Some(format!("Write `{}(…)` without the `{}::`.", last, module))));
+        self.findings.push(check_refusal("NK1163", span, format!("`{}` isn't in `{}`: it's always available on its own.", last, module), vec![format!("`{}` needs no `use` and no module in front of it.", last), String::from("Every other `std` name is reached through its module.")], Some(format!("Write `{}(…)` without the `{}::`.", last, module))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -64,13 +64,13 @@ impl CheckState {
             let mut help: String = String::from("bit operators work on the bits of an integer: `i32`, `i64`, `u8`, `u32` or `u64`");
             if a_bool {
                 match op {
-                    BinaryOp::BitAnd => { help = "`&&` joins two `bool`s".to_owned(); },
-                    BinaryOp::BitOr => { help = "`||` joins two `bool`s".to_owned(); },
-                    BinaryOp::BitXor => { help = "to ask whether two `bool`s differ, write `a != b`".to_owned(); },
+                    BinaryOp::BitAnd => { help = String::from("`&&` joins two `bool`s"); },
+                    BinaryOp::BitOr => { help = String::from("`||` joins two `bool`s"); },
+                    BinaryOp::BitXor => { help = String::from("to ask whether two `bool`s differ, write `a != b`"); },
                     _ => { },
                 }
             }
-            self.findings.push(check_refusal("NK1198", at, format!("`{}` works on integers, but this is a `{}`.", written, side.text()), vec!["Bit operators work on the bits of an integer.".to_owned()], Some(help)));
+            self.findings.push(check_refusal("NK1198", at, format!("`{}` works on integers, but this is a `{}`.", written, side.text()), vec![String::from("Bit operators work on the bits of an integer.")], Some(help)));
             return;
         }
     }

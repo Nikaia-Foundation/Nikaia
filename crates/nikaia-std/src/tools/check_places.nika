@@ -28,10 +28,10 @@ pub fn a_root_is_one_of_two(wanted: ref Vec[(String, Ty)]) -> String sync {
             bare = (text.strip_prefix("ref ") ?? "").clone()
         }
         if one.0 == "root" && bare == "fs::Root" {
-            return ". The root is either `fs::Root::Dir(store)`, which keeps the path inside `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a reviewer will look".clone()
+            return ". The root is either `fs::Root::Dir(store)`, which keeps the path inside `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a reviewer will look"
         }
     }
-    return "".clone()
+    return ""
 }
 
 impl CheckState {
@@ -70,14 +70,14 @@ impl CheckState {
     pub fn a_jump_with_nowhere_to_go(ref mut self, word: ref String, span: ref Span) sync {
         let mut does: String = "starts the innermost loop's next turn"
         if word == "break" {
-            does = "leaves the innermost loop around it".clone()
+            does = "leaves the innermost loop around it"
         }
         if self.flow.barrier != null {
             let what = (self.flow.barrier ?? "").clone()
             self.findings.push(check_refusal("NK1132", span, f"`{word}` {does}, but the nearest loop is outside this {what}.", [f"{with_article(what)} runs as a function of its own, and `{word}` can't jump out of a function."], f"Decide inside the {what} and act on the answer outside it: return a `bool` and test it in the loop."))
             return
         }
-        self.findings.push(check_refusal("NK1132", span, f"`{word}` {does}, but this isn't inside a loop.", ["It only works inside a `while` or a `for`.".clone()], "To leave the function instead, write `return`.".clone()))
+        self.findings.push(check_refusal("NK1132", span, f"`{word}` {does}, but this isn't inside a loop.", ["It only works inside a `while` or a `for`."], "To leave the function instead, write `return`."))
     }
 
     /// What a value's own type arguments bind its declaration's parameters to:

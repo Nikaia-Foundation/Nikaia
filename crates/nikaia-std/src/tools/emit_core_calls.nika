@@ -129,7 +129,7 @@ fn emit_call_builds_a_hull(world: ref EmitWorld, arg: ref Expr) -> bool {
 /// kind 0 where there is none.
 fn emit_call_pausing_entry(facts: ref CheckFacts, args: ref Vec[Expr]) -> (i64, String) {
     if args.len() == 0 {
-        return (0, "".clone())
+        return (0, "")
     }
     let last = args[args.len() - 1].clone()
     let key = match last {
@@ -137,9 +137,9 @@ fn emit_call_pausing_entry(facts: ref CheckFacts, args: ref Vec[Expr]) -> (i64, 
         else => -1,
     }
     if key < 0 || !facts.pausing_lambdas.contains_key(key) {
-        return (0, "".clone())
+        return (0, "")
     }
-    let entry = facts.pausing_lambdas.get(key) ?? return (0, "".clone())
+    let entry = facts.pausing_lambdas.get(key) ?? return (0, "")
     return match entry.clone() {
         FactPausing::Function(name) => (1, name),
         FactPausing::Lent(name) => (2, name),

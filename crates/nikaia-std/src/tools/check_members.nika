@@ -17,11 +17,11 @@ fn mem_offered(head: ref String) -> bool {
 /// where the key is not under the prefix or goes deeper.
 fn mem_member_under(key: ref String, prefix: ref String) -> String {
     if !key.starts_with(prefix) {
-        return "".clone()
+        return ""
     }
     let rest = (key.strip_prefix(prefix) ?? "").clone()
     if rest.contains("::") {
-        return "".clone()
+        return ""
     }
     return rest
 }
@@ -40,16 +40,16 @@ fn mem_under(table: ref collections::BTreeMap[String, FnContract], prefix: ref S
 /// The heads whose methods a head also has (ADR-282 D18); a list has `ListExt`'s.
 fn mem_also(head: ref String) -> Vec[String] {
     if head == "String" {
-        return ["str".clone()]
+        return ["str"]
     }
     if head == "str" {
-        return ["String".clone()]
+        return ["String"]
     }
     if head == "Vec" {
-        return ["list::ListExt".clone()]
+        return ["list::ListExt"]
     }
     if head == "Par" {
-        return ["Seq".clone()]
+        return ["Seq"]
     }
     return []
 }
@@ -181,21 +181,21 @@ impl CheckState {
         // A view of text is text to the reader.
         let mut shown: String = head.clone()
         if head == "str" {
-            shown = "String".clone()
+            shown = "String"
         }
         let mut written: String = f"{head}::{member}"
         if method {
             written = f".{member}()"
         }
-        let mut help: String = "".clone()
+        let mut help: String = ""
         if mem_text_from(head, member) {
-            help = "Write the text itself, `\"x\"`, or `\"x\".clone()` for text of its own.".clone()
+            help = "Write the text itself, `\"x\"`, or `f\"x\"` for text of its own."
         } else if member == "as_str" {
-            help = "Leave it out: the text is already what is passed.".clone()
+            help = "Leave it out: the text is already what is passed."
         } else if member == "is_some" {
-            help = "Compare with `null`: `value != null`.".clone()
+            help = "Compare with `null`: `value != null`."
         } else if member == "is_none" {
-            help = "Compare with `null`: `value == null`.".clone()
+            help = "Compare with `null`: `value == null`."
         } else {
             help = mem_nearest_help(head, member, method, members, shown)
         }
@@ -245,7 +245,7 @@ impl CheckState {
         let mut help: String = f"If `{member}` should be a method, add it in `impl {ty} {{ … }}`."
         let near = nearest_name(member, named)
         if near != null {
-            help = f"Read it from a value: `value.{near ?? "".clone()}`."
+            help = f"Read it from a value: `value.{near ?? ""}`."
         }
         self.findings.push(check_refusal("NK1171", span, f"`{ty}` has nothing called `{member}` to reach with `::`.", [f"`::` reaches a type's methods and variants. Fields are read from a value with a dot. `{ty}` holds {listed}."], help))
     }
@@ -260,7 +260,7 @@ impl CheckState {
         let near = nearest_name(member, variants)
         let mut help: String = f"Write one of {listed}."
         if near != null {
-            help = f"Did you mean `{ty}::{near ?? "".clone()}`?"
+            help = f"Did you mean `{ty}::{near ?? ""}`?"
         } else if variants.len() == 0 {
             help = f"`{ty}` has no variants, so there's nothing to write here."
         }
@@ -301,7 +301,7 @@ impl CheckState {
         }
         let mut blanks: Vec[String] = []
         while blanks.len() < declared {
-            blanks.push("_".clone())
+            blanks.push("_")
         }
         let shape = blanks.join(", ")
         self.findings.push(check_refusal("NK1253", span, f"The pattern `{key}` names {written} part(s), but the variant carries {declared}.", [f"A pattern names every part of a positional variant, in order; `_` ignores one."], f"Write `{key}({shape})` and bind the parts you need."))
@@ -320,13 +320,13 @@ impl CheckState {
         let member = world.words.resolve(path[1]).clone()
         let key = f"{ty}::{member}"
         if self.is_variant(ty, member) && !self.variant_parts.contains_key(key) && !self.structs.contains_key(key) {
-            self.findings.push(check_refusal("NK1255", span, f"`{key}` carries no values, so `..` in `{key}(..)` has nothing to stand for.", ["`..` matches the values of a variant that has some.".clone()], f"Write `{key}`.".clone()))
+            self.findings.push(check_refusal("NK1255", span, f"`{key}` carries no values, so `..` in `{key}(..)` has nothing to stand for.", ["`..` matches the values of a variant that has some."], f"Write `{key}`.".clone()))
             return
         }
         let declared = (self.variant_parts[key]?.clone() ?? []).len()
         let named = parts.len() - 1
         if self.variant_parts.contains_key(key) && named > declared {
-            self.findings.push(check_refusal("NK1253", span, f"The pattern `{key}` names {named} part(s) besides `..`, but the variant carries {declared}.", ["`..` stands for the values not named; it cannot make room for more.".clone()], "Name at most as many parts as the variant carries.".clone()))
+            self.findings.push(check_refusal("NK1253", span, f"The pattern `{key}` names {named} part(s) besides `..`, but the variant carries {declared}.", ["`..` stands for the values not named; it cannot make room for more."], "Name at most as many parts as the variant carries."))
         }
     }
 
@@ -340,7 +340,7 @@ impl CheckState {
             }
         }
         if rests > 1 {
-            self.findings.push(check_refusal("NK1258", span, "A pattern has more than one `..`.".clone(), ["One `..` stands for the values between those named before and after it; with two, which values each one takes is not said.".clone()], "Keep one `..`, and name the other values: `[first, .., last]`.".clone()))
+            self.findings.push(check_refusal("NK1258", span, "A pattern has more than one `..`.", ["One `..` stands for the values between those named before and after it; with two, which values each one takes is not said."], "Keep one `..`, and name the other values: `[first, .., last]`."))
             return false
         }
         return true
@@ -399,7 +399,7 @@ fn mem_nearest_help(head: ref String, member: ref String, method: bool, members:
     if near == null {
         return f"Only what is written down for `{shown}` can be called; a Rust function or method of the same name is not reached."
     }
-    let name = near ?? "".clone()
+    let name = near ?? ""
     if method {
         return f"Did you mean `.{name}()`?"
     }

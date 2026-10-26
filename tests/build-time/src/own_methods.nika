@@ -10,7 +10,7 @@
 comptime OWN_METHODS_NAMES: Array[ref String, 2] = ["a", "b"]
 
 fn own_methods_known(x: i64) -> bool {
-    let name = if x > 0 { "b".to_string() } else { return false }
+    let name = if x > 0 { "b" } else { return false }
     return OWN_METHODS_NAMES.contains(name)
 }
 

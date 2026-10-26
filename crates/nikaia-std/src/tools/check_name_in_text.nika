@@ -128,6 +128,6 @@ impl CheckState {
             Expr::Field { .. } => written.clone(),
             else => f"({written})",
         }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1201".clone(), message: f"You can't put the file name `{written}` in an `f\"…\"` that is text.", notes: ["A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.".clone()], help: f"Write `{{{shown}.to_text()}}` to use it as text where it is text, or `{{{shown}.display()}}` to show it.", labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1201", message: f"You can't put the file name `{written}` in an `f\"…\"` that is text.", notes: ["A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text."], help: f"Write `{{{shown}.to_text()}}` to use it as text where it is text, or `{{{shown}.display()}}` to show it.", labels: [] })
     }
 }

@@ -115,11 +115,11 @@ pub(crate) fn check_core_ops_whole_or_open(state: &CheckState, world: &CheckWorl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_whole_name(side: &Expr, ty: &Ty) -> String {
-    if check_core_ops_lit_int(side) { return "".to_owned(); }
+    if check_core_ops_lit_int(side) { return String::from(""); }
     let plain = ty.unseen();
     match plain {
         Ty::Named { ref name, .. } => name.to_owned(),
-        _ => "".to_owned(),
+        _ => String::from(""),
     }
 }
 
@@ -455,10 +455,10 @@ pub(crate) fn check_core_ops_a_number_written(node: &Expr) -> bool { matches!(no
 
 pub(crate) fn check_core_ops_number_written_kind(node: &Expr) -> String {
     match node {
-        Expr::LitInt { .. } => "integer".to_owned(),
-        Expr::LitFloat { .. } => "float".to_owned(),
-        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Neg { check_core_ops_number_written_kind(expr) } else { "".to_owned() } },
-        _ => "".to_owned(),
+        Expr::LitInt { .. } => String::from("integer"),
+        Expr::LitFloat { .. } => String::from("float"),
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Neg { check_core_ops_number_written_kind(expr) } else { String::from("") } },
+        _ => String::from(""),
     }
 }
 
@@ -540,15 +540,15 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     if from_a_map && nullable && moves(&inner) && state.jumps(world, fallback) { state.facts.map_read_views.insert(id_of(expr) as i64); }
     if nullable && leaves && check_core_ops_a_word(&inner) && (check_core_stmt_an_index(value) || check_core_stmt_a_get(world, value)) { state.facts.copied_jump_reads.insert(id_of(expr) as i64); }
     if lending && !from_a_map && check_core_ops_index(value) && (state.jumps(world, fallback) || state.facts.lent_coalesces.contains_key(&(id_of(fallback) as i64))) && nullable && state.takes_away(world, &inner.unseen()) {
-        if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned()); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".to_owned()); }
+        if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_deref()")); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_ref()")); }
         return view_of_type(&inner);
     }
     if place && state.jumps(world, fallback) && nullable && state.takes_away(world, &inner.unseen()) && (check_core_ops_lent_root(&state, world, value) || check_core_ops_behind_a_view(&state, world, value)) {
-        if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned()); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".to_owned()); }
+        if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_deref()")); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_ref()")); }
         return view_of_type(&inner);
     }
     if place && nullable && check_core_ops_plain_text(&inner) && check_core_ops_lit_str(fallback) && check_core_ops_behind_a_view(&state, world, value) {
-        state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned());
+        state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_deref()"));
         state.facts.view_fallbacks.insert(id_of(fallback) as i64);
         return check_core_ops_view("str");
     }
@@ -597,27 +597,27 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     if nullable && check_core_ops_own_type(&inner) && !state.jumps(world, fallback) {
         if check_core_ops_a_number_written(fallback) {
             let held = inner.text();
-            state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is a number, but the left side holds `{}`.", held), vec!["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.".to_owned()], Some(format!("Write a `{}` as the fallback.", held))));
+            state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is a number, but the left side holds `{}`.", held), vec![String::from("`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.")], Some(format!("Write a `{}` as the fallback.", held))));
         } else if !other.is_unknown() && !check_core_ops_nullable(&other) { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
     }
     if nullable && !from_a_map && !state.jumps(world, fallback) {
         let held_kind = check_core_ops_kind(&inner);
         let mut given_kind = check_core_ops_kind(&other);
-        if check_core_ops_a_number_written(fallback) { given_kind = "number".to_owned(); }
+        if check_core_ops_a_number_written(fallback) { given_kind = String::from("number"); }
         if held_kind != "" && given_kind != "" && held_kind != given_kind {
             let held = inner.text();
             let mut given: String = format!("`{}`", other.text());
-            if check_core_ops_a_number_written(fallback) { given = "a number".to_owned(); }
-            state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec!["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5).".to_owned()], Some(format!("Write a `{}` as the fallback.", held))));
+            if check_core_ops_a_number_written(fallback) { given = String::from("a number"); }
+            state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec![String::from("`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5).")], Some(format!("Write a `{}` as the fallback.", held))));
         }
         if held_kind == "number" && given_kind == "number" {
             let held = inner.text();
             let written = check_core_ops_number_written_kind(fallback);
             let held_float = a_float_type(&inner);
             if written == "integer" && held_float || written == "float" && !held_float {
-                let mut given: String = "an integer".to_owned();
-                if written == "float" { given = "a float".to_owned(); }
-                state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec!["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); an integer and a float are not made into one another (Part I 2.4).".to_owned()], Some(format!("Write a `{}` as the fallback.", held))));
+                let mut given: &'static str = "an integer";
+                if written == "float" { given = "a float"; }
+                state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is {}, but the left side holds `{}`.", given, held), vec![String::from("`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); an integer and a float are not made into one another (Part I 2.4).")], Some(format!("Write a `{}` as the fallback.", held))));
             } else if written == "" && !inner.is_a_view() && !other.is_a_view() { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
         }
     }
@@ -667,7 +667,7 @@ pub fn check_core_ops_none_named(state: &mut CheckState, declared: Option<&Ty>, 
         _ => 0,
     };
     if handed == 0 { return; }
-    let notes: Vec<String> = vec!["A lambda takes the arguments it names, so `fn { … }` takes none (Part I 5.3).".to_owned()];
+    let notes: Vec<String> = vec![String::from("A lambda takes the arguments it names, so `fn { … }` takes none (Part I 5.3).")];
     let help: String = if handed == 1 { String::from("Name the argument, `fn(item) { … }`, or `fn(_) { … }` where the body does not use it.") } else { String::from("Name the arguments, `fn(a, b) { … }`, or `_` for one the body does not use.") };
     state.findings.push(check_refusal("NK1101", span, format!("This lambda takes no arguments, but it is handed {}.", counted(handed, "argument")), notes, Some(help)));
 }
@@ -748,7 +748,7 @@ pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &
     state.inside_a_door = outer_inside;
     let bound: Vec<(String, Ty, i64)> = nikaia_std::index::or(state.task_bindings.pop(), || vec![].into());
     state.a_task_holds_these_across_a_pause(world, host, body, &bound, span);
-    Ty::Named { name: "TaskHandle".to_owned(), args: vec![value], view: false }
+    Ty::Named { name: String::from("TaskHandle"), args: vec![value], view: false }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

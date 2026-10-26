@@ -56,7 +56,7 @@ impl CheckState {
                         }
                         if reported {
                             let owner = written.join("::")
-                            self.findings.push(check_refusal("NK1193", span, f"This pattern looks inside part {index} of `{owner}`, which holds its own type, {why}, and patterns can't look that far yet.", ["A part that holds its own type is stored behind a pointer. A pattern can look inside one such part per arm, outside an `|`.".clone()], "Bind the part to a name here, and `match` on that name inside the arm.".clone()))
+                            self.findings.push(check_refusal("NK1193", span, f"This pattern looks inside part {index} of `{owner}`, which holds its own type, {why}, and patterns can't look that far yet.", ["A part that holds its own type is stored behind a pointer. A pattern can look inside one such part per arm, outside an `|`."], "Bind the part to a name here, and `match` on that name inside the arm."))
                         }
                     }
                 }
@@ -287,10 +287,10 @@ impl CheckState {
             if !has_true || !has_false {
                 let mut missing: Vec[String] = []
                 if !has_true {
-                    missing.push("true".clone())
+                    missing.push("true")
                 }
                 if !has_false {
-                    missing.push("false".clone())
+                    missing.push("false")
                 }
                 let text = missing.join("`, `")
                 self.a_case_is_missing(text, span)

@@ -1865,7 +1865,7 @@ pub(crate) fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeM
 pub(crate) fn rsrc_written_paths(contract: &FnContract) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = vec![];
     if contract.returns.is_empty() {
-        for borrowed in contract.borrows.iter() { out.push(("".to_owned(), borrowed.to_owned())); }
+        for borrowed in contract.borrows.iter() { out.push((String::from(""), borrowed.to_owned())); }
         return out;
     }
     for part in contract.returns.split("),") {

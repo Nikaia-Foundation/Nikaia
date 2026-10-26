@@ -5,9 +5,9 @@ pub(crate) fn ext_a_number(name: &str) -> bool { name == "i32" || name == "i64" 
 
 pub(crate) fn ext_a_text(base: &str) -> bool { base == "String" || base == "str" }
 
-pub(crate) fn ext_a_struct_note() -> String { "An `extern` struct has C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, other `extern` structs and `Array[T, N]` of these.".to_owned() }
+pub(crate) fn ext_a_struct_note() -> String { String::from("An `extern` struct has C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, other `extern` structs and `Array[T, N]` of these.") }
 
-pub(crate) fn ext_an_enum_note() -> String { "An `extern` enum is a tagged union in C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, `extern` structs and enums, and `Array[T, N]` of these.".to_owned() }
+pub(crate) fn ext_an_enum_note() -> String { String::from("An `extern` enum is a tagged union in C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, `extern` structs and enums, and `Array[T, N]` of these.") }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -25,24 +25,24 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn an_entry_point_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], args: &[FnArg], ret_type: Option<&Type>, is_public: bool, span: &Span, of_a_trait: bool) {
-        let mut written: String = "new".to_owned();
+        let mut written: String = String::from("new");
         if name.is_some() { written = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_owned(); }
-        if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec!["`extern` before a function with a body exports it to C, and what a package exports is part of its surface.".to_owned()], Some(format!("Write `pub extern fn {}`, or leave out `extern` for a function only this program calls.", written)))); }
-        self.findings.push(check_refusal("NK1238", span, format!("`{}` is an entry point, and this build makes no library.", written), vec!["Only a build with `artifact = \"c-library\"` in `[build]` exports its `extern` functions, as a shared and a static library and a header.".to_owned()], Some(format!("Set `artifact = \"c-library\"` in `[build]`, or leave out `extern`: `{}` is an ordinary function without it.", written))));
+        if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![String::from("`extern` before a function with a body exports it to C, and what a package exports is part of its surface.")], Some(format!("Write `pub extern fn {}`, or leave out `extern` for a function only this program calls.", written)))); }
+        self.findings.push(check_refusal("NK1238", span, format!("`{}` is an entry point, and this build makes no library.", written), vec![String::from("Only a build with `artifact = \"c-library\"` in `[build]` exports its `extern` functions, as a shared and a static library and a header.")], Some(format!("Set `artifact = \"c-library\"` in `[build]`, or leave out `extern`: `{}` is an ordinary function without it.", written))));
         if !generics.is_empty() || of_a_trait {
-            let mut what: String = "generic".to_owned();
+            let mut what: &'static str = "generic";
             let mut help: String = format!("Export one function for each type `{}` is called with, each calling it.", written);
             if of_a_trait {
-                what = "a trait's method".to_owned();
+                what = "a trait's method";
                 help = format!("Export a plain function that calls `{}`.", written);
             }
-            self.findings.push(check_refusal("NK1239", span, format!("`{}` is {}, and C cannot call one.", written, what), vec!["A C function has one signature and no dispatch: what a generic function or a trait's method stands for is decided in Nikaia, not by the caller.".to_owned()], Some(help)));
+            self.findings.push(check_refusal("NK1239", span, format!("`{}` is {}, and C cannot call one.", written, what), vec![String::from("A C function has one signature and no dispatch: what a generic function or a trait's method stands for is decided in Nikaia, not by the caller.")], Some(help)));
         }
         for arg in args.iter() {
             let way = self.crosses_to_c(world, &arg.ty, false);
             if way.is_some() {
                 let param = world.words.resolve(arg.name).to_owned();
-                self.findings.push(check_refusal("NK1240", span, format!("`{}` of `{}` cannot cross to C.", param, written), vec!["An entry point takes numbers, `bool` and `scalar` by value, text and bytes as a view, a list of numbers, a struct or an enum of the package, an optional of those, and a callback that does not pause (Part III 15.1).".to_owned()], std::convert::identity(way)));
+                self.findings.push(check_refusal("NK1240", span, format!("`{}` of `{}` cannot cross to C.", param, written), vec![String::from("An entry point takes numbers, `bool` and `scalar` by value, text and bytes as a view, a list of numbers, a struct or an enum of the package, an optional of those, and a callback that does not pause (Part III 15.1).")], std::convert::identity(way)));
             }
         }
         self.what_an_entry_point_hands_back(world, &written, ret_type, span);
@@ -52,7 +52,7 @@ impl CheckState {
     pub(crate) fn what_an_entry_point_hands_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, ret_type: Option<&Type>, span: &Span) {
         let result = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
         let way = self.crosses_to_c(world, result, true);
-        if way.is_some() { self.findings.push(check_refusal("NK1240", span, format!("What `{}` hands back cannot cross to C.", written), vec!["An entry point hands back numbers, `bool` and `scalar`, text and bytes into the caller's buffer, a struct or an enum of the package, or an optional of those (Part III 15.1).".to_owned()], std::convert::identity(way))); }
+        if way.is_some() { self.findings.push(check_refusal("NK1240", span, format!("What `{}` hands back cannot cross to C.", written), vec![String::from("An entry point hands back numbers, `bool` and `scalar`, text and bytes into the caller's buffer, a struct or an enum of the package, or an optional of those (Part III 15.1).")], std::convert::identity(way))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -115,14 +115,14 @@ impl CheckState {
     pub(crate) fn a_variant_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, variant_name: &str, field: String, ty: &Type, at: &Span) {
         if a_c_value(&world.here, ty) { return; }
         let shown = world.words.resolve(ty.name).to_owned();
-        self.findings.push(check_refusal("NK1145", at, format!("`{}::{}.{}` is a `{}`, which is not a C value.", written, variant_name, field, shown), vec![ext_an_enum_note()], Some("Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field.".to_owned())));
+        self.findings.push(check_refusal("NK1145", at, format!("`{}::{}.{}` is a `{}`, which is not a C value.", written, variant_name, field, shown), vec![ext_an_enum_note()], Some(String::from("Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn crosses_to_c(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
         let name = world.words.resolve(ty.name).to_owned();
         if (*ty.code).is_some() { return self.a_callback_crosses(world, ty, out); }
-        if ty.is_tuple { return Some("Hand a tuple's parts over one by one, or as a `pub extern struct`.".to_owned()); }
+        if ty.is_tuple { return Some(String::from("Hand a tuple's parts over one by one, or as a `pub extern struct`.")); }
         let mut args: Vec<String> = vec![];
         for generic in ty.generics.iter() { args.push(world.words.resolve(generic.name).to_owned()); }
         let declared = self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name);
@@ -131,9 +131,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_callback_crosses(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
-        if out { return Some("Hand back a value; a function is a parameter's shape: a callback.".to_owned()); }
+        if out { return Some(String::from("Hand back a value; a function is a parameter's shape: a callback.")); }
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if !code.is_sync { return Some("Write the callback `sync`: C calls it on its own thread, where nothing may pause.".to_owned()); }
+        if !code.is_sync { return Some(String::from("Write the callback `sync`: C calls it on its own thread, where nothing may pause.")); }
         for part in ty.generics.iter() {
             let way = self.crosses_to_c(world, part, false);
             if way.is_some() { return std::convert::identity(way); }
@@ -149,17 +149,17 @@ impl CheckState {
         if plain && !view && ext_a_number(base) { return None; }
         if ext_a_text(base) && plain && view && !out { return None; }
         if base == "String" && plain && !view && out { return None; }
-        if base == "String" && plain && !view && !out { return Some("Take `ref String`: C keeps the text and lends it for the call.".to_owned()); }
-        if ext_a_text(base) && plain && view && out { return Some("Hand back `String`: it is written into the caller's buffer.".to_owned()); }
+        if base == "String" && plain && !view && !out { return Some(String::from("Take `ref String`: C keeps the text and lends it for the call.")); }
+        if ext_a_text(base) && plain && view && out { return Some(String::from("Hand back `String`: it is written into the caller's buffer.")); }
         if base == "Bytes" && plain { return None; }
         if base == "Vec" && args.len() == 1 && !view && out && *nikaia_std::index::get(&args, 0) == "u8" { return None; }
         if base == "Array" && args.len() == 1 && view && !out && ext_a_number(nikaia_std::index::get(&args, 0)) { return None; }
         if args.len() == 1 && (base == "Array" && view && !out || base == "Vec" && !view) && an_extern_struct_named(&world.here, nikaia_std::index::get(&args, 0)) { return None; }
-        if (base == "Vec" || base == "Array") && !out { return Some("Take `ref Array[T]` of a number: C keeps the array and lends it for the call.".to_owned()); }
+        if (base == "Vec" || base == "Array") && !out { return Some(String::from("Take `ref Array[T]` of a number: C keeps the array and lends it for the call.")); }
         if plain && declared { return None; }
         if base == "Locked" || base == "Shared" || base == "SharedMut" || base == "Seen" { return Some(format!("Keep the `{}` inside the package, in a `pub struct` C holds as a handle.", name)); }
-        if base == "HashMap" || base == "BTreeMap" || base == "Map" { return Some("Keep the map in a `pub struct` C holds as a handle, or hand its entries to a callback.".to_owned()); }
-        if base == "Vec" || base == "Array" { return Some("Hand many results to a callback, or put them in a `pub struct` C holds as a handle.".to_owned()); }
+        if base == "HashMap" || base == "BTreeMap" || base == "Map" { return Some(String::from("Keep the map in a `pub struct` C holds as a handle, or hand its entries to a callback.")); }
+        if base == "Vec" || base == "Array" { return Some(String::from("Hand many results to a callback, or put them in a `pub struct` C holds as a handle.")); }
         Some(format!("Declare `{}` in the package as a `pub struct`, which C holds as a handle.", name))
     }
 }

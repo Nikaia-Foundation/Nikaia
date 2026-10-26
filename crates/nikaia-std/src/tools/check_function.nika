@@ -11,10 +11,10 @@ use std::collections
 /// fields under `[T: Struct]`, an `enum`'s variants under `[T: Enum]`.
 fn check_function_shape_member(bound: String) -> String? {
     if bound == "Struct" {
-        return "fields".clone()
+        return "fields"
     }
     if bound == "Enum" {
-        return "variants".clone()
+        return "variants"
     }
     return null
 }
@@ -444,7 +444,7 @@ fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWor
             ty = Ty::Named { name: target?.clone() ?? "", args: state.subject_arguments.clone(), view: receiver?.is_ref ?? false }
         }
         let id = state.a_new_binding()
-        frame.push(CheckLocal::free("self".clone(), ty, id))
+        frame.push(CheckLocal::free("self", ty, id))
     }
     let mut at = 0
     for arg in args {
@@ -602,14 +602,14 @@ fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref Ch
 fn check_function_hands_nothing(mut state: CheckState, body: ref Block, expected: ref Ty, at: ref Span, is_extern: bool, ends: bool) sync {
     let want = expected.text()
     if body.stmts.len() == 0 && !is_extern {
-        state.findings.push(check_refusal("NK1104", at, f"This function returns `()`, but it's declared to return `{want}`.", ["Its body is empty, so it hands nothing back.".clone()], f"Write the `{want}` it returns as the body's last expression, or remove `-> {want}`."))
+        state.findings.push(check_refusal("NK1104", at, f"This function returns `()`, but it's declared to return `{want}`.", ["Its body is empty, so it hands nothing back."], f"Write the `{want}` it returns as the body's last expression, or remove `-> {want}`."))
     }
     if body.stmts.len() > 0 && ends {
         let last = body.stmts[body.stmts.len() - 1]
         match last.node {
             Stmt::Expr(value) => {
                 if check_function_end_hands_nothing(value) {
-                    state.findings.push(check_refusal("NK1104", last.span, f"This function returns `()` where this `if` is not taken, but it's declared to return `{want}`.", ["An `if` without `else` hands nothing back when its condition is false, and nothing comes after it.".clone()], f"Add an `else` that hands back a `{want}`, or a `return` after the `if`."))
+                    state.findings.push(check_refusal("NK1104", last.span, f"This function returns `()` where this `if` is not taken, but it's declared to return `{want}`.", ["An `if` without `else` hands nothing back when its condition is false, and nothing comes after it."], f"Add an `else` that hands back a `{want}`, or a `return` after the `if`."))
                 }
             },
             else => {},
@@ -631,7 +631,7 @@ pub fn check_function_function[H: CheckHost](mut state: CheckState, world: ref C
 fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: winnow_grammar::Symbol?, generics: ref Vec[GenericParam], receiver: ref Receiver?, args: ref Vec[FnArg], config: ref Vec[ConfigParam], spread: winnow_grammar::Symbol?, ret_type: ref Type?, body: ref Block, can_throw: bool, is_sync: bool, sync_by: ref Vec[winnow_grammar::Symbol], is_extern: bool, at: ref Span, target: String?) sync {
     // The same key the ledger uses, the anonymous constructor of Kap 4.2
     // included, which a caller reaches as `Type::new`.
-    let mut own_name = "new".clone()
+    let mut own_name: String = "new"
     match name {
         sym => {
             own_name = world.words.resolve(sym).clone()
@@ -669,7 +669,7 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
         declared.insert(world.words.resolve(g.name).clone(), bounds)
     }
     let mut parameters: collections::BTreeSet[String] = collections::BTreeSet()
-    parameters.insert("Self".clone())
+    parameters.insert("Self")
     let outer_declared = state.type_parameters.clone()
     state.type_parameters = declared
     let outer_borrowing = state.borrowing_self

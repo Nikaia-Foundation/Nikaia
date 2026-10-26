@@ -11,10 +11,10 @@ use std::collections
 /// fields under `[T: Struct]`, an `enum`'s variants under `[T: Enum]`.
 fn check_function_shape_member(bound: String) -> String? {
     if bound == "Struct" {
-        return "fields".clone()
+        return "fields"
     }
     if bound == "Enum" {
-        return "variants".clone()
+        return "variants"
     }
     return null
 }

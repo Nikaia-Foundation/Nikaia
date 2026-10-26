@@ -84,7 +84,7 @@ impl EmitState {
         let written = world.words.resolve(ty.name).clone()
         // **`int` is an `i64` in memory until a narrowing is built** (ADR-285
         // D37): the representation is the compiler's, and today it is this one.
-        let name = if written == "int" { "i64".clone() } else { written }
+        let name = if written == "int" { "i64" } else { written }
         return self.emit_core_ty_named(world, walk, crossings, overlaps, ty, name, lifetimes, count)
     }
 

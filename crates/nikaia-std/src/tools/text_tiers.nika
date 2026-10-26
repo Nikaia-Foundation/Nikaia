@@ -2674,7 +2674,7 @@ fn late_arms(program: ref Program, ask: ref TierAsk) -> TierLateFound {
 fn late_function(item: ref Item, ask: ref TierAsk, mut late: TierLate) {
     match item {
         Item::Fn { args, body, .. } => {
-            let mut names: Vec[String] = ["self".clone()]
+            let mut names: Vec[String] = ["self"]
             for arg in args {
                 names.push(ask.names.resolve(arg.name).clone())
             }
@@ -2854,7 +2854,7 @@ fn late_stmt(stmt: ref Stmt, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             late_expr(value, false, ask, late)
             let assigned = match target {
                 Expr::Variable(name, _) => ask.names.resolve(name).clone(),
-                else => "".clone(),
+                else => "",
             }
             if op != null || assigned == "" {
                 late_expr(target, false, ask, late)

@@ -14,10 +14,10 @@ enum Shape {
 
 fn name(op: ref BinaryOp) -> String {
     match op {
-        BinaryOp::Add => "add".clone()
-        BinaryOp::Sub => "sub".clone()
-        BinaryOp::Mul => "mul".clone()
-        BinaryOp::Pow(_) => "pow".clone()
+        BinaryOp::Add => "add"
+        BinaryOp::Sub => "sub"
+        BinaryOp::Mul => "mul"
+        BinaryOp::Pow(_) => "pow"
     }
 }
 

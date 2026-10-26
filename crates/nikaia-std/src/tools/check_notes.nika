@@ -82,20 +82,20 @@ impl CheckState {
         }
         // In the program's words and not the ledger's: `ends` and `sized` are
         // not words a program can write (ADR-105 D4).
-        let mut needs: String = "walks the sequence more than once".clone()
-        let mut lacks: String = "this one is used up by the first walk".clone()
-        let mut way: String = "Collect it into a list first.".clone()
+        let mut needs: String = "walks the sequence more than once"
+        let mut lacks: String = "this one is used up by the first walk"
+        let mut way: String = "Collect it into a list first."
         if missing[0] == ENDS {
-            needs = "walks a sequence from the back".clone()
-            lacks = "this one can only be walked from the front".clone()
-            way = "Collect it into a list first, and walk the list from the back: `….collect()` and then `list.iter().rev()`.".clone()
+            needs = "walks a sequence from the back"
+            lacks = "this one can only be walked from the front"
+            way = "Collect it into a list first, and walk the list from the back: `….collect()` and then `list.iter().rev()`."
         } else if missing[0] == SIZED {
-            needs = "needs to know how long the sequence is".clone()
-            lacks = "this one doesn't know until it has been walked".clone()
-            way = "Collect it into a list first with `….collect()`: a list knows its length.".clone()
+            needs = "needs to know how long the sequence is"
+            lacks = "this one doesn't know until it has been walked"
+            way = "Collect it into a list first with `….collect()`: a list knows its length."
         }
         let item = note_seq_item(actual)
-        let mut what: String = "a sequence".clone()
+        let mut what: String = "a sequence"
         if !item.is_unknown() {
             what = f"a sequence of `{item.text()}`"
         }
@@ -111,14 +111,14 @@ impl CheckState {
             return
         }
         let named = names_listed(gained)
-        let notes: Vec[String] = [f"`{key}` couldn't throw {named} when this handler was written. A `catch` takes everything that reaches it, so it handles the new error the same way as the others.", "Nothing is wrong: this is just to let you know. Once the updated `nikaia.contracts` is committed, you won't see this note again.".clone()]
+        let notes: Vec[String] = [f"`{key}` couldn't throw {named} when this handler was written. A `catch` takes everything that reaches it, so it handles the new error the same way as the others.", "Nothing is wrong: this is just to let you know. Once the updated `nikaia.contracts` is committed, you won't see this note again."]
         self.findings.push(CheckFinding {
             severity: CheckSeverity::Warning,
             span: span.clone(),
-            code: "NK2402".clone(),
+            code: "NK2402",
             message: f"This `catch` now also receives {named} from `{key}`.",
             notes: notes,
-            help: "Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.".clone(),
+            help: "Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.",
             labels: [],
         })
     }
@@ -134,9 +134,9 @@ impl CheckState {
             else => return,
         }
         let how = self.tears_down(world, want, collections::BTreeSet()) ?? return
-        let mut message: String = "".clone()
-        let mut before: String = "".clone()
-        let mut help: String = "".clone()
+        let mut message: String = ""
+        let mut before: String = ""
+        let mut help: String = ""
         if moved_now {
             message = f"`{key}` now keeps `{param}`, so `{value}` is cleaned up when `{key}` is done with it, not at the end of this block."
             before = f"`{key}` only read its `{param}` when this call was written"
@@ -146,11 +146,11 @@ impl CheckState {
             before = f"`{key}` kept its `{param}` when this call was written"
             help = f"If the cleanup belongs inside `{key}`, change it back to keeping what it's given. Otherwise there's nothing to do."
         }
-        let notes: Vec[String] = [f"{capitalised(before)}, and a `{moved_ty}` does something when it's cleaned up ({how}).", "Nothing is wrong: this is just to let you know, since the call itself doesn't show it. Once the updated `nikaia.contracts` is committed, you won't see this note again.".clone()]
+        let notes: Vec[String] = [f"{capitalised(before)}, and a `{moved_ty}` does something when it's cleaned up ({how}).", "Nothing is wrong: this is just to let you know, since the call itself doesn't show it. Once the updated `nikaia.contracts` is committed, you won't see this note again."]
         self.findings.push(CheckFinding {
             severity: CheckSeverity::Warning,
             span: span.clone(),
-            code: "NK2403".clone(),
+            code: "NK2403",
             message: message,
             notes: notes,
             help: help,
@@ -167,11 +167,11 @@ impl CheckState {
         if divisor.beyond || divisor.value.magnitude != 0 {
             return
         }
-        let mut what: String = "takes the remainder".clone()
+        let mut what: String = "takes the remainder"
         if op == BinaryOp::Div {
-            what = "divides".clone()
+            what = "divides"
         }
-        self.findings.push(check_refusal("NK1118", span, f"This {what} by zero.", ["Dividing by zero would stop the program, and here it's certain to happen.".clone()], "If the divisor can really be zero, check it before dividing.".clone()))
+        self.findings.push(check_refusal("NK1118", span, f"This {what} by zero.", ["Dividing by zero would stop the program, and here it's certain to happen."], "If the divisor can really be zero, check it before dividing."))
     }
 
     /// **`NK1116`: a shift by a constant count below 0, or as large as the
@@ -196,8 +196,8 @@ impl CheckState {
             return
         }
         let ty: String = match left {
-            Ty::Named { name, args, view } => if !view && args.len() == 0 && note_an_integer(name) { name.clone() } else { "i64".clone() },
-            else => "i64".clone(),
+            Ty::Named { name, args, view } => if !view && args.len() == 0 && note_an_integer(name) { name.clone() } else { "i64" },
+            else => "i64",
         }
         self.a_shift_too_far(ty, count, span)
     }
@@ -246,7 +246,7 @@ impl CheckState {
         }
         let article = if an_or_a(ty) == "an" { "an" } else { "a" }
         let last = width - 1
-        self.findings.push(check_refusal("NK1116", span, f"This shifts {article} `{ty}` by {written} places, and it has {width} bits.", ["A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen.".clone()], f"Shift by 0 to {last} places.".clone()))
+        self.findings.push(check_refusal("NK1116", span, f"This shifts {article} `{ty}` by {written} places, and it has {width} bits.", ["A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen."], f"Shift by 0 to {last} places.".clone()))
     }
 
     /// **A lambda's parameter**, bound without `mut` where a write door asks

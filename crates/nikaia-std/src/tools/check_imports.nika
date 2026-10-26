@@ -178,7 +178,7 @@ impl CheckState {
         let near = nearest_name(module, offered)
         let mut why: String = f"`{module}` is not one of the modules `std` offers."
         if module == "tools" {
-            why = "`tools` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach".clone()
+            why = "`tools` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"
         }
         let mut help: String = f"`std` offers: {offered.join(", ")}."
         if near != null {
@@ -212,10 +212,10 @@ impl CheckState {
             Pattern::Ref { name, args, .. } => {
                 let written = world.words.resolve(name).clone()
                 if written == "tag" {
-                    self.findings.push(check_refusal("NK1187", pattern.span, f"`{written}` is not something a grammar can use.", [capitalised("a literal is written as itself")], "Write `\"x\"` instead.".clone()))
+                    self.findings.push(check_refusal("NK1187", pattern.span, f"`{written}` is not something a grammar can use.", [capitalised("a literal is written as itself")], "Write `\"x\"` instead."))
                 }
                 if written == "digit1" {
-                    self.findings.push(check_refusal("NK1187", pattern.span, f"`{written}` is not something a grammar can use.", [capitalised("one or more characters of a class are written as the class and a `+`, which gives the text it matched")], "Write `digit+` instead.".clone()))
+                    self.findings.push(check_refusal("NK1187", pattern.span, f"`{written}` is not something a grammar can use.", [capitalised("one or more characters of a class are written as the class and a `+`, which gives the text it matched")], "Write `digit+` instead."))
                 }
                 for arg in args {
                     self.a_name_the_page_does_not_have(world, arg)
@@ -265,6 +265,6 @@ impl CheckState {
             why = f"`{key}` has no parameter `{named}`"
         }
         let reason = why ?? return
-        self.findings.push(check_refusal("NK2210", at, f"`sync({named})` names `{named}`, but `{key}` doesn't run it as code.", [reason, "`sync(f)` promises the function pauses only where the lambda passed as `f` does, so `f` has to be a lambda the function itself calls.".clone()], f"Name a parameter of `{key}` that takes a function and calls it, or write plain `sync` if nothing it's given can pause."))
+        self.findings.push(check_refusal("NK2210", at, f"`sync({named})` names `{named}`, but `{key}` doesn't run it as code.", [reason, "`sync(f)` promises the function pauses only where the lambda passed as `f` does, so `f` has to be a lambda the function itself calls."], f"Name a parameter of `{key}` that takes a function and calls it, or write plain `sync` if nothing it's given can pause."))
     }
 }

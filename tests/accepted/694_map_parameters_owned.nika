@@ -15,9 +15,9 @@ fn either(a: collections::BTreeMap[String, E], b: collections::BTreeMap[String, 
 
 fn main() {
     let mut a: collections::BTreeMap[String, E] = collections::BTreeMap()
-    a.insert("j", E { n: 4, tags: ["j".clone()] })
+    a.insert("j", E { n: 4, tags: ["j"] })
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
-    b.insert("k", E { n: 3, tags: ["k".clone(), "k2".clone()] })
+    b.insert("k", E { n: 3, tags: ["k", "k2"] })
     let k = f"k"
     println(f"{either(a, b, "j")} {either(a, b, k)} {either(a, b, "z")} {a.len()} {b.len()}")
 }

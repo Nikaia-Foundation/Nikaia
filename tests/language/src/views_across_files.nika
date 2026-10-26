@@ -18,7 +18,7 @@ test "a struct holds a view-carrying enum from another file" {
     let line = views_across_first(text)
     let word = match line.first {
         ViewsAcrossToken::Word(w) => f"{w}"
-        ViewsAcrossToken::Gap => "gap".clone()
+        ViewsAcrossToken::Gap => "gap"
     }
     assert(word == "hello")
     assert(line.count == 1)

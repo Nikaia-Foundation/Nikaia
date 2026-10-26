@@ -82,7 +82,7 @@ fn report(dna: ref String, fragment: TEXT) {
 }
 
 fn main() {
-    let d = "GGTAGGT".clone()
+    let d = f"GGTAGGT"
     report(d, "GGT")
 }
 "#;
@@ -108,7 +108,7 @@ pub struct Hit {
 }
 
 fn main() {
-    let text = "a\nb\n".clone()
+    let text = f"a\nb\n"
     let hits = Hits::file(text) catch { return }
     for h in hits {
         println(h.path)
@@ -147,7 +147,7 @@ pub fn read(data: TEXT) -> Vec[Entry] throws {
 }
 
 fn main() {
-    let text = "fruit;apple;3\n".clone()
+    let text = f"fruit;apple;3\n"
     let entries = read(text) catch { return }
     for e in entries {
         println(f"{e.category} {e.item} {e.count}")
@@ -168,7 +168,7 @@ fn a_map_key_filled_by_views_is_a_view() {
     let program = r#"use std::collections
 
 fn main() {
-    let data = "a;1\nb;2\na;3\n".clone()
+    let data = f"a;1\nb;2\na;3\n"
     let mut seen: collections::HashMap[TEXT, i64] = collections::HashMap()
     for line in data.lines() {
         let at = line.find(";") ?? 0
@@ -200,7 +200,7 @@ fn a_lent_string_parameter_is_borrowed_in_the_ledger() {
             .collect::<Vec<_>>()
     };
     let program = "fn report(dna: TEXT, k: i64) -> i64 {\n    return dna.len() + k\n}\n\n\
-                   fn main() {\n    let d = \"GGT\".clone()\n    println(f\"{report(d, 1)}\")\n}\n";
+                   fn main() {\n    let d = \"GGT\"\n    println(f\"{report(d, 1)}\")\n}\n";
     let written = views(&program.replace("TEXT", "ref String"));
     assert_eq!(written, vec!["dna: borrowed".to_string()]);
     assert_eq!(views(&program.replace("TEXT", "String")), written);
@@ -223,8 +223,8 @@ fn a_string_option_the_body_only_reads_is_lent() {
                    \x20   return out\n\
                    }\n\n\
                    fn main() {\n\
-                   \x20   let ws = [\"a\".clone(), \"b\".clone()]\n\
-                   \x20   let dash = \"-\".clone()\n\
+                   \x20   let ws = [f\"a\", f\"b\"]\n\
+                   \x20   let dash = \"-\"\n\
                    \x20   println(join(ws))\n\
                    \x20   println(join(ws; sep: \"+\"))\n\
                    \x20   println(join(ws; sep: dash))\n\
@@ -252,7 +252,7 @@ fn a_kept_option_is_owned_and_listed_in_keeps() {
                   fn main() {\n\
                   \x20   println(store().name)\n\
                   \x20   println(read(1; sep: \";\"))\n\
-                  \x20   println(hands(\"t\".clone()).name)\n\
+                  \x20   println(hands(\"t\").name)\n\
                   }\n";
     let parsed = nikaia::parser::parse_to_ast(source).expect("the source parses");
     let ledger = common::infer(&parsed);
@@ -400,7 +400,7 @@ fn a_view_orders_against_owned_text() {
 
 fn main() {
     let s = "abc"
-    let t = "a".clone() + "b"
+    let t = f"a" + "b"
     print(f"{less(s, "abd")} {s.trim() >= t} {t > s} {t <= s.trim()}")
 }
 "#;

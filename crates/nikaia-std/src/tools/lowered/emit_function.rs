@@ -177,7 +177,7 @@ impl EmitState {
                 if is_sync { out.push(&format!("// sync (Part II, 12.1): pure CPU, cannot pause. Checked before\n{}// this was written - see `contracts::sync`.\n{}", pad, pad)); }
                 let own_name: String = match name {
                     Some(each) => emit_text(world, each),
-                    None => "new".to_owned(),
+                    None => String::from("new"),
                 };
                 let key: String = if has_owner { format!("{}::{}", target, own_name) } else { own_name.to_owned() };
                 let standalone = !has_owner && !is_public && generics.is_empty() && name.is_some();
@@ -190,7 +190,7 @@ impl EmitState {
                 if receiver.is_some() {
                     let is_ref = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
                     let is_mut = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
-                    if is_ref && is_mut { params.push("&mut self".to_owned()); } else if is_ref { params.push("&self".to_owned()); } else { params.push("self".to_owned()); }
+                    if is_ref && is_mut { params.push(String::from("&mut self")); } else if is_ref { params.push(String::from("&self")); } else { params.push(String::from("self")); }
                 }
                 let kept = self.kept_lifetimes(&key, lifetimes);
                 let has_kept = kept.is_some();
@@ -279,7 +279,7 @@ impl EmitState {
                     }
                     if (found.len() as i64) == wanted.len() as i64 { several_at = found; }
                 }
-                if receiver.is_some() && !several_at.is_empty() && nikaia_std::list::contains(&named, &"self") && *nikaia_std::index::get(&params, 0) == "&self" { { let __nikaia_stored = "&'r self".to_owned(); nikaia_std::index::set(&mut params, 0usize, __nikaia_stored); } }
+                if receiver.is_some() && !several_at.is_empty() && nikaia_std::list::contains(&named, &"self") && *nikaia_std::index::get(&params, 0) == "&self" { { let __nikaia_stored = String::from("&'r self"); nikaia_std::index::set(&mut params, 0usize, __nikaia_stored); } }
                 let mut source_option: Option<i64> = None;
                 if has_borrows && plain_signature && named.len() == 1 && source_at.is_none() { for k in 0..config.len() as i64 { if source_option.is_none() && emit_text(world, nikaia_std::index::get(&config, nikaia_std::index::at(k)).name) == *nikaia_std::index::get(&named, 0) && (self.carries_a_view(world, &nikaia_std::index::get(&config, nikaia_std::index::at(k)).ty) || self.emit_fn_lent_option(&key, k)) { source_option = Some(k); } } }
                 let mut source_nested = false;
@@ -318,7 +318,7 @@ impl EmitState {
                     if any {
                         lengths.push(format!("__NIKAIA_N{}", at));
                         open.push(format!("const __NIKAIA_N{}: usize", at));
-                    } else { lengths.push("".to_owned()); }
+                    } else { lengths.push(String::from("")); }
                     at += 1;
                 }
                 let mut either_first: Vec<String> = vec![];
@@ -361,7 +361,7 @@ impl EmitState {
                     let plain_bytes = type_name == "Bytes" && each.ty.generics.is_empty() && !each.ty.is_nullable && !each.ty.is_slice;
                     let by_four = reference == "&" || reference == "&'r " || reference == "&'k " || reference == "&'a ";
                     let by_three = reference == "&" || reference == "&'r " || reference == "&'k ";
-                    if by_four && plain_bytes { spelled = "[u8]".to_owned(); } else if by_four && plain_text { spelled = "str".to_owned(); } else if by_three && plain_list && spelled.starts_with("Vec<") {
+                    if by_four && plain_bytes { spelled = String::from("[u8]"); } else if by_four && plain_text { spelled = String::from("str"); } else if by_three && plain_list && spelled.starts_with("Vec<") {
                         let inner = nikaia_std::index::or(nikaia_std::index::or(spelled.strip_prefix("Vec<"), || "").strip_suffix('>'), || "");
                         spelled = format!("[{}]", inner);
                     } else if reference == "" && plain_list && spelled.starts_with("&Vec<") {
@@ -411,17 +411,17 @@ impl EmitState {
                 if has_kept { params.push(format!("__keep: {}nikaia_std::tether::Keep", kept_lt.reference())); }
                 let mut declared: Vec<String> = vec![];
                 if walk.specialising.is_some() {
-                    if has_dsl { declared.push("NikaiaDsl".to_owned()); }
+                    if has_dsl { declared.push(String::from("NikaiaDsl")); }
                     for each in open.iter() { declared.push(each.to_owned()); }
                 } else {
                     for each in generics.iter() { declared.push(emit_bounded(world, each)); }
-                    if has_dsl { declared.push("NikaiaDsl".to_owned()); }
+                    if has_dsl { declared.push(String::from("NikaiaDsl")); }
                     for each in open.iter() { declared.push(each.to_owned()); }
                 }
-                if has_kept && emit_is_kept(kept_lt) { declared.insert(0, "'k".to_owned()); }
-                if emit_is_elided(lifetimes) && (!input_empty || inner_views.is_some() || !stores.is_empty()) { declared.insert(0, "'a".to_owned()); }
-                if shared { declared.insert(0, "'r".to_owned()); }
-                if !either_first.is_empty() { declared.insert(0, "'e".to_owned()); }
+                if has_kept && emit_is_kept(kept_lt) { declared.insert(0, String::from("'k")); }
+                if emit_is_elided(lifetimes) && (!input_empty || inner_views.is_some() || !stores.is_empty()) { declared.insert(0, String::from("'a")); }
+                if shared { declared.insert(0, String::from("'r")); }
+                if !either_first.is_empty() { declared.insert(0, String::from("'e")); }
                 walk.either_prelude = either_first.to_owned();
                 let mut returned: String = String::from("");
                 match ret_type {
@@ -547,7 +547,7 @@ impl EmitState {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 };
-                if hint.is_none() && self.fold_callees.contains(&own_name) { hint = Some("#[inline(always)]".to_owned()); }
+                if hint.is_none() && self.fold_callees.contains(&own_name) { hint = Some(String::from("#[inline(always)]")); }
                 match hint {
                     Some(ref text) => {
                         out.push(text);
@@ -596,7 +596,7 @@ impl EmitState {
                     out.push(&emit_fn_signature(&vis, &pausing, &emitted, &declared, &params, &ret));
                     out.push("{ ");
                     out.push(&check_lines);
-                    pending = Some("}".to_owned());
+                    pending = Some(String::from("}"));
                 } else { out.push(&emit_fn_signature(&vis, &pausing, &emitted, &declared, &params, &ret)); }
                 let mut awaited: Vec<winnow_grammar::Symbol> = vec![];
                 for each in args.iter() {
@@ -638,7 +638,7 @@ impl EmitState {
                     None => { out.push("\n"); },
                 }
             },
-            _ => { return Err(nikaia_std::error::raise(EmitRefused { message: "not a function".to_owned(), at: None }, &"emit_function")); },
+            _ => { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("not a function"), at: None }, &"emit_function")); },
         }
         Ok(())
     }

@@ -190,7 +190,7 @@ fn two_tasks_are_in_flight_before_either_finishes() {
 fn data_a_task_took_and_the_program_used_again_is_refused() {
     let found = findings(
         "fn main() {\n\
-         \x20   let message: String = \"Hello\".clone()\n\
+         \x20   let message: String = f\"Hello\"\n\
          \x20   spawn fn { println(message) }\n\
          \x20   println(message)\n\
          }",
@@ -419,7 +419,7 @@ fn data_a_kept_child_took_and_the_program_used_again_is_refused() {
          \x20   println(name)\n\
          }\n\
          fn main() throws {\n\
-         \x20   let name = \"Ada\".clone()\n\
+         \x20   let name = f\"Ada\"\n\
          \x20   supervisor::run([supervisor::child(fn { greet(name) }; restart: supervisor::Kind::Transient)])\n\
          \x20   println(name)\n\
          }",

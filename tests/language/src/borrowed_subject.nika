@@ -17,7 +17,7 @@ impl BorrowedSubjectCountRow {
 // away. This is half the polarity and it is why the rule reads the field's
 // type rather than counting `&self`s.
 test "a field that copies is handed out freely" {
-    let r = BorrowedSubjectCountRow { name: "a".to_string(), count: 1 }
+    let r = BorrowedSubjectCountRow { name: "a", count: 1 }
     let got = r.m()
     assert(got == 1)
 }
@@ -35,7 +35,7 @@ impl BorrowedSubjectCloneRow {
 
 // The way out the message names first, run.
 test "a written clone is the way out" {
-    let r = BorrowedSubjectCloneRow { name: "a".to_string(), count: 1 }
+    let r = BorrowedSubjectCloneRow { name: "a", count: 1 }
     let got = r.m()
     assert(got == "a")
 }
@@ -52,7 +52,7 @@ impl BorrowedSubjectOwnedRow {
 
 // And the other: a method that means to consume its subject says so.
 test "a method that owns its subject may hand the field out" {
-    let r = BorrowedSubjectOwnedRow { name: "a".to_string() }
+    let r = BorrowedSubjectOwnedRow { name: "a" }
     let got = r.into_name()
     assert(got == "a")
 }
@@ -80,7 +80,7 @@ impl BorrowedSubjectReadRow {
 // this refusal useless: a method call on the field, its length, and its use in
 // an interpolation all borrow, and all still work.
 test "reading a field is not taking it" {
-    let r = BorrowedSubjectReadRow { name: "a".to_string(), count: 1 }
+    let r = BorrowedSubjectReadRow { name: "a", count: 1 }
     let shown = f"{r.shout()} {r.size()} {r.label()}"
     assert(shown == "A 1 a: 1")
 }
@@ -106,7 +106,7 @@ impl BorrowedSubjectViewRow {
 test "a view of the field is the free way out" {
     let mut v = Vec()
     v.push(7)
-    let r = BorrowedSubjectViewRow { name: "a".to_string(), tags: v }
+    let r = BorrowedSubjectViewRow { name: "a", tags: v }
     let shown = f"{r.name()} {r.tags()[0]}"
     assert(shown == "a 7")
 }
@@ -135,7 +135,7 @@ impl BorrowedSubjectTailRow {
 test "a field handed back where a view is declared needs no reference" {
     let mut v = Vec()
     v.push(7)
-    let r = BorrowedSubjectTailRow { name: "a".to_string(), tags: v }
+    let r = BorrowedSubjectTailRow { name: "a", tags: v }
     let shown = f"{r.name()} {r.tags()[0]}"
     assert(shown == "a 7")
 }

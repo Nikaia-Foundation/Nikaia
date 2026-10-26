@@ -389,7 +389,7 @@ impl CheckState {
     pub fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, text: &str, span: &Span) {
         if text.contains("{{") || text.contains("}}") {
             let single = text.replace("{{", "{").replace("}}", "}");
-            self.warn_migration(span, "`{{{{` in a plain string is now two braces.".to_owned(), format!("Braces in a plain string don't need escaping any more: write `\"{}\"`.", single));
+            self.warn_migration(span, String::from("`{{{{` in a plain string is now two braces."), format!("Braces in a plain string don't need escaping any more: write `\"{}\"`.", single));
             return;
         }
         for hole in brace_groups(text) {
@@ -494,7 +494,7 @@ impl CheckState {
     pub fn a_build_time_value_with_nowhere_to_compile(&mut self, bound: &str, span: &Span) {
         let mut help: String = format!("Check it with `nikaia check` or `nikaia build`, which have one, or write `let {} = …` to compute it while the program runs.", bound);
         if self.computing_default { help = format!("Check it with `nikaia check` or `nikaia build`, which have one, or make `{}` a `T?` and compute it in the body.", bound); }
-        self.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), vec!["This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it.".to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), vec![String::from("This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

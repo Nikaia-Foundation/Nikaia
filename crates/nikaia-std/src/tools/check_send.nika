@@ -10,7 +10,7 @@ use std::collections
 /// The note every `NK25xx` carries, because it is the reason the code exists:
 /// the verdict may not depend on `user_parallelism`.
 pub fn same_at_both() -> String {
-    return "This is checked even when the program runs on one thread, so code stays correct when `user-parallelism` is turned on.".clone()
+    return "This is checked even when the program runs on one thread, so code stays correct when `user-parallelism` is turned on."
 }
 
 /// Whether the verdict is the lock's (ADR-281 D32).
@@ -42,7 +42,7 @@ impl CheckState {
         if verdict.refused_part() == null {
             return
         }
-        let notes: Vec[String] = ["A task runs on its own thread, so everything it uses has to be able to move between threads.".clone(), verdict.note() ?? "".clone(), same_at_both()]
+        let notes: Vec[String] = ["A task runs on its own thread, so everything it uses has to be able to move between threads.", verdict.note() ?? "", same_at_both()]
         self.findings.push(check_refusal("NK2501", span, f"This task uses `{name}`, which can't be passed to a task.", notes, verdict.way_out()))
     }
 
@@ -75,7 +75,7 @@ impl CheckState {
             self.reaches_a_lock(callee, what, path, verdict, span)
             return
         }
-        let notes: Vec[String] = [why.clone(), verdict.note() ?? "".clone(), same_at_both()]
+        let notes: Vec[String] = [why.clone(), verdict.note() ?? "", same_at_both()]
         self.findings.push(check_refusal("NK2502", span, f"{capitalised(what)} can't move to another thread, and `{callee}` might move it.", notes, verdict.way_out()))
     }
 
@@ -86,7 +86,7 @@ impl CheckState {
         let part = verdict.refused_part() ?? return
         let reached = reached_path(path, verdict.refused_at())
         let mut note: String = f"What you pass is a `{part}`, and code that might keep a lock could deadlock."
-        let mut help: String = "Open the lock here and pass the value inside it, so the called code gets an ordinary value and no lock.".clone()
+        let mut help: String = "Open the lock here and pass the value inside it, so the called code gets an ordinary value and no lock."
         if reached != null {
             let shown = reached ?? return
             note = f"`{shown}` is a `{part}`, and code that might keep a lock could deadlock."

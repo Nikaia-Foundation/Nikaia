@@ -220,7 +220,7 @@ fn a_buffer_that_is_not_handed_back_is_left_alone() {
 #[test]
 fn a_literal_is_left_alone() {
     let source = "fn name() -> ref String {\n\
-                  \x20   let unused = \"Grace\".clone()\n\
+                  \x20   let unused = \"Grace\"\n\
                   \x20   return \"Ada\"\n\
                   }\n\
                   fn main() { }\n";

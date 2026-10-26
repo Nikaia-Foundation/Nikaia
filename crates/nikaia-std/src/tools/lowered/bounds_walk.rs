@@ -732,10 +732,10 @@ pub(crate) fn bounding_element_written(expr: &Expr, words: &winnow_grammar::Inte
             let list = path_of(base, words);
             if list.is_none() {
                 let root = match bounding_root_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                return Some((root, "".to_owned(), "".to_owned()));
+                return Some((root, String::from(""), String::from("")));
             }
             let at = nikaia_std::index::or(bounding_variable(index, words), || "".into());
-            return Some((nikaia_std::index::or(list.as_deref(), || "").to_owned(), at.to_owned(), "".to_owned()));
+            return Some((nikaia_std::index::or(list.as_deref(), || "").to_owned(), at.to_owned(), String::from("")));
         },
         _ => return None,
     }
@@ -1636,7 +1636,7 @@ pub(crate) fn bounding_loop_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut
             let mut parts: Vec<(i64, String)> = vec![];
             for guess in guesses.iter() {
                 let guess = nikaia_std::num::value(guess);
-                parts.push((guess, "guess and check".to_owned()));
+                parts.push((guess, String::from("guess and check")));
             }
             walk.proven.loops.insert(start, loop_parts_text(&walk.arena, &LoopFound { parts }));
             facts.facts = here.facts.to_owned();

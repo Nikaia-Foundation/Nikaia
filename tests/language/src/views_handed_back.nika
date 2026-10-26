@@ -4,7 +4,7 @@
 // `crates/nikaia/tests/views_handed_back.rs`.
 
 fn views_handed_back_d() -> ref String {
-    let s: String = "x".clone()
+    let s: String = "x"
     return ref s
 }
 
@@ -59,16 +59,16 @@ fn views_handed_back_label(a: String, b: String) -> ref String {
 // borrows from the caller's argument - `'static` was *lifetime may not live
 // long enough* (D25: one source on every way out).
 test "a view of a parameter borrows from the argument" {
-    let t: String = "y".clone()
-    let row = ViewsHandedBackRow { name: "z".clone() }
+    let t: String = "y"
+    let row = ViewsHandedBackRow { name: "z" }
     let line = f"{views_handed_back_e(t)} {views_handed_back_c(row)} {views_handed_back_first("long", "x")} {views_handed_back_label("a", "b")}"
     assert(line == "y z long other")
 }
 
 // **D24, step 3**: an argument made in the call goes into the caller's keep.
 test "an argument made in the call is kept" {
-    let r = views_handed_back_e("y".clone())
-    let q = views_handed_back_c(ViewsHandedBackRow { name: "z".clone() })
+    let r = views_handed_back_e("y")
+    let q = views_handed_back_c(ViewsHandedBackRow { name: "z" })
     let l = views_handed_back_e("w")
     let line = f"{r} {q} {l}"
     assert(line == "y z w")
@@ -86,7 +86,7 @@ test "following nk1104s help runs" {
 // given and the caller declares it beside the call - it was *cannot return
 // value referencing local variable*.
 fn views_handed_back_g() -> ref String {
-    return views_handed_back_e("y".clone())
+    return views_handed_back_e("y")
 }
 
 test "an argument made in the call handed on lives in the callers keep" {

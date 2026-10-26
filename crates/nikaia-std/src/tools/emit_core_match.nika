@@ -181,7 +181,7 @@ impl EmitState {
         }
         let name = match value {
             Expr::Variable(symbol, _) => emit_text(world, symbol),
-            else => "".clone(),
+            else => "",
         }
         let lent = self.facts.lent_bindings.get(arm) ?? return ""
         if name != "" && lent.contains(name) {

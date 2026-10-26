@@ -267,7 +267,7 @@ fn a_name_in_a_text_interpolation_is_refused_at_the_hole() {
             "an assignment",
         ),
         (
-            "    let s = match 1 {\n        1 => f\"name {p}\"\n        else => \"other\".clone()\n    }\n",
+            "    let s = match 1 {\n        1 => f\"name {p}\"\n        else => f\"other\"\n    }\n",
             "a match arm",
         ),
     ] {
@@ -318,7 +318,7 @@ fn an_io_errors_name_is_a_file_name() {
                    \x20   let text = fs::read_to_string(\"nope.txt\", fs::Root::Dir(\".\")) catch {\n\
                    \x20       match error {\n\
                    \x20           io::IoError::NotFound(p) => f\"no file: {p}\"\n\
-                   \x20           else => \"other\".clone()\n\
+                   \x20           else => f\"other\"\n\
                    \x20       }\n\
                    \x20   }\n\
                    \x20   println(text)\n\

@@ -90,7 +90,7 @@ fn a_narrowed_callee_does_not_break_its_callers() {
     let source = "struct User {\n    name: String,\n}\n\n\
          fn find(id: i64) -> User {\n    return User { name: f\"u{id}\" }\n}\n\n\
          fn main() {\n\
-         \x20   let a = find(1) ?? User { name: \"-\".clone() }\n\
+         \x20   let a = find(1) ?? User { name: \"-\" }\n\
          \x20   let b = find(2)?.name\n\
          \x20   println(f\"{a.name} {b}\")\n\
          }\n";

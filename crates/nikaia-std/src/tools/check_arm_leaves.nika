@@ -530,9 +530,9 @@ impl CheckState {
         let before = self.facts.settle_fns.get(current) ?? false
         self.facts.settle_fns.insert(current, before || failing)
         if failing {
-            return "cleanup::settle_failing".clone()
+            return "cleanup::settle_failing"
         }
-        return "cleanup::settle".clone()
+        return "cleanup::settle"
     }
 }
 
@@ -603,10 +603,10 @@ impl CheckState {
             let arm = asked.tail ?? continue
             let mut ty = self.text_literal(world, want, arm, true) ?? asked.ty.clone()
             // **An open-number arm is asked as a number written there** (#600):
-            // `if c { "a".clone() } else { 1 }` under `String` is refused as
+            // `if c { "a" } else { 1 }` under `String` is refused as
             // `let s: String = 3` is.
             if ty.is_unknown() && arm_is_a_written_integer(arm) && self.no_integer_is(want) {
-                ty = Ty::Named { name: "i64".clone(), args: [], view: false }
+                ty = Ty::Named { name: "i64", args: [], view: false }
             }
             if what == "field" {
                 self.flow.field_either = mixed

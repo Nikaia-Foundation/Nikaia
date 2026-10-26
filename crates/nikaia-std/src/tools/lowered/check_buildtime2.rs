@@ -7,7 +7,7 @@ impl CheckState {
     pub fn a_body_that_may_not_run_at_build_time(&mut self, callee: &str, because: &str, span: &Span) {
         let mut help: String = format!("Call it while the program runs, with `let` instead of `comptime`, or make `{}` `sync` so it touches nothing outside the program.", callee);
         if self.computing_default { help = format!("Make `{}` `sync` so it touches nothing outside the program, or make the option a `T?` and call it in the body.", callee); }
-        self.findings.push(check_refusal("NK1152", span, format!("You can't call `{}` while the program is built.", callee), vec![because.to_owned(), "At build time only functions that never pause and touch nothing outside the program can run.".to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK1152", span, format!("You can't call `{}` while the program is built.", callee), vec![because.to_owned(), String::from("At build time only functions that never pause and touch nothing outside the program can run.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -32,7 +32,7 @@ impl CheckState {
         let mut note: String = String::from("Each turn of a loop and each call is a step, and the count is the same on every machine.");
         if kind == "memory" {
             message = format!("`{}` held more than {} bytes at once while the program was built.", bound, limit);
-            note = "What it holds is counted as it asks for it, the same on every machine.".to_owned();
+            note = String::from("What it holds is counted as it asks for it, the same on every machine.");
         } else if kind == "depth" { message = format!("`{}` went more than {} calls deep while the program was built.", bound, limit); }
         let mut notes: Vec<String> = vec![];
         if !path.is_empty() {
@@ -42,7 +42,7 @@ impl CheckState {
         }
         notes.push(note);
         let mut help: String = String::from("Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`.");
-        if self.computing_default { help = "Look for a loop or a recursion that does not end, or make the option a `T?` and compute the value in the body.".to_owned(); }
+        if self.computing_default { help = String::from("Look for a loop or a recursion that does not end, or make the option a `T?` and compute the value in the body."); }
         self.findings.push(check_refusal("NK1152", span, message, notes, Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -56,7 +56,7 @@ impl CheckState {
         self.said_rings.insert(unique);
         let mut named: Vec<String> = vec![];
         for name in ring.iter() { named.push(format!("`{}`", name)); }
-        self.findings.push(check_refusal("NK1168", span, format!("`{}` depends on itself.", bound), vec![format!("The chain is {}, and a `comptime` has to be computable while the program is built.", named.join(" → "))], Some("Give one of them a value that doesn't depend on the others, or make it a `let` so it's computed while the program runs.".to_owned())));
+        self.findings.push(check_refusal("NK1168", span, format!("`{}` depends on itself.", bound), vec![format!("The chain is {}, and a `comptime` has to be computable while the program is built.", named.join(" → "))], Some(String::from("Give one of them a value that doesn't depend on the others, or make it a `let` so it's computed while the program runs."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

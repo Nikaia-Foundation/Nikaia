@@ -148,7 +148,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         if !known { state.no_such_option(key, name, signature, span); }
     }
-    let text_view = Ty::Named { name: "str".to_owned(), args: vec![], view: true };
+    let text_view = Ty::Named { name: String::from("str"), args: vec![], view: true };
     let mut expanded: Vec<CheckArgument> = vec![];
     let mut all_arms: Vec<Vec<CheckArm<'_>>> = vec![];
     let mut position: i64 = 0;
@@ -172,7 +172,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             k += 1;
             let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
             let literal = matches!(check_peeled(tail), Expr::LitInt { .. });
-            if arm.ty.is_unknown() && literal && no_number { expanded.push(CheckArgument { at, arm: index, found: Ty::Named { name: "i64".to_owned(), args: vec![], view: false } }); } else { expanded.push(CheckArgument { at, arm: index, found: arm.ty.clone() }); }
+            if arm.ty.is_unknown() && literal && no_number { expanded.push(CheckArgument { at, arm: index, found: Ty::Named { name: String::from("i64"), args: vec![], view: false } }); } else { expanded.push(CheckArgument { at, arm: index, found: arm.ty.clone() }); }
         }
         all_arms.push(arms);
     }
@@ -224,15 +224,15 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             state.hands_over(world, value, &found_here, &format!("passed to `{}`, which keeps it", written), span);
         }
         let mut literal_wants = want.clone();
-        if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: "String".to_owned(), args: vec![], view: false }; }
+        if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             let array = state.array_literal(world, &found_here, &want, value, span);
             if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || nikaia_std::index::or(state.tuple_literal(world, &found_here, &literal_wants, value), || found_here.clone().into()).into()); }
-            if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(&want) { found_here = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
+            if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(&want) { found_here = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
         }
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(&found_here) { continue; }
-        let string = Ty::Named { name: "String".to_owned(), args: vec![], view: false };
+        let string = Ty::Named { name: String::from("String"), args: vec![], view: false };
         if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own { continue; }
         if views_into_text(&found_here, &want) && either_param(&world.here, key, at) {
             if argument.arm >= 0 && at < given.len() as i64 && check_arguments_a_choice(nikaia_std::index::get(&given, nikaia_std::index::at(at))) && given_here.is_some() { state.note_mixed(world, nikaia_std::index::get(&given, nikaia_std::index::at(at)), check_arguments_nullable(&want)); } else if given_here.is_some() && check_arguments_nullable(&want) && !check_arguments_nullable(&found_here) {
@@ -284,7 +284,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let mut help: String = format!("Make it {} `{}`.", an_or_a(&want.text()), want.text());
             let hull: String = match want {
                 Ty::Named { ref name, .. } => name.to_owned(),
-                _ => "".to_owned(),
+                _ => String::from(""),
             };
             if value.is_some() {
                 let shown = nikaia_std::index::or(value.as_deref(), || "").to_owned();

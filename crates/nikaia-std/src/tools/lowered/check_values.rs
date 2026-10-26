@@ -48,7 +48,7 @@ impl CheckState {
         };
         if a_list {
             let method = nikaia_std::index::or(key.strip_prefix("str::"), || "").to_owned();
-            self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be text or a character, but you're passing a list.", key, param), vec!["What it looks for is one view of text or one character; a list of them is neither.".to_owned()], Some(format!("Ask once per character: `x.{}('a') || x.{}('i')`.", method, method))));
+            self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be text or a character, but you're passing a list.", key, param), vec![String::from("What it looks for is one view of text or one character; a list of them is neither.")], Some(format!("Ask once per character: `x.{}('a') || x.{}('i')`.", method, method))));
             return;
         }
         let owned = match nikaia_std::index::get(&found, 0) {
@@ -78,12 +78,12 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_kept_whole(&mut self, key: &str, name: &str, found: &Ty, want: &Ty, span: &Span) { self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, want.text(), found.text()), vec![format!("This is a view: it points into a `{}` that something else owns.", want.text()), format!("`{}` keeps its `{}` after the call returns, so it needs a `{}` of its own.", key, name, want.text())], Some("Write `.clone()` to copy it here.".to_owned()))); }
+    pub fn a_view_kept_whole(&mut self, key: &str, name: &str, found: &Ty, want: &Ty, span: &Span) { self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, want.text(), found.text()), vec![format!("This is a view: it points into a `{}` that something else owns.", want.text()), format!("`{}` keeps its `{}` after the call returns, so it needs a `{}` of its own.", key, name, want.text())], Some(String::from("Write `.clone()` to copy it here.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_handler_that_does_more_than_the_type_allows(&mut self, promised: &CheckPromises, seen: &CheckHanded, span: &Span) {
-        if seen.pauses && !promised.may_pause { self.findings.push(check_refusal("NK2206", span, "This lambda can pause, but the parameter it's passed to is `sync`.".to_owned(), vec!["A function type says what the code passed in may do, and `sync` means it must never pause.".to_owned(), "A lambda that does less fits a type that allows more, never the other way round.".to_owned()], Some("Do the pausing work outside the lambda and pass the result in, or remove `sync` from the parameter's type.".to_owned()))); }
-        if seen.fails && !promised.may_fail { self.findings.push(check_refusal("NK2606", span, "This lambda can fail, but the parameter it's passed to doesn't say `throws`.".to_owned(), vec!["A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.".to_owned()], Some("Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.".to_owned()))); }
+        if seen.pauses && !promised.may_pause { self.findings.push(check_refusal("NK2206", span, String::from("This lambda can pause, but the parameter it's passed to is `sync`."), vec![String::from("A function type says what the code passed in may do, and `sync` means it must never pause."), String::from("A lambda that does less fits a type that allows more, never the other way round.")], Some(String::from("Do the pausing work outside the lambda and pass the result in, or remove `sync` from the parameter's type.")))); }
+        if seen.fails && !promised.may_fail { self.findings.push(check_refusal("NK2606", span, String::from("This lambda can fail, but the parameter it's passed to doesn't say `throws`."), vec![String::from("A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.")], Some(String::from("Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.")))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -94,11 +94,20 @@ impl CheckState {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
             _ => String::from("…"),
         };
-        self.findings.push(check_refusal("NK1189", span, format!("To copy a value, write `.clone()`, not `.{}()`.", written), vec!["Nikaia has one word for a copy, for text and for everything else.".to_owned()], Some(format!("Write `{}.clone()`.", shown))));
+        self.findings.push(check_refusal("NK1189", span, format!("To copy a value, write `.clone()`, not `.{}()`.", written), vec![String::from("Nikaia has one word for a copy, for text and for everything else.")], Some(format!("Write `{}.clone()`.", shown))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_part_of_a_loan_handed_over(&mut self, path: &str, root: &str, to: &str, span: &Span) { self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but `{}` is only borrowed here.", path, to, root), vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.", root), "Nikaia never makes a copy behind your back.".to_owned()], Some(format!("Hand over a copy: `{}.clone()`.", path)))); }
+    pub fn a_call_on_a_literal_that_adds_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
+        let written = world.words.resolve(method).to_owned();
+        if !args.is_empty() || written != "to_string" && written != "clone" { return; }
+        let plain = matches!(receiver, Expr::LitStr { .. });
+        if !plain || !ledger_candidates(world.own, world.own_methods, &written).is_empty() { return; }
+        self.findings.push(check_refusal("NK1301", span, format!("`.{}()` on a text literal adds nothing.", written), vec![String::from("A text literal is already the text wherever text is wanted.")], Some(format!("Drop `.{}()`.", written))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_part_of_a_loan_handed_over(&mut self, path: &str, root: &str, to: &str, span: &Span) { self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but `{}` is only borrowed here.", path, to, root), vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.", root), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path)))); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

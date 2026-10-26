@@ -36,10 +36,10 @@ fn batch_info(abs: String) -> String throws {
             let out = process::run(exe, ["run", "scripts/agent.nika", "--", "--info", abs.clone()])
             let line = out.stdout.trim().clone()
             if out.ok && line.split(" ").collect().len() == 4 { return line }
-            return "builder sonnet 120 20".to_string()
+            return "builder sonnet 120 20"
         }
     }
-    return "builder sonnet 120 20".to_string()
+    return "builder sonnet 120 20"
 }
 
 fn batch_report_path(dir: String, brief: String) -> String throws {

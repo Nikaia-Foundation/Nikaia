@@ -20,8 +20,8 @@ fn kind_a_bound_name(name: ref String) -> bool {
 }
 
 fn kind_unknown_bound_help(name: ref String) -> String {
-    let among: Vec[String] = ["steps".clone(), "ram".clone()]
-    let near = nearest_name(name, among) ?? return "Name `steps` or `ram`, like `comptime(steps: 50G) …`.".clone()
+    let among: Vec[String] = ["steps", "ram"]
+    let near = nearest_name(name, among) ?? return "Name `steps` or `ram`, like `comptime(steps: 50G) …`."
     return f"Did you mean `{near}`?"
 }
 
@@ -244,15 +244,15 @@ impl CheckState {
         for bound in bounds {
             let name = world.words.resolve(bound.name).clone()
             if !kind_a_bound_name(name) {
-                self.findings.push(check_refusal("NK1109", span, f"A `comptime` has no bound called `{name}`.", ["Its bounds are `steps` and `ram`.".clone()], kind_unknown_bound_help(name)))
+                self.findings.push(check_refusal("NK1109", span, f"A `comptime` has no bound called `{name}`.", ["Its bounds are `steps` and `ram`."], kind_unknown_bound_help(name)))
                 refused = true
                 continue
             }
             let value = kind_bound_value(self.constant_of(world, bound.value))
             if value == null {
-                let mut help: String = "Write a number of bytes, like `ram: 16Gi`.".clone()
+                let mut help: String = "Write a number of bytes, like `ram: 16Gi`."
                 if name == "steps" {
-                    help = "Write a number, like `steps: 50G`.".clone()
+                    help = "Write a number, like `steps: 50G`."
                 }
                 self.findings.push(check_refusal("NK1102", span, f"`{name}` takes a whole number the build knows, and this is not one.", [], help))
                 refused = true
@@ -313,7 +313,7 @@ impl CheckState {
         for param in params {
             let name = world.words.resolve(param).clone()
             if kind_an_update_only_replaces(world, name, body) {
-                self.findings.push(check_refusal("NK2207", span, f"This `update` block replaces `{name}` without reading it, which is what `set` is for.", ["`update` is for changes that depend on the current value. Just storing a new value is what `set` does.".clone()], "Use `set` if the value is computed outside, or use the old value here: `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`.".clone()))
+                self.findings.push(check_refusal("NK2207", span, f"This `update` block replaces `{name}` without reading it, which is what `set` is for.", ["`update` is for changes that depend on the current value. Just storing a new value is what `set` does."], "Use `set` if the value is computed outside, or use the old value here: `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`."))
             }
         }
     }
@@ -330,7 +330,7 @@ impl CheckState {
             return
         }
         let written = written_expression(world.words, value)
-        self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.text()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm.".clone()))
+        self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.text()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm."))
     }
 
     /// **`NK1103`: an arm's pattern of another type than the value** (#704):
@@ -359,7 +359,7 @@ impl CheckState {
             if self.kind_a_misfit(world, arm.pattern, kind) {
                 let written = written_expression(world.words, value)
                 let pattern = written_pattern(world.words, arm.pattern)
-                self.findings.push(check_refusal("NK1103", span, f"`{written}` is {shown}, so the pattern `{pattern}` can't match it.", ["An arm's pattern is a value of the type the `match` is over.".clone()], "Write a pattern of that type, or convert the value before the `match`.".clone()))
+                self.findings.push(check_refusal("NK1103", span, f"`{written}` is {shown}, so the pattern `{pattern}` can't match it.", ["An arm's pattern is a value of the type the `match` is over."], "Write a pattern of that type, or convert the value before the `match`."))
                 return
             }
         }
@@ -436,11 +436,11 @@ impl CheckState {
             if which == "Some" && !some_seen {
                 some_seen = true
                 let bound = kind_some_binding(world, arm.pattern)
-                self.findings.push(check_refusal("NK2704", span, f"`Some({bound})` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`.".clone()], f"Write the name alone: `{bound} => …`, with `null => …` beside it."))
+                self.findings.push(check_refusal("NK2704", span, f"`Some({bound})` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `Some`: its value is the `T` itself, and its nothing is `null`."], f"Write the name alone: `{bound} => …`, with `null => …` beside it."))
             }
             if which == "None" && !none_seen {
                 none_seen = true
-                self.findings.push(check_refusal("NK2705", span, f"`None` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `None`: its nothing is written `null`.".clone()], "Write `null => …`."))
+                self.findings.push(check_refusal("NK2705", span, f"`None` is not a pattern of `{written}`, a `{on.text()}`.", ["A `T?` has no `None`: its nothing is written `null`."], "Write `null => …`."))
             }
         }
         return some_seen || none_seen

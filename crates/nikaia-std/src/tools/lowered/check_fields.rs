@@ -151,7 +151,7 @@ impl CheckState {
         let a_name = matches!(owned, Ty::Named { .. });
         if !a_name || !moves(&owned) || !self.takes_away(world, &owned) { return; }
         let message = format!("The two sides of `??` don't match: the left is a `{}`, the fallback a `{}`.", viewed.text(), owned.text());
-        let notes: Vec<String> = vec!["A view and the value it points into are different types, and `??` has to give back one type.".to_owned(), "Nikaia never makes a copy behind your back, so it can't make the two agree on its own.".to_owned()];
+        let notes: Vec<String> = vec![String::from("A view and the value it points into are different types, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back, so it can't make the two agree on its own.")];
         let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.text());
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }

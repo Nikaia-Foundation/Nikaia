@@ -200,10 +200,10 @@ pub(crate) fn bt_if_value<H: BtHost>(cond: &Expr, then_branch: &Block, else_bran
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn bt_branch<H: BtHost>(block: &Block, host: &H, state: &mut BtState) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
-    if block.stmts.len() != 1 { return Err(nikaia_std::error::throwing(bt_not_folded("{ … }".to_owned()), &"bt_branch")); }
+    if block.stmts.len() != 1 { return Err(nikaia_std::error::throwing(bt_not_folded(String::from("{ … }")), &"bt_branch")); }
     Ok(match &nikaia_std::index::get(&block.stmts, 0).node {
         Stmt::Expr(inner) => bt_expr(inner, host, state)?,
-        _ => { return Err(nikaia_std::error::throwing(bt_not_folded("{ … }".to_owned()), &"bt_branch")) },
+        _ => { return Err(nikaia_std::error::throwing(bt_not_folded(String::from("{ … }")), &"bt_branch")) },
     })
 }
 
@@ -238,7 +238,7 @@ pub(crate) fn bt_field<H: BtHost>(base: &Expr, name: winnow_grammar::Symbol, hos
 pub(crate) fn bt_call_expr<H: BtHost>(func: &Expr, args: &[Expr], config: &[ConfigArg], host: &H, state: &mut BtState) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
     Ok(match func {
         Expr::Path(path, _) => {
-            if !config.is_empty() || path.len() != 2 { return Err(nikaia_std::error::throwing(bt_not_folded("a call".to_owned()), &"bt_call_expr")); }
+            if !config.is_empty() || path.len() != 2 { return Err(nikaia_std::error::throwing(bt_not_folded(String::from("a call")), &"bt_call_expr")); }
             let parser = host.text(state.unit, *nikaia_std::index::get(&path, 0));
             let rule = host.text(state.unit, *nikaia_std::index::get(&path, 1));
             if host.variant_of(state.unit, &parser, &rule) {

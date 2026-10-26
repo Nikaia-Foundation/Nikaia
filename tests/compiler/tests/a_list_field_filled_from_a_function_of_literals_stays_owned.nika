@@ -22,7 +22,7 @@ fn score(lines: ref Vec[String]) -> Score {
 
 fn main() {
     let mut ls: Vec[String] = []
-    ls.push("xa".clone())
+    ls.push("xa")
     let s = score(ls)
     let kinds: Vec[String] = s.kinds.clone()
     print(stats(kinds))

@@ -108,7 +108,7 @@ impl CheckState {
             let added = self.facts.copied_reads.insert(node)
             return
         }
-        self.findings.push(check_refusal("NK1102", span, f"This keeps a `{want.text()}` of its own, and a map's read is a view of what the map keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens.".clone()], "Write `?.clone()` after the read: `m[k]?.clone()`.".clone()))
+        self.findings.push(check_refusal("NK1102", span, f"This keeps a `{want.text()}` of its own, and a map's read is a view of what the map keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens."], "Write `?.clone()` after the read: `m[k]?.clone()`."))
     }
 
     /// **A map's read, past a jump, assigned to a place that owns its value**
@@ -125,7 +125,7 @@ impl CheckState {
                     let added = self.facts.copied_reads.insert(node)
                     return
                 }
-                self.findings.push(check_refusal("NK1102", span, f"This keeps a `{into.text()}` of its own, and a map's read is a view of what the map keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens.".clone()], "Write `?.clone()` after the read: `m[k]?.clone()`.".clone()))
+                self.findings.push(check_refusal("NK1102", span, f"This keeps a `{into.text()}` of its own, and a map's read is a view of what the map keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens."], "Write `?.clone()` after the read: `m[k]?.clone()`."))
             }
             else => {}
         }
@@ -216,18 +216,18 @@ impl CheckState {
         let number_right = right.is_unknown() && self.a_lent_name(world, rhs) && self.a_number_beside(world, lhs, left)
         let here = at.start as i64
         if number_left {
-            let added = self.facts.compared_numbers.insert((here, "lhs".clone()))
+            let added = self.facts.compared_numbers.insert((here, "lhs"))
         }
         if number_right {
-            let added = self.facts.compared_numbers.insert((here, "rhs".clone()))
+            let added = self.facts.compared_numbers.insert((here, "rhs"))
         }
         // **By the operator's own span and the side**: a statement may hold two
         // comparisons of one name, and only the second reads `a`.
         if read_left {
-            let added = self.facts.compared_views.insert((here, "lhs".clone()))
+            let added = self.facts.compared_views.insert((here, "lhs"))
         }
         if read_right {
-            let added = self.facts.compared_views.insert((here, "rhs".clone()))
+            let added = self.facts.compared_views.insert((here, "rhs"))
         }
     }
 

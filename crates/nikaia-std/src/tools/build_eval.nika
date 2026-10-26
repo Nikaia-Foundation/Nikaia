@@ -274,12 +274,12 @@ fn bt_if_value[H: BtHost](cond: ref Expr, then_branch: ref Block, else_branch: r
 /// code, compiled and run with the program (ADR-321 D1).
 fn bt_branch[H: BtHost](block: ref Block, host: ref H, mut state: BtState) -> BuildValue sync throws {
     if block.stmts.len() != 1 {
-        throw bt_not_folded("{ … }".clone())
+        throw bt_not_folded("{ … }")
     }
     return match block.stmts[0].node {
         Stmt::Expr(inner) => bt_expr(inner, host, state),
         else => {
-            throw bt_not_folded("{ … }".clone())
+            throw bt_not_folded("{ … }")
         },
     }
 }
@@ -320,7 +320,7 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
         // Anything else called is code, which the folder does not run.
         Expr::Path(path, _) => {
             if config.len() > 0 || path.len() != 2 {
-                throw bt_not_folded("a call".clone())
+                throw bt_not_folded("a call")
             }
             let parser = host.text(state.unit, path[0])
             let rule = host.text(state.unit, path[1])

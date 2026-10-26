@@ -285,7 +285,7 @@ pub(crate) fn types_word_by_ref_here(names: &winnow_grammar::InternerContext, ty
     if !a_word { return; }
     let mut written = name.to_owned();
     if ty.is_nullable { written = format!("{}?", name); }
-    out.push(refusal("NK1257", span.clone(), format!("A `{}` is copied at a read, so a {} can't be a `ref {}`.", name, position, written), vec!["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects.".to_owned()], format!("Write `{}` without `ref`; a parameter the function changes is `mut name: {}`.", written, written)));
+    out.push(refusal("NK1257", span.clone(), format!("A `{}` is copied at a read, so a {} can't be a `ref {}`.", name, position, written), vec![String::from("A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects.")], format!("Write `{}` without `ref`; a parameter the function changes is `mut name: {}`.", written, written)));
 }
 
 pub(crate) fn types_word_by_ref_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, plain: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) { types_word_by_ref(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, plain, "result", span, out); }
@@ -296,7 +296,7 @@ pub(crate) fn types_text_by_ref(names: &winnow_grammar::InternerContext, ty: &Ty
     if names.resolve(ty.name) != "String" { return; }
     let mut written: &'static str = "String";
     if ty.is_nullable { written = "String?"; }
-    out.push(Finding { code: String::from("NK1261"), span: span.clone(), message: format!("`ref` is redundant here: a {} written `ref {}` says what `{}` already says.", position, written, written), notes: vec!["Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.".to_owned()], help: Some(format!("Write `{}` without `ref`.", written)), warning: true, labels: vec![] });
+    out.push(Finding { code: String::from("NK1261"), span: span.clone(), message: format!("`ref` is redundant here: a {} written `ref {}` says what `{}` already says.", position, written, written), notes: vec![String::from("Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.")], help: Some(format!("Write `{}` without `ref`.", written)), warning: true, labels: vec![] });
 }
 
 pub(crate) fn types_text_by_ref_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, position: &str, views: &collections::BTreeSet<String>, key: &str, span: &Span, out: &mut Vec<Finding>) { types_text_by_ref(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, position, views, key, span, out); }

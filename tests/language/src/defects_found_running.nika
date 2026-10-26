@@ -59,7 +59,7 @@ test "a chain through two nullable fields of a lent value" {
 // the one handed over, and refused a correct program with `NK2105`.
 test "a loop binding is not the name it shadows" {
     let mut seen: collections::HashMap[String, i64] = collections::HashMap()
-    let k = "b".clone()
+    let k = "b"
     seen[k] = 2
     let mut kept: Vec[String] = []
     for (k, v) in seen {
@@ -82,11 +82,11 @@ test "a number a loop binds is the number" {
         out.push(DefectsW { count: n, first: n == 3 })
     }
     let mut seen: collections::HashMap[String, i64] = collections::HashMap()
-    seen["a".clone()] = 5
+    seen["a"] = 5
     for (k, v) in seen {
         out.push(DefectsW { count: v, first: k == "a" })
     }
-    let pairs: Vec[(String, i64)] = [("x".clone(), 6)]
+    let pairs: Vec[(String, i64)] = [("x", 6)]
     for (_, v) in pairs {
         out.push(DefectsW { count: v, first: false })
     }
@@ -105,7 +105,7 @@ test "a key read and written in one statement" {
     for w in "a b a".split(" ") {
         seen[w.clone()] = (seen[w.clone()] ?? 0) + 1
     }
-    let a = seen["a".clone()] ?? 0
+    let a = seen["a"] ?? 0
     let line = f"{a} {seen.len()}"
     assert(line == "2 2")
 }
@@ -606,8 +606,8 @@ fn defects_joined(parts: ref Vec[i64]) -> String sync {
 test "a position a tuple part a lent name and a join" {
     let stmts: Vec[DefectsStmt] = [DefectsStmt::Set { target: DefectsExpr::Name(4), value: 1 }, DefectsStmt::Skip, DefectsStmt::Set { target: DefectsExpr::Nothing, value: 0 }]
     let mut params: Vec[(String, i64)] = []
-    params.push(("a".clone(), 1))
-    params.push(("b".clone(), 2))
+    params.push(("a", 1))
+    params.push(("b", 2))
     let borrows: Vec[String] = ["b"]
     let line = f"{defects_total(stmts)} {defects_position(borrows, params)} {defects_joined(defects_ordered([3, 1, 2]))}"
     assert(line == "9 2 1, 2, 3")
@@ -676,8 +676,8 @@ fn defects_said(answer: DefectsAnswer) -> String {
 }
 
 test "a fallback that returns takes its takings with it" {
-    let a = defects_said(defects_look(4, "a".clone()))
-    let b = defects_said(defects_look(3, "b".clone()))
+    let a = defects_said(defects_look(4, "a"))
+    let b = defects_said(defects_look(3, "b"))
     assert(a == "a:2")
     assert(b == "no b")
 }

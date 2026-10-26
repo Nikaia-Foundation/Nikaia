@@ -334,7 +334,7 @@ impl EmitState {
                 out.push(")")
             },
             else => {
-                throw EmitRefused { message: "not a string literal".clone(), at: null }
+                throw EmitRefused { message: "not a string literal", at: null }
             },
         }
     }
@@ -412,8 +412,8 @@ impl EmitState {
     pub fn emit_core_grammar_entry[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: ref Expr, parallelism: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **The `?` is the call's, and a `catch` is what takes it away.**
         let question = match flow.caught {
-            true => "".clone(),
-            false => "?".clone(),
+            true => "",
+            false => "?",
         }
         let name = emit_text(world, grammar_symbol)
         if !self.grammars.contains_key(name.clone()) {

@@ -2481,7 +2481,7 @@ fn rsrc_written_paths(contract: ref FnContract) -> Vec[(String, String)] {
     let mut out: Vec[(String, String)] = []
     if contract.returns.len() == 0 {
         for borrowed in contract.borrows {
-            out.push(("".clone(), borrowed.clone()))
+            out.push(("", borrowed.clone()))
         }
         return out
     }

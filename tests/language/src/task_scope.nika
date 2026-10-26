@@ -24,7 +24,7 @@ test "a scope's tasks borrow and the scope waits for them" {
 test "a task that panicked is thrown where the scope ends" {
     let said = task::scope fn(s) {
         s.spawn fn { panic("boom") }
-        "finished".clone()
+        "finished"
     } catch { f"{error.message}" }
     assert(said == "boom")
 }
@@ -32,7 +32,7 @@ test "a task that panicked is thrown where the scope ends" {
 // A task that pauses is polled by the scope itself (ADR-328 D10): it borrows
 // what the function holds, at both settings, and the scope waits for it.
 test "a task that pauses borrows, and the scope waits for it" {
-    let config = "abc".clone()
+    let config = "abc"
     let seen = SharedMut(0)
     let made = task::scope fn(s) {
         s.spawn fn {
@@ -78,7 +78,7 @@ test "a crash after a pause drops the other tasks" {
             panic("after a pause")
         }
         s.spawn fn { time::sleep(60000.millis()) }
-        "finished".clone()
+        "finished"
     } catch { f"{error.message}" }
     assert(said == "after a pause")
 }

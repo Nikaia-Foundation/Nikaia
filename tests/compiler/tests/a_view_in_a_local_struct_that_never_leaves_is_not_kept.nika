@@ -15,7 +15,7 @@ fn two(s: ref String, c: bool) -> i64 {
 }
 
 fn main() {
-    let a = "ab".clone()
+    let a = "ab"
     println(f"{two(a, true)}")
     println(f"{two(a, false)}")
 }
