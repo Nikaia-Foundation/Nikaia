@@ -24,3 +24,4 @@
 /home/user/Nikaia/docs/briefs/b867-seeds-tables.md 1010616 24
 /home/user/Nikaia/docs/briefs/architect-task.md 455507 16
 /home/user/Nikaia/docs/briefs/b-fixforward-drive-tidy.md 143067 8
+/home/user/Nikaia/docs/briefs/b655-mut-param-coalesce.md 222099 10
