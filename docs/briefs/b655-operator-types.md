@@ -16,6 +16,9 @@ Score: bugs lane: S=3 (the checker passes programs only rustc refuses), O=small,
 Replace the `NK1191` row's sentence in `docs/specification/30-nikaia-tooling.md` (grep `NK1191\``) with, verbatim:
 > `NK1191` an arithmetic operator, or its compound assignment, on something that has none: text or a `bool` (`"a" - 1`, `true + 1`; `+` joins two texts and nothing else), a list, a map or a set (Part I 4.5), or a `struct` or an `enum` this unit declares - there is no overloading and no trait that gives a type an operator. The same code refuses `-` on anything but a number and `!` on anything but a `bool`, an integer, a vector or a mask.
 
+## An interrupted earlier run (architect, 7280a0b)
+The main checkout holds this brief's uncommitted work from a run that ended without a report: `check_arith.nika`, `check_core_expr.nika`, `check_core_ops.nika`, `check_core_stmt.nika` (+ their `lowered/*.rs`, `lowered.rs`), the NK1191 row in `30-nikaia-tooling.md`, and the four tests below. These files are yours: read `git diff` first, keep what is right, finish, and commit them with the rest.
+
 ## Locations
 * `crates/nikaia-std/src/tools/check_arith.nika`: `arithmetic_on_something_that_has_none` (315; today only collections and declared types), `arithmetic_on_a_declared_type` (~355); add the text/bool case there.
 * `crates/nikaia-std/src/tools/check_core_expr.nika`: `check_core_expr_unary` (469): `UnaryOp::Not` returns `Ty::Unknown` silently for a non-bool non-integer (~512-522); `UnaryOp::Neg` (~493) checks nothing. Refuse there with NK1191 (only when the operand's type is known: an unknown type is NK1245's, no second error).
