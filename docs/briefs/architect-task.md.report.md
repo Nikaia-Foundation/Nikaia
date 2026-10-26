@@ -1,3 +1,3 @@
 Result: done
-Batch: b866-inferred-number-local.md b706-views-into-param-vec.md
+Batch: b665-lent-let-returned.md, b867-seeds-writer.md
 Owner: none

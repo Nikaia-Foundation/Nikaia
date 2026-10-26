@@ -15,3 +15,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 418192 14
 /home/user/Nikaia/docs/briefs/b866-inferred-number-local.md 459104 16
 /home/user/Nikaia/docs/briefs/b706-views-into-param-vec.md 227500 10
+/home/user/Nikaia/docs/briefs/architect-task.md 849632 22
