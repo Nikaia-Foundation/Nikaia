@@ -1,5 +1,4 @@
 Result: done
-Batch: b865-to-string-local-view.md b863-exit-code.md
+Batch: b863-exit-code.md b866-inferred-number-local.md
 Owner: none
-Filed: #865 (ready), from b864's Found, reproduced on d33d355.
-Changelog owed (supervisor): #864, "A view of a local built with `+` can be returned from a `String` function; the local lives in the caller's keep".
+Notes: #865 done (635b59f); b865's Found filed as #866 (ready). Changelog for #865 is in b865's report.

@@ -250,6 +250,7 @@ performance*).
 ## State
 
 *Updated by the architect when it ends.*
+**2026-10-26 (architect after 79a95b3, cut at b865 on Found):** #865 done (635b59f, closes on promote; Changelog line in its report). Found filed as #866 (`ready`: `.to_string()` of an inferred number local / tuple field, `buffers.nika`). Batch: `b863-exit-code.md`, `b866-inferred-number-local.md`. Then: the self-hosting lane (C-7 rest research brief, `emit/seeds.rs`), #851 `decision`.
 **2026-10-26 (architect after d33d355, cut at b864 on Found):** #864 done (6ba5c74, closes on promote; Changelog line in its report). Found filed as #865 (`ready`: `let s = t.len().to_string(); return s.trim()` fails in rustc; `formats` in `buffers.nika`). Batch: `b865-to-string-local-view.md`, `b863-exit-code.md`. Then: the self-hosting lane (C-7 rest research brief, `emit/seeds.rs`), #851 `decision`.
 **2026-10-26 (architect after 1db1a4e, cut at b848 on `Deviation: none (note)`, a false cut):** #848 done (39ebe78, closes on promote). Rule fixed in `common.part` and the report form: bare `none`. Batch: `b864-plus-local-view.md`, `b863-exit-code.md`. Then: the self-hosting lane (C-7 rest research brief, `emit/seeds.rs`), #851 `decision`.
 
