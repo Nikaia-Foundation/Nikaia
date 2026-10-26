@@ -7,3 +7,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 257766 10
 /home/user/Nikaia/docs/briefs/b864-plus-local-view.md 3270070 59
 /home/user/Nikaia/docs/briefs/architect-task.md 485025 17
+/home/user/Nikaia/docs/briefs/b865-to-string-local-view.md 639869 21
