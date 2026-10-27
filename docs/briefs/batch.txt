@@ -1,2 +1,2 @@
-b878-condition-binding-message.md
+b880-string-move-view.md
 e12-2.md
