@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1238] — 2026-10-27
+
+**A `String` local assigned whole from another kept `String` local compiles**
+(#883). When the result was the trimmed view of the source local, the keeps
+walk put the assigned local in the keep a second time, and rustc refused the
+lowered code; it is now kept once (`tools/buffers.nika`). Test
+`string_reassigned_trim_result`.
+
 ## [0.0.1237] — 2026-10-27
 
 **A `Bytes` has `iter`, `starts_with` and `ends_with`** (#877). A `Bytes`,
