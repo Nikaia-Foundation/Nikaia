@@ -33,7 +33,7 @@ pub mod template;
 use winnow_grammar::Symbol;
 
 use crate::assets::Reads;
-use crate::ast::{Block, Expr, GrammarDef, Item, Pattern, Span, Spanned, Stmt, Type};
+use crate::ast::{Block, Expr, Span, Spanned, Stmt, Type};
 use crate::parser::Parsed;
 use crate::refused;
 
@@ -864,80 +864,6 @@ struct Emitter<'p> {
     main_params: std::cell::RefCell<Vec<String>>,
 }
 
-/// **The functions of this file the build calls** (#446): what a `comptime`
-/// and an option's default call, and what those call in turn.
-///
-/// Their values reach the Rust as literals, so the Rust may never call them,
-/// and `rustc` would say *never used* about a function the program used. Each
-/// gets `#[allow(dead_code)]`; a function nothing calls is still warned.
-fn built_at_build_time(parsed: &Parsed) -> HashSet<String> {
-    use crate::contracts::sync::{visit_expr, visit_expr_blocks, visit_stmt, visit_stmt_blocks};
-
-    fn calls(parsed: &Parsed, expr: &Expr, found: &mut Vec<String>) {
-        visit_expr(parsed, expr, &mut |inner| {
-            if let Expr::Call { func, .. } = inner
-                && let Expr::Variable(name, _) = func.as_ref()
-            {
-                found.push(parsed.text(*name).to_string());
-            }
-        });
-        visit_expr_blocks(expr, &mut |block| block_calls(parsed, block, found));
-    }
-    fn block_calls(parsed: &Parsed, block: &Block, found: &mut Vec<String>) {
-        for stmt in &block.stmts {
-            visit_stmt(parsed, &stmt.node, &mut |expr| calls(parsed, expr, found));
-            visit_stmt_blocks(&stmt.node, &mut |inner| block_calls(parsed, inner, found));
-        }
-    }
-    fn comptimes(parsed: &Parsed, block: &Block, found: &mut Vec<String>) {
-        for stmt in &block.stmts {
-            if let Stmt::Comptime { value, .. } = &stmt.node {
-                calls(parsed, value, found);
-            }
-            visit_stmt_blocks(&stmt.node, &mut |inner| comptimes(parsed, inner, found));
-        }
-    }
-
-    let mut bodies: HashMap<String, &Block> = HashMap::new();
-    let mut waiting: Vec<String> = Vec::new();
-    let mut functions: Vec<(&Item, bool)> = Vec::new();
-    for item in &parsed.program.items {
-        match &item.node {
-            Item::Comptime { value, .. } => calls(parsed, value, &mut waiting),
-            Item::Impl { methods, .. } => {
-                functions.extend(methods.iter().map(|method| (&method.node, false)));
-            }
-            other => functions.push((other, true)),
-        }
-    }
-    for (item, free) in functions {
-        let Item::Fn {
-            name, config, body, ..
-        } = item
-        else {
-            continue;
-        };
-        for option in config {
-            calls(parsed, &option.default, &mut waiting);
-        }
-        comptimes(parsed, body, &mut waiting);
-        if let Some(name) = name
-            && free
-        {
-            bodies.insert(parsed.text(*name).to_string(), body);
-        }
-    }
-    let mut built = HashSet::new();
-    while let Some(name) = waiting.pop() {
-        if let Some(body) = bodies.get(&name)
-            && built.insert(name)
-        {
-            block_calls(parsed, body, &mut waiting);
-        }
-    }
-    built
-}
-
 /// The generated name of [ADR-300](../../../docs/specification/adr/adr-300.md)
 /// D1's table. `__nikaia_` for the same reason `__nikaia_main` is: a name a
 /// program could also have chosen would be a name this compiler took from it.
@@ -1173,7 +1099,11 @@ impl<'p> Emitter<'p> {
                     )
                 })
                 .collect(),
-            fold_callees: fold_callees(parsed, &grammars).into_iter().collect(),
+            fold_callees: nikaia_std::tools::emit_holes::emit_holes_fold_callees(
+                parsed,
+                &parsed.interner,
+                &grammars,
+            ),
             by_name,
             grammars,
             methods,
@@ -1259,7 +1189,11 @@ impl<'p> Emitter<'p> {
                 .cloned()
                 .unwrap_or_default(),
             shared,
-            built_at_build_time: built_at_build_time(parsed).into_iter().collect(),
+            built_at_build_time: nikaia_std::tools::emit_holes::emit_holes_built_at_build_time(
+                parsed,
+                &parsed.interner,
+                &parsed.program.items,
+            ),
             pausing_reach: reach,
             own_methods: nikaia_std::tools::ty::method_index(&own_contracts),
             library_methods: nikaia_std::tools::ty::method_index(library),
@@ -1272,19 +1206,14 @@ impl<'p> Emitter<'p> {
             sums: std::collections::BTreeMap::new(),
         };
         let mut state = state;
-        let (holes, errors) = template_hole_tables(parsed);
-        state.template_holes = holes;
-        state.template_errors = errors;
-        state.kept_calls = parsed
-            .cached_kept_calls()
-            .into_iter()
-            .map(|((name, arity), (names, call))| {
-                (
-                    (name, arity as i64),
-                    nikaia_std::tools::emit_state::EmitKeptCall { names, call },
-                )
-            })
-            .collect();
+        let tables = nikaia_std::tools::emit_holes::emit_holes_tables(
+            parsed,
+            &parsed.interner,
+            &parsed.program.items,
+        );
+        state.template_holes = tables.holes;
+        state.template_errors = tables.errors;
+        state.kept_calls = tables.kept_calls;
         let give_ups = crate::view_changes::analyse(
             parsed,
             &state.own_contracts,
@@ -1459,111 +1388,6 @@ impl<'p> Emitter<'p> {
 
 // --- Free helpers ---
 
-type HoleTables = (
-    std::collections::BTreeMap<(i64, String), Expr>,
-    std::collections::BTreeMap<(i64, String), String>,
-);
-
-/// Every hole of every template in the file, by the template's site and the
-/// hole's text - the trees every reader of them shares - and what was said of
-/// the ones that did not parse.
-fn template_hole_tables(parsed: &Parsed) -> HoleTables {
-    let mut errors = std::collections::BTreeMap::new();
-    let mut ask = |expr: &Expr| {
-        let Expr::Dsl {
-            target,
-            package,
-            content,
-            ..
-        } = expr
-        else {
-            return;
-        };
-        if crate::dsl::is_deferred(&dsl_name(parsed, *package, *target), content) {
-            return;
-        }
-        let Ok(segments) = template::split(content.trim()) else {
-            return;
-        };
-        let site = crate::ast::id_of(expr);
-        for (hole, _) in template_holes_bound(&segments) {
-            if let Err(error) = parsed.hole(site, &hole) {
-                errors.insert((site as i64, hole), error.to_string());
-            }
-        }
-    };
-    for item in &parsed.program.items {
-        match &item.node {
-            Item::Fn { body, .. } => visit_block(body, &mut ask),
-            Item::Impl { methods, .. } => {
-                for method in methods {
-                    if let Item::Fn { body, .. } = &method.node {
-                        visit_block(body, &mut ask);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let holes = parsed
-        .cached_holes()
-        .into_iter()
-        .map(|((site, text), expr)| ((site as i64, text), expr))
-        .collect();
-    (holes, errors)
-}
-
-/// **The names a `fold`'s or a `par_fold`'s step calls directly** (#433): a
-/// function it calls and a method it calls, by name, in any rule of any
-/// grammar this unit declares. By name, because the step's receiver is the
-/// accumulator, whose type this emitter does not know (ADR-296 D17) - and a
-/// method of another type with the same name gains a hint, nothing more.
-fn fold_callees(
-    parsed: &Parsed,
-    grammars: &std::collections::BTreeMap<String, GrammarDef>,
-) -> HashSet<String> {
-    fn steps<'a>(pattern: &'a Pattern, found: &mut Vec<&'a Expr>) {
-        match pattern {
-            Pattern::Fold(spec) => found.push(&spec.step),
-            Pattern::Seq(all) | Pattern::Choice(all) => {
-                all.iter().for_each(|p| steps(&p.node, found));
-            }
-            Pattern::Bind { pat, .. } | Pattern::Repeat { pat, .. } => steps(&pat.node, found),
-            Pattern::Group(inner) => steps(&inner.node, found),
-            Pattern::Ref { args, .. } => args.iter().for_each(|p| steps(&p.node, found)),
-            Pattern::Literal(_) | Pattern::Cut => {}
-        }
-    }
-    let mut found = Vec::new();
-    for def in grammars.values() {
-        for rule in &def.rules {
-            for alt in &rule.alts {
-                steps(&alt.pattern.node, &mut found);
-            }
-        }
-    }
-    let mut names = HashSet::new();
-    for step in found {
-        let Expr::Closure { body, .. } = step else {
-            continue;
-        };
-        for stmt in &body.stmts {
-            crate::contracts::sync::visit_stmt(parsed, &stmt.node, &mut |e| match e {
-                Expr::MethodCall { method, .. } => {
-                    names.insert(parsed.text(*method).to_string());
-                }
-                Expr::Call { func, .. } => {
-                    if let Expr::Variable(name, _) = &**func {
-                        names.insert(parsed.text(*name).to_string());
-                    }
-                }
-                _ => {}
-            });
-        }
-    }
-    names
-}
-
 /// **The view-holding fields of each struct that holds two or more**
 /// (ADR-353 D1, D7): one lifetime each, `pub` or not, in the order written.
 /// An error keeps one place.
@@ -1733,23 +1557,28 @@ impl nikaia_std::tools::emit_holes::EmitHolesHost for Parsed {
         crate::text_tiers::wrap_hole(&mut wrapped, wraps);
         Some(wrapped)
     }
-}
 
-/// The same, with **what a `<for>` binds around each hole**.
-///
-/// `<for r in :rows>{r.name}</for>`: `r` is declared by the template and named
-/// in the hole, so a reader of a hole that does not know that sees a name
-/// nothing declares. Which is what a checker asking *"does anything declare
-/// this?"* needs, and nothing else does - the emitter only needs the text
-/// ([ADR-017](../../../docs/specification/adr/adr-017.md)).
-///
-/// Innermost last, so a nested `<for>` shadowing the same word behaves the way
-/// a nested block does.
-/// Each name beside the collection it walks, as written after its `:` (#524).
-pub(crate) fn template_holes_bound(
-    segments: &[template::Segment],
-) -> Vec<(String, Vec<(String, String)>)> {
-    nikaia_std::tools::emit_walk::template_holes_bound(segments)
+    fn cached_holes(&self) -> std::collections::BTreeMap<(i64, String), Expr> {
+        self.cached_holes()
+            .into_iter()
+            .map(|((site, text), expr)| ((site as i64, text), expr))
+            .collect()
+    }
+
+    fn cached_kept_calls(
+        &self,
+    ) -> std::collections::BTreeMap<(String, i64), nikaia_std::tools::emit_state::EmitKeptCall>
+    {
+        self.cached_kept_calls()
+            .into_iter()
+            .map(|((name, arity), (names, call))| {
+                (
+                    (name, arity as i64),
+                    nikaia_std::tools::emit_state::EmitKeptCall { names, call },
+                )
+            })
+            .collect()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1773,13 +1602,6 @@ fn nonnegative_locals(body: &Block) -> HashSet<Symbol> {
     nikaia_std::tools::emit_locals::nonnegative_locals(body)
         .into_iter()
         .collect()
-}
-
-/// What a `dsl` block names: `pkg::Grammar` for a package's, the bare name
-/// for one the program declares and for `html`
-/// ([ADR-299](../../docs/specification/adr/adr-299.md) D20).
-pub(crate) fn dsl_name(parsed: &Parsed, package: Option<Symbol>, target: Symbol) -> String {
-    nikaia_std::tools::emit_items::dsl_name(&parsed.interner, package, target)
 }
 
 #[cfg(test)]

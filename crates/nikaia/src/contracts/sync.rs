@@ -291,14 +291,6 @@ pub(crate) fn visit_stmt_blocks<'a>(stmt: &'a Stmt, f: &mut impl FnMut(&'a Block
         .for_each(f);
 }
 
-/// Every block an expression holds, including the body of a lambda passed as
-/// an argument (the walk is `tools/check_visit.nika`'s; `spawn` is not walked).
-pub(crate) fn visit_expr_blocks<'a>(expr: &'a Expr, f: &mut impl FnMut(&'a Block)) {
-    nikaia_std::tools::check_visit::check_visit_expr_blocks(expr)
-        .into_iter()
-        .for_each(f);
-}
-
 /// Every expression inside one, excluding the bodies of nested blocks. The
 /// holes of a literal are visited right after it (`tools/check_visit.nika`
 /// walks the tree, only the parser can read a literal's holes).

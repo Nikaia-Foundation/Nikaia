@@ -2364,7 +2364,7 @@ pub mod emit_function_body {}
 pub mod emit_grammar {}
 pub mod emit_holes {
     #[allow(unused_imports)]
-    pub use super::{EmitHole, EmitHolesHost, emit_holes_literal_bound, emit_holes_literal};
+    pub use super::{EmitHole, EmitHolesHost, emit_holes_literal_bound, emit_holes_literal, EmitHoleTables, emit_holes_tables, emit_holes_fold_callees, emit_holes_built_at_build_time};
 }
 pub mod emit_host {
     #[allow(unused_imports)]

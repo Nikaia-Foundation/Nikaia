@@ -10,6 +10,8 @@ pub enum EmitHole {
 pub trait EmitHolesHost {
     fn hole(&self, site: u32, text: String) -> EmitHole;
     fn wrapped_hole(&self, at: u32, hole: &Expr) -> Option<Expr>;
+    fn cached_holes(&self) -> collections::BTreeMap<(i64, String), Expr>;
+    fn cached_kept_calls(&self) -> collections::BTreeMap<(String, i64), EmitKeptCall>;
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -90,6 +92,189 @@ pub(crate) fn emit_holes_stmt_roots(stmt: &Stmt) -> Vec<&Expr> {
         Stmt::Expr(inner) => { out.push(inner); },
     }
     out
+}
+
+pub(crate) fn emit_holes_pick(words: &winnow_grammar::InternerContext, expr: &Expr, kind: i64) -> Option<String> {
+    match expr {
+        Expr::Call { func, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            match func {
+                Expr::Variable(name, _) => { let name = *name; return Some(words.resolve(name).to_owned()); },
+                _ => { },
+            }
+        },
+        Expr::MethodCall { method, .. } => {
+            let method = *method;
+            if kind == 2 { return Some(words.resolve(method).to_owned()); }
+        },
+        _ => { },
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_holes_names_in<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, expr: &Expr, kind: i64, out: &mut Vec<String>) {
+    let picked = emit_holes_pick(words, expr, kind);
+    if picked.is_some() { out.push(match picked { Some(__nikaia_value) => __nikaia_value, None => return }); }
+    if check_visit_has_holes(expr) { for hole in emit_holes_literal(host, words, expr) { emit_holes_names_in(host, words, &hole, kind, out); } }
+    for child in check_visit_children(expr) { emit_holes_names_in(host, words, child, kind, out); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_holes_names_deep<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, expr: &Expr, kind: i64, out: &mut Vec<String>) {
+    emit_holes_names_in(host, words, expr, kind, out);
+    for block in check_visit_expr_blocks(expr) { emit_holes_names_block(host, words, block, kind, out); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_holes_names_block<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, block: &Block, kind: i64, out: &mut Vec<String>) {
+    for stmt in block.stmts.iter() {
+        for root in emit_holes_stmt_roots(&stmt.node) { emit_holes_names_in(host, words, root, kind, out); }
+        for inner in check_visit_stmt_blocks(&stmt.node) { emit_holes_names_block(host, words, inner, kind, out); }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmitHoleTables {
+    pub holes: collections::BTreeMap<(i64, String), Expr>,
+    pub errors: collections::BTreeMap<(i64, String), String>,
+    pub kept_calls: collections::BTreeMap<(String, i64), EmitKeptCall>,
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_holes_tables<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> EmitHoleTables {
+    let mut errors: collections::BTreeMap<(i64, String), String> = collections::BTreeMap::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { body, .. } => { emit_holes_ask_block(host, words, body, &mut errors); },
+            Item::Impl { methods, .. } => {
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { body, .. } => { emit_holes_ask_block(host, words, body, &mut errors); },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    EmitHoleTables { holes: host.cached_holes(), errors, kept_calls: host.cached_kept_calls() }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_holes_ask_block<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, body: &Block, errors: &mut collections::BTreeMap<(i64, String), String>) {
+    for expr in visited_in_block(body) {
+        let site = id_of(expr);
+        for (text, _) in emit_holes_template_texts(words, expr) {
+            match host.hole(site, text.to_owned()) {
+                EmitHole::Refused(ref said) => { errors.insert((site as i64, text.to_owned()), said.to_owned()); },
+                EmitHole::Parsed(_) => { },
+            }
+        }
+    }
+}
+
+pub(crate) fn emit_holes_fold_steps(pattern: &Pattern) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match pattern {
+        Pattern::Fold(spec) => { out.extend(check_visit_one(&spec.step)); },
+        Pattern::Seq(all) => { for each in all.iter() { out.extend(emit_holes_fold_steps(&each.node)); } },
+        Pattern::Choice(all) => { for each in all.iter() { out.extend(emit_holes_fold_steps(&each.node)); } },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(emit_holes_fold_steps(&pat.node)); },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(emit_holes_fold_steps(&pat.node)); },
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); out.extend(emit_holes_fold_steps(&inner.node)); },
+        Pattern::Ref { args, .. } => { for each in args.iter() { out.extend(emit_holes_fold_steps(&each.node)); } },
+        Pattern::Literal(_) => { },
+        Pattern::Cut => { },
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_holes_fold_callees<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, grammars: &collections::BTreeMap<String, GrammarDef>) -> collections::BTreeSet<String> {
+    let mut found: Vec<String> = vec![];
+    for (_, def) in grammars.iter() {
+        for rule in def.rules.iter() {
+            for alt in rule.alts.iter() {
+                for step in emit_holes_fold_steps(&alt.pattern.node) {
+                    match step {
+                        Expr::Closure { body, .. } => { for stmt in body.stmts.iter() { for root in emit_holes_stmt_roots(&stmt.node) { emit_holes_names_in(host, words, root, 2, &mut found); } } },
+                        _ => { },
+                    }
+                }
+            }
+        }
+    }
+    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in found.iter() { names.insert(name.to_owned()); }
+    names
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_holes_fn_builds<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, item: &Item, waiting: &mut Vec<String>) {
+    match item {
+        Item::Fn { config, body, .. } => {
+            for option in config.iter() { emit_holes_names_deep(host, words, &option.default, 1, waiting); }
+            emit_holes_comptimes(host, words, body, waiting);
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_holes_comptimes<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, block: &Block, waiting: &mut Vec<String>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Comptime { value, .. } => { emit_holes_names_deep(host, words, value, 1, waiting); },
+            _ => { },
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { emit_holes_comptimes(host, words, inner, waiting); }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+    let mut waiting: Vec<String> = vec![];
+    let mut free: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut at = 0;
+    for item in items.iter() {
+        match &item.node {
+            Item::Comptime { value, .. } => { emit_holes_names_deep(host, words, value, 1, &mut waiting); },
+            Item::Impl { methods, .. } => { for method in methods.iter() { emit_holes_fn_builds(host, words, &method.node, &mut waiting); } },
+            Item::Fn { name, .. } => {
+                let name = *name;
+                emit_holes_fn_builds(host, words, &item.node, &mut waiting);
+                if name.is_some() {
+                    let named = match name { Some(__nikaia_value) => __nikaia_value, None => return collections::BTreeSet::new() };
+                    free.insert(words.resolve(named).to_owned(), at);
+                }
+            },
+            _ => { },
+        }
+        at += 1;
+    }
+    let mut built: collections::BTreeSet<String> = collections::BTreeSet::new();
+    while !waiting.is_empty() {
+        let name = match waiting.pop() { Some(__nikaia_value) => __nikaia_value, None => return built };
+        if free.contains_key(&name.to_owned()) && !built.contains(&name.to_owned()) {
+            built.insert(name.to_owned());
+            let place = match free.get(&name.to_owned()) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return built };
+            match &nikaia_std::index::get(&items, nikaia_std::index::at(place)).node {
+                Item::Fn { body, .. } => { emit_holes_names_block(host, words, body, 1, &mut waiting); },
+                _ => { },
+            }
+        }
+    }
+    built
 }
 
 impl EmitState {
