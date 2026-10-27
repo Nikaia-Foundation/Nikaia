@@ -1,0 +1,12 @@
+// ADR-352 D1 per position, #879: `(null, null)` does not take `(null, "b")`,
+// so `x` in the next arm may still be `null`.
+fn pick(a: String?, b: String?) -> i64 {
+    match (a, b) {
+        (null, null) => 0,
+        (x, _) => x.len(),
+    }
+}
+
+fn main() {
+    println(pick("ada", null))
+}

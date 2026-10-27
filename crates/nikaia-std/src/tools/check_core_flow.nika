@@ -538,6 +538,183 @@ fn check_core_flow_a_guard[H: CheckHost](mut state: CheckState, world: ref Check
     check_core_flow_guard(state, world, host, pattern, g, span)
 }
 
+/// **An arm's body sees what its guard proves** (ADR-382 D2, #879): in
+/// `(x, _) if x != null => x`, `x` is the `T` in the body, as after an `if`.
+fn check_core_flow_guarded_body[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, guard: ref Expr?, body: ref Expr, span: ref Span) -> Ty sync {
+    let g: ref Expr = guard ?? return check_core_expr(state, world, host, body, span)
+    let markers = check_narrow_proved_here(state, world, g, true)
+    if markers.len() == 0 {
+        return check_core_expr(state, world, host, body, span)
+    }
+    state.scope.push(markers)
+    let found = check_core_expr(state, world, host, body, span)
+    state.scope.pop()
+    return found
+}
+
+/// The parts of a tuple pattern of `count` positions with no rest, where the
+/// pattern is one.
+fn check_core_flow_tuple_parts(pattern: ref MatchPattern, count: i64) -> Vec[MatchPattern]? sync {
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            if path.len() > 0 || parts.len() as i64 != count {
+                return null
+            }
+            for part in parts {
+                if pattern_is_rest(part) {
+                    return null
+                }
+            }
+            return parts.clone()
+        },
+        else => return null,
+    }
+}
+
+/// Whether a part of a pattern matches whatever is at its place: `_`, or a
+/// bare name that is not one of the type's variants.
+fn check_core_flow_takes_all(state: ref CheckState, world: ref CheckWorld, part: ref MatchPattern, ty: ref Ty) -> bool sync {
+    match part {
+        MatchPattern::Otherwise => return true,
+        MatchPattern::Path(p) => {
+            if p.len() != 1 {
+                return false
+            }
+            let word = world.words.resolve(p[0]).clone()
+            return match check_core_flow_inside(ty) {
+                Ty::Named { name, .. } => !state.is_variant(name, word) && !state.variant_parts.contains_key(f"{name}::{word}"),
+                else => true,
+            }
+        },
+        else => return false,
+    }
+}
+
+/// Whether a part is a name that binds: a bare name, not `_`.
+fn check_core_flow_a_bare_name(state: ref CheckState, world: ref CheckWorld, part: ref MatchPattern, ty: ref Ty) -> bool sync {
+    return match part {
+        MatchPattern::Path(_) => check_core_flow_takes_all(state, world, part, ty),
+        else => false,
+    }
+}
+
+/// Whether a part matches only some values of the `T`: a variant, a literal
+/// other than `null`, a range, a tuple or a struct pattern. Not `_`, a name
+/// that binds, `null`, or an `|` (which may hold `null`).
+fn check_core_flow_a_value_part(state: ref CheckState, world: ref CheckWorld, part: ref MatchPattern, ty: ref Ty) -> bool sync {
+    return match part {
+        MatchPattern::Otherwise => false,
+        MatchPattern::Or(_) => false,
+        MatchPattern::Rest => false,
+        MatchPattern::RestNamed(_) => false,
+        MatchPattern::Path(_) => !check_core_flow_takes_all(state, world, part, ty),
+        else => !shapes_is_null(part),
+    }
+}
+
+/// Whether two parts say the same: both `null`, or both the same path
+/// (`Color::Red`).
+fn check_core_flow_same_part(world: ref CheckWorld, one: ref MatchPattern, other: ref MatchPattern) -> bool sync {
+    if shapes_is_null(one) && shapes_is_null(other) {
+        return true
+    }
+    let a: Vec[String] = match one {
+        MatchPattern::Path(p) => check_core_flow_path_words(world, p),
+        else => return false,
+    }
+    let b: Vec[String] = match other {
+        MatchPattern::Path(p) => check_core_flow_path_words(world, p),
+        else => return false,
+    }
+    if a.len() == 0 || a.len() != b.len() {
+        return false
+    }
+    for at in 0..<a.len() {
+        if a[at] != b[at] {
+            return false
+        }
+    }
+    return true
+}
+
+/// The words of a pattern's path.
+fn check_core_flow_path_words(world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol]) -> Vec[String] sync {
+    let mut out: Vec[String] = []
+    for part in path {
+        out.push(world.words.resolve(part).clone())
+    }
+    return out
+}
+
+/// Whether the arm `earlier` takes every value `parts` meets with `null` at
+/// `at`: it has `null` there, and at each other position it takes all, or
+/// both say the same.
+fn check_core_flow_covers_null_at(state: ref CheckState, world: ref CheckWorld, earlier: ref Vec[MatchPattern], parts: ref Vec[MatchPattern], at: i64, types: ref Vec[Ty]) -> bool sync {
+    if !shapes_is_null(earlier[at]) {
+        return false
+    }
+    let mut j: i64 = 0
+    while j < types.len() as i64 {
+        let all = j == at || check_core_flow_takes_all(state, world, earlier[j], types[j])
+        if !all && !check_core_flow_same_part(world, earlier[j], parts[j]) {
+            return false
+        }
+        j += 1
+    }
+    return true
+}
+
+/// **A tuple's position is its `T` once the arms before it cover `null`
+/// there** (ADR-352 D1 per position, #879): the arm `at`, typed with each
+/// position that meets only set values as the `T` (a bare name the arms
+/// before took `null` from, a variant, a literal), or `null` where none
+/// does. The positions are kept for the lowering, which writes
+/// them `Some(…)`.
+fn check_core_flow_set_tuple(mut state: CheckState, world: ref CheckWorld, arms: ref Vec[MatchArm], at: i64, typed: ref Ty) -> Ty? sync {
+    let types: Vec[Ty] = match typed {
+        Ty::Tuple(types) => types.clone(),
+        else => return null,
+    }
+    let count = types.len() as i64
+    let parts: Vec[MatchPattern] = check_core_flow_tuple_parts(arms[at].pattern, count) ?? return null
+    let mut set: Vec[i64] = []
+    let mut narrowed: Vec[Ty] = []
+    for i in 0..<types.len() {
+        let nullable = match types[i] {
+            Ty::Nullable(_) => true,
+            else => false,
+        }
+        let mut covered = false
+        if nullable && check_core_flow_a_bare_name(state, world, parts[i], types[i]) {
+            let mut before = 0
+            while before < at && !covered {
+                let arm = arms[before]
+                before += 1
+                if arm.guard != null {
+                    continue
+                }
+                let earlier: Vec[MatchPattern] = check_core_flow_tuple_parts(arm.pattern, count) ?? continue
+                covered = check_core_flow_covers_null_at(state, world, earlier, parts, i, types)
+            }
+        } else if nullable && check_core_flow_a_value_part(state, world, parts[i], types[i]) {
+            // A variant or a literal at a `T?` position meets only set values
+            // (ADR-352 D1, D4): it is matched against the `T`.
+            covered = true
+        }
+        if covered {
+            set.push(i)
+            narrowed.push(check_core_flow_inside(types[i]))
+        } else {
+            narrowed.push(types[i].clone())
+        }
+    }
+    if set.len() == 0 {
+        return null
+    }
+    state.facts.set_positions.insert(id_of(arms[at].body) as i64, set)
+    return Ty::Tuple(narrowed)
+}
+
 /// The parts a `match` arm binds, as its scope sees them (ADR-291, 0.0.252,
 /// #171).
 fn check_core_flow_parts(mut state: CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty, lendable: bool) -> collections::BTreeMap[String, Ty] sync {
@@ -742,7 +919,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let (_, handed_from) = state.taken_so_far()
     let changed_from = state.changed.len() as i64
     check_core_flow_a_guard(state, world, host, arm.pattern, arm.guard, span)
-    let ty = check_core_expr(state, world, host, arm.body, span)
+    let ty = check_core_flow_guarded_body(state, world, host, arm.guard, arm.body, span)
     // **A name that is a view binds by reference by itself** (D30).
     let name = check_core_flow_variable(world, value)
     let by_reference = through_the_reference || a_list || (name != "" && (on.is_a_view() || state.got_past_a_jump.contains(name)))
@@ -855,6 +1032,10 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
         let mut arm_typed = typed.clone()
         if several.len() > 0 {
             arm_typed = check_core_flow_member(world, several, arm.pattern)
+        }
+        let set_tuple: Ty? = check_core_flow_set_tuple(state, world, arms, taken, arm_typed)
+        if set_tuple != null {
+            arm_typed = set_tuple ?? arm_typed
         }
         let got = check_core_flow_arm(state, world, host, value, on, arm, arm_typed, lendable, through_the_reference, mut_subject, choice, taken, span)
         taken += 1

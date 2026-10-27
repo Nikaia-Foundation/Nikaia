@@ -335,6 +335,40 @@ impl EmitState {
         return n
     }
 
+    /// **An arm's pattern, with each tuple position the checker found set
+    /// written `Some(…)`** (ADR-352 D4 per position, #879): the arms before
+    /// it took `null` there.
+    fn emit_core_arm_pattern_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arm: ref MatchArm, wild: bool, lent_key: i64, collect: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
+        let set: Vec[i64] = self.facts.set_positions.get(node_key(arm.body))?.clone() ?? []
+        if set.len() > 0 {
+            match arm.pattern {
+                MatchPattern::Tuple { parts, .. } => {
+                    out.push("(")
+                    let mut n = 0
+                    let mut i: i64 = 0
+                    for part in parts {
+                        if i > 0 {
+                            out.push(", ")
+                        }
+                        let some = set.contains(i)
+                        if some {
+                            out.push("Some(")
+                        }
+                        n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)
+                        if some {
+                            out.push(")")
+                        }
+                        i += 1
+                    }
+                    out.push(")")
+                    return n
+                },
+                else => {},
+            }
+        }
+        return self.emit_core_pattern_written(world, walk, out, host, arm.pattern, wild, lent_key, collect, 0, depth, flow, scope)
+    }
+
     /// The boxed part number `wanted` of a pattern (numbered as
     /// `emit_core_pattern_written` numbers them from `before`), written with the
     /// names bound (`wild` off) or as `_` (on). What comes back is the number of
@@ -763,7 +797,7 @@ impl EmitState {
                         if i > 0 {
                             out.push(" | ")
                         }
-                        self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 1, flow, scope)
+                        self.emit_core_arm_pattern_written(world, walk, out, host, arm, false, node_key(arm.body), false, depth + 1, flow, scope)
                     }
                     i += 1
                 }
@@ -803,7 +837,7 @@ impl EmitState {
             // arm, so it binds nothing.
             if arm.guard == null && !self.looks_inside_a_box(world, arm.pattern) && self.facts.taking_arms.contains_key(key) {
                 let stand_in = (self.facts.taking_arms.get(key) ?? "").clone()
-                self.emit_core_pattern_written(world, walk, out, host, arm.pattern, true, -1, false, 0, depth + 1, flow, scope)
+                self.emit_core_arm_pattern_written(world, walk, out, host, arm, true, -1, false, depth + 1, flow, scope)
                 out.push(" => ")
                 let mut place = EmitOut::empty()
                 self.emit_expr(world, walk, place, host, value, depth, flow, scope)
@@ -812,7 +846,7 @@ impl EmitState {
                     place_text = f"&mut {place.buf}"
                 }
                 let mut bound = EmitOut::empty()
-                self.emit_core_pattern_written(world, walk, bound, host, arm.pattern, false, -1, false, 0, depth + 1, flow, scope)
+                self.emit_core_arm_pattern_written(world, walk, bound, host, arm, false, -1, false, depth + 1, flow, scope)
                 let lead = f"let {bound.buf} = std::mem::replace({place_text}, {stand_in}) else {{ unreachable!(\"the pattern matched it\") }}; "
                 self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 1, flow, scope, lead)
                 out.push(",\n")
@@ -827,7 +861,7 @@ impl EmitState {
             if wrapped {
                 out.push("Some(")
             }
-            let nests = self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, key, true, 0, depth + 1, flow, scope)
+            let nests = self.emit_core_arm_pattern_written(world, walk, out, host, arm, false, key, true, depth + 1, flow, scope)
             if wrapped {
                 out.push(")")
             }

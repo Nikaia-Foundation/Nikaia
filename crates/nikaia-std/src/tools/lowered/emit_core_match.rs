@@ -215,6 +215,36 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_arm_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arm: &MatchArm, wild: bool, lent_key: i64, collect: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, nikaia_std::error::Thrown<EmitRefused>> {
+        let set: Vec<i64> = nikaia_std::index::or(match self.facts.set_positions.get(&node_key(&arm.body)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
+        if !set.is_empty() {
+            match &arm.pattern {
+                MatchPattern::Tuple { parts, .. } => {
+                    out.push("(");
+                    let mut n: i64 = 0;
+                    let mut i: i64 = 0;
+                    for part in parts.iter() {
+                        if i > 0 { out.push(", "); }
+                        let some = set.contains(&i);
+                        if some { out.push("Some("); }
+                        n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)?;
+                        if some { out.push(")"); }
+                        i += 1;
+                    }
+                    out.push(")");
+                    return Ok(n);
+                },
+                _ => { },
+            }
+        }
+        Ok(self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, wild, lent_key, collect, 0, depth, flow, scope)?)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
     pub fn emit_core_nest_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, nikaia_std::error::Thrown<EmitRefused>> {
         let mut n = before;
         match pattern {
@@ -491,7 +521,7 @@ impl EmitState {
                 for arm in arms.iter() {
                     if ((i + 1) as usize) < arms.len() {
                         if i > 0 { out.push(" | "); }
-                        self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 1, flow, scope)?;
+                        self.emit_core_arm_pattern_written(world, walk, out, host, arm, false, node_key(&arm.body), false, depth + 1, flow, scope)?;
                     }
                     i += 1;
                 }
@@ -514,14 +544,14 @@ impl EmitState {
             let key = node_key(&arm.body);
             if arm.guard.is_none() && !self.looks_inside_a_box(world, &arm.pattern) && self.facts.taking_arms.contains_key(&key) {
                 let stand_in = nikaia_std::index::or(self.facts.taking_arms.get(&key), || "").to_owned();
-                self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, true, -1, false, 0, depth + 1, flow, scope)?;
+                self.emit_core_arm_pattern_written(world, walk, out, host, arm, true, -1, false, depth + 1, flow, scope)?;
                 out.push(" => ");
                 let mut place = EmitOut::empty();
                 self.emit_expr(world, walk, &mut place, host, value, depth, flow, scope)?;
                 let mut place_text = place.buf.to_owned();
                 if !emit_match_is_variable(value) { place_text = format!("&mut {}", place.buf); }
                 let mut bound = EmitOut::empty();
-                self.emit_core_pattern_written(world, walk, &mut bound, host, &arm.pattern, false, -1, false, 0, depth + 1, flow, scope)?;
+                self.emit_core_arm_pattern_written(world, walk, &mut bound, host, arm, false, -1, false, depth + 1, flow, scope)?;
                 let lead = format!("let {} = std::mem::replace({}, {}) else {{ unreachable!(\"the pattern matched it\") }}; ", bound.buf, place_text, stand_in);
                 self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 1, flow, scope, &lead)?;
                 out.push(",\n");
@@ -529,7 +559,7 @@ impl EmitState {
             }
             let wrapped = nullish && !shapes_is_null(&arm.pattern) && !shapes_is_otherwise(&arm.pattern);
             if wrapped { out.push("Some("); }
-            let nests = self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, key, true, 0, depth + 1, flow, scope)?;
+            let nests = self.emit_core_arm_pattern_written(world, walk, out, host, arm, false, key, true, depth + 1, flow, scope)?;
             if wrapped { out.push(")"); }
             if arm.guard.is_some() && nests > 0 && self.facts.guards_inside_boxes.contains_key(&key) {
                 let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };

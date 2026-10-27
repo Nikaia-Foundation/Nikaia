@@ -1,0 +1,16 @@
+error[NK1104]: This function returns `i64?`, but it's declared to return `i64`.
+  --> tests/a_guard_proof_does_not_reach_another_arm.nika:3:5
+   |
+ 3 |     match k {
+   |     ^^^^^^^^^
+   |
+   = help: Make it an `i64`, or change the declaration to `i64?`.
+error[NK1102]: `+` is given `i64?`, which may be `null`.
+  --> tests/a_guard_proof_does_not_reach_another_arm.nika:5:19
+   |
+ 5 |         else => a + 2,
+   |                   ^^^
+   |
+   = note: A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.
+   = help: Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.
+2 type errors

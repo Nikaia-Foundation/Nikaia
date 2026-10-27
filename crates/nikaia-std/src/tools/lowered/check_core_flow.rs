@@ -444,6 +444,145 @@ pub(crate) fn check_core_flow_a_guard<H: CheckHost>(state: &mut CheckState, worl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_guarded_body<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, guard: Option<&Expr>, body: &Expr, span: &Span) -> Ty {
+    let g: &Expr = match guard { Some(__nikaia_value) => __nikaia_value, None => return check_core_expr(state, world, host, body, span) };
+    let markers = check_narrow_proved_here(state, world, g, true);
+    if markers.is_empty() { return check_core_expr(state, world, host, body, span); }
+    state.scope.push(markers);
+    let found = check_core_expr(state, world, host, body, span);
+    state.scope.pop();
+    found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_tuple_parts(pattern: &MatchPattern, count: i64) -> Option<Vec<MatchPattern>> {
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            if !path.is_empty() || (parts.len() as i64) != count { return None; }
+            for part in parts.iter() { if pattern_is_rest(part) { return None; } }
+            return Some(parts.to_owned());
+        },
+        _ => return None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_takes_all(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &MatchPattern, ty: &Ty) -> bool {
+    match part {
+        MatchPattern::Otherwise => return true,
+        MatchPattern::Path(p) => {
+            if p.len() != 1 { return false; }
+            let word = world.words.resolve(*nikaia_std::index::get(&p, 0)).to_owned();
+            return match check_core_flow_inside(ty) {
+                Ty::Named { ref name, .. } => !state.is_variant(name, &word) && !state.variant_parts.contains_key(&format!("{}::{}", name, word)),
+                _ => true,
+            };
+        },
+        _ => return false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_a_bare_name(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &MatchPattern, ty: &Ty) -> bool {
+    match part {
+        MatchPattern::Path(_) => check_core_flow_takes_all(state, world, part, ty),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_a_value_part(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &MatchPattern, ty: &Ty) -> bool {
+    match part {
+        MatchPattern::Otherwise => false,
+        MatchPattern::Or(_) => false,
+        MatchPattern::Rest => false,
+        MatchPattern::RestNamed(_) => false,
+        MatchPattern::Path(_) => !check_core_flow_takes_all(state, world, part, ty),
+        _ => !shapes_is_null(part),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_same_part(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, one: &MatchPattern, other: &MatchPattern) -> bool {
+    if shapes_is_null(one) && shapes_is_null(other) { return true; }
+    let a: Vec<String> = match one {
+        MatchPattern::Path(p) => check_core_flow_path_words(world, p),
+        _ => return false,
+    };
+    let b: Vec<String> = match other {
+        MatchPattern::Path(p) => check_core_flow_path_words(world, p),
+        _ => return false,
+    };
+    if a.is_empty() || (a.len() as i64) != b.len() as i64 { return false; }
+    for at in 0..a.len() as i64 { if *nikaia_std::index::get(&a, (at) as usize) != *nikaia_std::index::get(&b, (at) as usize) { return false; } }
+    true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_path_words(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for part in path.iter() {
+        let part = *part;
+        out.push(world.words.resolve(part).to_owned());
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_covers_null_at(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, earlier: &[MatchPattern], parts: &[MatchPattern], at: i64, types: &[Ty]) -> bool {
+    if !shapes_is_null(nikaia_std::index::get(&earlier, nikaia_std::index::at(at))) { return false; }
+    let mut j: i64 = 0;
+    while j < types.len() as i64 {
+        let all = j == at || check_core_flow_takes_all(state, world, nikaia_std::index::get(&earlier, nikaia_std::index::at(j)), nikaia_std::index::get(&types, nikaia_std::index::at(j)));
+        if !all && !check_core_flow_same_part(world, nikaia_std::index::get(&earlier, nikaia_std::index::at(j)), nikaia_std::index::get(&parts, nikaia_std::index::at(j))) { return false; }
+        j += 1;
+    }
+    true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_set_tuple(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[MatchArm], at: i64, typed: &Ty) -> Option<Ty> {
+    let types: Vec<Ty> = match typed {
+        Ty::Tuple(types) => types.to_owned(),
+        _ => return None,
+    };
+    let count = types.len() as i64;
+    let parts: Vec<MatchPattern> = match check_core_flow_tuple_parts(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).pattern, count) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut set: Vec<i64> = vec![];
+    let mut narrowed: Vec<Ty> = vec![];
+    for i in 0..types.len() as i64 {
+        let nullable = matches!(*nikaia_std::index::get(&types, nikaia_std::index::at(i)), Ty::Nullable(_));
+        let mut covered = false;
+        if nullable && check_core_flow_a_bare_name(&state, world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), nikaia_std::index::get(&types, nikaia_std::index::at(i))) {
+            let mut before: i64 = 0;
+            while before < at && !covered {
+                let arm = nikaia_std::index::get(&arms, (before) as usize);
+                before += 1;
+                if arm.guard.is_some() { continue; }
+                let earlier: Vec<MatchPattern> = match check_core_flow_tuple_parts(&arm.pattern, count) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                covered = check_core_flow_covers_null_at(&state, world, &earlier, &parts, i, &types);
+            }
+        } else if nullable && check_core_flow_a_value_part(&state, world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), nikaia_std::index::get(&types, nikaia_std::index::at(i))) { covered = true; }
+        if covered {
+            set.push(i);
+            narrowed.push(check_core_flow_inside(nikaia_std::index::get(&types, nikaia_std::index::at(i))));
+        } else { narrowed.push((*nikaia_std::index::get(&types, nikaia_std::index::at(i))).clone()); }
+    }
+    if set.is_empty() { return None; }
+    state.facts.set_positions.insert(id_of(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).body) as i64, set);
+    Some(Ty::Tuple(narrowed))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_parts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty, lendable: bool) -> collections::BTreeMap<String, Ty> {
     let parts = state.pattern_parts(world, pattern, typed);
     if lendable || !typed.is_a_view() { return parts; }
@@ -588,7 +727,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let (_, handed_from) = state.taken_so_far();
     let changed_from = state.changed.len() as i64;
     check_core_flow_a_guard(state, world, host, &arm.pattern, (arm.guard).as_ref(), span);
-    let ty = check_core_expr(state, world, host, &arm.body, span);
+    let ty = check_core_flow_guarded_body(state, world, host, (arm.guard).as_ref(), &arm.body, span);
     let name = check_core_flow_variable(world, value);
     let by_reference = through_the_reference || a_list || name != "" && (on.is_a_view() || state.got_past_a_jump.contains(&name));
     check_core_flow_lent_parts(state, world, host, &arm.body, &parts, handed_from, changed_from, by_reference, a_list);
@@ -667,6 +806,8 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     for arm in arms.iter() {
         let mut arm_typed = typed.clone();
         if !several.is_empty() { arm_typed = check_core_flow_member(world, &several, &arm.pattern); }
+        let set_tuple: Option<Ty> = check_core_flow_set_tuple(state, world, arms, taken, &arm_typed);
+        if set_tuple.is_some() { arm_typed = nikaia_std::index::or(set_tuple, || arm_typed.into()); }
         let got = check_core_flow_arm(state, world, host, value, &on, arm, &arm_typed, lendable, through_the_reference, (mut_subject).as_deref(), choice, taken, span);
         taken += 1;
         if got.is_some() {

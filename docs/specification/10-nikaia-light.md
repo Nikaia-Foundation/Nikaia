@@ -603,7 +603,9 @@ The proof holds in the operand after `&&` (what the left proves true) and
 after `||` (what the left proves false), in the branch the condition leads
 into (the `else` branch gets what it proves false), in a `while` body, and in
 the rest of a block after an `if` whose branch leaves with `return`, `break`,
-`continue` or `throw`. `!` swaps true and false. Elsewhere the name is the
+`continue` or `throw`, and in the body of a `match` arm whose guard proves it
+(`(x, _) if x != null => x`; no other arm sees that proof). `!` swaps true
+and false. Elsewhere the name is the
 `T?` it was declared. An assignment to the name after the test ends the proof
 there, and a loop inside the proven region that assigns it ends it for the
 whole loop; a use that needs a `T` after that is `NK1102`, naming the
@@ -1193,7 +1195,7 @@ A pattern is one of seven things, and each is read the way it is written:
 | `Message::Write(text)` | that variant, binding what it carries |
 | `Message::Move { x, y }` | that variant, binding its fields by name: `x` is short for `x: x` |
 | `other` | anything, and **binds it** to that name |
-| `null` | over a `T?`, the value that is not set; every other arm of that `match` matches the `T` inside, so a bare name binds the `T` and `0` compares with it (ADR-352). Over a type that is never `null` it is refused with `NK1259` |
+| `null` | over a `T?`, the value that is not set; every other arm of that `match` matches the `T` inside, so a bare name binds the `T` and `0` compares with it (ADR-352). In a tuple, a bare name at a `T?` position binds the `T` once the arms before it have taken `null` there: after `(null, null)` and `(null, y)`, `(x, _)` binds `x` as the `T` (ADR-352 D1). Over a type that is never `null` it is refused with `NK1259` |
 
 The last two rows are one rule: a path with `::` in it names a variant, and a
 bare name binds. `Quit` is a variant *of* `Message`, never on its own.

@@ -1,0 +1,11 @@
+// ADR-382 D2, #879: a guard's proof holds in its own arm only.
+fn step(a: i64?, k: i64) -> i64 {
+    match k {
+        0 if a != null => a + 1,
+        else => a + 2,
+    }
+}
+
+fn main() {
+    println(step(1, 0))
+}

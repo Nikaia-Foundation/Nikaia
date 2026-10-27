@@ -1,0 +1,14 @@
+// ADR-382 D2, #879: `&&` in a guard carries its proof to the right and
+// into the body, for both names.
+fn both(a: String?, b: String?) -> i64 {
+    match (a, b) {
+        (x, y) if x != null && y != null && x.len() > 0 => x.len() + y.len(),
+        else => -1,
+    }
+}
+
+fn main() {
+    println(both("ab", "cde"))
+    println(both("", "cde"))
+    println(both("ab", null))
+}

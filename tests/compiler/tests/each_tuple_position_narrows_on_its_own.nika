@@ -1,0 +1,46 @@
+// ADR-352 D1 per position, #879: `x` in `(x, null)` is set, as
+// `(null, null)` took the rest; `y` in `(null, y)` likewise; the last arm
+// meets set values at both positions, each through another arm before it.
+fn sum(a: i64?, b: i64?) -> i64 {
+    match (a, b) {
+        (null, null) => 0,
+        (x, null) => x + 100,
+        (null, y) => y + 200,
+        (x, y) => x + y,
+    }
+}
+
+enum Color { Red, Blue }
+
+// The same variant at the other position counts as taking it, and a tuple
+// held in one name narrows as a tuple written out does.
+fn colored(c: Color?, n: i64?) -> i64 {
+    match (c, n) {
+        (null, _) => 0,
+        (Color::Red, null) => 1,
+        (Color::Red, m) => m + 10,
+        (k, m) => if m != null { m + 100 } else { 3 },
+    }
+}
+
+fn pair(t: (String?, i64)) -> i64 {
+    match t {
+        (null, k) => k,
+        (s, k) => s.len() + k,
+    }
+}
+
+fn main() {
+    println(sum(null, null))
+    println(sum(1, null))
+    println(sum(null, 2))
+    println(sum(3, 4))
+    println(colored(null, 1))
+    println(colored(Color::Red, null))
+    println(colored(Color::Red, 5))
+    println(colored(Color::Blue, 5))
+    let some: String? = "xy"
+    let none: String? = null
+    println(pair((some, 1)))
+    println(pair((none, 1)))
+}

@@ -1,0 +1,16 @@
+// #879's example: a guard narrows its arm (ADR-382 D2), `&&` carries the
+// proof, and `null` at a position is matched as written.
+fn pick(a: String?, b: String?) -> String {
+    match (a, b) {
+        (x, _) if x != null => x,
+        (null, y) if y != null && y.len() > 0 => f"b {y}",
+        else => "none",
+    }
+}
+
+fn main() {
+    println(pick("ada", null))
+    println(pick(null, "bob"))
+    println(pick(null, ""))
+    println(pick(null, null))
+}

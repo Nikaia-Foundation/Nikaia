@@ -1,0 +1,21 @@
+// ADR-382 D2, #879: the proof a guard gives holds in the arm's body.
+fn first(a: String?, b: String?) -> String {
+    match (a, b) {
+        (x, _) if x != null => x,
+        else => "none",
+    }
+}
+
+fn next(n: i64?) -> i64 {
+    match n {
+        v if v != null => v + 1,
+        else => 0,
+    }
+}
+
+fn main() {
+    println(first("ada", null))
+    println(first(null, "bob"))
+    println(next(41))
+    println(next(null))
+}

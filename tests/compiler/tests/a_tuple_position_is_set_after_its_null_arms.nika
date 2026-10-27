@@ -1,0 +1,16 @@
+// ADR-352 D1 per position, #879: a position of a tuple is its `T` once the
+// arms before it have taken `null` there.
+fn pick(a: String?, b: String?) -> String {
+    match (a, b) {
+        (null, null) => "none",
+        (null, y) => f"b {y.len()}",
+        (x, _) => f"a {x.len()}",
+    }
+}
+
+fn main() {
+    println(pick("ada", null))
+    println(pick("ada", "bob"))
+    println(pick(null, "bo"))
+    println(pick(null, null))
+}

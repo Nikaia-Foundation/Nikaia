@@ -269,6 +269,10 @@ pub struct CheckFacts {
     /// (`x.as_ref().unwrap()`), bit 1 whether it is an operand, which no wrap
     /// into an option stands directly around.
     pub narrowed_reads: collections::BTreeMap[i64, i64],
+    /// **The positions of a tuple pattern that meet only set values**
+    /// (ADR-352 D1 per position, #879), by the arm's body: each is written
+    /// `Some(…)`.
+    pub set_positions: collections::BTreeMap[i64, Vec[i64]],
     pub task_handles: collections::BTreeSet[(i64, String)],
     /// **An argument of a grammar's entry that is a `Bytes`** (ADR-366 D1), by
     /// the argument: the call enters the grammar's copy over bytes.
@@ -493,6 +497,7 @@ impl CheckFacts {
             nullable_args: collections::BTreeMap(),
             narrowing_casts: collections::BTreeMap(),
             narrowed_reads: collections::BTreeMap(),
+            set_positions: collections::BTreeMap(),
             task_handles: collections::BTreeSet(),
             bytes_entries: collections::BTreeSet(),
             bytes_grammars: collections::BTreeSet(),
