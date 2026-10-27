@@ -1,0 +1,9 @@
+// ADR-352 D1, #890: a different literal does not cover `null`: `w` stays a
+// `String?`.
+fn counted(n: i64, why: String?) -> i64 {
+    return match (n, why) { (1, null) => 0, (2, w) => w.len(), (_, _) => -1 }
+}
+
+fn main() {
+    println(counted(2, "abc"))
+}

@@ -108,6 +108,16 @@ impl EmitState {
         for part in parts.iter() {
             if i > 0 { out.push(", "); }
             i += 1;
+            if self.facts.text_parts.contains_key(&node_key(part)) {
+                let nullable = nikaia_std::index::or(self.facts.text_parts.get(&node_key(part)), || false);
+                let plain = matches!(part, Expr::Variable(..) | Expr::Field { .. });
+                if !nullable { out.push("&*"); }
+                if !plain { out.push("("); }
+                self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
+                if !plain { out.push(")"); }
+                if nullable { out.push(".as_deref()"); }
+                continue;
+            }
             let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(part), part);
             out.push(&before);
             self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;

@@ -1,0 +1,36 @@
+// #890: a text literal at a `String` or `String?` position of a tuple
+// pattern is matched against a view of that position.
+fn k1(a: String?, b: i64) -> String {
+    return match (a, b) { ("out", 1) => "o1", (_, _) => "rest" }
+}
+
+fn k2(a: String, b: i64) -> String {
+    return match (a, b) { ("out", 1) => "o1", (_, _) => "rest" }
+}
+
+fn k3(a: String?, b: String?) -> String {
+    return match (a, b) { ("out", s) if s != null => s, (_, _) => "rest" }
+}
+
+// A name bound at the viewed position is still text.
+fn k4(a: String, b: i64) -> String {
+    return match (a, b) { ("out", 1) | ("in", 2) => "both", (x, _) => f"other {x}" }
+}
+
+fn nested(a: String, n: i64, m: i64) -> String {
+    return match ((a, n), m) { (("out", 1), 2) => "deep", ((_, _), _) => "flat" }
+}
+
+fn main() {
+    println(k1("out", 1))
+    println(k1("in", 1))
+    println(k1(null, 1))
+    println(k2("out", 1))
+    println(k2("out", 2))
+    println(k3("out", "s"))
+    println(k3("in", "s"))
+    println(k4("in", 2))
+    println(k4("up", 3))
+    println(nested("out", 1, 2))
+    println(nested("out", 1, 3))
+}

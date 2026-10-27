@@ -1,0 +1,19 @@
+// ADR-352 D1, #890: a literal at a position counts as the same part, as
+// `null` and a variant do: after `(false, null)`, `(false, w)` binds `w` as
+// the `String`.
+fn why(flag: bool, why: String?) -> String {
+    return match (flag, why) { (false, null) => "a", (false, w) => f"{w.len()}", (true, _) => "c" }
+}
+
+fn counted(n: i64, why: String?) -> i64 {
+    return match (n, why) { (0x1, null) => 0, (1, w) => w.len(), (_, _) => -1 }
+}
+
+fn main() {
+    println(why(false, null))
+    println(why(false, "four"))
+    println(why(true, null))
+    println(counted(1, null))
+    println(counted(1, "abc"))
+    println(counted(2, "abc"))
+}

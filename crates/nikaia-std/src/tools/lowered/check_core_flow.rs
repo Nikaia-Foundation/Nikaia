@@ -510,6 +510,15 @@ pub(crate) fn check_core_flow_a_value_part(state: &CheckState, world: &CheckWorl
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_same_part(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, one: &MatchPattern, other: &MatchPattern) -> bool {
     if shapes_is_null(one) && shapes_is_null(other) { return true; }
+    match one {
+        MatchPattern::Literal(left) => {
+            return match other {
+                MatchPattern::Literal(right) => check_core_flow_same_literal(left, right),
+                _ => false,
+            };
+        },
+        _ => { },
+    }
     let a: Vec<String> = match one {
         MatchPattern::Path(p) => check_core_flow_path_words(world, p),
         _ => return false,
@@ -521,6 +530,30 @@ pub(crate) fn check_core_flow_same_part(world: &CheckWorld<'_, '_, '_, '_, '_, '
     if a.is_empty() || (a.len() as i64) != b.len() as i64 { return false; }
     for at in 0..a.len() as i64 { if *nikaia_std::index::get(&a, (at) as usize) != *nikaia_std::index::get(&b, (at) as usize) { return false; } }
     true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_same_literal(left: &Expr, right: &Expr) -> bool {
+    match left {
+        Expr::LitStr { text, .. } => match right {
+            Expr::LitStr { text: other, .. } => text == other,
+            _ => false,
+        },
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; match right {
+            Expr::LitInt { value: other, negative: sign, .. } => { let other = *other; let sign = *sign; value == other && (negative == sign || value == 0u64) },
+            _ => false,
+        } },
+        Expr::LitBool(value, _) => { let value = *value; match right {
+            Expr::LitBool(other, _) => { let other = *other; value == other },
+            _ => false,
+        } },
+        Expr::LitChar(value, _) => match right {
+            Expr::LitChar(other, _) => value == other,
+            _ => false,
+        },
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -889,6 +922,14 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
         state.facts.text_scrutinees.insert(id_of(value) as i64);
         if !typed.is_a_view() { typed = view_of_type(&typed); }
     }
+    match value {
+        Expr::Tuple(parts, _) => {
+            let mut patterns: Vec<MatchPattern> = vec![];
+            for arm in arms.iter() { patterns.push(arm.pattern.clone()); }
+            typed = check_core_flow_text_parts(state, parts, &typed, &patterns);
+        },
+        _ => { },
+    }
     let lent_name = check_core_flow_a_lent_name(&state, world, value) || state.a_lent_let(world, value);
     if lent_name && !typed.is_a_view() && state.takes_away(world, &typed) { typed = view_of_type(&typed); }
     let outer_condition = state.stamped_condition;
@@ -933,6 +974,51 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     state.a_pattern_of_another_type(world, &over, value, arms, span);
     if any && agree { return seen; }
     check_core_flow_meet(state, world, expr, &answered, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_text_parts(state: &mut CheckState, parts: &[Expr], typed: &Ty, patterns: &[MatchPattern]) -> Ty {
+    let types: Vec<Ty> = match typed {
+        Ty::Tuple(types) => types.to_owned(),
+        _ => return typed.clone(),
+    };
+    if (types.len() as i64) != parts.len() as i64 { return typed.clone(); }
+    let mut out: Vec<Ty> = vec![];
+    for at in 0..types.len() as i64 {
+        let mut here: Vec<MatchPattern> = vec![];
+        for pattern in patterns.iter() { check_core_flow_parts_at(pattern, at, types.len() as i64, &mut here); }
+        let ty = (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).clone();
+        let read: Ty = match nikaia_std::index::get(&parts, nikaia_std::index::at(at)) {
+            Expr::Tuple(inner, _) => check_core_flow_text_parts(state, inner, &ty, &here),
+            _ => {
+                let nullable = match ty {
+                    Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); check_core_flow_owned_text(held) },
+                    _ => false,
+                };
+                let mut seen = false;
+                for part in here.iter() { if check_core_flow_text_pattern(part) { seen = true; } }
+                if seen && (nullable || check_core_flow_owned_text(&ty)) {
+                    state.facts.text_parts.insert(id_of(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) as i64, nullable);
+                    view_of_type(&ty)
+                } else { ty }
+            },
+        };
+        out.push(read);
+    }
+    Ty::Tuple(out)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_parts_at(pattern: &MatchPattern, at: i64, count: i64, out: &mut Vec<MatchPattern>) {
+    match pattern {
+        MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { check_core_flow_parts_at(alternative, at, count, out); } },
+        _ => {
+            let parts: Vec<MatchPattern> = match check_core_flow_tuple_parts(pattern, count) { Some(__nikaia_value) => __nikaia_value, None => return };
+            out.push((*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).clone());
+        },
+    }
 }
 
 pub(crate) fn check_core_flow_text_arms(arms: &[MatchArm]) -> bool {

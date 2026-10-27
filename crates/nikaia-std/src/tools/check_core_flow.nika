@@ -612,11 +612,21 @@ fn check_core_flow_a_value_part(state: ref CheckState, world: ref CheckWorld, pa
     }
 }
 
-/// Whether two parts say the same: both `null`, or both the same path
-/// (`Color::Red`).
+/// Whether two parts say the same: both `null`, both the same literal
+/// (ADR-352 D1: one fixed value, compared by value, not spelling), or both
+/// the same path (`Color::Red`).
 fn check_core_flow_same_part(world: ref CheckWorld, one: ref MatchPattern, other: ref MatchPattern) -> bool sync {
     if shapes_is_null(one) && shapes_is_null(other) {
         return true
+    }
+    match one {
+        MatchPattern::Literal(left) => {
+            return match other {
+                MatchPattern::Literal(right) => check_core_flow_same_literal(left, right),
+                else => false,
+            }
+        },
+        else => {},
     }
     let a: Vec[String] = match one {
         MatchPattern::Path(p) => check_core_flow_path_words(world, p),
@@ -635,6 +645,30 @@ fn check_core_flow_same_part(world: ref CheckWorld, one: ref MatchPattern, other
         }
     }
     return true
+}
+
+/// Whether two literals are one value: text, a whole number, a `bool` or a
+/// `char`.
+fn check_core_flow_same_literal(left: ref Expr, right: ref Expr) -> bool sync {
+    return match left {
+        Expr::LitStr { text, .. } => match right {
+            Expr::LitStr { text: other, .. } => text == other,
+            else => false,
+        },
+        Expr::LitInt { value, negative, .. } => match right {
+            Expr::LitInt { value: other, negative: sign, .. } => value == other && (negative == sign || value == 0),
+            else => false,
+        },
+        Expr::LitBool(value, _) => match right {
+            Expr::LitBool(other, _) => value == other,
+            else => false,
+        },
+        Expr::LitChar(value, _) => match right {
+            Expr::LitChar(other, _) => value == other,
+            else => false,
+        },
+        else => false,
+    }
 }
 
 /// The words of a pattern's path.
@@ -1118,6 +1152,18 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
             typed = view_of_type(typed)
         }
     }
+    // **So is a part of a tuple written in place, matched against a text
+    // literal at its position** (#890): `(a, b)` with `("out", 1)`.
+    match value {
+        Expr::Tuple(parts, _) => {
+            let mut patterns: Vec[MatchPattern] = []
+            for arm in arms {
+                patterns.push(arm.pattern.clone())
+            }
+            typed = check_core_flow_text_parts(state, parts, typed, patterns)
+        },
+        else => {},
+    }
     // **And so is a name lent to this function's walk**, and a `let` over a
     // place (#567).
     let lent_name = check_core_flow_a_lent_name(state, world, value) || state.a_lent_let(world, value)
@@ -1190,6 +1236,66 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
         return seen
     }
     return check_core_flow_meet(state, world, expr, answered, span)
+}
+
+/// **The parts of a tuple written in place that a text literal is matched
+/// against** (#890): an owned `String` or `String?` part is read as its view,
+/// and kept for the lowering (`text_parts`); a tuple inside, part by part.
+/// `patterns` are what the arms have at this tuple.
+fn check_core_flow_text_parts(mut state: CheckState, parts: ref Vec[Expr], typed: ref Ty, patterns: ref Vec[MatchPattern]) -> Ty sync {
+    let types: Vec[Ty] = match typed {
+        Ty::Tuple(types) => types.clone(),
+        else => return typed.clone(),
+    }
+    if types.len() != parts.len() {
+        return typed.clone()
+    }
+    let mut out: Vec[Ty] = []
+    for at in 0..<types.len() {
+        let mut here: Vec[MatchPattern] = []
+        for pattern in patterns {
+            check_core_flow_parts_at(pattern, at, types.len() as i64, here)
+        }
+        let ty = types[at].clone()
+        let read: Ty = match parts[at] {
+            Expr::Tuple(inner, _) => check_core_flow_text_parts(state, inner, ty, here),
+            else => {
+                let nullable = match ty {
+                    Ty::Nullable(held) => check_core_flow_owned_text(held),
+                    else => false,
+                }
+                let mut seen = false
+                for part in here {
+                    if check_core_flow_text_pattern(part) {
+                        seen = true
+                    }
+                }
+                if seen && (nullable || check_core_flow_owned_text(ty)) {
+                    state.facts.text_parts.insert(id_of(parts[at]) as i64, nullable)
+                    view_of_type(ty)
+                } else {
+                    ty
+                }
+            },
+        }
+        out.push(read)
+    }
+    return Ty::Tuple(out)
+}
+
+/// What a pattern has at position `at` of a tuple of `count`, through `|`.
+fn check_core_flow_parts_at(pattern: ref MatchPattern, at: i64, count: i64, mut out: Vec[MatchPattern]) sync {
+    match pattern {
+        MatchPattern::Or(alternatives) => {
+            for alternative in alternatives {
+                check_core_flow_parts_at(alternative, at, count, out)
+            }
+        },
+        else => {
+            let parts: Vec[MatchPattern] = check_core_flow_tuple_parts(pattern, count) ?? return
+            out.push(parts[at].clone())
+        },
+    }
 }
 
 /// Whether an arm's pattern is a text literal, or an `|` with one.

@@ -198,6 +198,30 @@ impl EmitState {
                 out.push(", ")
             }
             i += 1
+            // **A part matched against a text literal is matched as a view**
+            // (#890, `text_parts`).
+            if self.facts.text_parts.contains_key(node_key(part)) {
+                let nullable = self.facts.text_parts.get(node_key(part)) ?? false
+                let plain = match part {
+                    Expr::Variable(..) => true,
+                    Expr::Field { .. } => true,
+                    else => false,
+                }
+                if !nullable {
+                    out.push("&*")
+                }
+                if !plain {
+                    out.push("(")
+                }
+                self.emit_expr(world, walk, out, host, part, depth, flow, scope)
+                if !plain {
+                    out.push(")")
+                }
+                if nullable {
+                    out.push(".as_deref()")
+                }
+                continue
+            }
             // A part read off a place into a `ref T?` slot goes inside its
             // option (ADR-354 D1, #655).
             let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(part), part)

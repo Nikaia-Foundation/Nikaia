@@ -197,6 +197,10 @@ pub struct CheckFacts {
     /// patterns**, by the subject (#704): the language below matches a
     /// literal against a `&str`, so the subject is written as one.
     pub text_scrutinees: collections::BTreeSet[i64],
+    /// **A part of a tuple a `match` is over, matched against a text
+    /// literal at its position** (#890), by the part: `true` where it is a
+    /// `String?` (written `.as_deref()`), `false` for a `String` (`&*`).
+    pub text_parts: collections::BTreeMap[i64, bool],
     /// **A `match` on a name an enclosing arm bound**, by the subject: that
     /// arm's body. Where the arm lent the name, it is a reference below, and
     /// the `match` is over what it points to.
@@ -457,6 +461,7 @@ impl CheckFacts {
             shadowing_reads: collections::BTreeSet(),
             lent_scrutinees: collections::BTreeSet(),
             text_scrutinees: collections::BTreeSet(),
+            text_parts: collections::BTreeMap(),
             arm_subjects: collections::BTreeMap(),
             guards_inside_boxes: collections::BTreeMap(),
             collected_into: collections::BTreeSet(),
