@@ -57,10 +57,10 @@ fn more_hashed() -> u64 {
 }
 
 fn more_either(args: ref Vec[Arg], ret: ref Ty?) -> bool {
-    if args.iter().map(fn(a) { a.ty }).any(fn(t) { t.is_view }) || (ret != null && ret.is_view) {
+    if args.iter().map(fn(a) { a.ty }).any(fn(t) { t.is_view }) || (match ret { t => t.is_view, null => false }) {
         return true
     }
-    let all = (args.iter().map(fn(a) { a.ty }).all(fn(t) { t.lasting }) && (ret == null || ret.lasting)) && args.len() > 1
+    let all = (args.iter().map(fn(a) { a.ty }).all(fn(t) { t.lasting }) && (match ret { t => t.lasting, null => true })) && args.len() > 1
     return all
 }
 

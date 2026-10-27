@@ -215,7 +215,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R202 a `match` arm `x @ P =>` (no `@` in Nikaia): over the subject `x` itself -> `P =>`; over another name `s` with a block -> `P => {` + `let x = s`",
         "R203 `visit_stmt_blocks(s, &mut |b| { .. })` (contracts::sync) -> `for b in check_visit_stmt_blocks(s) { .. }`, as R174",
         "R204 a radix literal's suffix: `0xcbf2_9ce4u64` -> `(0xcbf2_9ce4 as u64)`, as R106",
-        "R205 `A.chain(B).any(F)` -> `A.any(F) || B.any(F)`, `.all(F)` with `&&` (`Seq` has no `chain`)",
+        "R205 `A.chain(B).any(F)` -> `A.any(F) || B.any(F)`, `.all(F)` with `&&` (`Seq` has no `chain`); a nullable half `x.iter()` is `(match x { t => F(t), null => false })`",
         "R206 a statement with `A.chain(B)`: `let mut chained = A.collect()` (`[x]` for `once(x)`), `chained.extend(B.collect())` first, the chain reads `chained` / `chained.iter()`",
         "R207 profile: the methods of an `impl` of a type other than `Checker`/`Emitter` keep `ref self`, their names and `self.x`: no state, world or prefix",
         "R208 a `{x};` inside a string literal keeps its `;` (only a block's `};` loses it)",
@@ -6190,8 +6190,8 @@ fn rs2nika_lift_chain(line: String, made: i64) -> Vec[String] {
 
 /// R205: the half `x.iter()` of a nullable `x` (a parameter `x: T?`, a
 /// name the file declares `Option<..>`, a field `tools/*.nika` declares only
-/// as `T?`) asked `fn(t) { e }`: `(x != null && e)` with `x` for `t`
-/// (`(x == null || e)` for `all`), or "".
+/// as `T?`) asked `fn(t) { e }`: `(match x { t => e, null => false })`
+/// (`null => true` for `all`), or "".
 fn rs2nika_nullable_half(ctx: ref Rs2nikaCtx, sig: String, half: String, pred: String, any: bool) -> String {
     let name = half.strip_suffix(".iter()") ?? return ""
     if name == "" || !name.chars().all(fn(ch) { rs2nika_word(ch) || ch == '.' }) {
@@ -6215,11 +6215,12 @@ fn rs2nika_nullable_half(ctx: ref Rs2nikaCtx, sig: String, half: String, pred: S
         return ""
     }
     let inner = rest.strip_suffix(" }") ?? return ""
-    let said = rs2nika_replace_word(inner, param, name)
+    // a `match` binds the value: `x != null && e` narrows a value, not a
+    // `ref T?` (#898)
     if any {
-        return f"({name} != null && {said})"
+        return f"(match {name} {{ {param} => {inner}, null => false }})"
     }
-    return f"({name} == null || {said})"
+    return f"(match {name} {{ {param} => {inner}, null => true }})"
 }
 
 /// R188: `mod core;`, `pub(crate) mod attributes;`: Nikaia's tools files
