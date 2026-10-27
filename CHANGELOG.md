@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1240] — 2026-10-27
+
+### A match guard narrows, and so does a tuple position
+
+What a `match` guard proves holds in that arm's body, as after an `if` (ADR-382 D2): in `(x, _) if x != null => x`, `x` is a `String`, `&&` in the guard carries its proof, and no other arm sees it. In a `match` over a tuple, a bare name at a `T?` position binds the `T` once an unguarded arm before it has `null` there and covers the other positions (ADR-352 D1): after `(null, null)` and `(null, y)`, `(x, _)` binds `x` as the `T`, and `y` is set too. A variant or literal at a `T?` position is matched against the `T`. A name proved not `null` that a function hands back whole, by `return` or as its tail, is now the value itself, also for text; it was lowered as a reference, which rustc refused (#879).
+
 ## [0.0.1239] — 2026-10-27
 
 ### A `catch` whose block hands back `null` gives `T?`
