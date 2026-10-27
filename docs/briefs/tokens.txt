@@ -80,3 +80,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 808758 21
 /home/user/Nikaia/docs/briefs/e12-4a.md 84025 1
 /home/user/Nikaia/docs/briefs/architect-task.md 213886 9
+/home/user/Nikaia/docs/briefs/b893-optional-let-proved-arm.md 777036 26
