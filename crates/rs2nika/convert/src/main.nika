@@ -223,6 +223,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R210 `X::new(..)` -> `X(..)` for a type of the file whose `impl` declares `fn new` (NK1149)",
         "R211 a signature over several lines (`fn f(` then `&mut self,`) is a method",
         "R212 check profiles: `self.parsed` -> `world.here`, `self.parsed.x` -> `world.here.x`",
+        "R213 check profiles: `let parsed = self.parsed;` is dropped, `parsed` reads `self.parsed` to the end of the function",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -5488,6 +5489,8 @@ fn rs2nika_delegates(mut ctx: Rs2nikaCtx, given: String) -> String {
     }
     let mut out: Vec[String] = []
     let mut n = 0
+    // how many calls of each delegate were inlined
+    let mut inlined: Vec[i64] = names.iter().map(fn(_) { 0 }).collect()
     for l in lines {
         let mut s: String = l.clone()
         let mut d = 0
@@ -5516,6 +5519,7 @@ fn rs2nika_delegates(mut ctx: Rs2nikaCtx, given: String) -> String {
                 b = b.replace("&&", "&").replace("&&mut ", "&mut ")
                 s = f"{rs2nika_text(c, 0, at)}{b}{rs2nika_text(c, end, c.len())}"
                 n = n + 1
+                inlined[d] = inlined[d] + 1
             }
             d = d + 1
         }
@@ -5525,11 +5529,12 @@ fn rs2nika_delegates(mut ctx: Rs2nikaCtx, given: String) -> String {
         return given.clone()
     }
     rs2nika_hit(ctx, "R175")
-    // a delegate no call is left of goes
+    // a delegate whose calls were inlined and none is left of goes; one the
+    // file never calls stays
     let mut d = 0
     while d < names.len() {
         let what = f"self.{names[d]}("
-        if !out.iter().any(fn(l) { l.contains(what) }) {
+        if inlined[d] > 0 && !out.iter().any(fn(l) { l.contains(what) }) {
             let ends = spans[d].split(" ").collect()
             let from = text::parse_i64(ends[0].clone()) ?? 0
             let to = text::parse_i64(ends[1].clone()) ?? 0
@@ -10200,7 +10205,8 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
         ctx.view_names = rs2nika_view_names(repo)
     }
     rs2nika_enum_arity(ctx, src)
-    let pruned0 = rs2nika_rust_impls(ctx, src)
+    let aliased = rs2nika_parsed_alias(ctx, src.clone())
+    let pruned0 = rs2nika_rust_impls(ctx, aliased)
     let pruned1 = rs2nika_tool_paths(ctx, pruned0)
     let pruned = rs2nika_mut_some(ctx, pruned1)
     let delegated = rs2nika_delegates(ctx, pruned)
@@ -11596,6 +11602,40 @@ fn rs2nika_shift(ctx: ref Rs2nikaCtx, skip: i64) -> String {
 /// R207: an `impl` header at the left margin of a type other than the
 /// state's (`impl Mark {`, `impl Code for Finding {`) opens `impl_other`;
 /// the `}` at the margin closes it.
+/// R213: under a check profile `let parsed = self.parsed;` is dropped and
+/// `parsed` reads `self.parsed` to the end of the function, so R212 writes
+/// `world.here` where the tools write it (a `let` cannot hold a lent field).
+fn rs2nika_parsed_alias(mut ctx: Rs2nikaCtx, src: String) -> String {
+    if !ctx.profile.starts_with("check") {
+        return src
+    }
+    let mut out: Vec[String] = []
+    let mut name: String = ""
+    let mut close: String = ""
+    for line in src.split("\n") {
+        let t = line.trim()
+        if name != "" && line.trim_end() == close {
+            name = ""
+        }
+        if name == "" && t.starts_with("let ") && t.ends_with(" = self.parsed;") {
+            let n = ((t.strip_prefix("let ") ?? "").strip_suffix(" = self.parsed;") ?? "").clone()
+            let ind = line.len() - line.trim_start().len()
+            if n != "" && rs2nika_all_word(n) && ind >= 4 {
+                name = n.clone()
+                close = f"{" ".repeat(ind - 4)}}}"
+                rs2nika_hit(ctx, "R213")
+                continue
+            }
+        }
+        if name != "" {
+            out.push(rs2nika_replace_word(line, name, "self.parsed"))
+        } else {
+            out.push(line.clone())
+        }
+    }
+    return out.join("\n")
+}
+
 fn rs2nika_impl_track(mut ctx: Rs2nikaCtx, line: String) {
     if line.trim_end() == "}" {
         ctx.impl_other = false

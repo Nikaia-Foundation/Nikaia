@@ -130,3 +130,12 @@ impl Checker<'_> {
         self.spelled(value)
     }
 }
+
+impl Checker<'_> {
+    fn walked(&mut self) {
+        let parsed = self.parsed;
+        for item in &parsed.program.items {
+            self.twice(&item.value);
+        }
+    }
+}
