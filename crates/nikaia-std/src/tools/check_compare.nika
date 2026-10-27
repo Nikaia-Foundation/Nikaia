@@ -413,7 +413,7 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
             if ordered {
                 what = "an order"
             }
-            let mut help: String = "Pass a type that has one: a number, `String`, `bool`, `char`, or a tuple, list or option of those, or a type you declare with an `impl`."
+            let mut help: String = "Pass a type that has one: a number, `String`, `bool`, `scalar`, or a tuple, list or option of those, or a type you declare with an `impl`."
             if asking.structs.contains_key(shown) || asking.enums.contains_key(shown) {
                 help = f"Write `impl {wanted_trait} for {shown} {{ … }}`, or pass a type that already has one."
             }
@@ -435,7 +435,7 @@ pub fn compare_keys_with_no_order(asking: ref CheckComparable, ty: ref Ty, span:
                 let last = compare_base(name)
                 if (last == "BTreeMap" || last == "BTreeSet") && args.len() > 0 && !asking.orders(args[0]) {
                     let key = args[0].text()
-                    let note: String = "A number, a `String`, a `bool`, a `char`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`."
+                    let note: String = "A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`."
                     refused.push(check_refusal("NK1247", span, f"`{last}` keeps its keys in order, and `{key}` has no order.", [note], "Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first."))
                 }
                 for arg in args {

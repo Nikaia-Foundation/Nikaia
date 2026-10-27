@@ -224,7 +224,7 @@ impl CheckState {
         if what == "loop" {
             again = "the next time round the loop it would be handed over again, but it's already gone"
         }
-        self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `char`s and views would be fine: they're copied."], f"Hand over a copy each time: `{path}.clone()`."))
+        self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{path}.clone()`."))
     }
 
     /// Every taking whose name is read again: `NK2105`, said once per site.
@@ -244,7 +244,7 @@ impl CheckState {
                 continue
             }
             said.insert(used.at)
-            found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.text()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `char`s and views would be fine: they're copied."], f"If both need it, hand over a copy: `{name}.clone()`."))
+            found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.text()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"If both need it, hand over a copy: `{name}.clone()`."))
         }
         self.handed = []
         for one in found {

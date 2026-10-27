@@ -244,7 +244,7 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
             let shown = held.text();
             let mut what: &'static str = "an equality that is an equivalence";
             if ordered { what = "an order"; }
-            let mut help: String = String::from("Pass a type that has one: a number, `String`, `bool`, `char`, or a tuple, list or option of those, or a type you declare with an `impl`.");
+            let mut help: String = String::from("Pass a type that has one: a number, `String`, `bool`, `scalar`, or a tuple, list or option of those, or a type you declare with an `impl`.");
             if asking.structs.contains_key(&shown) || asking.enums.contains_key(&shown) { help = format!("Write `impl {} for {} {{ … }}`, or pass a type that already has one.", wanted_trait, shown); }
             refused.push(check_refusal("NK1164", span, format!("`{}` needs a `{}` here, but `{}` isn't one.", key, wanted_trait, shown), vec![format!("`{}` declares `[{}: {}]`, so the type passed has to have {}, and `{}` hasn't.", key, parameter, wanted_trait, what, shown)], Some(help)));
         }
@@ -262,7 +262,7 @@ pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '
                 let last = compare_base(name);
                 if (last == "BTreeMap" || last == "BTreeSet") && !args.is_empty() && !asking.orders(nikaia_std::index::get(&args, 0)) {
                     let key = (*nikaia_std::index::get(&args, 0)).text();
-                    let note: String = String::from("A number, a `String`, a `bool`, a `char`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`.");
+                    let note: String = String::from("A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`.");
                     refused.push(check_refusal("NK1247", span, format!("`{}` keeps its keys in order, and `{}` has no order.", last, key), vec![note], Some(String::from("Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first."))));
                 }
                 for arg in args.iter() { stack.push(arg.clone()); }
