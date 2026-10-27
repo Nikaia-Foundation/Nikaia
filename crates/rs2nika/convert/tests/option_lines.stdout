@@ -1,0 +1,62 @@
+fn first_word(text: ref String) -> ref String? sync {
+    return text.split(' ').next()
+}
+
+fn arms(binary: String, at: i64?, shape: Shape?) -> i64 sync {
+    let binary = match binary.rsplit_once('-') {
+        (name, hash) if hash.len() > 3 => name.to_string(),
+        null => binary,
+        else => binary,
+    }
+    let width = if at != null {
+        let n = at
+        n + 1
+    } else {
+        0
+    }
+    let dot = match shape {
+        Shape::Dot(x) => x,
+        null => 0,
+        else => 0,
+    }
+    return width + dot + binary.len()
+}
+
+fn paths(table: ref Table, n: i64, name: ref String?, kept: ref String?) -> i64 sync {
+    let path = (match table.get("path") { x => x.as_str(), null => null })
+    let c = (match u32::try_from(n).ok() { x => char::from_u32(x), null => null })
+    let size = (match name { n => n.len() + 1, null => null }) ?? 0
+    let kept_len = (match kept { k => k.len() * 2, null => null }) ?? 0
+    let first = (match first_word("a b") { w => w.len() + 2, null => null })
+    let found = table.get("x")
+    let x = (match found { f => f.len() + 3, null => 0 })
+    let y = (match found { x => x.len(), null => 0 })
+    return size + kept_len + x
+}
+
+fn chains(dependency: Dep?, recorded: String?, ready: bool) -> i64 sync {
+    if dependency != null {
+        let shipped = shipped_ledger(dependency.root)
+        if shipped != null && shipped.fresh() {
+            return 1
+        }
+    }
+    if recorded != null {
+        let asked = read(recorded)
+        if asked != null {
+            let entry = recorded
+            return asked
+        }
+    }
+    if ready {
+        let a = lookup(1)
+        if a != null {
+            let b = lookup(a)
+            if b != null {
+        return a + b
+            }
+        }
+    }
+    return 0
+}
+

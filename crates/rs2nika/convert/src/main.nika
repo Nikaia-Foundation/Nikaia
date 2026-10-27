@@ -46,6 +46,7 @@ struct Rs2nikaCtx {
     todo_extra: Vec[String],
     arity: Vec[String],
     host_fns: Vec[String],
+    opt_names: Vec[String],
 }
 
 /// The rules, as `--rules` prints them.
@@ -135,6 +136,10 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R103 `const X: T = v;` (also `pub(crate)`, in a function, over several lines) -> `comptime X: T = v`, the type as in R101; one from a macro (`include_str!`, `env!`) or of tuples or nested references keeps a TODO",
         "R104 `const fn` -> `fn`",
         "R105 a `const` of an `impl` -> a top-level `comptime` above it (no associated constants), `Self::X` / `Type::X` -> `X`; a name already taken keeps a TODO",
+        "R120 a multi-line `match` on an option whose `None` arm is a value (R55 would need `?? return`): arm by arm in place, `Some(P) =>` -> `P =>`, `None`/`_` -> `null =>`, and `else =>` with the `_` arm's one line after it where a `Some` arm can fail",
+        "R121 R96 with a function's path for the closure: `e.map(f)` / `.and_then(f)` / `.map_or(d, f)` -> `(match e { x => f(x), null => .. })`, `x.m()` for `Type::as_m`/`to_m`/`is_m`",
+        "R122 R96 also where `e` is an option by its `.as_ref()`/`.as_deref()`, or is a name (or ends in a field) the file declares `: Option<..>` (or a function of it that hands back `Option<..>`, or a `let` of R96's sure kind)",
+        "R123 the let-chains R97 leaves (`if let Some(P) = e && ..`, several `let`s, a tuple `P`): a `let` over a name is `e != null`; over anything else the test so far opens an `if`, then `let P = e`, and `P != null` opens the next; closed once for each `if`",
         "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
         "R74  struct update `S { a: x, ..base }` -> `base with { a: x }` (Part I 4.2)",
         "R75  a callback `&|a: T| e` -> the lambda `fn(a) { e }` (R26)",
@@ -2089,7 +2094,7 @@ fn rs2nika_bool_then(mut ctx: Rs2nikaCtx, given: ref String) -> String {
 /// null => null })`. `map`, `and_then` and `map_or` only where `e` is surely
 /// an option (its last call is one that hands one back), since a `Result` has
 /// them too.
-fn rs2nika_comb_match(given: ref String) -> String {
+fn rs2nika_comb_match(given: ref String, opts: ref Vec[String]) -> String {
     let mut s: String = given.clone()
     for name in ["is_some_and", "map_or", "and_then", "map"] {
         let mut from = 0
@@ -2107,12 +2112,16 @@ fn rs2nika_comb_match(given: ref String) -> String {
             }
             let start = rs2nika_recv_start(c, at)
             let mut recv: String = rs2nika_text(c, start, at)
+            let mut borrowed = false
             for tail in [".as_ref()", ".as_deref()"] {
                 if recv.ends_with(tail) {
                     recv = (recv.strip_suffix(tail) ?? "").clone()
+                    borrowed = true
                 }
             }
-            if recv == "" || (name != "is_some_and" && !rs2nika_surely_option(recv)) {
+            // R122: an option by its `.as_ref()`, or by a name the file
+            // declares `Option<..>`
+            if recv == "" || (name != "is_some_and" && !rs2nika_surely_option(recv) && !borrowed && !rs2nika_named_option(recv, opts)) {
                 continue
             }
             let mut arg: String = rs2nika_text(c, open + 1, end).trim().clone()
@@ -2120,9 +2129,19 @@ fn rs2nika_comb_match(given: ref String) -> String {
             if name == "is_some_and" {
                 none = "false"
             } else if name == "map_or" {
-                let comma = arg.find(", |") ?? continue
+                let comma = arg.find(", |") ?? arg.rfind(", ") ?? continue
                 none = arg[0..<comma].trim().clone()
-                arg = arg[comma + ", ".len()..<arg.len()].clone()
+                arg = arg[comma + ", ".len()..<arg.len()].trim().clone()
+            }
+            // R121: a function's path for the closure -> its call on the value
+            let lead = arg.chars().next() ?? '0'
+            if rs2nika_is_path(arg) && !lead.is_ascii_digit() &&!rs2nika_iter_recv(recv) {
+                let pre: String = rs2nika_text(c, 0, start)
+                let post: String = rs2nika_text(c, end + 1, c.len())
+                let call = rs2nika_path_call(arg, "x")
+                s = f"{pre}(match {recv} {{ x => {call}, null => {none} }}){post}"
+                from = 0
+                continue
             }
             if !arg.starts_with("|") || arg.starts_with("||") {
                 continue
@@ -2157,6 +2176,169 @@ fn rs2nika_comb_match(given: ref String) -> String {
     return s
 }
 
+/// For R121: the call of the function at `path` on `x`: `x.m()` for a
+/// method by its name (`Type::as_str`, `str::to_string`), else `path(x)`.
+fn rs2nika_path_call(path: ref String, x: ref String) -> String {
+    let parts: Vec[String] = path.split("::").map(fn(p) { p.to_string() }).collect()
+    if parts.len() >= 2 {
+        let m: String = parts[parts.len() - 1].clone()
+        let ty: String = parts[parts.len() - 2].clone()
+        let first = ty.chars().next() ?? 'a'
+        let typed = first.is_uppercase() || ty == "str"
+        let method = m.starts_with("as_") || m.starts_with("to_") || m.starts_with("is_") || m.starts_with("into_") || m == "len" || m == "clone" || m == "trim"
+        if typed && method {
+            return f"{x}.{m}()"
+        }
+    }
+    return f"{path}({x})"
+}
+
+/// For R122: the names a file declares `Option<..>` (a parameter, a field, a
+/// typed `let`): `name: Option<`, `name: &Option<`, `name: &mut Option<`.
+fn rs2nika_opt_names(src: ref String) -> Vec[String] {
+    let mut names: Vec[String] = []
+    let c: Vec[scalar] = src.chars().collect()
+    for decl in [": Option<", ": &Option<", ": &mut Option<"] {
+        let mut from = 0
+        while true {
+            let at = rs2nika_find_from(c, decl, from)
+            if at < 0 {
+                break
+            }
+            from = at + 1
+            let mut b = at
+            while b > 0 && rs2nika_word(c[b - 1]) {
+                b = b - 1
+            }
+            let name: String = rs2nika_text(c, b, at)
+            if name != "" && !names.contains(name) {
+                names.push(name)
+            }
+        }
+    }
+    // a function of the file that hands back an option: `NAME(` stands for
+    // its call
+    let mut from = 0
+    while true {
+        let at = rs2nika_find_from(c, "fn ", from)
+        if at < 0 {
+            break
+        }
+        from = at + 1
+        if at > 0 && rs2nika_word(c[at - 1]) {
+            continue
+        }
+        let mut e = at + "fn ".len()
+        while e < c.len() && rs2nika_word(c[e]) {
+            e = e + 1
+        }
+        let mut body = e
+        while body < c.len() && c[body] != '{' && c[body] != ';' {
+            body = body + 1
+        }
+        let sig: String = rs2nika_text(c, e, body)
+        let name: String = rs2nika_text(c, at + "fn ".len(), e)
+        if name != "" && sig.trim_end().ends_with(">") && (sig.contains("-> Option<") || sig.contains("-> Option <")) {
+            names.push(f"{name}(")
+        }
+    }
+    return names
+}
+
+/// For R122: the names a `let` binds to a value that surely is an option
+/// (R96's test), where no other `let` of the file binds the same name to
+/// something else.
+fn rs2nika_opt_lets(lines: ref Vec[String], opts: ref Vec[String]) -> Vec[String] {
+    let mut sure: Vec[String] = []
+    let mut other: Vec[String] = []
+    for line in lines {
+        let st: String = line.trim().clone()
+        let mut rest: String = (st.strip_prefix("let ") ?? continue).clone()
+        if rest.starts_with("mut ") {
+            rest = (rest.strip_prefix("mut ") ?? "").clone()
+        }
+        let eq = rest.find(" = ") ?? continue
+        let name: String = rest[0..<eq].trim().clone()
+        let mut value: String = rest[eq + " = ".len()..<rest.len()].trim().clone()
+        if value.ends_with(";") {
+            value = value[0..<value.len() - ";".len()].trim().clone()
+        }
+        let mut word = name != ""
+        for ch in name.chars() {
+            if !rs2nika_word(ch) {
+                word = false
+            }
+        }
+        if !word {
+            continue
+        }
+        let mut borrowed = false
+        for tail in [".as_ref()", ".as_deref()"] {
+            if value.ends_with(tail) {
+                borrowed = true
+            }
+        }
+        if rs2nika_surely_option(value) || borrowed || rs2nika_named_option(value, opts) {
+            sure.push(name)
+        } else {
+            other.push(name)
+        }
+    }
+    let mut out: Vec[String] = []
+    for n in sure {
+        if !other.contains(n) && !out.contains(n) {
+            out.push(n.clone())
+        }
+    }
+    return out
+}
+
+/// For R122: whether a receiver is a name of `opts`, or a path of fields
+/// ending in one (no call, no index on the way).
+fn rs2nika_named_option(recv: ref String, opts: ref Vec[String]) -> bool {
+    let mut r: String = recv.clone()
+    while r.starts_with("*") || r.starts_with("&") {
+        r = (r.strip_prefix("*") ?? r.strip_prefix("&") ?? "").clone()
+    }
+    // a call of a function of the file that hands back an option
+    if r.ends_with(")") {
+        let rc: Vec[scalar] = r.chars().collect()
+        let mut depth = 0
+        let mut at = rc.len() - 1
+        while at >= 0 {
+            if rc[at] == ')' {
+                depth = depth + 1
+            } else if rc[at] == '(' {
+                depth = depth - 1
+                if depth == 0 {
+                    break
+                }
+            }
+            at = at - 1
+        }
+        let mut b = at
+        while b > 0 && rs2nika_word(rc[b - 1]) {
+            b = b - 1
+        }
+        let callee: String = rs2nika_text(rc, b, at)
+        // `m::f(` is another module's `f`
+        let other = b > 0 && rc[b - 1] == ':'
+        return at > 0 && callee != "" && !other && opts.contains(f"{callee}(")
+    }
+    for ch in r.chars() {
+        if !(rs2nika_word(ch) || ch == '.') {
+            return false
+        }
+    }
+    let c: Vec[scalar] = r.chars().collect()
+    let mut b = c.len()
+    while b > 0 && rs2nika_word(c[b - 1]) {
+        b = b - 1
+    }
+    let last: String = rs2nika_text(c, b, c.len())
+    return last != "" && opts.contains(last)
+}
+
 /// For R96: whether a receiver surely is an `Option`, by the call it ends in.
 fn rs2nika_surely_option(recv: ref String) -> bool {
     if recv.starts_with("(match ") && recv.ends_with("})") {
@@ -2186,7 +2368,7 @@ fn rs2nika_surely_option(recv: ref String) -> bool {
         at = at - 1
     }
     let head: String = rs2nika_text(c, 0, at)
-    for m in [".get", ".find", ".nth", ".split_once", ".rsplit_once", ".strip_prefix", ".strip_suffix", ".find_map", ".position", ".checked_sub", ".checked_add", ".get_mut", ".remove", ".and_then", ".filter", ".or_else", ".rfind", ".max_by_key", ".min_by_key"] {
+    for m in [".get", ".find", ".nth", ".split_once", ".rsplit_once", ".strip_prefix", ".strip_suffix", ".find_map", ".position", ".checked_sub", ".checked_add", ".get_mut", ".remove", ".and_then", ".filter", ".or_else", ".rfind", ".max_by_key", ".min_by_key", ".rposition"] {
         if head.ends_with(m) {
             return true
         }
@@ -2217,7 +2399,7 @@ fn rs2nika_opt_comb_hit(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     if general != out {
         rs2nika_hit(ctx, "R63")
     }
-    let matched: String = rs2nika_comb_match(general)
+    let matched: String = rs2nika_comb_match(general, ctx.opt_names)
     if matched != general {
         rs2nika_hit(ctx, "R96")
     }
@@ -3129,8 +3311,8 @@ fn rs2nika_turbofish(mut ctx: Rs2nikaCtx, given: ref String) -> String {
 }
 
 /// The `TODO(rs2nika)` markers a Rust line asks for.
-fn rs2nika_todos(line: ref String) -> Vec[String] {
-    let comb: String = rs2nika_comb_match(rs2nika_some_and(rs2nika_opt_comb(line)))
+fn rs2nika_todos(line: ref String, opts: ref Vec[String]) -> Vec[String] {
+    let comb: String = rs2nika_comb_match(rs2nika_some_and(rs2nika_opt_comb(line)), opts)
     let mut todo: Vec[String] = []
     let st: String = line.trim().clone()
     if line.contains(" && let ") || ((st.starts_with("if let ") || st.starts_with("} else if let ")) && st.ends_with("&&")) || st.starts_with("&& let ") {
@@ -3524,6 +3706,12 @@ fn rs2nika_some_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Stri
         } else if !(none.starts_with("return") || none.starts_with("continue") || none.starts_with("break")) {
             let tail = pre.trim() == "" && j + 1 < out.len() && out[j + 1].trim() == "}" && rs2nika_indent(out[j + 1]).len() < ind.len()
             if pre.trim() != "return" && !tail {
+                let arms = rs2nika_some_arms_lines(ctx, out, starts, pats, j)
+                if arms.len() > 0 {
+                    out = arms
+                    i = i + 1
+                    continue
+                }
                 new.push(f"{ind}// TODO(rs2nika): the `None` arm is a value: `?? return` fits once this `match` is a function of its own (pattern check_claim_held)")
             }
             none = f"return {none}"
@@ -3579,6 +3767,92 @@ fn rs2nika_some_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Stri
         i = i + 1
     }
     return out
+}
+
+/// R120: a `match` on an option whose `None` arm is a value, arm by arm in
+/// place (ADR-352 D1: beside a `null` arm the other arms match the `T`):
+/// `Some(P) =>` -> `P =>`, `None =>` -> `null =>`, `_ =>` -> `null =>`, and
+/// `else =>` with the same one-line body after it where a `Some` arm can fail
+/// (a guard, a pattern that tests). The lines with the arms rewritten, or
+/// none (a `Some(P) | None` arm, a `_` arm of several lines that would be
+/// needed twice).
+fn rs2nika_some_arms_lines(mut ctx: Rs2nikaCtx, out: ref Vec[String], starts: ref Vec[i64], pats: ref Vec[String], j: i64) -> Vec[String] {
+    let mut has_null = false
+    let mut refutable = false
+    let mut n = 0
+    while n < pats.len() {
+        let p: String = pats[n].clone()
+        if p.ends_with("|null") {
+            return []
+        }
+        if p == "null" {
+            has_null = true
+        } else if p != "_" && !rs2nika_irrefutable(p) {
+            refutable = true
+        }
+        n = n + 1
+    }
+    let mut rebuilt: Vec[String] = []
+    let mut r = 0
+    let mut a = 0
+    while r < out.len() {
+        if a < starts.len() && r == starts[a] {
+            let line: String = out[r].clone()
+            let arm = rs2nika_indent(line)
+            let t: String = line.trim().clone()
+            let arrow = t.find("=>") ?? return []
+            let rest: String = t[arrow..<t.len()].clone()
+            let p: String = pats[a].clone()
+            let mut end = j
+            if a + 1 < starts.len() {
+                end = starts[a + 1]
+            }
+            a = a + 1
+            if p == "_" && has_null {
+                rebuilt.push(f"{arm}else {rest}")
+            } else if p == "_" {
+                rebuilt.push(f"{arm}null {rest}")
+                if refutable {
+                    if end - r != 1 {
+                        return []
+                    }
+                    rebuilt.push(f"{arm}else {rest}")
+                }
+            } else {
+                rebuilt.push(f"{arm}{p} {rest}")
+            }
+        } else {
+            rebuilt.push(out[r].clone())
+        }
+        r = r + 1
+    }
+    rs2nika_hit(ctx, "R120")
+    return rebuilt
+}
+
+/// For R120: whether a pattern always matches (names, `_`, tuples of them).
+fn rs2nika_irrefutable(p: ref String) -> bool {
+    if p.contains(" if ") || p.contains("::") || p.contains("..") {
+        return false
+    }
+    let mut word: String = ""
+    for ch in f"{p} ".chars() {
+        if rs2nika_word(ch) {
+            word.push(ch)
+            continue
+        }
+        if word != "" {
+            let first = word.chars().next() ?? '_'
+            if !(first == '_' || first.is_lowercase()) || word == "true" || word == "false" {
+                return false
+            }
+            word = ""
+        }
+        if !(ch == '(' || ch == ')' || ch == ',' || ch == ' ') {
+            return false
+        }
+    }
+    return true
 }
 
 fn rs2nika_arm_body(mut new: Vec[String], out: ref Vec[String], k: i64, end: i64, first: ref String, arm: ref String) {
@@ -5122,6 +5396,10 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     if chain.len() > 0 {
         return chain
     }
+    let chains = rs2nika_let_chains(ctx, line)
+    if chains.len() > 0 {
+        return chains
+    }
     let at = st.find("if let ") ?? return []
     if !st.ends_with(" {") || st.contains(" && let ") || (at > 0 && !st[..<at].ends_with(" ")) {
         return []
@@ -5284,7 +5562,7 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
     } else if profile == "emit" {
         world = "EmitWorld"
     }
-    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [] }
+    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: rs2nika_opt_names(src) }
     if repo != "" {
         rs2nika_load(ctx, repo)
     }
@@ -5314,6 +5592,9 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
     let first = rs2nika_join_chains(ctx, hoisted)
     let split = rs2nika_join_split(ctx, first)
     let chained = rs2nika_join_chains(ctx, split)
+    for name in rs2nika_opt_lets(chained, ctx.opt_names) {
+        ctx.opt_names.push(name.clone())
+    }
     let joined0 = rs2nika_option_matches(ctx, chained)
     let joined1 = rs2nika_some_matches(ctx, joined0)
     let joined = rs2nika_field_tests(ctx, joined1)
@@ -5401,7 +5682,7 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
                 for t in ctx.todo_extra.clone() {
                     out.push(f"{ind}// TODO(rs2nika): {t}")
                 }
-                for t in rs2nika_todos(line) {
+                for t in rs2nika_todos(line, ctx.opt_names) {
                     out.push(f"{ind}// TODO(rs2nika): {t}")
                 }
                 if line.trim_start().starts_with("None if ") || line.trim_start().starts_with("None =>") {
@@ -6072,6 +6353,148 @@ fn rs2nika_let_chain(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     return [f"{ind}if {pa} {{", f"{ind}    let {name} = {v}", f"{ind}    if {name} != null{g} {{"]
 }
 
+/// R123: the let-chains R97 leaves, `if [a &&] let Some(P) = e && .. {`
+/// with several `let`s, or one first, or a tuple `P`: each `let` over a plain
+/// name is `e != null` in the test (and `let P = e` in the block); over
+/// anything else the test so far opens an `if`, then `let P = e`, and `P !=
+/// null` starts the next test; a tuple `P` is taken out under its own `if`.
+/// The block closes once for each `if`. Only `Some(P)` patterns, `P` a name
+/// or a tuple of names.
+fn rs2nika_let_chains(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let st: String = line.trim().clone()
+    if !st.starts_with("if ") || !st.ends_with(" {") || !st.contains("let Some(") {
+        return []
+    }
+    let cond: String = st["if ".len()..<st.len() - " {".len()].clone()
+    // the parts between `&&`s at depth 0
+    let cc: Vec[scalar] = cond.chars().collect()
+    let mut parts: Vec[String] = []
+    let mut depth = 0
+    let mut from = 0
+    let mut k = 0
+    while k < cc.len() {
+        if cc[k] == '(' || cc[k] == '[' || cc[k] == '{' {
+            depth = depth + 1
+        } else if cc[k] == ')' || cc[k] == ']' || cc[k] == '}' {
+            depth = depth - 1
+        } else if cc[k] == '|' {
+            // a closure's own `&&` is not the chain's
+            return []
+        }
+        if depth == 0 && k + 4 <= cc.len() && rs2nika_text(cc, k, k + 4) == " && " {
+            parts.push(rs2nika_text(cc, from, k).trim().clone())
+            from = k + 4
+            k = k + 4
+            continue
+        }
+        k = k + 1
+    }
+    parts.push(rs2nika_text(cc, from, cc.len()).trim().clone())
+    if parts.len() < 2 {
+        return []
+    }
+    // every `let` is `let Some(P) = e`, `P` names; one tuple at most
+    let mut tuples = 0
+    for part in parts {
+        if !part.starts_with("let ") {
+            continue
+        }
+        let rest: String = (part.strip_prefix("let Some(") ?? return []).clone()
+        let close = rest.find(") = ") ?? return []
+        let pat: String = rest[0..<close].replace("&", "").replace("ref ", "").trim().clone()
+        if rest.contains(" let ") || !rs2nika_irrefutable(pat) || pat == "" {
+            return []
+        }
+        if !(rs2nika_is_path(pat) && !pat.contains(":")) {
+            tuples = tuples + 1
+        }
+    }
+    // one `let` with a tuple, first: R48's `match` with a guard takes it
+    let mut lets = 0
+    for part in parts {
+        if part.starts_with("let ") {
+            lets = lets + 1
+        }
+    }
+    if tuples > 1 || (tuples == 1 && lets == 1 && parts[0].starts_with("let ")) {
+        return []
+    }
+    let mut out: Vec[String] = []
+    let mut conds: Vec[String] = []
+    let mut post: Vec[String] = []
+    let mut from_names: Vec[String] = []
+    let mut to_names: Vec[String] = []
+    let mut level = 0
+    let step = "    "
+    for given in parts {
+        let mut part: String = given.clone()
+        let mut n = 0
+        while n < from_names.len() {
+            part = rs2nika_replace_word(part, from_names[n], to_names[n])
+            n = n + 1
+        }
+        let here = f"{ind}{step.repeat(level)}"
+        if !part.starts_with("let ") {
+            conds.push(rs2nika_expr(ctx, part))
+            continue
+        }
+        let rest: String = (part.strip_prefix("let Some(") ?? "").clone()
+        let close = rest.find(") = ") ?? 0
+        let pat: String = rest[0..<close].replace("&", "").replace("ref ", "").trim().clone()
+        let mut value: String = rest[close + ") = ".len()..<rest.len()].trim().clone()
+        while value.starts_with("&") {
+            value = (value.strip_prefix("&") ?? "").trim_start().clone()
+        }
+        let v = rs2nika_expr(ctx, value)
+        let plain = rs2nika_is_path(value) && !value.contains(":")
+        let named = rs2nika_is_path(pat) && !pat.contains(":")
+        if named && plain && !value.contains("(") {
+            conds.push(f"{v} != null")
+            if pat != value {
+                from_names.push(pat.clone())
+                to_names.push(value.clone())
+                post.push(f"let {pat} = {v}")
+            }
+            continue
+        }
+        if conds.len() > 0 {
+            let joined = rs2nika_join(conds, " && ")
+            out.push(f"{here}if {joined} {{")
+            level = level + 1
+            conds = []
+        }
+        let inner = f"{ind}{step.repeat(level)}"
+        if named {
+            out.push(f"{inner}let {pat} = {v}")
+            conds.push(f"{pat} != null")
+            continue
+        }
+        out.push(f"{inner}let pair = {v}")
+        out.push(f"{inner}if pair != null {{")
+        level = level + 1
+        out.push(f"{inner}    let {pat} = pair")
+    }
+    if conds.len() > 0 {
+        let joined = rs2nika_join(conds, " && ")
+        out.push(f"{ind}{step.repeat(level)}if {joined} {{")
+        level = level + 1
+    }
+    for p in post {
+        out.push(f"{ind}{step.repeat(level)}{p}")
+    }
+    rs2nika_hit(ctx, "R123")
+    ctx.stack_ind.push(ind.clone())
+    // `chain` closes twice (R97's), each `+` once more
+    if level == 1 {
+        ctx.stack_kind.push("if")
+    } else {
+        let more = "+"
+        ctx.stack_kind.push(f"chain{more.repeat(level - 2)}")
+    }
+    return out
+}
+
 /// R24: `if let P = e {` (not `Some(x)`) -> `match e {` + `P => {`; the
 /// closing lines it becomes when `line` closes one, or none.
 fn rs2nika_close_iflet(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
@@ -6130,6 +6553,26 @@ fn rs2nika_close_iflet(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
             return [f"{ind}    }}", f"{ind}    // TODO(rs2nika): this `else` also runs in Rust where the `let` did not match: repeat it after the inner `if`", f"{ind}}}{rest}"]
         }
         return [f"{ind}    }}", f"{ind}}}{tail}"]
+    }
+    // R123's nested `if`s: each inner one closes too
+    if kind.starts_with("chain+") {
+        let levels = kind.chars().count() - "chain".len() + 2
+        ctx.stack_ind.pop()
+        ctx.stack_kind.pop()
+        let mut out: Vec[String] = []
+        let mut k = levels - 1
+        while k > 0 {
+            let step = "    "
+            out.push(f"{ind}{step.repeat(k)}}}")
+            k = k - 1
+        }
+        if is_else {
+            out.push(f"{ind}// TODO(rs2nika): this `else` also runs in Rust where a `let` did not match: repeat it after the inner `if`s")
+            out.push(f"{ind}}}{rest}")
+            return out
+        }
+        out.push(f"{ind}}}{tail}")
+        return out
     }
     return []
 }
