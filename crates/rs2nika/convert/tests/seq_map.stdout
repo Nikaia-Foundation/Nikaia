@@ -1,0 +1,8 @@
+fn range_map_probe(n: i64, xs: ref Vec[i64]) -> Vec[i64] sync {
+    return (0..<n).map(fn(i) { xs[i] + 1 }).collect()
+}
+
+fn lines_map_probe(text: String) -> Vec[i64] sync {
+    return text.lines().filter(fn(l) { !l.is_empty() }).map(fn(l) { l.len() }).collect()
+}
+

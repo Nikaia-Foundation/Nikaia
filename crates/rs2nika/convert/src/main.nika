@@ -2365,9 +2365,30 @@ fn rs2nika_literals(mut ctx: Rs2nikaCtx, given: String) -> String {
     return out
 }
 
+/// Whether `text` has a `.map(|` and each one maps a sequence (R107's test),
+/// not an `Option`.
+fn rs2nika_seq_maps(text: String) -> bool {
+    let c: Vec[scalar] = text.chars().collect()
+    let mut from = 0
+    let mut any = false
+    while true {
+        let at = rs2nika_find_from(c, ".map(|", from)
+        if at < 0 {
+            break
+        }
+        if !rs2nika_seq_receiver(c, at) {
+            return false
+        }
+        any = true
+        from = at + 1
+    }
+    return any
+}
+
 /// R107: whether the receiver ending at `at` is a sequence, not a text: it
 /// ends in a call to a method that starts or continues an iterator
-/// (`xs.iter()`, `.values()`, `.lines()`, `.rev()`, `.filter(..)`).
+/// (`xs.iter()`, `.values()`, `.lines()`, `.rev()`, `.filter(..)`), or it is
+/// a range in brackets (`(0..n)`).
 fn rs2nika_seq_receiver(c: ref Vec[scalar], at: i64) -> bool {
     if at == 0 || c[at - 1] != ')' {
         return false
@@ -2385,8 +2406,12 @@ fn rs2nika_seq_receiver(c: ref Vec[scalar], at: i64) -> bool {
         }
         k = k - 1
     }
-    if k <= 0 {
+    if k < 0 {
         return false
+    }
+    if k == 0 || !rs2nika_word(c[k - 1]) {
+        // a range in brackets, `(0..n)`
+        return rs2nika_text(c, k + 1, at - 1).contains("..")
     }
     let mut s = k
     while s > 0 && rs2nika_word(c[s - 1]) {
@@ -4918,7 +4943,7 @@ fn rs2nika_todos(line: String, opts: ref Vec[String]) -> Vec[String] {
         todo.push(needle)
     }
     let map_end = line.trim_end().ends_with(")") && line.contains(".map(|")
-    if comb.contains(".and_then(") || (comb.contains(".map(|") && (line.contains("?") || line.contains("unwrap_or") || map_end) && !line.contains("iter()")) {
+    if comb.contains(".and_then(") || (comb.contains(".map(|") && (line.contains("?") || line.contains("unwrap_or") || map_end) && !line.contains("iter()") && !rs2nika_seq_maps(comb)) {
         todo.push("`Option::map`/`and_then`: `let x = e ?? <none>` then the body")
     }
     if line.contains(".enumerate()") {
