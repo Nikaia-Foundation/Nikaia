@@ -157,6 +157,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R88  `-free` profiles: `host: ref H` and the generic `[H: CheckHost]` only on a method whose text names `host`, calls `self.s.m(..)`, or calls (`self.m(`) one that does; its calls pass `host` only to those",
         "R85  `-free` profiles: a function with no `self` is not marked `sync` (it threads no state, it does not pause)",
         "R86  `let v = xs.iter().find(|x| c)` / `.find_map(|x| e)` (also after `return`, or as the tail) -> a `for` loop with `break` / `return`, a closure block's `return None` -> `continue`",
+        "R162 a let-chain with no `else` whose `let` is not `Some(..)`: `if a && let P = e && g && let Q = f {` -> `if a {`, `if let P = e && g {` (R24), `if let Q = f {` nested, closed once each",
         "R82  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
         "R93  `for (i, x) in xs.iter().enumerate() {` -> `for i in 0..<xs.len() {` and `let x = xs[i]`; `for x in xs.iter().skip(n) {` -> `for at in n..<xs.len() {` the same (`Seq` has no `enumerate`/`skip`)",
         "R92  `m.entry(k).or_insert(d);` / `.or_insert_with(|| d)` -> `if m[k] == null { m[k.clone()] = d }`; `m.entry(k).or_default().push(x)` (any method; `or_default` of `push` is `[]`, of `insert(x)` a set, of `insert(k, v)` a map) -> `let mut slot = m[k]?.clone() ?? d`, `slot.push(x)`, `m[k.clone()] = slot`; `*m.entry(k).or_insert(d) += n` -> `m[k.clone()] = (m[k] ?? d) + n` (`or_default`: `0`); the map keeps its own key",
@@ -7434,7 +7435,8 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     for name in rs2nika_opt_lets(chained, ctx.opt_names) {
         ctx.opt_names.push(name.clone())
     }
-    let joined0 = rs2nika_option_matches(ctx, chained)
+    let nested = rs2nika_nest_chains(ctx, chained)
+    let joined0 = rs2nika_option_matches(ctx, nested)
     let joined1 = rs2nika_some_matches(ctx, joined0)
     let joined = rs2nika_field_tests(ctx, joined1)
     let mut out: Vec[String] = []
@@ -8211,6 +8213,165 @@ fn rs2nika_let_chain(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
     return [f"{ind}if {pa} {{", f"{ind}    let {name} = {v}", f"{ind}    if {name} != null{g} {{"]
 }
 
+/// R162: the parts of a let-chain's condition, between the `&&`s outside
+/// brackets and strings; none where a `|` stands outside them (`||`, a
+/// closure whose `&&` would be read as the chain's).
+fn rs2nika_chain_parts(cond: String) -> Vec[String] {
+    let cc: Vec[scalar] = cond.chars().collect()
+    let mut parts: Vec[String] = []
+    let mut depth = 0
+    let mut from = 0
+    let mut quoted = false
+    let mut k = 0
+    while k < cc.len() {
+        let ch = cc[k]
+        if quoted {
+            if ch == '\\' {
+                k = k + 1
+            } else if ch == '"' {
+                quoted = false
+            }
+        } else if ch == '"' {
+            quoted = true
+        } else if ch == '(' || ch == '[' || ch == '{' {
+            depth = depth + 1
+        } else if ch == ')' || ch == ']' || ch == '}' {
+            depth = depth - 1
+        } else if ch == '|' && depth == 0 {
+            return []
+        } else if depth == 0 && k + 4 <= cc.len() && rs2nika_text(cc, k, k + 4) == " && " {
+            parts.push(rs2nika_text(cc, from, k).trim().clone())
+            from = k + 4
+            k = k + 4
+            continue
+        }
+        k = k + 1
+    }
+    parts.push(rs2nika_text(cc, from, cc.len()).trim().clone())
+    return parts
+}
+
+/// R162: `if [a &&] let P = e [&& g] && rest {` with no `else`, `P` not
+/// `Some(..)` (R97 and R123 take those), `rest` starting with a `let` ->
+/// `if a {`, `if let P = e [&& g] {` (R24) and `if rest {` nested, the block
+/// shifted in and closed once for each; a `rest` that is a chain again is
+/// taken on the next line. `if let P = e && g {` alone is R24's.
+fn rs2nika_nest_chains(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = given.clone()
+    let mut i = 0
+    while i < out.len() {
+        let st: String = out[i].trim().clone()
+        if !st.starts_with("if ") || !st.ends_with(" {") || !(st.contains(" let ") || st.starts_with("if let ")) {
+            i = i + 1
+            continue
+        }
+        // a `let`'s value lent (`= &mut x`, `= &x`): Nikaia lends implicitly
+        let mut parts: Vec[String] = []
+        for part in rs2nika_chain_parts(st["if ".len()..<st.len() - " {".len()].clone()) {
+            if part.starts_with("let ") {
+                parts.push(part.replace(" = &mut ", " = ").replace(" = &", " = "))
+            } else {
+                parts.push(part.clone())
+            }
+        }
+        let mut first_let = 0 - 1
+        let mut p = 0
+        while p < parts.len() && first_let < 0 {
+            if parts[p].starts_with("let ") && !parts[p].starts_with("let Some(") && parts[p].contains(" = ") {
+                first_let = p
+            }
+            p = p + 1
+        }
+        // the next `let` after it: the parts between are its guard
+        let mut next_let = parts.len()
+        if first_let >= 0 {
+            p = first_let + 1
+            while p < parts.len() && next_let == parts.len() {
+                if parts[p].starts_with("let ") {
+                    next_let = p
+                }
+                p = p + 1
+            }
+        }
+        // one `let`, first, and guards: R24's `match` with a guard
+        if parts.len() < 2 || first_let < 0 || (first_let == 0 && next_let == parts.len()) {
+            i = i + 1
+            continue
+        }
+        let ind = rs2nika_indent(out[i])
+        let closing = f"{ind}}}"
+        let mut j = i + 1
+        while j < out.len() && !(rs2nika_starts(out[j], closing) && rs2nika_indent(out[j]) == ind) {
+            j = j + 1
+        }
+        if j >= out.len() || out[j].trim() != "}" {
+            i = i + 1
+            continue
+        }
+        let step = "    "
+        let mut heads: Vec[String] = []
+        if first_let > 0 {
+            let mut before: Vec[String] = []
+            let mut b = 0
+            while b < first_let {
+                before.push(parts[b].clone())
+                b = b + 1
+            }
+            heads.push(rs2nika_join(before, " && "))
+        }
+        let mut guarded: Vec[String] = []
+        let mut g = first_let
+        while g < next_let {
+            guarded.push(parts[g].clone())
+            g = g + 1
+        }
+        heads.push(rs2nika_join(guarded, " && "))
+        if next_let < parts.len() {
+            let mut after: Vec[String] = []
+            let mut a = next_let
+            while a < parts.len() {
+                after.push(parts[a].clone())
+                a = a + 1
+            }
+            heads.push(rs2nika_join(after, " && "))
+        }
+        let mut rebuilt: Vec[String] = []
+        let mut r = 0
+        while r < i {
+            rebuilt.push(out[r].clone())
+            r = r + 1
+        }
+        let mut level = 0
+        for h in heads {
+            rebuilt.push(f"{ind}{step.repeat(level)}if {h} {{")
+            level = level + 1
+        }
+        let shift = step.repeat(level - 1)
+        r = i + 1
+        while r < j {
+            if out[r].trim() == "" {
+                rebuilt.push("")
+            } else {
+                rebuilt.push(f"{shift}{out[r]}")
+            }
+            r = r + 1
+        }
+        while level > 0 {
+            level = level - 1
+            rebuilt.push(f"{ind}{step.repeat(level)}}}")
+        }
+        r = j + 1
+        while r < out.len() {
+            rebuilt.push(out[r].clone())
+            r = r + 1
+        }
+        out = rebuilt
+        rs2nika_hit(ctx, "R162")
+        i = i + 1
+    }
+    return out
+}
+
 /// R123: the let-chains R97 leaves, `if [a &&] let Some(P) = e && .. {`
 /// with several `let`s, or one first, or a tuple `P`: each `let` over a plain
 /// name is `e != null` in the test (and `let P = e` in the block); over
@@ -8236,8 +8397,9 @@ fn rs2nika_let_chains(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
             depth = depth + 1
         } else if cc[k] == ')' || cc[k] == ']' || cc[k] == '}' {
             depth = depth - 1
-        } else if cc[k] == '|' {
-            // a closure's own `&&` is not the chain's
+        } else if cc[k] == '|' && depth == 0 {
+            // a closure's own `&&` is not the chain's, nor is `||`'s; one
+            // in brackets (`.any(|b| ..)`) keeps its `&&`s inside them
             return []
         }
         if depth == 0 && k + 4 <= cc.len() && rs2nika_text(cc, k, k + 4) == " && " {

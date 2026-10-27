@@ -1,0 +1,48 @@
+fn chain_probe(items: ref Vec[Item], key: String, bad: ref Vec[String]) -> i64 sync {
+    let mut n = 0
+    for item in items {
+        match item.shape {
+            Shape::Circle { r, .. } => {
+                if item.extra != null {
+                    n += r + item.extra
+                }
+            },
+            else => {},
+        }
+        if item.ok {
+            match item.shape {
+                Shape::Square(side) if side > 2 => {
+                    n += side
+                },
+                else => {},
+            }
+        }
+        if item.ok {
+            let pair = key.split_once("::")
+            if pair != null {
+                let (target, _) = pair
+                if !bad.iter().any(fn(b) { b == target }) {
+            n += target.len()
+                }
+            }
+        }
+        match item.shape {
+            Shape::Square(s) if s > 0 => {
+                if item.extra != null {
+                    n += s * item.extra
+                }
+            },
+            else => {},
+        }
+        match item.shape {
+            Shape::Square(s) if s > 1 => {
+                n += 1
+            },
+            else => {
+                n -= 1
+            },
+        }
+    }
+    return n
+}
+
