@@ -1,0 +1,29 @@
+// A text `+` of a field read through a lent parameter (#897): the field is not
+// the function's to move, so it is lent to the `+`, at any depth, in an
+// argument, a `let` and a `return`.
+
+struct P { name: String }
+
+struct Q { inner: P }
+
+fn look(p: ref P) -> i64 { return p.name.len() }
+
+fn f(t: ref P) -> i64 { return look(P { name: t.name + "!" }) }
+
+fn let_bound(t: ref P) -> i64 {
+    let joined = t.name + "?"
+    return joined.len() + t.name.len()
+}
+
+fn returned(t: ref P) -> String { return "<" + t.name + ">" }
+
+fn deep(q: ref Q) -> String { return q.inner.name + q.inner.name }
+
+fn main() {
+    let p = P { name: "ab" }
+    println(f(p))
+    println(let_bound(p))
+    println(returned(p))
+    println(deep(Q { inner: P { name: "xy" } }))
+    println(p.name)
+}

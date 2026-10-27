@@ -208,11 +208,13 @@ impl EmitState {
         }
     }
 
-    /// One side of a text `+`: a side read out of a list is lent as `&str`, so
-    /// that it is not moved out of the list.
+    /// One side of a text `+`: a side read out of a list, or a field at any
+    /// depth (#897: through a lent parameter it is not the function's to
+    /// move), is lent as `&str`, so that it is not moved out of its place.
     pub fn emit_core_concatenated[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, side: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let indexed = match side {
             Expr::Index { .. } => true,
+            Expr::Field { .. } => true,
             else => false,
         }
         if indexed {

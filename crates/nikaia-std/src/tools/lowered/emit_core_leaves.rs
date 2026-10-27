@@ -139,7 +139,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_concatenated<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, side: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let indexed = matches!(side, Expr::Index { .. });
+        let indexed = matches!(side, Expr::Index { .. } | Expr::Field { .. });
         if indexed {
             out.push("::core::convert::AsRef::<str>::as_ref(&");
             self.emit_expr(world, walk, out, host, side, depth, flow, scope)?;
