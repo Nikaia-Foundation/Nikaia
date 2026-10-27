@@ -221,6 +221,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R208 a `{x};` inside a string literal keeps its `;` (only a block's `};` loses it)",
         "R209 a struct Rust derives `Default` for gets `pub fn empty() -> X` (every field its type's empty value: `\"\"`, `[]`, `0`, `false`, `null`, `collections::BTreeMap()`, `Y::empty()`)",
         "R210 `X::new(..)` -> `X(..)` for a type of the file whose `impl` declares `fn new` (NK1149)",
+        "R211 a signature over several lines (`fn f(` then `&mut self,`) is a method",
+        "R212 check profiles: `self.parsed` -> `world.here`, `self.parsed.x` -> `world.here.x`",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -3821,6 +3823,11 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: String) -> String {
             rs2nika_hit(ctx, "R31")
         }
         s = s2.clone()
+        // R212: a `CheckWorld` holds the file as `here` (a `ParsedView`)
+        if ctx.profile.starts_with("check") {
+            s2 = s2.replace("self.parsed.program.items", "world.here.items").replace("self.parsed.", "world.here.")
+            s2 = rs2nika_replace_word(s2, "self.parsed", "world.here")
+        }
         s2 = s2.replace("self.parsed.program.items", "world.items").replace("self.s.", "self.§")
         s2 = rs2nika_replace_word(s2, "self.world", "world")
         s2 = rs2nika_replace_word(s2, "self.s", "self")
@@ -10201,14 +10208,26 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     let viewed0 = rs2nika_view(ctx, narrowed)
     let viewed = rs2nika_unwrap_impls(ctx, viewed0)
     let mut lines: Vec[String] = []
+    // R211: a signature written over several lines (`fn f(` then
+    // `&mut self,`) is a method when its first parameter line takes `self`
+    let mut pending: String = ""
     for given in viewed.split("\n") {
         let raw = rs2nika_const_fn(ctx, given)
         lines.push(rs2nika_reserved(ctx, raw))
+        if pending != "" {
+            if rs2nika_replace_word(raw, "self", "\u{3}") != raw {
+                ctx.methods.push(pending.clone())
+                rs2nika_hit(ctx, "R211")
+            }
+            pending = ""
+        }
         rs2nika_impl_track(ctx, raw)
         let name = rs2nika_fn_name(raw)
         if name != "" && !ctx.impl_other {
             if rs2nika_takes_self(raw) {
                 ctx.methods.push(name.clone())
+            } else if raw.trim_end().ends_with("(") {
+                pending = name.clone()
             }
             if prefix != "" && !rs2nika_starts(name, prefix) {
                 ctx.renamed_from.push(name.clone())

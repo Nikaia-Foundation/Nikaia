@@ -129,3 +129,12 @@ fn more_fresh() -> Moved {
     return Moved()
 }
 
+fn more_spelled(mut state: CheckState, world: ref CheckWorld, value: ref Expr) -> String sync {
+    let here = world.here
+    return state.written(here, value)
+}
+
+fn more_twice(mut state: CheckState, world: ref CheckWorld, value: ref Expr) -> String sync {
+    return more_spelled(state, world, value)
+}
+

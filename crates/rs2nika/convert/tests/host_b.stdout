@@ -5,7 +5,7 @@
         let here = if self.here != null {
             self.here
         } else {
-                files.insert(0, world)
+                files.insert(0, world.here)
                 0
         }
         return (files, here)

@@ -17,7 +17,7 @@ use std::text
     fn assets_read_in(ref self, world: ref CheckWorld, value: ref Expr, read: ref collections::BTreeMap[String, String]) -> Expr sync {
         let mut value = value.clone()
         if !read.is_empty() {
-            let parsed = world
+            let parsed = world.here
             // TODO(rs2nika): let-chain (`&& let`): nest `match`es
             // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
             // TODO(rs2nika): slice pattern in a `let`: a `match` with a list pattern (ADR-355)
@@ -47,7 +47,7 @@ use std::text
     }
 
     fn written(ref self, world: ref CheckWorld, value: ref Expr) -> String sync {
-        return super::written_by(world, value)
+        return super::written_by(world.here, value)
     }
 
     fn newly_throws(ref self, world: ref CheckWorld, key: String) -> Vec[String]? sync {

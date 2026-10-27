@@ -116,3 +116,17 @@ impl Moved {
 fn fresh() -> Moved {
     Moved::new()
 }
+
+impl Checker<'_> {
+    fn spelled(
+        &mut self,
+        value: &Expr,
+    ) -> String {
+        let here = self.parsed;
+        self.written(here, value)
+    }
+
+    fn twice(&mut self, value: &Expr) -> String {
+        self.spelled(value)
+    }
+}
