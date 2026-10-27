@@ -1,0 +1,20 @@
+// A value handed over in an arm and not read after it runs (#892); a read in
+// the other arm is not after it, and a text is copied.
+struct P { name: String }
+
+fn main() {
+    let c = true
+    let t = P { name: "a" }
+    let s: P = if c { t } else { P { name: t.name.clone() } }
+    println(s.name)
+    let u = P { name: "x" }
+    let v: P = match c {
+        true => { u },
+        false => P { name: "y" },
+    }
+    println(v.name)
+    let w: String = "w"
+    let x: String = if c { w } else { "z" }
+    println(x)
+    println(w)
+}

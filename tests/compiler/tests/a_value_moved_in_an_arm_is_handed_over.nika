@@ -1,0 +1,50 @@
+// A value handed over in an arm of an `if` or a `match` is gone after it
+// (#892, ADR-293 D29): bound by a `let`, passed to a function that keeps it
+// or stored in a field, each is NK2105, as `let s: P = t` is.
+struct P { name: String }
+struct H { p: P }
+
+fn keep(p: P) -> P {
+    return p
+}
+
+fn by_if(t: P, c: bool) {
+    let s: P = if c { t } else { P { name: "b" } }
+    println(s.name)
+    println(t.name)
+}
+
+fn by_match(t: P, c: bool) {
+    let s: P = match c {
+        true => t,
+        false => P { name: "b" },
+    }
+    println(s.name)
+    println(t.name)
+}
+
+fn proved(p: P?) {
+    let s: P = if p != null { p } else { P { name: "b" } }
+    println(s.name)
+    println(p?.name ?? "none")
+}
+
+fn passed(t: P, c: bool) {
+    let k = keep(if c { t } else { P { name: "b" } })
+    println(k.name)
+    println(t.name)
+}
+
+fn stored(t: P, c: bool) {
+    let h = H { p: if c { t } else { P { name: "b" } } }
+    println(h.p.name)
+    println(t.name)
+}
+
+fn main() {
+    by_if(P { name: "a" }, true)
+    by_match(P { name: "a" }, true)
+    proved(P { name: "a" })
+    passed(P { name: "a" }, true)
+    stored(P { name: "a" }, true)
+}

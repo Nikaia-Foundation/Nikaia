@@ -1,0 +1,46 @@
+error[NK2105]: You're using `t.name`, but `t` was bound to `s` by a `let`.
+   --> tests/a_value_moved_in_an_arm_is_handed_over.nika:14:5
+    |
+ 14 |     println(t.name)
+    |     ^
+    |
+    = note: `t` is a `P`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `t.clone()`.
+error[NK2105]: You're using `t.name`, but `t` was bound to `s` by a `let`.
+   --> tests/a_value_moved_in_an_arm_is_handed_over.nika:23:5
+    |
+ 23 |     println(t.name)
+    |     ^
+    |
+    = note: `t` is a `P`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `t.clone()`.
+error[NK2105]: You're using `p` again, but it was bound to `s` by a `let`.
+   --> tests/a_value_moved_in_an_arm_is_handed_over.nika:29:5
+    |
+ 29 |     println(p?.name ?? "none")
+    |     ^
+    |
+    = note: `p` is a `P`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `p.clone()`.
+error[NK2105]: You're using `t.name`, but `t` was passed to `keep`, which keeps it.
+   --> tests/a_value_moved_in_an_arm_is_handed_over.nika:35:5
+    |
+ 35 |     println(t.name)
+    |     ^
+    |
+    = note: `t` is a `P`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `t.clone()`.
+error[NK2105]: You're using `t.name`, but `t` was stored in `H.p`.
+   --> tests/a_value_moved_in_an_arm_is_handed_over.nika:41:5
+    |
+ 41 |     println(t.name)
+    |     ^
+    |
+    = note: `t` is a `P`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `t.clone()`.
+

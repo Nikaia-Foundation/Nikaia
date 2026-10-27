@@ -387,26 +387,78 @@ impl CheckState {
     /// a field path read here is handed over; `name.to_string()` is `name`
     /// (ADR-282 D8).
     pub fn hands_over(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span) sync {
+        self.hands_over_read_at(world, value, ty, to, span, span.start as i64)
+    }
+
+    /// **Each end of a value that chooses is handed over** (#892, ADR-293
+    /// D29): the tail of either side of an `if` with an `else`, of a block,
+    /// of each arm of a `match`, as `narrowed_reads_given_back` walks them.
+    /// The read is looked up at the statement it was read in (`read_at`);
+    /// the taking stands where the whole value is handed over (`span`), so
+    /// a read in another arm is not after it.
+    fn hands_over_read_at(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span, read_at: i64) sync {
+        // **Text chosen in arms is the choice's own** (ADR-282 D13, #744): a
+        // view where every arm is one, else each arm copied; nothing moves.
+        let a_text = is_text_type(ty) || match ty {
+            Ty::Nullable(inner) => is_text_type(inner),
+            else => false,
+        }
+        if a_text && (is_a_choice(value) || check_arm_leaves_a_block(value)) {
+            return
+        }
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                if else_branch != null {
+                    for block in [then_branch, else_branch ?? return] {
+                        self.hands_over_in(world, block, ty, to, span)
+                    }
+                }
+                return
+            },
+            Expr::Block(block, _) => {
+                self.hands_over_in(world, block, ty, to, span)
+                return
+            },
+            Expr::Match { arms, .. } => {
+                for each in arms {
+                    self.hands_over_read_at(world, each.body, ty, to, span, read_at)
+                }
+                return
+            },
+            else => {},
+        }
         if self.a_text_bytes_kept(world, value) {
             return
         }
         match value {
             Expr::MethodCall { receiver, .. } => {
                 if self.facts.text_as_is.contains(node_key(receiver)) {
-                    self.hands_over(world, receiver, ty, to, span)
+                    self.hands_over_read_at(world, receiver, ty, to, span, read_at)
                     return
                 }
             },
             else => {},
         }
         self.a_narrowed_read_given_up(value)
-        let at = self.flow.read_index.get((node_key(value), span.start as i64)) ?? return
+        let at = self.flow.read_index.get((node_key(value), read_at)) ?? return
         if !a_name_or_a_field(value) {
             return
         }
         let path = self.reads_on_paths[at].path.clone()
         let seq = self.reads_on_paths[at].seq
         self.hands_over_path(world, path, ty, seq, to, span)
+    }
+
+    /// The tail of a block, handed over; its read stands at its statement.
+    fn hands_over_in(ref mut self, world: ref CheckWorld, block: ref Block, ty: ref Ty, to: ref String, span: ref Span) sync {
+        if block.stmts.len() == 0 {
+            return
+        }
+        let read_at = block.stmts[block.stmts.len() - 1].span.start as i64
+        match block.stmts[block.stmts.len() - 1].node {
+            Stmt::Expr(value) => self.hands_over_read_at(world, value, ty, to, span, read_at),
+            else => {},
+        }
     }
 
     /// **A text's own bytes, `s.bytes`, or a name a `let` bound to them**
@@ -579,6 +631,14 @@ impl CheckState {
                 self.expect_kept_asked(world, ty, want, null, keeper, span, "argument", fn(found, wanted) { f"`{key}` expects `{name}` to be `{wanted}` here, but you're passing `{found}`." })
             }
         }
+    }
+}
+
+/// Whether `value` is a block used as a value.
+fn check_arm_leaves_a_block(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Block(_, _) => true,
+        else => false,
     }
 }
 

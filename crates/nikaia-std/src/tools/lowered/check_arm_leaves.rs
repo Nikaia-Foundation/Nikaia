@@ -258,24 +258,57 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn hands_over(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, to: &str, span: &Span) {
+    pub fn hands_over(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, to: &str, span: &Span) { self.hands_over_read_at(world, value, ty, to, span, span.start as i64); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn hands_over_read_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, to: &str, span: &Span, read_at: i64) {
+        let a_text = is_text_type(ty) || match ty {
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); is_text_type(inner) },
+            _ => false,
+        };
+        if a_text && (is_a_choice(value) || check_arm_leaves_a_block(value)) { return; }
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                if else_branch.is_some() { for block in [then_branch, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }] { self.hands_over_in(world, block, ty, to, span); } }
+                return;
+            },
+            Expr::Block(block, _) => {
+                self.hands_over_in(world, block, ty, to, span);
+                return;
+            },
+            Expr::Match { arms, .. } => {
+                for each in arms.iter() { self.hands_over_read_at(world, &each.body, ty, to, span, read_at); }
+                return;
+            },
+            _ => { },
+        }
         if self.a_text_bytes_kept(world, value) { return; }
         match value {
             Expr::MethodCall { receiver, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver);
                 if self.facts.text_as_is.contains(&node_key(receiver)) {
-                    self.hands_over(world, receiver, ty, to, span);
+                    self.hands_over_read_at(world, receiver, ty, to, span, read_at);
                     return;
                 }
             },
             _ => { },
         }
         self.a_narrowed_read_given_up(value);
-        let at = match self.flow.read_index.get(&(node_key(value), span.start as i64)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
+        let at = match self.flow.read_index.get(&(node_key(value), read_at)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
         if !a_name_or_a_field(value) { return; }
         let path = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path.to_owned();
         let seq = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).seq;
         self.hands_over_path(world, path, ty, seq, to, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn hands_over_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, ty: &Ty, to: &str, span: &Span) {
+        if block.stmts.is_empty() { return; }
+        let read_at = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).span.start as i64;
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+            Stmt::Expr(value) => { self.hands_over_read_at(world, value, ty, to, span, read_at); },
+            _ => { },
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -395,6 +428,10 @@ impl CheckState {
         }
     }
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_arm_leaves_a_block(value: &Expr) -> bool { matches!(value, Expr::Block(_, _)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
