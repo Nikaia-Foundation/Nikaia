@@ -1,6 +1,6 @@
 use std::text
 
-fn width(name: ref String?) -> i64 sync {
+fn width(name: String?) -> i64 sync {
     return (name ?? "").len()
 }
 

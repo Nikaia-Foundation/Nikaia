@@ -7,7 +7,7 @@ fn width(text: String, owned: String, n: i64) -> i64 sync {
 fn head(line: String) -> String sync {
     return line.trim()
 }
-fn fallback(name: ref String?) -> i64 sync {
+fn fallback(name: String?) -> i64 sync {
     return (name ?? "").len()
 }
 fn any_of(xs: ref Vec[String], f: fn(ref String) -> bool sync) -> bool sync {

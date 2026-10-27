@@ -166,7 +166,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R111 `xs.iter().enumerate().map(|(i, x)| b)` -> `(0..<xs.len()).map(fn(i) { let x = xs[i]; b })` (`Seq` has no `enumerate`), also `filter_map`, `flat_map`, `any`, `all`; a `filter`/`skip_while`/`take_while` on the pair keeps the index, the next step takes the element",
         "R112 `.flat_map(..)` / `.skip(n)` on a `Seq` chain is a `Seq` method: no TODO",
         "R113 R94's fold also over any `Seq` chain, with a function for the closure (`v = f(v, x)`), with a closure block of statements, after `return` (`folded`, then `return folded`) and as a block's tail (`folded` last)",
-        "R130 `&str` stays `ref String` in a function type's parameter and in `Option<&str>`, where NK1261 does not hold (R4 writes `String` elsewhere)",
+        "R130 `&str` stays `ref String` in a function type's parameter, where NK1261 does not hold (R4 writes `String` elsewhere, `Option<&str>` and `&Option<String>` -> `String?`: `ref String?` is NK1261)",
         "R140 a `Result`'s `.unwrap_or_else(|e| d)` / `.or_else(|e| d)` -> `catch { d }`, `e` read as `let e = error` where `d` names it (Part I 7.1)",
         "R141 an option's `.or_else(|| e)` -> `?? e`; R20 and R140-R143 put the call in parentheses where an operator, `.` or `[` stands beside it: `x.unwrap_or(\"\").len()` -> `(x ?? \"\").len()`",
         "R142 `.ok_or(e)` / `.ok_or_else(|| e)` -> `?? throw e`",
@@ -411,6 +411,10 @@ fn rs2nika_ty(mut ctx: Rs2nikaCtx, given: String) -> String {
         }
         rs2nika_hit(ctx, "R3")
         let rest = rs2nika_ty(ctx, inner)
+        // `&Option<String>`: `ref String?` is NK1261 (R130)
+        if rest == "String?" {
+            return rest
+        }
         return f"ref {rest}"
     }
     if rs2nika_is_int(t) {
@@ -436,7 +440,8 @@ fn rs2nika_ty(mut ctx: Rs2nikaCtx, given: String) -> String {
         }
         if base == "Option" {
             rs2nika_hit(ctx, "R7")
-            let a = rs2nika_view_ty(ctx, args[0].clone())
+            // `Option<&str>` -> `String?`: `ref String?` is NK1261 (Part I 2.2)
+            let a = rs2nika_ty(ctx, args[0].clone())
             return f"{a}?"
         }
         if base == "Box" || base == "Rc" {
@@ -740,8 +745,7 @@ fn rs2nika_fn_param(mut ctx: Rs2nikaCtx, n: String, t: String) -> String {
 
 /// R130: where `ref String` still says what NK1261 does not cover, `&str`
 /// stays `ref String`: a function type's parameter (`fn(String)` takes the
-/// text over) and `Option<&str>` (a `String?` parameter read with `??` or
-/// `match` is counted as kept).
+/// text over). `Option<&str>` is `String?` (NK1261 warns on `ref String?`).
 fn rs2nika_view_ty(mut ctx: Rs2nikaCtx, given: String) -> String {
     let r = rs2nika_ty(ctx, given)
     if r == "String" && given.trim().starts_with("&") {
