@@ -47,3 +47,4 @@
 /home/user/Nikaia/docs/briefs/b869a-path-narrowing.md 6543128 112
 /home/user/Nikaia/docs/briefs/architect-task.md 1263261 26
 /home/user/Nikaia/docs/briefs/b869b-path-rest.md 3453658 62
+/home/user/Nikaia/docs/briefs/architect-task.md 609860 20
