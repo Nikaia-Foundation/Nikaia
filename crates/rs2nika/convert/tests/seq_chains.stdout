@@ -1,0 +1,68 @@
+// ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
+fn chains(units: ref Vec[ref CheckWorld], errors: ref Vec[String], members: ref Vec[Member], parsed: ref CheckWorld, held: ref Vec[ClaimHeld], at: i64) -> u64 sync {
+    for parsed in units {
+        visit(parsed)
+    }
+    for unit in 0..<units.len() {
+        let parsed = units[unit]
+        visit_at(unit, parsed)
+    }
+    for name in errors {
+        visit_name(name)
+    }
+    let mut fatal: Vec[String] = []
+    for e in errors {
+        if e.len() > 3 {
+            fatal.push(e.clone())
+        }
+    }
+    let mut out: Vec[ClaimHeld] = held.iter().filter(fn(h) { h.position == "self" }).map(fn(x) { x.clone() }).collect()
+    let context = Context { lengths: lengths.iter().collect(), sized: sized.iter().collect() }
+    let at_of: collections::BTreeMap[ref Path, i64] = (0..<members.len()).map(fn(at) { let m = members[at]; (m.root.as_path(), at) }).collect()
+    // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
+    let beside: Vec[ref CheckWorld] = (0..<units.len()).filter(fn(other) { other != at }).map(fn(i) { units[i] }).collect()
+    let names: Vec[i64] = (0..<parsed.items.len()).filter_map(fn(i) { let item = parsed.items[i]; if item.public { i } else { null } }).collect()
+    let mut hash = 0u64
+    for b in name.bytes() {
+        hash = (hash ^ u64::from(b)).wrapping_mul(3)
+    }
+    let mut provenance = Provenance::Trusted
+    for x in held.iter().map(fn(r) { r.provenance }) {
+        provenance = Provenance::join(provenance, x)
+    }
+    let mut total = 0
+    for e in errors {
+        let n = e.len()
+        total = total + n
+    }
+    for calls in held.iter().flat_map(fn(c) { c.methods.values() }) {
+        visit_calls(calls)
+    }
+    let declared: collections::BTreeSet[String] = units.iter().flat_map(fn(u) { declares(u) }).collect()
+    let rest: Vec[String] = errors.iter().skip(1).map(fn(x) { x.clone() }).collect()
+    let one = held.get(at)?.clone()
+    // TODO(rs2nika): iterator adapter with no `Seq` method: a `for` loop
+    let argv: Vec[String] = std::env::args().skip(1).collect()
+    let mut folded = 0
+    for x in held.iter().map(fn(h) { h.weight }) {
+        folded = worst_of(folded, x)
+    }
+    return folded
+}
+
+fn join(answers: Vec[Crossing]) -> Crossing sync {
+    let mut folded = Crossing::May
+    for x in answers {
+        folded = threads::worst_of(folded, x)
+    }
+    return folded
+}
+
+fn casts(head: Expr, casts: Vec[Ty]) -> Expr sync {
+    let mut expr = head
+    for ty in casts {
+        expr = Expr::Cast { expr: (expr), ty }
+    }
+    return expr
+}
+
