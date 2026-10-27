@@ -198,6 +198,10 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R177 `--view`: the parsed files are `ParsedView`s named `unit`, by the `[view]` table of rs2nika.names (or one in the working directory): `&Parsed` -> `ref ParsedView`, `&[&Parsed]` -> `ref Vec[ParsedView]`, `parsed.program.items` -> `unit.items`, `parsed.interner` -> `unit.words`, `parsed.text(*x).to_string()` -> `unit.text(x)`",
         "R178 (`-free`) an `impl Type {` whose methods all became free (none takes `self` any longer) loses its head and its closing brace, and its body moves out one level",
         "R179 `let mut out = []` in a function that ends `return out` takes the list type it returns (`let mut out: Vec[Call] = []`); `match &*func` and `match *func` -> `match func`",
+        "R187 `match (&xs[..], b) {` -> `match (ref xs, b) {`",
+        "R186 `let x: T =` with its value on the next line takes the same type rules",
+        "R185 `let f = |x| match x {` over several lines -> `let f = fn(x) { match x {`, closed after the `match`",
+        "R184 `let Some(x) = e else {` over several lines -> `let x = e ?? {`, the block its fallback",
         "R183 (`-free`) `name.to_string()` of a `String` parameter -> `name`: it is a text already",
         "R182 `let (a, b): (A, B) = e` -> `let (a, b) = e`: a `let` of several names takes no type (NK1136)",
         "R181 `refused!(\"..{x}\")` -> `throw Refused::Because(f\"..{x}\")`, the error the emitters throw",
@@ -3704,6 +3708,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: String) -> String {
     }
     s = rs2nika_rep(ctx, s, ".to_owned()", ".clone()", "R16")
     s = rs2nika_rep(ctx, s, ".into_owned()", ".clone()", "R16")
+    s = rs2nika_tuple_slice(ctx, s)
     s = rs2nika_rep(ctx, s, "[..]", "", "R151")
     s = rs2nika_fallbacks(ctx, s)
     s = rs2nika_method_arg(ctx, s, ".unwrap_or_else(", " ?? ", "", "R20")
@@ -4592,6 +4597,14 @@ fn rs2nika_closures(mut ctx: Rs2nikaCtx, given: String) -> String {
                 at = b + 1
                 continue
             }
+            if !block && d > 0 && j == c.len() {
+                // `|x| match x {` whose arms follow: the closure opens here
+                // and R185 closes it after the `match`
+                out.push_str(f"fn({args0}) {{ {rs2nika_text(c, b, j).trim()}")
+                rs2nika_hit(ctx, "R26")
+                at = j
+                continue
+            }
             let mut body: String = rs2nika_text(c, b, j).trim().clone()
             let mut semi: String = ""
             if !block && j == c.len() && body.ends_with(";") {
@@ -5394,6 +5407,54 @@ fn rs2nika_lead_args(line: String, name: String, drop: ref Vec[String]) -> Strin
     return out
 }
 
+/// R187: `match (&xs[..], b) {` -> `match (ref xs, b) {`: a list matched by
+/// slice patterns inside a tuple is borrowed, not moved into it.
+fn rs2nika_tuple_slice(mut ctx: Rs2nikaCtx, s: String) -> String {
+    let at = s.find("match (&") ?? return s.clone()
+    let from = at + "match (&".len()
+    let tail: String = s[from..<s.len()].clone()
+    let end = tail.find("[..]") ?? return s.clone()
+    let place: String = tail[0..<end].clone()
+    if !rs2nika_is_path(place.replace(".", "::")) {
+        return s.clone()
+    }
+    rs2nika_hit(ctx, "R187")
+    return f"{s[0..<at]}match (ref {place}{tail[end + "[..]".len()..<tail.len()]}"
+}
+
+/// Whether a line ends by opening `fn(x) { match x {` (R185).
+fn rs2nika_lambda_open(line: String) -> bool {
+    let at = line.rfind("fn(") ?? return false
+    let tail = line[at..<line.len()]
+    return line.ends_with(" {") && tail.contains(") { match ") && !tail.contains("}")
+}
+
+/// R185: a closure opened by `fn(x) { match x {` on one line ends where its
+/// `match` does: the line at the same indent that starts with `}` gets the
+/// closure's own `}`.
+fn rs2nika_close_lambdas(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = given.clone()
+    let mut i = 0
+    while i < out.len() {
+        let line: String = out[i].trim_end().clone()
+        if rs2nika_lambda_open(line) {
+            let ind = rs2nika_indent(line)
+            let mut j = i + 1
+            while j < out.len() {
+                let st: String = out[j].trim_start().clone()
+                if rs2nika_indent(out[j]) == ind && st.starts_with("}") {
+                    out[j] = f"{ind}}} }}{st["}".len()..<st.len()]}"
+                    rs2nika_hit(ctx, "R185")
+                    break
+                }
+                j = j + 1
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
 /// R180 (`-free`): a free function takes `state` and `world` only where its
 /// body uses them, itself or by handing them to one of the draft's own
 /// functions that does; the parameter goes, and so does the argument at
@@ -6172,6 +6233,11 @@ fn rs2nika_let_type(mut ctx: Rs2nikaCtx, line: String) -> String {
     let st: String = line.trim_start().clone()
     if !st.starts_with("let ") {
         return line.clone()
+    }
+    // R186: `let x: T =` whose value follows on the next line
+    if line.ends_with(" =") {
+        rs2nika_hit(ctx, "R186")
+        return rs2nika_let_type(ctx, f"{line} ").trim_end().clone()
     }
     let eq = line.find(" = ") ?? return line.clone()
     let colon = line.find(":") ?? return rs2nika_let_literal(ctx, line)
@@ -9000,6 +9066,11 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
             return []
         }
         let value: String = st[eq + 3..<els].trim().clone()
+        // R184: the `else` block on the lines below is the fallback block
+        if st.ends_with(" else {") {
+            rs2nika_hit(ctx, "R184")
+            return ["=", f"{ind}let {name} = {value} ?? {{"]
+        }
         let mut jump: String = st[els + 7..<st.len()].trim().clone()
         while jump.ends_with(";") || jump.ends_with("}") {
             jump = (jump.strip_suffix(";") ?? jump.strip_suffix("}") ?? "").trim().clone()
@@ -9423,7 +9494,8 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     let matched = rs2nika_result_matches(ctx, returned)
     let done0 = rs2nika_result_reads(ctx, matched)
     let done1 = rs2nika_typed_empty(ctx, done0)
-    let done = rs2nika_unused_hosts(ctx, done1)
+    let done2 = rs2nika_unused_hosts(ctx, done1)
+    let done = rs2nika_close_lambdas(ctx, done2)
     // R100 after R45, which drops the `use` of an alias
     let named = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
     let mut named_lines: Vec[String] = []

@@ -1,0 +1,5 @@
+--profile
+emit-free
+--prefix
+shape_
+f.rs
