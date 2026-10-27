@@ -90,3 +90,4 @@
 /home/user/Nikaia/docs/briefs/b889-guard-tuple-arm-by-value.md 436051 17
 /home/user/Nikaia/docs/briefs/architect-task.md 1177750 27
 /home/user/Nikaia/docs/briefs/b896a-slice-in-tuple-to-string.md 365461 12
+/home/user/Nikaia/docs/briefs/architect-task.md 1260776 25
