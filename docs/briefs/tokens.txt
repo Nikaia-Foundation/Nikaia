@@ -67,3 +67,4 @@
 /home/user/Nikaia/docs/briefs/b-commit-brief-name.md 470678 18
 /home/user/Nikaia/docs/briefs/e12-3a.md 458834 6
 /home/user/Nikaia/docs/briefs/architect-task.md 1071529 25
+/home/user/Nikaia/docs/briefs/b886-struct-field-narrowing.md 1855054 37
