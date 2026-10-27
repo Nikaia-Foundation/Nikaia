@@ -6,7 +6,7 @@ Part: #125
 Tests: it `target parallelism bounds overflow optimization` 124 passed; --lib `emit:: bounds:: project:: manifest::` ok; `nikaia test --both-settings --project tests/compiler` 191 passed; lower-std fixpoint (only emit_build.rs and the index line); self_hosting.py 79.6 %
 Gate: green
 Deviation: none
-Found: rs2nika garbles a `refused!` whose string continues with `\` over lines: the draft of `Target::parse` swallowed `is_bare_metal`, `name`, `triple` and half of `has_threads` into one string line (the main cost of the score below)
+Found: rs2nika garbles a `refused!` whose string continues with `\` over lines: the draft of `Target::parse` swallowed `is_bare_metal`, `name`, `triple` and half of `has_threads` into one string line (the main cost of the score below). Main session: not the converter, the extracted moved.rs stopped inside the text; on the real source every function survives; e421d39 (R216) now names such a cut input on stderr. Nothing to brief.
 Needs: none
 Changelog: none
 Owner: none
