@@ -18,7 +18,6 @@ three commits, thirteen functions: `5755b65` (`several_errors`,
 | Rust form | Today | Written instead |
 | :--- | :--- | :--- |
 | `if let Some(x) = self.f { .. }` (a field) | `if self.f != null` does not narrow a field yet (NK1125): decided by ADR-382 D4-D5, **not built**; `if let` is refused (ADR-382 D6) | `let x = self.f` first, then `if x != null` (a name narrows, ADR-382 D1) |
-| struct update `S { a: 1, ..p }` | parse error | every field written out |
 | `Option<Option<T>>` (`T??`) | parse error | a `bool` beside a `T?`, or two functions |
 | `map.entry(k).or_insert(..)` | NK1171, no `entry` in `std` | `get`, then `insert` |
 | `opt.as_mut()` on a `T?` | NK1125 | `?.clone()`, change, write the option back |
@@ -36,7 +35,8 @@ when it is probed.
 
 * `Option::as_mut()` on a field: no translation (the language form is
   missing too, see above).
-* `i128` (`int_value`) has no twin type.
+* `i128` (`int_value`) has no twin type: the compiler stops building it
+  (#871), so code over a literal reads its magnitude and sign.
 * `spec?.clone()` on a `String?` is written right only with `--facts`.
 
 ## Compiler defects that block a move
@@ -72,7 +72,9 @@ The first version of this note listed: slice patterns (`[a, b]`, `[a, .., z]`,
 #618), narrowing of a struct or list `T?` (#621), a tuple pattern over an
 option, vectors of views (`Vec[ref S]`), or-pattern arms with a guard,
 `let .. else` (as `?? continue`), and the missing `std` entries of the
-LANGUAGE section. All of these work today.
+LANGUAGE section. All of these work today. Struct update was listed by
+mistake: Nikaia writes `p with { a: 1 }` (Part I 4.2), and rs2nika R74
+converts `S { a: 1, ..p }` to it.
 
 ## Method
 
