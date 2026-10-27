@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1249] — 2026-10-27
+
+### A part of `split_once` that is cloned keeps no view of the text it was cut from (#901)
+
+The two parts of a `split_once`/`rsplit_once` of a text (also with `?? ("", "")`) are text: a `.clone()` of one keeps no view of the text cut, so that text is not parked in the frame's keep and a later move of it (`out.push(line)`) compiles.
+
 ## [0.0.1248] — 2026-10-27
 
 ### `replace` hands back text of its own
