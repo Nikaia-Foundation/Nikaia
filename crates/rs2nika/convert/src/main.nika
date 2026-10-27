@@ -155,6 +155,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R86  `let v = xs.iter().find(|x| c)` / `.find_map(|x| e)` (also after `return`, or as the tail) -> a `for` loop with `break` / `return`, a closure block's `return None` -> `continue`",
         "R82  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
         "R93  `for (i, x) in xs.iter().enumerate() {` -> `for i in 0..<xs.len() {` and `let x = xs[i]`; `for x in xs.iter().skip(n) {` -> `for at in n..<xs.len() {` the same (`Seq` has no `enumerate`/`skip`)",
+        "R92  `m.entry(k).or_insert(d);` / `.or_insert_with(|| d)` -> `if m[k] == null { m[k.clone()] = d }`; `m.entry(k).or_default().push(x)` (any method; `or_default` of `push` is `[]`, of `insert(x)` a set, of `insert(k, v)` a map) -> `let mut slot = m[k]?.clone() ?? d`, `slot.push(x)`, `m[k.clone()] = slot`; `*m.entry(k).or_insert(d) += n` -> `m[k.clone()] = (m[k] ?? d) + n` (`or_default`: `0`); the map keeps its own key",
         "R94  iterator adapters as a `for` loop: `out.extend(xs.iter().cloned())` -> `for x in xs { out.push(x.clone()) }` (`.copied()`: `push(x)`); `let v = xs.iter().fold(init, |acc, x| e)` -> `let mut v = init` and `for x in xs { v = e }`; R59 also after `.cloned()`/`.copied()` before the `filter`",
         "R110 `.copied()` of a `Seq` chain (back over `Seq` steps to `.iter()`, `.keys()`, `.chars()` ..) goes, `.cloned()` -> `.map(|x| x.clone())`; `for p in xs.iter().copied() {` -> `for p in xs {`",
         "R111 `xs.iter().enumerate().map(|(i, x)| b)` -> `(0..<xs.len()).map(fn(i) { let x = xs[i]; b })` (`Seq` has no `enumerate`), also `filter_map`, `flat_map`, `any`, `all`; a `filter`/`skip_while`/`take_while` on the pair keeps the index, the next step takes the element",
@@ -3338,7 +3339,7 @@ fn rs2nika_todos(line: ref String, opts: ref Vec[String]) -> Vec[String] {
     if line.contains("let [") {
         todo.push("slice pattern in a `let`: a `match` with a list pattern (ADR-355)")
     }
-    if line.contains(".entry(") {
+    if line.contains(".entry(") && (line.contains(").or_") || line.contains("Entry::")) {
         todo.push("`.entry(..)`: read with `??`, then write `m[k] = v`")
     }
     if line.contains(".iter()") && (line.contains(".cloned()") || line.contains(".copied()")) {
@@ -4392,8 +4393,130 @@ fn rs2nika_semis(text: ref String) -> Vec[String] {
     return out
 }
 
+/// R92: a map's `entry` read with `??` and written back with `m[k] = v`:
+/// `m.entry(k).or_insert(d);` -> `if m[k] == null { m[k] = d }`;
+/// `m.entry(k).or_default().push(x);` -> `let mut slot = m[k]?.clone() ?? []`,
+/// `slot.push(x)`, `m[k] = slot`; `*m.entry(k).or_insert(0) += n;` ->
+/// `m[k] = (m[k] ?? 0) + n`. Each write is `m[k.clone()]`: the map keeps its
+/// own key (a view is refused, NK1105). The map and the key are places (a
+/// key's `.clone()` / `.to_string()` goes, it is read three times); a bound
+/// entry (`let e = m.entry(k)..`) stays under the TODO.
+fn rs2nika_entry(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let mut st: String = line.trim().clone()
+    if st.ends_with(";") {
+        st = st[0..<st.len() - ";".len()].clone()
+    }
+    let deref = st.starts_with("*")
+    if deref {
+        st = (st.strip_prefix("*") ?? "").clone()
+    }
+    let c: Vec[scalar] = st.chars().collect()
+    let at = rs2nika_find_from(c, ".entry(", 0)
+    if at < 0 {
+        return []
+    }
+    let map: String = rs2nika_text(c, 0, at)
+    let close = rs2nika_closing(c, at + ".entry".len(), '(', ')')
+    if close < 0 || !rs2nika_is_place(map) {
+        return []
+    }
+    let mut key: String = rs2nika_text(c, at + ".entry(".len(), close).trim().clone()
+    for m in [".clone()", ".to_string()", ".to_owned()"] {
+        if key.ends_with(m) {
+            key = (key.strip_suffix(m) ?? "").clone()
+        }
+    }
+    while key.starts_with("&") || key.starts_with("*") {
+        key = (key.strip_prefix("&") ?? key.strip_prefix("*") ?? "").clone()
+    }
+    if !rs2nika_is_place(key) {
+        return []
+    }
+    let rest: String = rs2nika_text(c, close + 1, c.len())
+    let mut dflt: String = ""
+    let mut after: String = ""
+    if rest.starts_with(".or_default()") {
+        after = (rest.strip_prefix(".or_default()") ?? "").clone()
+    } else if rest.starts_with(".or_insert(") || rest.starts_with(".or_insert_with(") {
+        let rc: Vec[scalar] = rest.chars().collect()
+        let open = rs2nika_find_from(rc, "(", 0)
+        let shut = rs2nika_closing(rc, open, '(', ')')
+        if open < 0 || shut < 0 {
+            return []
+        }
+        let arg: String = rs2nika_text(rc, open + 1, shut).trim().clone()
+        if !rest.starts_with(".or_insert_with(") {
+            dflt = arg
+        } else if arg.starts_with("||") {
+            dflt = (arg.strip_prefix("||") ?? "").trim().clone()
+        } else if rs2nika_is_path(arg) {
+            dflt = f"{arg}()"
+        } else {
+            return []
+        }
+        after = rs2nika_text(rc, shut + 1, rc.len())
+    } else {
+        return []
+    }
+    let read: String = f"{map}[{key}]"
+    // a map keeps its own key: the write takes a copy (a view is refused)
+    let write: String = f"{map}[{key}.clone()]"
+    if after == "" && !deref {
+        if dflt == "" {
+            return []
+        }
+        rs2nika_hit(ctx, "R92")
+        return ["=", f"{ind}if {read} == null {{", f"{ind}    {write} = {dflt}", f"{ind}}}"]
+    }
+    if deref {
+        let mut op: String = ""
+        let mut n: String = ""
+        if after.starts_with(" += ") {
+            op = "+"
+            n = (after.strip_prefix(" += ") ?? "").trim().clone()
+        } else if after.starts_with(" -= ") {
+            op = "-"
+            n = (after.strip_prefix(" -= ") ?? "").trim().clone()
+        }
+        if op == "" || n == "" {
+            return []
+        }
+        if dflt == "" {
+            dflt = "0"
+        }
+        rs2nika_hit(ctx, "R92")
+        return ["=", f"{ind}{write} = ({read} ?? {dflt}) {op} {n}"]
+    }
+    // a method on the entry's value: it is changed in a copy written back
+    let ac: Vec[scalar] = after.chars().collect()
+    let open = rs2nika_find_from(ac, "(", 0)
+    if !after.starts_with(".") || open < 0 || rs2nika_closing(ac, open, '(', ')') != ac.len() - 1 {
+        return []
+    }
+    let method: String = rs2nika_text(ac, 1, open)
+    let margs: Vec[String] = rs2nika_split_args(rs2nika_text(ac, open + 1, ac.len() - 1))
+    if !rs2nika_is_path(method) || method.contains(":") {
+        return []
+    }
+    if dflt == "" {
+        if method == "push" {
+            dflt = "Vec::new()"
+        } else if method == "insert" && margs.len() == 1 {
+            dflt = "BTreeSet::new()"
+        } else if method == "insert" && margs.len() == 2 {
+            dflt = "BTreeMap::new()"
+        } else {
+            return []
+        }
+    }
+    let slot = rs2nika_fresh(line, ["slot", "entry_slot"])
+    rs2nika_hit(ctx, "R92")
+    return ["=", f"{ind}let mut {slot} = {read}¿.clone() ?? {dflt}", f"{ind}{slot}{after}", f"{ind}{write} = {slot}"]
+}
+
 /// The rules that turn an iterator pipeline into a loop over the list (R93,
-/// R94).
+/// R94), and a map's `entry` into a read and a write (R92).
 fn rs2nika_iter_loops(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let indexed = rs2nika_index_for(ctx, line)
     if indexed.len() > 0 {
@@ -4403,7 +4526,11 @@ fn rs2nika_iter_loops(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     if extended.len() > 0 {
         return extended
     }
-    return rs2nika_fold_for(ctx, line)
+    let folded = rs2nika_fold_for(ctx, line)
+    if folded.len() > 0 {
+        return folded
+    }
+    return rs2nika_entry(ctx, line)
 }
 
 /// A step a `Seq` chain passes through on its way back to its root (R110-R113).

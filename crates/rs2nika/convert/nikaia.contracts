@@ -218,6 +218,12 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: ref String) -> String"
 
+[fn."rs2nika_entry"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String]"
+
 [fn."rs2nika_enum_arity"]
 sync = "inferred"
 touches = []
