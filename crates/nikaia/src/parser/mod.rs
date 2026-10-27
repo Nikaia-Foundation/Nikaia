@@ -3269,7 +3269,21 @@ grammar! {
         rule head_expr -> Expr @=
             e:head_expr_bare -> { _state.user().at(e, _span) }
 
+        // The head's `catch`, the level above `??` as in a body (#884):
+        // `match parse(line) catch { null } { … }`. The handler's `{` follows
+        // the keyword, so it is not the body's.
         rule head_expr_bare -> Expr =
+            value:head_coalesce handler:catch_tail? -> {
+                match handler {
+                    Some(handler) => Expr::TryCatch { expr: Box::new(value), handler, id: _state.user().id() },
+                    None => value,
+                }
+            }
+
+        rule head_coalesce -> Expr @=
+            e:head_coalesce_bare -> { _state.user().at(e, _span) }
+
+        rule head_coalesce_bare -> Expr =
             value:head_range fallback:head_coalesce_tail? -> {
                 match fallback {
                     Some(fallback) => Expr::Coalesce {
