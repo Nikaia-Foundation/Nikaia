@@ -31,6 +31,7 @@
 extern crate self as nikaia_std;
 
 pub mod abort;
+pub mod arm;
 pub mod boxed;
 pub mod build_time;
 pub mod bytes;

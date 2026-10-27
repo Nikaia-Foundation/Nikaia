@@ -57,6 +57,13 @@ impl EmitState {
                 _ => { },
             }
         }
+        if self.facts.lent_arm_leaves.contains_key(&at) {
+            let made = nikaia_std::index::or(self.facts.lent_arm_leaves.get(&at), || false);
+            if made { out.push("nikaia_std::arm::Arm::Own("); } else { out.push("nikaia_std::arm::Arm::View("); }
+            self.emit_expr_unmixed(world, walk, out, host, node, depth, flow, scope)?;
+            out.push(")");
+            return Ok(());
+        }
         if self.facts.mixed_leaves.contains_key(&at) {
             let nullable = nikaia_std::index::or(self.facts.mixed_leaves.get(&at), || false);
             if nullable { out.push("nikaia_std::either_text::either_maybe("); } else { out.push("nikaia_std::either_text::either("); }

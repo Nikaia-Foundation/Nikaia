@@ -143,6 +143,69 @@ impl CheckState {
         self.facts.mixed_choices.insert(node_key(value))
     }
 
+    /// **A choice handed to a lent parameter whose arms are views and values
+    /// made there** (#894, ADR-282 D13): no arm can be lent on its own, since
+    /// what an arm makes is gone at the arm's end. Every arm is put into one
+    /// value made at the argument instead - text into `EitherText`, anything
+    /// else into `Arm` - and that value is lent through the call. True where
+    /// the argument is one; an arm that is `null` or a place of its own leaves
+    /// it to the other rules, and so does an arm whose view is not a name or a literal.
+    pub fn lent_arms_view_and_new(ref mut self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+        if !is_a_choice(given) {
+            return false
+        }
+        let mut viewed: Vec[i64] = []
+        let mut made: Vec[i64] = []
+        let mut text = false
+        let mut names = 0
+        for leaf in self.value_leaves(world, given) {
+            if ends_in_null(check_peeled(leaf)) {
+                return false
+            }
+            let ty = self.arm_type_of(leaf) ?? return false
+            if is_text_type(ty) {
+                text = true
+            }
+            let (named, literal) = match leaf {
+                Expr::Variable(_, _) => (true, false),
+                Expr::LitStr { .. } => (false, true),
+                else => (false, false),
+            }
+            let a_view = named && (ty.is_a_view() || self.a_name_that_is_lent(world, leaf))
+            if a_view {
+                names += 1
+            }
+            if a_view || (literal && ty.is_a_view()) {
+                viewed.push(node_key(leaf))
+            } else if check_arm_is_a_place(leaf) || ty.is_a_view() {
+                return false
+            } else {
+                made.push(node_key(leaf))
+            }
+        }
+        // A literal beside values made there is made one of them by the
+        // rules before (ADR-282 D5): only a name lent here needs this.
+        if names == 0 || made.len() == 0 {
+            return false
+        }
+        for node in viewed {
+            if text {
+                self.facts.mixed_leaves.insert(node, false)
+            } else {
+                self.facts.lent_arm_leaves.insert(node, false)
+            }
+        }
+        for node in made {
+            if text {
+                self.facts.mixed_leaves.insert(node, false)
+            } else {
+                self.facts.lent_arm_leaves.insert(node, true)
+            }
+        }
+        self.facts.lent_arms.insert(node_key(given))
+        return true
+    }
+
     /// **The arms of a function's last value that are a `String` read through
     /// a borrowed parameter** (ADR-282 D13, D15, #738) are lent, as `return
     /// h.name` is: into a result both kinds flow into, wrapped one by one;
@@ -795,6 +858,16 @@ impl CheckState {
 fn arm_leaves_a_text_literal(leaf: ref Expr) -> bool {
     return match check_peeled(leaf) {
         Expr::LitStr { .. } => true,
+        else => false,
+    }
+}
+
+/// A name, a field or an element: a place that is lent where it stands.
+fn check_arm_is_a_place(leaf: ref Expr) -> bool {
+    return match leaf {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        Expr::Index { .. } => true,
         else => false,
     }
 }

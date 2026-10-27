@@ -103,6 +103,39 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn lent_arms_view_and_new(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+        if !is_a_choice(given) { return false; }
+        let mut viewed: Vec<i64> = vec![];
+        let mut made: Vec<i64> = vec![];
+        let mut text = false;
+        let mut names = 0;
+        for leaf in self.value_leaves(world, given) {
+            if ends_in_null(check_peeled(leaf)) { return false; }
+            let ty = match self.arm_type_of(leaf) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if is_text_type(&ty) { text = true; }
+            let (named, literal) = match leaf {
+                Expr::Variable(_, _) => (true, false),
+                Expr::LitStr { .. } => (false, true),
+                _ => (false, false),
+            };
+            let a_view = named && (ty.is_a_view() || self.a_name_that_is_lent(world, leaf));
+            if a_view { names += 1; }
+            if a_view || literal && ty.is_a_view() { viewed.push(node_key(leaf)); } else if check_arm_is_a_place(leaf) || ty.is_a_view() { return false; } else { made.push(node_key(leaf)); }
+        }
+        if names == 0 || made.is_empty() { return false; }
+        for node in viewed.iter() {
+            let node = nikaia_std::num::value(node);
+            if text { self.facts.mixed_leaves.insert(node, false); } else { self.facts.lent_arm_leaves.insert(node, false); }
+        }
+        for node in made.iter() {
+            let node = nikaia_std::num::value(node);
+            if text { self.facts.mixed_leaves.insert(node, false); } else { self.facts.lent_arm_leaves.insert(node, true); }
+        }
+        self.facts.lent_arms.insert(node_key(given));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn lent_arms_handed_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, nullable: bool) -> bool {
         if !is_a_choice(value) { return false; }
         let either = self.flow.expected_either;
@@ -535,4 +568,6 @@ impl CheckState {
 }
 
 pub(crate) fn arm_leaves_a_text_literal(leaf: &Expr) -> bool { matches!(check_peeled(leaf), Expr::LitStr { .. }) }
+
+pub(crate) fn check_arm_is_a_place(leaf: &Expr) -> bool { matches!(leaf, Expr::Variable(_, _) | Expr::Field { .. } | Expr::Index { .. }) }
 

@@ -424,6 +424,10 @@ impl EmitState {
                 if lend && keep != "" {
                     out.push(f"({keep}).put(")
                     kept_here = true
+                } else if self.facts.lent_arms.contains(node) {
+                    // **Arms that are views and values made there** (#894):
+                    // the one value they are put in lives through the call.
+                    out.push("&*")
                 } else if lend && !self.facts.views_handed_on.contains(node) {
                     // **A part an expression arm binds as a view** is one
                     // already (#456); the others are lent here.

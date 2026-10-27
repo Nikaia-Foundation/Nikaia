@@ -61,7 +61,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_that_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub fn a_name_that_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;

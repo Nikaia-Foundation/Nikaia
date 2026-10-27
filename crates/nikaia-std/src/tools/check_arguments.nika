@@ -329,6 +329,11 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(found_here) {
             continue
         }
+        // **Arms that are views and values made there, lent whole** (#894):
+        // asked of the choice, whole or once for each of its arms.
+        if at < given.len() && (lent || want.is_a_view()) && !check_arguments_nullable(want) && state.lent_arms_view_and_new(world, given[at]) {
+            continue
+        }
         // **A view handed to a `String` the callee only reads is lent as it
         // is** (ADR-282 D11), for a function this compiler declares; **not a
         // `ref` the source wrote**, which is `NK1137`'s below.

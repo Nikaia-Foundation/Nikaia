@@ -307,6 +307,12 @@ pub struct CheckFacts {
     pub some_tails: collections::BTreeSet[i64],
     pub mixed_leaves: collections::BTreeMap[i64, bool],
     pub mixed_choices: collections::BTreeSet[i64],
+    /// **A choice handed to a lent parameter whose arms are views and values
+    /// made there** (#894, ADR-282 D13): the argument, lent as the view of
+    /// the one value its arms are put in, and each arm's leaf, `true` where
+    /// the arm made its value.
+    pub lent_arms: collections::BTreeSet[i64],
+    pub lent_arm_leaves: collections::BTreeMap[i64, bool],
     pub lent_options: collections::BTreeSet[i64],
     pub wrapped: collections::BTreeMap[i64, FactWrap],
     pub compared_views: collections::BTreeSet[(i64, String)],
@@ -522,6 +528,8 @@ impl CheckFacts {
             some_tails: collections::BTreeSet(),
             mixed_leaves: collections::BTreeMap(),
             mixed_choices: collections::BTreeSet(),
+            lent_arms: collections::BTreeSet(),
+            lent_arm_leaves: collections::BTreeMap(),
             lent_options: collections::BTreeSet(),
             wrapped: collections::BTreeMap(),
             compared_views: collections::BTreeSet(),

@@ -272,7 +272,7 @@ impl EmitState {
                 if lend && keep != "" {
                     out.push(&format!("({}).put(", keep));
                     kept_here = true;
-                } else if lend && !self.facts.views_handed_on.contains(&node) { out.push("&"); }
+                } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) { out.push("&"); }
             }
         }
         let boxed_alone = pointer == 0 && !count && self.facts.boxed_reads.contains(&node);

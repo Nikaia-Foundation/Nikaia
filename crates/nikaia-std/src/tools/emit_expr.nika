@@ -77,6 +77,20 @@ impl EmitState {
                 else => {},
             }
         }
+        // **An arm of a choice lent whole is put into one value made at the
+        // argument** (#894, `lent_arm_leaves`): a view as it is, a value the
+        // arm made as its own.
+        if self.facts.lent_arm_leaves.contains_key(at) {
+            let made = self.facts.lent_arm_leaves.get(at) ?? false
+            if made {
+                out.push("nikaia_std::arm::Arm::Own(")
+            } else {
+                out.push("nikaia_std::arm::Arm::View(")
+            }
+            self.emit_expr_unmixed(world, walk, out, host, node, depth, flow, scope)
+            out.push(")")
+            return
+        }
         // **An arm of a choice that goes into a mixed position is wrapped on
         // its own** (ADR-282 D14, `mixed_leaves`, #562): a view and text of
         // its own are two types, and only `EitherText` holds both.

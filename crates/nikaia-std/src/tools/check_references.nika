@@ -91,7 +91,7 @@ impl CheckState {
     }
 
     /// Whether the expression is a name whose binding was lent to this code.
-    fn a_name_that_is_lent(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    pub fn a_name_that_is_lent(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(symbol, _) => {
                 let name = world.words.resolve(symbol).clone()

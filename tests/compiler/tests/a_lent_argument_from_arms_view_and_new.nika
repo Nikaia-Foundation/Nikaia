@@ -1,0 +1,49 @@
+// An `if` or a `match` handed to a lent parameter, one arm a view and the
+// other a value made in the arm (#894, ADR-282 D13): every arm is lent through
+// the call, declared `ref` or inferred lent, a struct or text.
+
+struct P { name: String }
+
+fn look(p: ref P) -> i64 { return p.name.len() }
+
+fn keep(p: P) -> i64 { return p.name.len() }
+
+fn count(s: String) -> i64 { return s.len() }
+
+fn pick(t: ref P, c: bool) -> i64 { return look(if c { t } else { P { name: "bb" } }) }
+
+fn pick_kept(t: ref P, c: bool) -> i64 { return keep(if c { t } else { P { name: "ccc" } }) }
+
+fn pick_match(t: ref P, k: i64) -> i64 {
+    return look(match k {
+        0 => t,
+        1 => P { name: "dddd" },
+        else => P { name: f"{t.name}!" },
+    })
+}
+
+fn pick_text(t: String, c: bool) -> i64 { return count(if c { t } else { t + "xy" }) }
+
+fn pick_text_match(t: String, k: i64) -> i64 {
+    return count(match k {
+        0 => t,
+        1 => "four",
+        else => f"<{t}>",
+    })
+}
+
+fn main() {
+    let t = P { name: "a" }
+    println(pick(t, true))
+    println(pick(t, false))
+    println(pick_kept(t, true))
+    println(pick_kept(t, false))
+    println(pick_match(t, 0))
+    println(pick_match(t, 1))
+    println(pick_match(t, 2))
+    println(pick_text("ab", true))
+    println(pick_text("ab", false))
+    println(pick_text_match("ab", 0))
+    println(pick_text_match("ab", 1))
+    println(pick_text_match("ab", 2))
+}
