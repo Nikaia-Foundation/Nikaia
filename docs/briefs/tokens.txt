@@ -44,3 +44,4 @@
 /home/user/Nikaia/docs/briefs/b655-two-ref-lifetime.md 777161 23
 /home/user/Nikaia/docs/briefs/architect-task.md 723357 19
 /home/user/Nikaia/docs/briefs/e12-1.md 6209780 104
+/home/user/Nikaia/docs/briefs/b869a-path-narrowing.md 6543128 112
