@@ -188,7 +188,7 @@ fn main() throws {
         let parts = line.split(" ").collect()
         if parts.len() == 2 && parts[0] == today { spent += agent_micro(parts[1].clone()) }
     }
-    if spent > 200 * 1000000 { agent_escalate(dir.clone(), f"cost today {spent / 1000000} USD above 200") }
+    if spent > 1000 * 1000000 { agent_escalate(dir.clone(), f"cost today {spent / 1000000} USD above 1000") }
 
     let out = process::run(claude, claude_args; within: 90.minutes())
     let json = out.stdout.clone()
