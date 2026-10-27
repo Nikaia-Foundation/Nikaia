@@ -925,12 +925,18 @@ impl EmitState {
             }
         }
         // **Owned text is lent to a pattern** (D28, `owned_patterns`): `&` in
-        // front of it, as for any `ref String` parameter.
-        if receiver != null && args.len() == 1 && self.facts.owned_patterns.contains(node_key(args[0])) {
+        // front of it, as for any `ref String` parameter. `replace`'s
+        // replacement is lent the same way (#877).
+        let lent_pattern = args.len() == 1 || (name == "replace" && args.len() == 2)
+        if receiver != null && lent_pattern && self.facts.owned_patterns.contains(node_key(args[0])) {
             let text = receiver ?? return
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
             out.push(f".{name}(&")
             self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+            if args.len() == 2 {
+                out.push(", &")
+                self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
+            }
             out.push(")")
             return
         }
@@ -1273,7 +1279,8 @@ impl EmitState {
             return
         }
         // **`rfind` and `replacen` count in `i64`**, as `find` does: the
-        // language below's own take and give a `usize`.
+        // language below's own take and give a `usize`. **Each, and `find`,
+        // takes a text or one scalar** (#877), lent with `&` whichever it is.
         if (name == "rfind" || name == "replacen") && self.facts.text_finds.contains(node_key(receiver)) {
             out.push(f"nikaia_std::search::{name}(&")
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)

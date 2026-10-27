@@ -40,7 +40,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
         let mut param: &'static str = "";
-        if key == "str::starts_with" { param = "prefix"; } else if key == "str::ends_with" { param = "suffix"; } else if key == "str::contains" { param = "part"; } else if key == "str::strip_prefix" { param = "prefix"; } else if key == "str::strip_suffix" { param = "suffix"; } else if key == "str::split" || key == "str::rsplit" || key == "str::split_once" || key == "str::rsplit_once" || key == "str::matches" || key == "str::trim_start_matches" || key == "str::trim_end_matches" { param = "sep"; } else { return; }
+        if key == "str::starts_with" { param = "prefix"; } else if key == "str::ends_with" { param = "suffix"; } else if key == "str::contains" { param = "part"; } else if key == "str::strip_prefix" { param = "prefix"; } else if key == "str::strip_suffix" { param = "suffix"; } else if key == "str::split" || key == "str::rsplit" || key == "str::split_once" || key == "str::rsplit_once" || key == "str::matches" || key == "str::trim_start_matches" || key == "str::trim_end_matches" { param = "sep"; } else if key == "str::find" || key == "str::rfind" { param = "needle"; } else if key == "str::replace" || key == "str::replacen" { param = "from"; } else { return; }
+        let routed = param == "needle" || key == "str::replacen";
         if found.is_empty() { return; }
         let a_list = match nikaia_std::index::get(&found, 0) {
             Ty::Named { name, .. } => name == "Vec" || name == "Array",
@@ -51,6 +52,7 @@ impl CheckState {
             self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be text or a character, but you're passing a list.", key, param), vec![String::from("What it looks for is one view of text or one character; a list of them is neither.")], Some(format!("Ask once per character: `x.{}('a') || x.{}('i')`.", method, method))));
             return;
         }
+        if routed { return; }
         let owned = match nikaia_std::index::get(&found, 0) {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
             _ => false,

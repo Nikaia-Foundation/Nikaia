@@ -936,7 +936,7 @@ fn check_core_method_pattern_at(name: ref String) -> i64 {
     if name == "splitn" {
         return 1
     }
-    let first: Vec[String] = ["split", "rsplit", "replace", "contains", "starts_with", "ends_with",
+    let first: Vec[String] = ["split", "rsplit", "replace", "replacen", "find", "rfind", "contains", "starts_with", "ends_with",
         "matches", "trim_start_matches", "trim_end_matches", "strip_prefix", "strip_suffix"]
     if first.contains(name) {
         return 0

@@ -81,9 +81,17 @@ impl CheckState {
             param = "suffix"
         } else if key == "str::split" || key == "str::rsplit" || key == "str::split_once" || key == "str::rsplit_once" || key == "str::matches" || key == "str::trim_start_matches" || key == "str::trim_end_matches" {
             param = "sep"
+        } else if key == "str::find" || key == "str::rfind" {
+            param = "needle"
+        } else if key == "str::replace" || key == "str::replacen" {
+            param = "from"
         } else {
             return
         }
+        // **A search is `std`'s own call** (#877), which lends its needle
+        // with `&` whatever it is: no `owned_patterns` entry for it.
+        // `replace` is the language below's, as `contains` is.
+        let routed = param == "needle" || key == "str::replacen"
         if found.len() == 0 {
             return
         }
@@ -96,6 +104,9 @@ impl CheckState {
         if a_list {
             let method = (key.strip_prefix("str::") ?? "").clone()
             self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{param}` to be text or a character, but you're passing a list.", ["What it looks for is one view of text or one character; a list of them is neither."], f"Ask once per character: `x.{method}('a') || x.{method}('i')`."))
+            return
+        }
+        if routed {
             return
         }
         let owned = match found[0] {

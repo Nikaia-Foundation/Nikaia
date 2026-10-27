@@ -803,7 +803,8 @@ byte offset.
 **A search gives a match.** `s.find(needle; from: text::Pos) -> text::Match?`
 finds the first match at or after `from` (default `s.start()`), `s.rfind(needle)
 -> text::Match?` the last. A match has `start` and `end`, positions of `s`, and
-`m.text()`, the matched text.
+`m.text()`, the matched text. A needle is a text or one scalar, `s.find(',')`,
+as the pattern of `contains`, `starts_with`, `split` and `replace` is (#877).
 
 **A text is cut by name, at its own positions:** `s.before(p)`, `s.after(p)`,
 `s.between(p, q)`, and `s.split_at(p)` for the first two at once. Each is a

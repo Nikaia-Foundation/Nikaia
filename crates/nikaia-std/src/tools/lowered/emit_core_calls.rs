@@ -634,11 +634,16 @@ impl EmitState {
                 return Ok(());
             }
         }
-        if receiver.is_some() && args.len() == 1 && self.facts.owned_patterns.contains(&node_key(nikaia_std::index::get(&args, 0))) {
+        let lent_pattern = args.len() == 1 || name == "replace" && args.len() == 2;
+        if receiver.is_some() && lent_pattern && self.facts.owned_patterns.contains(&node_key(nikaia_std::index::get(&args, 0))) {
             let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
             out.push(&format!(".{}(&", name));
             self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+            if args.len() == 2 {
+                out.push(", &");
+                self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 1), depth, flow, scope)?;
+            }
             out.push(")");
             return Ok(());
         }

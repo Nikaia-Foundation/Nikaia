@@ -688,7 +688,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
 
 pub(crate) fn check_core_method_pattern_at(name: &str) -> i64 {
     if name == "splitn" { return 1; }
-    let first: Vec<&'static str> = vec!["split", "rsplit", "replace", "contains", "starts_with", "ends_with", "matches", "trim_start_matches", "trim_end_matches", "strip_prefix", "strip_suffix"];
+    let first: Vec<&'static str> = vec!["split", "rsplit", "replace", "replacen", "find", "rfind", "contains", "starts_with", "ends_with", "matches", "trim_start_matches", "trim_end_matches", "strip_prefix", "strip_suffix"];
     if nikaia_std::list::contains(&first, &name) { return 0; }
     -1
 }

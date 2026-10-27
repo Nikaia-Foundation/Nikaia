@@ -3760,7 +3760,7 @@ signature = "(self: ref String) -> String"
 pub = true
 sync = true
 touches = []
-signature = "(self: ref String, from: ref String, to: ref String) -> String"
+signature = "(self: ref String, from: ?, to: ref String) -> String"
 
 # The text with the first `count` matches of `from` replaced by `to`, left to
 # right; a `count` of 0 or less replaces nothing.
@@ -3768,7 +3768,7 @@ signature = "(self: ref String, from: ref String, to: ref String) -> String"
 pub = true
 sync = true
 touches = []
-signature = "(self: ref String, from: ref String, to: ref String, count: i64) -> String"
+signature = "(self: ref String, from: ?, to: ref String, count: i64) -> String"
 
 # The same text with every character in upper case, as new text.
 #
@@ -3903,11 +3903,13 @@ signature = "(self: ref String, suffix: ?) -> ref(self) String?"
 # byte position: a match of a valid needle always starts on a scalar, so a
 # search begun inside one finds the next match. A one-byte needle is a byte
 # search of the kind `memchr` does. The position cuts the text it came from.
+# **`needle` is a text or one scalar** (#877), as `contains`'s and `split`'s
+# pattern is; so is `rfind`'s, `replace`'s and `replacen`'s `from`.
 [fn."str::find"]
 pub = true
 sync = true
 touches = []
-signature = "(self: ref String, needle: ref String; from: i64 = 0) -> i64?"
+signature = "(self: ref String, needle: ?; from: i64 = 0) -> i64?"
 
 # **The byte position of the last match**, or nothing. The position cuts the
 # text it came from, as `find`'s does.
@@ -3915,7 +3917,7 @@ signature = "(self: ref String, needle: ref String; from: i64 = 0) -> i64?"
 pub = true
 sync = true
 touches = []
-signature = "(self: ref String, needle: ref String) -> i64?"
+signature = "(self: ref String, needle: ?) -> i64?"
 
 # The lines of the text, each a view into it, without its line ending.
 #
