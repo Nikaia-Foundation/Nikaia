@@ -43,12 +43,12 @@
 10-nikaia-light.md #83 compiles
 10-nikaia-light.md #89 compiles
 10-nikaia-light.md #90 compiles
-10-nikaia-light.md #96 compiles
-10-nikaia-light.md #101 compiles
-10-nikaia-light.md #103 compiles
+10-nikaia-light.md #97 compiles
+10-nikaia-light.md #102 compiles
 10-nikaia-light.md #104 compiles
 10-nikaia-light.md #105 compiles
-10-nikaia-light.md #108 compiles
+10-nikaia-light.md #106 compiles
+10-nikaia-light.md #109 compiles
 20-nikaia-advance.md #4 compiles
 20-nikaia-advance.md #5 compiles
 20-nikaia-advance.md #10 refused
