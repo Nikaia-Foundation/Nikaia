@@ -1,0 +1,35 @@
+use std::text
+
+fn host_target() -> Target? sync {
+    return Target::read_triple(env!("HOST")) catch { return null }
+}
+
+fn flushed(mut file: File, line: ref String) sync {
+    std::io::stdout().flush() catch {}
+    writeln!(file, "{line}") catch {}
+}
+
+fn store(entry: ref Path) sync {
+    std::fs::create_dir_all(entry) catch {
+        return
+    }
+    std::fs::remove_file(entry) catch {
+        eprintln!("kept")
+        return
+    }
+    done()
+}
+
+fn mode(other: ref String) -> bool sync {
+    if text::parse_i64(other) != null {
+        return true
+    }
+    return !(text::parse_i64(other) != null)
+}
+
+fn kept(path: ref Path) -> String? sync {
+    // TODO(rs2nika): a `Result` read as a value (`.ok()`, `.is_ok()`, `.is_err()`, `.is_ok_and(..)`): Nikaia has no value-or-`null` of a call that can fail (a `catch` hands back the guarded type, `catch { null }` is NK1103: a language question, #877); where the failure leaves, `e catch { <jump> }`; else `let mut ok = true` before, `e catch { ok = false; <a value of its type> }`
+    let current = std::fs::read_to_string(path).ok()
+    return current
+}
+

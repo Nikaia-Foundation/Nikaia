@@ -24,7 +24,7 @@ fn arms(binary: String, at: i64?, shape: Shape?) -> i64 sync {
 
 fn paths(table: ref Table, n: i64, name: ref String?, kept: ref String?) -> i64 sync {
     let path = (match table.get("path") { x => x.as_str(), null => null })
-    // TODO(rs2nika): a `Result` read as a value (`.ok()`, `.is_ok()`, `.is_err()`, `.is_ok_and(..)`): a `catch` hands back the guarded value's own type, never `null` (NK1103); `let mut ok = true` before, `e catch { ok = false; <a value> }`
+    // TODO(rs2nika): a `Result` read as a value (`.ok()`, `.is_ok()`, `.is_err()`, `.is_ok_and(..)`): Nikaia has no value-or-`null` of a call that can fail (a `catch` hands back the guarded type, `catch { null }` is NK1103: a language question, #877); where the failure leaves, `e catch { <jump> }`; else `let mut ok = true` before, `e catch { ok = false; <a value of its type> }`
     let c = (match u32::try_from(n).ok() { x => char::from_u32(x), null => null })
     let size = (match name { n => n.len() + 1, null => null }) ?? 0
     let kept_len = (match kept { k => k.len() * 2, null => null }) ?? 0

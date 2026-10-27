@@ -10,10 +10,8 @@ use std::text
     }
 
     fn read(ref self, world: ref CheckWorld, path: ref String) -> BtRead sync {
-        return match self.reads.read(path) {
-            Ok(text) => BtRead { text: text, denied: null },
-            Err(why) => BtRead { text: null, denied: why },
-        }
+        let text = self.reads.read(path) catch { let why = error; return BtRead { text: null, denied: why } }
+        return BtRead { text: text, denied: null }
     }
 
     fn assets_read_in(ref self, world: ref CheckWorld, value: ref Expr, read: ref collections::BTreeMap[String, String]) -> Expr sync {

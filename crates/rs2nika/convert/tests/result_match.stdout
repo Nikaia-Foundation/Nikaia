@@ -1,0 +1,104 @@
+fn twice(text: ref String) -> Tree sync throws {
+    let again = read_tree(text) catch { bail!("does not parse: {error}") }
+    return again
+}
+
+fn format_all(files: Vec[String]) -> i64 sync {
+    let mut code = 0
+    for file in files {
+        let formatted = format(file) catch {
+            let refusal = error
+            eprintln!("{file}: {refusal}")
+            code = 1
+            continue
+        }
+        println!("{formatted}")
+    }
+    return code
+}
+
+fn stage(text: ref String) -> Stage sync {
+    lower(text) catch { return Stage::Refused }
+    return Stage::Lowered
+}
+
+fn hole(text: ref String) -> Hole sync {
+    let expr = read_tree(text) catch { let e = error; return Hole::Refused(e.to_string()) }
+    return Hole::Parsed(expr)
+}
+
+fn dump(ty: ref String) -> Computed sync {
+    let dump = dumper(ty) catch {
+        match error {
+            Wall::NoForm { because } => {
+                return Computed::NotHere(because)
+            }
+            else => {
+                return Computed::NotHere("no")
+            }
+        }
+    }
+    return Computed::Value(dump)
+}
+
+fn run_it() sync {
+    let mut held = run() catch {
+        eprintln!("{error}")
+        return
+    }
+    held.push(1)
+    show(held)
+    done()
+}
+
+fn open_cache() -> Cache? sync {
+    // TODO(rs2nika): `match` on `Ok`/`Err`: an `Err` arm whose value is `null`: a `catch` hands back the guarded type, never `null` (NK1103); Nikaia has no form for the value-or-`null` of a call that can fail (a language question, #877)
+    let cache = match Cache::open() {
+        Ok(cache) => cache,
+        Err(error) => {
+            eprintln!("warning: {error:#}")
+            null
+        }
+    }
+    return cache
+}
+
+fn position(starts: ref Vec[i64], at: i64) -> i64 sync {
+    // TODO(rs2nika): `match` on `Ok`/`Err`: `binary_search`: its `Err` is the place to insert at, not a failure; Nikaia's `xs.binary_search(x)` (Part I) and a test of what it hands back
+    let line = match starts.binary_search(at) {
+        Ok(i) => i,
+        Err(i) => i - 1,
+    }
+    return line
+}
+
+fn report(said: Result[Out]) -> i64 sync {
+    // TODO(rs2nika): `match` on `Ok`/`Err`: over a kept `Result` (not a call): Nikaia holds no `Result`; match where the call is made, `let v = call catch { <the Err arm> }`
+    match said {
+        Ok(out) => {
+            show(out)
+        }
+        Err(error) => {
+            eprintln!("{error}")
+        }
+    }
+    return 0
+}
+
+fn first_line(path: ref String) -> String sync {
+    let text = read_file(path) catch { return "" }
+    show(text)
+    return path.to_string()
+}
+
+fn note(path: ref String) sync {
+    // TODO(rs2nika): `match` on `Ok`/`Err`: the `Ok` arm runs on success only and the program goes on after a failure: a `catch` leaves or hands back the value (Part I 7.1); `let v = call catch { return }` / `{ continue }` where the `match` ends the function or the loop body, otherwise a language question (#877)
+    match read_file(path) {
+        Ok(text) => {
+            show(text)
+        },
+        else => {},
+    }
+    done()
+}
+
