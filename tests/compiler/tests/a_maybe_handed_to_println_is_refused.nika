@@ -1,0 +1,11 @@
+fn find_nickname(name: String) -> String? {
+    if name == "Nika" {
+        return "Nik"
+    }
+    return null
+}
+
+fn main() {
+    println(find_nickname("Ada") ?? "no nickname")
+    println(find_nickname("Rust"))
+}

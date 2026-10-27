@@ -38,6 +38,12 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_maybe_printed(&mut self, held: &Ty, span: &Span) {
+        if !a_known_maybe(held) { return; }
+        self.findings.push(check_refusal("NK1102", span, format!("This prints `{}`, which may be `null`.", held.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.")], Some(String::from("Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_fatal_type_that_is_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, span: &Span) {
         let own = world.own.implementations.get("Error");
         if own.is_some() && nikaia_std::index::or(match own {

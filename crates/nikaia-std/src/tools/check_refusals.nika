@@ -68,6 +68,16 @@ impl CheckState {
         self.findings.push(check_refusal("NK1102", span, f"A hole of this `f\"…\"` is `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`."))
     }
 
+    /// **`NK1102`: a `T?` handed to a print call** (Part I 2.3), for the
+    /// reason of [`a_maybe_in_a_hole`]: `println(x)` says no more than
+    /// `println(f"{x}")` about what `null` reads as.
+    pub fn a_maybe_printed(ref mut self, held: ref Ty, span: ref Span) sync {
+        if !a_known_maybe(held) {
+            return
+        }
+        self.findings.push(check_refusal("NK1102", span, f"This prints `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say."], "Print it with a fallback: `println(x ?? \"none\")`, or `println(x?.to_string() ?? \"none\")`."))
+    }
+
     /// **`NK1164`: `impl Fatal for T` where `T` has no `impl Error`**
     /// (ADR-345 D1): a fatal type is an error as well, so the second `impl` is
     /// what the first asks for, as a bound asks for its trait.

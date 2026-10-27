@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1228] — 2026-10-27
+
+**A `T?` handed to a print call is `NK1102`** (Part I 2.3). `println(x)` with
+`x: String?` reached rustc and failed there with an `Option` display error;
+it is now refused as the f-string hole already was (`f"{x}"`): what an absent
+value reads as is the program's to say, `println(x ?? "none")`. Built in
+`tools/check_refusals.nika` (`a_maybe_printed`), called from the print branch
+of `tools/check_arguments.nika`; test
+`a_maybe_handed_to_println_is_refused`. The syntax tour shows it.
+
 ## [0.0.1227] — 2026-10-27
 
 **ADR-382 replaces ADR-350: a `null` test narrows a path of fields too.**

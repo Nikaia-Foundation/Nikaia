@@ -1,0 +1,9 @@
+error[NK1102]: This prints `ref String?`, which may be `null`.
+   --> tests/a_maybe_handed_to_println_is_refused.nika:10:5
+    |
+ 10 |     println(find_nickname("Rust"))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.
+    = help: Print it with a fallback: `println(x ?? "none")`, or `println(x?.to_string() ?? "none")`.
+1 type error

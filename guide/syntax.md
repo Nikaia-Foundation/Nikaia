@@ -5,7 +5,8 @@ TypeScript, Go, Java, C#, Kotlin or Swift) and want to see what Nikaia looks lik
 they read the specification. It covers the parts you will write every day, one short
 example each, and says where Nikaia behaves differently from what you probably expect.
 
-Every snippet here compiles and runs with the current compiler. To try one, put it in
+Every snippet here compiles and runs with the current compiler, except a line marked
+`does not compile`, which shows what the compiler refuses. To try one, put it in
 `src/main.nika` of a project (see [Getting started](getting-started.md)) and run
 `nikaia run`.
 
@@ -22,8 +23,8 @@ let mut count = 0   // `mut` says it may change
 count += x
 ```
 
-Values are immutable unless declared `mut`, as in Rust or Kotlin's `val`/`var`. Types
-are inferred. You write one where you want to, `let big: int = 3000000000`.
+Values are immutable unless declared `mut`. Types are inferred. You write one where you
+want to, `let big: int = 3000000000`.
 
 There are no semicolons at the end of lines. A comment is `//` or `/* … */`.
 
@@ -33,15 +34,15 @@ There are no semicolons at the end of lines. A comment is `//` or `/* … */`.
 
 | Type | What it is |
 | :--- | :--- |
-| `int` | the integer for most numbers: the values of an `i64`, stored as the compiler sees fit |
+| `int` | the integer for most numbers: up to 64 bits, and the compiler chooses the machine type |
 | `i64`, `i32`, `u8`, `u64`, `u32` | integers of exactly that width, for a hash, a byte, a wire format or C. Every length and index is an `i64`, and `int` and `i64` convert to each other without `as` |
 | `f64` | a floating-point number |
 | `bool` | `true` or `false` |
-| `scalar` | one Unicode scalar value, `'a'` (there is no `char`) |
+| `scalar` | one Unicode scalar value, `'a'` |
 | `String` | text |
 
-There is no `long` or `usize`. An integer that overflows stops the program instead of
-wrapping silently. Where you mean to wrap, you say so: `h.wrapping_mul(31)`.
+An integer that overflows stops the program instead of wrapping silently. Where you mean
+to wrap, you say so: `h.wrapping_mul(31)`.
 Conversions are written with `as`: `(total as f64) / (count as f64)`.
 
 **Specification:** [Part I, §2.2 Primitive data types](../docs/specification/10-nikaia-light.md#22-primitive-data-types)
@@ -54,8 +55,8 @@ println(f"hello, {name}, your name has {name.len()} letters")
 println("braces in a plain string are just braces: {name}")
 ```
 
-`f"…"` interpolates, like Python's f-strings. A plain `"…"` never does, so JSON and CSS
-can be written as they are.
+`f"…"` interpolates. A plain `"…"` never does, so JSON and CSS can be written as they
+are.
 
 You never choose between a string type and a string-slice type. There is one `String`,
 and whether a value is text of its own or a view into text that already exists is the compiler's
@@ -178,6 +179,8 @@ fn find_nickname(name: String) -> String? {
 }
 
 let nick = find_nickname("Ada") ?? "no nickname"
+println(nick)                    // no nickname
+println(find_nickname("Rust"))   // does not compile: NK1102, it may be null
 ```
 
 A `String` is always a string. Only a `String?` may be `null`, and the compiler makes you
