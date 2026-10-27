@@ -4,7 +4,7 @@
 # what Cargo resolved, listed per name because one name can resolve twice.
 version = 1
 toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"
-compiler = "f86b2333475867efe6b8a0a2deb00b679c92bb8fe26ca332b506b52fab294fdf"
+compiler = "ad9c323b76ce7b9004a5ac8d9e746912aa60fb02671927dad4bc890b00b3ddcd"
 
 [dependencies]
 ahash = ["0.8.12"]
@@ -54,7 +54,7 @@ rayon = ["1.12.0"]
 rayon-core = ["1.13.0"]
 redox_syscall = ["0.5.18"]
 ref-or-box = ["0.1.0"]
-rustix = ["1.1.5"]
+rustix = ["1.1.6"]
 scopeguard = ["1.2.0"]
 shared-bytes = ["0.1.0"]
 simdutf8 = ["0.1.5"]
@@ -79,4 +79,4 @@ zerocopy = ["0.8.63"]
 zerocopy-derive = ["0.8.63"]
 
 [units."src/main.nika"]
-source = "2b618081f70ee50300d32f58db58782e0cd5ed86a9747bdb9bd9e55121fe786f"
+source = "1e61a0d0d28c1c050d35f613368e59c3971ec152bf6354b230eadc3e60239da3"

@@ -1,0 +1,13 @@
+fn shown(xs: ref Vec[Unit], written: String?) -> Vec[String] sync {
+    return xs.iter().map(fn(u) { match written { w if u.first => w.clone(), null => u.path.clone(), else => u.path.clone() } }).collect()
+}
+fn dir(v: String?) -> String? sync {
+    let t = match v { _value => null, null => { default_dir() } }
+    return t
+}
+fn pair(a: i64?, b: i64?) -> i64 sync {
+    // TODO(rs2nika): `match` on `Some`/`None`: `let x = e ?? <none arm>`
+    let n = match (a, b) { (Some(x), _) => x, (null, _) => 0 }
+    return n
+}
+

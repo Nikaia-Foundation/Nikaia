@@ -486,6 +486,13 @@ touches = []
 views = ["st: borrowed"]
 signature = "(st: ref String) -> bool"
 
+[fn."rs2nika_none_of_rest"]
+sync = "inferred"
+keeps = ["line"]
+touches = []
+views = ["line: borrowed"]
+signature = "(line: ref String) -> String"
+
 [fn."rs2nika_number"]
 sync = "inferred"
 touches = []
@@ -678,6 +685,13 @@ sync = "inferred"
 touches = []
 views = ["line: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> String"
+
+[fn."rs2nika_some_arms_inline"]
+sync = "inferred"
+keeps = ["given"]
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
 [fn."rs2nika_some_matches"]
 sync = "inferred"

@@ -62,7 +62,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R9   `Box<T>` -> `T`, `Box::new(x)` -> `x`",
         "R10  `usize`/`u32`/`u16`/`isize`/`i32` -> `i64` in types; `as usize` casts dropped",
         "R11  signature: ` sync` added; `-> Result<T>` -> `-> T sync throws`",
-        "R12  `None` -> `null`, `Some(x)` as a value -> `x`",
+        "R12  `None` -> `null`, `Some(x)` as a value -> `x` (also at the end of a block, `{ ..; Some(x) }`)",
         "R13  `_ =>` -> `else =>`",
         "R14  `matches!(e, P)` / `matches!(e, P if g)` -> `match e { P => true, else => false }`",
         "R15  `format!(\"..{}..\", a)` -> `f\"..{a}..\"`; `&format!` -> `f\"..\"`",
@@ -126,6 +126,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R70  a `format!` hole hoisted out of a match arm (R81) -> the arm becomes a block holding it",
         "R71  a `None =>` / `None if guard =>` arm -> `null =>` / `null if guard =>` (ADR-352)",
         "R72  a `Some(p) =>` arm -> `p =>`, `Some(_)` -> `_value` (the other arms of a `match` with `null` match the `T`, ADR-352)",
+        "R95  R72 inside a one-line `match` (`match e { Some(p) => a, None => b }` -> `match e { p => a, null => b }`); a `Some(` in a tuple or struct pattern keeps its TODO",
         "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
         "R74  struct update `S { a: x, ..base }` -> `base with { a: x }` (Part I 4.2)",
         "R75  a callback `&|a: T| e` -> the lambda `fn(a) { e }` (R26)",
@@ -1493,6 +1494,12 @@ fn rs2nika_some(mut ctx: Rs2nikaCtx, given: ref String) -> String {
                 ok = true
             }
             let close = rs2nika_closing(c, at + 4, '(', ')')
+            // A value at the end of a block: `{ ..; Some(x) }` (not an arm's
+            // `{ Some(x) =>`, R95's).
+            if !ok && close > at + 5 && at > 1 && c[at - 1] == ' ' && rs2nika_in(c[at - 2], ";{") {
+                let after: String = rs2nika_text(c, close + 1, c.len())
+                ok = !after.starts_with(" =>") && !after.starts_with(" if ")
+            }
             if ok && close > at + 5 {
                 let inner: String = rs2nika_text(c, at + 5, close)
                 let ic: Vec[scalar] = inner.chars().collect()
@@ -3479,6 +3486,108 @@ fn rs2nika_some_arm(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     return f"{rs2nika_indent(line)}{inner}{rest}"
 }
 
+/// R95: R72 inside a line, for a `match` written on one line (a closure, a
+/// field's value): `match e { Some(p) => a, None => b }` -> `match e { p =>
+/// a, None => b }`. Only an arm's own `Some(`, after `{`, `,` or `}`, and only
+/// where the line has a `None` arm; a `Some(` in a tuple or a struct pattern
+/// stays (its name would bind the `T?`).
+fn rs2nika_some_arms_inline(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let line: String = rs2nika_none_of_rest(given)
+    if !line.contains("Some(") || !(line.contains("None =>") || line.contains("None if ")) {
+        return given.clone()
+    }
+    let c: Vec[scalar] = line.chars().collect()
+    let mut out: String = ""
+    let mut at = 0
+    let mut quoted = false
+    while at < c.len() {
+        if c[at] == '"' && (at == 0 || c[at - 1] != '\\') {
+            quoted = !quoted
+        }
+        if quoted || rs2nika_find_from(c, "Some(", at) != at || (at > 0 && rs2nika_path_char(c[at - 1])) {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        let mut before = at - 1
+        while before >= 0 && c[before] == ' ' {
+            before = before - 1
+        }
+        if before < 0 || (c[before] != '{' && c[before] != ',' && c[before] != '}') {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        let mut depth = 0
+        let mut close = at + 4
+        while close < c.len() {
+            if c[close] == '(' {
+                depth = depth + 1
+            } else if c[close] == ')' {
+                depth = depth - 1
+                if depth == 0 {
+                    break
+                }
+            }
+            close = close + 1
+        }
+        let rest: String = rs2nika_text(c, close + 1, c.len())
+        if close >= c.len() || !(rest.starts_with(" =>") || rest.starts_with(" if ")) {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        let mut inner: String = rs2nika_text(c, at + 5, close)
+        if inner == "_" {
+            inner = "_value"
+        }
+        out.push_str(inner)
+        at = close + 1
+        rs2nika_hit(ctx, "R95")
+    }
+    return out
+}
+
+/// For R95: a one-line `match` whose `None` is Rust's `_ =>` gets its own
+/// `None` arm, so the `Some` arms can match the `T`: `{ Some(x) => a, _ => b }`
+/// -> `{ Some(x) => a, None => b }`; with a guard on a `Some` arm `_` also
+/// takes what the guard leaves, so it stays beside it: `None => b, _ => b`.
+/// Only for a line with one `match` and one `_ =>` arm.
+fn rs2nika_none_of_rest(line: ref String) -> String {
+    let arm = line.find(", _ => ") ?? return line.clone()
+    if line.contains("None") || !line.contains("Some(") || line.matches("match ").count() != 1 || line.matches(" _ => ").count() != 1 {
+        return line.clone()
+    }
+    let c: Vec[scalar] = line.chars().collect()
+    let from = arm + ", _ => ".len()
+    let mut depth = 0
+    let mut end = from
+    while end < c.len() {
+        if c[end] == '(' || c[end] == '[' || c[end] == '{' {
+            depth = depth + 1
+        } else if c[end] == ')' || c[end] == ']' || c[end] == '}' {
+            if depth == 0 {
+                break
+            }
+            depth = depth - 1
+        }
+        end = end + 1
+    }
+    if end >= c.len() || c[end] != '}' {
+        return line.clone()
+    }
+    let body: String = rs2nika_text(c, from, end).trim_end().trim_end_matches(",").clone()
+    let start = line.find("match ") ?? return line.clone()
+    let arms: String = line[start..<arm].clone()
+    let guarded = arms.contains(") if ")
+    let head: String = line[0..<arm].clone()
+    let tail: String = rs2nika_text(c, end, c.len())
+    if guarded {
+        return f"{head}, None => {body}, _ => {body} {tail}"
+    }
+    return f"{head}, None => {body} {tail}"
+}
+
 /// The names a pattern binds: lower-case words not followed by `(`, `{`,
 /// `:` or `::`, and not after `::` or `.`.
 fn rs2nika_pattern_names(pat: ref String) -> Vec[String] {
@@ -4118,7 +4227,7 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
                     out.push(f"{below}{l}")
                 }
             } else {
-                line = f"{shift}{line}"
+                line = rs2nika_some_arms_inline(ctx, f"{shift}{line}")
                 let ind = rs2nika_indent(line)
                 for t in ctx.todo_extra.clone() {
                     out.push(f"{ind}// TODO(rs2nika): {t}")
