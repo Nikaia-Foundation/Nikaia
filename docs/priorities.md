@@ -12,8 +12,8 @@ counts, never seconds.
 every batch carries at least two moves, the largest Rust files first
 (`project.rs`, `parser/mod.rs`, `comptime_run.rs`, `sysroot.rs`,
 `emit/mod.rs`, `modules.rs`, `contracts/mod.rs`, `check/mod.rs`). A compiler
-bug goes into a batch only when it blocks a move or turns `develop` red; the
-pause rule (more bugs found than fixed) no longer stops the self-hosting lane.
+bug goes into a batch only when it blocks a move or turns `develop` red. The
+pause rule (more bugs found than fixed) still stops the self-hosting lane.
 Each move starts from an `rs2nika` draft; a converter defect met on the way
 is fixed in the converter (the 60 % rule in `scripts/drive.nika`).
 
