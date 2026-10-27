@@ -705,7 +705,11 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     let outer = state.reading_only;
     state.reading_only = check_core_stmt_a_name(target);
     state.flow.writing_index = op.is_none() && check_core_stmt_an_index(target);
+    let saved_target = state.narrowing.target;
+    if op.is_none() { state.narrowing.target = id_of(target) as i64; }
     let mut into = check_core_expr(state, world, host, target, span);
+    state.narrowing.target = saved_target;
+    check_narrow_written_through(state, target);
     if check_core_stmt_an_index(target) {
         let slot: Ty = match into {
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
@@ -807,6 +811,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, cond: &Expr, body: &Block, span: &Span) -> Ty {
+    ({ let __nikaia_arg1 = state.scope.len() as i64; check_narrow_turn_begins(state, __nikaia_arg1) });
     let cond_ty = check_core_expr(state, world, host, cond, span);
     let at = check_span_at(world, cond, span);
     state.expect_bool(&cond_ty, &at, "A `while` loop repeats while a `bool` is `true`.");
@@ -819,6 +824,7 @@ pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &Check
     check_core_block(state, world, host, body);
     state.flow.loops -= 1;
     state.scope.pop();
+    check_narrow_turn_ends(state);
     state.repeats.pop();
     check_core_stmt_unit()
 }
@@ -963,12 +969,14 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     for local in frame.iter() { state.nameable(&local.name, span, "a `for` binding"); }
     let depth = state.scope.len() as i64;
     state.repeats.push(CheckRepeats::a_loop(world.words, depth, body));
+    check_narrow_turn_begins(state, depth);
     state.scope.push(frame);
     state.flow.loops += 1;
     check_core_stmt_body_discarded(state, body);
     check_core_block(state, world, host, body);
     state.flow.loops -= 1;
     state.scope.pop();
+    check_narrow_turn_ends(state);
     state.repeats.pop();
     check_core_stmt_unit()
 }

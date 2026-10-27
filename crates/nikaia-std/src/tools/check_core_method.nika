@@ -896,7 +896,9 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         else => false,
     }
     if nullable {
+        let before = state.findings.len() as i64
         state.reaches_into_a_nullable(on, "method", name, span)
+        check_narrow_a_proof_taken_back(state, receiver, receiver, before)
         // The arguments are still walked.
         for a in args {
             check_core_expr(state, world, host, a, span)

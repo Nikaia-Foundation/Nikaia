@@ -51,11 +51,11 @@ impl Range {
     pub fn meet(&self, other: &Range) -> Range {
         let mut out = Range { lo: self.lo, hi: self.hi };
         if other.lo.is_some() {
-            out.lo = other.lo;
+            out.lo = std::convert::identity(other.lo);
             if self.lo.is_some() { out.lo = Some(nikaia_std::index::or(self.lo, || 0).max(nikaia_std::index::or(other.lo, || 0))); }
         }
         if other.hi.is_some() {
-            out.hi = other.hi;
+            out.hi = std::convert::identity(other.hi);
             if self.hi.is_some() { out.hi = Some(nikaia_std::index::or(self.hi, || 0).min(nikaia_std::index::or(other.hi, || 0))); }
         }
         out

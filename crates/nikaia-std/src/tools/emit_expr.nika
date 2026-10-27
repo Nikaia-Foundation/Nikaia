@@ -62,13 +62,19 @@ impl EmitState {
         // fails.
         let how = self.facts.narrowed_reads.get(at) ?? -1
         if how >= 0 {
-            let narrowed = match node {
-                Expr::Variable(name, _) => emit_text(world, name),
-                else => "",
-            }
-            if narrowed != "" {
-                self.emit_expr_narrowed(out, narrowed, how)
-                return
+            match node {
+                Expr::Variable(name, _) => {
+                    self.emit_expr_narrowed(out, EmitOut { buf: emit_text(world, name), entries: [] }, how, false)
+                    return
+                },
+                // **A path of fields, as written, and then unwrapped**.
+                Expr::Field { .. } => {
+                    let mut path = EmitOut::empty()
+                    self.emit_expr_as_written(world, walk, path, host, node, depth, flow, scope)
+                    self.emit_expr_narrowed(out, path, how, true)
+                    return
+                },
+                else => {},
             }
         }
         // **An arm of a choice that goes into a mixed position is wrapped on
@@ -96,12 +102,26 @@ impl EmitState {
 
     /// A narrowed read of `name`, by the checker's flags in `how`: 1 copied,
     /// 2 an operand, 4 a struct or a list lent out of the option (#621), 8
-    /// given up where the read hands it to something that keeps it.
-    fn emit_expr_narrowed(ref self, mut out: EmitOut, name: ref String, how: i64) sync {
+    /// given up where the read hands it to something that keeps it, 16
+    /// written through (a path, ADR-382). A `path` of fields is not the
+    /// caller's to give up: what it hands on is a copy.
+    fn emit_expr_narrowed(ref self, mut out: EmitOut, name: EmitOut, how: i64, path: bool) sync {
         let copied = how % 2 == 1
         let operand = (how / 2) % 2 == 1
         let other = (how / 4) % 2 == 1
         let given_up = (how / 8) % 2 == 1
+        let written = (how / 16) % 2 == 1
+        if written {
+            if copied {
+                out.push("(*")
+                out.append(name)
+                out.push(".as_mut().unwrap())")
+            } else {
+                out.append(name)
+                out.push(".as_mut().unwrap()")
+            }
+            return
+        }
         // **Put back into an option, it stays the option it is**: the wrap
         // the slot asked for is already written, and its `)` follows.
         let lent = if copied || other { "Option::as_ref(&" } else { "Option::as_deref(&" }
@@ -109,13 +129,13 @@ impl EmitState {
             if out.buf.ends_with("Some(&") {
                 out.buf = (out.buf.strip_suffix("Some(&") ?? "").clone()
                 out.push(lent)
-                out.push(name)
+                out.append(name)
                 return
             }
             if out.buf.ends_with("Some(") {
                 out.buf = (out.buf.strip_suffix("Some(") ?? "").clone()
                 out.push("std::convert::identity(")
-                out.push(name)
+                out.append(name)
                 return
             }
         }
@@ -124,9 +144,15 @@ impl EmitState {
         if other && !given_up && out.buf.ends_with("&") && !out.buf.ends_with("&&") {
             out.buf = (out.buf.strip_suffix("&") ?? "").clone()
         }
-        out.push(name)
-        if copied || given_up {
+        out.append(name)
+        if given_up && path && !copied {
+            out.push(".clone().unwrap()")
+        } else if copied || given_up {
             out.push(".unwrap()")
+        } else if path && !other {
+            // Text in a field is a `String` or a view below: either reads
+            // as the `&str`.
+            out.push(".as_deref().unwrap()")
         } else {
             out.push(".as_ref().unwrap()")
         }

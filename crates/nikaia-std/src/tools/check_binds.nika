@@ -217,6 +217,7 @@ impl CheckState {
         let saved = CheckBoundary { loops: self.flow.loops, barrier: self.flow.barrier?.clone(), handed: self.handed_over?.clone(), promised: self.inside_a_sync_function?.clone() }
         self.flow.loops = 0
         self.flow.barrier = what.clone()
+        self.narrowing.walls.push(self.scope.len() as i64)
         self.handed_over = null
         self.inside_a_sync_function = null
         return saved
@@ -228,6 +229,7 @@ impl CheckState {
         self.handed_over = saved.handed?.clone()
         self.flow.loops = saved.loops
         self.flow.barrier = saved.barrier?.clone()
+        self.narrowing.walls.pop()
     }
 }
 

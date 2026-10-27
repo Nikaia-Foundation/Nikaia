@@ -2160,7 +2160,7 @@ pub mod check_names {
 }
 pub mod check_narrow {
     #[allow(unused_imports)]
-    pub use super::{CheckNarrow, CheckNarrowing, CheckLost, CheckBoundAt, CheckProved, check_narrow_proved_names, check_narrow_proofs_for, check_narrow_proved_here, check_narrow_proved_from_here, check_narrow_reads_of_the_maybe, check_narrow_read_as_proved, check_narrow_a_proof_taken_back};
+    pub use super::{CheckNarrow, CheckPathRead, CheckNarrowTurn, CheckNarrowing, CheckLost, CheckBoundAt, CheckProved, check_narrow_proved_names, check_narrow_proofs_for, check_narrow_proved_here, check_narrow_proved_from_here, check_narrow_ends, check_narrow_reads_of_the_maybe, check_narrow_read_as_proved, check_narrow_path_read, check_narrow_handed, check_narrow_written_through, check_narrow_turn_begins, check_narrow_turn_ends, check_narrow_a_proof_taken_back};
 }
 pub mod check_notes {}
 pub mod check_numbers {

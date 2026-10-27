@@ -6,6 +6,24 @@ pub struct CheckNarrow {
     pub inner: Ty,
     pub written_from: i64,
     pub frame: i64,
+    pub root: i64,
+    pub handed_from: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckPathRead {
+    pub node: i64,
+    pub path: String,
+    pub frame: i64,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CheckNarrowTurn {
+    pub frame: i64,
+    pub written: i64,
+    pub handed: i64,
+    pub reads: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,16 +32,23 @@ pub struct CheckNarrowing {
     pub lost_reads: collections::BTreeMap<i64, CheckLost>,
     pub maybe_reads: collections::BTreeSet<i64>,
     pub operand_reads: collections::BTreeSet<i64>,
+    pub handed_at: Vec<(String, i64)>,
+    pub path_reads: Vec<CheckPathRead>,
+    pub turns: Vec<CheckNarrowTurn>,
+    pub walls: Vec<i64>,
+    pub target: i64,
 }
 
 impl CheckNarrowing {
-    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new() } }
+    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new(), handed_at: vec![], path_reads: vec![], turns: vec![], walls: vec![], target: -1 } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckLost {
     pub name: String,
     pub at: i64,
+    pub written: String,
+    pub handed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,22 +61,14 @@ pub struct CheckBoundAt {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CheckProved {
     Yes(Ty),
-    Lost(i64),
+    Lost(CheckLost),
     No,
 }
 
 pub(crate) fn check_narrow_tested(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, other: &Expr) -> Option<String> {
     let null_other = matches!(other, Expr::LitNull(_));
     if !null_other { return None; }
-    let mut name: String = String::from("");
-    match side {
-        Expr::Variable(word, _) => {
-            let word = *word;
-            name = format!("{}", world.words.resolve(word));
-        },
-        _ => { return None; },
-    }
-    Some(name)
+    dotted_path(world, side)
 }
 
 pub fn check_narrow_proved_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cond: &Expr, holds: bool) -> Vec<String> {
@@ -100,20 +117,28 @@ pub(crate) fn check_narrow_bound_where(state: &CheckState, name: &str) -> Option
 pub fn check_narrow_proofs_for(state: &mut CheckState, names: &[String], frame: i64) -> Vec<CheckLocal> {
     let mut markers: Vec<CheckLocal> = vec![];
     for name in names.iter() {
-        let found: Option<CheckLocal> = state.binding(name);
+        let path = name.contains('.');
+        let root_name: String = nikaia_std::index::or(name.split('.').next(), || "").to_owned();
+        let found: Option<CheckLocal> = state.binding(&root_name);
         if found.is_none() { continue; }
-        let local: CheckLocal = match found { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let inner: Ty = match local.ty {
+        let mut local: CheckLocal = match found { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let mut root: i64 = -1;
+        let mut inner: Ty = match local.ty {
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => Ty::Unknown,
         };
+        if path {
+            root = local.id;
+            local = CheckLocal::free(name.to_owned(), Ty::Unknown, state.a_new_binding());
+            inner = Ty::Unknown;
+        }
         let unknown = matches!(inner, Ty::Unknown);
         let mut twice = false;
         for marker in markers.iter() { if marker.name == *name { twice = true; } }
-        if unknown || twice { continue; }
+        if unknown && !path || twice { continue; }
         let mut at = markers.len() as i64;
         if frame < state.scope.len() as i64 { at = at + (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame))).len() as i64; }
-        state.narrowing.narrows.insert((frame, at, local.id), CheckNarrow { inner, written_from: state.written_at.len() as i64, frame });
+        state.narrowing.narrows.insert((frame, at, local.id), CheckNarrow { inner, written_from: state.written_at.len() as i64, frame, root, handed_from: state.narrowing.handed_at.len() as i64 });
         markers.push(local);
     }
     markers
@@ -137,22 +162,47 @@ pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<
     for marker in markers.iter() { state.scope[nikaia_std::index::at(frame)].push(marker.clone()); }
 }
 
+pub fn check_narrow_ends(path: &str, written: &str) -> bool { path == written || path.starts_with(&format!("{}.", written)) }
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_narrow_proved(state: &CheckState, name: &str, here: i64) -> CheckProved {
-    let bound: CheckBoundAt = match check_narrow_bound_where(state, name) { Some(__nikaia_value) => __nikaia_value, None => return CheckProved::No };
+pub(crate) fn check_narrow_found(state: &CheckState, name: &str) -> Option<CheckNarrow> {
+    let bound: CheckBoundAt = match check_narrow_bound_where(state, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let narrow: CheckNarrow = match match state.narrowing.narrows.get(&(bound.frame, bound.at, bound.id)) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return CheckProved::No };
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if narrow.root >= 0 {
+        let root_name: String = nikaia_std::index::or(name.split('.').next(), || "").to_owned();
+        let root: CheckLocal = match state.binding(&root_name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if root.id != narrow.root { return None; }
+    }
+    Some(narrow)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_narrow_proved(state: &CheckState, name: &str, here: i64) -> CheckProved {
+    let narrow: CheckNarrow = match check_narrow_found(state, name) { Some(__nikaia_value) => __nikaia_value, None => return CheckProved::No };
     let mut from = narrow.written_from;
     if from > state.written_at.len() as i64 { from = state.written_at.len() as i64; }
     while from < state.written_at.len() as i64 {
         let written = nikaia_std::index::get(&state.written_at, nikaia_std::index::at(from));
-        if written.0 == name && written.1 != here { return CheckProved::Lost(written.1); }
+        if check_narrow_ends(name, &written.0) && written.1 != here { return CheckProved::Lost(CheckLost { name: name.to_owned(), at: written.1, written: written.0.to_owned(), handed: false }); }
         from = from + 1;
     }
-    for repeats in state.repeats.iter() { if repeats.what == "loop" && repeats.frame > narrow.frame && repeats.revived.contains(name) { return CheckProved::Lost(-1); } }
+    if narrow.root >= 0 {
+        let walls = state.narrowing.walls.len() as i64;
+        if walls > 0 && narrow.frame < *nikaia_std::index::get(&state.narrowing.walls, nikaia_std::index::at(walls - 1)) { return CheckProved::No; }
+        let mut handed_from = narrow.handed_from;
+        if handed_from > state.narrowing.handed_at.len() as i64 { handed_from = state.narrowing.handed_at.len() as i64; }
+        while handed_from < state.narrowing.handed_at.len() as i64 {
+            let handed = nikaia_std::index::get(&state.narrowing.handed_at, nikaia_std::index::at(handed_from));
+            if check_narrow_ends(name, &handed.0) && handed.1 != here { return CheckProved::Lost(CheckLost { name: name.to_owned(), at: handed.1, written: handed.0.to_owned(), handed: true }); }
+            handed_from = handed_from + 1;
+        }
+    }
+    for repeats in state.repeats.iter() { if repeats.what == "loop" && repeats.frame > narrow.frame { for revived in repeats.revived.iter() { if check_narrow_ends(name, revived) { return CheckProved::Lost(CheckLost { name: name.to_owned(), at: -1, written: revived.to_owned(), handed: false }); } } } }
     CheckProved::Yes(narrow.inner.clone())
 }
 
@@ -161,6 +211,7 @@ pub(crate) fn check_narrow_proved(state: &CheckState, name: &str, here: i64) -> 
 pub(crate) fn check_narrow_a_maybe_read(state: &mut CheckState, read: &Expr) {
     match read {
         Expr::Variable(_, _) => { state.narrowing.maybe_reads.insert(id_of(read) as i64); },
+        Expr::Field { .. } => { state.narrowing.maybe_reads.insert(id_of(read) as i64); },
         _ => { },
     }
 }
@@ -212,29 +263,121 @@ pub fn check_narrow_read_as_proved(state: &mut CheckState, expr: &Expr, name: &s
     if !nullable || state.reading_only || state.narrowing.maybe_reads.contains(&node) { return ty.clone(); }
     match check_narrow_proved(&state, name, span.start as i64) {
         CheckProved::Yes(ref inner) => {
-            let copied = check_narrow_copied(inner);
-            let written = inner.text();
-            let text = written == "String" || written == "ref String";
-            let lent = !copied && !text;
-            if lent {
-                let bound: Option<CheckLocal> = state.binding(name);
-                let lent_binding = if bound.is_some() { match bound { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() }.lent } else { false };
-                if inner.is_a_view() || lent_binding { return ty.clone(); }
-            }
-            let operand = state.narrowing.operand_reads.contains(&node);
-            let mut bits = 0;
-            if copied { bits = bits + 1; }
-            if operand { bits = bits + 2; }
-            if lent { bits = bits + 4; }
-            state.facts.narrowed_reads.insert(node, bits);
-            return inner.clone();
+            let bound: Option<CheckLocal> = state.binding(name);
+            let lent_binding = if bound.is_some() { match bound { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() }.lent } else { false };
+            return check_narrow_as_proved(state, node, ty, inner, lent_binding);
         },
-        CheckProved::Lost(at) => {
-            state.narrowing.lost_reads.insert(node, CheckLost { name: name.to_owned(), at });
+        CheckProved::Lost(lost) => {
+            state.narrowing.lost_reads.insert(node, lost);
             return ty.clone();
         },
         CheckProved::No => { return ty.clone(); },
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_narrow_as_proved(state: &mut CheckState, node: i64, ty: &Ty, inner: &Ty, lent_binding: bool) -> Ty {
+    let copied = check_narrow_copied(inner);
+    let written = inner.text();
+    let text = written == "String" || written == "ref String";
+    let lent = !copied && !text;
+    if lent && (inner.is_a_view() || lent_binding) { return ty.clone(); }
+    let operand = state.narrowing.operand_reads.contains(&node);
+    let mut bits = 0;
+    if copied { bits = bits + 1; }
+    if operand { bits = bits + 2; }
+    if lent { bits = bits + 4; }
+    state.facts.narrowed_reads.insert(node, bits);
+    inner.clone()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_path_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, ty: &Ty, span: &Span) -> Ty {
+    let inner: Ty = match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+        _ => return ty.clone(),
+    };
+    let node = id_of(expr) as i64;
+    if state.reading_only || node == state.narrowing.target || state.narrowing.maybe_reads.contains(&node) { return ty.clone(); }
+    let path: String = match dotted_path(world, expr) { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
+    match check_narrow_proved(&state, &path, span.start as i64) {
+        CheckProved::Yes(_) => {
+            let narrow: CheckNarrow = match check_narrow_found(&state, &path) { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
+            let proved = check_narrow_as_proved(state, node, ty, &inner, false);
+            if !state.narrowing.turns.is_empty() && state.facts.narrowed_reads.contains_key(&node) { state.narrowing.path_reads.push(CheckPathRead { node, path: path.to_owned(), frame: narrow.frame, span: Span { start: span.start, end: span.end } }); }
+            return proved;
+        },
+        CheckProved::Lost(lost) => {
+            state.narrowing.lost_reads.insert(node, lost);
+            return ty.clone();
+        },
+        CheckProved::No => { return ty.clone(); },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_handed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) {
+    let path: String = match dotted_path(world, check_peeled(expr)) { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.narrowing.handed_at.push((path, at));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_written_through(state: &mut CheckState, expr: &Expr) {
+    let walked = check_peeled(expr);
+    let node = id_of(walked) as i64;
+    let bits = nikaia_std::index::or(state.facts.narrowed_reads.get(&node), || -1);
+    if bits >= 0 && bits % 32 < 16 { state.facts.narrowed_reads.insert(node, bits + 16); }
+    match walked {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_narrow_written_through(state, base); },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_turn_begins(state: &mut CheckState, frame: i64) { state.narrowing.turns.push(CheckNarrowTurn { frame, written: state.written_at.len() as i64, handed: state.narrowing.handed_at.len() as i64, reads: state.narrowing.path_reads.len() as i64 }); }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_turn_ends(state: &mut CheckState) {
+    let turn: CheckNarrowTurn = match state.narrowing.turns.pop() { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut at = turn.reads;
+    while at < state.narrowing.path_reads.len() as i64 {
+        let read: CheckPathRead = (*nikaia_std::index::get(&state.narrowing.path_reads, nikaia_std::index::at(at))).clone();
+        at = at + 1;
+        if read.frame >= turn.frame { continue; }
+        let mut lost: Option<CheckLost> = None;
+        let mut w = turn.written;
+        while w < state.written_at.len() as i64 && lost.is_none() {
+            let written = nikaia_std::index::get(&state.written_at, nikaia_std::index::at(w));
+            if written.1 >= i64::from(read.span.start) && check_narrow_ends(&read.path, &written.0) { lost = Some(CheckLost { name: read.path.to_owned(), at: written.1, written: written.0.to_owned(), handed: false }); }
+            w = w + 1;
+        }
+        let mut h = turn.handed;
+        while h < state.narrowing.handed_at.len() as i64 && lost.is_none() {
+            let handed = nikaia_std::index::get(&state.narrowing.handed_at, nikaia_std::index::at(h));
+            if handed.1 >= i64::from(read.span.start) && check_narrow_ends(&read.path, &handed.0) { lost = Some(CheckLost { name: read.path.to_owned(), at: handed.1, written: handed.0.to_owned(), handed: true }); }
+            h = h + 1;
+        }
+        let found: CheckLost = match lost { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let path = read.path.to_owned();
+        let what = if found.handed { format!("hands `{}` over `mut`", found.written) } else { format!("assigns `{}`", found.written) };
+        let mut finding = check_refusal("NK1102", &read.span, format!("`{}` may be `null` here: the loop around this read {} after it.", path, what), vec![format!("A test before proved `{}` is not `null`, but the next turn reaches this read after that write, and from there on `{}` is a `T?` again.", path, path)], Some(format!("Test `{}` inside the loop, or copy it into a local before it: `let x = {}`.", path, path)));
+        finding.labels.push(CheckLabel { span: Span { start: read.span.start, end: read.span.end }, word: path.to_owned(), text: String::from("read here, on the next turn too"), main: true });
+        finding.labels.push(check_narrow_label(&found));
+        state.findings.push(finding);
+        state.facts.narrowed_reads.remove(&read.node);
+    }
+    if state.narrowing.turns.is_empty() { state.narrowing.path_reads = vec![]; }
+}
+
+pub(crate) fn check_narrow_label(lost: &CheckLost) -> CheckLabel {
+    let text: String = if lost.handed { String::from("handed over `mut` here, after the test") } else { String::from("assigned here, after the test") };
+    CheckLabel { span: Span { start: u32::try_from(lost.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(lost.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + u32::try_from(lost.written.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, word: lost.written.to_owned(), text, main: false }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -250,9 +393,14 @@ pub fn check_narrow_a_proof_taken_back(state: &mut CheckState, lhs: &Expr, rhs: 
     let lost: CheckLost = match found { Some(__nikaia_value) => __nikaia_value, None => return };
     if state.findings.is_empty() { return; }
     let name = lost.name.to_owned();
-    let at = lost.at;
     let last = state.findings.len() as i64 - 1;
-    if at == -1 { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but a loop around this use assigns `{}`, so the next turn may read it `null`.", name, name)); } else { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on it is a `T?` again.", name, name)); }
-    if at >= 0 { state.findings[nikaia_std::index::at(last)].labels.push(CheckLabel { span: Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + u32::try_from(name.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, word: name.to_owned(), text: String::from("assigned here, after the test"), main: false }); }
+    if lost.at == -1 {
+        state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but a loop around this use assigns `{}`, so the next turn may read it `null`.", name, name));
+        return;
+    }
+    if lost.handed { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is handed over `mut` after the test, and from there on `{}` is a `T?` again.", name, lost.written, name)); } else if lost.written == name { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on it is a `T?` again.", name, name)); } else { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on `{}` is a `T?` again.", name, lost.written, name)); }
+    let read = nikaia_std::index::get(&state.findings, nikaia_std::index::at(last)).span.clone();
+    state.findings[nikaia_std::index::at(last)].labels.push(CheckLabel { span: read, word: name.to_owned(), text: String::from("read here, where it may be `null`"), main: true });
+    state.findings[nikaia_std::index::at(last)].labels.push(check_narrow_label(&lost));
 }
 

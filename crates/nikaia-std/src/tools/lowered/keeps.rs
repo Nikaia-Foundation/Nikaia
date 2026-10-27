@@ -346,7 +346,7 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
                     let named = interner.resolve(field.name).to_owned();
                     keep_viewed_name(&named, walk);
                     if context.parameters.contains(&named) { walk.uses.kept.insert(named); }
-                } else { keep_part((field.value).as_ref(), interner, context, own, library, walk); }
+                } else { keep_part(Option::as_ref(&field.value), interner, context, own, library, walk); }
             }
         },
         Expr::ListLit { items, .. } => { for item in items.iter() { keep_part(Some(item), interner, context, own, library, walk); } },
@@ -358,7 +358,7 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             keep_named(base, interner, context, own, library, walk);
-            for field in fields.iter() { if field.value.is_some() { keep_part((field.value).as_ref(), interner, context, own, library, walk); } }
+            for field in fields.iter() { if field.value.is_some() { keep_part(Option::as_ref(&field.value), interner, context, own, library, walk); } }
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);

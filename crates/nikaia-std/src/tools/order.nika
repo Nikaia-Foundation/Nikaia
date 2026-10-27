@@ -144,7 +144,7 @@ pub fn verdict(earlier: ref Operation, later: ref Operation) -> Verdict {
     }
     // Two `let`s of the same name would make the order decide which value
     // survives. The parser allows shadowing, so this is reachable.
-    if earlier.binds != null && earlier.binds == later.binds {
+    if earlier.binds != null && later.binds != null && earlier.binds == later.binds {
         return Verdict::Shadowed(bound.clone())
     }
     for a in earlier.reaches {

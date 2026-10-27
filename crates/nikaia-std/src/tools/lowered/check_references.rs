@@ -116,6 +116,8 @@ impl CheckState {
                 let changed: String = nikaia_std::index::or(root, || "".into());
                 self.a_changed_binding_says_mut(&changed, "handed to a `mut` parameter here", check_span_at(world, given_expr, span));
             }
+            check_narrow_handed(&mut *self, world, given_expr, span.start as i64);
+            check_narrow_written_through(&mut *self, given_expr);
             self.facts.mut_args.insert(id_of(given_expr) as i64);
             let bound = match given_expr {
                 Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::index::or(self.binding(world.words.resolve(symbol)).as_ref().map(|__nikaia_it| __nikaia_it.id), || -1) },

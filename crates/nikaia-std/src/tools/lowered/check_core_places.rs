@@ -141,6 +141,15 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
+    let got = check_core_field_walked(state, world, host, expr, safe, base, name, span);
+    if safe { return got; }
+    check_narrow_path_read(state, world, expr, &got, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
     let on = check_core_expr(state, world, host, base, span);
     let field: String = format!("{}", world.words.resolve(name));
     if safe {
@@ -164,7 +173,9 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     state.a_read_of_a_part(base, expr, &field, span);
     match on {
         Ty::Nullable(_) => {
+            let before = state.findings.len() as i64;
             state.reaches_into_a_nullable(&on, "field", &field, span);
+            check_narrow_a_proof_taken_back(state, base, base, before);
             return Ty::Unknown;
         },
         _ => { },

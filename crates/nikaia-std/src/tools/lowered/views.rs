@@ -1506,7 +1506,7 @@ pub(crate) fn rsrc_struct_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &
     for field in fields.iter() {
         let named = asked.names.resolve(field.name);
         let mut more = rsrc_none();
-        if field.value.is_none() { more = rsrc_of_name(&flow, named); } else { more = rsrc_maybe(unit, asked, here, known, own_buffer, (field.value).as_ref(), flow); }
+        if field.value.is_none() { more = rsrc_of_name(&flow, named); } else { more = rsrc_maybe(unit, asked, here, known, own_buffer, Option::as_ref(&field.value), flow); }
         let mut owning = false;
         for (written, ty) in declared.iter() { if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) { owning = true; } }
         if !owning { rsrc_join(&mut out, &rsrc_under(named, &more)); }
@@ -1518,7 +1518,7 @@ pub(crate) fn rsrc_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, k
     let mut out = rsrc_none();
     for field in fields.iter() {
         let mut more = rsrc_none();
-        if field.value.is_none() { more = rsrc_of_name(&flow, asked.names.resolve(field.name)); } else { more = rsrc_maybe(unit, asked, here, known, own_buffer, (field.value).as_ref(), flow); }
+        if field.value.is_none() { more = rsrc_of_name(&flow, asked.names.resolve(field.name)); } else { more = rsrc_maybe(unit, asked, here, known, own_buffer, Option::as_ref(&field.value), flow); }
         rsrc_join(&mut out, &rsrc_under(asked.names.resolve(field.name), &more));
     }
     out

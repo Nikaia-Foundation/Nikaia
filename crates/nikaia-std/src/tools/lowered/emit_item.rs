@@ -409,7 +409,7 @@ impl EmitState {
     pub(crate) fn emit_trait_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &TraitMethod, is_sync: bool, foreign: bool) -> Result<(), Box<dyn std::error::Error>> {
         host.set_floor(true);
         let mut params: Vec<String> = vec![];
-        if method.receiver.is_some() { params.push(emit_item_receiver((method.receiver).as_ref())); }
+        if method.receiver.is_some() { params.push(emit_item_receiver(Option::as_ref(&method.receiver))); }
         for arg in method.args.iter() {
             let reference = if arg.mutable && !foreign { "&mut " } else { "" };
             let mut written: String = String::from("");

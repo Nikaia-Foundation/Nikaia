@@ -170,6 +170,9 @@ impl CheckState {
                 let changed: String = root ?? ""
                 self.a_changed_binding_says_mut(changed, "handed to a `mut` parameter here", check_span_at(world, given_expr, span))
             }
+            // **A path handed over `mut` loses its proofs** (ADR-382 D5).
+            check_narrow_handed(self, world, given_expr, span.start as i64)
+            check_narrow_written_through(self, given_expr)
             self.facts.mut_args.insert(id_of(given_expr) as i64)
             let bound = match given_expr {
                 Expr::Variable(symbol, _) => self.binding(world.words.resolve(symbol))?.id ?? -1,

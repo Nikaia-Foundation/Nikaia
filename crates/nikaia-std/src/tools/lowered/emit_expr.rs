@@ -42,13 +42,19 @@ impl EmitState {
         }
         let how = nikaia_std::index::or(self.facts.narrowed_reads.get(&at), || -1);
         if how >= 0 {
-            let narrowed = match node {
-                Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
-                _ => String::from(""),
-            };
-            if narrowed != "" {
-                self.emit_expr_narrowed(out, &narrowed, how);
-                return Ok(());
+            match node {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    self.emit_expr_narrowed(out, EmitOut { buf: emit_text(world, name), entries: vec![] }, how, false);
+                    return Ok(());
+                },
+                Expr::Field { .. } => {
+                    let mut path = EmitOut::empty();
+                    self.emit_expr_as_written(world, walk, &mut path, host, node, depth, flow, scope)?;
+                    self.emit_expr_narrowed(out, path, how, true);
+                    return Ok(());
+                },
+                _ => { },
             }
         }
         if self.facts.mixed_leaves.contains_key(&at) {
@@ -63,29 +69,41 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_expr_narrowed(&self, out: &mut EmitOut, name: &str, how: i64) {
+    pub(crate) fn emit_expr_narrowed(&self, out: &mut EmitOut, name: EmitOut, how: i64, path: bool) {
         let copied = how % 2 == 1;
         let operand = how / 2 % 2 == 1;
         let other = how / 4 % 2 == 1;
         let given_up = how / 8 % 2 == 1;
+        let written = how / 16 % 2 == 1;
+        if written {
+            if copied {
+                out.push("(*");
+                out.append(name);
+                out.push(".as_mut().unwrap())");
+            } else {
+                out.append(name);
+                out.push(".as_mut().unwrap()");
+            }
+            return;
+        }
         let lent = if copied || other { "Option::as_ref(&" } else { "Option::as_deref(&" };
         if !operand {
             if out.buf.ends_with("Some(&") {
                 out.buf = nikaia_std::index::or(out.buf.strip_suffix("Some(&"), || "").to_owned();
                 out.push(lent);
-                out.push(name);
+                out.append(name);
                 return;
             }
             if out.buf.ends_with("Some(") {
                 out.buf = nikaia_std::index::or(out.buf.strip_suffix("Some("), || "").to_owned();
                 out.push("std::convert::identity(");
-                out.push(name);
+                out.append(name);
                 return;
             }
         }
         if other && !given_up && out.buf.ends_with('&') && !out.buf.ends_with("&&") { out.buf = nikaia_std::index::or(out.buf.strip_suffix('&'), || "").to_owned(); }
-        out.push(name);
-        if copied || given_up { out.push(".unwrap()"); } else { out.push(".as_ref().unwrap()"); }
+        out.append(name);
+        if given_up && path && !copied { out.push(".clone().unwrap()"); } else if copied || given_up { out.push(".unwrap()"); } else if path && !other { out.push(".as_deref().unwrap()"); } else { out.push(".as_ref().unwrap()"); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

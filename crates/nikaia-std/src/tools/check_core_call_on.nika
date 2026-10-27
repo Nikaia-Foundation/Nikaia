@@ -729,6 +729,12 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.flow.last_resolved = key.clone()
     if contract.mutates {
         state.facts.mut_receivers.insert(node)
+        check_narrow_written_through(state, receiver)
+    }
+    // **A path handed to a method that changes or takes it loses its
+    // proofs** (ADR-382 D5).
+    if contract.mutates || check_core_call_on_takes(state, world, contract) {
+        check_narrow_handed(state, world, receiver, span.start as i64)
     }
     // **A receiver the method changes or takes is not only read.**
     if state.flow.receiver_name != null {

@@ -84,7 +84,7 @@ pub(crate) fn same_resource(kind: &str, named: Option<&str>, unnameable: bool) -
 pub fn verdict(earlier: &Operation, later: &Operation) -> Verdict {
     let bound = written_or_nothing((earlier.binds).as_deref());
     if earlier.binds.is_some() && later.mentions.contains(&bound) { return Verdict::DataDependency(bound.to_owned()); }
-    if earlier.binds.is_some() && earlier.binds == later.binds { return Verdict::Shadowed(bound.to_owned()); }
+    if earlier.binds.is_some() && later.binds.is_some() && earlier.binds.as_deref().unwrap() == later.binds.as_deref().unwrap() { return Verdict::Shadowed(bound.to_owned()); }
     for a in earlier.reaches.iter() { for b in later.reaches.iter() { if a.conflicts_with(b) { return conflict(a, b); } } }
     Verdict::Overlap
 }

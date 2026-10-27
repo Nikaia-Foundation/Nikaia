@@ -661,7 +661,9 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     }
     let nullable = matches!(on, Ty::Nullable(_));
     if nullable {
+        let before = state.findings.len() as i64;
         state.reaches_into_a_nullable(&on, "method", &name, span);
+        check_narrow_a_proof_taken_back(state, receiver, receiver, before);
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
         if witness >= 0 { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
         return Ty::Unknown;

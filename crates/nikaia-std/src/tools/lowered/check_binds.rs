@@ -168,6 +168,7 @@ impl CheckState {
         } };
         self.flow.loops = 0;
         self.flow.barrier = Some(what.to_owned());
+        self.narrowing.walls.push(self.scope.len() as i64);
         self.handed_over = None;
         self.inside_a_sync_function = None;
         saved
@@ -188,6 +189,7 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         };
+        self.narrowing.walls.pop();
     }
 }
 

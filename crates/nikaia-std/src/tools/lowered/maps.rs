@@ -468,7 +468,7 @@ impl<'a> MpBody<'a> {
                 for f in fields.iter() {
                     let field = mp_text(self.words, f.name);
                     let part = format!("{}.{}", under, field);
-                    if f.value.is_some() { self.flows_in((f.value).as_ref(), part); } else {
+                    if f.value.is_some() { self.flows_in(Option::as_ref(&&f.value), part); } else {
                         let held = match *nikaia_std::index::get(&self.roots, &field) {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
                             None => None,
@@ -606,7 +606,7 @@ impl<'a> MpBody<'a> {
                 self.expr(end);
             },
             Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); self.returned_maybe((value).as_ref()); },
-            Expr::StructLit { fields, .. } => { for f in fields.iter() { if f.value.is_some() { self.expr_maybe((f.value).as_ref()); } else if self.roots.contains_key(&mp_text(self.words, f.name)) { self.doubt(); } } },
+            Expr::StructLit { fields, .. } => { for f in fields.iter() { if f.value.is_some() { self.expr_maybe(Option::as_ref(&&f.value)); } else if self.roots.contains_key(&mp_text(self.words, f.name)) { self.doubt(); } } },
             _ => { self.doubt(); },
         }
     }

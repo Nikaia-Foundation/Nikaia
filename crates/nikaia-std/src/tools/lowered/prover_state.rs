@@ -276,7 +276,7 @@ impl ProverState {
             let unread = unread_name(names, &scope);
             if unread.is_some() { why = format!("`{}` is not a whole number the prover reads", nikaia_std::index::or(unread.as_deref(), || "")); }
         } else if only_params && at.no_precondition.is_some() {
-            let no = nikaia_std::index::or(claim_text_of((at.no_precondition).as_deref()), || "".into());
+            let no = nikaia_std::index::or(claim_text_of(Option::as_deref(&at.no_precondition)), || "".into());
             why = format!("nothing before it shows it; {}", lowered_first(&without_full_stops(&no)));
         } else if only_params && !at.top { why = String::from("nothing before it shows it, and a claim about parameters is a precondition only at the top of the function's body"); }
         outcome.held = ClaimHeld::AtRunTime(why);

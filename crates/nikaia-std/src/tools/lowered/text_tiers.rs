@@ -2169,7 +2169,7 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_>, 
             for arm in arms.iter() {
                 late_open(late);
                 late_pattern(&arm.pattern, ask, late);
-                if arm.guard.is_some() { late_maybe((arm.guard).as_ref(), ask, late); }
+                if arm.guard.is_some() { late_maybe(Option::as_ref(&arm.guard), ask, late); }
                 late_expr(&arm.body, true, ask, late);
                 late_close(late);
                 late_branch_ended(&mut gathered, late);
