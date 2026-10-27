@@ -74,6 +74,29 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn lend_choice_beside_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: &Ty) -> bool {
+        let optional = matches!(want, Ty::Nullable(_));
+        if !optional || !is_a_choice(value) { return false; }
+        let mut lent: Vec<i64> = vec![];
+        let mut nulls = 0;
+        for leaf in self.value_leaves(world, value) {
+            if ends_in_null(check_peeled(leaf)) {
+                nulls += 1;
+                continue;
+            }
+            let ty = match self.arm_type_of(leaf) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if check_core_stmt_element_view(self, world, leaf, &ty, want) != 1 { return false; }
+            lent.push(node_key(leaf));
+        }
+        if nulls == 0 || lent.is_empty() { return false; }
+        for node in lent.iter() {
+            let node = nikaia_std::num::value(node);
+            self.facts.lent_reads.insert(node);
+        }
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn note_mixed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, nullable: bool) {
         for leaf in self.value_leaves(world, value) { if !ends_in_null(check_peeled(leaf)) { self.facts.mixed_leaves.insert(node_key(leaf), nullable); } }
         self.facts.mixed_choices.insert(node_key(value));
@@ -87,6 +110,7 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if self.lend_choice_beside_null(world, value, &expected) { return true; }
         let view = expected.is_a_view();
         if !either && !view { return false; }
         let text = a_string_type();

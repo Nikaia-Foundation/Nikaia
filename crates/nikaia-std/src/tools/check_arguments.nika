@@ -17,9 +17,9 @@ struct CheckArgument {
     found: Ty,
 }
 
-/// The argument written at `at`, where one was (a `ref Expr?` is not yet
-/// built from an `if`, nor assigned from a `ref Expr`, so the option is made
-/// where it is returned).
+/// The argument written at `at`, where one was (an `Expr` read out of a place
+/// is a copy for the ledger, so `let x: ref Expr? = if .. { given[at] } else
+/// { null }` is NK1257: the option is made where it is returned).
 fn check_arguments_at(given: ref Vec[Expr], at: i64) -> ref Expr? sync {
     if at < given.len() {
         return given[at]

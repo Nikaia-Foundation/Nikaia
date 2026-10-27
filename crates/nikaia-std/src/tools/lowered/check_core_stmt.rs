@@ -387,6 +387,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let want = written_ty(world.words, world.here.aliases, t);
         element_view = check_core_stmt_element_view(&state, world, value, &found, &want);
+        if element_view == 0 && state.lend_choice_beside_null(world, value, &want) { element_view = 3; }
     }
     let bytes_view = !mutable && names.len() == 1 && shape.is_empty() && state.a_text_bytes_view(world, value);
     let mut moved_out = false;
@@ -412,7 +413,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let found_used: Ty = nikaia_std::index::or(by_use, || found.clone().into());
         let widened = state.widened_elements(world, &found_used, &want, value, span);
         let mut found_kept: Ty = nikaia_std::index::or(widened, || found_used.clone().into());
-        if element_view == 1 { found_kept = want.clone(); } else if element_view == 2 {
+        if element_view == 1 || element_view == 3 { found_kept = want.clone(); } else if element_view == 2 {
             let shown = found.unseen().text();
             let written = check_core_stmt_read_shown(world, value);
             state.findings.push(check_refusal("NK1257", span, format!("A `{}` read out of a place is a copy, so it can't be bound as a `ref {}`.", shown, shown), vec![String::from("A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep.")], Some(format!("an `{}` is copied at a read; write `let {} = {}`.", shown, name, written))));

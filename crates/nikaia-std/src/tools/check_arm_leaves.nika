@@ -97,6 +97,39 @@ impl CheckState {
         return asked
     }
 
+    /// **A `null` arm beside arms that read an element off a place, under a
+    /// `ref E?`, is an optional view** (ADR-354 D1, #655): every other arm is
+    /// lent, `null` stays `None`. True where the arms were lent.
+    pub fn lend_choice_beside_null(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty) -> bool sync {
+        let optional = match want {
+            Ty::Nullable(_) => true,
+            else => false,
+        }
+        if !optional || !is_a_choice(value) {
+            return false
+        }
+        let mut lent: Vec[i64] = []
+        let mut nulls = 0
+        for leaf in self.value_leaves(world, value) {
+            if ends_in_null(check_peeled(leaf)) {
+                nulls += 1
+                continue
+            }
+            let ty = self.arm_type_of(leaf) ?? return false
+            if check_core_stmt_element_view(self, world, leaf, ty, want) != 1 {
+                return false
+            }
+            lent.push(node_key(leaf))
+        }
+        if nulls == 0 || lent.len() == 0 {
+            return false
+        }
+        for node in lent {
+            self.facts.lent_reads.insert(node)
+        }
+        return true
+    }
+
     /// **An `if` or a `match` whose arms are views and text of their own, going
     /// into a position both kinds flow into** (#562): the lowering wraps each
     /// leaf on its own (`either(…)`, `either_maybe(…)` in a `T?`, `null`
@@ -122,6 +155,9 @@ impl CheckState {
         }
         let either = self.flow.expected_either
         let expected = self.expected?.clone() ?? return false
+        if self.lend_choice_beside_null(world, value, expected) {
+            return true
+        }
         let view = expected.is_a_view()
         if !either && !view {
             return false

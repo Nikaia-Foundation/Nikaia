@@ -1,0 +1,28 @@
+struct E { n: i64 }
+
+fn a(given: ref Vec[E], c: bool) -> i64 {
+    let y: ref E? = if c { null } else { given[1] }
+    return (y ?? return 0).n
+}
+
+fn b(given: ref Vec[E], c: bool) -> i64 {
+    let y: ref E? = match c {
+        true => null
+        else => given[1]
+    }
+    return (y ?? return 0).n
+}
+
+fn r(given: ref Vec[E], c: bool) -> ref E? {
+    if c { null } else { given[1] }
+}
+
+fn main() {
+    let g = [E { n: 1 }, E { n: 2 }]
+    println(a(g, false))
+    println(a(g, true))
+    println(b(g, false))
+    println(b(g, true))
+    println((r(g, false) ?? return).n)
+    println(r(g, true) == null)
+}
