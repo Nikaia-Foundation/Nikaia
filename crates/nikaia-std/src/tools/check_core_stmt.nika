@@ -592,6 +592,13 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             bound = found.clone()
         }
     }
+    // **A proved name bound whole by a `let` that owns its value is given
+    // up** (ADR-382, #888), as one handed back by `return` is: the arm of
+    // `let s: String = if b != null { b } else { … }` is `b.unwrap()`. A
+    // view-typed `let` keeps its view.
+    if element_view == 0 && !seen_through && !bytes_view && check_core_stmt_owns_whole(bound) {
+        state.narrowed_reads_given_back(value)
+    }
     let mut open: i64? = null
     if ty == null && bound.is_unknown() && state.number_shaped(world, value) {
         state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(name, false, span))
@@ -919,6 +926,16 @@ fn check_core_stmt_shared(state: ref CheckState, world: ref CheckWorld, target: 
 }
 
 /// **`x = v` and `x op= v`** (Part I 2.1).
+/// **A type a place owns whole** (#888): neither a view nor an option, whose
+/// slot takes a proved read as it is.
+fn check_core_stmt_owns_whole(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Nullable(_) => false,
+        Ty::Unknown => false,
+        else => !ty.is_a_view(),
+    }
+}
+
 pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span) -> Ty sync {
     // **Code assigned meets what the place holds** (ADR-351 D3).
     let code_keys: Vec[String] = if op == null { check_core_places_code_keys(state, world, target) } else { [] }
@@ -1018,6 +1035,11 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         } else {
             let to: String = if check_core_stmt_an_index(target) { "written into a container" } else { "assigned to another name" }
             state.hands_over(world, value, found, to, span)
+            // **A proved name assigned whole to a place that owns it is
+            // given up** (#888), as a `let`'s is.
+            if check_core_stmt_owns_whole(into) {
+                state.narrowed_reads_given_back(value)
+            }
         }
     }
     // **A write to shared mutable state goes through a door** (ADR-281).

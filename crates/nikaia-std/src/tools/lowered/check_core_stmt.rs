@@ -435,6 +435,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             bound = nikaia_std::index::or(lent, || found.clone().into());
         } else { bound = found.clone(); }
     }
+    if element_view == 0 && !seen_through && !bytes_view && check_core_stmt_owns_whole(&bound) { state.narrowed_reads_given_back(value); }
     let mut open: Option<i64> = None;
     if ty.is_none() && bound.is_unknown() && state.number_shaped(world, value) {
         state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(&name, false, span));
@@ -683,6 +684,16 @@ pub(crate) fn check_core_stmt_shared(state: &CheckState, world: &CheckWorld<'_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_owns_whole(ty: &Ty) -> bool {
+    match ty {
+        Ty::Nullable(_) => false,
+        Ty::Unknown => false,
+        _ => !ty.is_a_view(),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, target: &Expr, op: Option<&BinaryOp>, value: &Expr, span: &Span) -> Ty {
     let code_keys: Vec<String> = if op.is_none() { check_core_places_code_keys(&state, world, target) } else { vec![] };
     let path = state.place_path(world, target);
@@ -747,6 +758,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         if lent { found = Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true }; } else {
             let to: String = if check_core_stmt_an_index(target) { String::from("written into a container") } else { String::from("assigned to another name") };
             state.hands_over(world, value, &found, &to, span);
+            if check_core_stmt_owns_whole(&into) { state.narrowed_reads_given_back(value); }
         }
     }
     let written = check_walked_written(value, world.words);

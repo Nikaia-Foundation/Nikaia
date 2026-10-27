@@ -235,7 +235,7 @@ impl CheckState {
         self.a_narrowed_read_given_up(value);
         let a_name = matches!(value, Expr::Variable(_, _));
         let narrowed = nikaia_std::index::or(self.facts.narrowed_reads.get(&node_key(value)), || -1);
-        if a_name && narrowed >= 0 && narrowed % 8 == 0 { self.facts.narrowed_reads.insert(node_key(value), narrowed + 8); }
+        if a_name && narrowed >= 0 && narrowed % 16 == 0 { self.facts.narrowed_reads.insert(node_key(value), narrowed + 8); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

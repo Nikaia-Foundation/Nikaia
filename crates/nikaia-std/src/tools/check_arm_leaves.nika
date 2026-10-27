@@ -346,7 +346,7 @@ impl CheckState {
             else => false,
         }
         let narrowed = self.facts.narrowed_reads.get(node_key(value)) ?? -1
-        if a_name && narrowed >= 0 && narrowed % 8 == 0 {
+        if a_name && narrowed >= 0 && narrowed % 16 == 0 {
             self.facts.narrowed_reads.insert(node_key(value), narrowed + 8)
         }
     }

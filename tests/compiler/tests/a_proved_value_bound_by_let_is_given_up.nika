@@ -1,0 +1,64 @@
+// A name proved not `null` and bound whole by a `let` that owns its value,
+// or assigned whole to such a place, is given up as one handed back by
+// `return` is (ADR-382, #888): the arm is `b.unwrap()`, not a view.
+
+struct Point { name: String }
+
+fn declared(n: i64) -> String {
+    let b: String? = if n > 0 { f"d{n}" } else { null }
+    let s: String = if b != null { b } else { "none" }
+    s
+}
+
+fn inferred(n: i64) -> String {
+    let b: String? = if n > 0 { f"i{n}" } else { null }
+    let s = if b != null { b } else { "none" }
+    s
+}
+
+fn assigned(n: i64) -> String {
+    let b: String? = if n > 0 { f"a{n}" } else { null }
+    let mut s: String = "a"
+    s = if b != null { b } else { "x" }
+    s
+}
+
+fn bound_in_the_arm(n: i64) -> String {
+    let b: String? = if n > 0 { f"r{n}" } else { null }
+    if b != null {
+        let s: String = b
+        return s
+    }
+    "none"
+}
+
+fn a_struct(n: i64) -> Point {
+    let b: Point? = if n > 0 { Point { name: f"p{n}" } } else { null }
+    let s: Point = if b != null { b } else { Point { name: "none" } }
+    s
+}
+
+// Controls: a `match` binds the value itself; a copy leaves `b` whole.
+fn matched(n: i64) -> String {
+    let b: String? = if n > 0 { f"m{n}" } else { null }
+    let s: String = match b { null => "none", x => x }
+    s
+}
+
+fn copied(n: i64) -> String {
+    let b: String? = if n > 0 { f"c{n}" } else { null }
+    let s: String = if b != null { b.clone() } else { "none" }
+    f"{s} {b ?? "-"}"
+}
+
+fn main() {
+    for n in [3, 0] {
+        println(declared(n))
+        println(inferred(n))
+        println(assigned(n))
+        println(bound_in_the_arm(n))
+        println(a_struct(n).name)
+        println(matched(n))
+        println(copied(n))
+    }
+}
