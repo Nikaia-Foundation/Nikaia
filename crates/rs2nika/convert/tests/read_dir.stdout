@@ -10,8 +10,7 @@ fn stale(dir: ref Path) -> Vec[String] sync {
 
 fn walk(dir: ref Path) sync {
     let entries = fs::read_dir(dir, fs::Root::Anywhere) catch { return }
-    for entry in entries.iter().map(fn(name) { dir.join(name) }) {
-        let path = entry
+    for path in entries.iter().map(fn(name) { dir.join(name) }) {
         if path.is_dir() {
             walk(path)
         }
@@ -20,5 +19,11 @@ fn walk(dir: ref Path) sync {
 
 fn count(dir: ref Path) -> i64 sync {
     return (fs::read_dir(dir, fs::Root::Anywhere) catch { [] }).len()
+}
+
+fn direct(dir: ref Path) sync {
+    for path in (fs::read_dir(dir, fs::Root::Anywhere) catch { [] }).iter().map(fn(name) { dir.join(name) }) {
+        println(f"{path.display()}")
+    }
 }
 

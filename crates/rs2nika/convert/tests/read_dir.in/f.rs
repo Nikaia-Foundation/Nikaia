@@ -30,3 +30,10 @@ fn walk(dir: &Path) {
 fn count(dir: &Path) -> usize {
     std::fs::read_dir(dir).map(|entries| entries.flatten().count()).unwrap_or(0)
 }
+
+fn direct(dir: &Path) {
+    for entry in std::fs::read_dir(dir).into_iter().flatten() {
+        let path = entry.path();
+        println!("{}", path.display());
+    }
+}

@@ -1072,6 +1072,15 @@ fn rs2nika_read_dirs(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]
         for p in paths {
             line = line.replace(f"{p}?.path()", p).replace(f"{p}.path()", p)
         }
+        let n = out.len()
+        let renamed = paths.iter().find(fn(p) { line.trim().starts_with("let ") && (line.trim().ends_with(f" = {p}") || line.trim().ends_with(f" = {p};")) }) ?? ""
+        if renamed != "" && n > 0 && out[n - 1].trim().starts_with(f"for {renamed} in ") {
+            let (_, bound) = line.trim().split_once("let ") ?? ("", "")
+            let (to, _) = bound.split_once(" = ") ?? ("", "")
+            out[n - 1] = out[n - 1].replacen(f"for {renamed} in ", f"for {to} in ", 1)
+            paths.push(to.clone())
+            continue
+        }
         let c: Vec[scalar] = line.chars().collect()
         let (before, _) = line.split_once("std::fs::read_dir(") ?? ("", "")
         if line.contains("std::fs::read_dir(") {
@@ -1103,6 +1112,11 @@ fn rs2nika_read_dirs(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]
                 }
                 let mut tail = rs2nika_entries(rs2nika_text(c, k, c.len()), d)
                 let lhs: String = rs2nika_text(c, 0, from).trim().clone()
+                let (looped, _) = (lhs.strip_prefix("for ") ?? "").split_once(" in") ?? ("", "")
+                if looped != "" && tail.starts_with(" {") {
+                    tail = f".iter().map(|name| {d}.join(name)){tail}"
+                    paths.push(looped.trim().clone())
+                }
                 line = f"{rs2nika_text(c, 0, from)}{head}{tail}"
                 rs2nika_hit(ctx, "R217")
                 if tail.trim() == "" && head.starts_with("(") {
