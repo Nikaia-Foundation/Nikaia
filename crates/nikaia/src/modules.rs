@@ -1079,12 +1079,12 @@ impl Program {
                 trust.provenance = crate::contracts::Provenance::Untrusted;
             }
         }
-        let needs = self.units.iter().fold(Needs::default(), |acc, u| {
-            acc.join(crate::proofs::for_unit(
+        let needs = self.units.iter().fold(Needs::none(), |acc, u| {
+            acc.join(&crate::proofs::for_unit(
                 &u.path,
                 &u.source,
                 u.package.is_some(),
-                || Needs::of(&u.parsed),
+                || crate::emit::needs_of(&u.parsed),
             ))
         });
         // **Every file, for every file.** What a `comptime` came to is the
@@ -1160,7 +1160,13 @@ impl Program {
         }) {
             let paths = self.shown_paths();
             let sources: Vec<&str> = self.units.iter().map(|u| u.source.as_str()).collect();
-            rust.push_str(&crate::emit::abort_table(&rust, &map, &paths, &sources));
+            let rows: Vec<(i64, i64, i64)> = map
+                .rows()
+                .map(|(at, from, unit)| (at as i64, from as i64, unit as i64))
+                .collect();
+            rust.push_str(&nikaia_std::tools::emit_needs::emit_needs_abort_table(
+                &rust, &rows, &paths, &sources,
+            ));
         }
 
         Ok(Lowered {

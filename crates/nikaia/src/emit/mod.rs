@@ -436,92 +436,6 @@ pub struct Lowered {
     pub published: std::collections::BTreeMap<String, crate::prove::Published>,
 }
 
-/// **[ADR-300](../../../docs/specification/adr/adr-300.md) D9's table, as a Rust
-/// item to append to a program.**
-///
-/// One row per line of the generated file that came from a `.nika` line: the
-/// generated line, the file, and the line there. Sorted by the generated line,
-/// because the lookup at run time is a binary search and sorting once here costs
-/// the program nothing.
-///
-/// **Every mapped line, and not the ones that "can abort".** Which constructs
-/// abort is a list that would have to be kept correct as the emitter grows, and
-/// getting it wrong means an abort with no Nikaia line - the defect this closes.
-/// The source map already knows which lines came from somewhere, so the table is
-/// that knowledge kept rather than a second judgement about it. What it costs is
-/// a row per line in the binary, which the record accepts: *"paid by every
-/// program and needed by the ones that fail, which is the same trade a panic
-/// message itself already makes."*
-///
-/// **Appended, never prepended.** A table written above the program would move
-/// every line it names, and correcting for its own height is a circle. Rust does
-/// not care where an item sits.
-///
-/// `paths` are the program's files, indexed the way the map indexes them.
-pub fn abort_table(rust: &str, map: &SourceMap, paths: &[String], sources: &[&str]) -> String {
-    // Where each line of the generated file starts, so an offset becomes a line
-    // in one binary search rather than by counting newlines per entry.
-    let mut starts = vec![0usize];
-    starts.extend(
-        rust.char_indices()
-            .filter(|(_, c)| *c == '\n')
-            .map(|(i, _)| i + 1),
-    );
-    let line_of = |offset: usize| match starts.binary_search(&offset) {
-        Ok(i) => i + 1,
-        Err(i) => i,
-    };
-
-    // The `.nika` line of a span, per file.
-    let nika: Vec<Vec<usize>> = sources
-        .iter()
-        .map(|source| {
-            let mut starts = vec![0usize];
-            starts.extend(
-                source
-                    .char_indices()
-                    .filter(|(_, c)| *c == '\n')
-                    .map(|(i, _)| i + 1),
-            );
-            starts
-        })
-        .collect();
-
-    // **The outermost entry wins**, which is the opposite of what a lookup
-    // wants. `SourceMap::locate` answers with the innermost span covering an
-    // offset, and that is right for a diagnostic about a byte; a whole generated
-    // *line* is better named by the statement it came from than by the
-    // sub-expression that happens to start it. A `BTreeMap` keyed by the
-    // generated line and filled in map order gives that: the emitter records a
-    // node before anything it encloses, so the first entry for a line is the
-    // outermost one.
-    let mut rows: std::collections::BTreeMap<usize, (usize, usize)> =
-        std::collections::BTreeMap::new();
-    for entry in map.rows() {
-        let generated = line_of(entry.0);
-        let Some(starts) = nika.get(entry.2) else {
-            continue;
-        };
-        let line = match starts.binary_search(&entry.1) {
-            Ok(i) => i + 1,
-            Err(i) => i,
-        };
-        rows.entry(generated).or_insert((entry.2, line));
-    }
-
-    let mut out = String::new();
-    out.push_str("\n// ADR-300 D9: the generated line, and the `.nika` line it came from.\n");
-    out.push_str(&format!(
-        "const {ABORT_TABLE}: &[nikaia_std::abort::Site] = &[\n"
-    ));
-    for (generated, (unit, line)) in rows {
-        let path = paths.get(unit).map(String::as_str).unwrap_or("<unknown>");
-        out.push_str(&format!("    ({generated}, {path:?}, {line}),\n"));
-    }
-    out.push_str("];\n");
-    out
-}
-
 /// Emitted byte range -> the `.nika` span that produced it.
 ///
 /// This is the whole answer to "the error points at a line nobody wrote": the
@@ -600,7 +514,8 @@ impl SourceMap {
     /// Every entry as `(generated start, source start, unit)`, in the order the
     /// emitter recorded them - which is outermost first for any one place.
     ///
-    /// For [`abort_table`], which needs all of them rather than a lookup.
+    /// For the abort table (`emit_needs_abort_table`), which needs all of
+    /// them rather than a lookup.
     pub fn rows(&self) -> impl Iterator<Item = (usize, usize, usize)> + '_ {
         self.entries
             .iter()
@@ -806,145 +721,20 @@ pub fn barrier_names(
     .barrier_names()
 }
 
-/// What a program's preamble has to say, over all of its files.
-///
-/// `uses_std` and the rest are per-file facts, and the preamble is written
-/// once - so they are joined here rather than guessed at from the entry.
-#[derive(Debug, Clone, Default)]
-pub struct Needs {
-    pub grammar: bool,
-    pub driver: bool,
-    pub std: bool,
-    /// Kap 7.1: a function here declares `throws`, so the error surface is
-    /// reachable and `std`'s is what carries it.
-    pub fails: bool,
-    /// Kap 4.7 across a package: every trait an `impl` in this unit names with
-    /// a package in front of it
-    /// ([ADR-286](../../docs/specification/adr/adr-286.md)).
-    ///
-    /// Rust needs a trait **in scope** before its methods can be called, and
-    /// `impl http::Handler for Fixed` does not put it there. So a trait a
-    /// package publishes could be implemented and then not called, in the
-    /// backend's words about the generated file: *"trait `Handler` … is
-    /// implemented but not in scope; perhaps you want to import it"* — a rule
-    /// the program has no way to satisfy, because Nikaia has no import to
-    /// write ([ADR-286](../../docs/specification/adr/adr-286.md) D11 brings no
-    /// names in).
-    ///
-    /// The **same shape in one file compiles**, which is what says this is one
-    /// missing emitted line rather than a question: there the trait is in the
-    /// same module and needs no import.
-    pub foreign_traits: std::collections::BTreeSet<String>,
+/// What a program's preamble has to say, over all of its files
+/// (`tools/emit_needs.nika`).
+pub use nikaia_std::tools::emit_needs::EmitNeeds as Needs;
+
+/// What one file needs, read off its items with no emitter built (#727).
+pub fn needs_of(parsed: &Parsed) -> Needs {
+    Needs::of(&EmitWorld {
+        words: &parsed.interner,
+        aliases: &parsed.aliases,
+        items: &parsed.program.items,
+        library: std_ledger(),
+    })
 }
 
-impl Needs {
-    pub fn of(parsed: &Parsed) -> Needs {
-        // **Read off the items, with no emitter built** (#727): what a
-        // program needs is which items it declares and which grammar entries
-        // its functions enter, the same reading `Emitter::with_contracts`
-        // makes of them, and building an emitter for it inferred the ledger
-        // and ran the checker and the prover once more per file.
-        let mut grammars: std::collections::BTreeMap<String, GrammarDef> =
-            std::collections::BTreeMap::new();
-        let (mut std, mut fails) = (false, false);
-        for item in &parsed.program.items {
-            match &item.node {
-                Item::Grammar(def) => {
-                    grammars.insert(parsed.text(def.name).to_string(), def.clone());
-                }
-                Item::Import { .. } => std = true,
-                Item::Fn {
-                    can_throw: true, ..
-                } => fails = true,
-                _ => {}
-            }
-        }
-        let world = EmitWorld {
-            words: &parsed.interner,
-            aliases: &parsed.aliases,
-            items: &parsed.program.items,
-            library: std_ledger(),
-        };
-        Needs {
-            grammar: !grammars.is_empty(),
-            driver: nikaia_std::tools::emit_below::emit_uses_driver(&world, &grammars),
-            std,
-            fails,
-            foreign_traits: foreign_traits(parsed),
-        }
-    }
-
-    pub fn join(mut self, other: Needs) -> Needs {
-        self.foreign_traits.extend(other.foreign_traits);
-        Needs {
-            grammar: self.grammar || other.grammar,
-            driver: self.driver || other.driver,
-            std: self.std || other.std,
-            fails: self.fails || other.fails,
-            foreign_traits: self.foreign_traits,
-        }
-    }
-
-    /// The lines at the top of the emitted file.
-    pub fn preamble(self) -> String {
-        let mut out = String::new();
-        if self.grammar {
-            out.push_str("use winnow_grammar::grammar;\n");
-        }
-        if self.driver {
-            out.push_str("use winnow_grammar::rt::Parallelism;\n");
-            out.push_str("use winnow_grammar::ParseContext;\n");
-        }
-        // **Always, and allowed to be unused.** It used to be written only where
-        // the program had a `use std::…` line of its own, which is not the same
-        // question: `HashMap` is a name the prelude provides and a program may
-        // write it without importing anything, and such a program lowered to a
-        // file where `TrustedMap` was undeclared - `rustc` about a file nobody
-        // wrote (Part III, C.1). What a program uses is not a list this emitter
-        // keeps, and it does not need one: the import is one line, a locally
-        // declared name shadows a glob, and `#[allow]` is what keeps an unused
-        // one from reaching a reader (the same move the emitted `use super::*`
-        // made).
-        // Nikaia's `std` is a crate rather than a table in this file, so
-        // `fs::map`, `cli::args` and `HashMap` resolve as written and what
-        // they mean is code someone can read.
-        // `pub use`, because the grammar module the backend generates
-        // reaches these names through a glob of its own, and a private
-        // import is not re-exported into one.
-        out.push_str("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n");
-        if self.fails {
-            // Kap 7.1: `error.full()` is a method on whatever a `catch` bound, so
-            // the trait has to be in scope even in a program that imports no `std`
-            // module of its own - `throw` needs `std` whether or not the source
-            // mentions it.
-            out.push_str("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n");
-        }
-        // **A trait reached across a package is imported**
-        // ([ADR-286](../../docs/specification/adr/adr-286.md)). Written as the
-        // path the program already wrote, because that is the path the
-        // generated crate resolves: `impl http::Handler for Fixed` names the
-        // crate `http`, and so does this.
-        //
-        // `allow(unused_imports)` for the same reason the two lines above carry
-        // it - a program may implement a trait and never call the method, and a
-        // warning about a line nobody wrote is
-        // [Part III C.1](../../docs/specification/30-nikaia-tooling.md) one
-        // severity down.
-        for path in &self.foreign_traits {
-            out.push_str(&format!("#[allow(unused_imports)]\npub use {path};\n"));
-        }
-        out
-    }
-}
-
-/// Every trait an `impl` in this unit names with a package in front of it.
-///
-/// **Qualified only**, and that is the whole of the test: a trait of this
-/// program's own is in the same module below and needs no import, while a
-/// `::` in the name is exactly what says the declaration is in another crate.
-/// A trait the compiler reads rather than a `.nika` file wrote - `impl Error
-/// for ConfigError` ([ADR-023](../../docs/specification/adr/adr-023.md) D3) -
-/// carries no `::` either, so it is left alone by the same test.
 /// What each `extern "C"` declaration in this file takes
 /// ([ADR-302](../../docs/specification/adr/adr-302.md) D5), by the name a call
 /// writes.
@@ -962,10 +752,6 @@ fn opaque_handles(parsed: &Parsed) -> std::collections::BTreeMap<String, String>
 /// ([ADR-302](../../docs/specification/adr/adr-302.md) D12).
 fn foreign_results(parsed: &Parsed) -> std::collections::BTreeMap<String, Type> {
     nikaia_std::tools::emit_items::foreign_results(&parsed.interner, &parsed.program.items)
-}
-
-fn foreign_traits(parsed: &Parsed) -> std::collections::BTreeSet<String> {
-    nikaia_std::tools::emit_items::foreign_traits(&parsed.interner, &parsed.program.items)
 }
 
 /// `std`'s shipped contracts, parsed once.

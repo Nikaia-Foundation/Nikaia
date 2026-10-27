@@ -1151,6 +1151,14 @@ mod emit_misc_lowered {
 #[allow(unused_imports)]
 pub use emit_misc_lowered::*;
 
+mod emit_needs_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_needs.rs");
+}
+#[allow(unused_imports)]
+pub use emit_needs_lowered::*;
+
 mod emit_ops_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2373,6 +2381,10 @@ pub mod emit_locals {
 pub mod emit_misc {
     #[allow(unused_imports)]
     pub use super::{is_reserved, escaped_name, emit_local_name, opaque_type_text};
+}
+pub mod emit_needs {
+    #[allow(unused_imports)]
+    pub use super::{EmitNeeds, emit_needs_abort_table};
 }
 pub mod emit_ops {
     #[allow(unused_imports)]
