@@ -47,6 +47,8 @@ struct Rs2nikaCtx {
     arity: Vec[String],
     host_fns: Vec[String],
     opt_names: Vec[String],
+    /// R205: the field names `tools/*.nika` declares only as `T?`.
+    field_opts: collections::BTreeSet[String],
     /// R172: the arm lines a tuple `match` keeps as written, and why.
     tuple_line: Vec[String],
     tuple_why: Vec[String],
@@ -5845,7 +5847,7 @@ fn rs2nika_split_chains(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] 
             let head: String = before.trim_end().clone()
             let tail: String = after.trim_start().clone()
             let bare = (head == "" || head.ends_with("if") || head.ends_with("=") || head.ends_with("return") || head.ends_with("(") || head.ends_with(",")) && (tail == "" || tail.starts_with("{") || tail.starts_with(")") || tail.starts_with(","))
-            let other = rs2nika_nullable_half(sig, b, f, op == ".any(")
+            let other = rs2nika_nullable_half(ctx, sig, b, f, op == ".any(")
             let split = if other != "" { f"{a}{op}{f}) {joint} {other}" } else { f"{a}{op}{f}) {joint} {b}{op}{f})" }
             l = if bare { f"{before}{split}{after}" } else { f"{before}({split}){after}" }
             rs2nika_hit(ctx, "R205")
@@ -5855,39 +5857,38 @@ fn rs2nika_split_chains(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] 
     return out
 }
 
-/// R205: the half `ret.iter()` of a nullable parameter `ret: T?` asked
-/// `fn(t) { t.rest }`: `(ret?.rest ?? false)` (`?? true` for `all`), or "".
-fn rs2nika_nullable_half(sig: String, half: String, pred: String, any: bool) -> String {
-    if !half.ends_with(".iter()") {
+/// R205: the half `x.iter()` of a nullable `x` (a parameter `x: T?`, a
+/// name the file declares `Option<..>`, a field `tools/*.nika` declares only
+/// as `T?`) asked `fn(t) { e }`: `(x != null && e)` with `x` for `t`
+/// (`(x == null || e)` for `all`), or "".
+fn rs2nika_nullable_half(ctx: ref Rs2nikaCtx, sig: String, half: String, pred: String, any: bool) -> String {
+    let name = half.strip_suffix(".iter()") ?? return ""
+    if name == "" || !name.chars().all(fn(ch) { rs2nika_word(ch) || ch == '.' }) {
         return ""
     }
-    let name = half.strip_suffix(".iter()") ?? ""
-    if name == "" || !name.chars().all(fn(ch) { rs2nika_word(ch) }) {
-        return ""
-    }
+    let last = (name.rsplit_once(".") ?? ("", name)).1
+    let mut nullable = ctx.opt_names.contains(last) || ctx.field_opts.contains(last)
     let typed = f"{name}: "
-    let (_, rest_sig) = sig.split_once(typed) ?? return ""
-    let ty_end = rest_sig.find(",") ?? (rest_sig.find(")") ?? return "")
-    if !rest_sig[..<ty_end].trim().ends_with("?") {
+    let (_, rest_sig) = sig.split_once(typed) ?? ("", "")
+    if rest_sig != "" {
+        let ty_end = rest_sig.find(",") ?? (rest_sig.find(")") ?? 0)
+        nullable = rest_sig[..<ty_end].trim().ends_with("?")
+    }
+    if !nullable {
         return ""
     }
     let body = pred.trim()
-    if !body.starts_with("fn(") {
+    let after = body.strip_prefix("fn(") ?? return ""
+    let (param, rest) = after.split_once(") { ") ?? return ""
+    if param == "" || !param.chars().all(fn(ch) { rs2nika_word(ch) }) {
         return ""
     }
-    let open = body.find(") { ") ?? return ""
-    let param = body["fn(".len()..<open]
-    if param == "" || !param.chars().all(fn(ch) { rs2nika_word(ch) }) || !body.ends_with(" }") {
-        return ""
+    let inner = rest.strip_suffix(" }") ?? return ""
+    let said = rs2nika_replace_word(inner, param, name)
+    if any {
+        return f"({name} != null && {said})"
     }
-    let inner = body[open + ") { ".len()..<body.len() - " }".len()]
-    let lead = f"{param}."
-    let tail = inner.strip_prefix(lead) ?? return ""
-    if rs2nika_count_word(inner, param) != 1 {
-        return ""
-    }
-    let fallback = if any { "false" } else { "true" }
-    return f"({name}?.{tail} ?? {fallback})"
+    return f"({name} == null || {said})"
 }
 
 /// R188: `mod core;`, `pub(crate) mod attributes;`: Nikaia's tools files
@@ -9852,7 +9853,7 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     } else if profile == "emit" {
         world = "EmitWorld"
     }
-    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: rs2nika_opt_names(src), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [] }
+    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: rs2nika_opt_names(src), field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [] }
     if repo != "" {
         rs2nika_load(ctx, repo)
     }
@@ -11431,6 +11432,8 @@ fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: String) {
     let files = fs::walk(tools, fs::Root::Anywhere) catch {
         return
     }
+    let mut maybe: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut sure: collections::BTreeSet[String] = collections::BTreeSet()
     for name in files {
         if !name.ends_with(".nika") {
             continue
@@ -11459,6 +11462,21 @@ fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: String) {
             } else if !st.starts_with("#[") {
                 doc = ""
             }
+            // R205: a field line `[pub ]name: T[?],`
+            let field: String = if st.starts_with("pub ") { (st.strip_prefix("pub ") ?? "").clone() } else { st.clone() }
+            let (fname, fty) = field.split_once(": ") ?? continue
+            if fname != "" && fname.chars().all(fn(ch) { rs2nika_word(ch) }) && fty.ends_with(",") && !fty.contains("(") {
+                if fty.trim_end_matches(",").ends_with("?") {
+                    maybe.insert(fname.clone())
+                } else {
+                    sure.insert(fname.clone())
+                }
+            }
+        }
+    }
+    for fname in maybe {
+        if !sure.contains(fname) {
+            ctx.field_opts.insert(fname.clone())
         }
     }
     let src: String = f"{repo}/crates/nikaia/src"
@@ -11745,7 +11763,7 @@ pub fn rs2nika_lint(path: String, text: String) -> i64 {
 /// The checkout the names come from: the first of `.` and its parents that
 /// holds `crates/nikaia-std/src/tools`, or "".
 fn rs2nika_find_repo() -> String {
-    let parents = [".", "..", "../..", "../../..", "../../../.."]
+    let parents = [".", "..", "../..", "../../..", "../../../..", "../../../../..", "../../../../../.."]
     for d in parents {
         let there = fs::exists(f"{d}/crates/nikaia-std/src/tools", fs::Root::Anywhere) catch {
             false
