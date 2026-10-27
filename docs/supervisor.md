@@ -48,7 +48,10 @@ the hand-over between main sessions in `docs/architect.md`.
   (about 120). A slice runs as a chain: a research agent writes a brief of at
   most 80 lines to a file, the builder gets its path and the steps. The rs2nika
   draft is the default start (report `rs2nika: kept N of M lines`); a compiler
-  defect is fixed first. After each agent, `nikaia run scripts/tokenspeed.nika
+  defect is fixed first. **Under 60% kept, the pipeline stops** (owner,
+  2026-10-27): `scripts/drive.nika` escalates on such a report, and the main
+  session repairs or improves the converter itself, with a corpus case for
+  the moved code, before it starts the driver again. After each agent, `nikaia run scripts/tokenspeed.nika
   -- --short AGENTS_DIR` prints one row for the *Runs* table of
   `docs/tokenspeed.md`. The figures and the reasons are in
   `docs/tokensaverstrategy.md`; the ordered steps for the core of `emit` and

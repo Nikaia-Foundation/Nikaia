@@ -1,0 +1,35 @@
+// scripts/drive.nika --kept REPORT: a move that kept under 60% of the
+// converter's draft stops the pipeline (owner, 2026-10-27).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, body: String) throws {
+    fs::write(f"{tmp}/{name}", fs::Root::Anywhere, body)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--kept", f"{tmp}/{name}"]; dir: repo)
+    println(f"== {name}")
+    println(out.stdout.trim())
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    case(nikaia, repo, tmp, "under", "Result: done\nRs2nika: kept 50 of 100 lines; most cost: types\n")
+    case(nikaia, repo, tmp, "at", "Result: done\nRs2nika: kept 60 of 100 lines\n")
+    case(nikaia, repo, tmp, "none", "Result: done\nCommit: fix\n")
+    process::run("rm", ["-rf", tmp])
+}

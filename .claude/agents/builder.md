@@ -29,7 +29,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   `rs2nika --score DRAFT FINAL` over the draft and the function as committed.
   Its `kept N of M lines` goes into the report's `Rs2nika:` field (owner,
   2026-10-27), with the three edits that cost most; a report of a move without
-  it is incomplete. The draft's iterator chains stay chains: rewrite one as a
+  it is incomplete. Under 60% kept, the driver stops the pipeline and the
+  converter is repaired first (owner, 2026-10-27). The draft's iterator chains stay chains: rewrite one as a
   loop only where it does not compile, and that is a finding.
 * **A compiler defect stops the slice.** Do not work around it in the moved
   code: fix it in the compiler as its own commit if the task allows, else stop

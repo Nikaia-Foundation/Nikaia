@@ -22,6 +22,10 @@
 // output from FILE instead of running `cycle.nika` (for tests).
 // A builder's `Pushed: rejected` is rewritten when this driver pushed its commit.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
+// **A move that kept under 60% of the converter's draft stops the pipeline**
+// (owner, 2026-10-27): a builder report whose `Rs2nika:` reads `kept N of M
+// lines` with N < 0.6 M escalates, and the main session repairs the converter
+// before the next move. `--kept REPORT` prints `ok` or that line (for tests).
 // `nikaia run` compiles this script once, so a commit to it does nothing until a
 // restart: at the top of each round of a real run the driver reads
 // scripts/drive.nika again, and if it changed since the start it prints the one
@@ -66,6 +70,20 @@ fn drive_field(body: String, key: String) -> String {
 
 fn drive_word(value: String) -> String {
     return value.split(" ").collect()[0].replace(".", "").clone()
+}
+
+// The stop line for a report whose `Rs2nika:` kept under 60% of the draft,
+// "" for any other report.
+fn drive_kept(report: String) -> String {
+    let field = drive_field(report, "Rs2nika")
+    let at = field.find("kept ") ?? return ""
+    let rest = field[at + "kept ".len()..<field.len()].clone()
+    let words = rest.split(" ").collect()
+    if words.len() < 3 || words[1] != "of" { return "" }
+    let kept = text::parse_i64(words[0].clone()) ?? return ""
+    let all = text::parse_i64(words[2].clone()) ?? return ""
+    if all <= 0 || kept * 100 >= all * 60 { return "" }
+    return f"rs2nika kept {kept} of {all} lines, under 60%: repair the converter before the next move"
 }
 
 // Which action a cycle's output leads to, as one line:
@@ -278,6 +296,11 @@ fn main() throws {
         println(drive_rewrite(drive_read(args[2].clone()), drive_read(args[3].clone())))
         return
     }
+    if args.len() == 3 && args[1] == "--kept" {
+        let why = drive_kept(drive_read(args[2].clone()))
+        if why == "" { println("ok") } else { println(f"ESCALATE drive: {why}") }
+        return
+    }
     if args.len() == 3 && args[1] == "--changed" {
         if drive_read(args[2].clone()) != drive_read("scripts/drive.nika") {
             println("RESTART drive: scripts/drive.nika changed")
@@ -330,8 +353,12 @@ fn main() throws {
             let brief = (action.strip_prefix("NEXT ") ?? "").clone()
             drive_agent(exe.clone(), dry, dir.clone(), brief.clone(), "builder")
             runs += 1
-            drive_commit(dry, dir.clone(), brief, [])
+            drive_commit(dry, dir.clone(), brief.clone(), [])
             drive_tidy(dry, dir.clone())
+            if !dry {
+                let why = drive_kept(drive_read(f"{brief}.report.md"))
+                if why != "" { drive_escalate(f"{drive_stem(brief.clone())}: {why}") }
+            }
             if dry {
                 println(f"DRY-RUN NEXT {drive_stem(action.clone())}")
                 return
