@@ -198,6 +198,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R177 `--view`: the parsed files are `ParsedView`s named `unit`, by the `[view]` table of rs2nika.names (or one in the working directory): `&Parsed` -> `ref ParsedView`, `&[&Parsed]` -> `ref Vec[ParsedView]`, `parsed.program.items` -> `unit.items`, `parsed.interner` -> `unit.words`, `parsed.text(*x).to_string()` -> `unit.text(x)`",
         "R178 (`-free`) an `impl Type {` whose methods all became free (none takes `self` any longer) loses its head and its closing brace, and its body moves out one level",
         "R179 `let mut out = []` in a function that ends `return out` takes the list type it returns (`let mut out: Vec[Call] = []`); `match &*func` and `match *func` -> `match func`",
+        "R183 (`-free`) `name.to_string()` of a `String` parameter -> `name`: it is a text already",
+        "R182 `let (a, b): (A, B) = e` -> `let (a, b) = e`: a `let` of several names takes no type (NK1136)",
         "R181 `refused!(\"..{x}\")` -> `throw Refused::Because(f\"..{x}\")`, the error the emitters throw",
         "R180 (`-free`) a free function takes `state` and `world` only where its body uses them, itself or through one of the draft's functions it hands them to: `emit_x_pure(state, world, a)` -> `emit_x_pure(a)`",
     ]
@@ -437,6 +439,15 @@ fn rs2nika_ty(mut ctx: Rs2nikaCtx, given: String) -> String {
     if rs2nika_is_int(t) {
         rs2nika_hit(ctx, "R10")
         return "i64"
+    }
+    // a tuple: each of its parts
+    if t.starts_with("(") && t.ends_with(")") && t.len() > 2 {
+        let parts = rs2nika_split_args(t["(".len()..<t.len() - ")".len()].clone())
+        let mut done: Vec[String] = []
+        for part in parts {
+            done.push(rs2nika_ty(ctx, part.clone()))
+        }
+        return f"({done.join(", ")})"
     }
     if t == "str" {
         return "String"
@@ -5500,6 +5511,7 @@ fn rs2nika_unused_hosts(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] 
 /// R181: `refused!("..")` -> `throw Refused::Because(f"..")`.
 fn rs2nika_typed_empty(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
+    let mut texts: Vec[String] = []
     let mut i = 0
     while i < given.len() {
         let mut line: String = given[i].replace("match &*", "match ").replace("match *", "match ")
@@ -5517,6 +5529,31 @@ fn rs2nika_typed_empty(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
             }
         }
         let st: String = line.trim().clone()
+        // R183: a text parameter is a text already: `name.to_string()` -> `name`
+        if ctx.free && (st.starts_with("fn ") || st.starts_with("pub fn ")) {
+            texts = []
+            let c: Vec[scalar] = st.chars().collect()
+            let open = rs2nika_find_from(c, "(", 0) + 1
+            if open > 0 {
+                let end = rs2nika_group_end(c, open)
+                for p in rs2nika_split_args(rs2nika_text(c, open, end - 1)) {
+                    let bare: String = p.trim().trim_start_matches("mut ").clone()
+                    let colon = bare.find(": ") ?? continue
+                    if bare[colon + ": ".len()..<bare.len()].trim() == "String" {
+                        texts.push(bare[0..<colon].clone())
+                    }
+                }
+            }
+        }
+        for name in texts {
+            for tail in [".to_string()", ".to_owned()"] {
+                let renamed = rs2nika_rename_word(line, f"{name}{tail}", name)
+                if renamed != line {
+                    rs2nika_hit(ctx, "R183")
+                    line = renamed
+                }
+            }
+        }
         if st.starts_with("let mut ") && st.ends_with(" = []") {
             let name: String = st["let mut ".len()..<st.len() - " = []".len()].clone()
             let mut ret: String = ""
@@ -6147,6 +6184,17 @@ fn rs2nika_let_type(mut ctx: Rs2nikaCtx, line: String) -> String {
     let mut bare: String = (name.strip_prefix("let ") ?? "").clone()
     if bare.starts_with("mut ") {
         bare = (bare.strip_prefix("mut ") ?? "").clone()
+    }
+    // `let (a, b): (A, B) =` binds several names, which take no type (NK1136)
+    if bare.starts_with("(") && bare.ends_with(")") {
+        let mut names = true
+        for part in rs2nika_split_args(bare["(".len()..<bare.len() - ")".len()].clone()) {
+            names = names && rs2nika_is_path(part.trim().clone())
+        }
+        if names {
+            rs2nika_hit(ctx, "R182")
+            return f"{rs2nika_indent(line)}{name}{line[eq..<line.len()]}"
+        }
     }
     if !rs2nika_is_path(bare) || bare.contains(":") {
         return line.clone()
@@ -8640,11 +8688,22 @@ fn rs2nika_let_else(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
     let sf = rs2nika_some_fields(pat)
     let p = rs2nika_expr(ctx, sf[0])
     let v = rs2nika_expr(ctx, value)
-    let mut g: String = ""
+    // a `Some(x)` field: the arm hands `x ?? jump` on, as a guard would
+    // narrow `x` in the arm but not in what the `match` hands back
     if sf[1] != "" {
         rs2nika_hit(ctx, "R173")
-        g = f" if {sf[1]}"
+        let tested: Vec[String] = sf[1].split(" && ").map(fn(g) { g.replace(" != null", "") }).collect()
+        let mut parts: Vec[String] = []
+        for n in names {
+            if tested.contains(n) {
+                parts.push(f"{n} ?? {jump}")
+            } else {
+                parts.push(n.clone())
+            }
+        }
+        bound = if parts.len() > 1 { f"({parts.join(", ")})" } else { parts[0].clone() }
     }
+    let g: String = ""
     // R146: `let Ok(P) = call else { jump }` -> `let P = call catch { jump }`
     let ok = rs2nika_called(pat, "Ok(")
     if ok.len() == 1 && value.ends_with(")") {
@@ -8657,7 +8716,8 @@ fn rs2nika_let_else(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
         return []
     }
     rs2nika_hit(ctx, "R60")
-    return [f"{ind}let {bound} = match {v} {{ {p}{g} => {bound}, else => {jump} }}"]
+    let names_bound = if names.len() > 1 { f"({names.join(", ")})" } else { names[0].clone() }
+    return [f"{ind}let {names_bound} = match {v} {{ {p}{g} => {bound}, else => {jump} }}"]
 }
 
 /// R61: `let (mut a, mut b): (A, B) = (x, y);` -> one `let` each.
