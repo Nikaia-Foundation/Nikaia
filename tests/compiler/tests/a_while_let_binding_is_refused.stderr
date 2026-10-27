@@ -1,0 +1,7 @@
+error: A condition can't bind a name: `match` binds the value an enum or a `T?` holds.
+  --> tests/a_while_let_binding_is_refused.nika:3:11
+   |
+ 3 |     while let v = x {
+   |           ^^^
+   |
+   = help: Write `match x { ... }`, or test a `T?` with `x != null`.

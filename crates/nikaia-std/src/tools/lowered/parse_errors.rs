@@ -76,6 +76,13 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
     let before = upto(c, at);
     let has_found = error.has_found;
     let found_word = error.found.to_owned();
+    if has_found {
+        let word = found_word.to_owned();
+        let __nikaia_held_0 = last_line_to(c, at);
+        let head = __nikaia_held_0.trim_start();
+        let in_head = head.starts_with("if ") || head.starts_with("while ") || head.starts_with("} else if ");
+        if word == "let" && (prev == "if" || prev == "while") || word == "is" && in_head && lists(&error.expected, "`{`") { return Some(reading_at(at, &word, "A condition can't bind a name: `match` binds the value an enum or a `T?` holds.", "Write `match x { ... }`, or test a `T?` with `x != null`.")); }
+    }
     if !has_found && lists(&error.expected, "`\"`") {
         let open = unclosed_quote(&source);
         if open >= 0 { return Some(reading_at(open, "\"", "This string is never closed.", "End it with `\"` where the text is meant to stop.")); }

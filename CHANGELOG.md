@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1230] — 2026-10-27
+
+**A binding in a condition is refused with words that name `match`** (#878,
+ADR-382 D6). `if let v = x`, `while let v = x` and `if e is Leaf(v)` now read
+"A condition can't bind a name", with the help `match x { ... }` or `x != null`,
+instead of the reserved-word message (`let_`) and "Expected `{`". Tests
+`an_if_let_binding_in_a_condition_is_refused`,
+`an_is_binding_in_a_condition_is_refused`, `a_while_let_binding_is_refused`.
+
 ## [0.0.1229] — 2026-10-27
 
 **A comptime number below `i64::MIN` is `NK1116`; the compiler builds no

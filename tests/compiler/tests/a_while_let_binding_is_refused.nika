@@ -1,0 +1,6 @@
+fn main() {
+    let x: i64? = 1
+    while let v = x {
+        println(v)
+    }
+}

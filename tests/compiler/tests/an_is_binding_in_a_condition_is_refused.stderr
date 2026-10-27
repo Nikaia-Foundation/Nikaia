@@ -1,6 +1,7 @@
-error: Expected `{` here, but found `is`.
+error: A condition can't bind a name: `match` binds the value an enum or a `T?` holds.
   --> tests/an_is_binding_in_a_condition_is_refused.nika:8:10
    |
  8 |     if e is Leaf(v) {
    |          ^^
    |
+   = help: Write `match x { ... }`, or test a `T?` with `x != null`.
