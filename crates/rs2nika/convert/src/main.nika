@@ -10233,7 +10233,10 @@ fn rs2nika_as_file(text: String, state: String) -> String {
             if head.starts_with("pub ") {
                 head = (head.strip_prefix("pub ") ?? "").clone()
             }
-            let item = head.starts_with("fn ") || head.starts_with("struct ") || head.starts_with("enum ") || head.starts_with("impl ") || head.starts_with("impl[")
+            // every line at the top is an item (`fn`, `struct`, `comptime`,
+            // `trait`, ..) but a comment, a `use` and a closing brace: none
+            // is dropped unsaid
+            let item = st != "" && !st.starts_with("//") && !st.starts_with("}") && !head.starts_with("use ")
             if item {
                 if open {
                     rs2nika_flush(cur, cur_method, cur_ind, free, meth)

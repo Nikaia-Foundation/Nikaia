@@ -1,0 +1,6 @@
+--profile
+emit-free
+--file
+--prefix
+emit_x_
+f.rs

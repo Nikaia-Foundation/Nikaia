@@ -1,0 +1,8 @@
+use std::collections
+
+pub comptime TARGETS: Array[ref String, 2] = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+
+pub comptime ONE: Array[ref String, 2] = ["a", "b"]
+
+comptime MAX: i64 = 3
+
