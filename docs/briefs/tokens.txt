@@ -78,3 +78,4 @@
 /home/user/Nikaia/docs/briefs/b-fixforward-agent-cap.md 189752 10
 /home/user/Nikaia/docs/briefs/b892-arm-moved-value.md 286475 5
 /home/user/Nikaia/docs/briefs/architect-task.md 808758 21
+/home/user/Nikaia/docs/briefs/e12-4a.md 84025 1
