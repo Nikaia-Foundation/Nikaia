@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1241] — 2026-10-27
+
+### A `catch` on a call used as a statement drops the call's value
+
+`save(file) catch { log("not saved") }` no longer needs its block to hand back what `save` returns: a `catch` whose value is not used (a statement, a loop body's tail, the tail of an arm whose value is dropped) has a block that runs for its effect, and the call's value is dropped (Part I 7.1, #885).
+
 ## [0.0.1240] — 2026-10-27
 
 ### A match guard narrows, and so does a tuple position
