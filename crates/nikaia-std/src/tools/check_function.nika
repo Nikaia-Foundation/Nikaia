@@ -552,6 +552,9 @@ fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref Ch
                 state.facts.lent_returns.insert(span.start as i64)
             }
             if !lending {
+                if !tail_view {
+                    state.narrowed_reads_given_back(value)
+                }
                 let mut result: Ty? = state.text_literal(world, expected, value, true)
                 if result == null {
                     result = state.tuple_literal(world, shown, expected, value)

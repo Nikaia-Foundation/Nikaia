@@ -231,6 +231,33 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_narrowed_read_given_back(&mut self, value: &Expr) {
+        self.a_narrowed_read_given_up(value);
+        let a_name = matches!(value, Expr::Variable(_, _));
+        let narrowed = nikaia_std::index::or(self.facts.narrowed_reads.get(&node_key(value)), || -1);
+        if a_name && narrowed >= 0 && narrowed % 8 == 0 { self.facts.narrowed_reads.insert(node_key(value), narrowed + 8); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn narrowed_reads_given_back(&mut self, value: &Expr) {
+        match value {
+            Expr::If { then_branch, else_branch, .. } => { if else_branch.is_some() { for block in [then_branch, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }] { self.narrowed_reads_given_back_in(block); } } },
+            Expr::Block(block, _) => { self.narrowed_reads_given_back_in(block); },
+            Expr::Match { arms, .. } => { for each in arms.iter() { self.narrowed_reads_given_back(&each.body); } },
+            _ => { self.a_narrowed_read_given_back(value); },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn narrowed_reads_given_back_in(&mut self, block: &Block) {
+        if block.stmts.is_empty() { return; }
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+            Stmt::Expr(value) => { self.narrowed_reads_given_back(value); },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn hands_over(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, to: &str, span: &Span) {
         if self.a_text_bytes_kept(world, value) { return; }
         match value {

@@ -450,6 +450,7 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
         Stmt::Expr(value) => {
             if lending && nullable { state.facts.lent_reads.insert(id_of(value) as i64); } else if lending { state.facts.lent_returns.insert(span.start as i64); }
             if !lending {
+                if !tail_view { state.narrowed_reads_given_back(value); }
                 let mut result: Option<Ty> = state.text_literal(world, expected, value, true);
                 if result.is_none() { result = state.tuple_literal(world, &shown, expected, value); }
                 if result.is_none() { result = number_where_no_number_is(expected, value); }

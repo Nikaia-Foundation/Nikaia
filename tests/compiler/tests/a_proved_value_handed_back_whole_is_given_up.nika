@@ -1,0 +1,25 @@
+// ADR-382, #879: a name a test proved not `null` that the function hands
+// back whole, by `return` or as its tail, is the value itself, text too.
+fn listed(a: Vec[i64]?) -> Vec[i64] {
+    if a != null { a } else { [] }
+}
+
+fn named(n: i64) -> String {
+    let s: String? = if n > 0 { f"n{n}" } else { null }
+    if s != null {
+        return s
+    }
+    return "none"
+}
+
+fn tail(n: i64) -> String {
+    let s: String? = if n > 0 { f"t{n}" } else { null }
+    if s != null { s } else { "none" }
+}
+
+fn main() {
+    println(listed([1, 2]).len())
+    println(named(3))
+    println(named(0))
+    println(tail(4))
+}

@@ -335,6 +335,54 @@ impl CheckState {
         }
     }
 
+    /// **A proved name the function hands back whole is given up, text too**
+    /// (ADR-382, #879): the function's value is the `String` itself, not a
+    /// view of it (`s.unwrap()`, not `s.as_ref().unwrap()`). A path of
+    /// fields keeps its view.
+    pub fn a_narrowed_read_given_back(ref mut self, value: ref Expr) sync {
+        self.a_narrowed_read_given_up(value)
+        let a_name = match value {
+            Expr::Variable(_, _) => true,
+            else => false,
+        }
+        let narrowed = self.facts.narrowed_reads.get(node_key(value)) ?? -1
+        if a_name && narrowed >= 0 && narrowed % 8 == 0 {
+            self.facts.narrowed_reads.insert(node_key(value), narrowed + 8)
+        }
+    }
+
+    /// **Every end of a function's tail hands its value back** (ADR-282 D4):
+    /// a proved read there is given up as after `return`.
+    pub fn narrowed_reads_given_back(ref mut self, value: ref Expr) sync {
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                if else_branch != null {
+                    for block in [then_branch, else_branch ?? return] {
+                        self.narrowed_reads_given_back_in(block)
+                    }
+                }
+            },
+            Expr::Block(block, _) => self.narrowed_reads_given_back_in(block),
+            Expr::Match { arms, .. } => {
+                for each in arms {
+                    self.narrowed_reads_given_back(each.body)
+                }
+            },
+            else => self.a_narrowed_read_given_back(value),
+        }
+    }
+
+    /// The tail of a block, given back.
+    fn narrowed_reads_given_back_in(ref mut self, block: ref Block) sync {
+        if block.stmts.len() == 0 {
+            return
+        }
+        match block.stmts[block.stmts.len() - 1].node {
+            Stmt::Expr(value) => self.narrowed_reads_given_back(value),
+            else => {},
+        }
+    }
+
     /// **A value handed to something that keeps it** (ADR-293 D29): a name or
     /// a field path read here is handed over; `name.to_string()` is `name`
     /// (ADR-282 D8).
