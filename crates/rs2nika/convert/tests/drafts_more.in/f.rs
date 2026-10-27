@@ -97,3 +97,22 @@ fn listed(places: &str, c: char) -> String {
     let q = if c == '"' { 1 } else { 2 };
     format!("{places}; repeatable {q}")
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct Moved {
+    /// The names.
+    pub names: Vec<String>,
+    pub by: BTreeMap<String, usize>,
+    pub last: Option<String>,
+    pub done: bool,
+}
+
+impl Moved {
+    pub fn new() -> Moved {
+        Moved::default()
+    }
+}
+
+fn fresh() -> Moved {
+    Moved::new()
+}

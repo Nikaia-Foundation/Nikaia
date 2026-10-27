@@ -219,6 +219,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R206 a statement with `A.chain(B)`: `let mut chained = A.collect()` (`[x]` for `once(x)`), `chained.extend(B.collect())` first, the chain reads `chained` / `chained.iter()`",
         "R207 profile: the methods of an `impl` of a type other than `Checker`/`Emitter` keep `ref self`, their names and `self.x`: no state, world or prefix",
         "R208 a `{x};` inside a string literal keeps its `;` (only a block's `};` loses it)",
+        "R209 a struct Rust derives `Default` for gets `pub fn empty() -> X` (every field its type's empty value: `\"\"`, `[]`, `0`, `false`, `null`, `collections::BTreeMap()`, `Y::empty()`)",
+        "R210 `X::new(..)` -> `X(..)` for a type of the file whose `impl` declares `fn new` (NK1149)",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -4244,6 +4246,174 @@ fn rs2nika_block_semis(code: String) -> String {
     return out
 }
 
+/// R210: a type of the file whose `impl` declares `fn new(..)` is made with
+/// `X(..)`, not `X::new(..)` (NK1149).
+fn rs2nika_new_calls(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut made: Vec[String] = []
+    let mut owner: String = ""
+    for l in given {
+        if l.starts_with("impl ") && l.ends_with(" {") {
+            owner = rs2nika_impl_type(l)
+        } else if l == "}" {
+            owner = ""
+        } else if owner != "" && (l.trim_start().starts_with("pub fn new(") || l.trim_start().starts_with("fn new(")) && !made.contains(owner) {
+            made.push(owner.clone())
+        }
+    }
+    if made.len() == 0 {
+        return given.clone()
+    }
+    let mut out: Vec[String] = []
+    for l in given {
+        let mut line: String = l.clone()
+        for x in made {
+            let next = rs2nika_replace_free(line, f"{x}::new(", f"{x}(")
+            if next != line {
+                rs2nika_hit(ctx, "R210")
+                line = next
+            }
+        }
+        out.push(line)
+    }
+    return out
+}
+
+/// R209: a struct Rust derives `Default` for gets `pub fn empty() -> X`, every
+/// field its type's empty value, the constructor tools/*.nika write and R38's
+/// `X::default()` -> `X::empty()` calls.
+fn rs2nika_empty_ctors(mut ctx: Rs2nikaCtx, src: String, given: ref Vec[String]) -> Vec[String] {
+    let mut derived: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut pending = false
+    for raw in src.split("\n") {
+        let st: String = raw.trim().clone()
+        if st.starts_with("#[derive(") {
+            if st.contains("Default") {
+                pending = true
+            }
+            continue
+        }
+        if st.starts_with("#[") || st.starts_with("//") || st == "" {
+            continue
+        }
+        if pending {
+            let mut head: String = st.clone()
+            for p in ["pub(crate) ", "pub(super) ", "pub "] {
+                if head.starts_with(p) {
+                    head = (head.strip_prefix(p) ?? "").clone()
+                }
+            }
+            if head.starts_with("struct ") && head.ends_with("{") {
+                let name: String = (head.strip_prefix("struct ") ?? "").strip_suffix("{") ?? ""
+                let n: String = name.trim().clone()
+                if n != "" && rs2nika_all_word(n) {
+                    derived.insert(n)
+                }
+            }
+        }
+        pending = false
+    }
+    let mut out: Vec[String] = []
+    let mut i = 0
+    while i < given.len() {
+        let l: String = given[i].clone()
+        out.push(l.clone())
+        let mut head: String = l.clone()
+        if head.starts_with("pub ") {
+            head = (head.strip_prefix("pub ") ?? "").clone()
+        }
+        if !(head.starts_with("struct ") && head.ends_with(" {")) {
+            i = i + 1
+            continue
+        }
+        let name: String = ((head.strip_prefix("struct ") ?? "").strip_suffix(" {") ?? "").clone()
+        if !derived.contains(name) {
+            i = i + 1
+            continue
+        }
+        let mut parts: Vec[String] = []
+        let mut known = true
+        let mut j = i + 1
+        while j < given.len() && given[j] != "}" {
+            let f: String = given[j].clone()
+            out.push(f.clone())
+            let mut fs: String = f.trim().clone()
+            j = j + 1
+            if fs == "" || fs.starts_with("//") || fs.starts_with("@") {
+                continue
+            }
+            if fs.starts_with("pub ") {
+                fs = (fs.strip_prefix("pub ") ?? "").clone()
+            }
+            if fs.ends_with(",") {
+                fs = (fs.strip_suffix(",") ?? "").clone()
+            }
+            let (field, ty) = fs.split_once(": ") ?? ("", "")
+            let empty = rs2nika_empty_of(ty.trim())
+            if field == "" || empty == "" {
+                known = false
+            } else {
+                parts.push(f"{field}: {empty}")
+            }
+        }
+        if j < given.len() {
+            out.push(given[j].clone())
+        }
+        i = j + 1
+        if !known {
+            continue
+        }
+        rs2nika_hit(ctx, "R209")
+        let joined = rs2nika_join(parts, ", ")
+        out.push("")
+        out.push(f"impl {name} {{")
+        out.push("    /// Every field empty (Rust's derived `Default`).")
+        out.push(f"    pub fn empty() -> {name} {{")
+        out.push(f"        return {name} {{ {joined} }}")
+        out.push("    }")
+        out.push("}")
+    }
+    return out
+}
+
+/// Whether the text is one name: word characters only.
+fn rs2nika_all_word(text: String) -> bool {
+    return text.chars().all(fn(ch) { rs2nika_word(ch) })
+}
+
+/// R209: the empty value of a Nikaia type, or "" where none is plain.
+fn rs2nika_empty_of(ty: String) -> String {
+    if ty.ends_with("?") {
+        return "null"
+    }
+    if ty == "String" {
+        return "\"\""
+    }
+    if ty == "bool" {
+        return "false"
+    }
+    if ty == "f64" || ty == "f32" {
+        return "0.0"
+    }
+    for n in ["i64", "i32", "i16", "i8", "u64", "u32", "u16", "u8", "usize", "isize"] {
+        if ty == n {
+            return "0"
+        }
+    }
+    if ty.starts_with("Vec[") {
+        return "[]"
+    }
+    if ty.starts_with("collections::BTreeMap[") {
+        return "collections::BTreeMap()"
+    }
+    if ty.starts_with("collections::BTreeSet[") {
+        return "collections::BTreeSet()"
+    }
+    if rs2nika_all_word(ty) && ty != "" {
+        return f"{ty}::empty()"
+    }
+    return ""
+}
+
 /// For R52: the names a file declares `&Parsed` (`unit: &Parsed`), other
 /// than `parsed`, whose `.text(x)` is the world's `words.resolve(x)`.
 fn rs2nika_parsed_names(src: String) -> Vec[String] {
@@ -5563,7 +5733,8 @@ fn rs2nika_narrow(mut ctx: Rs2nikaCtx, given: String) -> String {
 /// `unit.text(x)`.
 /// R178: an `impl Type {` without a trait whose methods all became free
 /// (none takes `self` any longer) is no wrapper in Nikaia: its head and its
-/// closing brace go, and its body moves out one level.
+/// closing brace go, and its body moves out one level - unless the file
+/// calls them as `Type::f(..)` (R207).
 fn rs2nika_unwrap_impls(mut ctx: Rs2nikaCtx, given: String) -> String {
     if !ctx.free {
         return given.clone()
@@ -5573,7 +5744,10 @@ fn rs2nika_unwrap_impls(mut ctx: Rs2nikaCtx, given: String) -> String {
     let mut i = 0
     while i < lines.len() {
         let line = lines[i].clone()
-        if line.starts_with("impl ") && line.trim_end().ends_with("{") && !line.contains(" for ") {
+        let named = rs2nika_impl_type(line)
+        // R207: an `impl` whose functions the file calls as `Newly::new()` stays
+        let called = named != "" && given.contains(f"{named}::")
+        if line.starts_with("impl ") && line.trim_end().ends_with("{") && !line.contains(" for ") && !called {
             let mut close = i + 1
             let mut takes = false
             while close < lines.len() && !lines[close].starts_with("}") {
@@ -10241,7 +10415,9 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     let done4 = rs2nika_drop_mods(ctx, done3)
     let done5 = rs2nika_at_bindings(ctx, done4)
     let done6 = rs2nika_collect_seqs(ctx, done5)
-    let done = rs2nika_split_chains(ctx, done6)
+    let done7 = rs2nika_split_chains(ctx, done6)
+    let done8 = rs2nika_empty_ctors(ctx, src, done7)
+    let done = rs2nika_new_calls(ctx, done8)
     // R100 after R45, which drops the `use` of an alias
     let named = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
     let mut named_lines: Vec[String] = []

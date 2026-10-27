@@ -104,3 +104,28 @@ fn more_listed(places: String, c: scalar) -> String {
     return f"{places}; repeatable {q}"
 }
 
+pub struct Moved {
+    /// The names.
+    pub names: Vec[String],
+    pub by: collections::BTreeMap[String, i64],
+    pub last: String?,
+    pub done: bool,
+}
+
+impl Moved {
+    /// Every field empty (Rust's derived `Default`).
+    pub fn empty() -> Moved {
+        return Moved { names: [], by: collections::BTreeMap(), last: null, done: false }
+    }
+}
+
+impl Moved {
+    pub fn new() -> Moved {
+        return Moved::empty()
+    }
+}
+
+fn more_fresh() -> Moved {
+    return Moved()
+}
+
