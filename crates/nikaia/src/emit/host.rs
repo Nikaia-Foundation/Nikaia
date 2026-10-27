@@ -224,7 +224,7 @@ impl EmitHost for Emitter<'_> {
     }
 
     fn parallelism(&self) -> String {
-        self.build.parallelism().to_string()
+        self.build.parallelism()
     }
 
     fn written(&self, expr: &Expr) -> String {

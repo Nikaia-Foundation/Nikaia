@@ -4436,7 +4436,7 @@ fn run_directly(binary: &std::path::Path, args: &[String]) -> Result<i32> {
 /// `Stream`, and the point of compiling the generated parser at all is that it
 /// *is* the program's parser.
 pub fn runtime_dependencies_for(rust: &str) -> Vec<(String, String)> {
-    runtime_dependencies(rust, crate::emit::ReentrancyCheck::default())
+    runtime_dependencies(rust, crate::emit::ReentrancyCheck::Yes)
         .map(|table| {
             table
                 .into_iter()

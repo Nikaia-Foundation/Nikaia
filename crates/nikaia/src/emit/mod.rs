@@ -27,7 +27,6 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 
 mod host;
-mod rust_targets;
 pub(crate) mod seeds;
 pub mod template;
 use winnow_grammar::Symbol;
@@ -65,76 +64,15 @@ impl Default for Target {
     }
 }
 
-/// Whether the **user's** code may run concurrently at all (ADR-037 D2).
-///
-/// A yes-or-no question, deliberately: *how many* threads or cores serve that
-/// answer is the runtime's business, and a number in the language would be a
-/// promise the language cannot keep on a machine it has not seen.
-///
-/// It does not bind the compiler - `fs::map` may still validate its text on
-/// four cores at `No`, because that is not code the user wrote and it changes
-/// nothing the program prints (ADR-016 D3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum UserParallelism {
-    /// `no` - the default. Nothing the user wrote ever runs concurrently.
-    #[default]
-    No,
-    /// `yes` - it may, and the runtime decides how widely.
-    Yes,
-}
-
-/// **Whether the program carries the runtime re-entrancy check**
-/// ([ADR-281](../../docs/specification/adr/adr-281.md) D36).
-///
-/// Taking a lock while a lock is held is refused when the program is compiled
-/// (`NK2203`, Part II 12.3), so under D2 this check cannot fire in a correct
-/// compiler — and that is its role: **self-control of D2's rule, not error
-/// handling.** No input can trigger it; if it fires, the compiler has a hole,
-/// and without it such a hole is a silent hang instead.
-///
-/// **For every program that obeys the nesting rule, both builds behave
-/// identically**, which is what keeps Part I 1.2's *how, never what* intact:
-/// the switch decides only whether a violation is **noticed**.
-///
-/// It is not named *debug* and is not a development aid to be removed later. It
-/// is a guarantee that can be declined, which is
-/// [ADR-292](../../docs/specification/adr/adr-292.md) D7's precedent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ReentrancyCheck {
-    /// `yes` — the default. The program carries the check.
-    #[default]
-    Yes,
-    /// `no` — it does not, and a hole in this compiler is a hang.
-    No,
-}
-
-impl ReentrancyCheck {
-    pub fn parse(value: &str) -> Result<ReentrancyCheck> {
-        match value {
-            "yes" => Ok(ReentrancyCheck::Yes),
-            "no" => Ok(ReentrancyCheck::No),
-            // **A third spelling is refused rather than guessed at**, which is
-            // what `user-parallelism` does one switch over: `on` and `off` read
-            // like this option and are not it, and a build that silently took
-            // the default for a word it did not know would ship the guarantee
-            // the manifest declined.
-            other => Err(refused!(
-                "`reentrancy-check` is `yes` or `no`, not `{other}`."
-            )),
-        }
-    }
-
-    /// Whether the emitted program carries it.
-    pub fn is_on(self) -> bool {
-        matches!(self, ReentrancyCheck::Yes)
-    }
-}
+/// Whether the user's code may run concurrently, and whether the program
+/// carries the re-entrancy check: `tools/emit_build.nika`.
+pub use nikaia_std::tools::emit_build::{ReentrancyCheck, UserParallelism};
 
 /// The build switches together (ADR-037, [ADR-281](../../docs/specification/adr/adr-281.md) D36).
 ///
 /// One value rather than three parameters: a fourth switch is then a field, not
 /// a change at every call site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Build {
     pub target: Target,
     pub user_parallelism: UserParallelism,
@@ -176,12 +114,36 @@ pub struct Build {
     pub called_from_c: bool,
 }
 
+impl Default for Build {
+    fn default() -> Build {
+        Build {
+            target: Target::default(),
+            user_parallelism: UserParallelism::No,
+            reentrancy_check: ReentrancyCheck::Yes,
+            bounds: crate::bounds::BoundsChecks::default(),
+            overflow: crate::bounds::OverflowChecks::default(),
+            skip_free_at_exit: false,
+            prove_through_loops: false,
+            counts_steps: false,
+            leaves_values: false,
+            called_from_c: false,
+        }
+    }
+}
+
+/// A build switch's refusal from `tools/emit_build.nika`, in the words it gave.
+fn switch(thrown: nikaia_std::error::Thrown<nikaia_std::tools::Refused>) -> anyhow::Error {
+    refused!("{thrown}")
+}
+
 impl Build {
     pub fn parse(target: &str, user_parallelism: &str, reentrancy_check: &str) -> Result<Build> {
         Ok(Build {
             target: Target::parse(target)?,
-            user_parallelism: UserParallelism::parse(user_parallelism)?,
-            reentrancy_check: ReentrancyCheck::parse(reentrancy_check)?,
+            user_parallelism: UserParallelism::parse(user_parallelism.to_string())
+                .map_err(switch)?,
+            reentrancy_check: ReentrancyCheck::parse(reentrancy_check.to_string())
+                .map_err(switch)?,
             bounds: crate::bounds::BoundsChecks::default(),
             overflow: crate::bounds::OverflowChecks::default(),
             skip_free_at_exit: false,
@@ -208,8 +170,8 @@ impl Build {
     }
 
     /// How the generated driver is asked to cut the input.
-    fn parallelism(self) -> &'static str {
-        self.user_parallelism.parallelism(self.target)
+    fn parallelism(self) -> String {
+        self.user_parallelism.parallelism(self.target.has_threads())
     }
 
     /// **May two pieces of the program's own code run at the same time?**
@@ -280,9 +242,9 @@ impl Target {
         {
             return Ok(target);
         }
-        match rust_targets::RUST_TARGETS
-            .iter()
-            .find(|known| **known == triple)
+        match nikaia_std::tools::emit_build::emit_build_rust_targets()
+            .into_iter()
+            .find(|known| *known == triple)
         {
             Some(known) => Ok(Target::Rust(known)),
             None => Err(refused!(
@@ -378,44 +340,6 @@ impl Target {
                  a build profile's, which does not exist yet (ADR-037 D9)",
             ),
             Target::X86_64Linux | Target::Aarch64Linux | Target::Rust(_) => None,
-        }
-    }
-}
-
-impl UserParallelism {
-    pub fn parse(value: &str) -> Result<UserParallelism> {
-        match value {
-            "no" => Ok(UserParallelism::No),
-            "yes" => Ok(UserParallelism::Yes),
-            // A number is the plausible mistake, and it has a reason rather
-            // than a typo behind it. Say which.
-            other if other.parse::<u32>().is_ok() => Err(refused!(
-                "`user-parallelism` is `yes` or `no`, not a number: the runtime decides \
-                 how many threads to use."
-            )),
-            other => Err(refused!(
-                "`user-parallelism` is `yes` or `no`, not `{other}`."
-            )),
-        }
-    }
-
-    /// Whether any code the user wrote may run concurrently.
-    pub fn is_concurrent(self) -> bool {
-        matches!(self, UserParallelism::Yes)
-    }
-
-    /// How the generated driver is asked to cut the input.
-    ///
-    /// A target without threads pins this to `Off` whatever was asked for: the
-    /// switch bounds what may run at once, it cannot conjure a thread the
-    /// machine does not have.
-    fn parallelism(self, target: Target) -> &'static str {
-        if !target.has_threads() {
-            return "Parallelism::Off";
-        }
-        match self {
-            UserParallelism::No => "Parallelism::Off",
-            UserParallelism::Yes => "Parallelism::Auto",
         }
     }
 }

@@ -218,6 +218,7 @@ COMPILER_NIKA = {
     "check_references.nika": "check: who writes the reference at a call (NK1137), a lent coalesce, a name given back (0.0.X) (0.0.833)",
     "check_expect.nika": "check: expect, expect_kept (0.0.834)",
     "emit_core_flow.nika": "emit: the flow of the core: Closure, Binary, Coalesce, TryCatch, Try, Return, Break, Throw, Spawn (0.0.835)",
+    "emit_build.nika": "emit: the build switches user-parallelism and reentrancy-check, the target triples Rust knows (E12-4a) (0.0.X)",
     "check_compare.nika": "check: whether a type compares, NK1188 NK1164 NK1247 NK1249 NK2204 NK2605, lent parts (0.0.894)",
     "check_overflow.nika": "check: an operation on constants that overflows, the wrap a slot takes, unsigned slots, moved refusals (0.0.900)",
     "check_arguments.nika": "check: the count and the types of what a call passes (C-5h, arguments) (0.0.905)",

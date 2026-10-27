@@ -959,6 +959,14 @@ mod emit_below_lowered {
 #[allow(unused_imports)]
 pub use emit_below_lowered::*;
 
+mod emit_build_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_build.rs");
+}
+#[allow(unused_imports)]
+pub use emit_build_lowered::*;
+
 mod emit_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2326,6 +2334,10 @@ pub mod dump {
 pub mod emit_below {
     #[allow(unused_imports)]
     pub use super::{emit_is_a_shape_bound, emit_bounded, emit_uses_driver};
+}
+pub mod emit_build {
+    #[allow(unused_imports)]
+    pub use super::{UserParallelism, ReentrancyCheck, emit_build_rust_targets};
 }
 pub mod emit_calls {
     #[allow(unused_imports)]
