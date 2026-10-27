@@ -228,6 +228,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R215 a reserved word renamed with `_` is renamed inside a text only where it is a hole: `\"with {with}\"` -> `\"with {with_}\"`",
         "R220 `x.with_context(|| format!(m))?` / `.with_context(|| m)?` / `.context(m)?` over a call -> `x catch { throw format!(m) }`",
         "R219 `return match call { Ok(v) if g => a, .., Ok(v) => b, Err(e) => d }`, one-line arms -> `let v = call catch { return d }`, `if g { return a }`, `return b`",
+        "R221 `return match call { Ok(v) => a, Err(e) if g => b, Err(e) => d }` -> `let v = call catch { if g { return b } return d }`, `return a`",
         "R218 `let r = call` right before `match r {` (`Ok`/`Err` arms), `r` read nowhere else -> `match call {`, so R160 takes it",
         "R217 `std::fs::read_dir(d)` -> `fs::read_dir(d, fs::Root::Anywhere)`, names in byte order with no failure per entry: `.filter_map(|e| e.ok())` / `.flatten()` go, `e.path()` -> `d.join(e)`, `.file_name().into_string().ok()` -> `name.to_text().ok()`, the `.sort()` after it goes; `.with_context(|| format!(m))?` -> `catch { throw format!(m) }`, `.into_iter().flatten()` -> `catch { [] }`; `let Ok(es) = ..` keeps `d` for `for e in es`",
         "R216 a text continued with `\\` that no later line closes (a cut input) is named on stderr with its line",
@@ -1921,6 +1922,8 @@ fn rs2nika_result_match(out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i6
     let mut handler: Vec[String] = []
     let mut variants: Vec[String] = []
     let mut leaves = true
+    let mut errors_named: Vec[String] = []
+    let mut guarded = false
     let mut n = 0
     while n < starts.len() {
         let s = starts[n]
@@ -1949,8 +1952,19 @@ fn rs2nika_result_match(out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i6
             inner = rs2nika_text(tc, open + 1, close).trim().clone()
             after = rs2nika_text(tc, close + 1, tc.len()).trim().clone()
         }
+        // R221: `Err(e) if g => d` before the last `Err` arm -> `if g { d }`
+        // at the head of the `catch` block
+        let mut guard: String = ""
         if after.starts_with("if ") {
-            return rs2nika_guarded_ok(out, i, j, starts, ind, pre, subject)
+            if ok || pre != "return " {
+                return rs2nika_guarded_ok(out, i, j, starts, ind, pre, subject)
+            }
+            let (g, value) = after.split_once(" => ") ?? ("", "")
+            if value == "" {
+                return rs2nika_r160_todo("guard")
+            }
+            guard = (g.strip_prefix("if ") ?? "").trim().clone()
+            after = f"=> {value}"
         }
         if !after.starts_with("=> ") {
             return rs2nika_r160_todo("")
@@ -2012,18 +2026,47 @@ fn rs2nika_result_match(out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i6
                 return rs2nika_r160_todo("")
             }
             let catch_all = inner == "_" || (rs2nika_is_path(inner) && !inner.contains(":") && !rs2nika_upper(ic[0]))
-            if catch_all && n + 1 < starts.len() && !(n + 2 == starts.len() && out[starts[n + 1]].trim().starts_with("Ok(")) {
-                return rs2nika_r160_todo("")
-            }
-            let mut named: Vec[String] = []
-            let mut used = false
+            let mut used = rs2nika_replace_word(guard, inner, "\u{a7}") != guard
             for b in body {
                 if rs2nika_replace_word(b, inner, "\u{a7}") != b {
                     used = true
                 }
             }
-            if catch_all && inner != "_" && inner != "error" && used {
+            let mut named: Vec[String] = []
+            if catch_all && inner != "_" && inner != "error" && used && !errors_named.contains(inner) {
                 named.push(f"let {inner} = error")
+                errors_named.push(inner.clone())
+            }
+            if guard != "" {
+                if !catch_all || variants.len() > 0 || n + 1 >= starts.len() {
+                    return rs2nika_r160_todo("guard")
+                }
+                for nm in named {
+                    handler.push(f"{ind}    {nm}")
+                }
+                let mut then: Vec[String] = []
+                if block {
+                    for b in body {
+                        then.push(b.clone())
+                    }
+                } else {
+                    then.push(f"{ind}        {body[0]}")
+                }
+                rs2nika_returned(then)
+                handler.push(f"{ind}    if {guard} {{")
+                for t in then {
+                    handler.push(t.clone())
+                }
+                handler.push(f"{ind}    }}")
+                guarded = true
+                n = n + 1
+                continue
+            }
+            if catch_all && n + 1 < starts.len() && !(n + 2 == starts.len() && out[starts[n + 1]].trim().starts_with("Ok(")) {
+                return rs2nika_r160_todo("")
+            }
+            if catch_all {
+                guarded = false
             }
             if catch_all && variants.len() == 0 {
                 // the one `Err(e)`: its body is the block
@@ -2066,6 +2109,9 @@ fn rs2nika_result_match(out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i6
             }
         }
         n = n + 1
+    }
+    if guarded {
+        return rs2nika_r160_todo("guard")
     }
     if !ok_seen || handler.len() == 0 {
         return rs2nika_r160_todo("")
