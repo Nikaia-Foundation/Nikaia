@@ -18,12 +18,15 @@ three commits, thirteen functions: `5755b65` (`several_errors`,
 | Rust form | Today | Written instead |
 | :--- | :--- | :--- |
 | `if let Some(x) = self.f { .. }` (a field) | `if self.f != null` does not narrow a field yet (NK1125): decided by ADR-382 D4-D5, **not built**; `if let` is refused (ADR-382 D6) | `let x = self.f` first, then `if x != null` (a name narrows, ADR-382 D1) |
-| `Option<Option<T>>` (`T??`) | parse error | a `bool` beside a `T?`, or two functions |
 | `map.entry(k).or_insert(..)` | NK1171, no `entry` in `std` | `get`, then `insert` |
 | `opt.as_mut()` on a `T?` | NK1125 | `?.clone()`, change, write the option back |
 
 Not gaps, by design: `Vec[ref i64]` is refused (NK1257, a view of a word is
-the word); `grammar` is a reserved word.
+the word); `grammar` is a reserved word; there is no `T??`: `a?.b` and a
+read of a map of `T?` flatten (Part I 4.5, ADR-278 D11, ADR-293), and where
+Rust's `Option<Option<T>>` keeps two kinds of absence apart (`reads_any` in
+`comptime_run.rs`: keep, drop, drop under a name), the move names them as
+an enum.
 
 Not probed yet, met in the moves: `usize` arithmetic in indices,
 `mem::replace`, `'static`, `impl FnOnce(&mut Self)`, a struct of views taken
