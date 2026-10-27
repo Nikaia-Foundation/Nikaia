@@ -1,0 +1,31 @@
+// scripts/commit.nika --dry-run: the brief of an `X.md.report.md` is `X.md`
+// (its Attribution: block), and the report's Body: is a paragraph.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/commit.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/commit.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    process::run("git", ["init", "-q", tmp.clone()])
+    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "x\n")
+    fs::write(f"{tmp}/X.md", fs::Root::Anywhere, "# Brief\n\nAttribution:\nCo-Authored-By: Test <t@example.com>\nClaude-Session: https://example.com/s\n")
+    fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, "Result: done\nFiles: a.txt\nCommit: a subject\nBody: A paragraph for the body.\nChangelog: none\n")
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/commit.nika", "--", "--dry-run", f"{tmp}/X.md.report.md"]; dir: tmp.clone())
+    println(out.stdout.trim())
+    process::run("rm", ["-rf", tmp])
+}

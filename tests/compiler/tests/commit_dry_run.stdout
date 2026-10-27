@@ -1,0 +1,7 @@
+git add a.txt
+a subject
+
+A paragraph for the body.
+
+Co-Authored-By: Test <t@example.com>
+Claude-Session: https://example.com/s

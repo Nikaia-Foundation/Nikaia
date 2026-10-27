@@ -3,11 +3,12 @@
 //     nikaia run scripts/commit.nika -- [--dry-run] REPORT
 //
 // REPORT is `<brief>.report.md` with `Files:` (paths, space-separated) and
-// `Commit:` (subject), plus `Changelog:`, and optionally `Fixes: #N[, #M]` or
+// `Commit:` (subject), plus `Changelog:`, and optionally `Body:` (one paragraph after the subject), `Fixes: #N[, #M]` or
 // `Part: #N`. Refuses when a listed file is unchanged or when a staged file is
 // not listed. Adds exactly the listed files, commits with the subject,
 // `Changelog:`, `Fixes #N` / `Part of #N` and the lines under `Attribution:` at
-// the end of the brief (`<brief>.md`, the report's name without `.report.md`;
+// the end of the brief (the report's name without `.report.md`, which is the
+// brief itself when that ends in `.md`, else `<brief>.md`;
 // without them `Co-Authored-By: Claude <Model: field, default Sonnet 5.5>` and the
 // last `Claude-Session:` trailer on develop),
 // pushes `origin develop` fast-forward only (no rebase), writes `Pushed: <sha>`
@@ -52,6 +53,8 @@ fn commit_session() -> String throws {
 
 fn commit_message(report: String, brief: String) -> String throws {
     let mut msg = commit_field(report.clone(), "Commit:")
+    let body = commit_field(report.clone(), "Body:")
+    if body != "" && body != "none" { msg = msg + f"\n\n{body}" }
     let changelog = commit_field(report.clone(), "Changelog:")
     if changelog != "" && changelog != "none" { msg = msg + f"\n\nChangelog: {changelog}" }
     let fixes = commit_field(report.clone(), "Fixes:")
@@ -120,7 +123,9 @@ fn main() throws {
     let report = fs::read_to_string(path.clone(), fs::Root::Anywhere)
     let brief_path = path.strip_suffix(".report.md") ?? ""
     let mut brief: String = ""
-    if brief_path != "" && fs::exists(f"{brief_path}.md", fs::Root::Anywhere) {
+    if brief_path.ends_with(".md") && fs::exists(brief_path.clone(), fs::Root::Anywhere) {
+        brief = fs::read_to_string(brief_path.clone(), fs::Root::Anywhere)
+    } else if brief_path != "" && fs::exists(f"{brief_path}.md", fs::Root::Anywhere) {
         brief = fs::read_to_string(f"{brief_path}.md", fs::Root::Anywhere)
     }
     let mut files: Vec[String] = []
