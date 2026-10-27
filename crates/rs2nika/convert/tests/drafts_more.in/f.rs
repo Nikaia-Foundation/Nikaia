@@ -139,3 +139,10 @@ impl Checker<'_> {
         }
     }
 }
+
+fn told(with: &str, throw: usize) {
+    println!("told {} with {throw} items", with);
+    eprintln!();
+    eprint!("no holes, with care");
+    print!("{with}: '{}'", 'x');
+}

@@ -8,11 +8,11 @@ fn format_all(files: Vec[String]) -> i64 sync {
     for file in files {
         let formatted = format(file) catch {
             let refusal = error
-            eprintln!("{file}: {refusal}")
+            eprintln(f"{file}: {refusal}")
             code = 1
             continue
         }
-        println!("{formatted}")
+        println(f"{formatted}")
     }
     return code
 }
@@ -43,7 +43,7 @@ fn dump(ty: String) -> Computed sync {
 
 fn run_it() sync {
     let mut held = run() catch {
-        eprintln!("{error}")
+        eprintln(f"{error}")
         return
     }
     held.push(1)
@@ -53,7 +53,7 @@ fn run_it() sync {
 
 fn open_cache() -> Cache? sync {
     let cache = Cache::open() catch {
-        eprintln!("warning: {error:#}")
+        eprintln(f"warning: {error:#}")
         null
     }
     return cache
@@ -75,7 +75,7 @@ fn report(said: Result[Out]) -> i64 sync {
             show(out)
         }
         Err(error) => {
-            eprintln!("{error}")
+            eprintln(f"{error}")
         }
     }
     return 0

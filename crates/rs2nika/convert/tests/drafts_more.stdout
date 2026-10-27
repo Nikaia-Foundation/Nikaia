@@ -139,3 +139,10 @@ fn more_walked(mut state: CheckState, world: ref CheckWorld) sync {
     }
 }
 
+fn more_told(with_: String, throw_: i64) {
+    println(f"told {with_} with {throw_} items")
+    eprintln("")
+    eprint("no holes, with care")
+    print(f"{with_}: '{'x'}'")
+}
+

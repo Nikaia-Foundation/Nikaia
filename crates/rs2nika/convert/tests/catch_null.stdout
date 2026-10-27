@@ -6,7 +6,7 @@ fn port(n: i64) -> String sync {
 fn report(n: i64) sync {
     match half(n) catch { null } {
         v => {
-            println!("got {v}")
+            println(f"got {v}")
         },
         null => {},
     }
@@ -14,14 +14,14 @@ fn report(n: i64) sync {
 
 fn quiet(n: i64) sync {
     match half(n) catch { null } {
-        v => println!("half {v}"),
+        v => println(f"half {v}"),
         null => {},
     }
 }
 
 fn touched(n: i64) sync {
     if (half(n) catch { null }) != null {
-        println!("even")
+        println("even")
     }
 }
 

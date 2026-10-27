@@ -14,7 +14,7 @@ fn store(entry: ref Path) sync {
         return
     }
     std::fs::remove_file(entry) catch {
-        eprintln!("kept")
+        eprintln("kept")
         return
     }
     done()

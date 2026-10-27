@@ -224,6 +224,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R211 a signature over several lines (`fn f(` then `&mut self,`) is a method",
         "R212 check profiles: `self.parsed` -> `world.here`, `self.parsed.x` -> `world.here.x`",
         "R213 check profiles: `let parsed = self.parsed;` is dropped, `parsed` reads `self.parsed` to the end of the function",
+        "R214 `println!(\"…{}\", a)` (also `eprintln!`, `print!`, `eprint!`) -> `println(f\"…{a}\")`; a text without holes stays plain, `println!()` -> `println(\"\")`",
+        "R215 a reserved word renamed with `_` is renamed inside a text only where it is a hole: `\"with {with}\"` -> `\"with {with_}\"`",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -2120,6 +2122,66 @@ fn rs2nika_panic(mut ctx: Rs2nikaCtx, given: String) -> String {
     return s
 }
 
+/// R214: `println!("..", a)` -> `println(format!("..", a))`, which R15 writes
+/// as an f-string; `println!()` -> `println("")`. The same for `print!`,
+/// `eprintln!` and `eprint!`.
+fn rs2nika_print_macros(mut ctx: Rs2nikaCtx, given: String) -> String {
+    let mut s: String = given.clone()
+    for m in ["eprintln", "println", "eprint", "print"] {
+        let what = f"{m}!("
+        while true {
+            let c: Vec[scalar] = s.chars().collect()
+            let i = rs2nika_find_from(c, what, 0)
+            if i < 0 || (i > 0 && rs2nika_word(c[i - 1])) {
+                break
+            }
+            let open = i + what.chars().count()
+            let end = rs2nika_text_group_end(c, open)
+            if end > c.len() || c[end - 1] != ')' {
+                // the arguments go on below: the macro stays as it is
+                break
+            }
+            let inner = rs2nika_text(c, open, end - 1).trim().clone()
+            let mut call: String = f"{m}(\"\")"
+            let quotes = inner.chars().filter(fn(q) { q == '"' }).count()
+            let plain = quotes == 2 && inner.starts_with("\"") && inner.ends_with("\"") && !inner.contains("{")
+            if plain {
+                // a text without holes is passed as it is
+                call = f"{m}({inner})"
+            } else if inner != "" {
+                call = f"{m}(format!({inner}))"
+            }
+            s = f"{rs2nika_text(c, 0, i)}{call}{rs2nika_text(c, end, c.len())}"
+            rs2nika_hit(ctx, "R214")
+        }
+    }
+    return s
+}
+
+/// Like `rs2nika_group_end`, but a bracket inside a text literal does not count.
+fn rs2nika_text_group_end(c: ref Vec[scalar], from: i64) -> i64 {
+    let mut d = 1
+    let mut j = from
+    let mut quoted = false
+    while j < c.len() && d > 0 {
+        if quoted {
+            if c[j] == '\\' {
+                j = j + 1
+            } else if c[j] == '"' {
+                quoted = false
+            }
+        } else if c[j] == '"' {
+            quoted = true
+        } else if c[j] == '(' || c[j] == '[' || c[j] == '{' {
+            d = d + 1
+        } else if c[j] == ')' || c[j] == ']' || c[j] == '}' {
+            d = d - 1
+        }
+        j = j + 1
+    }
+    return j
+}
+
 /// R15: `format!("..{}..", a)` -> `f"..{a}.."`.
 fn rs2nika_format(mut ctx: Rs2nikaCtx, given: String) -> String {
     let mut s: String = given.clone()
@@ -3871,6 +3933,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: String) -> String {
     }
     s = rs2nika_matches(ctx, s)
     s = rs2nika_panic(ctx, s)
+    s = rs2nika_print_macros(ctx, s)
     s = rs2nika_format(ctx, s)
     s = rs2nika_names(ctx, s)
     s = rs2nika_rep(ctx, s, "String::new()", "\"\"", "R17")
@@ -11815,10 +11878,13 @@ fn rs2nika_rest(mut ctx: Rs2nikaCtx, given: String) -> String {
 
 /// R69: a Rust name that Nikaia reserves (`grammar`, `throws`, ..) -> `name_`.
 fn rs2nika_reserved(mut ctx: Rs2nikaCtx, given: String) -> String {
-    let mut s: String = given.clone()
     if given.trim_start().starts_with("//") {
-        return s
+        return given.clone()
     }
+    // R215: a text keeps its words (`"a program with a claim"`); only a hole
+    // (`{with}`) is renamed
+    let (masked, texts) = rs2nika_mask_texts(given)
+    let mut s: String = masked.clone()
     for w in ["catch", "comptime", "dsl", "grammar", "null", "overlap", "select", "spawn", "sync", "throw", "throws", "with"] {
         if !s.contains(ref w) {
             continue
@@ -11838,7 +11904,64 @@ fn rs2nika_reserved(mut ctx: Rs2nikaCtx, given: String) -> String {
         }
         s = t.clone()
     }
+    let mut k = 0
+    while k < texts.len() {
+        let mut text: String = texts[k].clone()
+        for w in ["catch", "comptime", "dsl", "grammar", "null", "overlap", "select", "spawn", "sync", "throw", "throws", "with"] {
+            text = text.replace(f"{{{w}}}", f"{{{w}_}}").replace(f"{{{w}:", f"{{{w}_:")
+        }
+        let mark = "\u{4}"
+        s = s.replace(f"{mark}{k}{mark}", text)
+        k = k + 1
+    }
+    if s != given && texts.len() > 0 && given.contains("\"") {
+        rs2nika_hit(ctx, "R215")
+    }
     return s
+}
+
+/// The line with each text literal's body replaced by `\u{4}k\u{4}`, and the
+/// bodies in order.
+fn rs2nika_mask_texts(given: String) -> (String, Vec[String]) {
+    let c: Vec[scalar] = given.chars().collect()
+    let mut out: String = ""
+    let mut texts: Vec[String] = []
+    let mut at = 0
+    while at < c.len() {
+        // a char literal `'"'` is no text
+        if c[at] == '\'' && at + 2 < c.len() && c[at + 2] == '\'' {
+            out.push_str(rs2nika_text(c, at, at + 3))
+            at = at + 3
+            continue
+        }
+        if c[at] == '\'' && at + 3 < c.len() && c[at + 1] == '\\' && c[at + 3] == '\'' {
+            out.push_str(rs2nika_text(c, at, at + 4))
+            at = at + 4
+            continue
+        }
+        if c[at] != '"' {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        let mut end = at + 1
+        while end < c.len() && c[end] != '"' {
+            if c[end] == '\\' {
+                end = end + 1
+            }
+            end = end + 1
+        }
+        if end >= c.len() {
+            // a text that goes on in the next line stays as it is
+            out.push_str(rs2nika_text(c, at, c.len()))
+            return (out, texts)
+        }
+        let mark = "\u{4}"
+        out.push_str(f"\"{mark}{texts.len()}{mark}\"")
+        texts.push(rs2nika_text(c, at + 1, end))
+        at = end + 1
+    }
+    return (out, texts)
 }
 
 fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: String) {
