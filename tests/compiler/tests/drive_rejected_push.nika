@@ -1,0 +1,38 @@
+// scripts/drive.nika --rewrite: a builder's `Pushed: rejected` becomes the sha
+// when the driver's log holds the report's commit; no git here.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, report: String) throws {
+    fs::write(f"{tmp}/r.md", fs::Root::Anywhere, report)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--rewrite", f"{tmp}/r.md", f"{tmp}/log"]; dir: repo)
+    println(f"== {name}")
+    println(out.stdout.trim())
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/log", fs::Root::Anywhere, "abc1234\tother subject\ndef5678\tdrive: the subject\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "found", "Result: done\nCommit: drive: the subject\nPushed: rejected\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "none found", "Result: done\nCommit: drive: the subject\nPushed: none\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "not found", "Result: done\nCommit: another subject\nPushed: rejected\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "pushed", "Result: done\nCommit: drive: the subject\nPushed: 9999999\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "partial", "Result: partial\nCommit: drive: the subject\nPushed: rejected\nTests: ok\n")
+    process::run("rm", ["-rf", tmp])
+}

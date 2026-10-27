@@ -20,6 +20,8 @@
 // `--dry-run` runs one step of the loop and prints the commands it would run
 // and the final line `DRY-RUN <action>`; `--lines FILE` takes the cycle's
 // output from FILE instead of running `cycle.nika` (for tests).
+// A builder's `Pushed: rejected` is rewritten when this driver pushed its commit.
+// `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
 // The scripts are run as programs: a script cannot `use` another.
 
 use std::cli
@@ -108,6 +110,34 @@ fn drive_paths(dir: String, brief: String) -> Vec[String] throws {
     return out
 }
 
+// The report with `Pushed:` rewritten when `Result: done`, `Pushed:` is
+// `rejected` or `none`, and a log line `<sha>\t<subject>` has the report's
+// `Commit:` as its subject; else the report as it is.
+fn drive_rewrite(report: String, log: String) -> String {
+    if drive_word(drive_field(report.clone(), "Result")) != "done" { return report }
+    let pushed = drive_word(drive_field(report.clone(), "Pushed"))
+    if pushed != "rejected" && pushed != "none" { return report }
+    let subject = drive_field(report.clone(), "Commit")
+    if subject == "" { return report }
+    let mut sha: String = ""
+    for l in log.split("\n") {
+        let parts = l.split("\t").collect()
+        if sha == "" && parts.len() == 2 && parts[1].trim() == subject { sha = parts[0].trim().clone() }
+    }
+    if sha == "" { return report }
+    let mut out: Vec[String] = []
+    let mut done = false
+    for l in report.split("\n") {
+        if !done && l.trim().starts_with("Pushed:") {
+            out.push(f"Pushed: {sha} (pushed by drive.nika)")
+            done = true
+        } else {
+            out.push(l.clone())
+        }
+    }
+    return out.join("\n")
+}
+
 fn drive_say(dry: bool, line: String) {
     if dry { println(f"would run: {line}") }
 }
@@ -129,6 +159,16 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
         if fs::exists(extra[i].clone(), fs::Root::Anywhere) { paths.push(extra[i].clone()) }
     }
     if paths.len() == 0 { return }
+    let report_path = f"{brief}.report.md"
+    if fs::exists(report_path.clone(), fs::Root::Anywhere) {
+        let old = drive_read(report_path.clone())
+        let log = process::run("git", ["log", "--format=%h%x09%s", "origin/develop..HEAD"]).stdout.clone()
+        let fresh = drive_rewrite(old.clone(), log)
+        if fresh != old {
+            drive_say(dry, f"rewrite Pushed: in {report_path}")
+            if !dry { fs::write(report_path.clone(), fs::Root::Anywhere, fresh) }
+        }
+    }
     let name = drive_stem(brief)
     let msg = f"briefs: {name} report"
     let trailer = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq"
@@ -227,6 +267,10 @@ fn main() throws {
     if dir == "" {
         println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--dry-run] [--lines FILE]")
         process::exit(2)
+    }
+    if args.len() == 4 && args[1] == "--rewrite" {
+        println(drive_rewrite(drive_read(args[2].clone()), drive_read(args[3].clone())))
+        return
     }
     let exe = drive_exe()
     if exe == "" {

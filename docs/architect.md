@@ -80,7 +80,7 @@ The builder writes its report to exactly `<full brief path>.report.md`, beside t
     Files: <paths of the commit, space-separated>   (for scripts/commit.nika)
     Commit: <subject line>
     Fixes: #N[, #M] | Part: #N   (optional)
-    Pushed: <sha> | rejected | none
+    Pushed: <sha> | rejected | none   (drive.nika rewrites `rejected` when it pushed the commit itself)
     Tests: <test filters run> - pass | <failing names>
     Gate: green | red <tests>   (#852; batch.nika cuts on red, #862)
     Deviation: none | <one sentence>   (bare `none`, no note after it: batch.nika cuts on anything else)

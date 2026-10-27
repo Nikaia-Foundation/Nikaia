@@ -1,0 +1,25 @@
+== found
+Result: done
+Commit: drive: the subject
+Pushed: def5678 (pushed by drive.nika)
+Tests: ok
+== none found
+Result: done
+Commit: drive: the subject
+Pushed: def5678 (pushed by drive.nika)
+Tests: ok
+== not found
+Result: done
+Commit: another subject
+Pushed: rejected
+Tests: ok
+== pushed
+Result: done
+Commit: drive: the subject
+Pushed: 9999999
+Tests: ok
+== partial
+Result: partial
+Commit: drive: the subject
+Pushed: rejected
+Tests: ok
