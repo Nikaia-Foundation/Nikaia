@@ -1030,7 +1030,9 @@ fn held_as(found: Ty, held: &Value) -> Option<Ty> {
             let fits = match n.negative {
                 false => "u64",
                 true if n.magnitude == 1 << 63 => return Some(Ty::Unknown),
-                true => "i128",
+                // Below `i64::MIN` no Nikaia type holds it: the checker has
+                // refused it (`NK1116`) before a value is carried.
+                true => return None,
             };
             Some(Ty::Named {
                 name: fits.to_string(),

@@ -270,7 +270,7 @@ where
 /// text. **The radix is a spelling** (D2): `0xFF` is `255` and takes the first
 /// type that holds it, exactly as `255` does
 /// ([ADR-285](../../../docs/specification/adr/adr-285.md)).
-fn number_lit<'a, S>(i: &mut ParseInput<'a, S>) -> Result<i128, ParseError>
+fn number_lit<'a, S>(i: &mut ParseInput<'a, S>) -> Result<(u64, bool), ParseError>
 where
     S: Clone + std::fmt::Debug,
 {
@@ -292,7 +292,7 @@ where
 /// inside it. `- 5` and `-x` are the unary operator they always were, and
 /// `a - 5` never reaches this at all — a binary operator is matched by the rule
 /// that wrote it, not by the operand's.
-fn negative_number_lit<'a, S>(i: &mut ParseInput<'a, S>) -> Result<i128, ParseError>
+fn negative_number_lit<'a, S>(i: &mut ParseInput<'a, S>) -> Result<(u64, bool), ParseError>
 where
     S: Clone + std::fmt::Debug,
 {
@@ -302,7 +302,7 @@ where
 /// The two above, which differ in one byte at the front. What a number is,
 /// and every way it is refused, is `tools/parse_numbers.nika`; this hands it
 /// the characters and moves the caret to where it says.
-fn number_at<'a, S>(i: &mut ParseInput<'a, S>, signed: bool) -> Result<i128, ParseError>
+fn number_at<'a, S>(i: &mut ParseInput<'a, S>, signed: bool) -> Result<(u64, bool), ParseError>
 where
     S: Clone + std::fmt::Debug,
 {
@@ -316,7 +316,7 @@ where
             consumed,
         } => {
             let _ = winnow::stream::Stream::next_slice(i, consumed as usize);
-            Ok(ast::int_value(magnitude, negative))
+            Ok((magnitude, negative))
         }
         Number::Refused { message, consumed } => {
             // **The caret goes on the character that is wrong**: a
@@ -935,8 +935,8 @@ grammar! {
         // [ADR-285](../../../../docs/specification/adr/adr-285.md) D16).
         extern rule same_line -> ();
         extern rule new_line -> ();
-        extern rule number_lit -> i128;
-        extern rule negative_number_lit -> i128;
+        extern rule number_lit -> (u64, bool);
+        extern rule negative_number_lit -> (u64, bool);
         extern rule float_end -> ();
         extern rule doc_here -> Option<String>;
 
@@ -1831,13 +1831,13 @@ grammar! {
           // (`NK1135` stays silent, and the type it names is unknown).
           | n:number_lit -> {
                 Type {
-                    name: _state.intern(&n.to_string()),
+                    name: _state.intern(&n.0.to_string()),
                     generics: Vec::new(),
                     is_view: false,
                     is_tuple: false,
                     is_nullable: false,
                     code: Box::new(None),
-                    count: i64::try_from(n).ok(),
+                    count: i64::try_from(n.0).ok(),
                     is_mut: false,
                     is_slice: false,
                     either: false,
@@ -2902,7 +2902,7 @@ grammar! {
             // positive literal its digits do not fit the type it belongs to.
             // Every other number in the range parsed either way, which is why
             // this was one number missing rather than a hole.
-            n:negative_number_lit -> { crate::ast::numbered_int_literal(n, _state.user().id()) }
+            n:negative_number_lit -> { crate::ast::numbered_int_literal(n.0, n.1, _state.user().id()) }
           | op:unary_op e:unary_expr -> {
                 Expr::Unary { op, expr: Box::new(e), id: _state.user().id() }
             }
@@ -4311,7 +4311,7 @@ grammar! {
         // ([ADR-285](../../../../docs/specification/adr/adr-285.md)): see
         // `number_lit` above for why.
         rule int_lit -> Expr =
-            n:number_lit -> { crate::ast::numbered_int_literal(n, _state.user().id()) }
+            n:number_lit -> { crate::ast::numbered_int_literal(n.0, n.1, _state.user().id()) }
 
         // **A tuple's part is a plain run of digits** and takes neither form:
         // `t.0` is a *field name* that happens to be a number

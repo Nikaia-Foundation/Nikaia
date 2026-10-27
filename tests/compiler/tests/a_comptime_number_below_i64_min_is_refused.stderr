@@ -1,0 +1,9 @@
+error[NK1116]: This comes to -9223372036854775812, which doesn't fit in an `i64`.
+  --> tests/a_comptime_number_below_i64_min_is_refused.nika:1:1
+   |
+ 1 | comptime BIG = -9223372036854775807 - 5
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: An `i64` holds -9223372036854775808 to 9223372036854775807.
+   = help: An `i64` is the widest signed number Nikaia has, so the computation has to stay inside it.
+1 type error

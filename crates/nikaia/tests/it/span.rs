@@ -52,16 +52,22 @@ fn a_source_over_four_gib_is_refused_with_the_reason() {
 /// two ends of ADR-285 D19's range survive the trip.
 #[test]
 fn an_integer_literal_is_a_magnitude_and_a_sign() {
-    use nikaia::ast::{Expr, Stmt, int_literal, int_value};
+    use nikaia::ast::{Expr, Stmt, int_literal};
 
-    for n in [0i128, 7, -7, i64::MIN as i128, u64::MAX as i128] {
+    for (magnitude, sign) in [
+        (0u64, false),
+        (7, false),
+        (7, true),
+        (1 << 63, true),
+        (u64::MAX, false),
+    ] {
         let Expr::LitInt {
             value, negative, ..
-        } = int_literal(n)
+        } = int_literal(magnitude, sign)
         else {
             panic!("an integer literal")
         };
-        assert_eq!(int_value(value, negative), n);
+        assert_eq!((value, negative), (magnitude, sign));
     }
 
     let parsed = parse_to_ast("fn main() {\n    let low = -9223372036854775808\n}\n")

@@ -94,7 +94,7 @@ impl Host<'_> {
             func: Box::new(func),
             args: args
                 .iter()
-                .map(|value| crate::ast::int_literal(i128::from(*value)))
+                .map(|value| crate::ast::int_literal(value.unsigned_abs(), *value < 0))
                 .collect(),
             config: Vec::new(),
             id: crate::ast::NodeId::fresh(),

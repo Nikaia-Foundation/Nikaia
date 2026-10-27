@@ -4,7 +4,7 @@
 // describes: lowered ahead of time by `nikaia lower-std` to `ast.rs` beside it,
 // `include!`d as `nikaia_std::tools::ast`, and re-exported by the compiler's
 // `crate::ast`, which adds what Nikaia cannot say - the `usize` doors of a
-// `Span`, `int_value` over an `i128`, and the grammar backend's `WithSpan`.
+// `Span`, and the grammar backend's `WithSpan`.
 //
 // **The boxes are the compiler's** (ADR-294 D8, ADR-246 D1): a field on a ring
 // of types that hold each other inline is boxed below, and nothing here says
@@ -399,7 +399,7 @@ pub enum Expr {
     /// ([ADR-294](../../../docs/specification/adr/adr-294.md) D9.2), which is
     /// what the source writes and exactly ADR-285 D19's range: `value` up to
     /// `u64::MAX`, and `negative` where a `-` stands directly against the
-    /// digits. [`int_value`] is the number for arithmetic.
+    /// digits.
     LitInt {
         value: u64,
         negative: bool,

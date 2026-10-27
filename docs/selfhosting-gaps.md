@@ -38,8 +38,6 @@ when it is probed.
 
 * `Option::as_mut()` on a field: no translation (the language form is
   missing too, see above).
-* `i128` (`int_value`) has no twin type: the compiler stops building it
-  (#871), so code over a literal reads its magnitude and sign.
 * `spec?.clone()` on a `String?` is written right only with `--facts`.
 
 ## Compiler defects that block a move

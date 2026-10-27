@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1229] — 2026-10-27
+
+**A comptime number below `i64::MIN` is `NK1116`; the compiler builds no
+`i128`** (#871, ADR-285 D19). `comptime BIG = -9223372036854775807 - 5` was
+carried as an `i128` and reached rustc; it is refused at the declaration, as
+a value over `u64::MAX` already was. An integer literal is a magnitude and a
+sign (`int_literal(value, negative)`), and `int_value` is gone, so the
+self-hosting gap row "`i128` has no twin type" goes. Test
+`a_comptime_number_below_i64_min_is_refused`.
+
 ## [0.0.1228] — 2026-10-27
 
 **A `T?` handed to a print call is `NK1102`** (Part I 2.3). `println(x)` with
