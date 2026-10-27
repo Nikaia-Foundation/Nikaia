@@ -135,7 +135,11 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   `--prefix` is given; `--corpus` also scores its cases in parallel. Iterator chains (`.iter().map(..).sum()`,
   `.any(..)`, `.filter(..).map(..).collect()`) are the house style in
   `tools/*.nika`, as the converter writes them (owner, 2026-10-27). Rust's
-  types come from rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`); open
+  types come from rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`): `--facts
+  F` takes them (`rust-analyzer lsif crates/nikaia > x.lsif`, two minutes,
+  then `nikaia run -- x.lsif > F` in `crates/rs2nika/facts`; delete the 100 MB
+  `x.lsif` after), and closures get their types and options their `match`
+  from them (R82, R222); open
   lowering defects are GitHub issues, the language options against the usual
   hurdles in `docs/history/mitigation-hurdles.md`.
 

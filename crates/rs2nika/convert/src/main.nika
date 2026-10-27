@@ -228,6 +228,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R215 a reserved word renamed with `_` is renamed inside a text only where it is a hole: `\"with {with}\"` -> `\"with {with_}\"`",
         "R220 `x.with_context(|| format!(m))?` / `.with_context(|| m)?` / `.context(m)?` over a call -> `x catch { throw format!(m) }`",
         "R219 `return match call { Ok(v) if g => a, .., Ok(v) => b, Err(e) => d }`, one-line arms -> `let v = call catch { return d }`, `if g { return a }`, `return b`",
+        "R222 a receiver rust-analyzer finds an `Option`'s `map`/`and_then`/`map_or`/`is_some_and` on (`--facts`) counts as an option for R96: `name.map(|n| f(n))` -> `(match name { n => f(n), null => null })`",
         "R221 `return match call { Ok(v) => a, Err(e) if g => b, Err(e) => d }` -> `let v = call catch { if g { return b } return d }`, `return a`",
         "R218 `let r = call` right before `match r {` (`Ok`/`Err` arms), `r` read nowhere else -> `match call {`, so R160 takes it",
         "R217 `std::fs::read_dir(d)` -> `fs::read_dir(d, fs::Root::Anywhere)`, names in byte order with no failure per entry: `.filter_map(|e| e.ok())` / `.flatten()` go, `e.path()` -> `d.join(e)`, `.file_name().into_string().ok()` -> `name.to_text().ok()`, the `.sort()` after it goes; `.with_context(|| format!(m))?` -> `catch { throw format!(m) }`, `.into_iter().flatten()` -> `catch { [] }`; `let Ok(es) = ..` keeps `d` for `for e in es`",
@@ -5079,6 +5080,74 @@ fn rs2nika_named_option(recv: String, opts: ref Vec[String]) -> bool {
     }
     let last: String = rs2nika_text(c, b, c.len())
     return last != "" && opts.contains(last)
+}
+
+/// R222: the receivers rust-analyzer finds an `Option`'s `map`, `and_then`,
+/// `map_or` or `is_some_and` called on (`--facts`), as R96 names them: a
+/// path's last word, a call's `f(`. A receiver written on another line than
+/// its method is not read.
+fn rs2nika_fact_options(src: String, facts: ref Vec[String]) -> Vec[String] {
+    let lines: Vec[String] = src.lines().map(fn(l) { l.clone() }).collect()
+    let mut out: Vec[String] = []
+    for fact in facts {
+        if !fact.starts_with("m\t") {
+            continue
+        }
+        let parts: Vec[String] = fact.split("\t").map(fn(p) { p.clone() }).collect()
+        let row = text::parse_i64(parts[1]) ?? 0
+        let col = text::parse_i64(parts[2]) ?? 0
+        if row < 1 || row > lines.len() || col < 3 {
+            continue
+        }
+        // the column counts UTF-16 units: a line with other text is skipped
+        let line: String = lines[row - 1].clone()
+        if line.len() != line.chars().count() {
+            continue
+        }
+        let c: Vec[scalar] = line.chars().collect()
+        let dot = col - 2
+        if dot >= c.len() || c[dot] != '.' {
+            continue
+        }
+        let mut named = false
+        for m in ["map(", "and_then(", "map_or(", "is_some_and("] {
+            if rs2nika_text(c, dot + 1, c.len()).starts_with(m) {
+                named = true
+            }
+        }
+        if !named {
+            continue
+        }
+        let mut recv: String = rs2nika_text(c, rs2nika_recv_start(c, dot), dot).trim_start_matches("&").trim_start_matches("*").clone()
+        for tail in [".as_ref()", ".as_deref()", ".as_mut()"] {
+            if recv.ends_with(tail) {
+                recv = (recv.strip_suffix(tail) ?? "").clone()
+            }
+        }
+        let rc: Vec[scalar] = recv.chars().collect()
+        let mut end = rc.len()
+        if recv.ends_with(")") {
+            end = rs2nika_find_from(rc, "(", 0)
+            if end < 0 || rs2nika_closing(rc, end, '(', ')') != rc.len() - 1 {
+                continue
+            }
+        }
+        let mut b = end
+        while b > 0 && rs2nika_word(rc[b - 1]) {
+            b = b - 1
+        }
+        let mut name: String = rs2nika_text(rc, b, end)
+        if name == "" || (b > 0 && rc[b - 1] == ':') {
+            continue
+        }
+        if end < rc.len() {
+            name = f"{name}("
+        }
+        if !out.contains(name) {
+            out.push(name)
+        }
+    }
+    return out
 }
 
 /// For R96: whether a receiver surely is an `Option`, by the call it ends in.
@@ -10720,6 +10789,11 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, src: String, profile_given: St
     ctx.world = world
     ctx.prefix = prefix.clone()
     ctx.opt_names = rs2nika_opt_names(src)
+    for name in rs2nika_fact_options(src, facts) {
+        if !ctx.opt_names.contains(name) {
+            ctx.opt_names.push(name.clone())
+        }
+    }
     ctx.parsed_names = rs2nika_parsed_names(src)
     ctx.view = view
     rs2nika_enum_arity(ctx, src)
@@ -12832,7 +12906,7 @@ fn rs2nika_read_facts(facts: String, path: String) -> Vec[String] {
     }
     for line in text.lines() {
         let cols: Vec[String] = line.split("\t").map(fn(c) { c.clone() }).collect()
-        if cols.len() < 4 || cols[2] != "local" {
+        if cols.len() < 4 || (cols[2] != "local" && cols[2] != "method") {
             continue
         }
         let file: String = cols[0].clone()
@@ -12842,6 +12916,14 @@ fn rs2nika_read_facts(facts: String, path: String) -> Vec[String] {
         let colon = cols[1].find(":") ?? 0
         let at: String = cols[1][0..<colon].clone()
         let ty: String = cols[3].clone()
+        if cols[2] == "method" {
+            // R222: a method of `Option`, by where its name starts
+            if ty.starts_with("core::option::Option ") {
+                let dash = cols[1].find("-") ?? colon
+                out.push(f"m\t{at}\t{cols[1][colon + ":".len()..<dash]}")
+            }
+            continue
+        }
         out.push(f"{at}\t{ty}")
     }
     return out
