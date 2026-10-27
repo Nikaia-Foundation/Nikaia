@@ -48,3 +48,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1263261 26
 /home/user/Nikaia/docs/briefs/b869b-path-rest.md 3453658 62
 /home/user/Nikaia/docs/briefs/architect-task.md 609860 20
+/home/user/Nikaia/docs/briefs/e12-2.md 902811 23
