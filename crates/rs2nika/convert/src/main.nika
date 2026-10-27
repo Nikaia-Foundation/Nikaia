@@ -99,7 +99,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R45  a Rust alias of a moved type (`use nikaia_std::tools::m::{CheckX as X}`) -> its Nikaia name",
         "R46  a path call `a::b::f(..)` -> `f(..)` where tools/*.nika has `fn f` (one global namespace)",
         "R47  the equivalence table rs2nika.names (`value_node node_key`): Rust helpers that Nikaia has under another name",
-        "R48  `match e { Some(x) => a, None => b }` -> `if e != null { let x = .. a } else { b }`",
+        "R48  `match e { Some(x) => a, None => b }` -> `if e != null { let x = .. a } else { b }`; as a statement whose `None` arm leaves (`return`, `continue`, `break`), either order -> `let x = e ?? <leave>` and `a` after it",
         "R49  `Ty::named(x)` / `Ty::view(x)` -> `Ty::Named { name: x, args: [], view: false/true }`",
         "R50  `&Span` -> `Span` (a span is copied, never lent)",
         "R51  a `fn` nested in a `fn` is hoisted to the top level",
@@ -5119,7 +5119,33 @@ fn rs2nika_option_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
         }
         let first = rs2nika_option_arm(out[starts[0]])
         let second = rs2nika_option_arm(out[starts[1]])
-        if first[0] == "" || second[0] == "" || !first[0].starts_with("Some") {
+        if first[0] == "" || second[0] == "" {
+            i = i + 1
+            continue
+        }
+        // R48: a statement `match` whose `None` arm leaves, in either order
+        // -> `let x = e ?? <leave>` and the `Some(x)` arm's body after it
+        let leaving = rs2nika_option_leave(ctx, out, i, j, starts, pre, subject, ind)
+        if leaving.len() > 0 {
+            let mut rebuilt: Vec[String] = []
+            let mut r = 0
+            while r < i {
+                rebuilt.push(out[r].clone())
+                r = r + 1
+            }
+            for n in leaving {
+                rebuilt.push(n.clone())
+            }
+            r = j + 1
+            while r < out.len() {
+                rebuilt.push(out[r].clone())
+                r = r + 1
+            }
+            out = rebuilt
+            i = i + 1
+            continue
+        }
+        if !first[0].starts_with("Some") {
             i = i + 1
             continue
         }
@@ -5174,6 +5200,71 @@ fn rs2nika_option_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
         i = i + 1
     }
     return out
+}
+
+/// R48: the lines of `match e { Some(x) => <body>, None => <leave> }` as a
+/// statement (either order; `_` for `None` after `Some`), where `<leave>` is one line of
+/// `return`, `continue` or `break`: `let x = e ?? <leave>` and the
+/// body dedented after it; none for any other shape.
+fn rs2nika_option_leave(mut ctx: Rs2nikaCtx, out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i64], pre: String, subject: String, ind: String) -> Vec[String] {
+    let tail: String = (out[j].trim().strip_prefix("}") ?? "").trim().clone()
+    if pre.trim() != "" || tail != "" {
+        return []
+    }
+    let first = rs2nika_option_arm(out[starts[0]])
+    let second = rs2nika_option_arm(out[starts[1]])
+    let some_first = first[0].starts_with("Some")
+    let mut some_arm: Vec[String] = second.clone()
+    let mut none_arm: Vec[String] = first.clone()
+    let mut s_k = starts[1]
+    let mut s_end = j
+    let mut n_end = starts[1]
+    let mut n_k = starts[0]
+    if some_first {
+        some_arm = first.clone()
+        none_arm = second.clone()
+        s_k = starts[0]
+        s_end = starts[1]
+        n_k = starts[1]
+        n_end = j
+    }
+    // `_` first would take every value: only `None` stands before `Some`
+    if !some_arm[0].starts_with("Some(") || none_arm[0].starts_with("Some") || (!some_first && none_arm[0] != "None") || n_k + 1 != n_end {
+        return []
+    }
+    let bound: String = ((some_arm[0].strip_prefix("Some(") ?? "").strip_suffix(")") ?? "").trim().clone()
+    if !rs2nika_is_path(bound) || bound.contains(":") || bound.contains(" ") {
+        return []
+    }
+    let leave: String = none_arm[1].trim().trim_end_matches(",").trim_end_matches(";").trim().clone()
+    let w = rs2nika_first_word(leave)
+    if !(w == "return" || w == "continue" || w == "break") || leave.ends_with("{") {
+        return []
+    }
+    let mut fallback: String = leave.clone()
+    if leave == "return None" {
+        fallback = "return null"
+    }
+    let arm = f"{ind}    "
+    let mut body: Vec[String] = []
+    rs2nika_arm_body(body, out, s_k, s_end, some_arm[1], arm)
+    let mut least = 0 - 1
+    for b in body {
+        if b.trim() != "" {
+            let n = rs2nika_indent(b).chars().count()
+            if least < 0 || n < least {
+                least = n
+            }
+        }
+    }
+    let mut lines: Vec[String] = [f"{ind}let {bound} = {subject} ?? {fallback}"]
+    for b in body {
+        if b.trim() != "" {
+            lines.push(rs2nika_moved(b, least, ind))
+        }
+    }
+    rs2nika_hit(ctx, "R48")
+    return lines
 }
 
 /// An arm's pattern of a `match` on an option: `Some(P)` -> `P`, `None` ->

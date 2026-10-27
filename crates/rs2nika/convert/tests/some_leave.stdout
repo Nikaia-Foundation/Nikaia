@@ -1,0 +1,30 @@
+fn probe(xs: ref Vec[String], key: String) -> i64 sync {
+    let mut n = 0
+    for x in xs {
+        let at = x.find(key) ?? continue
+        n += at
+        n += 1
+    }
+    return n
+}
+
+fn second(key: String) -> i64 sync {
+    let v = lookup(key) ?? return 0
+    let k = v.len()
+    return k + 1
+}
+
+fn third(xs: ref Vec[String]) -> i64? sync {
+    let mut n = 0
+    for x in xs {
+        let v = lookup(x) ?? break
+        n += v.len()
+        let w = lookup(x) ?? continue
+        if w.is_empty() {
+            n += 1
+        }
+    }
+    let v = lookup("a") ?? return null
+    return (v.len() + n)
+}
+

@@ -797,6 +797,13 @@ touches = []
 views = ["line: borrowed"]
 signature = "(line: String) -> Vec[String]"
 
+[fn."rs2nika_option_leave"]
+sync = "inferred"
+keeps = ["j"]
+touches = []
+views = ["out: borrowed", "starts: borrowed", "pre: borrowed", "subject: borrowed", "ind: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i64], pre: String, subject: String, ind: String) -> Vec[String]"
+
 [fn."rs2nika_option_matches"]
 sync = "inferred"
 touches = []
