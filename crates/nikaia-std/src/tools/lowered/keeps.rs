@@ -491,13 +491,19 @@ pub(crate) fn keeps_owner_of(receiver: &Expr, method: &str, interner: &winnow_gr
     match receiver {
         Expr::Variable(ident, _) => {
             let ident = *ident;
-            let declared = match *nikaia_std::index::get(&context.types, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let written = match *nikaia_std::index::get(&context.types, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let declared = keeps_ledger_owner(written);
             let key = format!("{}::{}", declared, method);
-            if own.functions.contains_key(&key) || library.functions.contains_key(&key) { return Some(declared.to_owned()); }
+            if own.functions.contains_key(&key) || library.functions.contains_key(&key) { return Some(declared); }
             return None;
         },
         _ => return None,
     }
+}
+
+pub(crate) fn keeps_ledger_owner(written: &str) -> String {
+    if written == "String" { return String::from("str"); }
+    written.to_owned()
 }
 
 pub(crate) fn method_keys_of(methods: &MethodIndex, method: &str, owner: Option<&str>) -> Vec<String> {

@@ -798,15 +798,26 @@ fn keeps_at_in(ledger: ref Ledger, methods: ref MethodIndex, method: ref String,
 fn keeps_owner_of(receiver: ref Expr, method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger) -> String? {
     match receiver {
         Expr::Variable(ident, _) => {
-            let declared = context.types[interner.resolve(ident)] ?? return null
+            let written = context.types[interner.resolve(ident)] ?? return null
+            let declared = keeps_ledger_owner(written)
             let key = f"{declared}::{method}"
             if own.functions.contains_key(key) || library.functions.contains_key(key) {
-                return declared.clone()
+                return declared
             }
             return null
         }
         else => return null,
     }
+}
+
+// **Text's methods are the ledger's `str::`** (#882): a `String` receiver's
+// `find` is `str::find`, which lends, and not `Seq::find`, which takes its
+// sequence whole.
+fn keeps_ledger_owner(written: ref String) -> String {
+    if written == "String" {
+        return "str"
+    }
+    return written.clone()
 }
 
 // The keys of a bare method name, narrowed to one type's method when the

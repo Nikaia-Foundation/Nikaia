@@ -1,0 +1,32 @@
+// #882: a `String` parameter the body only reads through `find` (a `str::`
+// method, which lends) stays lent, also past `??`; `Seq::find`, which takes
+// its sequence whole, is not a candidate for a text receiver.
+fn first_comma(line: String) -> i64 {
+    return line.find(",") ?? 0
+}
+
+fn head(line: String) -> String {
+    let at = line.find(",") ?? return line.to_string()
+    if first_comma(line) > 0 {
+        return line[..<at].to_string()
+    }
+    return ""
+}
+
+fn has_arguments(line: String) -> bool {
+    let open = line.find("(") ?? return false
+    let rest = line[open..<line.len()]
+    return rest.len() > 2
+}
+
+fn main() {
+    let own = f"a,b{1}"
+    println(first_comma(own))
+    println(own)
+    println(head(own))
+    println(own)
+    let call = f"f(x{1})"
+    println(has_arguments(call))
+    println(has_arguments("g()"))
+    println(call)
+}

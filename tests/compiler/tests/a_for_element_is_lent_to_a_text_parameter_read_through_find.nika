@@ -1,0 +1,13 @@
+// #882: a loop element handed to a `String` parameter the body only reads
+// through `find` and `??` is lent, not refused as a `ref String` (NK1102).
+fn first_comma(line: String) -> i64 {
+    return line.find(",") ?? -1
+}
+
+fn main() {
+    let lines = [f"a,b{1}", f"ab,{2}", "none"]
+    for l in lines {
+        println(first_comma(l))
+    }
+    println(lines.len())
+}
