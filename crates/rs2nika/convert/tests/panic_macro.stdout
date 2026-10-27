@@ -1,0 +1,33 @@
+fn pick(o: i64?, k: i64) -> i64 sync {
+    let given = o ?? panic(f"no value for {k}")
+    return match given {
+        0 => 1,
+        n => n + k,
+    }
+}
+
+fn guard_n(n: i64) -> i64 sync {
+    if n < 0 {
+        panic(f"negative: {n}")
+    }
+    if n > 100 {
+        panic("too big")
+    }
+    return n
+}
+
+fn half(n: i64) -> i64 sync {
+    return match n % 2 {
+        0 => n / 2,
+        1 => n,
+        else => panic("unreachable"),
+    }
+}
+
+fn positive(n: i64) -> i64 sync {
+    if n > 0 {
+        return n
+    }
+    panic(f"not positive: {n}")
+}
+
