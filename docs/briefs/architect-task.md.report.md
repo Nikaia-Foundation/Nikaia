@@ -1,3 +1,3 @@
 Result: done
-Batch: b869b-path-rest.md, e12-2.md
+Batch: b878-condition-binding-message.md e12-2.md
 Owner: none
