@@ -1,3 +1,3 @@
 Result: done
-Batch: b871-int-literal-pair.md, e12-1.md, b869a-path-narrowing.md
+Batch: b869b-path-rest.md, e12-2.md
 Owner: none
