@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1246] — 2026-10-27
+
+### A text literal in a tuple pattern, and a literal is the same part
+
+A text literal at a `String` or `String?` position of a tuple pattern is matched against a view of that position, so `match (a, b) { ("x", s) => .., .. }` compiles (#890). A literal at a tuple position counts as the same part for narrowing (ADR-352 D1): `(1, s)` after `(1, null)` binds `s` as the `T`, and a different literal does not.
+
+- A proved name in an arm of `return match` is given up, as at the tail of a function (#890).
+
 ## [0.0.1245] — 2026-10-27
 
 ### A proved name bound whole by a `let` is the value itself
