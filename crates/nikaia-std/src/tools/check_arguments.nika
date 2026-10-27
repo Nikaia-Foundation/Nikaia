@@ -17,16 +17,6 @@ struct CheckArgument {
     found: Ty,
 }
 
-/// The argument written at `at`, where one was (an `Expr` read out of a place
-/// is a copy for the ledger, so `let x: ref Expr? = if .. { given[at] } else
-/// { null }` is NK1257: the option is made where it is returned).
-fn check_arguments_at(given: ref Vec[Expr], at: i64) -> ref Expr? sync {
-    if at < given.len() {
-        return given[at]
-    }
-    return null
-}
-
 fn check_arguments_a_var(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Var { .. } => true,
@@ -216,7 +206,8 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             arms = state.arms_to_ask(world, given[at])
         }
         if arms.is_empty() {
-            expanded.push(CheckArgument { at: at, arm: false, given: check_arguments_at(given, at), found: found_here })
+            let here: ref Expr? = if at < given.len() { given[at] } else { null }
+            expanded.push(CheckArgument { at: at, arm: false, given: here, found: found_here })
             continue
         }
         // A number literal as an arm is an `i64` written there (#600).

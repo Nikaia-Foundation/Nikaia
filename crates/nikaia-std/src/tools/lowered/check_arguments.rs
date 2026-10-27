@@ -11,13 +11,6 @@ pub(crate) struct CheckArgument<'a> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_arguments_at(given: &[Expr], at: i64) -> Option<&Expr> {
-    if at < given.len() as i64 { return Some(nikaia_std::index::get(&given, nikaia_std::index::at(at))); }
-    None
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_a_var(ty: &Ty) -> bool { matches!(ty, Ty::Var { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -160,7 +153,8 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         let mut arms: Vec<CheckArm<'_>> = vec![];
         if found_here.is_unknown() && known_want && at < given.len() as i64 { arms = state.arms_to_ask(world, nikaia_std::index::get(&given, nikaia_std::index::at(at))); }
         if arms.is_empty() {
-            expanded.push(CheckArgument { at, arm: false, given: check_arguments_at(given, at), found: found_here });
+            let here: Option<&Expr> = if at < given.len() as i64 { Some(nikaia_std::index::get(&given, nikaia_std::index::at(at))) } else { None };
+            expanded.push(CheckArgument { at, arm: false, given: here, found: found_here });
             continue;
         }
         let no_number = at < wanted.len() as i64 && state.no_integer_is(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
