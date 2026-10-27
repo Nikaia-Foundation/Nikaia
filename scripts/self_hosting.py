@@ -189,7 +189,7 @@ COMPILER_NIKA = {
     "emit_holes.nika": "emit: the holes of a literal as their readers read them, and the names a walk through them finds (E12-2)",
     "emit_fold.nika": "emit: a fold and a par_fold of a grammar pattern, step and merge (E10-2)",
     "emit_host.nika": "emit: the host trait the emitter's core asks of the Rust side, and the first moved methods: a cast's operand, a bare range, an index (0.0.816)",
-    "emit_seeds.nika": "emit: the map-position seeds: the writer (`EmitSeedsPlace`, the written type's text), the `EmitSeedsTables` with its type queries, and the reader's decisions: the counting fixpoint, the barrier closure, the hands test (#867; the AST walks stay in `emit/seeds.rs`)",
+    "emit_seeds.nika": "emit: the map-position seeds: the writer (`EmitSeedsPlace`, the written type's text), the `EmitSeedsTables` with its type queries, and the reader's decisions: the counting fixpoint, the barrier closure, the hands test, and the AST walks of the reader (#867, E12-3a; `analyse_with` stays Rust, behind `EmitSeedsHost`)",
     "emit_core_types.nika": "emit: how a type is written, the tethered wrapper, the pointer an extern parameter takes and the words that depend on user parallelism (0.0.818)",
     "emit_core_below.nika": "emit: the small questions below the core: held `?.` receivers, resize fills, call options, what a catch guards, keeps, map keys, reflected reads (0.0.820)",
     "emit_core_leaves.nika": "emit: the leaves of the core: keys, postfix bases, operands, string literals, f-strings, call options, guards, grammar entries, html templates, blocks and ifs (0.0.822)",

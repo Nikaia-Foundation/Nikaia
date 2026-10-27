@@ -127,6 +127,314 @@ pub struct EmitSeedsDeclared {
     pub words: Vec<String>,
 }
 
+pub trait EmitSeedsHost {
+    fn analysed(&self, tables: &EmitSeedsTables) -> Vec<(String, bool, i64, i64)>;
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_seeds_read<H: EmitSeedsHost>(host: &H, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], described: &[String]) -> EmitSeedsTables {
+    let mut tables = emit_seeds_tables();
+    for name in described.iter() { tables.barriers.insert(name.to_owned()); }
+    let declared = emit_seeds_structs(units);
+    tables.count_types(&declared);
+    emit_seeds_read_barriers(&mut tables, units);
+    let impls = emit_seeds_impls_of(units);
+    for _ in 0..4 {
+        let mut bad = tables.self_handers(&impls);
+        for (key, conflict, _, _) in host.analysed(&tables) {
+            if !conflict { continue; }
+            let at = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let target = nikaia_std::index::get(&key, nikaia_std::index::at(0..at)).to_owned();
+            if tables.arity(&target) > 0 && !nikaia_std::list::contains(&bad, &target) { bad.push(target); }
+        }
+        if bad.is_empty() { break; }
+        for name in bad.iter() {
+            tables.excluded.insert(name.to_owned());
+            tables.barriers.insert(name.to_owned());
+        }
+        tables.count_types(&declared);
+        emit_seeds_read_barriers(&mut tables, units);
+    }
+    tables
+}
+
+pub fn emit_seeds_fill_calls(tables: &mut EmitSeedsTables, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], analysed: &[(String, bool, i64, i64)]) {
+    let mut owns: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut fixes: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for (key, _, own, fixed) in analysed.iter() {
+        let own = nikaia_std::num::value(own);let fixed = nikaia_std::num::value(fixed);
+        owns.insert(key.to_owned(), own);
+        fixes.insert(key.to_owned(), fixed);
+    }
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            match &item.node {
+                Item::Fn { name, generics, args, ret_type, is_public, receiver, .. } => {
+                    let is_public = *is_public; let name = *name;
+                    if receiver.is_some() { continue; }
+                    let called = unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue });
+                    if !is_public && !emit_seeds_mentions(&tables, unit, args, (ret_type).as_ref()) { continue; }
+                    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    let mut fixed: i64 = 0;
+                    for a in args.iter() { fixed += tables.distinct(unit.words, &a.ty, &mut seen); }
+                    let mut total: i64 = fixed;
+                    if ret_type.is_some() {
+                        let ret = match ret_type { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        total += tables.distinct(unit.words, ret, &mut seen);
+                    }
+                    if total > 0 { tables.functions = true; }
+                    if tables.fixed.contains(&called) { continue; }
+                    if is_public && owns.contains_key(&called) {
+                        total = nikaia_std::index::or(owns.get(&called), || 0);
+                        fixed = nikaia_std::index::or(fixes.get(&called), || 0);
+                    }
+                    if total > fixed {
+                        let own = generics.len() as i64;
+                        tables.calls.insert(called, (total + own, fixed + own));
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+}
+
+pub(crate) fn emit_seeds_mentions(tables: &EmitSeedsTables, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, args: &[FnArg], ret_type: Option<&Type>) -> bool {
+    for a in args.iter() { if tables.mentions_a_struct(unit.words, &a.ty) { return true; } }
+    if ret_type.is_none() { return false; }
+    let ret = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
+    tables.mentions_a_struct(unit.words, ret)
+}
+
+pub(crate) fn emit_seeds_holds(tables: &EmitSeedsTables, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, args: &[FnArg], ret_type: Option<&Type>) -> bool {
+    for a in args.iter() { if tables.count(unit.words, &a.ty) > 0 { return true; } }
+    if ret_type.is_none() { return false; }
+    let ret = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
+    tables.count(unit.words, ret) > 0
+}
+
+pub(crate) fn emit_seeds_structs(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> Vec<EmitSeedsDeclared> {
+    let mut declared: Vec<EmitSeedsDeclared> = vec![];
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            match &item.node {
+                Item::Struct { name, fields, is_public, is_extern, .. } => {
+                    let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                    if is_public && !is_extern {
+                        let mut words: Vec<String> = vec![];
+                        for f in fields.iter() { emit_seeds_words(unit.words, &f.ty, &mut words); }
+                        declared.push(EmitSeedsDeclared { name: unit.text(name), words });
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    declared
+}
+
+pub(crate) fn emit_seeds_read_barriers(tables: &mut EmitSeedsTables, units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) {
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            match &item.node {
+                Item::Trait { methods, .. } => {
+                    for m in methods.iter() {
+                        if emit_seeds_holds(&tables, unit, &m.node.args, (m.node.ret_type).as_ref()) {
+                            tables.trait_maps = true;
+                            tables.barriers.insert(unit.text(m.node.name));
+                        }
+                    }
+                },
+                Item::Impl { trait_name, methods, .. } => {
+                    let trait_name = *trait_name;
+                    if trait_name.is_none() { continue; }
+                    for m in methods.iter() {
+                        match &m.node {
+                            Item::Fn { name, args, ret_type, .. } => {
+                                let name = *name;
+                                if name.is_some() && emit_seeds_holds(&tables, unit, args, (ret_type).as_ref()) {
+                                    tables.trait_maps = true;
+                                    tables.barriers.insert(unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
+                                }
+                            },
+                            _ => { },
+                        }
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            match &item.node {
+                Item::Impl { trait_name, methods, .. } => {
+                    let trait_name = *trait_name;
+                    if trait_name.is_some() { continue; }
+                    for m in methods.iter() {
+                        match &m.node {
+                            Item::Fn { name, args, ret_type, is_public, .. } => {
+                                let is_public = *is_public; let name = *name;
+                                if !is_public || name.is_none() || ret_type.is_none() { continue; }
+                                let ret = match ret_type { Some(__nikaia_value) => __nikaia_value, None => continue };
+                                let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+                                let mut given: i64 = 0;
+                                for a in args.iter() { given += tables.distinct(unit.words, &a.ty, &mut seen); }
+                                if tables.distinct(unit.words, ret, &mut seen) > 0 && given == 0 {
+                                    tables.fixed.insert(unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
+                                    tables.functions = true;
+                                }
+                            },
+                            _ => { },
+                        }
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    tables.private = collections::BTreeSet::new();
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            match &item.node {
+                Item::Fn { name, args, ret_type, is_public, receiver, .. } => {
+                    let is_public = *is_public; let name = *name;
+                    if is_public || receiver.is_some() || name.is_none() { continue; }
+                    let mut bare: i64 = 0;
+                    for a in args.iter() { bare += emit_seeds_bare(unit.words, &a.ty); }
+                    if ret_type.is_some() {
+                        let ret = match ret_type { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        bare += emit_seeds_bare(unit.words, ret);
+                    }
+                    if bare > 0 { tables.private.insert(unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue })); }
+                },
+                _ => { },
+            }
+        }
+    }
+    let mut bodies: Vec<EmitSeedsBody> = vec![];
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            match &item.node {
+                Item::Fn { name, args, body, is_public, receiver, .. } => {
+                    let is_public = *is_public; let name = *name;
+                    if is_public && receiver.is_none() && name.is_some() { emit_seeds_body(&tables, &mut bodies, unit, unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }), args, body); }
+                },
+                _ => { },
+            }
+        }
+    }
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            match &item.node {
+                Item::Impl { trait_name, methods, .. } => {
+                    let trait_name = *trait_name;
+                    if trait_name.is_some() { continue; }
+                    for m in methods.iter() {
+                        match &m.node {
+                            Item::Fn { name, args, body, is_public, receiver, .. } => {
+                                let is_public = *is_public; let name = *name;
+                                if is_public && receiver.is_some() && name.is_some() { emit_seeds_body(&tables, &mut bodies, unit, unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }), args, body); }
+                            },
+                            _ => { },
+                        }
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    tables.close_barriers(&bodies);
+}
+
+pub(crate) fn emit_seeds_body(tables: &EmitSeedsTables, bodies: &mut Vec<EmitSeedsBody>, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, name: String, args: &[FnArg], body: &Block) {
+    let mut held: Vec<String> = vec![];
+    for a in args.iter() { if tables.count(unit.words, &a.ty) > 0 { held.push(unit.text(a.name)); } }
+    if !held.is_empty() { bodies.push(EmitSeedsBody { name, held, calls: emit_seeds_calls_of(unit, body) }); }
+}
+
+pub(crate) fn emit_seeds_impls_of(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> Vec<EmitSeedsBody> {
+    let mut out: Vec<EmitSeedsBody> = vec![];
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            match &item.node {
+                Item::Impl { trait_name, target, methods } => {
+                    let trait_name = *trait_name;
+                    if trait_name.is_some() { continue; }
+                    let mut calls: Vec<EmitSeedsCall> = vec![];
+                    for m in methods.iter() {
+                        match &m.node {
+                            Item::Fn { receiver, body, .. } => { if receiver.is_some() { calls.extend(emit_seeds_calls_of(unit, body)); } },
+                            _ => { },
+                        }
+                    }
+                    out.push(EmitSeedsBody { name: emit_seeds_last(&unit.text(target.name)), held: vec![String::from("self")], calls });
+                },
+                _ => { },
+            }
+        }
+    }
+    out
+}
+
+pub(crate) fn emit_seeds_calls_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> Vec<EmitSeedsCall> {
+    let mut out: Vec<EmitSeedsCall> = vec![];
+    for e in visited_in_block(body) {
+        match e {
+            Expr::MethodCall { method, args, .. } => {
+                let method = *method;
+                out.push(EmitSeedsCall { callee: unit.text(method), roots: emit_seeds_roots(unit, args) });
+            },
+            Expr::Call { func, args, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                let callee = match emit_seeds_callee(unit, func) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                out.push(EmitSeedsCall { callee, roots: emit_seeds_roots(unit, args) });
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn emit_seeds_callee(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
+    let mut out: Option<String> = None;
+    match func {
+        Expr::Path(segments, _) => { if !segments.is_empty() { out = Some(unit.text(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1)))); } },
+        Expr::Variable(one, _) => {
+            let one = *one;
+            out = Some(unit.text(one));
+        },
+        _ => { },
+    }
+    out
+}
+
+pub(crate) fn emit_seeds_roots(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, args: &[Expr]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for a in args.iter() {
+        let root = match emit_seeds_root(unit, a) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        out.push(root);
+    }
+    out
+}
+
+pub(crate) fn emit_seeds_root(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, e: &Expr) -> Option<String> {
+    let mut out: Option<String> = None;
+    match e {
+        Expr::Variable(n, _) => {
+            let n = *n;
+            out = Some(unit.text(n));
+        },
+        Expr::Field { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            out = emit_seeds_root(unit, base);
+        },
+        _ => { },
+    }
+    out
+}
+
 pub fn emit_seeds_words(words: &winnow_grammar::InternerContext, ty: &Type, out: &mut Vec<String>) {
     if (*ty.code).is_none() && !ty.is_tuple { out.push(words.resolve(ty.name).to_owned()); }
     for g in ty.generics.iter() { emit_seeds_words(words, g, out); }

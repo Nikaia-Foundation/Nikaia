@@ -3,7 +3,8 @@
 // written type with them put in, and the tables the reader fills (which `pub`
 // structs hold maps, which functions are barriers) with the queries on them,
 // and the reader's decisions on them (the counting fixpoint, the barrier
-// closure). The walks over the AST that collect the facts are `emit/seeds.rs`.
+// closure), and the walks over the AST that collect the facts. The maps'
+// analysis (`contracts::maps::analyse_with`) is the host's (`EmitSeedsHost`).
 
 use std::collections
 
@@ -239,6 +240,414 @@ pub struct EmitSeedsBody {
 pub struct EmitSeedsDeclared {
     pub name: String,
     pub words: Vec[String],
+}
+
+/// What the reader asks of the compiler: the ledger's analysis of the maps
+/// (`contracts::maps::analyse_with`) against the tables read so far, per
+/// `pub` function its key, whether two positions of its `impl`'s own type are
+/// joined (`conflict`), and how many hidden parameters it declares of its own
+/// and how many of them its parameters fix.
+pub trait EmitSeedsHost {
+    fn analysed(ref self, tables: ref EmitSeedsTables) -> Vec[(String, bool, i64, i64)] sync
+}
+
+/// **Reads every file of every package in the build**: the `pub` structs that
+/// hold maps, the barriers, then the types a method of theirs keeps from
+/// declaring parameters, until none is added (at most four rounds). The
+/// `pub` functions' calls are `emit_seeds_fill_calls`, once the shapes are
+/// read.
+pub fn emit_seeds_read[H: EmitSeedsHost](host: ref H, units: ref Vec[ParsedView], described: ref Vec[String]) -> EmitSeedsTables sync {
+    let mut tables = emit_seeds_tables()
+    for name in described {
+        tables.barriers.insert(name.clone())
+    }
+    // Fields of every public struct, then the count of each, until the
+    // counts stop growing (a struct holds another one that holds a map).
+    let declared = emit_seeds_structs(units)
+    tables.count_types(declared)
+    emit_seeds_read_barriers(tables, units)
+    // **A method that hands a map of its type to a barrier**: the `impl`'s
+    // parameters are the type's and one method cannot fix them to std's
+    // hasher, so the type declares none - its maps are the keyed one - and
+    // a program that names it is no more trusted than the keyed hash.
+    let impls = emit_seeds_impls_of(units)
+    for _ in 0..<4 {
+        let mut bad = tables.self_handers(impls)
+        // And a method whose body makes two maps of its own type one: the
+        // type declares a parameter for each, no signature can say that
+        // two of the `impl`'s parameters are the same.
+        for (key, conflict, _, _) in host.analysed(tables) {
+            if !conflict {
+                continue
+            }
+            let at = key.find("::") ?? continue
+            let target = key[0..<at].clone()
+            if tables.arity(target) > 0 && !bad.contains(target) {
+                bad.push(target)
+            }
+        }
+        if bad.is_empty() {
+            break
+        }
+        for name in bad {
+            tables.excluded.insert(name.clone())
+            tables.barriers.insert(name.clone())
+        }
+        tables.count_types(declared)
+        emit_seeds_read_barriers(tables, units)
+    }
+    return tables
+}
+
+/// **The `pub` functions a call has to fill**, and whether some function holds
+/// a map position, from the shapes the analysis gave (`analysed`, as
+/// `EmitSeedsHost::analysed` answers).
+pub fn emit_seeds_fill_calls(mut tables: EmitSeedsTables, units: ref Vec[ParsedView], analysed: ref Vec[(String, bool, i64, i64)]) {
+    let mut owns: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut fixes: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for (key, _, own, fixed) in analysed {
+        owns.insert(key.clone(), own)
+        fixes.insert(key.clone(), fixed)
+    }
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Fn { name, generics, args, ret_type, is_public, receiver, .. } => {
+                    if receiver != null {
+                        continue
+                    }
+                    let called = unit.text(name ?? continue)
+                    if !is_public && !emit_seeds_mentions(tables, unit, args, ret_type) {
+                        continue
+                    }
+                    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+                    let mut fixed = 0
+                    for a in args {
+                        fixed += tables.distinct(unit.words, a.ty, seen)
+                    }
+                    let mut total = fixed
+                    if ret_type != null {
+                        let ret = ret_type ?? continue
+                        total += tables.distinct(unit.words, ret, seen)
+                    }
+                    if total > 0 {
+                        tables.functions = true
+                    }
+                    if tables.fixed.contains(called) {
+                        continue
+                    }
+                    // A `pub` function declares one parameter for each group
+                    // of positions its body joins.
+                    if is_public && owns.contains_key(called) {
+                        total = owns.get(called) ?? 0
+                        fixed = fixes.get(called) ?? 0
+                    }
+                    if total > fixed {
+                        // A type parameter of its own comes first, and nothing
+                        // fixes it from here: the call leaves it to `_`.
+                        let own = generics.len() as i64
+                        tables.calls.insert(called, (total + own, fixed + own))
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+}
+
+/// Whether a signature mentions a `pub` struct that declares parameters.
+fn emit_seeds_mentions(tables: ref EmitSeedsTables, unit: ref ParsedView, args: ref Vec[FnArg], ret_type: ref Type?) -> bool {
+    for a in args {
+        if tables.mentions_a_struct(unit.words, a.ty) {
+            return true
+        }
+    }
+    if ret_type == null {
+        return false
+    }
+    let ret = ret_type ?? return false
+    return tables.mentions_a_struct(unit.words, ret)
+}
+
+/// Whether a signature holds a map position.
+fn emit_seeds_holds(tables: ref EmitSeedsTables, unit: ref ParsedView, args: ref Vec[FnArg], ret_type: ref Type?) -> bool {
+    for a in args {
+        if tables.count(unit.words, a.ty) > 0 {
+            return true
+        }
+    }
+    if ret_type == null {
+        return false
+    }
+    let ret = ret_type ?? return false
+    return tables.count(unit.words, ret) > 0
+}
+
+/// Every `pub` struct of the units (not an `extern` one) with the names of
+/// the parts of its fields' types.
+fn emit_seeds_structs(units: ref Vec[ParsedView]) -> Vec[EmitSeedsDeclared] {
+    let mut declared: Vec[EmitSeedsDeclared] = []
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Struct { name, fields, is_public, is_extern, .. } => {
+                    if is_public && !is_extern {
+                        let mut words: Vec[String] = []
+                        for f in fields {
+                            emit_seeds_words(unit.words, f.ty, words)
+                        }
+                        declared.push(EmitSeedsDeclared { name: unit.text(name), words: words })
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return declared
+}
+
+/// The traits' methods with a map position, and then the `pub` functions
+/// that hand a position they were given to one of them (or to another such
+/// function), until none is added.
+fn emit_seeds_read_barriers(mut tables: EmitSeedsTables, units: ref Vec[ParsedView]) {
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Trait { methods, .. } => {
+                    for m in methods {
+                        if emit_seeds_holds(tables, unit, m.node.args, m.node.ret_type) {
+                            tables.trait_maps = true
+                            tables.barriers.insert(unit.text(m.node.name))
+                        }
+                    }
+                },
+                Item::Impl { trait_name, methods, .. } => {
+                    if trait_name == null {
+                        continue
+                    }
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { name, args, ret_type, .. } => {
+                                if name != null && emit_seeds_holds(tables, unit, args, ret_type) {
+                                    tables.trait_maps = true
+                                    tables.barriers.insert(unit.text(name ?? continue))
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    // **A method whose result alone holds a map position**: a method call
+    // takes no turbofish here, so nothing could fill it. Its positions are
+    // the keyed map, like a barrier's.
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Impl { trait_name, methods, .. } => {
+                    if trait_name != null {
+                        continue
+                    }
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { name, args, ret_type, is_public, .. } => {
+                                if !is_public || name == null || ret_type == null {
+                                    continue
+                                }
+                                let ret = ret_type ?? continue
+                                let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+                                let mut given = 0
+                                for a in args {
+                                    given += tables.distinct(unit.words, a.ty, seen)
+                                }
+                                if tables.distinct(unit.words, ret, seen) > 0 && given == 0 {
+                                    tables.fixed.insert(unit.text(name ?? continue))
+                                    tables.functions = true
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    // **A private function with a map of its own in its signature** has
+    // the package's class for it, not a hidden parameter: a `pub` function
+    // that hands it a map it was given cannot say that the two are one
+    // type, so its positions are the keyed map, as a trait method's are
+    // (the package writes the keyed map in its own bodies, `seeded()`).
+    tables.private = collections::BTreeSet()
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Fn { name, args, ret_type, is_public, receiver, .. } => {
+                    if is_public || receiver != null || name == null {
+                        continue
+                    }
+                    let mut bare = 0
+                    for a in args {
+                        bare += emit_seeds_bare(unit.words, a.ty)
+                    }
+                    if ret_type != null {
+                        let ret = ret_type ?? continue
+                        bare += emit_seeds_bare(unit.words, ret)
+                    }
+                    if bare > 0 {
+                        tables.private.insert(unit.text(name ?? continue))
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    // The bodies the barrier closure looks at: the `pub` functions, then the
+    // methods that hand a map they were given (not `self`'s) on.
+    let mut bodies: Vec[EmitSeedsBody] = []
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Fn { name, args, body, is_public, receiver, .. } => {
+                    if is_public && receiver == null && name != null {
+                        emit_seeds_body(tables, bodies, unit, unit.text(name ?? continue), args, body)
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Impl { trait_name, methods, .. } => {
+                    if trait_name != null {
+                        continue
+                    }
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { name, args, body, is_public, receiver, .. } => {
+                                if is_public && receiver != null && name != null {
+                                    emit_seeds_body(tables, bodies, unit, unit.text(name ?? continue), args, body)
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    tables.close_barriers(bodies)
+}
+
+/// A body for the barrier closure, if one of its parameters holds a map.
+fn emit_seeds_body(tables: ref EmitSeedsTables, mut bodies: Vec[EmitSeedsBody], unit: ref ParsedView, name: String, args: ref Vec[FnArg], body: ref Block) {
+    let mut held: Vec[String] = []
+    for a in args {
+        if tables.count(unit.words, a.ty) > 0 {
+            held.push(unit.text(a.name))
+        }
+    }
+    if !held.is_empty() {
+        bodies.push(EmitSeedsBody { name: name, held: held, calls: emit_seeds_calls_of(unit, body) })
+    }
+}
+
+/// The `impl`s without a trait, each as one body of the calls of its methods
+/// with a receiver, held in `self`.
+fn emit_seeds_impls_of(units: ref Vec[ParsedView]) -> Vec[EmitSeedsBody] {
+    let mut out: Vec[EmitSeedsBody] = []
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Impl { trait_name, target, methods } => {
+                    if trait_name != null {
+                        continue
+                    }
+                    let mut calls: Vec[EmitSeedsCall] = []
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { receiver, body, .. } => {
+                                if receiver != null {
+                                    calls.extend(emit_seeds_calls_of(unit, body))
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                    out.push(EmitSeedsBody { name: emit_seeds_last(unit.text(target.name)), held: ["self"], calls: calls })
+                },
+                else => {},
+            }
+        }
+    }
+    return out
+}
+
+/// The calls of a body (to a method, a path or a name) and the variables
+/// their arguments are field chains of, for `EmitSeedsTables::hands`.
+fn emit_seeds_calls_of(unit: ref ParsedView, body: ref Block) -> Vec[EmitSeedsCall] {
+    let mut out: Vec[EmitSeedsCall] = []
+    for e in visited_in_block(body) {
+        match e {
+            Expr::MethodCall { method, args, .. } => {
+                out.push(EmitSeedsCall { callee: unit.text(method), roots: emit_seeds_roots(unit, args) })
+            },
+            Expr::Call { func, args, .. } => {
+                let callee = emit_seeds_callee(unit, func) ?? continue
+                out.push(EmitSeedsCall { callee: callee, roots: emit_seeds_roots(unit, args) })
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// The name a called value is written as: the last part of a path, or a name.
+fn emit_seeds_callee(unit: ref ParsedView, func: ref Expr) -> String? {
+    let mut out: String? = null
+    match func {
+        Expr::Path(segments, _) => {
+            if segments.len() > 0 {
+                out = unit.text(segments[segments.len() - 1])
+            }
+        },
+        Expr::Variable(one, _) => {
+            out = unit.text(one)
+        },
+        else => {},
+    }
+    return out
+}
+
+/// The variables the arguments are field chains of, in order.
+fn emit_seeds_roots(unit: ref ParsedView, args: ref Vec[Expr]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for a in args {
+        let root = emit_seeds_root(unit, a) ?? continue
+        out.push(root)
+    }
+    return out
+}
+
+/// The variable a value is a field chain of: `m`, `t.counts`.
+fn emit_seeds_root(unit: ref ParsedView, e: ref Expr) -> String? {
+    let mut out: String? = null
+    match e {
+        Expr::Variable(n, _) => {
+            out = unit.text(n)
+        },
+        Expr::Field { base, .. } => {
+            out = emit_seeds_root(unit, base)
+        },
+        else => {},
+    }
+    return out
 }
 
 /// The names of a type's parts that can hold a map position (neither a
