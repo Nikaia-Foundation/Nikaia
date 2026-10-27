@@ -357,7 +357,7 @@ impl EmitState {
     pub fn emit_core_guard_reopening<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: &Expr) -> String {
         let boxed = self.boxed_bindings(world, pattern);
         let mut read: Vec<String> = vec![];
-        for each in host.names_read(guard) {
+        for each in self.emit_holes_names_read(world, host, guard) {
             let name = escaped_name(&each);
             if boxed.contains(&name) && !read.contains(&name) { read.push(name); }
         }

@@ -216,10 +216,11 @@ impl CheckHost for Host<'_> {
     }
 
     fn literal_holes(&self, literal: &Expr) -> Vec<Expr> {
-        crate::emit::literal_expressions_bound(self.parsed, literal)
-            .into_iter()
-            .map(|(hole, _)| hole)
-            .collect()
+        nikaia_std::tools::emit_holes::emit_holes_literal(
+            self.parsed,
+            &self.parsed.interner,
+            literal,
+        )
     }
 
     fn evaluate(&self, value: &Expr, held: &BTreeMap<String, build_time::Value>) -> CheckBuilt {
@@ -353,18 +354,11 @@ impl CheckHost for Host<'_> {
     }
 
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)> {
-        match literal {
-            Expr::LitInterpolated { parts, .. } => crate::emit::interpolated_holes(parts)
-                .into_iter()
-                .map(|(at, hole)| {
-                    (
-                        crate::emit::hole_as_read(self.parsed, at, hole).into_owned(),
-                        Vec::new(),
-                    )
-                })
-                .collect(),
-            _ => crate::emit::literal_expressions_bound(self.parsed, literal),
-        }
+        nikaia_std::tools::emit_holes::emit_holes_literal_bound(
+            self.parsed,
+            &self.parsed.interner,
+            literal,
+        )
     }
 
     /// Code below the core never walks an expression: the hubs are the core's

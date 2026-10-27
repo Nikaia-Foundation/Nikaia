@@ -243,7 +243,7 @@ impl EmitState {
                     return
                 }
                 let mut mentions = false
-                for name in host.names_read(index) {
+                for name in self.emit_holes_names_read(world, host, index) {
                     if name == root {
                         mentions = true
                     }

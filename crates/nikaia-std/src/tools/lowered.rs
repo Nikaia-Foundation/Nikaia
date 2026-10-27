@@ -1095,6 +1095,14 @@ mod emit_grammar_lowered {
 #[allow(unused_imports)]
 pub use emit_grammar_lowered::*;
 
+mod emit_holes_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_holes.rs");
+}
+#[allow(unused_imports)]
+pub use emit_holes_lowered::*;
+
 mod emit_host_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2354,6 +2362,10 @@ pub mod emit_function {
 }
 pub mod emit_function_body {}
 pub mod emit_grammar {}
+pub mod emit_holes {
+    #[allow(unused_imports)]
+    pub use super::{EmitHole, EmitHolesHost, emit_holes_literal_bound, emit_holes_literal};
+}
 pub mod emit_host {
     #[allow(unused_imports)]
     pub use super::{EmitHost};

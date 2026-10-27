@@ -181,7 +181,7 @@ impl EmitState {
                 self.emit_core_hold_chain(world, walk, out, host, base, root, depth, flow, scope)?;
                 if only_literals(index) || self.map_key(index, true).is_some() { return Ok(()); }
                 let mut mentions = false;
-                for name in host.names_read(index) { if name == root { mentions = true; } }
+                for name in self.emit_holes_names_read(world, host, index) { if name == root { mentions = true; } }
                 if !mentions { return Ok(()); }
                 let key = node_key(index);
                 walk.held.remove(&key);

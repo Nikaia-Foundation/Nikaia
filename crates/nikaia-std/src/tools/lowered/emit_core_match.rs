@@ -248,7 +248,7 @@ impl EmitState {
             taken_apart.push_str(&format!("let __nikaia_box{} = nikaia_std::boxed::open(__nikaia_box{}); let {} = __nikaia_box{} else {{ unreachable!(\"the guard matched it\") }}; ", at, at, written.buf, at));
         }
         let opened = self.boxed_bindings(world, pattern);
-        let read = host.names_read(body);
+        let read = self.emit_holes_names_read(world, host, body);
         let mut copied: Vec<String> = vec![];
         for name in host.copied_bindings(node_key(body)) { if nikaia_std::list::contains(&read, &name) && self.facts.changed_copies.contains(&(node_key(body), name.to_owned())) { copied.push(format!("let mut {} = *{}; ", name, name)); } else if nikaia_std::list::contains(&read, &name) { copied.push(format!("let {} = *{}; ", name, name)); } }
         for one in self.facts.changed_bindings.iter() { if one.0 == node_key(body) { copied.push(format!("let mut {} = {}; ", one.1, one.1)); } }
@@ -560,7 +560,7 @@ impl EmitState {
             }
             if arm.guard.is_some() {
                 let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                let guard_read = host.names_read(guard);
+                let guard_read = self.emit_holes_names_read(world, host, guard);
                 let mut guard_copied: Vec<String> = vec![];
                 for name in host.copied_bindings(node_key(&arm.body)) { if nikaia_std::list::contains(&guard_read, &name) { guard_copied.push(name); } }
                 if nests == 0 && !guard_copied.is_empty() {

@@ -17,10 +17,6 @@ pub trait EmitHost {
     /// (`text_tiers::wrap_hole`).
     fn wrap_hole(ref self, hole: ref Expr, wraps: ref Vec[(i64, winnow_grammar::Symbol)]) -> Expr sync
 
-    /// The names of the variables read anywhere in `expr`, string holes
-    /// included, in the order the walk meets them (`sync::visit_expr`).
-    fn names_read(ref self, expr: ref Expr) -> Vec[String] sync
-
     /// The names bound out of a lent value that an arm copies out
     /// (`check::Checked::copied_bindings`), for the arm whose body is at `at`.
     fn copied_bindings(ref self, at: i64) -> Vec[String] sync

@@ -8,8 +8,8 @@
 // the keeps a statement declares, how a map key goes into brackets and what a
 // reflected read stands for. Methods of `EmitState` (and of `EmitWalk` where
 // they read the walk); a function that hands back references into the tree is
-// free, with every reference parameter one lifetime. Only `guard_reopening`
-// calls back (`EmitHost::names_read`).
+// free, with every reference parameter one lifetime. `guard_reopening` reads
+// the names in a guard through `emit_holes_names_read`.
 
 use std::collections
 
@@ -456,7 +456,7 @@ impl EmitState {
     pub fn emit_core_guard_reopening[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, pattern: ref MatchPattern, guard: ref Expr) -> String {
         let boxed = self.boxed_bindings(world, pattern)
         let mut read: Vec[String] = []
-        for each in host.names_read(guard) {
+        for each in self.emit_holes_names_read(world, host, guard) {
             let name = escaped_name(each)
             if boxed.contains(ref name) && !read.contains(ref name) {
                 read.push(name)

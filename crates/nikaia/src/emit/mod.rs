@@ -1700,93 +1700,6 @@ pub(crate) fn visit_expr<'a>(expr: &'a Expr, f: &mut impl FnMut(&'a Expr)) {
     }
 }
 
-/// Split an interpolated string into a Rust format string and its holes.
-///
-/// `"{a}={s.mean()}"` becomes `("{}={}", ["a", "s.mean()"])`. Braces are
-/// doubled to be literal, as in every format string; the holes themselves are
-/// Nikaia expressions and are parsed as such by the caller.
-/// Every expression a literal holds - the holes of an interpolated string, and
-/// the holes of a template.
-///
-/// **The emitter is not the only thing that needs these.** A hole is Nikaia
-/// source, and until this existed it was source no analysis could see: the
-/// splitting happened here, on the way out, so the type checker, the `sync`
-/// check and the provenance analysis all walked past a `LitStr` as if it were
-/// a string.
-///
-/// That was not only a missed diagnostic. `sync` is *inferred* from what a body
-/// calls (ADR-288), so a function whose only pausing call sat inside a hole was
-/// recorded `sync = "inferred"` - a claim, in a file a library ships, that it
-/// cannot pause. ADR-288 D2 and ADR-010 D1 both say the same thing about that
-/// direction: an analysis that fails open is a vulnerability generator.
-///
-/// A hole that does not parse yields nothing here. The emitter reports it, in
-/// its own words, at the place it happens; an analysis has nothing to add.
-/// The same as [`literal_expressions`], with the names a template's `<for>`
-/// binds around each hole. Empty for anything that is not a template.
-pub(crate) fn literal_expressions_bound(
-    parsed: &Parsed,
-    expr: &Expr,
-) -> Vec<(Expr, Vec<(String, String)>)> {
-    match expr {
-        Expr::Dsl {
-            target,
-            package,
-            content,
-            ..
-        } if crate::dsl::is_deferred(&dsl_name(parsed, *package, *target), content) => Vec::new(),
-        Expr::Dsl { content, .. } => match template::split(content.trim()) {
-            Ok(segments) => template_holes_bound(&segments)
-                .into_iter()
-                .filter_map(|(hole, bound)| {
-                    parsed
-                        .hole(crate::ast::id_of(expr), &hole)
-                        .ok()
-                        .map(|expr| (expr, bound))
-                })
-                .collect(),
-            Err(_) => Vec::new(),
-        },
-        _ => literal_expressions(parsed, expr)
-            .into_iter()
-            .map(|hole| (hole, Vec::new()))
-            .collect(),
-    }
-}
-
-/// **One hole of an `f"…"` as its readers read it**: the node in the tree,
-/// or a copy with what the tier pass hands over inside it (ADR-229 D1). The
-/// node itself wherever nothing is wrapped, so that what the checker records
-/// against a node's address is found by the emitter at the same address.
-pub(crate) fn hole_as_read<'a>(
-    parsed: &Parsed,
-    at: u32,
-    hole: &'a Expr,
-) -> std::borrow::Cow<'a, Expr> {
-    match parsed.hole_wraps.get(&at) {
-        Some(wraps) => {
-            let mut wrapped = hole.clone();
-            crate::text_tiers::wrap_hole(&mut wrapped, wraps);
-            std::borrow::Cow::Owned(wrapped)
-        }
-        None => std::borrow::Cow::Borrowed(hole),
-    }
-}
-
-/// **An `f"…"`'s holes as the grammar parsed them**
-/// ([ADR-309](../../docs/specification/adr/adr-309.md) D6), each beside the
-/// byte its `{` stands at - the key the tier pass's wraps are recorded by
-/// ([ADR-229](../../docs/specification/adr/adr-229.md) D1).
-pub(crate) fn interpolated_holes(parts: &[crate::ast::FPart]) -> Vec<(u32, &Expr)> {
-    parts
-        .iter()
-        .filter_map(|part| match part {
-            crate::ast::FPart::Hole { expr, at, .. } => Some((*at, expr)),
-            crate::ast::FPart::Text(_) => None,
-        })
-        .collect()
-}
-
 /// **An `f"…"` as the format string the language below reads**
 /// ([ADR-309](../../docs/specification/adr/adr-309.md) D9): each run of text
 /// as written - an escape and a doubled brace mean there what they mean here
@@ -1795,53 +1708,31 @@ pub(crate) fn format_of(parts: &[crate::ast::FPart]) -> String {
     nikaia_std::tools::emit_text::format_of(parts)
 }
 
+/// Every expression a literal holds - the holes of an interpolated string, and
+/// the holes of a template (`tools/emit_holes.nika`). A hole that does not
+/// parse yields nothing here. The Rust analyses that still take it as a closure
+/// call this until they move.
 pub(crate) fn literal_expressions(parsed: &Parsed, expr: &Expr) -> Vec<Expr> {
-    match expr {
-        // **The grammar parsed them** ([ADR-309](../../docs/specification/adr/adr-309.md)
-        // D2): the holes are the literal's parts, read and not parsed again.
-        // Each with what the tier pass hands over inside it (ADR-229 D1),
-        // which is keyed by the hole's text - the hole at the same place among
-        // the text's holes, so nothing is parsed to find it.
-        Expr::LitInterpolated { parts, .. } => interpolated_holes(parts)
-            .into_iter()
-            .map(|(at, hole)| {
-                let mut expr = hole.clone();
-                if let Some(wraps) = parsed.hole_wraps.get(&at) {
-                    crate::text_tiers::wrap_hole(&mut expr, wraps);
-                }
-                expr
-            })
-            .collect(),
-        // A template's holes are Nikaia too (ADR-017), and reach the emitter by
-        // the same route: text, split on the way out. A deferred-parameter
-        // statement has none: its braces are the foreign syntax's, and reading
-        // them as holes would be this compiler speaking for a grammar it does
-        // not have (ADR-296 D5).
-        Expr::Dsl {
-            target,
-            package,
-            content,
-            ..
-        } if crate::dsl::is_deferred(&dsl_name(parsed, *package, *target), content) => Vec::new(),
-        Expr::Dsl { content, .. } => match template::split(content.trim()) {
-            Ok(segments) => template_holes(&segments)
-                .iter()
-                .filter_map(|hole| parsed.hole(crate::ast::id_of(expr), hole).ok())
-                .collect(),
-            Err(_) => Vec::new(),
-        },
-        _ => Vec::new(),
-    }
+    nikaia_std::tools::emit_holes::emit_holes_literal(parsed, &parsed.interner, expr)
 }
 
-/// Every hole in a template, including the ones inside a `<for>` body - a hole
-/// does not become invisible by being repeated, any more than it becomes safe
-/// by it (ADR-017 D3).
-fn template_holes(segments: &[template::Segment]) -> Vec<String> {
-    template_holes_bound(segments)
-        .into_iter()
-        .map(|(hole, _)| hole)
-        .collect()
+/// **The parsed file is what the walks over holes ask**
+/// (`tools/emit_holes.nika`): a template's hole parsed once per text at one
+/// site, and an `f"…"`'s hole with what the tier pass hands over inside it.
+impl nikaia_std::tools::emit_holes::EmitHolesHost for Parsed {
+    fn hole(&self, site: u32, text: String) -> nikaia_std::tools::emit_holes::EmitHole {
+        match Parsed::hole(self, site, &text) {
+            Ok(expr) => nikaia_std::tools::emit_holes::EmitHole::Parsed(expr),
+            Err(error) => nikaia_std::tools::emit_holes::EmitHole::Refused(error.to_string()),
+        }
+    }
+
+    fn wrapped_hole(&self, at: u32, hole: &Expr) -> Option<Expr> {
+        let wraps = self.hole_wraps.get(&at)?;
+        let mut wrapped = hole.clone();
+        crate::text_tiers::wrap_hole(&mut wrapped, wraps);
+        Some(wrapped)
+    }
 }
 
 /// The same, with **what a `<for>` binds around each hole**.

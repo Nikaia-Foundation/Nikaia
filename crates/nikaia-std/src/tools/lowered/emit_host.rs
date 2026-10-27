@@ -3,7 +3,6 @@
 
 pub trait EmitHost {
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr;
-    fn names_read(&self, expr: &Expr) -> Vec<String>;
     fn copied_bindings(&self, at: i64) -> Vec<String>;
     fn guard_copies(&self, at: i64) -> Vec<String>;
     fn take_lend(&self, out: &mut EmitOut) -> bool;
