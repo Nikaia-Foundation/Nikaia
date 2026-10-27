@@ -13,6 +13,19 @@ fn pick(rest: String, first: bool) -> String {
     return dflt
 }
 
+// The same with the copy trimmed (rs2nika's `rs2nika_entry`, #877).
+fn trimmed(rest: String, first: bool) -> String {
+    let mut dflt: String = ""
+    let arg: String = rest.trim().clone()
+    if first {
+        dflt = arg
+    } else {
+        dflt = (arg.strip_prefix("||") ?? "").trim().clone()
+    }
+    return dflt
+}
+
 fn main() {
     print(f"{pick(" ab ", true)}|{pick("|x", false)}\n")
+    print(f"{trimmed(" ab ", true)}|{trimmed("|| y ", false)}\n")
 }
