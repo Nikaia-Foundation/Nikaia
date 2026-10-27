@@ -1,0 +1,39 @@
+// `??` on a part of a parameter (#891): the option is moved out of the
+// part, so the parameter is taken and not lent, as a part handed back is.
+
+struct Named { name: String?, n: i64 }
+
+fn first(p: (String?, i64)) -> String { p.0 ?? "none" }
+
+fn bound(p: (String?, i64)) -> String {
+    let x = p.0 ?? "none"
+    x
+}
+
+fn shown(s: String) -> String { s }
+
+fn argument(p: (String?, i64)) -> String { shown(p.0 ?? "none") }
+
+fn whole(p: String?) -> String { shown(p ?? "none") }
+
+fn nested(p: (i64, (String?, i64))) -> String { p.1.0 ?? ".." }
+
+fn field(s: Named) -> String { s.name ?? ".." }
+
+fn made(t: String) -> Named { Named { name: t, n: 1 } }
+
+fn main() {
+    println(first(("xy", 1)))
+    println(first((null, 2)))
+    println(bound((f"a{1}", 1)))
+    println(bound((null, 2)))
+    println(argument((f"c{2}", 1)))
+    println(argument((null, 2)))
+    let w: String? = f"w{5}"
+    println(whole(w))
+    println(whole(null))
+    println(nested((0, (f"e{3}", 1))))
+    println(nested((0, (null, 2))))
+    println(field(made(f"s{4}")))
+    println(field(Named { name: null, n: 1 }))
+}

@@ -225,7 +225,21 @@ pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerC
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             keeps_expression(func, interner, holes_of, context, own, library, walk);
-            keeps_expressions(args, interner, holes_of, context, own, library, walk);
+            let callee = resolved_callee(func, interner, own, library);
+            for at in 0..args.len() as i64 {
+                let lent = match nikaia_std::index::get(&args, nikaia_std::index::at(at)) {
+                    Expr::Coalesce { value, fallback, .. } => {
+                        let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+                        if a_position_the_result_points_into((callee).as_deref(), at, own, library) {
+                            keeps_expression(value, interner, holes_of, context, own, library, walk);
+                            keeps_expression(fallback, interner, holes_of, context, own, library, walk);
+                            true
+                        } else { false }
+                    },
+                    _ => false,
+                };
+                if !lent { keeps_expression(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, holes_of, context, own, library, walk); }
+            }
             for setting in config.iter() { keeps_expression(&setting.value, interner, holes_of, context, own, library, walk); }
         },
         Expr::MethodCall { receiver, args, config, .. } => {
@@ -352,7 +366,7 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
         Expr::ListLit { items, .. } => { for item in items.iter() { keep_part(Some(item), interner, context, own, library, walk); } },
         Expr::Tuple(items, _) => { for item in items.iter() { keep_part(Some(item), interner, context, own, library, walk); } },
         Expr::ListRepeat { value, .. } => { let value = nikaia_std::boxed::open(value); keep_part(Some(value), interner, context, own, library, walk); },
-        Expr::Coalesce { value, .. } => { let value = nikaia_std::boxed::open(value); keep_named(value, interner, context, own, library, walk); },
+        Expr::Coalesce { value, .. } => { let value = nikaia_std::boxed::open(value); keep_part(Some(value), interner, context, own, library, walk); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); keep_named(base, interner, context, own, library, walk); },
         Expr::Try(value, _) => { let value = nikaia_std::boxed::open(value); keep_named(value, interner, context, own, library, walk); },
         Expr::With { base, fields, .. } => {

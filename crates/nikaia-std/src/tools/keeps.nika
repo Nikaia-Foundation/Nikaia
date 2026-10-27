@@ -375,7 +375,27 @@ fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContex
     match expr {
         Expr::Call { func, args, config, .. } => {
             keeps_expression(func, interner, holes_of, context, own, library, walk)
-            keeps_expressions(args, interner, holes_of, context, own, library, walk)
+            // **A `??` the result points into lends its left side** (#891):
+            // `shown(p ?? "none")` hands back a view of it, so it takes
+            // nothing; its two sides are walked as they stand.
+            let callee = resolved_callee(func, interner, own, library)
+            for at in 0..<args.len() {
+                let lent = match args[at] {
+                    Expr::Coalesce { value, fallback, .. } => {
+                        if a_position_the_result_points_into(callee, at, own, library) {
+                            keeps_expression(value, interner, holes_of, context, own, library, walk)
+                            keeps_expression(fallback, interner, holes_of, context, own, library, walk)
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    else => false,
+                }
+                if !lent {
+                    keeps_expression(args[at], interner, holes_of, context, own, library, walk)
+                }
+            }
             for setting in config {
                 keeps_expression(setting.value, interner, holes_of, context, own, library, walk)
             }
@@ -557,8 +577,11 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         Expr::ListRepeat { value, .. } => keep_part(value, interner, context, own, library, walk),
         // **Three shapes the lowering consumes**: `a ?? b` is
         // `unwrap_or_else`, `x?.f` takes the value it reaches through, and `x?`
-        // unwraps one - each moves the value in the language below.
-        Expr::Coalesce { value, .. } => keep_named(value, interner, context, own, library, walk),
+        // unwraps one - each moves the value in the language below. **A
+        // moving part on the left of `??` keeps its parameter too** (#891):
+        // `p.0 ?? ".."` and `s.name ?? ".."` move the option out of it, as a
+        // part handed back does.
+        Expr::Coalesce { value, .. } => keep_part(value, interner, context, own, library, walk),
         Expr::SafeField { base, .. } => keep_named(base, interner, context, own, library, walk),
         Expr::Try(value, _) => keep_named(value, interner, context, own, library, walk),
         // **`p with { .. }` builds a value out of the whole of `p`** (Part I
