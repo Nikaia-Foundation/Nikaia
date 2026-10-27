@@ -208,6 +208,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R202 a `match` arm `x @ P =>` (no `@` in Nikaia): over the subject `x` itself -> `P =>`; over another name `s` with a block -> `P => {` + `let x = s`",
         "R203 `visit_stmt_blocks(s, &mut |b| { .. })` (contracts::sync) -> `for b in check_visit_stmt_blocks(s) { .. }`, as R174",
         "R204 a radix literal's suffix: `0xcbf2_9ce4u64` -> `(0xcbf2_9ce4 as u64)`, as R106",
+        "R205 `A.chain(B).any(F)` -> `A.any(F) || B.any(F)`, `.all(F)` with `&&` (`Seq` has no `chain`)",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -5795,6 +5796,100 @@ fn rs2nika_collect_seqs(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] 
     return out
 }
 
+/// R205: `A.chain(B).any(F)` -> `A.any(F) || B.any(F)` and `.all(F)` with
+/// `&&`: `Seq` has no `chain`, and a predicate asked of both halves is the
+/// same answer.
+fn rs2nika_split_chains(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut sig: String = ""
+    for line in given {
+        let mut l: String = line.clone()
+        if rs2nika_declared(l) != "" {
+            sig = l.clone()
+        }
+        let mut tries = 0
+        while l.contains(".chain(") && tries < 4 {
+            tries = tries + 1
+            let c: Vec[scalar] = l.chars().collect()
+            let mut i = 0
+            let mut found = 0 - 1
+            while i + 7 <= c.len() {
+                if rs2nika_text(c, i, i + 7) == ".chain(" {
+                    found = i
+                    break
+                }
+                i = i + 1
+            }
+            if found < 0 {
+                break
+            }
+            let close = rs2nika_tuple_close(c, found + 6)
+            if close < 0 || close + 6 > c.len() {
+                break
+            }
+            let op = rs2nika_text(c, close + 1, close + 6)
+            if op != ".any(" && op != ".all(" {
+                break
+            }
+            let end = rs2nika_tuple_close(c, close + 5)
+            if end < 0 {
+                break
+            }
+            let start = rs2nika_recv_start(c, found)
+            let a = rs2nika_text(c, start, found)
+            let b = rs2nika_text(c, found + 7, close)
+            let f = rs2nika_text(c, close + 6, end)
+            let joint = if op == ".any(" { "||" } else { "&&" }
+            let before = rs2nika_text(c, 0, start)
+            let after = rs2nika_text(c, end + 1, c.len())
+            let head: String = before.trim_end().clone()
+            let tail: String = after.trim_start().clone()
+            let bare = (head == "" || head.ends_with("if") || head.ends_with("=") || head.ends_with("return") || head.ends_with("(") || head.ends_with(",")) && (tail == "" || tail.starts_with("{") || tail.starts_with(")") || tail.starts_with(","))
+            let other = rs2nika_nullable_half(sig, b, f, op == ".any(")
+            let split = if other != "" { f"{a}{op}{f}) {joint} {other}" } else { f"{a}{op}{f}) {joint} {b}{op}{f})" }
+            l = if bare { f"{before}{split}{after}" } else { f"{before}({split}){after}" }
+            rs2nika_hit(ctx, "R205")
+        }
+        out.push(l)
+    }
+    return out
+}
+
+/// R205: the half `ret.iter()` of a nullable parameter `ret: T?` asked
+/// `fn(t) { t.rest }`: `(ret?.rest ?? false)` (`?? true` for `all`), or "".
+fn rs2nika_nullable_half(sig: String, half: String, pred: String, any: bool) -> String {
+    if !half.ends_with(".iter()") {
+        return ""
+    }
+    let name = half.strip_suffix(".iter()") ?? ""
+    if name == "" || !name.chars().all(fn(ch) { rs2nika_word(ch) }) {
+        return ""
+    }
+    let typed = f"{name}: "
+    let (_, rest_sig) = sig.split_once(typed) ?? return ""
+    let ty_end = rest_sig.find(",") ?? (rest_sig.find(")") ?? return "")
+    if !rest_sig[..<ty_end].trim().ends_with("?") {
+        return ""
+    }
+    let body = pred.trim()
+    if !body.starts_with("fn(") {
+        return ""
+    }
+    let open = body.find(") { ") ?? return ""
+    let param = body["fn(".len()..<open]
+    if param == "" || !param.chars().all(fn(ch) { rs2nika_word(ch) }) || !body.ends_with(" }") {
+        return ""
+    }
+    let inner = body[open + ") { ".len()..<body.len() - " }".len()]
+    let lead = f"{param}."
+    let tail = inner.strip_prefix(lead) ?? return ""
+    if rs2nika_count_word(inner, param) != 1 {
+        return ""
+    }
+    let fallback = if any { "false" } else { "true" }
+    return f"({name}?.{tail} ?? {fallback})"
+}
+
 /// R188: `mod core;`, `pub(crate) mod attributes;`: Nikaia's tools files
 /// share one namespace and declare no modules.
 ///
@@ -9984,7 +10079,8 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     let done3 = rs2nika_close_lambdas(ctx, done2)
     let done4 = rs2nika_drop_mods(ctx, done3)
     let done5 = rs2nika_at_bindings(ctx, done4)
-    let done = rs2nika_collect_seqs(ctx, done5)
+    let done6 = rs2nika_collect_seqs(ctx, done5)
+    let done = rs2nika_split_chains(ctx, done6)
     // R100 after R45, which drops the `use` of an alias
     let named = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
     let mut named_lines: Vec[String] = []

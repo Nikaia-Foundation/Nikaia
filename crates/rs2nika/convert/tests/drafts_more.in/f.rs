@@ -56,3 +56,11 @@ fn hashed() -> u64 {
     let basis = 0xcbf2_9ce4_8422_2325u64;
     basis ^ 0b1010u8 as u64 ^ 0xFFusize as u64
 }
+
+fn either(args: &[Arg], ret: Option<&Ty>) -> bool {
+    if args.iter().map(|a| &a.ty).chain(ret.iter().copied()).any(|t| t.is_view) {
+        return true;
+    }
+    let all = args.iter().map(|a| &a.ty).chain(ret.iter().copied()).all(|t| t.lasting) && args.len() > 1;
+    all
+}
