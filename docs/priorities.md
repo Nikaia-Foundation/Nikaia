@@ -7,6 +7,16 @@ Model from an outside adviser (owner, 2026-10-25), made usable here.
 All terms over the same horizon (the next about 20 builder runs), in tokens or
 counts, never seconds.
 
+**Owner's direction (2026-10-27): finish self-hosting.** Until
+`crates/nikaia/src` holds no compiler logic in Rust, self-hosting goes first:
+every batch carries at least two moves, the largest Rust files first
+(`project.rs`, `parser/mod.rs`, `comptime_run.rs`, `sysroot.rs`,
+`emit/mod.rs`, `modules.rs`, `contracts/mod.rs`, `check/mod.rs`). A compiler
+bug goes into a batch only when it blocks a move or turns `develop` red; the
+pause rule (more bugs found than fixed) no longer stops the self-hosting lane.
+Each move starts from an `rs2nika` draft; a converter defect met on the way
+is fixed in the converter (the 60 % rule in `scripts/drive.nika`).
+
 ## Estimating the terms per ticket
 
 | Term | Estimate from | Unit |
