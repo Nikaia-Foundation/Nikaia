@@ -10,6 +10,7 @@ fn at(source: ref String, at: i64) -> i64 sync {
 // ADAPTER: bleibt in Rust (`Ledger`)
 fn committed(root: ref Path) -> Ledger? sync {
     // ADAPTER: bleibt in Rust (`Ledger`)
+    // TODO(rs2nika): a `Result` read as a value (`.ok()`, `.is_ok()`, `.is_err()`, `.is_ok_and(..)`): a `catch` hands back the guarded value's own type, never `null` (NK1103); `let mut ok = true` before, `e catch { ok = false; <a value> }`
     return (match std::fs::read_to_string(root.join("c")).ok() { text => Ledger::parse(text).ok(), null => null })
 }
 fn stays(r: Result[i64, String]) -> i64 sync throws {

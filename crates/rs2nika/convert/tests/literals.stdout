@@ -3,6 +3,7 @@ use std::text
 fn a(s: ref String) -> i64? sync {
     let at = 1 + (s.find(":") ?? return null)
     let n = (s.find(",") ?? return null) + 1
+    // TODO(rs2nika): `.get(range)`: Nikaia has no `get` of a range (NK1171); test the bounds, then cut `s[a..]` / `s[a..<b]`
     let m = (s.get(1..) ?? return null).len()
     return (at + n + m)
 }

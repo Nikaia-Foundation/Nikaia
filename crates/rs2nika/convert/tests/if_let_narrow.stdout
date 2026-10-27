@@ -10,29 +10,26 @@ fn big(limit: i64?, other: i64?) -> i64 sync {
 }
 
 impl Cache {
-}
-
-fn size(ref self, world: ref CheckWorld) -> i64 sync {
-    if self.f != null && self.f.len() > 2 {
-        return self.f.len()
+    fn size(ref self, world: ref CheckWorld) -> i64 sync {
+        if self.f != null && self.f.len() > 2 {
+            return self.f.len()
+        }
+        return 0
     }
-    return 0
-}
-
-fn reset(ref mut self, world: ref CheckWorld) -> i64 sync {
-    if self.f != null {
-        let x = self.f
-        self.f = null
-        return x.len()
+    fn reset(ref mut self, world: ref CheckWorld) -> i64 sync {
+        if self.f != null {
+            let x = self.f
+            self.f = null
+            return x.len()
+        }
+        return 0
     }
-    return 0
-}
-
-fn deep(ref self, world: ref CheckWorld, p: ref Node) -> String sync {
-    if p.inner.name != null {
-        f"{p.inner.name}"
-    } else {
-        ""
+    fn deep(ref self, world: ref CheckWorld, p: ref Node) -> String sync {
+        if p.inner.name != null {
+            f"{p.inner.name}"
+        } else {
+            ""
+        }
     }
 }
 

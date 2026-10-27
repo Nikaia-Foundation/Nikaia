@@ -1,0 +1,28 @@
+enum Token {
+    Word(String),
+    Count(i64),
+    List(Vec[i64]),
+    End,
+}
+
+struct Pt {
+    x: i64,
+}
+
+impl Pt {
+    fn make() -> Pt sync {
+        return Pt { x: 0 }
+    }
+
+    fn twice() -> Pt sync {
+        let p = Pt::make()
+        return p
+    }
+}
+
+fn tail(s: ref String) -> String sync {
+    let rest = s[2..]
+    let all = s
+    return f"{rest}{all}"
+}
+
