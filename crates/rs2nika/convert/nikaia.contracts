@@ -194,6 +194,18 @@ touches = []
 views = ["line: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> String"
 
+[fn."rs2nika_field_path"]
+sync = "inferred"
+touches = []
+views = ["path: borrowed"]
+signature = "(path: ref String) -> bool"
+
+[fn."rs2nika_field_tests"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
+
 [fn."rs2nika_filter_chain"]
 sync = "inferred"
 touches = []
@@ -545,6 +557,12 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
+[fn."rs2nika_read_as"]
+sync = "inferred"
+touches = []
+views = ["text: borrowed", "name: borrowed", "path: borrowed"]
+signature = "(text: ref String, name: ref String, path: ref String) -> String"
+
 [fn."rs2nika_read_facts"]
 locks = true
 views = ["facts: borrowed", "path: borrowed"]
@@ -842,6 +860,12 @@ signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String]"
 sync = "inferred"
 touches = []
 signature = "(c: scalar) -> bool"
+
+[fn."rs2nika_writes_path"]
+sync = "inferred"
+touches = []
+views = ["text: borrowed", "path: borrowed"]
+signature = "(text: ref String, path: ref String) -> bool"
 
 [type."Rs2nikaCtx"]
 fields = ["profile: String", "free: bool", "world: ref String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[ref String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]", "host_fns: Vec[String]"]

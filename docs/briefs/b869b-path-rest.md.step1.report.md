@@ -6,3 +6,4 @@ Tests: nikaia test --both-settings tests/compiler 149 ok; it nullable narrow vie
 Gate: green
 Changelog: A `null` test of `v[i].f` or `f().x` proves nothing, and the NK1102 at a use says the read is not a path (ADR-382 D4).
 Model: Opus 5.5
+Pushed: 441382db4576052dc16516da1837eacb16ab5526

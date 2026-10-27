@@ -3,8 +3,7 @@
         // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
         let mut files: Vec[ref CheckWorld] = self.beside.to_vec()
         let here = if self.here != null {
-            let here = self.here ?? panic("rs2nika: checked above")
-            here
+            self.here
         } else {
                 files.insert(0, world)
                 0

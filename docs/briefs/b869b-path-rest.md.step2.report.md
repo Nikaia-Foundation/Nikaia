@@ -6,3 +6,4 @@ Tests: nikaia test --both-settings tests/compiler 149 ok; tests only, no compile
 Gate: green
 Changelog: none
 Model: Opus 5.5
+Pushed: a9978f9836b4a3df6253675fa4af0d5f9fb274be

@@ -17,7 +17,6 @@ three commits, thirteen functions: `5755b65` (`several_errors`,
 
 | Rust form | Today | Written instead |
 | :--- | :--- | :--- |
-| `if let Some(x) = self.f { .. }` (a field) | `if self.f != null` does not narrow a field yet (NK1125): decided by ADR-382 D4-D5, **not built**; `if let` is refused (ADR-382 D6) | `let x = self.f` first, then `if x != null` (a name narrows, ADR-382 D1) |
 | `map.entry(k).or_insert(..)` | NK1171, no `entry` in `std` | `get`, then `insert` |
 | `opt.as_mut()` on a `T?` | NK1125 | `?.clone()`, change, write the option back |
 

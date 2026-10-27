@@ -73,7 +73,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R20  `.unwrap_or(d)` / `.unwrap_or_else(|| d)` -> `?? d`; `.cloned()` / `.copied()` of an option -> `?.clone()` (R35 leaves that `?`)",
         "R21  `.is_some()` -> `!= null`, `.is_none()` -> `== null`",
         "R22  `let Some(x) = e else { return y };` -> `let x = e ?? return y` (also continue/break)",
-        "R23  `if let Some(x) = x [&& g] {` -> `if x != null [&& g] {` (ADR-382); over another name + `let x = e`; else + `let x = e ?? panic(..)`",
+        "R23  `if let Some(x) = x [&& g] {` -> `if x != null [&& g] {` (ADR-382); over a path of fields `if let Some(x) = &self.f [&& g] {` -> `if self.f != null [&& g] {` with `x` read as `self.f`, + `let x = self.f` only where the block writes the path (ADR-382 D7); over another name + `let x = e`; else + `let x = e ?? panic(..)`",
         "R24  `if let P = e {` ... `} else {` ... `}` -> `match e { P => {..}, else => {..} }` (single let, optional `&& guard`)",
         "R25  `for x in &xs` / `xs.iter()` -> `for x in xs`",
         "R26  closures `|x| e` -> `fn(x) { e }`; `.any`/`.all`/`.find` pass through (`Seq`), a function name `.any(f)` -> `.any(fn(x) { f(x) })`",
@@ -2697,7 +2697,10 @@ fn rs2nika_option_arm(line: ref String) -> Vec[String] {
     return ["", ""]
 }
 
-/// R48: `match e { Some(x) => a, None => b }` -> `if let Some(x) = e { a } else { b }`.
+/// R48: `match e { Some(x) => a, None => b }` -> `if e != null { a } else { b }`
+/// (through R23, as `if let Some(x) = e {`), and `match e { Some(P) => a, None
+/// => b }` as a statement -> `match e { Some(P) => .., else => .. }` (R24); a
+/// pattern in a value's place keeps its `match`, so no `if let` is left.
 fn rs2nika_option_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = given.clone()
     let mut i = 0
@@ -2740,6 +2743,14 @@ fn rs2nika_option_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
         let first = rs2nika_option_arm(out[starts[0]])
         let second = rs2nika_option_arm(out[starts[1]])
         if first[0] == "" || second[0] == "" || !first[0].starts_with("Some") {
+            i = i + 1
+            continue
+        }
+        // **R23 and R24 finish what R48 writes**: a name (`Some(x)`) anywhere,
+        // another pattern only as a statement (R24's `match`).
+        let bound: String = ((first[0].strip_prefix("Some(") ?? "").strip_suffix(")") ?? "").clone()
+        let named = rs2nika_is_path(bound) && !bound.contains(":")
+        if !named && pre.trim() != "" {
             i = i + 1
             continue
         }
@@ -3615,6 +3626,193 @@ fn rs2nika_let_pair(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     return out
 }
 
+/// Whether `path` is a path of fields from a name (`self.f`, `p.a.b`): words
+/// joined by `.`, at least one `.` (ADR-382 D4).
+fn rs2nika_field_path(path: ref String) -> bool {
+    if !path.contains(".") || path.starts_with(".") || path.ends_with(".") || path.contains("..") {
+        return false
+    }
+    for c in path.chars() {
+        if !(rs2nika_word(c) || c == '.') {
+            return false
+        }
+    }
+    return true
+}
+
+/// Whether `text` writes `path` or a path it is part of (ADR-382 D5): an
+/// assignment, `.take()`, `.insert(..)`, `.replace(..)`, `.get_or_insert..`,
+/// `.as_mut()` or a `&mut` of it.
+fn rs2nika_writes_path(text: ref String, path: ref String) -> bool {
+    let t = rs2nika_blank(text)
+    let mut held: String = ""
+    for part in path.split(".") {
+        if held == "" {
+            held = part.clone()
+        } else {
+            held = f"{held}.{part}"
+        }
+        let c: Vec[scalar] = t.chars().collect()
+        let mut from = 0
+        while true {
+            let at = rs2nika_find_from(c, held, from)
+            if at < 0 {
+                break
+            }
+            from = at + 1
+            if at > 0 && (rs2nika_word(c[at - 1]) || c[at - 1] == '.') {
+                continue
+            }
+            let after: String = rs2nika_text(c, at + held.chars().count(), c.len())
+            let before: String = rs2nika_text(c, 0, at)
+            if before.trim_end().ends_with("&mut") {
+                return true
+            }
+            for w in [" = ", " += ", " -= ", ".take()", ".insert(", ".replace(", ".get_or_insert", ".as_mut()", ".push("] {
+                if after.starts_with(w) {
+                    return true
+                }
+            }
+        }
+    }
+    return false
+}
+
+/// `name` read as `path` in `text`: a whole word, not a field (`.name`) nor
+/// a field's name in a struct literal (`name: ..`); in a string only inside
+/// a format hole (`"{name}"`).
+fn rs2nika_read_as(text: ref String, name: ref String, path: ref String) -> String {
+    let c: Vec[scalar] = text.chars().collect()
+    let f: Vec[scalar] = name.chars().collect()
+    let mut out: String = ""
+    let mut in_string = false
+    let mut hole = 0
+    let mut at = 0
+    while at < c.len() {
+        let ch = c[at]
+        if in_string && ch == '\\' && at + 1 < c.len() {
+            out.push(ch)
+            out.push(c[at + 1])
+            at = at + 2
+            continue
+        }
+        if ch == '"' {
+            in_string = !in_string
+            hole = 0
+        } else if in_string && ch == '{' {
+            hole = hole + 1
+        } else if in_string && ch == '}' && hole > 0 {
+            hole = hole - 1
+        }
+        let mut same = (!in_string || hole > 0) && at + f.len() <= c.len()
+        let mut k = 0
+        while same && k < f.len() {
+            if c[at + k] != f[k] {
+                same = false
+            }
+            k = k + 1
+        }
+        if same && at > 0 && (rs2nika_word(c[at - 1]) || c[at - 1] == '.') {
+            same = false
+        }
+        let end = at + f.len()
+        if same && end < c.len() && rs2nika_word(c[end]) {
+            same = false
+        }
+        if same && end < c.len() && c[end] == ':' && !(end + 1 < c.len() && c[end + 1] == ':') {
+            same = false
+        }
+        if same {
+            out.push_str(path)
+            at = end
+        } else {
+            out.push(ch)
+            at = at + 1
+        }
+    }
+    return out
+}
+
+/// R23 over a path of fields (ADR-382 D4, D7): `if let Some(x) = &self.f [&&
+/// g] {` -> `if self.f.is_some() [&& g] {` (R21 writes `!= null`), `x` read as
+/// `self.f` in the block; where the block writes the path or a part of it,
+/// `let x = self.f;` keeps the old value. `&mut self.f` is left to R23.
+fn rs2nika_field_tests(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut lines: Vec[String] = given.clone()
+    let mut i = 0
+    while i < lines.len() {
+        let line: String = lines[i].clone()
+        let st: String = line.trim().clone()
+        i = i + 1
+        let at = st.find("if let Some(") ?? continue
+        if !st.ends_with(" {") || st.starts_with("}") || st.starts_with("//") || (at > 0 && !st[..<at].ends_with(" ")) {
+            continue
+        }
+        let pre: String = st[0..<at].clone()
+        let rest: String = st[at + "if let Some(".len()..<st.len() - " {".len()].clone()
+        let close = rest.find(") = ") ?? continue
+        let name: String = rest[0..<close].clone()
+        if !rs2nika_is_path(name) || name.contains(":") || name.starts_with("mut ") {
+            continue
+        }
+        let mut value: String = rest[close + ") = ".len()..<rest.len()].trim().clone()
+        let mut guard: String = ""
+        let and = value.find(" && ") ?? 0
+        if and > 0 {
+            guard = value[and + " && ".len()..<value.len()].trim().clone()
+            value = value[0..<and].trim().clone()
+        }
+        if value.starts_with("&mut ") {
+            continue
+        }
+        if value.starts_with("&") {
+            value = (value.strip_prefix("&") ?? "").clone()
+        }
+        if !rs2nika_field_path(value) || guard.contains(" let ") {
+            continue
+        }
+        let ind = rs2nika_indent(line)
+        let mut j = i
+        while j < lines.len() && !(rs2nika_indent(lines[j]) == ind && lines[j].trim().starts_with("}")) {
+            j = j + 1
+        }
+        if j >= lines.len() {
+            continue
+        }
+        let mut written = false
+        let mut k = i
+        while k < j {
+            if rs2nika_writes_path(lines[k], value) {
+                written = true
+            }
+            k = k + 1
+        }
+        let mut g: String = ""
+        if guard != "" {
+            g = f" && {rs2nika_read_as(guard, name, value)}"
+        }
+        rs2nika_hit(ctx, "R23")
+        lines[i - 1] = f"{ind}{pre}if {value}.is_some(){g} {{"
+        if name == "_" {
+            continue
+        }
+        if written {
+            let mut body_ind = f"{ind}    "
+            if i < j {
+                body_ind = rs2nika_indent(lines[i])
+            }
+            lines.insert(i, f"{body_ind}let {name} = {value};")
+            continue
+        }
+        k = i
+        while k < j {
+            lines[k] = rs2nika_read_as(lines[k], name, value)
+            k = k + 1
+        }
+    }
+    return lines
+}
+
 fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let ind = rs2nika_indent(line)
     let filtered = rs2nika_filter_cloned(ctx, line)
@@ -3849,7 +4047,8 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
     let split = rs2nika_join_split(ctx, first)
     let chained = rs2nika_join_chains(ctx, split)
     let joined0 = rs2nika_option_matches(ctx, chained)
-    let joined = rs2nika_some_matches(ctx, joined0)
+    let joined1 = rs2nika_some_matches(ctx, joined0)
+    let joined = rs2nika_field_tests(ctx, joined1)
     let mut out: Vec[String] = []
     let mut in_struct = false
     for raw in joined {
