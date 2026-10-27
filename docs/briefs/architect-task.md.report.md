@@ -1,4 +1,4 @@
 Result: done
-Batch: b893-optional-let-proved-arm.md b894-lent-argument-arms.md
+Batch: b-fixforward-range-guard.md, b893-commit.md, b894-lent-argument-arms.md
 Owner: none
-Notes: cut at e12-4a was its Found (E12-4a itself done, ae04379). Filed #895 (ready, brief form): rs2nika --file drops a `const` slice silently; it is converter work for the main session's rs2nika lane, so it is not in this batch.
+Notes: RED since f74c199: the range_spelling guard flags ".." inside string literals of a `for` head in rs2nika/convert/src/main.nika (a false positive); fixed in the guard, not in the converter lane's file. b893's verified work stays uncommitted in the checkout until b893-commit.md commits it (Fixes #893). Committed d7ac87e.
