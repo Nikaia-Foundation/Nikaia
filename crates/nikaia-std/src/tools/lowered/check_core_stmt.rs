@@ -999,7 +999,7 @@ pub fn check_core_stmt_return<H: CheckHost>(state: &mut CheckState, world: &Chec
     check_core_returns(state, world, host, value, span, false);
     if value.is_some() {
         let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        state.a_narrowed_read_given_back(returned);
+        state.narrowed_reads_given_back(returned);
     }
     state.a_way_out("return", "", span);
     Ty::Unknown

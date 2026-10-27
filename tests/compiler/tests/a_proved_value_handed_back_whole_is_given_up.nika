@@ -17,9 +17,16 @@ fn tail(n: i64) -> String {
     if s != null { s } else { "none" }
 }
 
+// `return match`: each arm's value is handed back too (#890).
+fn returned(a: String?, b: String?) -> String {
+    return match (a, b) { (_, s) if s != null => s, (_, _) => "rest" }
+}
+
 fn main() {
     println(listed([1, 2]).len())
     println(named(3))
     println(named(0))
     println(tail(4))
+    println(returned("a", "r5"))
+    println(returned("a", null))
 }
