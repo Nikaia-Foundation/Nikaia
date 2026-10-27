@@ -1,5 +1,3 @@
-use grammar_run::Wall
-
     // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
     fn files(ref self, world: ref CheckWorld) -> (Vec[ref CheckWorld], i64) sync {
         // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
@@ -15,7 +13,7 @@ use grammar_run::Wall
 }
 
 /// What a grammar's wall is, as the report of it is given it.
-fn a_wall(why: ref crate::grammar_run::Wall) -> CheckWall sync {
+fn a_wall(why: ref Wall) -> CheckWall sync {
     return match why {
         Wall::Refused { detail } => CheckWall::Refused { detail: detail.clone() },
         Wall::NoCrossedForm { ty, because } => CheckWall::NoCrossedForm { ty: ty.clone(), because: because.clone() },

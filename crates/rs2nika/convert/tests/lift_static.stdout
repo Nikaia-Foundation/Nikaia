@@ -1,10 +1,7 @@
 //! R100-R102: a `use` inside a block, and `static`.
-use std::collections::BTreeMap
-use emit::{Lowered, Needs}
+use std::collections
 use std::io::Read
-use prove::ClaimRun
-use sync::{visit_expr, visit_stmt}
-use emit::Lowered
+use std::collections::BTreeMap
 
 comptime NAMES: Array[ref String, 3] = ["a", "b", "c"]
 pub comptime LIMIT: u64 = 4096

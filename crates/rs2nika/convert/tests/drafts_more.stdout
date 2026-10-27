@@ -1,0 +1,53 @@
+//! R188-R203: module lines, foreign `use`s, adapters, and patterns.
+use std::collections
+
+// TODO(rs2nika): `static` behind a lock: no globals in tools/*.nika; a field of the state struct (the lock drops), set through `mut self`
+static CACHE: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new([])
+
+// ADAPTER: bleibt in Rust (`impl std::fmt::Display for Shape`: Rust's `Display`)
+
+
+trait Named {
+    fn name(ref self) -> String sync
+}
+
+fn more_chosen(names: ref Vec[String], body: ref Block, expected: Ty?, tail: Span?, how: Wrap?) -> Vec[String] {
+    let all = names.iter().map(fn(x) { x.clone() }).collect()
+    let n = count(body)
+    let _ = first(body)
+    if expected != null {
+        match body.stmts.last()?.node {
+            Stmt::Expr(value) => {
+                if tail != null {
+                    let at = tail
+                    use_both(value, at)
+                }
+            },
+            else => {},
+        }
+    }
+    match (expected, body.stmts.last()?.node) {
+        (expected, Stmt::Expr(value)) if expected != null => {
+            use_both(value, expected)
+        },
+        else => {},
+    }
+    match how {
+        Wrap::Widen(_) | Wrap::Constructor => {
+            keep(how)
+        }
+        else => {}
+    }
+    // a comment between two links
+    // TODO(rs2nika): `.get(range)`: Nikaia has no `get` of a range (NK1171); test the bounds, then cut `s[a..]` / `s[a..<b]`
+    let typed: Vec[Ty] = names.iter().filter_map(fn(n) { Ty::from(n.get(0..<1) ?? return null) }).collect()
+    for inner in check_visit_stmt_blocks(body.stmts[0].node) {
+        walk(inner)
+    }
+    return all
+}
+
+fn more_evens(xs: ref Vec[i64]) -> Vec[i64] {
+    return xs.iter().filter(fn(x) { x % 2 == 0 }).collect()
+}
+

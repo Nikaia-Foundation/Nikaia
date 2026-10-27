@@ -22,20 +22,20 @@ use std::text
             // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
             // TODO(rs2nika): slice pattern in a `let`: a `match` with a list pattern (ADR-355)
             // TODO(rs2nika): `decoded` with `ascii_scalar`: a numbered escape above ASCII reads as no text
-            text_tiers::visit_expr_mut(value, mut |expr: Expr| { if let Expr::Call { func, args, .. } = expr && (match func { Expr::Variable(name, _) if parsed.words.resolve(name) == assets::ASSET => true, else => false }) && let [Expr::LitStr { text, .. }] = args && let Some(content) = (decoded(text) fn(n) { ascii_scalar(n) }).and_then(fn(path) { read.get(path) }) { expr = Expr::LitStr { text: build_time::written(content), id: NodeId::fresh() } } }, mut |_, _| {})
+            visit_expr_mut(value, mut |expr: Expr| { if let Expr::Call { func, args, .. } = expr && (match func { Expr::Variable(name, _) if parsed.words.resolve(name) == ASSET => true, else => false }) && let [Expr::LitStr { text, .. }] = args && let Some(content) = (decoded(text) fn(n) { ascii_scalar(n) }).and_then(fn(path) { read.get(path) }) { expr = Expr::LitStr { text: build_time::written(content), id: NodeId::fresh() } } }, mut |_, _| {})
         }
         return value
     }
 
     fn value_fn(ref self, world: ref CheckWorld) -> String sync {
-        return comptime_run::VALUE_FN.to_string()
+        return VALUE_FN.to_string()
     }
 
     fn place_of(ref self, world: ref CheckWorld, place: String, here: i64) -> CheckPlace sync {
         let (files, _) = self.files()
         let here = here
         // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
-        let stopped = place?.strip_prefix(comptime_run::STOPPED_AT)?.split_once(':').and_then(fn(unit, byte) { (text::parse_i64(unit)?, text::parse_i64(byte)?) })
+        let stopped = place?.strip_prefix(STOPPED_AT)?.split_once(':').and_then(fn(unit, byte) { (text::parse_i64(unit) ?? return null, text::parse_i64(byte) ?? return null) })
         let at = (match stopped.filter(fn(unit, _) { unit == here }) { (_, byte) => byte, null => null })
         // `@<file>:<byte>`: a place in this file is shown, and one in another
         // is named by the function it is in.

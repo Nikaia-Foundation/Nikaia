@@ -10,9 +10,9 @@ fn shown(file: String?, function: String?) -> String sync {
 fn flags(encoded: String?, plain: String?) -> Vec[String] sync {
     let flags: Vec[String] = match (encoded, plain) {
         (null, null) => return [],
-        (null, p) => p.split(' ').map(String::from).collect(),
+        (null, p) => p.split(' ').map(fn(x) { x.clone() }).collect(),
         // the encoded ones first
-        (e, _) => e.split(',').map(String::from).collect(),
+        (e, _) => e.split(',').map(fn(x) { x.clone() }).collect(),
     }
     return flags
 }
