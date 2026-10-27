@@ -631,3 +631,8 @@ after the other. Line ranges are at 62a07a1: re-grep the names before cutting.
   `Vec[(String, Shape)]` from Rust is the first of its kind in `emit_seeds.nika`.
 * E12-4: a list literal of about 300 strings in a tools file (lowering cost, not seen yet);
   `Result<Target>` becomes `throws`, with `anyhow` text kept byte for byte in the adapter.
+  Split 2026-10-27: **E12-4a** `UserParallelism`, `ReentrancyCheck`, `RUST_TARGETS` (no `Default`
+  from the lowering needed: `Build` gets a hand `impl Default` while it is Rust); **E12-4b**
+  `Target`, `Build`, `BoundsChecks`/`OverflowChecks`: first the lowering writes `impl Default` for a
+  struct whose every field has a default (ADR-331 D5; 343 `Build::default()` callers), and
+  `Target::Rust(&'static str)` keeps `Copy` (an index into the list, or what 4a exposes).

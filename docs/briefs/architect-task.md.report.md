@@ -1,5 +1,4 @@
 Result: done
-Batch: b886-struct-field-narrowing.md, b891-lent-tuple-part-coalesce.md, e12-3b.md
+Batch: b888-let-bound-proved-name.md, b890-text-literal-tuple-pattern.md, e12-4a.md
 Owner: none
-Commit: 190a4a9 (briefs, batch.txt, common.part rule: two steps in one commit is no deviation, State)
-Note: the cut at e12-3a was false (its Deviation was steps 1+2 in one commit); E12-3a done at 33b5fe7, 79.0 %. No version raise owed from this round (both reports: Changelog none).
+Decided: #890 step 3 yes (a literal is the same part, ADR-352 D1 amended; version raise owed with b890's build). #888 narrowed to the `let`-bound `if` form. E12-4 split 4a/4b (4b needs a lowered `impl Default` from field defaults).
