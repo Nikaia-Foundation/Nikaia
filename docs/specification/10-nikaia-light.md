@@ -722,6 +722,13 @@ string inside a hole has plain quotes: `f"{greet("Ada")}"`. What follows a `:` i
 the value rather than which value. The first colon that is not inside a call or
 an index separates the two, so `move(by: 1)` in a hole keeps its own colon.
 
+**A hole is written as its value's text, and so is what a print call is
+handed.** Text, a number, a `bool`, a `scalar` and an error (whose text is its
+message) have one. A list, a map, a set, a range, a tuple, a value behind a
+lock, and a struct or `enum` of the program that is not an error have none:
+`f"{p}"` and `println(p)` are refused alike (`NK1201`), and the help names the
+parts to write instead, such as `{p.name}`.
+
 Inside an `f"…"`, two braces stand for one: `{{` is a literal `{` and `}}` a
 literal `}`. An escape is not a hole: the `{` in `"\u{0041}"` belongs to the
 escape. A `}` on its own is an error. **A plain string needs none of that**: it

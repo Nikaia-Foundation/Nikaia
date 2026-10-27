@@ -1,0 +1,18 @@
+struct Person { name: String, age: int }
+
+struct Missing { name: String }
+
+impl Error for Missing {
+    fn message(ref self) -> String {
+        return f"no {self.name}"
+    }
+}
+
+fn main() {
+    let ada = Person { name: "Ada", age: 36 }
+    println(ada.name)
+    println(f"{ada.name} is {ada.age}")
+    let gone = Missing { name: "Grace" }
+    println(gone)
+    println(f"{gone}")
+}

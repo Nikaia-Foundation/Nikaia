@@ -375,6 +375,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 continue
             }
             state.a_maybe_printed(found_here, span)
+            state.a_value_with_no_text_printed(world, value, found_here, span)
             // **A file's name is printed as its bytes** (ADR-319 D4).
             if check_arguments_a_path(found_here) {
                 // An `f"…"` recorded which of its holes are names already.

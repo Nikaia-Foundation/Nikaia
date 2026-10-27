@@ -1,0 +1,33 @@
+error[NK1201]: You can't print the struct `Person`.
+  --> tests/a_struct_handed_to_println_is_refused.nika:8:5
+   |
+ 8 |     println(ada)
+   |     ^^^^^^^^^^^^
+   |
+   = note: A print call writes its value's text, and a struct that is not an error has no text form. `ada` is `Person`.
+   = help: Print its fields in holes of an `f"…"`: `{ada.name}`, `{ada.age}`.
+error[NK1201]: You can't put the struct `Person` in an `f"…"` hole.
+  --> tests/a_struct_handed_to_println_is_refused.nika:9:5
+   |
+ 9 |     println(f"{ada}")
+   |     ^^^^^^^^^^^^^^^^^
+   |
+   = note: A hole is written as its value's text, and a struct that is not an error has no text form. `ada` is `Person`.
+   = help: Write its fields in holes of their own: `{ada.name}`, `{ada.age}`.
+error[NK1201]: You can't print the `enum` `Mood`.
+   --> tests/a_struct_handed_to_println_is_refused.nika:10:5
+    |
+ 10 |     println(Mood::Glad)
+    |     ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A print call writes its value's text, and an `enum` that is not an error has no text form. `Mood::Glad` is `Mood`.
+    = help: Match on it and give each variant its text first, or print `f"{(Mood::Glad):?}"` for its debug form.
+error[NK1201]: You can't print a list.
+   --> tests/a_struct_handed_to_println_is_refused.nika:12:5
+    |
+ 12 |     eprintln(team)
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: A print call writes its value's text, and lists, maps and sets have no text form. `team` is a list.
+    = help: Join its elements into text first: `let text = team.iter().join(", ")`, then print `text`.
+4 type errors

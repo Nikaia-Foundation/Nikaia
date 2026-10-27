@@ -77,13 +77,22 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
         if spec.is_some() && nikaia_std::index::or(spec, || "").contains('?') { return; }
+        self.a_value_with_no_text(world, hole, held, span, false);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_value_with_no_text_printed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, held: &Ty, span: &Span) { self.a_value_with_no_text(world, value, held, span, true); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_value_with_no_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
         if !is_a_collection_type(held) {
-            self.a_value_with_no_text_in_a_hole(world, hole, held, span);
+            self.a_value_with_no_text_in_a_hole(world, hole, held, span, printed);
             return;
         }
         let written = written_expression(world.words, hole);
         let mut what: String = format!("`{}`", held.text());
         let mut help: String = String::from("Write the parts you want in holes of their own, or build the text in a loop first.");
+        if printed { help = String::from("Print the parts you want in holes of an `f\"…\"`, or build the text in a loop first."); }
         if is_a_list_type(held) {
             what = String::from("a list");
             let shown = match hole {
@@ -92,13 +101,19 @@ impl CheckState {
                 _ => format!("({})", written),
             };
             help = format!("Join its elements into text first: `let text = {}.iter().join(\", \")`, then write `{{text}}`.", shown);
+            if printed { help = format!("Join its elements into text first: `let text = {}.iter().join(\", \")`, then print `text`.", shown); }
+        }
+        if printed {
+            let note = format!("A print call writes its value's text, and lists, maps and sets have no text form. `{}` is {}.", written, what);
+            self.findings.push(check_refusal("NK1201", span, format!("You can't print {}.", what), vec![note], Some(help)));
+            return;
         }
         let note = format!("A hole is written as its value's text, and lists, maps and sets have no text form. `{}` is {}.", written, what);
         self.findings.push(check_refusal("NK1201", span, format!("You can't put {} in an `f\"…\"` hole.", what), vec![note], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_value_with_no_text_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span) {
+    pub(crate) fn a_value_with_no_text_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
         let written = written_expression(world.words, hole);
         let shown = match hole {
             Expr::Variable(_, _) => written.to_owned(),
@@ -114,6 +129,7 @@ impl CheckState {
                 what = String::from("a range");
                 kinds = "a range or a sequence has";
                 help = format!("Write the values you want in holes of their own, or write `{{{}:?}}` for its debug form.", shown);
+                if printed { help = format!("Print the values you want in holes of an `f\"…\"`, or print `f\"{{{}:?}}\"` for its debug form.", shown); }
             },
             Ty::Tuple(ref parts) => {
                 what = String::from("a tuple");
@@ -130,12 +146,19 @@ impl CheckState {
                 let pattern = names.join(", ");
                 let listed = holes.join(" and ");
                 help = format!("Take it apart first: `let ({}) = {}`, then write {}.", pattern, shown, listed);
+                if printed { help = format!("Take it apart first: `let ({}) = {}`, then print {} in an `f\"…\"`.", pattern, shown, listed); }
             },
             Ty::Named { ref name, .. } => {
                 if name == "SharedMut" || name == "Locked" {
-                    let message = format!("You can't put a `{}` in an `f\"…\"` hole.", held.text());
-                    let note = format!("A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.text());
-                    self.findings.push(check_refusal("NK1201", span, message, vec![note], Some(format!("Take the value out first: `let value = {}.get()`, then write `{{value}}`.", shown))));
+                    let mut message = format!("You can't put a `{}` in an `f\"…\"` hole.", held.text());
+                    let mut note = format!("A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.text());
+                    let mut out = format!("Take the value out first: `let value = {}.get()`, then write `{{value}}`.", shown);
+                    if printed {
+                        message = format!("You can't print a `{}`.", held.text());
+                        note = format!("A print call writes its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{}` is `{}`.", written, held.text());
+                        out = format!("Take the value out first: `let value = {}.get()`, then print `value`.", shown);
+                    }
+                    self.findings.push(check_refusal("NK1201", span, message, vec![note], Some(out)));
                     return;
                 }
                 if name.contains("::") || name == "Self" { return; }
@@ -167,14 +190,19 @@ impl CheckState {
                     what = format!("the `enum` `{}`", name);
                     kinds = "an `enum` that is not an error has";
                     help = format!("Match on it and give each variant its text first, or write `{{{}:?}}` for its debug form.", shown);
+                    if printed { help = format!("Match on it and give each variant its text first, or print `f\"{{{}:?}}\"` for its debug form.", shown); }
                 } else {
                     what = format!("the struct `{}`", name);
                     kinds = "a struct that is not an error has";
-                    if fields.is_empty() { help = format!("Write `{{{}:?}}` for its debug form.", shown); } else {
+                    if fields.is_empty() {
+                        help = format!("Write `{{{}:?}}` for its debug form.", shown);
+                        if printed { help = format!("Print `f\"{{{}:?}}\"` for its debug form.", shown); }
+                    } else {
                         let mut holes: Vec<String> = vec![];
                         for field in fields.iter() { holes.push(format!("`{{{}.{}}}`", shown, field)); }
                         let listed = holes.join(", ");
                         help = format!("Write its fields in holes of their own: {}.", listed);
+                        if printed { help = format!("Print its fields in holes of an `f\"…\"`: {}.", listed); }
                     }
                 }
             },
@@ -182,6 +210,11 @@ impl CheckState {
         }
         let mut called: String = format!("`{}`", held.text());
         if what == "a range" || what == "a tuple" { called = what.to_owned(); }
+        if printed {
+            let note = format!("A print call writes its value's text, and {} no text form. `{}` is {}.", kinds, written, called);
+            self.findings.push(check_refusal("NK1201", span, format!("You can't print {}.", what), vec![note], Some(help)));
+            return;
+        }
         let note = format!("A hole is written as its value's text, and {} no text form. `{}` is {}.", kinds, written, called);
         self.findings.push(check_refusal("NK1201", span, format!("You can't put {} in an `f\"…\"` hole.", what), vec![note], Some(help)));
     }

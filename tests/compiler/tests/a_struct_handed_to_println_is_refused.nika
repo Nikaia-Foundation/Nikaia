@@ -1,0 +1,13 @@
+struct Person { name: String, age: int }
+
+enum Mood { Glad, Tired }
+
+fn main() {
+    let ada = Person { name: "Ada", age: 36 }
+    println(ada.name)
+    println(ada)
+    println(f"{ada}")
+    println(Mood::Glad)
+    let team: Vec[String] = ["Ada", "Grace"]
+    eprintln(team)
+}

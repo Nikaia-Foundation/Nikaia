@@ -242,6 +242,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             if state.a_pending_coalesce_is_lent(value) { continue; }
             state.a_maybe_printed(&found_here, span);
+            state.a_value_with_no_text_printed(world, value, &found_here, span);
             if check_arguments_a_path(&found_here) {
                 let node = id_of(value) as i64;
                 if state.facts.path_holes.get(&node).is_none() { state.facts.path_holes.insert(node, vec![true]); }
