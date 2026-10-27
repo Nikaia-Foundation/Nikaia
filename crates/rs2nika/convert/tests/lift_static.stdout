@@ -1,0 +1,43 @@
+//! R100-R102: a `use` inside a block, and `static`.
+use std::collections::BTreeMap
+use emit::{Lowered, Needs}
+use std::io::Read
+use prove::ClaimRun
+use sync::{visit_expr, visit_stmt}
+use emit::Lowered
+
+comptime NAMES: Array[ref String, 3] = ["a", "b", "c"]
+pub comptime LIMIT: u64 = 4096
+pub comptime TITLE: ref String = "t"
+comptime SIZES: Array[i64, 2] = [1, 2]
+// TODO(rs2nika): `static` atomic: no globals in tools/*.nika; an `i64` field of the state struct, counted through `mut self`
+static COUNT: AtomicU64 = AtomicU64::new(0)
+// TODO(rs2nika): `static` behind a lock: no globals in tools/*.nika; a field of the state struct (the lock drops), set through `mut self`
+static ASKED: std::sync::Mutex<BTreeMap<String, String>> =
+    std::sync::Mutex::new(collections::BTreeMap())
+// ADAPTER: bleibt in Rust (`Ledger`)
+// TODO(rs2nika): `static` computed once: a `comptime` where its value is known at build time, else a field of the state struct filled at its first use
+static PARSED: std::sync::OnceLock<Ledger> = std::sync::OnceLock::new()
+thread_local! {
+    // TODO(rs2nika): `static` cell of a `thread_local!`: no globals in tools/*.nika; a field of the state struct (the cell drops), set through `mut self`
+    static SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }
+}
+
+pub fn run(x: u64) -> u64 sync {
+    let a = x + LIMIT
+    return a
+}
+
+fn again(x: u64) -> u64 sync {
+    return x
+}
+
+mod tests {
+    // TODO(rs2nika): `use super::again as twice`: Nikaia has no `super`; write the item's own name where this block names the alias
+
+}
+
+fn t() sync {
+    assert_eq!(run(1), 4097)
+}
+

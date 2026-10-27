@@ -118,7 +118,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R81  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
         "R67  `.find('c')` / `.rfind('c')` -> `.find(\"c\")`: `str::find` takes text",
         "R66  `build_time::decoded(x)` -> `decoded(x) fn(n) { ascii_scalar(n) }` (escapes.nika), with a TODO: above ASCII it reads no text",
-        "R65  `?` in a lambda -> `?? return null`; `x.starts_with([a, b])` -> `(x.starts_with(a) || x.starts_with(b))`; a `use` inside a function -> TODO",
+        "R65  `?` in a lambda -> `?? return null`; `x.starts_with([a, b])` -> `(x.starts_with(a) || x.starts_with(b))`",
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
         "R63  what R79 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))` (used twice: `match o ?? panic(..) { x => p }`), `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
@@ -129,6 +129,9 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R95  R72 inside a one-line `match` (`match e { Some(p) => a, None => b }` -> `match e { p => a, null => b }`); a `Some(` in a tuple or struct pattern keeps its TODO",
         "R96  what R79 and R63 leave of an option's combinator with a closure -> a `match`: `e.is_some_and(|x| p)` -> `(match e { x => p, null => false })`, `e.map_or(d, |x| b)` -> `(.. null => d })`, `e.map(|x| b)` / `.and_then(..)` -> `(.. null => null })`, the last three only where `e` ends in a call that hands back an option",
         "R97  a let-chain `if a && let Some(x) = e [&& b] {`: over a name -> `if a && e != null [&& b] {`; else -> `if a {` + `let x = e` + `if x != null [&& b] {`, closed twice",
+        "R100 a `use` inside a `fn` or `mod` block -> once at the top of the file, after its own `use` lines (a list over several lines on one line, a duplicate dropped); `use super::x` drops (the module is the same file), `use super::x as y` keeps a TODO",
+        "R101 a `static` that holds a constant -> `comptime`: `static X: &str = \"a\";` -> `comptime X: ref String = \"a\"`, `static X: &[T] = &[a, b];` -> `comptime X: Array[T, 2] = [a, b]`, `[T; N]` -> `Array[T, N]`",
+        "R102 a `static` that is a global (atomic, lock, cell, once) keeps a TODO that names the field of the state struct it becomes",
         "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
         "R74  struct update `S { a: x, ..base }` -> `base with { a: x }` (Part I 4.2)",
         "R75  a callback `&|a: T| e` -> the lambda `fn(a) { e }` (R26)",
@@ -2609,12 +2612,11 @@ fn rs2nika_closures(mut ctx: Rs2nikaCtx, given: ref String) -> String {
 
 /// R65: `x.starts_with(['a', 'b'])` -> `(x.starts_with('a') || x.starts_with('b'))`
 /// (`str::starts_with` takes one text or one character); a `use` inside a
-/// function -> a TODO (Nikaia's `use` stands at the top of a file).
+/// function stays, for R100 to lift to the top of the file.
 fn rs2nika_starts_any(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     let t: String = given.trim().clone()
     if t.starts_with("use ") && given.starts_with(" ") {
-        rs2nika_hit(ctx, "R65")
-        return f"{rs2nika_indent(given)}// TODO(rs2nika): `{t}` belongs at the top of the file"
+        return given.clone()
     }
     let mut s: String = given.clone()
     while true {
@@ -2644,6 +2646,195 @@ fn rs2nika_starts_any(mut ctx: Rs2nikaCtx, given: ref String) -> String {
         rs2nika_hit(ctx, "R65")
     }
     return s
+}
+
+/// R100: a `use` inside a `fn` or `mod` block -> once at the top of the file,
+/// after the file's own `use` lines; `use super::x` drops (Nikaia keeps the
+/// module and its tests in one file).
+fn rs2nika_lift_uses(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut body: Vec[String] = []
+    let mut lifted: Vec[String] = []
+    let mut i = 0
+    while i < given.len() {
+        let l: String = given[i].clone()
+        let st: String = l.trim().clone()
+        i = i + 1
+        if !l.starts_with(" ") || !st.starts_with("use ") {
+            body.push(l)
+            continue
+        }
+        let mut u: String = st.clone()
+        if u.ends_with("{") {
+            // a list over several lines -> one line
+            let mut items: Vec[String] = []
+            while i < given.len() && !given[i].trim().starts_with("}") {
+                items.push(given[i].trim().clone())
+                i = i + 1
+            }
+            i = i + 1
+            let mut inner: String = rs2nika_join(items, " ")
+            if inner.ends_with(",") {
+                inner = inner[0..<inner.len() - ",".len()].clone()
+            }
+            u = f"{u}{inner}}}"
+        }
+        if u.ends_with(";") {
+            u = u[0..<u.len() - ";".len()].clone()
+        }
+        rs2nika_hit(ctx, "R100")
+        if u.starts_with("use super::") {
+            if u.contains(" as ") {
+                body.push(f"{rs2nika_indent(l)}// TODO(rs2nika): `{u}`: Nikaia has no `super`; write the item's own name where this block names the alias")
+            }
+            continue
+        }
+        if !lifted.contains(u) {
+            lifted.push(u)
+        }
+    }
+    if lifted.len() == 0 {
+        return body
+    }
+    // after the file's own `use` lines, or after its leading comments
+    let mut at = 0
+    let mut found = false
+    let mut k = 0
+    let mut own: Vec[String] = []
+    while k < body.len() {
+        let l: String = body[k].clone()
+        if l.starts_with("use ") || l.starts_with("pub use ") {
+            let mut whole: String = l.trim().clone()
+            if whole.ends_with("{") {
+                while k + 1 < body.len() && !body[k].starts_with("}") {
+                    k = k + 1
+                    whole = f"{whole} {body[k].trim()}"
+                }
+            }
+            own.push(whole)
+            at = k + 1
+            found = true
+        }
+        k = k + 1
+    }
+    if !found {
+        while at < body.len() && body[at].starts_with("//") {
+            at = at + 1
+        }
+    }
+    let mut out: Vec[String] = []
+    k = 0
+    while k < at {
+        out.push(body[k].clone())
+        k = k + 1
+    }
+    for u in lifted {
+        if !own.contains(u) {
+            out.push(u.clone())
+        }
+    }
+    if !found && at < body.len() && body[at].trim() != "" {
+        out.push("")
+    }
+    while k < body.len() {
+        out.push(body[k].clone())
+        k = k + 1
+    }
+    return out
+}
+
+/// The kind of global a Rust `static` line is, as the TODO that says where
+/// it goes (R102); `""` for a line that is no `static` or holds a constant.
+fn rs2nika_static_todo(st: ref String) -> String {
+    let mut rest: String = st.clone()
+    for p in ["pub(crate) ", "pub(super) ", "pub "] {
+        if rest.starts_with(p) {
+            rest = (rest.strip_prefix(p) ?? "").clone()
+        }
+    }
+    if !rest.starts_with("static ") {
+        return ""
+    }
+    let no_global = "no globals in tools/*.nika;"
+    if rest.starts_with("static mut ") {
+        return f"`static mut`: {no_global} a field of the state struct, set through `mut self`"
+    }
+    let eq = rest.find(" =") ?? rest.len()
+    let ty: String = rest[0..<eq].clone()
+    if ty.contains("Atomic") {
+        return f"`static` atomic: {no_global} an `i64` field of the state struct, counted through `mut self`"
+    }
+    if ty.contains("Mutex<") || ty.contains("RwLock<") {
+        return f"`static` behind a lock: {no_global} a field of the state struct (the lock drops), set through `mut self`"
+    }
+    if ty.contains("Cell<") {
+        return f"`static` cell of a `thread_local!`: {no_global} a field of the state struct (the cell drops), set through `mut self`"
+    }
+    if ty.contains("OnceLock<") || ty.contains("LazyLock<") || ty.contains("OnceCell<") || ty.contains("Lazy<") {
+        return f"`static` computed once: a `comptime` where its value is known at build time, else a field of the state struct filled at its first use"
+    }
+    if !rest.ends_with(";") || !rest.contains(" = ") {
+        return f"`static`: {no_global} a `comptime` if it holds a constant, else a field of the state struct"
+    }
+    return ""
+}
+
+/// R101: a `static` that holds a constant -> `comptime`; R102 counts one that
+/// is a global (its TODO comes from `rs2nika_static_todo`). `""` for any
+/// other line.
+fn rs2nika_static(mut ctx: Rs2nikaCtx, raw: ref String) -> String {
+    let st: String = raw.trim().clone()
+    let mut vis: String = ""
+    let mut rest: String = st.clone()
+    for p in ["pub(crate) ", "pub(super) ", "pub "] {
+        if rest.starts_with(p) {
+            rest = (rest.strip_prefix(p) ?? "").clone()
+            vis = "pub "
+        }
+    }
+    if !rest.starts_with("static ") {
+        return ""
+    }
+    if rs2nika_static_todo(st) != "" {
+        rs2nika_hit(ctx, "R102")
+        return ""
+    }
+    rest = rest["static ".len()..<rest.len() - ";".len()].clone()
+    let colon = rest.find(":") ?? 0
+    let eq = rest.find(" = ") ?? 0
+    if colon == 0 || eq < colon {
+        return ""
+    }
+    let name: String = rest[0..<colon].trim().clone()
+    let ty: String = rest[colon + ":".len()..<eq].trim().clone()
+    let mut value: String = rest[eq + " = ".len()..].trim().clone()
+    let flat: String = rs2nika_lifetimes(ty).replace(" ", "")
+    let mut nty: String = ""
+    if flat == "&str" {
+        nty = "ref String"
+    } else if flat.starts_with("&[") && flat.ends_with("]") && value.starts_with("&[") && value.ends_with("]") {
+        let elem: String = flat["&[".len()..<flat.len() - "]".len()].clone()
+        let mut ne: String = "ref String"
+        if elem != "&str" {
+            ne = rs2nika_ty(ctx, elem)
+        }
+        let items = rs2nika_split_args(value["&[".len()..<value.len() - "]".len()].clone())
+        nty = f"Array[{ne}, {items.len()}]"
+        value = value["&".len()..].clone()
+    } else if flat.starts_with("[") && flat.ends_with("]") && flat.contains(";") {
+        let semi = flat.rfind(";") ?? 0
+        let elem: String = flat["[".len()..<semi].clone()
+        let n: String = flat[semi + ";".len()..<flat.len() - "]".len()].clone()
+        let mut ne: String = "ref String"
+        if elem != "&str" {
+            ne = rs2nika_ty(ctx, elem)
+        }
+        nty = f"Array[{ne}, {n}]"
+    } else {
+        nty = rs2nika_ty(ctx, ty)
+    }
+    let v: String = rs2nika_expr(ctx, value).trim().clone()
+    rs2nika_hit(ctx, "R101")
+    return f"{rs2nika_indent(raw)}{vis}comptime {name}: {nty} = {v}"
 }
 
 /// R27: `::<T>()` -> `()`.
@@ -2678,8 +2869,9 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
     if line.contains(" && let ") || ((st.starts_with("if let ") || st.starts_with("} else if let ")) && st.ends_with("&&")) || st.starts_with("&& let ") {
         todo.push("let-chain (`&& let`): nest `match`es")
     }
-    if st.starts_with("static ") {
-        todo.push("`static`: no globals in tools/*.nika; a field of the state struct")
+    let global = rs2nika_static_todo(st)
+    if global != "" {
+        todo.push(global)
     }
     let map_end = line.trim_end().ends_with(")") && line.contains(".map(|")
     if comb.contains(".and_then(") || (comb.contains(".map(|") && (line.contains("?") || line.contains("unwrap_or") || map_end) && !line.contains("iter()")) {
@@ -4529,6 +4721,11 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
         } else if st.starts_with("//") {
             out.push(raw.clone())
         } else {
+            let konst = rs2nika_static(ctx, raw)
+            if konst != "" {
+                out.push(konst)
+                continue
+            }
             let head = rs2nika_impl_head(ctx, raw)
             if head != "" {
                 out.push(head)
@@ -4632,7 +4829,13 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
         armed = rs2nika_unimpl(ctx, out)
     }
     let done = rs2nika_tail_returns(ctx, armed)
-    let text = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
+    // R100 after R45, which drops the `use` of an alias
+    let named = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
+    let mut named_lines: Vec[String] = []
+    for l in named.split("\n") {
+        named_lines.push(l.clone())
+    }
+    let text = rs2nika_join(rs2nika_lift_uses(ctx, named_lines), "\n")
     let mut missing: Vec[String] = []
     let mut twins: Vec[String] = []
     if ctx.tool_names.len() > 0 {

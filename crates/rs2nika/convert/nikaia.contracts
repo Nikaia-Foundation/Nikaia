@@ -479,6 +479,12 @@ touches = []
 views = ["text: borrowed"]
 signature = "(text: ref String) -> String"
 
+[fn."rs2nika_lift_uses"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
+
 [fn."rs2nika_lint"]
 pub = true
 sync = "inferred"
@@ -789,6 +795,18 @@ touches = []
 views = ["s: borrowed", "m: borrowed", "n2: borrowed"]
 signature = "(s: ref String, m: ref String, n2: ref String, host: bool) -> String"
 
+[fn."rs2nika_static"]
+sync = "inferred"
+touches = []
+views = ["raw: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, raw: ref String) -> String"
+
+[fn."rs2nika_static_todo"]
+sync = "inferred"
+touches = []
+views = ["st: borrowed"]
+signature = "(st: ref String) -> String"
+
 [fn."rs2nika_stats"]
 pub = true
 sync = "inferred"
@@ -875,7 +893,7 @@ sync = "inferred"
 keeps = ["line"]
 touches = []
 views = ["line: borrowed"]
-signature = "(line: ref String) -> Vec[ref String]"
+signature = "(line: ref String) -> Vec[String]"
 
 [fn."rs2nika_turbofish"]
 sync = "inferred"
