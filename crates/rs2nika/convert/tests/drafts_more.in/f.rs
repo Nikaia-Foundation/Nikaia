@@ -155,3 +155,23 @@ fn lazy(xs: &[usize]) -> usize {
     run(|| xs.len() + 1);
     g()
 }
+
+struct Left {
+    n: usize,
+}
+
+struct Right {
+    m: usize,
+}
+
+impl Left {
+    fn size(&self) -> usize {
+        self.n
+    }
+}
+
+impl Right {
+    fn size(&self) -> usize {
+        self.m
+    }
+}

@@ -204,7 +204,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R173 a struct pattern's field `f: Some(x)` -> `f: x` (`f` for `Some(f)` and `Some(_)`) and the guard `x != null` on the arm (ADR-382 D2; in `if let`, `let .. else`, let-chains and `match` arms)",
         "R174 a walk of the emitter `emit::visit_block(b, &mut |e| { .. });` (`visit_stmt`, `visit_expr`) -> `for e in visited_in_block(b) { .. }` (tools/emit_walk.nika), the closure's `return` -> `continue`",
         "R175 a method whose body is one call on a field of `self` (`self.tables.count(&parsed.interner, ty)`) is written out at each `self.count(..)`, its parameters replaced by the arguments",
-        "R176 a method that reads one field of `self` only (and calls methods that do) -> a free function of that field: `&self` -> `tables: &EmitSeedsTables` (the type from the `struct`), `self.tables` -> `tables`, `self.m(a)` -> `m(&self.tables, a)`",
+        "R176 a method that reads one field of `self` only (and calls methods that do) -> a free function of that field: `&self` -> `tables: &EmitSeedsTables` (the type from the `struct`), `self.tables` -> `tables`, `self.m(a)` -> `m(&self.tables, a)`; a name two `impl`s define stays a method",
         "R177 `--view`: the parsed files are `ParsedView`s named `unit`, by the `[view]` table of rs2nika.names (or one in the working directory): `&Parsed` -> `ref ParsedView`, `&[&Parsed]` -> `ref Vec[ParsedView]`, `parsed.program.items` -> `unit.items`, `parsed.interner` -> `unit.words`, `parsed.text(*x).to_string()` -> `unit.text(x)`",
         "R178 (`-free`) an `impl Type {` whose methods all became free (none takes `self` any longer) loses its head and its closing brace, and its body moves out one level",
         "R179 `let mut out = []` in a function that ends `return out` takes the list type it returns (`let mut out: Vec[Call] = []`); `match &*func` and `match *func` -> `match func`",
@@ -5720,7 +5720,16 @@ fn rs2nika_narrow(mut ctx: Rs2nikaCtx, given: String) -> String {
         let mut m = 0
         while m < at.len() {
             let f = rs2nika_rust_fn(lines, at[m])
-            if !narrowed.contains(f[3]) {
+            // a name two `impl`s define is no one free function: it stays a method
+            let mut hosts = 0
+            let mut o = 0
+            while o < at.len() {
+                if host[o] != host[m] && rs2nika_rust_fn(lines, at[o])[3] == f[3] {
+                    hosts = hosts + 1
+                }
+                o = o + 1
+            }
+            if hosts == 0 && !narrowed.contains(f[3]) {
                 let first = text::parse_i64(f[1].clone()) ?? 0
                 let last = text::parse_i64(f[2].clone()) ?? 0
                 let field = rs2nika_self_field(lines, first, last, narrowed, to)
@@ -12102,7 +12111,7 @@ fn rs2nika_missing(ctx: ref Rs2nikaCtx, draft: String) -> Vec[String] {
             }
         }
     }
-    for k in ["fn", "if", "match", "while", "for", "return", "panic", "println", "sync", "f", "in", "and", "or", "not"] {
+    for k in ["fn", "if", "match", "while", "for", "return", "panic", "println", "print", "eprintln", "eprint", "sync", "f", "in", "and", "or", "not"] {
         own.insert(k.clone())
     }
     let mut found: collections::BTreeSet[String] = collections::BTreeSet()

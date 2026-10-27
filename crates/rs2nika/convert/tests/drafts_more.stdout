@@ -155,3 +155,23 @@ fn more_lazy(xs: ref Vec[i64]) -> i64 {
     return g()
 }
 
+struct Left {
+    n: i64,
+}
+
+struct Right {
+    m: i64,
+}
+
+impl Left {
+    fn size(ref self) -> i64 {
+        return self.n
+    }
+}
+
+impl Right {
+    fn size(ref self) -> i64 {
+        return self.m
+    }
+}
+
