@@ -1,0 +1,18 @@
+// Two `ref Array[u8]` compare with `==` as the runs they view do (#877).
+fn same(a: ref Array[u8], b: ref Array[u8]) -> bool {
+    return a == b
+}
+
+fn differ(a: ref Array[i64], b: ref Array[i64]) -> bool {
+    return a != b
+}
+
+fn main() {
+    let v: Vec[u8] = [1, 2, 3]
+    let w: Vec[u8] = [1, 2, 3]
+    let x: Vec[u8] = [1, 2]
+    println(f"{same(v, w)} {same(v, x)}")
+    let p: Vec[i64] = [4, 5]
+    let q: Vec[i64] = [4, 6]
+    println(f"{differ(p, q)} {differ(p, p)}")
+}

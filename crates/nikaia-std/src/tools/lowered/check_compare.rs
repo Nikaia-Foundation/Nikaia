@@ -54,7 +54,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
             Ty::Tuple(parts) => self.all_of(parts, how, seen),
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.asking(inner, how, seen) },
             Ty::Seq { .. } => false,
-            Ty::Pointed { .. } => false,
+            Ty::Pointed { item, slice, .. } => { let item = nikaia_std::boxed::open(item); let slice = *slice; slice && self.asking(item, how, seen) },
             Ty::Fn { .. } => false,
             Ty::Named { name, args, .. } => self.named(name, args, how, seen),
         }

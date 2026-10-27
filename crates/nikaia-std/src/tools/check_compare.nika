@@ -88,7 +88,10 @@ impl CheckComparable {
             Ty::Tuple(parts) => self.all_of(parts, how, seen),
             Ty::Nullable(inner) => self.asking(inner, how, seen),
             Ty::Seq { .. } => false,
-            Ty::Pointed { .. } => false,
+            // **A view of a run compares as the run does** (#877): two
+            // `ref Array[u8]` are equal where their elements are. What the C
+            // boundary lends one of (`&mut sqlite3`) is not a run and does not.
+            Ty::Pointed { item, slice, .. } => slice && self.asking(item, how, seen),
             Ty::Fn { .. } => false,
             Ty::Named { name, args, .. } => self.named(name, args, how, seen),
         }
