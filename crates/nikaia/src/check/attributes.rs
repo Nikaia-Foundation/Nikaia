@@ -8,7 +8,7 @@
 //! with one by name after the `;`.
 //!
 //! The checking is `tools/check_attributes.nika` (U-d2); what stays here is
-//! what the ledger and the emitter read: the mark, `mark_of`, `@inline`'s word.
+//! what the ledger and the emitter read: the mark's name and text, `@inline`'s word.
 
 use super::*;
 
@@ -36,52 +36,8 @@ pub(crate) fn inline_written(unit: &Parsed, attributes: &[ast::Attribute]) -> Op
     }
 }
 
-/// Where an attribute may stand, as the mark's arguments spell them (D2).
-const PLACES: [&str; 8] = [
-    "field",
-    "struct",
-    "enum",
-    "variant",
-    "fn",
-    "parameter",
-    "trait",
-    "impl",
-];
-
-/// What a struct's `@meta::Attribute(…)` says: the places, and whether it may
-/// stand twice.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Mark {
-    pub places: BTreeSet<String>,
-    pub repeatable: bool,
-}
-
-impl Mark {
-    /// As the ledger writes it: `field, struct; repeatable` (ADR-331 D8).
-    pub(crate) fn text(&self) -> String {
-        let places = self.places.iter().cloned().collect::<Vec<_>>().join(", ");
-        match self.repeatable {
-            true => format!("{places}; repeatable"),
-            false => places,
-        }
-    }
-}
-
-/// The places a mark names, read off its arguments; a word that is not one is
-/// refused where the mark is checked.
-pub(crate) fn mark_of(unit: &Parsed, mark: &ast::Attribute) -> Mark {
-    let places = mark
-        .args
-        .iter()
-        .filter_map(|arg| match arg {
-            Expr::Variable(word, _) => Some(unit.text(*word).to_string()),
-            Expr::Path(segments, _) => segments.last().map(|s| unit.text(*s).to_lowercase()),
-            _ => None,
-        })
-        .filter(|word| PLACES.contains(&word.as_str()))
-        .collect();
-    let repeatable = mark.config.iter().any(|option| {
-        unit.text(option.name) == "repeatable" && matches!(option.value, Expr::LitBool(true, _))
-    });
-    Mark { places, repeatable }
+/// **A mark as the ledger writes it**: `field, struct; repeatable` (ADR-331
+/// D8), read off its arguments (`tools/check_attributes.nika`).
+pub(crate) fn mark_text(unit: &Parsed, mark: &ast::Attribute) -> String {
+    nikaia_std::tools::check_attributes::check_attributes_mark_text(&parsed_view_of(unit), mark)
 }

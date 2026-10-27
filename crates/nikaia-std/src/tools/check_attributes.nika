@@ -87,6 +87,23 @@ fn check_attributes_place_word(unit: ref ParsedView, arg: ref Expr) -> String {
     }
 }
 
+/// **A mark as the ledger writes it**: `field, struct; repeatable`
+/// (ADR-331 D8), read off the mark's arguments.
+pub fn check_attributes_mark_text(unit: ref ParsedView, mark: ref Attribute) -> String {
+    let read = check_attributes_mark_of(unit, mark)
+    let mut places: String = ""
+    for place in read.places {
+        if places != "" {
+            places = f"{places}, "
+        }
+        places = f"{places}{place}"
+    }
+    if read.repeatable {
+        return f"{places}; repeatable"
+    }
+    return places
+}
+
 /// Read back from the ledger's `attribute` column (`field, struct; repeatable`).
 fn check_attributes_mark_read(text: ref String) -> CheckAttributesMark {
     let mut places: collections::BTreeSet[String] = collections::BTreeSet()

@@ -599,7 +599,7 @@ impl LedgerOps for Ledger {
                                         parsed.unaliased(parsed.text(a.name))
                                             == crate::check::attributes::MARK
                                     })
-                                    .map(|a| crate::check::attributes::mark_of(parsed, a).text())
+                                    .map(|a| crate::check::attributes::mark_text(parsed, a))
                                     .unwrap_or_default(),
                                 attributes: Vec::new(),
                             },

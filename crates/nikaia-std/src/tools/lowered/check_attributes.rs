@@ -49,6 +49,17 @@ pub(crate) fn check_attributes_place_word(unit: &ParsedView<'_, '_, '_, '_, '_, 
     }
 }
 
+pub fn check_attributes_mark_text(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, mark: &Attribute) -> String {
+    let read = check_attributes_mark_of(unit, mark);
+    let mut places: String = String::from("");
+    for place in read.places.iter() {
+        if places != "" { places = format!("{}, ", places); }
+        places = format!("{}{}", places, place);
+    }
+    if read.repeatable { return format!("{}; repeatable", places); }
+    places
+}
+
 pub(crate) fn check_attributes_mark_read(text: &str) -> CheckAttributesMark {
     let mut places: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut word: String = String::from("");
