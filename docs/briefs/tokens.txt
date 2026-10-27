@@ -88,3 +88,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1082823 26
 /home/user/Nikaia/docs/briefs/b897-lent-field-plus-and-arm-local.md 1164202 29
 /home/user/Nikaia/docs/briefs/b889-guard-tuple-arm-by-value.md 436051 17
+/home/user/Nikaia/docs/briefs/architect-task.md 1177750 27

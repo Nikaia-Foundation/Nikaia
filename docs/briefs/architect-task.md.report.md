@@ -1,4 +1,5 @@
 Result: done
-Batch: b897-lent-field-plus-and-arm-local.md b889-guard-tuple-arm-by-value.md b896a-slice-in-tuple-to-string.md
+Batch: b896a-slice-in-tuple-to-string.md, b898-ref-nullable-narrowed.md, e12-4b0-struct-default-impl.md
 Owner: none
-Notes: CI green (30d2095), later runs in progress. b894's Found filed as #897 (ready, brief form). #896 split: steps 1-2 in b896a (Part), 3-4 later. Version raise owed for #893/#894 (Changelog lines in their reports).
+Commit: 2e33af4 (architect: batch b896a, b898, e12-4b0; already-built step is no deviation)
+Notes: the b889 cut was false (the emit fix was already on develop in 30798b2; the builder added the test, Fixes #889). Rule added to common.part: a step another commit already built is no deviation. #897 done, Changelog line in its report, version raise owed. #898 is new and briefed. E12-4b's prerequisite (impl Default for a struct whose every field has a default; the probe shows none today) is e12-4b0.
