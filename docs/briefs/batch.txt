@@ -1,3 +1,2 @@
-e12-4a.md
 b893-optional-let-proved-arm.md
 b894-lent-argument-arms.md
