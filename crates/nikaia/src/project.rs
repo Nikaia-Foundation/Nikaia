@@ -193,8 +193,8 @@ fn unproved_claims(word: &str) -> Result<String> {
 pub fn optimizations(
     words: &str,
 ) -> Result<(crate::bounds::BoundsChecks, crate::bounds::OverflowChecks)> {
-    let mut bounds = crate::bounds::BoundsChecks::default();
-    let mut overflow = crate::bounds::OverflowChecks::default();
+    let mut bounds = crate::bounds::BoundsChecks::Kept;
+    let mut overflow = crate::bounds::OverflowChecks::Kept;
     for word in words.split(',').map(str::trim).filter(|w| !w.is_empty()) {
         let Some((name, level)) = word.split_once(':') else {
             return Err(anyhow!(
@@ -326,7 +326,7 @@ impl Settings {
         user_parallelism: Option<&str>,
     ) -> Result<Settings> {
         let target = manifest
-            .setting("target", target, Target::default().name())
+            .setting("target", target, crate::emit::default_target().name())
             .to_string();
         let user_parallelism = manifest
             .setting("user-parallelism", user_parallelism, "no")
@@ -520,7 +520,7 @@ impl Settings {
     fn from_env() -> Result<Settings> {
         let word =
             |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.to_string());
-        let target = word(TARGET_VAR, Target::default().name());
+        let target = word(TARGET_VAR, crate::emit::default_target().name());
         let user_parallelism = word(PARALLELISM_VAR, "no");
         let reentrancy_check = word(REENTRANCY_VAR, "yes");
         let optimization = word(OPTIMIZATION_VAR, "");
@@ -624,8 +624,8 @@ impl Settings {
         match self.build.target {
             Target::X86_64Linux | Target::Aarch64Linux => "unwind",
             Target::Wasm32Unknown => "abort",
-            target @ Target::Rust(triple) => {
-                if target.is_bare_metal() || triple.starts_with("wasm") {
+            target @ Target::Rust(_) => {
+                if target.is_bare_metal() || target.triple().starts_with("wasm") {
                     "abort"
                 } else {
                     "unwind"
@@ -2901,7 +2901,7 @@ impl Project {
             && members[0].manifest.dependencies().is_empty()
             && link_flags.is_empty()
             && !self.settings.library()
-            && Some(self.settings.build.target) == Target::host()
+            && Some(self.settings.build.target) == crate::emit::host_target()
             && self.settings.panic_strategy() == "unwind"
             && self.settings.build.reentrancy_check.is_on()
             // **A CPU level is `std`'s too** (ADR-002 D6): the library this
@@ -3212,7 +3212,7 @@ impl Project {
         // not the host, the toolchain may not have its `std`, and Cargo's own
         // answer is `can't find crate for core` - so that is asked first.
         let target = self.settings.build.target;
-        if Some(target) != Target::host() {
+        if Some(target) != crate::emit::host_target() {
             toolchain_can_build_for(target.triple())?;
         }
         let target_args = ["--target".to_string(), target.triple().to_string()];

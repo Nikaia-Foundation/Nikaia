@@ -96,6 +96,125 @@ impl UserParallelism {
     }
 }
 
+/// **The machine a program is built for** ([ADR-037](../../docs/specification/adr/adr-037.md) D1).
+///
+/// It decides what `std` can offer and what a panic does. It decides nothing
+/// about what a program means: the same source compiles for every target and
+/// prints the same bytes. The default, the machine the compiler runs on, is
+/// `emit::host_target` in Rust: a value of the compiler's own build.
+pub enum Target {
+    X86_64Linux,
+    Aarch64Linux,
+    Wasm32Unknown,
+    /// Any other triple Rust knows (ADR-037 D9), named as Rust names it:
+    /// `aarch64-linux-android`, `thumbv7em-none-eabihf`. It is let through to
+    /// the backend; what it offers is read from the triple. It carries its
+    /// place in `emit_build_rust_targets`, which keeps `Target` a plain value.
+    Rust(i64),
+}
+
+/// Every target with a short name, in the order a refusal lists them.
+pub fn emit_build_targets() -> Vec[Target] sync {
+    return [Target::X86_64Linux, Target::Aarch64Linux, Target::Wasm32Unknown]
+}
+
+impl Target {
+    /// The short names first, then the short names of Android (ADR-037 D9),
+    /// then any triple Rust knows, written as Rust writes it. A triple that
+    /// has a short name is that target, not a second one.
+    pub fn parse(name: String) -> Target sync throws {
+        match emit_build_targets().iter().find fn(target) { target.name() == name } {
+            target => {
+                return target.clone()
+            },
+            null => {},
+        }
+        let triple = match name {
+            "aarch64-android" => "aarch64-linux-android",
+            "x86_64-android" => "x86_64-linux-android",
+            "armv7-android" => "armv7-linux-androideabi",
+            other => other,
+        }
+        match emit_build_targets().iter().find fn(target) { target.triple() == triple } {
+            target => {
+                return target.clone()
+            },
+            null => {},
+        }
+        return match emit_build_rust_targets().iter().position fn(known) { known == triple } {
+            known => Target::Rust(known),
+            null => throw Refused::Because(f"There's no target called `{name}`. Use x86_64-linux, aarch64-linux, wasm32-unknown, aarch64-android, x86_64-android, armv7-android, or a triple from `rustc --print target-list`."),
+        }
+    }
+
+    /// No operating system under the program (ADR-037 D9): Rust's `-none`
+    /// triples, and UEFI. There is no `std` there to build on.
+    pub fn is_bare_metal(self) -> bool sync {
+        return match self {
+            Target::Rust(_) => {
+                let triple = self.triple()
+                triple.split("-").any fn(part) { part == "none" || part.starts_with("none") } || triple.ends_with("-uefi")
+            },
+            else => false,
+        }
+    }
+
+    /// The word a manifest and `--target` use for it.
+    pub fn name(self) -> ref String sync {
+        return match self {
+            Target::X86_64Linux => "x86_64-linux",
+            Target::Aarch64Linux => "aarch64-linux",
+            Target::Wasm32Unknown => "wasm32-unknown",
+            Target::Rust(_) => self.triple(),
+        }
+    }
+
+    /// The triple handed to the backend: Cargo's `--target`.
+    pub fn triple(self) -> ref String sync {
+        return match self {
+            Target::X86_64Linux => "x86_64-unknown-linux-gnu",
+            Target::Aarch64Linux => "aarch64-unknown-linux-gnu",
+            Target::Wasm32Unknown => "wasm32-unknown-unknown",
+            Target::Rust(known) => emit_build_rust_targets()[known],
+        }
+    }
+
+    /// Whether this machine has threads at all. A target without them bounds
+    /// `user_parallelism` to `0` however it is set.
+    pub fn has_threads(self) -> bool sync {
+        return match self {
+            Target::X86_64Linux | Target::Aarch64Linux => true,
+            Target::Wasm32Unknown => false,
+            Target::Rust(_) => !self.is_bare_metal() && !self.triple().starts_with("wasm"),
+        }
+    }
+
+    /// Whether `std`'s own runtime exists for this machine (ADR-303 D4): the
+    /// I/O worker that is running before `main`, and the completion queue where
+    /// the kernel has one.
+    ///
+    /// The same answer as `has_threads` today and a different
+    /// question, which is why it is a second method rather than a second
+    /// caller. `wasm32-unknown` has neither `io_uring` nor a thread to fall
+    /// back to; a machine with threads but no completion queue has the runtime,
+    /// and `std` is what decides there what a pair costs.
+    pub fn has_runtime(self) -> bool sync {
+        return self.has_threads()
+    }
+
+    /// What a target still needs before a program can be built for it.
+    ///
+    /// A reason is a refusal that names the gap, never code emitted for
+    /// a different machine (ADR-037 D1).
+    pub fn unbuildable(self) -> String? sync {
+        return match self {
+            Target::Wasm32Unknown => "`std` reaches for a memory mapping and a thread pool, and neither exists on wasm32-unknown-unknown; what `std::fs` offers there is undecided",
+            Target::Rust(_) if self.is_bare_metal() => "there is no operating system under a program here, so no `std` to build on; how such a program starts and waits (a loop, interrupts) is a build profile's, which does not exist yet (ADR-037 D9)",
+            Target::X86_64Linux | Target::Aarch64Linux | Target::Rust(_) => null,
+        }
+    }
+}
+
 /// Every target triple Rust knows, as `rustc --print target-list` printed it
 /// (rustc 1.97.0). Regenerate with that command when the floor moves.
 pub fn emit_build_rust_targets() -> Vec[ref String] sync {
@@ -423,4 +542,59 @@ pub fn emit_build_rust_targets() -> Vec[ref String] sync {
         "xtensa-esp32s3-espidf",
         "xtensa-esp32s3-none-elf",
     ]
+}
+
+/// What happens to an index check the walk proved (ADR-306 D14): `on` writes
+/// it without its check, `off` (the default, `Kept`) keeps it. What is proved
+/// does not depend on it.
+pub enum BoundsChecks {
+    /// Every index is checked: the default.
+    Kept,
+    /// An index the walk proved inside is written without its check.
+    Removed,
+}
+
+impl BoundsChecks {
+    /// The word after `remove-bounds-checks:`.
+    pub fn parse(word: String) -> BoundsChecks? sync {
+        return match word {
+            "off" => BoundsChecks::Kept,
+            "on" => BoundsChecks::Removed,
+            else => null,
+        }
+    }
+
+    pub fn name(self) -> ref String sync {
+        return match self {
+            BoundsChecks::Kept => "off",
+            BoundsChecks::Removed => "on",
+        }
+    }
+}
+
+/// What happens to an overflow check the walk proved (ADR-306 D14), as for
+/// `BoundsChecks`; the default is `Kept`.
+pub enum OverflowChecks {
+    /// Every `+`, `-` and `*` is checked: the default.
+    Kept,
+    /// One the walk proved stays inside its type is written without its check.
+    Removed,
+}
+
+impl OverflowChecks {
+    /// The word after `remove-overflow-checks:`.
+    pub fn parse(word: String) -> OverflowChecks? sync {
+        return match word {
+            "off" => OverflowChecks::Kept,
+            "on" => OverflowChecks::Removed,
+            else => null,
+        }
+    }
+
+    pub fn name(self) -> ref String sync {
+        return match self {
+            OverflowChecks::Kept => "off",
+            OverflowChecks::Removed => "on",
+        }
+    }
 }

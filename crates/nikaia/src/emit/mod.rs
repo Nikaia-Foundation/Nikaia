@@ -36,32 +36,27 @@ use crate::ast::{Block, Expr, Span, Spanned, Stmt, Type};
 use crate::parser::Parsed;
 use crate::refused;
 
-/// The machine a program is built for (ADR-037 D1).
+/// The machine a program is built for (ADR-037 D1), and the build switches:
+/// `tools/emit_build.nika`. The default target is the machine the compiler
+/// runs on, [`host_target`], a value of the compiler's own build, so it stays
+/// here ([`default_target`]).
+pub use nikaia_std::tools::emit_build::Target;
+
+/// **The machine this compiler is running on.** The compiler is a native
+/// program, so the triple it was built for (`build.rs`) is the machine it
+/// runs on: `x86_64-linux` on a Linux PC, `aarch64-linux-android` on a
+/// phone, `aarch64-apple-darwin` on a Mac.
 ///
-/// It decides what `std` can offer and what a panic does. It decides nothing
-/// about what a program means: the same source compiles for every target and
-/// prints the same bytes.
-///
-/// **The default is the machine the compiler runs on** ([`Target::host`]), and
-/// the triple is handed to Cargo as `--target` whichever one is named. Until
-/// 0.0.218 it was only ever printed: every build was for the host, so on an ARM
-/// machine `x86_64-linux` - the default - produced ARM code under an x86 name,
-/// which is the one thing D1 says a target never does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Target {
-    X86_64Linux,
-    Aarch64Linux,
-    Wasm32Unknown,
-    /// Any other triple Rust knows (ADR-037 D9), named as Rust names it:
-    /// `aarch64-linux-android`, `thumbv7em-none-eabihf`. It is let through to
-    /// the backend; what it offers is read from the triple.
-    Rust(&'static str),
+/// `None` only for a triple Rust's target list does not know: a build
+/// there has to name its target.
+pub fn host_target() -> Option<Target> {
+    Target::parse(env!("NIKAIA_HOST_TRIPLE").to_string()).ok()
 }
 
-impl Default for Target {
-    fn default() -> Target {
-        Target::host().unwrap_or(Target::X86_64Linux)
-    }
+/// The target a build without `--target` is for: the host, or `x86_64-linux`
+/// on a machine Rust's target list does not know.
+pub fn default_target() -> Target {
+    host_target().unwrap_or(Target::X86_64Linux)
 }
 
 /// Whether the user's code may run concurrently, and whether the program
@@ -117,11 +112,11 @@ pub struct Build {
 impl Default for Build {
     fn default() -> Build {
         Build {
-            target: Target::default(),
+            target: default_target(),
             user_parallelism: UserParallelism::No,
             reentrancy_check: ReentrancyCheck::Yes,
-            bounds: crate::bounds::BoundsChecks::default(),
-            overflow: crate::bounds::OverflowChecks::default(),
+            bounds: crate::bounds::BoundsChecks::Kept,
+            overflow: crate::bounds::OverflowChecks::Kept,
             skip_free_at_exit: false,
             prove_through_loops: false,
             counts_steps: false,
@@ -139,13 +134,13 @@ fn switch(thrown: nikaia_std::error::Thrown<nikaia_std::tools::Refused>) -> anyh
 impl Build {
     pub fn parse(target: &str, user_parallelism: &str, reentrancy_check: &str) -> Result<Build> {
         Ok(Build {
-            target: Target::parse(target)?,
+            target: Target::parse(target.to_string()).map_err(switch)?,
             user_parallelism: UserParallelism::parse(user_parallelism.to_string())
                 .map_err(switch)?,
             reentrancy_check: ReentrancyCheck::parse(reentrancy_check.to_string())
                 .map_err(switch)?,
-            bounds: crate::bounds::BoundsChecks::default(),
-            overflow: crate::bounds::OverflowChecks::default(),
+            bounds: crate::bounds::BoundsChecks::Kept,
+            overflow: crate::bounds::OverflowChecks::Kept,
             skip_free_at_exit: false,
             prove_through_loops: false,
             counts_steps: false,
@@ -212,135 +207,6 @@ impl Build {
     /// there at all. `user_parallelism` has no say in it; the *target* does.
     pub fn overlaps_operations(self) -> bool {
         self.target.has_runtime()
-    }
-}
-
-impl Target {
-    /// Every target, in the order a refusal lists them.
-    pub const ALL: [Target; 3] = [
-        Target::X86_64Linux,
-        Target::Aarch64Linux,
-        Target::Wasm32Unknown,
-    ];
-
-    /// The short names first, then the short names of Android (ADR-037 D9),
-    /// then any triple Rust knows, written as Rust writes it. A triple that
-    /// has a short name is that target, not a second one.
-    pub fn parse(name: &str) -> Result<Target> {
-        if let Some(target) = Target::ALL.into_iter().find(|target| target.name() == name) {
-            return Ok(target);
-        }
-        let triple = match name {
-            "aarch64-android" => "aarch64-linux-android",
-            "x86_64-android" => "x86_64-linux-android",
-            "armv7-android" => "armv7-linux-androideabi",
-            other => other,
-        };
-        if let Some(target) = Target::ALL
-            .into_iter()
-            .find(|target| target.triple() == triple)
-        {
-            return Ok(target);
-        }
-        match nikaia_std::tools::emit_build::emit_build_rust_targets()
-            .into_iter()
-            .find(|known| *known == triple)
-        {
-            Some(known) => Ok(Target::Rust(known)),
-            None => Err(refused!(
-                "There's no target called `{name}`. Use x86_64-linux, aarch64-linux, \
-                 wasm32-unknown, aarch64-android, x86_64-android, armv7-android, or a \
-                 triple from `rustc --print target-list`."
-            )),
-        }
-    }
-
-    /// No operating system under the program (ADR-037 D9): Rust's `-none`
-    /// triples, and UEFI. There is no `std` there to build on.
-    pub fn is_bare_metal(self) -> bool {
-        match self {
-            Target::Rust(triple) => {
-                triple
-                    .split('-')
-                    .any(|part| part == "none" || part.starts_with("none"))
-                    || triple.ends_with("-uefi")
-            }
-            _ => false,
-        }
-    }
-
-    /// The word a manifest and `--target` use for it.
-    pub fn name(self) -> &'static str {
-        match self {
-            Target::X86_64Linux => "x86_64-linux",
-            Target::Aarch64Linux => "aarch64-linux",
-            Target::Wasm32Unknown => "wasm32-unknown",
-            Target::Rust(triple) => triple,
-        }
-    }
-
-    /// The triple handed to the backend: Cargo's `--target`.
-    pub fn triple(self) -> &'static str {
-        match self {
-            Target::X86_64Linux => "x86_64-unknown-linux-gnu",
-            Target::Aarch64Linux => "aarch64-unknown-linux-gnu",
-            Target::Wasm32Unknown => "wasm32-unknown-unknown",
-            Target::Rust(triple) => triple,
-        }
-    }
-
-    /// The machine this compiler is running on. The compiler is a native
-    /// program, so the triple it was built for (`build.rs`) is the machine it
-    /// runs on: `x86_64-linux` on a Linux PC, `aarch64-linux-android` on a
-    /// phone, `aarch64-apple-darwin` on a Mac.
-    ///
-    /// `None` only for a triple Rust's target list does not know: a build
-    /// there has to name its target.
-    pub fn host() -> Option<Target> {
-        Target::parse(env!("NIKAIA_HOST_TRIPLE")).ok()
-    }
-
-    /// Whether this machine has threads at all. A target without them bounds
-    /// `user_parallelism` to `0` however it is set.
-    pub fn has_threads(self) -> bool {
-        match self {
-            Target::X86_64Linux | Target::Aarch64Linux => true,
-            Target::Wasm32Unknown => false,
-            Target::Rust(triple) => !self.is_bare_metal() && !triple.starts_with("wasm"),
-        }
-    }
-
-    /// Whether `std`'s own runtime exists for this machine (ADR-303 D4): the
-    /// I/O worker that is running before `main`, and the completion queue where
-    /// the kernel has one.
-    ///
-    /// The same answer as [`Target::has_threads`] today and a different
-    /// question, which is why it is a second method rather than a second
-    /// caller. `wasm32-unknown` has neither `io_uring` nor a thread to fall
-    /// back to; a machine with threads but no completion queue has the runtime,
-    /// and `std` is what decides there what a pair costs.
-    pub fn has_runtime(self) -> bool {
-        self.has_threads()
-    }
-
-    /// What a target still needs before a program can be built for it.
-    ///
-    /// `Some(reason)` is a refusal that names the gap, never code emitted for
-    /// a different machine (ADR-037 D1).
-    pub fn unbuildable(self) -> Option<&'static str> {
-        match self {
-            Target::Wasm32Unknown => Some(
-                "`std` reaches for a memory mapping and a thread pool, and neither \
-                 exists on wasm32-unknown-unknown; what `std::fs` offers there is \
-                 undecided",
-            ),
-            Target::Rust(_) if self.is_bare_metal() => Some(
-                "there is no operating system under a program here, so no `std` to \
-                 build on; how such a program starts and waits (a loop, interrupts) is \
-                 a build profile's, which does not exist yet (ADR-037 D9)",
-            ),
-            Target::X86_64Linux | Target::Aarch64Linux | Target::Rust(_) => None,
-        }
     }
 }
 
@@ -1526,20 +1392,20 @@ mod target_tests {
     /// triple are one target; a bare-metal one is refused with what is missing.
     #[test]
     fn every_rust_triple_is_a_target() {
-        let android = Target::parse("aarch64-android").expect("android");
+        let android = Target::parse("aarch64-android".to_string()).expect("android");
         assert_eq!(
             android,
-            Target::parse("aarch64-linux-android").expect("triple")
+            Target::parse("aarch64-linux-android".to_string()).expect("triple")
         );
         assert_eq!(android.triple(), "aarch64-linux-android");
         assert!(android.has_threads() && android.unbuildable().is_none());
         assert_eq!(
-            Target::parse("x86_64-unknown-linux-gnu").expect("host triple"),
+            Target::parse("x86_64-unknown-linux-gnu".to_string()).expect("host triple"),
             Target::X86_64Linux
         );
-        let board = Target::parse("thumbv7em-none-eabihf").expect("bare metal");
+        let board = Target::parse("thumbv7em-none-eabihf".to_string()).expect("bare metal");
         assert!(board.is_bare_metal() && !board.has_threads());
         assert!(board.unbuildable().is_some());
-        assert!(Target::parse("z80-spectrum").is_err());
+        assert!(Target::parse("z80-spectrum".to_string()).is_err());
     }
 }

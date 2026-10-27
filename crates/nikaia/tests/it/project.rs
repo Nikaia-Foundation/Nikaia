@@ -404,9 +404,7 @@ fn a_cpu_level_the_target_lacks_is_refused_naming_its_levels() {
 /// with no `--target` writes `debug/` at the top.
 #[test]
 fn the_triple_of_the_target_is_handed_to_cargo() {
-    use nikaia::emit::Target;
-
-    let host = Target::host().expect("the suite runs on a machine that is a target");
+    let host = nikaia::emit::host_target().expect("the suite runs on a machine that is a target");
     let dir = a_project(
         "project-triple",
         "[package]\nname = \"triple\"\nversion = \"0.1.0\"\n",
@@ -449,11 +447,11 @@ fn the_triple_of_the_target_is_handed_to_cargo() {
 fn aarch64_linux_is_a_target_and_the_default_is_the_host() {
     use nikaia::emit::Target;
 
-    let arm = Target::parse("aarch64-linux").expect("a target that exists");
+    let arm = Target::parse("aarch64-linux".to_string()).expect("a target that exists");
     assert_eq!(arm.triple(), "aarch64-unknown-linux-gnu");
     assert!(arm.has_threads() && arm.has_runtime() && arm.unbuildable().is_none());
 
-    let error = Target::parse("riscv64-linux").expect_err("not a target");
+    let error = Target::parse("riscv64-linux".to_string()).expect_err("not a target");
     assert!(format!("{error:#}").contains("aarch64-linux"), "{error:#}");
 
     let dir = a_project(
@@ -462,7 +460,10 @@ fn aarch64_linux_is_a_target_and_the_default_is_the_host() {
         HELLO,
     );
     let project = Project::open(&dir, None, None).expect("the project opens");
-    assert_eq!(Some(project.settings.build.target), Target::host());
+    assert_eq!(
+        Some(project.settings.build.target),
+        nikaia::emit::host_target()
+    );
 
     std::fs::remove_dir_all(&dir).ok();
 }

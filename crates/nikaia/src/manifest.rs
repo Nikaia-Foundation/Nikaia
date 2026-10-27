@@ -304,7 +304,7 @@ fn libraries(document: &toml::Value) -> Result<BTreeMap<String, String>> {
 fn codegen(target: &str, table: &toml::Table) -> Result<BTreeMap<String, toml::Value>> {
     // Any target `--target` takes may have a table (ADR-037 D9); the refusal
     // for one that is none of them is `std`'s.
-    if crate::emit::Target::parse(target).is_err() {
+    if crate::emit::Target::parse(target.to_string()).is_err() {
         decide::codegen_table(target).map_err(refusal)?;
     }
     let mut out = BTreeMap::new();

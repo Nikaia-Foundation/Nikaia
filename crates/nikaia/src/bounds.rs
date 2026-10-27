@@ -36,64 +36,9 @@ use nikaia_std::tools::bounds_basic as nika;
 use nikaia_std::tools::bounds_shape::Around;
 use nikaia_std::tools::bounds_walk::{self as walk, BoundsContext, Ensured};
 
-/// What happens to an index check the walk proved (ADR-306 D14): `on` writes
-/// it without its check, `off` (the default) keeps it. What is proved does not
-/// depend on it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, PartialOrd, Ord)]
-pub enum BoundsChecks {
-    /// Every index is checked: the default.
-    #[default]
-    Kept,
-    /// An index the walk proved inside is written without its check.
-    Removed,
-}
-
-impl BoundsChecks {
-    /// The word after `remove-bounds-checks:`.
-    pub fn parse(word: &str) -> Option<BoundsChecks> {
-        match word {
-            "off" => Some(BoundsChecks::Kept),
-            "on" => Some(BoundsChecks::Removed),
-            _ => None,
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            BoundsChecks::Kept => "off",
-            BoundsChecks::Removed => "on",
-        }
-    }
-}
-
-/// What happens to an overflow check the walk proved (ADR-306 D14), as for
-/// [`BoundsChecks`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, PartialOrd, Ord)]
-pub enum OverflowChecks {
-    /// Every `+`, `-` and `*` is checked: the default.
-    #[default]
-    Kept,
-    /// One the walk proved stays inside its type is written without its check.
-    Removed,
-}
-
-impl OverflowChecks {
-    /// The word after `remove-overflow-checks:`.
-    pub fn parse(word: &str) -> Option<OverflowChecks> {
-        match word {
-            "off" => Some(OverflowChecks::Kept),
-            "on" => Some(OverflowChecks::Removed),
-            _ => None,
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            OverflowChecks::Kept => "off",
-            OverflowChecks::Removed => "on",
-        }
-    }
-}
+/// What happens to an index or overflow check the walk proved (ADR-306
+/// D14): `tools/emit_build.nika`. The default of both is `Kept`.
+pub use nikaia_std::tools::emit_build::{BoundsChecks, OverflowChecks};
 
 /// What the walk proved: index nodes ([`crate::check::value_node`] of the
 /// indexed `base`) and arithmetic operators (by the byte their operator

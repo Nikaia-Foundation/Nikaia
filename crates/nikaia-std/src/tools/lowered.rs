@@ -2337,7 +2337,7 @@ pub mod emit_below {
 }
 pub mod emit_build {
     #[allow(unused_imports)]
-    pub use super::{UserParallelism, ReentrancyCheck, emit_build_rust_targets};
+    pub use super::{UserParallelism, ReentrancyCheck, Target, emit_build_targets, emit_build_rust_targets, BoundsChecks, OverflowChecks};
 }
 pub mod emit_calls {
     #[allow(unused_imports)]
