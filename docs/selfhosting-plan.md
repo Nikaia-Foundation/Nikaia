@@ -641,3 +641,81 @@ after the other. Line ranges are at 62a07a1: re-grep the names before cutting.
   4b built: a `ref String` payload lowers with a lifetime parameter on the enum and no `Copy`,
   so `Target::Rust(i64)` carries the index into that list; `host_target()` and
   `default_target()` stay Rust free functions in `emit`.
+
+## Large files: project.rs and parser/mod.rs
+
+Read at 6f5b548 (`project.rs` 4,851 lines, `parser/mod.rs` 4,351). Line ranges are
+at that commit: re-grep the names before cutting. *Draft* is the share of code lines
+`rs2nika --profile check` drafted in items without a TODO, over a scratch cut of
+exactly the listed ranges.
+
+**`parser/mod.rs` is mostly what stays Rust for now**, so the next file by size,
+`comptime_run.rs` (1,699), is planned with it (`K` rows):
+
+* The `grammar!` block (926-4351: 3,426 lines, 1,334 of them comments, 358 rules) is
+  the parser. ADR-339 decided it moves as a Nikaia grammar, but #557's *To build*
+  (`span(p)`, `here`, `same_line`, the `doc` rule) is not built, and ADR-339 D3
+  forbids a grammar state while 71 actions draw node ids from `Trivia`
+  (`_state.user().id()`) and 27 record spans (`.at()`). Where a Nikaia grammar's
+  nodes get their ids is not decided: an owner question before any `R` row.
+* R-4 (the old plan's non-grammar leaves) is built: `PrTrivia` is in
+  `parser_leaves.nika`, `number_at` in `parse_numbers.nika`, the error texts in
+  `parse_errors.nika`. What is left in 1-925 is winnow glue (`doc_here`,
+  `same_line`, `new_line`, `float_end`, `number_lit`, `stops_at`, the `Trivia`
+  adapter), `Parsed` (the hole and kept-call caches behind `Mutex`es, `keeping`,
+  `growing`) and the entry points `parse_to_ast`, `parse_expression_from`. The pure
+  remainder (`number_prefix`, `byte_of`, `char_of`, `failure_of`, `a_parse_finding`,
+  `fits`, `flat_shape`, `kept_function_text`, about 110 lines, draft 90%) is below a
+  slice: it goes with the grammar.
+
+| Id | Rust (file:lines) | Target (`tools/`) | Host | Prerequisite | Rust lines | Draft |
+| :--- | :--- | :--- | :--- | :--- | ---: | ---: |
+| P2 | `project.rs`: the refusal summary of `check` (1989-2233: one count per NK family, `plural`, the `others` remainder), `let_refuted_claims_through`, `let_unproved_claims_through`, `lint_where_nothing_crosses` (2262-2323), the `--locked` texts of `write_proofs` and `write_ledger` (2385-2465) | new `project_check.nika`: `project_check_summary(findings: ref Vec[Finding], violations: i64) -> String`, the three filters over `mut Vec[Finding]`, the two texts | none: `check` keeps its calls (`check_against`, `foreign::check`, `sync::check`, the rendering) and passes `Finding`s (`findings.nika`) and the violation count | none | ~420 | 100% |
+| K1 | `comptime_run.rs`: `VALUE_FN`, `sub_program`, `constants_as_lets`, `unit_without_its_constants`, `without_readers`, `reads_any`, `constants_of` (36-287); `a_function`, `literal_of`, `held_as`, `written_type` (914-1103) | new `comptime_tree.nika` (prefix `comptime_`: `a_function`, `literal_of`, `written_type` exist in `ty.nika`, `ledger_items.nika`, `views.nika`) | Nikaia takes the items and `ref InternerContext` (as `names_in_block` does) and returns the items to add; `Parsed::keeping` stays Rust, `known`/`typed` are callbacks `fn(String) -> BuildValue? sync`, `fn(String) -> Ty? sync` | none | ~440 | 48% |
+| P1 | `project.rs`: `refuted_claims`, `unproved_claims`, `optimizations`, `prove_through_loops`, `skip_free_at_exit`, `renamed`, `artifact`, `symbol_prefix` (113-314), `cpu_config` (435-449), `choices`' key and `panic_strategy` (564-638), `encoded_with_cpu` (4660-4686) | new `project_settings.nika`: `ProjectWords` (the strings of `Settings`); `Settings` keeps `build: Build` (Rust, E12-4) and holds the words | `cpu_key` stays Rust (`sysroot::native_cpu`) and is passed in; `Build` is filled in Rust from the Nikaia `BoundsChecks`/`OverflowChecks` | the converter drafts `choices`' 12-hole `format!` (TODO: *fewer arguments than holes*, comments between the arguments): fix it first or the draft is under 60% | ~320 | 59% |
+| P3 | `project.rs`: the test runner: `Outcome`, `OutputTest`, `files_under`, `output_tests`, `copy_into`, `run_tests`, `ProgramTest`, `program_tests`, `is_refusal`, `does_not_compile`, `bless_program`, `named_by`, `explain_output`, `difference`, `Blessed`, `bless`, `verdict`, `shown_path` (3720-4437) | new `project_tests.nika` (`std::fs` reads and writes, as `sources.nika`) | added: `run_test_binary(binary, args, stdin, cwd) -> Outcome`, `run_program_test(test, setting) -> Outcome` (process spawns, `current_exe`, the `Sandbox` directory stay Rust); `Suite` holds the binaries as names | a probe that `std::fs` in `tools/*.nika` reads and writes bytes (`.stdout` compared byte for byte) | ~720 | 86% |
+| P4 | `project.rs`: `packages_of`, `renames_in`, `Member`, `dependencies_first`, `members_of`, `rooted`, `canonical`, `crate_root_of` (652-1039); `Foreign`, `crates_beneath`, `Foreign::of`/`packages`, `sources_that_moved`, `proofs_digest`, `description_at` (1598-1870) | new `project_members.nika` | added: `manifest_at(root) -> ManifestView?` (name, path dependencies, foreign crates; `Manifest` and `toml` stay Rust), `canonical(path) -> String`; `Foreign::library` stays Rust (`contracts::std_library`) | P3 (its `std::fs` probe); `Member.manifest` becomes the view, `drive_to` reads the Rust `Manifest` again where it needs `codegen_for` | ~660 | 88% |
+| K2 | `comptime_run.rs`: `Computed`, `NOT_COMPUTED_YET`, `as_built` (440-485), `undeclared_callee`, `culprit` (761-861) | `comptime_tree.nika` | `Ledger` is Nikaia's; the `AHEAD` `thread_local` stays Rust with `worked_out_ahead` | K1; below 300 lines, so it goes with K1 if that builder has room, else with the move of `computed` | ~170 | 54% |
+
+**Stays Rust** (each until the named module moves, not by itself):
+
+* `project.rs` `lower`, `lower_reading` (1040-1590), `read_file`, `packages_of_file`,
+  `reads_for*`: the driver; they own `Program`/`Parsed`, the build cache, `cexport` and the
+  merge of published contracts into the ledger.
+* `project_for_file` (1136-1212), `Project` with `open`, the directory paths, `drive`,
+  `drive_to` (3009-3480), `report`, `record_resolved_dependencies`, `program_name`,
+  `root_tag`, `own_copy`, `libraries_in`, `executable_in`: Cargo invocation, the file
+  system, `CARGO_TARGET_DIR`, the lock file.
+* `cargo_member`, `runs_without_cargo`, `cargo_workspace`, `crate_named`, `codegen`,
+  `runtime_dependencies*`, `runtime_features` (2815-2992, 4438-4518): they build
+  `orchestrator`'s `CargoProject`/`Workspace` out of `toml::Value`s; they go when
+  `orchestrator` does.
+* `wrapper_main`, `switches_beside`, `trace` (4519-4670), `Settings::from_env`,
+  `as_env`, `cpu_rustflags`, the `*_VAR` names: the `rustc` wrapper's process entry
+  (environment, `args_os`).
+* `check`'s calls into the analyses (1894-1988), `explain` (2524-2657, one `print!` per
+  Rust report), `Around`, `Lowered`, the `WARNED`/`SHOWN_AS` `thread_local`s: each goes
+  with its analysis or with the driver.
+* `Sandbox`, `outcome_of`, `run_program_test`'s spawns: P3's callbacks.
+* `mod tests` (4687-4851): Rust tests; they move to Nikaia with #821, not with a slice.
+* `comptime_run.rs` `compute`, `computed`, `worked_out_ahead` (486-760), `lowered_units`,
+  `without_foreign`, `dependency_modules`, `by_package` (288-439), `with_driver`: they
+  call the emitter, `trust::analyse_package`, `Ledger::infer_package` and the workshop.
+* `comptime_run.rs` `Bundle`, `bundle*`, `run_fingerprint`, `stamp_of`, `run`, `waited`,
+  `cargo`, `rustc`, `toolchain`, `target_libdir`, `write_if_changed`, `unique_beside`
+  (1131-1699): `rustc` invocation, child processes, dynamic libraries on disk.
+* `parser/mod.rs`: the grammar, `Trivia`, `Parsed` and the entry points, as said above.
+
+Of `project.rs` about 2,120 lines are in P1-P4; of `comptime_run.rs` about 610 in K1-K2.
+
+**First two slices to brief: P2, then K1** (different files, one after the other; both
+add a row to `scripts/self_hosting.py` and a module to `tools/lowered.rs`, so not side
+by side). Known risk of each:
+
+* P2: the summary text is byte for byte in many `.stderr` of `tests/compiler` and the
+  `it` tests; the filters change `severity` and push to `notes` in place
+  (`iter_mut().filter(..)`), which is a `mut Vec[Finding]` with an index loop, and the
+  `count`/`plural` closures become functions.
+* K1: the draft is 48%, under the 60% rule: three of its four TODO items are
+  *`collect` into an `Option`* (the fourth is a `Some(` in a struct pattern, #886); the
+  converter should write that loop itself before K1 is briefed, else it is hand work.
