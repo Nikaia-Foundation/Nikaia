@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1231] — 2026-10-27
+
+**A `String` moved after a clone of `x.strip_prefix(..) ?? ""` stays owned**
+(#880). The lowering's text-copy check (`copies_text`, `tools/buffers.nika`)
+did not count `(x ?? "").clone()` as a copy, so the moved `String` kept the
+origins of the text it was cut from and was lowered as a view, which rustc
+refused. A clone of `a ?? b` now copies when either side does. Test
+`string_move_not_view`.
+
 ## [0.0.1230] — 2026-10-27
 
 **A binding in a condition is refused with words that name `match`** (#878,
