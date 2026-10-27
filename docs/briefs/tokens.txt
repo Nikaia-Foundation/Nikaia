@@ -39,3 +39,4 @@
 /home/user/Nikaia/docs/briefs/b655-element-view-slots.md 1341262 30
 /home/user/Nikaia/docs/briefs/b655-null-arm-view.md 2739967 55
 /home/user/Nikaia/docs/briefs/architect-task.md 1733313 39
+/home/user/Nikaia/docs/briefs/b655-expr-view-in-tools.md 1090181 33
