@@ -115,6 +115,10 @@ pub(crate) fn hand_over(expr: &Expr, interner: &winnow_grammar::InternerContext,
 pub(crate) fn reached_of(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &KeepsWalk, through_calls: bool) -> collections::BTreeSet<String> {
     let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
     match expr {
+        Expr::MethodCall { receiver, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            if keeps_text_as_is(expr, interner, context) { return reached_of(receiver, interner, context, own, library, walk, through_calls); }
+        },
         Expr::If { then_branch, else_branch, .. } => {
             reached_by_last(then_branch, interner, context, own, library, walk, through_calls, &mut found);
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return found };
@@ -575,6 +579,24 @@ pub(crate) fn keep_named(expr: &Expr, interner: &winnow_grammar::InternerContext
     walk.uses.kept.insert(match parameter_named(expr, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return });
 }
 
+pub(crate) fn keeps_text_as_is(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> bool {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !args.is_empty() || interner.resolve(method) != "to_string" { return false; }
+            match receiver {
+                Expr::Variable(ident, _) => {
+                    let ident = *ident;
+                    let ty = match *nikaia_std::index::get(&context.types, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    return ty == "String";
+                },
+                _ => return false,
+            }
+        },
+        _ => return false,
+    }
+}
+
 pub(crate) fn keep_part(expr: Option<&Expr>, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     let part = match expr { Some(__nikaia_value) => __nikaia_value, None => return };
     for one in keeps_handed(part, interner, context, own, library, &walk) { walk.uses.kept.insert(one); }
@@ -586,6 +608,13 @@ pub(crate) fn keep_viewed_name(name: &str, walk: &mut KeepsWalk) {
 }
 
 pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &KeepsWalk) -> Vec<String> {
+    match expr {
+        Expr::MethodCall { receiver, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            if keeps_text_as_is(expr, interner, context) { return keeps_handed(receiver, interner, context, own, library, walk); }
+        },
+        _ => { },
+    }
     let mut names: Vec<String> = vec![];
     let part = part_of_a_parameter(expr, interner, context);
     if part.is_some() { names.push(nikaia_std::index::or(part, || "".into())); }

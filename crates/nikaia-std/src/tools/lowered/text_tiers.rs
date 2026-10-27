@@ -1017,6 +1017,14 @@ pub(crate) fn handed_parameter(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_, '
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     let name = match given {
         Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !args.is_empty() || ask.names.resolve(method) != "to_string" { return None; }
+            match receiver {
+                Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
+                _ => return None,
+            }
+        },
         _ => return None,
     };
     let local = match tier_local(&name, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -2722,7 +2730,10 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
         }
     }
     if method == "filter" || method == "rev" || method == "skip" || method == "take" || method == "step_by" { return received; }
-    if method == "to_string" && args.is_empty() && (!no_text(&received) || a_text_read_whole(receiver, ask, &walk)) { return viewed(&received); }
+    if method == "to_string" && args.is_empty() && (!no_text(&received) || a_text_read_whole(receiver, ask, &walk)) {
+        if handed_parameter(Some(receiver), ask, &walk).is_some() { return received; }
+        return viewed(&received);
+    }
     if owns_its_text(method) { return owned_kinds(); }
     if views_what_it_is_called_on(method) || cuts_in_two(method) { return viewed(&received); }
     if hands_back_an_element(method) { return received; }

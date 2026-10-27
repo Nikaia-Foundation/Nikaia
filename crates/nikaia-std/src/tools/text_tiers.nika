@@ -1448,10 +1448,21 @@ fn a_null(value: ref Expr) -> bool {
 }
 
 /// The word of the parameter a value is, where it is one of `String`.
+/// `to_string()` of a `String` parameter is the parameter as it is (ADR-282
+/// D8): handed on as the bare name is (#896).
 fn handed_parameter(value: ref Expr?, ask: ref TierAsk, walk: ref TierWalk) -> String? {
     let given = value ?? return null
     let name = match given {
         Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() > 0 || ask.names.resolve(method) != "to_string" {
+                return null
+            }
+            match receiver {
+                Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+                else => return null,
+            }
+        },
         else => return null,
     }
     let local = tier_local(name, walk) ?? return null
@@ -3642,6 +3653,10 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
     }
     // **`to_string()` of text is the text itself** (ADR-282 D8): a view stays a view.
     if method == "to_string" && args.len() == 0 && (!no_text(received) || a_text_read_whole(receiver, ask, walk)) {
+        // A `String` parameter is handed on as the bare name is (#896).
+        if handed_parameter(receiver, ask, walk) != null {
+            return received
+        }
         return viewed(received)
     }
     if owns_its_text(method) {

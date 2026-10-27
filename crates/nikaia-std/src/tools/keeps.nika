@@ -196,6 +196,11 @@ fn hand_over(expr: ref Expr, interner: ref winnow_grammar::InternerContext, cont
 fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, walk: ref KeepsWalk, through_calls: bool) -> collections::BTreeSet[String] {
     let mut found: collections::BTreeSet[String] = collections::BTreeSet()
     match expr {
+        Expr::MethodCall { receiver, .. } => {
+            if keeps_text_as_is(expr, interner, context) {
+                return reached_of(receiver, interner, context, own, library, walk, through_calls)
+            }
+        }
         Expr::If { then_branch, else_branch, .. } => {
             reached_by_last(then_branch, interner, context, own, library, walk, through_calls, found)
             let otherwise = else_branch ?? return found
@@ -926,6 +931,26 @@ fn keep_named(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
     walk.uses.kept.insert(parameter_named(expr, interner, context) ?? return)
 }
 
+// **`to_string()` of a `String` parameter is the parameter as it is**
+// (ADR-282 D8, #896): where it goes, the parameter goes.
+fn keeps_text_as_is(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> bool {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() > 0 || interner.resolve(method) != "to_string" {
+                return false
+            }
+            match receiver {
+                Expr::Variable(ident, _) => {
+                    let ty = context.types[interner.resolve(ident)] ?? return false
+                    return ty == "String"
+                }
+                else => return false,
+            }
+        }
+        else => return false,
+    }
+}
+
 fn keep_part(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     let part = expr ?? return
     for one in keeps_handed(part, interner, context, own, library, walk) {
@@ -945,6 +970,14 @@ fn keep_viewed_name(name: ref String, mut walk: KeepsWalk) {
 // **The parameters a value handed somewhere takes with it**: the parameter it
 // is or is a moving part of, and every parameter it points into (#697).
 fn keeps_handed(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, walk: ref KeepsWalk) -> Vec[String] {
+    match expr {
+        Expr::MethodCall { receiver, .. } => {
+            if keeps_text_as_is(expr, interner, context) {
+                return keeps_handed(receiver, interner, context, own, library, walk)
+            }
+        }
+        else => {}
+    }
     let mut names: Vec[String] = []
     let part = part_of_a_parameter(expr, interner, context)
     if part != null {

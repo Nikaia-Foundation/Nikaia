@@ -1,0 +1,41 @@
+// `to_string()` of a `String` parameter is the parameter as it is (ADR-282
+// D8): stored in a struct, a list or through a `let`, the parameter is handed
+// on as its bare name is, and the struct holds text of its own (#896).
+struct B { name: String, held: Vec[String] }
+
+fn add(mut bodies: Vec[B], name: String, args: ref Vec[String]) {
+    let held: Vec[String] = args.iter().filter(fn(a) { a.len() > 0 }).map(fn(a) { a.clone() }).collect()
+    if !held.is_empty() {
+        bodies.push(B { name: name.to_string(), held })
+    }
+}
+
+fn make(name: String) -> B {
+    return B { name: name.to_string(), held: [] }
+}
+
+fn keep(mut names: Vec[String], name: String) {
+    names.push(name.to_string())
+}
+
+fn escape(mut bodies: Vec[B], name: String) {
+    let s = name.to_string()
+    bodies.push(B { name: s, held: [] })
+}
+
+fn main() {
+    let mut bs: Vec[B] = []
+    add(bs, "x", ["a"])
+    println(bs[0].name)
+    let owned = f"o{bs.len()}"
+    add(bs, owned, ["b", ""])
+    println(f"{bs[1].name} {bs[1].held.len()}")
+    println(make(f"y{bs.len()}").name)
+    let mut ns: Vec[String] = []
+    keep(ns, "k")
+    let next = f"k{ns.len()}"
+    keep(ns, next)
+    println(ns.join(","))
+    escape(bs, "z")
+    println(bs[2].name)
+}
