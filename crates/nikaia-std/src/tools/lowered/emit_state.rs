@@ -52,6 +52,7 @@ pub struct EmitState {
     pub trusted_lets: collections::BTreeSet<i64>,
     pub fast_slots: collections::BTreeSet<String>,
     pub seeded_calls: collections::BTreeMap<String, (i64, i64)>,
+    pub seeds: EmitSeedsTables,
     pub escaped_lets: collections::BTreeSet<i64>,
     pub grammars: collections::BTreeMap<String, GrammarDef>,
     pub keep_plans: collections::BTreeMap<String, BufferPlan>,
@@ -101,9 +102,11 @@ pub struct EmitWalk {
     pub trusting: bool,
     pub unpinned: bool,
     pub believing: bool,
+    pub place: EmitSeedsPlace,
+    pub floor: bool,
 }
 
 impl EmitWalk {
-    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_bytes: false, grammar_raw: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, method_callee: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false } }
+    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_bytes: false, grammar_raw: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, method_callee: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false } }
 }
 

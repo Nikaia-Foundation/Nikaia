@@ -210,7 +210,7 @@ impl EmitState {
         let crossings = host.crossings_are_possible()
         let count = self.count_at(crossings, key, value)
         let written = self.emit_core_ty_counted(world, walk, crossings, host.overlaps_user_code(), ty, lifetimes, count)
-        return host.seeded(written)
+        return emit_seeds_seeded(self.seeds, walk, self.trusted_input, written)
     }
 
     /// **How a parameter's lifetimes are written** in this signature.
@@ -266,7 +266,7 @@ impl EmitState {
 
                 // **A function that stands alone** (ADR-010 D9).
                 let standalone = !has_owner && !is_public && generics.is_empty() && name != null
-                let begun = host.seeds_begin(written.node, owner_target?.clone(), has_declared_by)
+                let begun = emit_seeds_begin(self.seeds, world, walk, host, written.node, owner_target?.clone(), has_declared_by)
                 let recv: i64 = if receiver != null { 1 } else { 0 }
                 let mut params: Vec[String] = []
                 if receiver != null {
@@ -822,7 +822,7 @@ impl EmitState {
                     ret = f" -> {returned}"
                 }
 
-                let ended = host.seeds_end(begun.seeded, begun.base)
+                let ended = emit_seeds_end(walk, begun.seeded, begun.base)
                 for each in ended.declared {
                     declared.push(each.clone())
                 }

@@ -848,10 +848,6 @@ struct Emitter<'p> {
     /// assignment that becomes a binding of its own, and the `let`s that need
     /// no `mut` because of it.
     give_ups: crate::view_changes::GiveUps,
-    /// Where the parameters of the type being written come from.
-    place: std::cell::RefCell<nikaia_std::tools::emit_seeds::EmitSeedsPlace>,
-    /// A signature of a barrier is being written: its maps are the keyed ones.
-    floor: std::cell::Cell<bool>,
     /// **The counters `bounds::proven` already found never negative**, by the
     /// address of the body in `parsed` (`Proven::nonnegative_locals`).
     nonnegative_bodies: HashMap<usize, HashSet<Symbol>>,
@@ -1148,6 +1144,7 @@ impl<'p> Emitter<'p> {
             escaped_lets: plan.escaped.clone(),
             fast_slots: plan.slots.clone(),
             seeded_calls: seeds_of.calls().clone(),
+            seeds: seeds_of.tables().clone(),
             proven_indices: propagation
                 .list_indices
                 .iter()
@@ -1236,8 +1233,6 @@ impl<'p> Emitter<'p> {
                 library,
             },
             seeds: seeds_of,
-            place: std::cell::RefCell::new(nikaia_std::tools::emit_seeds::emit_seeds_place()),
-            floor: std::cell::Cell::new(false),
             nonnegative_bodies: std::mem::take(&mut proven.nonnegative_locals),
             main_params: std::cell::RefCell::new(Vec::new()),
             order_proofs,
@@ -1345,24 +1340,19 @@ impl<'p> Emitter<'p> {
         self.seeded(self.ty(ty, lifetimes))
     }
 
-    /// **A written type, with the hidden map parameters in** (ADR-010 D9).
+    /// **A written type, with the hidden map parameters in** (ADR-010 D9),
+    /// on the walk this hosted call holds (`tools/emit_seeds.nika`).
     fn seeded(&self, written: String) -> String {
-        // **A barrier's signature is the keyed map** (D9): std's `HashMap`,
-        // whatever the package, and the keyed hasher in a library type's
-        // arguments.
-        let floor = self.floor.get();
-        let written = match floor {
-            true => written
-                .replace("TrustedMap", "HashMap")
-                .replace("TrustedSet", "HashSet"),
-            false => written,
-        };
-        if self.seeds.is_empty() {
-            return written;
-        }
-        let mut place = self.place.borrow_mut();
-        self.seeds
-            .write(&written, &mut place, self.s.trusted_input && !floor)
+        let mut held = self.w.borrow_mut();
+        let walk = held
+            .as_mut()
+            .expect("a type is filled only inside a hosted call");
+        nikaia_std::tools::emit_seeds::emit_seeds_seeded(
+            &self.s.seeds,
+            walk,
+            self.s.trusted_input,
+            written,
+        )
     }
 
     // --- Statements and expressions ---

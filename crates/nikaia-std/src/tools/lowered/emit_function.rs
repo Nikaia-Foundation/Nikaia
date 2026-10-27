@@ -138,7 +138,7 @@ impl EmitState {
         let crossings = host.crossings_are_possible();
         let count = self.count_at(crossings, key, value);
         let written = self.emit_core_ty_counted(world, walk, crossings, host.overlaps_user_code(), ty, lifetimes, count);
-        host.seeded(written)
+        emit_seeds_seeded(&self.seeds, walk, self.trusted_input, written)
     }
     pub(crate) fn emit_how(&self, sig: &EmitSig, name: winnow_grammar::Symbol, text: &str, viewed: bool, read_only: bool) -> EmitLifetimes {
         if emit_store_place(&sig.stores, text) || emit_store_source(&sig.stores, text) && viewed { return EmitLifetimes::Named; }
@@ -181,7 +181,7 @@ impl EmitState {
                 };
                 let key: String = if has_owner { format!("{}::{}", target, own_name) } else { own_name.to_owned() };
                 let standalone = !has_owner && !is_public && generics.is_empty() && name.is_some();
-                let begun = host.seeds_begin(&written.node, match owner_target.as_ref() {
+                let begun = emit_seeds_begin(&self.seeds, world, walk, host, &written.node, &match owner_target.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, has_declared_by);
@@ -517,7 +517,7 @@ impl EmitState {
                 }
                 let mut ret: String = String::from("");
                 if throws_ { ret = format!(" -> Result<{}, {}>", returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
-                let ended = host.seeds_end(begun.seeded, begun.base);
+                let ended = emit_seeds_end(walk, begun.seeded, begun.base);
                 for each in ended.declared.iter() { declared.push(each.to_owned()); }
                 let outer_unpinned = walk.unpinned;
                 walk.unpinned = ended.hidden > 0 || begun.in_seeded_impl;

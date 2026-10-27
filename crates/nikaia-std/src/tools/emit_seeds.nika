@@ -317,7 +317,7 @@ pub fn emit_seeds_fill_calls(mut tables: EmitSeedsTables, units: ref Vec[ParsedV
                         continue
                     }
                     let called = unit.text(name ?? continue)
-                    if !is_public && !emit_seeds_mentions(tables, unit, args, ret_type) {
+                    if !is_public && !emit_seeds_mentions(tables, unit.words, args, ret_type) {
                         continue
                     }
                     let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
@@ -356,9 +356,9 @@ pub fn emit_seeds_fill_calls(mut tables: EmitSeedsTables, units: ref Vec[ParsedV
 }
 
 /// Whether a signature mentions a `pub` struct that declares parameters.
-fn emit_seeds_mentions(tables: ref EmitSeedsTables, unit: ref ParsedView, args: ref Vec[FnArg], ret_type: ref Type?) -> bool {
+fn emit_seeds_mentions(tables: ref EmitSeedsTables, words: ref winnow_grammar::InternerContext, args: ref Vec[FnArg], ret_type: ref Type?) -> bool {
     for a in args {
-        if tables.mentions_a_struct(unit.words, a.ty) {
+        if tables.mentions_a_struct(words, a.ty) {
             return true
         }
     }
@@ -366,13 +366,13 @@ fn emit_seeds_mentions(tables: ref EmitSeedsTables, unit: ref ParsedView, args: 
         return false
     }
     let ret = ret_type ?? return false
-    return tables.mentions_a_struct(unit.words, ret)
+    return tables.mentions_a_struct(words, ret)
 }
 
 /// Whether a signature holds a map position.
-fn emit_seeds_holds(tables: ref EmitSeedsTables, unit: ref ParsedView, args: ref Vec[FnArg], ret_type: ref Type?) -> bool {
+fn emit_seeds_holds(tables: ref EmitSeedsTables, words: ref winnow_grammar::InternerContext, args: ref Vec[FnArg], ret_type: ref Type?) -> bool {
     for a in args {
-        if tables.count(unit.words, a.ty) > 0 {
+        if tables.count(words, a.ty) > 0 {
             return true
         }
     }
@@ -380,7 +380,7 @@ fn emit_seeds_holds(tables: ref EmitSeedsTables, unit: ref ParsedView, args: ref
         return false
     }
     let ret = ret_type ?? return false
-    return tables.count(unit.words, ret) > 0
+    return tables.count(words, ret) > 0
 }
 
 /// Every `pub` struct of the units (not an `extern` one) with the names of
@@ -415,7 +415,7 @@ fn emit_seeds_read_barriers(mut tables: EmitSeedsTables, units: ref Vec[ParsedVi
             match item.node {
                 Item::Trait { methods, .. } => {
                     for m in methods {
-                        if emit_seeds_holds(tables, unit, m.node.args, m.node.ret_type) {
+                        if emit_seeds_holds(tables, unit.words, m.node.args, m.node.ret_type) {
                             tables.trait_maps = true
                             tables.barriers.insert(unit.text(m.node.name))
                         }
@@ -428,7 +428,7 @@ fn emit_seeds_read_barriers(mut tables: EmitSeedsTables, units: ref Vec[ParsedVi
                     for m in methods {
                         match m.node {
                             Item::Fn { name, args, ret_type, .. } => {
-                                if name != null && emit_seeds_holds(tables, unit, args, ret_type) {
+                                if name != null && emit_seeds_holds(tables, unit.words, args, ret_type) {
                                     tables.trait_maps = true
                                     tables.barriers.insert(unit.text(name ?? continue))
                                 }
@@ -811,6 +811,90 @@ pub fn emit_seeds_leave(mut place: EmitSeedsPlace) {
 
 pub fn emit_seeds_within(place: ref EmitSeedsPlace) -> bool {
     return place.within_target != null
+}
+
+/// How a `pub` function or method declares its hidden parameters, as the
+/// maps' analysis gives it (`contracts::maps`, Part III 17.1): the group of
+/// each position, the ordinal of the `impl`'s own parameter a position has
+/// (-1 where it has none), and the position its written types start at.
+pub struct EmitSeedsShape {
+    pub groups: Vec[i64],
+    pub within: Vec[i64],
+    pub start: i64,
+}
+
+/// **The seed table at the start of a function** (ADR-010 D9, E10-4): where
+/// its hidden type parameters begin, whether it declares any, and whether the
+/// `impl` it stands in already does. A barrier's signature writes the keyed
+/// map (`walk.floor`).
+pub fn emit_seeds_begin[H: EmitHost](tables: ref EmitSeedsTables, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, written: ref Item, owner_target: String?, owner_declared: bool) -> EmitSeedsBegin sync {
+    match written {
+        Item::Fn { name, args, ret_type, is_public, .. } => {
+            let in_seeded_impl = emit_seeds_within(walk.place)
+            let has_owner = owner_target != null
+            let target: String = owner_target?.clone() ?? ""
+            let mut base = 0
+            if has_owner && in_seeded_impl {
+                base = tables.arity(target)
+            }
+            let has_name = name != null
+            let own_name: String = match name {
+                each => emit_text(world, each),
+                null => "",
+            }
+            // **A signature of a barrier** (ADR-010 D9).
+            let barrier = (has_owner && owner_declared) || (!owner_declared && has_name && tables.is_fixed(own_name))
+            walk.floor = barrier
+            let mut seeded = !tables.is_empty() && !barrier && has_name && !owner_declared
+            if seeded {
+                if is_public {
+                    seeded = emit_seeds_holds(tables, world.words, args, ret_type)
+                } else {
+                    seeded = emit_seeds_mentions(tables, world.words, args, ret_type)
+                }
+            }
+            if seeded {
+                let mut shape: EmitSeedsShape? = null
+                if is_public {
+                    let key: String = if has_owner { f"{target}::{own_name}" } else { own_name.clone() }
+                    shape = host.seeds_shape(key)
+                }
+                match shape {
+                    s => emit_seeds_declare_fn(walk.place, base, s.groups, s.within, s.start),
+                    null => emit_seeds_declare(walk.place, base),
+                }
+            }
+            return EmitSeedsBegin { base: base, seeded: seeded, in_seeded_impl: in_seeded_impl }
+        },
+        else => return EmitSeedsBegin { base: 0, seeded: false, in_seeded_impl: false },
+    }
+}
+
+/// **The seed table at the end of a signature**: how many hidden parameters
+/// the function declared and what they are called.
+pub fn emit_seeds_end(mut walk: EmitWalk, seeded: bool, base: i64) -> EmitSeedsEnd {
+    walk.floor = false
+    let mut hidden = 0
+    if seeded {
+        hidden = emit_seeds_finish(walk.place, base)
+    }
+    return EmitSeedsEnd { hidden: hidden, declared: emit_seeds_declared(base, hidden, false) }
+}
+
+/// **A written type, with the hidden map parameters in** (ADR-010 D9). A
+/// barrier's signature is the keyed map: `std`'s `HashMap`, whatever the
+/// package, and the keyed hasher in a library type's arguments. `trusted`
+/// says the package's input is, so an ordinary mention is filled with `Fast`.
+pub fn emit_seeds_seeded(tables: ref EmitSeedsTables, mut walk: EmitWalk, trusted: bool, written: String) -> String {
+    let floor = walk.floor
+    let mut text = written
+    if floor {
+        text = text.replace("TrustedMap", "HashMap").replace("TrustedSet", "HashSet")
+    }
+    if tables.is_empty() {
+        return text
+    }
+    return emit_seeds_write(text, walk.place, trusted && !floor, tables)
 }
 
 /// The name of the parameter the next position has ("" where no group has

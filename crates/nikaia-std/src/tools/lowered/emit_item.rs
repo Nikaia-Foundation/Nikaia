@@ -166,8 +166,8 @@ impl EmitState {
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                 let text = emit_text(world, name);
-                let seeded = is_public && !is_extern && host.seeds_arity(&text) > 0;
-                if seeded { host.place_declare_type(0); }
+                let seeded = is_public && !is_extern && self.seeds.arity(&text) > 0;
+                if seeded { emit_seeds_declare_type(&mut walk.place, 0); }
                 let mut derives = self.derives(world, name);
                 let by_hand = seeded && generics.is_empty() && !self.borrowing.contains(&text) && derives.contains("PartialEq");
                 if by_hand { derives = derives.replace(", PartialEq", "").replace(", Eq", ""); }
@@ -192,7 +192,7 @@ impl EmitState {
                     body.push(&format!("    {}{}: {},\n", field_vis, escaped_name(&field_text), self.boxed_ty(&text, &field_text, lowered)));
                 }
                 let mut hidden: i64 = 0;
-                if seeded { hidden = host.place_finish(0); }
+                if seeded { hidden = emit_seeds_finish(&mut walk.place, 0); }
                 let mut parts: Vec<String> = vec![];
                 if self.borrowing.contains(&text) {
                     parts.push(String::from("'a"));
@@ -346,13 +346,13 @@ impl EmitState {
             if trait_text == "Eq" { out.push(&format!("impl{} PartialEq for {} {{\n    fn eq(&self, other: &Self) -> bool {{ {}::eq(self, other) }}\n}}\nimpl{} Eq for {} {{}}\n", declares, me, target_name, declares, me)); } else { out.push(&format!("impl{} PartialOrd for {} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{} Ord for {} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {}::compare(self, other) }}\n}}\n", declares, me, declares, me, target_name)); }
             return Ok(());
         }
-        let hidden = host.seeds_arity(&target_name);
+        let hidden = self.seeds.arity(&target_name);
         if hidden > 0 {
             for s in emit_seeds_declared(0, hidden, false) { head_parts.push(s); }
             for s in emit_seeds_applied(0, hidden) { target_parts.push(s); }
             declares = emit_angled(&head_parts);
             applied = emit_angled(&target_parts);
-            host.place_enter(&target_name, &emit_seeds_applied(0, hidden));
+            emit_seeds_enter(&mut walk.place, &target_name, &emit_seeds_applied(0, hidden));
         }
         let mut declared_by: Option<String> = None;
         if has_trait { declared_by = Some(trait_text.to_owned()); }
@@ -399,7 +399,7 @@ impl EmitState {
                 },
             }
         }
-        host.place_leave();
+        emit_seeds_leave(&mut walk.place);
         out.push("}\n");
         Ok(())
     }
@@ -407,7 +407,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_trait_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &TraitMethod, is_sync: bool, foreign: bool) -> Result<(), Box<dyn std::error::Error>> {
-        host.set_floor(true);
+        walk.floor = true;
         let mut params: Vec<String> = vec![];
         if method.receiver.is_some() { params.push(emit_item_receiver(Option::as_ref(&method.receiver))); }
         for arg in method.args.iter() {
@@ -433,7 +433,7 @@ impl EmitState {
         let mut generics: Vec<String> = vec![];
         for g in method.generics.iter() { generics.push(emit_bounded(world, g)); }
         out.push(&format!("fn {}{}({}){};\n", escaped_name(&emit_text(world, method.name)), emit_angled(&generics), params.join(", "), ret));
-        host.set_floor(false);
+        walk.floor = false;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

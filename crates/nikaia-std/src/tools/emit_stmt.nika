@@ -438,7 +438,7 @@ impl EmitState {
         }
         let own = ty ?? return ""
         let written = self.emit_core_ty_counted(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), own, EmitLifetimes::Elided, count)
-        return f": {host.seeded(written)}"
+        return f": {emit_seeds_seeded(self.seeds, walk, self.trusted_input, written)}"
     }
 
     /// `let`: one name with its keep, a task's packing and its nullable hull,

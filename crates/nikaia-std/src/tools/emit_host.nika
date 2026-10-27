@@ -97,14 +97,10 @@ pub trait EmitHost {
     /// be walked in Nikaia.
     fn held_buffers(ref self, walk: ref EmitWalk, function: ref String, statement: i64, root: ref String) -> Vec[(i64, Vec[i64])]? sync
 
-    /// The seed table at the start of a function (E10-4).
-    fn seeds_begin(ref self, written: ref Item, owner_target: String?, owner_declared: bool) -> EmitSeedsBegin sync
-
-    /// The seed table at the end of its signature.
-    fn seeds_end(ref self, seeded: bool, base: i64) -> EmitSeedsEnd sync
-
-    /// A type as written, with the seeds' hidden parameters in.
-    fn seeded(ref self, written: String) -> String sync
+    /// How the `pub` function or method of this key (`Type::name` for a
+    /// method) declares its hidden map parameters, from the maps' analysis
+    /// (ADR-010 D9); `null` where it has no shape.
+    fn seeds_shape(ref self, key: ref String) -> EmitSeedsShape? sync
 
     /// The parameters of the program's own `main`.
     fn set_main_params(ref self, params: ref Vec[String]) sync
@@ -120,19 +116,6 @@ pub trait EmitHost {
 
     /// Whether the program leaves the memory of what dies to the system.
     fn skip_free_at_exit(ref self) -> bool sync
-    /// How many hidden map parameters a `pub` struct of this name declares
-    /// (ADR-010 D9).
-    fn seeds_arity(ref self, name: ref String) -> i64 sync
-    /// A type with hidden parameters begins at `base` in the seed place.
-    fn place_declare_type(ref self, base: i64) sync
-    /// The type begun at `base` ends: how many hidden parameters it took.
-    fn place_finish(ref self, base: i64) -> i64 sync
-    /// An `impl` of a seeded type begins: a mention of it is `Self`'s.
-    fn place_enter(ref self, target: ref String, params: ref Vec[String]) sync
-    /// The `impl` ends.
-    fn place_leave(ref self) sync
-    /// Whether a barrier's keyed map is written (ADR-010 D9).
-    fn set_floor(ref self, on: bool) sync
     /// A `'…'` as the language below writes it (ADR-320 D8, `check::char_literal`).
     fn char_literal(ref self, written: ref String) -> String sync
 }

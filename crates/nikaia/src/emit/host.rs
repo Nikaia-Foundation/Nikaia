@@ -19,14 +19,9 @@
 //! same `Refused` the Rust side raises, with its position.
 
 use anyhow::Result;
-use nikaia_std::tools::emit_function::{EmitSeedsBegin, EmitSeedsEnd};
 use nikaia_std::tools::emit_host::EmitHost;
-use nikaia_std::tools::emit_item::emit_seeds_declared;
 use nikaia_std::tools::emit_kinds::EmitRefused;
-use nikaia_std::tools::emit_seeds::{
-    emit_seeds_declare, emit_seeds_declare_fn, emit_seeds_declare_type, emit_seeds_enter,
-    emit_seeds_finish, emit_seeds_leave, emit_seeds_within,
-};
+use nikaia_std::tools::emit_seeds::EmitSeedsShape;
 use nikaia_std::tools::emit_state::EmitWalk;
 
 use super::{Emitter, Out};
@@ -264,98 +259,16 @@ impl EmitHost for Emitter<'_> {
         )
     }
 
-    fn seeds_begin(
-        &self,
-        written: &crate::ast::Item,
-        owner_target: Option<String>,
-        owner_declared: bool,
-    ) -> EmitSeedsBegin {
-        let crate::ast::Item::Fn {
-            name,
-            args,
-            ret_type,
-            is_public,
-            ..
-        } = written
-        else {
-            return EmitSeedsBegin {
-                base: 0,
-                seeded: false,
-                in_seeded_impl: false,
-            };
-        };
-        let in_seeded_impl = emit_seeds_within(&self.place.borrow());
-        let base = match (&owner_target, in_seeded_impl) {
-            (Some(o), true) => self.seeds.arity(o),
-            _ => 0,
-        };
-        // **A signature of a barrier** (ADR-010 D9).
-        let barrier = (owner_target.is_some() && owner_declared)
-            || (!owner_declared && name.is_some_and(|n| self.seeds.is_fixed(self.text(n))));
-        self.floor.set(barrier);
-        let seeded = !self.seeds.is_empty()
-            && !barrier
-            && name.is_some()
-            && !owner_declared
-            && args
+    fn seeds_shape(&self, key: &str) -> Option<EmitSeedsShape> {
+        self.seeds.shape(key).map(|shape| EmitSeedsShape {
+            groups: shape.groups.iter().map(|g| *g as i64).collect(),
+            within: shape
+                .within
                 .iter()
-                .map(|a| &a.ty)
-                .chain(ret_type.iter())
-                .any(|t| match *is_public {
-                    true => self.seeds.positions(self.parsed, t) > 0,
-                    false => self.seeds.mentions_a_struct(self.parsed, t),
-                });
-        if seeded {
-            let shape = match (*is_public, name) {
-                (true, Some(n)) => {
-                    let key = match &owner_target {
-                        Some(o) => format!("{}::{}", o, self.text(*n)),
-                        None => self.text(*n).to_string(),
-                    };
-                    self.seeds.shape(&key).cloned()
-                }
-                _ => None,
-            };
-            match shape {
-                Some(shape) => {
-                    let groups: Vec<i64> = shape.groups.iter().map(|g| *g as i64).collect();
-                    let within: Vec<i64> = shape
-                        .within
-                        .iter()
-                        .map(|w| w.map_or(-1, |j| j as i64))
-                        .collect();
-                    emit_seeds_declare_fn(
-                        &mut self.place.borrow_mut(),
-                        base as i64,
-                        &groups,
-                        &within,
-                        shape.start as i64,
-                    )
-                }
-                None => emit_seeds_declare(&mut self.place.borrow_mut(), base as i64),
-            }
-        }
-        EmitSeedsBegin {
-            base: base as i64,
-            seeded,
-            in_seeded_impl,
-        }
-    }
-
-    fn seeds_end(&self, seeded: bool, base: i64) -> EmitSeedsEnd {
-        self.floor.set(false);
-        let hidden = match seeded {
-            true => emit_seeds_finish(&mut self.place.borrow_mut(), base),
-            false => 0,
-        };
-        EmitSeedsEnd {
-            hidden: hidden as i64,
-            declared: emit_seeds_declared(base, hidden, false),
-        }
-    }
-
-    fn seeded(&self, written: String) -> String {
-        Emitter::seeded(self, written)
+                .map(|w| w.map_or(-1, |j| j as i64))
+                .collect(),
+            start: shape.start as i64,
+        })
     }
 
     fn set_main_params(&self, params: &[String]) {
@@ -391,30 +304,6 @@ impl EmitHost for Emitter<'_> {
 
     fn skip_free_at_exit(&self) -> bool {
         self.build.skip_free_at_exit
-    }
-
-    fn seeds_arity(&self, name: &str) -> i64 {
-        self.seeds.arity(name) as i64
-    }
-
-    fn place_declare_type(&self, base: i64) {
-        emit_seeds_declare_type(&mut self.place.borrow_mut(), base);
-    }
-
-    fn place_finish(&self, base: i64) -> i64 {
-        emit_seeds_finish(&mut self.place.borrow_mut(), base)
-    }
-
-    fn place_enter(&self, target: &str, params: &[String]) {
-        emit_seeds_enter(&mut self.place.borrow_mut(), target, params);
-    }
-
-    fn place_leave(&self) {
-        emit_seeds_leave(&mut self.place.borrow_mut());
-    }
-
-    fn set_floor(&self, on: bool) {
-        self.floor.set(on);
     }
 
     fn char_literal(&self, written: &str) -> String {

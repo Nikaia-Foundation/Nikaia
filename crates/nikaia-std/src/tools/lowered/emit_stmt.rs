@@ -311,7 +311,7 @@ impl EmitState {
         if kept { return String::from(""); }
         let own = match ty { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let written = self.emit_core_ty_counted(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), own, EmitLifetimes::Elided, count);
-        format!(": {}", host.seeded(written))
+        format!(": {}", emit_seeds_seeded(&self.seeds, walk, self.trusted_input, written))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -109,6 +109,11 @@ impl Seeds {
         self.shapes.get(key)
     }
 
+    /// The tables, for the emitter's state (`EmitState::seeds`).
+    pub fn tables(&self) -> &EmitSeedsTables {
+        &self.tables
+    }
+
     pub fn is_empty(&self) -> bool {
         self.tables.is_empty()
     }

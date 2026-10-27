@@ -174,7 +174,7 @@ pub fn emit_seeds_fill_calls(tables: &mut EmitSeedsTables, units: &[ParsedView<'
                     let is_public = *is_public; let name = *name;
                     if receiver.is_some() { continue; }
                     let called = unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue });
-                    if !is_public && !emit_seeds_mentions(&tables, unit, args, (ret_type).as_ref()) { continue; }
+                    if !is_public && !emit_seeds_mentions(&tables, unit.words, args, (ret_type).as_ref()) { continue; }
                     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
                     let mut fixed: i64 = 0;
                     for a in args.iter() { fixed += tables.distinct(unit.words, &a.ty, &mut seen); }
@@ -200,18 +200,18 @@ pub fn emit_seeds_fill_calls(tables: &mut EmitSeedsTables, units: &[ParsedView<'
     }
 }
 
-pub(crate) fn emit_seeds_mentions(tables: &EmitSeedsTables, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, args: &[FnArg], ret_type: Option<&Type>) -> bool {
-    for a in args.iter() { if tables.mentions_a_struct(unit.words, &a.ty) { return true; } }
+pub(crate) fn emit_seeds_mentions(tables: &EmitSeedsTables, words: &winnow_grammar::InternerContext, args: &[FnArg], ret_type: Option<&Type>) -> bool {
+    for a in args.iter() { if tables.mentions_a_struct(words, &a.ty) { return true; } }
     if ret_type.is_none() { return false; }
     let ret = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
-    tables.mentions_a_struct(unit.words, ret)
+    tables.mentions_a_struct(words, ret)
 }
 
-pub(crate) fn emit_seeds_holds(tables: &EmitSeedsTables, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, args: &[FnArg], ret_type: Option<&Type>) -> bool {
-    for a in args.iter() { if tables.count(unit.words, &a.ty) > 0 { return true; } }
+pub(crate) fn emit_seeds_holds(tables: &EmitSeedsTables, words: &winnow_grammar::InternerContext, args: &[FnArg], ret_type: Option<&Type>) -> bool {
+    for a in args.iter() { if tables.count(words, &a.ty) > 0 { return true; } }
     if ret_type.is_none() { return false; }
     let ret = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
-    tables.count(unit.words, ret) > 0
+    tables.count(words, ret) > 0
 }
 
 pub(crate) fn emit_seeds_structs(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> Vec<EmitSeedsDeclared> {
@@ -240,7 +240,7 @@ pub(crate) fn emit_seeds_read_barriers(tables: &mut EmitSeedsTables, units: &[Pa
             match &item.node {
                 Item::Trait { methods, .. } => {
                     for m in methods.iter() {
-                        if emit_seeds_holds(&tables, unit, &m.node.args, (m.node.ret_type).as_ref()) {
+                        if emit_seeds_holds(&tables, unit.words, &m.node.args, (m.node.ret_type).as_ref()) {
                             tables.trait_maps = true;
                             tables.barriers.insert(unit.text(m.node.name));
                         }
@@ -253,7 +253,7 @@ pub(crate) fn emit_seeds_read_barriers(tables: &mut EmitSeedsTables, units: &[Pa
                         match &m.node {
                             Item::Fn { name, args, ret_type, .. } => {
                                 let name = *name;
-                                if name.is_some() && emit_seeds_holds(&tables, unit, args, (ret_type).as_ref()) {
+                                if name.is_some() && emit_seeds_holds(&tables, unit.words, args, (ret_type).as_ref()) {
                                     tables.trait_maps = true;
                                     tables.barriers.insert(unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
                                 }
@@ -553,6 +553,68 @@ pub fn emit_seeds_leave(place: &mut EmitSeedsPlace) {
 }
 
 pub fn emit_seeds_within(place: &EmitSeedsPlace) -> bool { place.within_target.is_some() }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitSeedsShape {
+    pub groups: Vec<i64>,
+    pub within: Vec<i64>,
+    pub start: i64,
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_seeds_begin<H: EmitHost>(tables: &EmitSeedsTables, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, written: &Item, owner_target: &Option<String>, owner_declared: bool) -> EmitSeedsBegin {
+    match written {
+        Item::Fn { name, args, ret_type, is_public, .. } => {
+            let is_public = *is_public; let name = *name;
+            let in_seeded_impl = emit_seeds_within(&walk.place);
+            let has_owner = owner_target.is_some();
+            let target: String = nikaia_std::index::or(match owner_target.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+            let mut base: i64 = 0;
+            if has_owner && in_seeded_impl { base = tables.arity(&target); }
+            let has_name = name.is_some();
+            let own_name: String = match name {
+                Some(each) => emit_text(world, each),
+                None => String::from(""),
+            };
+            let barrier = has_owner && owner_declared || !owner_declared && has_name && tables.is_fixed(&own_name);
+            walk.floor = barrier;
+            let mut seeded = !tables.is_empty() && !barrier && has_name && !owner_declared;
+            if seeded { if is_public { seeded = emit_seeds_holds(tables, world.words, args, (ret_type).as_ref()); } else { seeded = emit_seeds_mentions(tables, world.words, args, (ret_type).as_ref()); } }
+            if seeded {
+                let mut shape: Option<EmitSeedsShape> = None;
+                if is_public {
+                    let key: String = if has_owner { format!("{}::{}", target, own_name) } else { own_name.to_owned() };
+                    shape = host.seeds_shape(&key);
+                }
+                match shape {
+                    Some(ref s) => { emit_seeds_declare_fn(&mut walk.place, base, &s.groups, &s.within, s.start); },
+                    None => { emit_seeds_declare(&mut walk.place, base); },
+                }
+            }
+            return EmitSeedsBegin { base, seeded, in_seeded_impl };
+        },
+        _ => return EmitSeedsBegin { base: 0, seeded: false, in_seeded_impl: false },
+    }
+}
+
+pub fn emit_seeds_end(walk: &mut EmitWalk, seeded: bool, base: i64) -> EmitSeedsEnd {
+    walk.floor = false;
+    let mut hidden: i64 = 0;
+    if seeded { hidden = emit_seeds_finish(&mut walk.place, base); }
+    EmitSeedsEnd { hidden, declared: emit_seeds_declared(base, hidden, false) }
+}
+
+pub fn emit_seeds_seeded(tables: &EmitSeedsTables, walk: &mut EmitWalk, trusted: bool, written: String) -> String {
+    let floor = walk.floor;
+    let mut text = written;
+    if floor { text = text.replace("TrustedMap", "HashMap").replace("TrustedSet", "HashSet"); }
+    if tables.is_empty() { return text; }
+    emit_seeds_write(&text, &mut walk.place, trusted && !floor, tables)
+}
 
 pub(crate) fn emit_seeds_position(place: &mut EmitSeedsPlace) -> String {
     if !place.has_shape { return String::from(""); }

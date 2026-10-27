@@ -24,20 +24,12 @@ pub trait EmitHost {
     fn parallelism(&self) -> String;
     fn written(&self, expr: &Expr) -> String;
     fn held_buffers(&self, walk: &EmitWalk, function: &str, statement: i64, root: &str) -> Option<Vec<(i64, Vec<i64>)>>;
-    fn seeds_begin(&self, written: &Item, owner_target: Option<String>, owner_declared: bool) -> EmitSeedsBegin;
-    fn seeds_end(&self, seeded: bool, base: i64) -> EmitSeedsEnd;
-    fn seeded(&self, written: String) -> String;
+    fn seeds_shape(&self, key: &str) -> Option<EmitSeedsShape>;
     fn set_main_params(&self, params: &[String]);
     fn main_params(&self) -> Vec<String>;
     fn refuse_unwritten_item(&self, written: &Spanned<Item>) -> Result<(), Box<dyn std::error::Error>>;
     fn counts_steps(&self) -> bool;
     fn skip_free_at_exit(&self) -> bool;
-    fn seeds_arity(&self, name: &str) -> i64;
-    fn place_declare_type(&self, base: i64);
-    fn place_finish(&self, base: i64) -> i64;
-    fn place_enter(&self, target: &str, params: &[String]);
-    fn place_leave(&self);
-    fn set_floor(&self, on: bool);
     fn char_literal(&self, written: &str) -> String;
 }
 

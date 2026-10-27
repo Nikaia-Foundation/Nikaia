@@ -217,9 +217,9 @@ impl EmitState {
                 let text = emit_text(world, name)
                 // **A `pub` struct's map positions are its hidden type
                 // parameters** (ADR-010 D9), numbered by the fields in order.
-                let seeded = is_public && !is_extern && host.seeds_arity(text) > 0
+                let seeded = is_public && !is_extern && self.seeds.arity(text) > 0
                 if seeded {
-                    host.place_declare_type(0)
+                    emit_seeds_declare_type(walk.place, 0)
                 }
                 let mut derives = self.derives(world, name)
                 // `Keyed` is `std`'s own hasher, which does not compare: the
@@ -256,7 +256,7 @@ impl EmitState {
                 }
                 let mut hidden = 0
                 if seeded {
-                    hidden = host.place_finish(0)
+                    hidden = emit_seeds_finish(walk.place, 0)
                 }
                 // The input lifetime first and the type parameters after it,
                 // which is the order Rust wants them in (ADR-295 D3); the
@@ -475,7 +475,7 @@ impl EmitState {
         }
         // **The methods of a type that declares map parameters take them**
         // (ADR-010 D9): the `impl` is generic over them.
-        let hidden = host.seeds_arity(target_name)
+        let hidden = self.seeds.arity(target_name)
         if hidden > 0 {
             for s in emit_seeds_declared(0, hidden, false) {
                 head_parts.push(s)
@@ -485,7 +485,7 @@ impl EmitState {
             }
             declares = emit_angled(head_parts)
             applied = emit_angled(target_parts)
-            host.place_enter(target_name, emit_seeds_applied(0, hidden))
+            emit_seeds_enter(walk.place, target_name, emit_seeds_applied(0, hidden))
         }
         // **A method narrower than the trait's declaration is the type's own,
         // and the trait reaches it through a bridge** (ADR-288 D2, D25).
@@ -533,7 +533,7 @@ impl EmitState {
                 },
             }
         }
-        host.place_leave()
+        emit_seeds_leave(walk.place)
         out.push("}\n")
     }
 
@@ -542,7 +542,7 @@ impl EmitState {
     /// (ADR-288 D24), a C declaration never can (ADR-302 D2). A trait's
     /// methods are barriers (ADR-010 D9): the keyed map.
     fn emit_trait_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: ref TraitMethod, is_sync: bool, foreign: bool) sync throws {
-        host.set_floor(true)
+        walk.floor = true
         let mut params: Vec[String] = []
         if method.receiver != null {
             params.push(emit_item_receiver(method.receiver))
@@ -587,7 +587,7 @@ impl EmitState {
             generics.push(emit_bounded(world, g))
         }
         out.push(f"fn {escaped_name(emit_text(world, method.name))}{emit_angled(generics)}({params.join(", ")}){ret};\n")
-        host.set_floor(false)
+        walk.floor = false
     }
 
     /// **A type in an `extern "C"` declaration, as the pointer C wants**
