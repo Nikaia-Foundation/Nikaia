@@ -411,7 +411,10 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
         }
     }
     // Text with no type written: what a `.clone()` of it copies (#293).
-    let text = names.len() == 1 && ty == null && copies_text(value, ask, walk)
+    // And the parts of a cut text (#901): `let (_, bound) = line.split_once("let ")
+    // ?? ("", "")` binds two texts, so `bound.clone()` is a copy of text that
+    // keeps no view of `line`.
+    let text = ty == null && ((names.len() == 1 && copies_text(value, ask, walk)) || (names.len() == 2 && cuts_text(value, ask, walk)))
     let is_buffer = a_named_buffer(made) || is_the_buffer(value, ask, walk)
     let mut origins: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     match made {
@@ -566,6 +569,23 @@ fn clones_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
         // keeps no view of it.
         Expr::Index { base, .. } => copies_text(base, ask, walk),
         else => copies_text(receiver, ask, walk),
+    }
+}
+
+// Whether a value is two texts cut from a text (#901): `split_once` or
+// `rsplit_once` of a text, or that `?? ("", "")`.
+fn cuts_text(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match value {
+        Expr::Coalesce { value: cut, fallback, .. } => cuts_text(cut, ask, walk) && texts_pair(fallback, ask, walk),
+        Expr::MethodCall { receiver, method, .. } => (ask.names.resolve(method) == "split_once" || ask.names.resolve(method) == "rsplit_once") && copies_text(receiver, ask, walk),
+        else => false,
+    }
+}
+
+fn texts_pair(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match value {
+        Expr::Tuple(items, _) => items.len() == 2 && copies_text(items[0], ask, walk) && copies_text(items[1], ask, walk),
+        else => cuts_text(value, ask, walk),
     }
 }
 

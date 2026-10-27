@@ -334,7 +334,7 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
         let from = taken_from(ask.names, value);
         if from.is_some() { walk.taken.insert(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned(), nikaia_std::index::or(from, || "".into())); }
     }
-    let text = names.len() == 1 && ty.is_none() && copies_text(value, ask, &walk);
+    let text = ty.is_none() && (names.len() == 1 && copies_text(value, ask, &walk) || names.len() == 2 && cuts_text(value, ask, &walk));
     let is_buffer = a_named_buffer(&made) || is_the_buffer(value, ask, &walk);
     let mut origins: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     match made {
@@ -438,6 +438,21 @@ pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
         } },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); copies_text(base, ask, walk) },
         _ => copies_text(receiver, ask, walk),
+    }
+}
+
+pub(crate) fn cuts_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    match value {
+        Expr::Coalesce { value: cut, fallback, .. } => { let cut = nikaia_std::boxed::open(cut); let fallback = nikaia_std::boxed::open(fallback); cuts_text(cut, ask, walk) && texts_pair(fallback, ask, walk) },
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (ask.names.resolve(method) == "split_once" || ask.names.resolve(method) == "rsplit_once") && copies_text(receiver, ask, walk) },
+        _ => false,
+    }
+}
+
+pub(crate) fn texts_pair(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    match value {
+        Expr::Tuple(items, _) => items.len() == 2 && copies_text(nikaia_std::index::get(&items, 0), ask, walk) && copies_text(nikaia_std::index::get(&items, 1), ask, walk),
+        _ => cuts_text(value, ask, walk),
     }
 }
 

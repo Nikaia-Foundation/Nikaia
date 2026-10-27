@@ -1,0 +1,43 @@
+// #901: a part of `split_once` of a text, cloned into a `Vec[String]`, is a
+// copy of text: it keeps no view of the text it was cut from, so that text is
+// not parked in the frame's keep and a later `out.push(line)` moves it.
+fn cut_once(given: ref Vec[String]) -> String {
+    let mut out: Vec[String] = []
+    let mut names: Vec[String] = []
+    for l in given {
+        let line: String = l.clone()
+        let (_, bound) = line.split_once("let ") ?? ("", "")
+        if bound != "" {
+            names.push(bound.clone())
+            continue
+        }
+        out.push(line)
+    }
+    return f"{names.len()} {out.len()}"
+}
+
+// The converter's shape: a `let mut` line, cut twice, the second cut of a cut.
+fn cut_twice(given: ref Vec[String]) -> String {
+    let mut out: Vec[String] = []
+    let mut paths: Vec[String] = []
+    for l in given {
+        let mut line: String = l.clone()
+        for p in paths {
+            line = line.replace(f"{p}.path()", p)
+        }
+        let (_, bound) = line.trim().split_once("let ") ?? ("", "")
+        let (to, _) = bound.split_once(" = ") ?? ("", "")
+        if to != "" {
+            paths.push(to.clone())
+            continue
+        }
+        out.push(line)
+    }
+    return f"{paths.len()} {out.len()} {paths[0]} {out[0]}"
+}
+
+fn main() {
+    let given: Vec[String] = ["let a = b", "x"]
+    println(cut_once(given))
+    println(cut_twice(given))
+}
