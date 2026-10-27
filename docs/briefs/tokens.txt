@@ -37,3 +37,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 877103 22
 /home/user/Nikaia/docs/briefs/c7-rest-plan.md 2281024 36
 /home/user/Nikaia/docs/briefs/b655-element-view-slots.md 1341262 30
+/home/user/Nikaia/docs/briefs/b655-null-arm-view.md 2739967 55
