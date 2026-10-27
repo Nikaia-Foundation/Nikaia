@@ -1,0 +1,47 @@
+//! R103-R105: `const` -> `comptime`, `const fn`, a `const` of an `impl`.
+comptime LIMIT: i64 = 4096
+pub comptime NAME: ref String = "x"
+pub comptime NAMES: Array[ref String, 2] = ["a", "b"]
+comptime SIZES: Array[u64, 3] = [1, 2, 3]
+comptime MASK: i64 = 0xff
+comptime NEG: i64 = -1
+comptime FLAG: bool = true
+// TODO(rs2nika): `const` of a `char` or a 128-bit integer: a `comptime` holds integers up to 64 bits, floats, `bool`, text, lists, pairs and structs (Part II 10.2)
+const C: char = 'a';
+comptime KEYWORDS: Array[ref String, 3] = ["fn", "let", "if"]
+// TODO(rs2nika): `const` from the macro `include_str!`: no build-time macros in Nikaia; a `comptime` of the value, or a field the host fills
+const STD: &str = include_str!("../std.contracts");
+// TODO(rs2nika): `const` of nested references: a `comptime` list holds values of one length type; a table as `Array`s of pairs, or a `match` in a function
+const HAND: &[(&str, &[&str])] = &[("a", &["b"])];
+pub comptime RT: Array[ref String, 2] = ["x86", "arm"]
+// TODO(rs2nika): `const` of a `char` or a 128-bit integer: a `comptime` holds integers up to 64 bits, floats, `bool`, text, lists, pairs and structs (Part II 10.2)
+const LIMIT_B: u128 = 1 << 60;
+comptime PAIRS: Array[(ref String, i64), 2] = [("a", 1), ("b", 2)]
+// TODO(rs2nika): `const` of a `char` or a 128-bit integer: a `comptime` holds integers up to 64 bits, floats, `bool`, text, lists, pairs and structs (Part II 10.2)
+const SEP: char = ',';
+comptime HULLS: Array[ref String, 2] = [NAME, NAME]
+
+pub struct Foo {
+    pub a: i64,
+}
+
+pub comptime MAX: i64 = 10
+comptime PREFIX: ref String = "nk"
+
+impl Foo {
+    // TODO(rs2nika): `const` in an `impl`: no associated constants in Nikaia; `LIMIT` is taken at the top of the file: rename it, move it above the `impl` as a `comptime`
+    comptime LIMIT: i64 = 2
+    pub fn get(ref self, world: ref CheckWorld) -> i64 sync {
+        return MAX + self.a + PREFIX.len()
+    }
+}
+
+fn twice(x: u64) -> u64 sync {
+    return x * 2
+}
+
+pub fn run() -> i64 sync {
+    comptime INNER: i64 = 3
+    return LIMIT + INNER + NAMES.len() + MAX
+}
+

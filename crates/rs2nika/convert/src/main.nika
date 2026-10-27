@@ -132,6 +132,9 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R100 a `use` inside a `fn` or `mod` block -> once at the top of the file, after its own `use` lines (a list over several lines on one line, a duplicate dropped); `use super::x` drops (the module is the same file), `use super::x as y` keeps a TODO",
         "R101 a `static` that holds a constant -> `comptime`: `static X: &str = \"a\";` -> `comptime X: ref String = \"a\"`, `static X: &[T] = &[a, b];` -> `comptime X: Array[T, 2] = [a, b]`, `[T; N]` -> `Array[T, N]`",
         "R102 a `static` that is a global (atomic, lock, cell, once) keeps a TODO that names the field of the state struct it becomes",
+        "R103 `const X: T = v;` (also `pub(crate)`, in a function, over several lines) -> `comptime X: T = v`, the type as in R101; one from a macro (`include_str!`, `env!`) or of tuples or nested references keeps a TODO",
+        "R104 `const fn` -> `fn`",
+        "R105 a `const` of an `impl` -> a top-level `comptime` above it (no associated constants), `Self::X` / `Type::X` -> `X`; a name already taken keeps a TODO",
         "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
         "R74  struct update `S { a: x, ..base }` -> `base with { a: x }` (Part I 4.2)",
         "R75  a callback `&|a: T| e` -> the lambda `fn(a) { e }` (R26)",
@@ -2818,7 +2821,251 @@ fn rs2nika_static(mut ctx: Rs2nikaCtx, raw: ref String) -> String {
         rs2nika_hit(ctx, "R102")
         return ""
     }
-    rest = rest["static ".len()..<rest.len() - ";".len()].clone()
+    return rs2nika_comptime(ctx, raw, vis, rest["static ".len()..<rest.len() - ";".len()].clone(), "R101")
+}
+
+/// R103: a `const NAME: T = v;` (also `pub(crate)`, inside a function, or
+/// lifted out of an `impl` by R105) -> `comptime NAME: T = v`, the type by the
+/// rules of R101; `const fn` is R104's. `""` for any other line.
+fn rs2nika_const(mut ctx: Rs2nikaCtx, raw: ref String) -> String {
+    let st: String = raw.trim().clone()
+    let mut vis: String = ""
+    let mut rest: String = st.clone()
+    for p in ["pub(crate) ", "pub(super) ", "pub "] {
+        if rest.starts_with(p) {
+            rest = (rest.strip_prefix(p) ?? "").clone()
+            vis = "pub "
+        }
+    }
+    if !rest.starts_with("const ") || rest.starts_with("const fn ") || rest.starts_with("const unsafe ") {
+        return ""
+    }
+    let ind = rs2nika_indent(raw)
+    if !rest.ends_with(";") || !rest.contains(" = ") {
+        rs2nika_hit(ctx, "R103")
+        return f"{ind}// TODO(rs2nika): a `const` without a value on one line: `comptime NAME: T = v`\n{raw}"
+    }
+    let body: String = rest["const ".len()..<rest.len() - ";".len()].clone()
+    let eq = body.find(" = ") ?? 0
+    let value: String = body[eq + " = ".len()..].trim().clone()
+    if value.contains("!(") {
+        rs2nika_hit(ctx, "R103")
+        let mac: String = value[0..<(value.find("!(") ?? 0)].clone()
+        return f"{ind}// TODO(rs2nika): `const` from the macro `{mac}!`: no build-time macros in Nikaia; a `comptime` of the value, or a field the host fills\n{raw}"
+    }
+    let colon = body.find(":") ?? 0
+    if colon == 0 || eq < colon {
+        return ""
+    }
+    let ty: String = rs2nika_lifetimes(body[colon + ":".len()..<eq].clone()).replace(" ", "").replace("&str", "")
+    let mut inner: String = ty.clone()
+    if ty.starts_with("&[") {
+        inner = ty["&[".len()..].clone()
+    }
+    if inner.contains("&") {
+        rs2nika_hit(ctx, "R103")
+        return f"{ind}// TODO(rs2nika): `const` of nested references: a `comptime` list holds values of one length type; a table as `Array`s of pairs, or a `match` in a function\n{raw}"
+    }
+    if ty == "char" || ty.contains("[char") || ty.contains("(char") || ty.contains(",char") || ty.contains("128") {
+        rs2nika_hit(ctx, "R103")
+        return f"{ind}// TODO(rs2nika): `const` of a `char` or a 128-bit integer: a `comptime` holds integers up to 64 bits, floats, `bool`, text, lists, pairs and structs (Part II 10.2)\n{raw}"
+    }
+    return rs2nika_comptime(ctx, raw, vis, body, "R103")
+}
+
+/// The text of a `const` item after its visibility and `const `; `""` for a
+/// line that is no `const` item (a `const fn` is none).
+fn rs2nika_const_rest(line: ref String) -> String {
+    let mut rest: String = line.trim().clone()
+    for p in ["pub(crate) ", "pub(super) ", "pub "] {
+        if rest.starts_with(p) {
+            rest = (rest.strip_prefix(p) ?? "").clone()
+        }
+    }
+    if !rest.starts_with("const ") || rest.starts_with("const fn ") || rest.starts_with("const unsafe ") {
+        return ""
+    }
+    return rest["const ".len()..].clone()
+}
+
+/// The name a `const` item declares; `""` for any other line.
+fn rs2nika_const_name(line: ref String) -> String {
+    let rest = rs2nika_const_rest(line)
+    let colon = rest.find(":") ?? 0
+    return rest[0..<colon].trim().clone()
+}
+
+/// R104: `const fn` -> `fn` (any function may run at build time, Part II 10.2).
+fn rs2nika_const_fn(mut ctx: Rs2nikaCtx, line: ref String) -> String {
+    let ind = rs2nika_indent(line)
+    let st: String = line.trim_start().clone()
+    for p in ["pub(crate) ", "pub(super) ", "pub ", ""] {
+        if st.starts_with(f"{p}const fn ") {
+            rs2nika_hit(ctx, "R104")
+            let after: String = (st.strip_prefix(f"{p}const fn ") ?? "").clone()
+            return f"{ind}{p}fn {after}"
+        }
+    }
+    return line.clone()
+}
+
+/// The type an `impl` head is for: `impl<T> Trait for Foo<T> {` -> `Foo`.
+/// The last word outside `<..>` before `where` or `{`, as the type is the
+/// last segment of the path after `for` (or after `impl`).
+fn rs2nika_impl_type(head: ref String) -> String {
+    let mut depth = 0
+    let mut word: String = ""
+    let mut last: String = ""
+    for ch in head.chars() {
+        if ch == '<' {
+            depth = depth + 1
+        } else if ch == '>' {
+            depth = depth - 1
+        } else if depth == 0 && rs2nika_word(ch) {
+            word.push(ch)
+            continue
+        }
+        if word == "where" {
+            return last
+        }
+        if word != "" {
+            last = word.clone()
+            word = ""
+        }
+        if ch == '{' {
+            return last
+        }
+    }
+    return last
+}
+
+/// R103 a `const` written over several lines is joined into one (the list
+/// `[a,\n b,\n]` -> `[a, b]`); R105 a `const` of an `impl` moves above it as a
+/// top-level `comptime` (Nikaia has no associated constants), and
+/// `Self::NAME` / `Type::NAME` -> `NAME`. A name the file already declares
+/// keeps the `const` in place, with a TODO.
+fn rs2nika_lift_consts(mut ctx: Rs2nikaCtx, lines: ref Vec[String]) -> Vec[String] {
+    let mut joined: Vec[String] = []
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        if rs2nika_const_rest(l) != "" && !l.trim_end().ends_with(";") {
+            let mut text: String = l.trim_end().clone()
+            let mut j = i + 1
+            let mut ok = true
+            while ok && j < lines.len() && !text.ends_with(";") {
+                let part: String = lines[j].trim().clone()
+                if part.starts_with("//") || part == "" {
+                    ok = false
+                } else if text.ends_with("[") || text.ends_with("(") || part.starts_with("]") || part.starts_with(")") {
+                    text = f"{text}{part}"
+                } else {
+                    text = f"{text} {part}"
+                }
+                j = j + 1
+            }
+            if ok && text.ends_with(";") {
+                joined.push(text.replace(",]", "]").replace(",)", ")"))
+                rs2nika_hit(ctx, "R103")
+                i = j
+                continue
+            }
+        }
+        joined.push(l)
+        i = i + 1
+    }
+    let mut taken: Vec[String] = []
+    for l in joined.clone() {
+        if rs2nika_indent(l) == "" && rs2nika_const_rest(l) != "" {
+            taken.push(rs2nika_const_name(l))
+        }
+    }
+    let mut out: Vec[String] = []
+    let mut block: Vec[String] = []
+    let mut lifted: Vec[String] = []
+    let mut names: Vec[String] = []
+    let mut all_names: Vec[String] = []
+    let mut all_tys: Vec[String] = []
+    let mut in_impl = false
+    let mut ty: String = ""
+    for l in joined {
+        if !in_impl {
+            if (l.starts_with("impl ") || l.starts_with("impl<")) && l.trim_end().ends_with("{") {
+                in_impl = true
+                ty = rs2nika_impl_type(l)
+                block = [l.clone()]
+                lifted = []
+                names = []
+            } else {
+                out.push(l.clone())
+            }
+            continue
+        }
+        if l.trim_end() == "}" {
+            block.push(l.clone())
+            for c in lifted.clone() {
+                out.push(c)
+            }
+            if lifted.len() > 0 {
+                out.push("")
+            }
+            for b in block.clone() {
+                out.push(b)
+            }
+            in_impl = false
+            continue
+        }
+        let name = rs2nika_const_name(l)
+        if name != "" && rs2nika_indent(l).len() == 4 {
+            if taken.contains(name) {
+                block.push(f"    // TODO(rs2nika): `const` in an `impl`: no associated constants in Nikaia; `{name}` is taken at the top of the file: rename it, move it above the `impl` as a `comptime`")
+                block.push(l.clone())
+            } else {
+                lifted.push(l.trim_start().clone())
+                names.push(name.clone())
+                taken.push(name.clone())
+                all_names.push(name.clone())
+                all_tys.push(ty.clone())
+                rs2nika_hit(ctx, "R105")
+            }
+            continue
+        }
+        let mut t: String = l.clone()
+        for n in names.clone() {
+            t = rs2nika_replace_word(t, f"Self::{n}", n)
+        }
+        block.push(t)
+    }
+    if in_impl {
+        for c in lifted {
+            out.push(c.clone())
+        }
+        for b in block {
+            out.push(b.clone())
+        }
+    }
+    if all_names.len() == 0 {
+        return out
+    }
+    let mut done: Vec[String] = []
+    for l in out {
+        let mut t: String = l.clone()
+        let mut k = 0
+        while k < all_names.len() {
+            if all_tys[k] != "" {
+                t = rs2nika_replace_word(t, f"{all_tys[k]}::{all_names[k]}", all_names[k])
+            }
+            k = k + 1
+        }
+        done.push(t)
+    }
+    return done
+}
+
+/// The `comptime` a `static` (R101) or a `const` (R103) holding a constant
+/// becomes; `rest` is the text after the keyword, without the `;`.
+fn rs2nika_comptime(mut ctx: Rs2nikaCtx, raw: ref String, vis: ref String, given: ref String, rule: ref String) -> String {
+    let mut rest: String = given.clone()
     let colon = rest.find(":") ?? 0
     let eq = rest.find(" = ") ?? 0
     if colon == 0 || eq < colon {
@@ -2853,7 +3100,7 @@ fn rs2nika_static(mut ctx: Rs2nikaCtx, raw: ref String) -> String {
         nty = rs2nika_ty(ctx, ty)
     }
     let v: String = rs2nika_expr(ctx, value).trim().clone()
-    rs2nika_hit(ctx, "R101")
+    rs2nika_hit(ctx, rule)
     return f"{rs2nika_indent(raw)}{vis}comptime {name}: {nty} = {v}"
 }
 
@@ -5043,7 +5290,8 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
     }
     rs2nika_enum_arity(ctx, src)
     let mut lines: Vec[String] = []
-    for raw in src.split("\n") {
+    for given in src.split("\n") {
+        let raw = rs2nika_const_fn(ctx, given)
         lines.push(rs2nika_reserved(ctx, raw))
         let name = rs2nika_fn_name(raw)
         if name != "" {
@@ -5059,7 +5307,8 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
     if free {
         rs2nika_host_fns(ctx, src)
     }
-    let typed = rs2nika_typed_closures(ctx, lines, facts)
+    let consts = rs2nika_lift_consts(ctx, lines)
+    let typed = rs2nika_typed_closures(ctx, consts, facts)
     let inlined = rs2nika_inline_closures(ctx, typed)
     let hoisted = rs2nika_hoist(ctx, inlined)
     let first = rs2nika_join_chains(ctx, hoisted)
@@ -5098,6 +5347,11 @@ pub fn rs2nika_convert(src: ref String, profile_given: ref String, prefix: ref S
             let konst = rs2nika_static(ctx, raw)
             if konst != "" {
                 out.push(konst)
+                continue
+            }
+            let konst2 = rs2nika_const(ctx, raw)
+            if konst2 != "" {
+                out.push(konst2)
                 continue
             }
             let head = rs2nika_impl_head(ctx, raw)
