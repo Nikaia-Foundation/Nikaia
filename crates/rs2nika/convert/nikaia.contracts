@@ -130,6 +130,12 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
+[fn."rs2nika_comb_match"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(given: ref String) -> String"
+
 [fn."rs2nika_convert"]
 pub = true
 views = ["src: borrowed", "profile_given: borrowed", "prefix: borrowed", "repo: borrowed", "facts: borrowed"]
@@ -777,6 +783,12 @@ sync = "inferred"
 touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
+
+[fn."rs2nika_surely_option"]
+sync = "inferred"
+touches = []
+views = ["recv: borrowed"]
+signature = "(recv: ref String) -> bool"
 
 [fn."rs2nika_tail_returns"]
 sync = "inferred"

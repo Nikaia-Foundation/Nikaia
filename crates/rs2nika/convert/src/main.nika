@@ -127,6 +127,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R71  a `None =>` / `None if guard =>` arm -> `null =>` / `null if guard =>` (ADR-352)",
         "R72  a `Some(p) =>` arm -> `p =>`, `Some(_)` -> `_value` (the other arms of a `match` with `null` match the `T`, ADR-352)",
         "R95  R72 inside a one-line `match` (`match e { Some(p) => a, None => b }` -> `match e { p => a, null => b }`); a `Some(` in a tuple or struct pattern keeps its TODO",
+        "R96  what R79 and R63 leave of an option's combinator with a closure -> a `match`: `e.is_some_and(|x| p)` -> `(match e { x => p, null => false })`, `e.map_or(d, |x| b)` -> `(.. null => d })`, `e.map(|x| b)` / `.and_then(..)` -> `(.. null => null })`, the last three only where `e` ends in a call that hands back an option",
         "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
         "R74  struct update `S { a: x, ..base }` -> `base with { a: x }` (Part I 4.2)",
         "R75  a callback `&|a: T| e` -> the lambda `fn(a) { e }` (R26)",
@@ -2053,6 +2054,117 @@ fn rs2nika_bool_then(mut ctx: Rs2nikaCtx, given: ref String) -> String {
 }
 
 /// A receiver that is an iterator, not an `Option`.
+/// R96: what R79 and R63 leave of an option's combinator with a closure ->
+/// a `match` over the option (ADR-352 D1): `e.is_some_and(|x| p)` -> `(match
+/// e { x => p, null => false })`, `e.map_or(d, |x| b)` -> `(match e { x => b,
+/// null => d })`, `e.map(|x| b)` / `e.and_then(|x| b)` -> `(match e { x => b,
+/// null => null })`. `map`, `and_then` and `map_or` only where `e` is surely
+/// an option (its last call is one that hands one back), since a `Result` has
+/// them too.
+fn rs2nika_comb_match(given: ref String) -> String {
+    let mut s: String = given.clone()
+    for name in ["is_some_and", "map_or", "and_then", "map"] {
+        let mut from = 0
+        while true {
+            let c: Vec[scalar] = s.chars().collect()
+            let at = rs2nika_find_from(c, f".{name}(", from)
+            if at < 0 {
+                break
+            }
+            from = at + 1
+            let open = at + name.len() + 1
+            let end = rs2nika_closing(c, open, '(', ')')
+            if end < 0 {
+                break
+            }
+            let start = rs2nika_recv_start(c, at)
+            let mut recv: String = rs2nika_text(c, start, at)
+            for tail in [".as_ref()", ".as_deref()"] {
+                if recv.ends_with(tail) {
+                    recv = (recv.strip_suffix(tail) ?? "").clone()
+                }
+            }
+            if recv == "" || (name != "is_some_and" && !rs2nika_surely_option(recv)) {
+                continue
+            }
+            let mut arg: String = rs2nika_text(c, open + 1, end).trim().clone()
+            let mut none: String = "null"
+            if name == "is_some_and" {
+                none = "false"
+            } else if name == "map_or" {
+                let comma = arg.find(", |") ?? continue
+                none = arg[0..<comma].trim().clone()
+                arg = arg[comma + ", ".len()..<arg.len()].clone()
+            }
+            if !arg.starts_with("|") || arg.starts_with("||") {
+                continue
+            }
+            let ac: Vec[scalar] = arg.chars().collect()
+            let mut bar = 1
+            let mut depth = 0
+            while bar < ac.len() && !(ac[bar] == '|' && depth == 0) {
+                if ac[bar] == '(' {
+                    depth = depth + 1
+                } else if ac[bar] == ')' {
+                    depth = depth - 1
+                }
+                bar = bar + 1
+            }
+            if bar >= ac.len() {
+                continue
+            }
+            let pat: String = rs2nika_text(ac, 1, bar).replace("&", "").trim().clone()
+            let body: String = rs2nika_text(ac, bar + 1, ac.len()).trim().clone()
+            // a `?` in the closure leaves the closure, not the function; a
+            // `match` in it would hand R12 a second `=>`
+            if pat == "" || pat.contains(":") || body == "" || body.contains("?") || body.contains("=>") || recv.starts_with(".") || (start > 0 && c[start - 1] == '?') {
+                continue
+            }
+            let pre: String = rs2nika_text(c, 0, start)
+            let post: String = rs2nika_text(c, end + 1, c.len())
+            s = f"{pre}(match {recv} {{ {pat} => {body}, null => {none} }}){post}"
+            from = 0
+        }
+    }
+    return s
+}
+
+/// For R96: whether a receiver surely is an `Option`, by the call it ends in.
+fn rs2nika_surely_option(recv: ref String) -> bool {
+    if recv.starts_with("(match ") && recv.ends_with("})") {
+        return true
+    }
+    for m in [".ok()", ".err()", ".next()", ".next_back()", ".first()", ".last()", ".file_name()", ".extension()", ".file_stem()", ".parent()", ".pop()"] {
+        if recv.ends_with(m) {
+            return true
+        }
+    }
+    let c: Vec[scalar] = recv.chars().collect()
+    if !recv.ends_with(")") {
+        return false
+    }
+    let mut depth = 0
+    let mut at = c.len() - 1
+    while at >= 0 {
+        if c[at] == ')' {
+            depth = depth + 1
+        } else if c[at] == '(' {
+            depth = depth - 1
+            if depth == 0 {
+                break
+            }
+        }
+        at = at - 1
+    }
+    let head: String = rs2nika_text(c, 0, at)
+    for m in [".get", ".find", ".nth", ".split_once", ".rsplit_once", ".strip_prefix", ".strip_suffix", ".find_map", ".position", ".checked_sub", ".checked_add", ".get_mut", ".remove", ".and_then", ".filter", ".or_else", ".rfind", ".max_by_key", ".min_by_key"] {
+        if head.ends_with(m) {
+            return true
+        }
+    }
+    return false
+}
+
 fn rs2nika_iter_recv(recv: ref String) -> bool {
     for m in ["iter()", "chars()", "lines()", "bytes()", "split", "keys()", "values()", "windows(", "drain(", "args()", "zip("] {
         if recv.contains(m) {
@@ -2076,7 +2188,11 @@ fn rs2nika_opt_comb_hit(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     if general != out {
         rs2nika_hit(ctx, "R63")
     }
-    return general
+    let matched: String = rs2nika_comb_match(general)
+    if matched != general {
+        rs2nika_hit(ctx, "R96")
+    }
+    return matched
 }
 
 /// R63: what R79 leaves of `o.is_some_and(f)` on a plain path `o`:
@@ -2553,7 +2669,7 @@ fn rs2nika_turbofish(mut ctx: Rs2nikaCtx, given: ref String) -> String {
 
 /// The `TODO(rs2nika)` markers a Rust line asks for.
 fn rs2nika_todos(line: ref String) -> Vec[String] {
-    let comb: String = rs2nika_some_and(rs2nika_opt_comb(line))
+    let comb: String = rs2nika_comb_match(rs2nika_some_and(rs2nika_opt_comb(line)))
     let mut todo: Vec[String] = []
     let st: String = line.trim().clone()
     if line.contains(" && let ") || ((st.starts_with("if let ") || st.starts_with("} else if let ")) && st.ends_with("&&")) || st.starts_with("&& let ") {
