@@ -1,2 +1,2 @@
-b881-empty-string-local.md
+b883-reassigned-trim-result.md
 e12-3a.md
