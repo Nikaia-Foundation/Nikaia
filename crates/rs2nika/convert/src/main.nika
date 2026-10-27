@@ -10252,6 +10252,26 @@ fn rs2nika_struct_field(mut ctx: Rs2nikaCtx, line: String) -> String {
 }
 
 pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo: String, facts: ref Vec[String]) -> Rs2nikaOut {
+    let loaded = rs2nika_loaded(repo, profile_given.contains("+view"))
+    return rs2nika_convert_in(loaded, src, profile_given, prefix, facts)
+}
+
+/// What a run reads from the repository, once for all the files it
+/// converts: the names `tools/*.nika` declares (R66), rs2nika.names and its
+/// `[view]` table. Each file starts from a copy, so files convert side by side.
+pub fn rs2nika_loaded(repo: String, view: bool) -> Rs2nikaCtx {
+    let mut ctx = Rs2nikaCtx { profile: "", free: false, world: "", prefix: "", hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: [], parsed_names: [], impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [] }
+    if repo != "" {
+        rs2nika_load(ctx, repo)
+    }
+    if view {
+        ctx.view_names = rs2nika_view_names(repo)
+    }
+    return ctx
+}
+
+/// One file, from what `rs2nika_loaded` read: no file is read here.
+pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, src: String, profile_given: String, prefix: String, facts: ref Vec[String]) -> Rs2nikaOut {
     // R83: `check-free` / `emit-free` turn the methods into free functions
     let free = profile_given.ends_with("-free")
     let mut base: String = profile_given.clone()
@@ -10270,13 +10290,14 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     } else if profile == "emit" {
         world = "EmitWorld"
     }
-    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: rs2nika_opt_names(src), parsed_names: rs2nika_parsed_names(src), impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [] }
-    if repo != "" {
-        rs2nika_load(ctx, repo)
-    }
-    if view {
-        ctx.view_names = rs2nika_view_names(repo)
-    }
+    let mut ctx: Rs2nikaCtx = loaded.clone()
+    ctx.profile = base.clone()
+    ctx.free = free
+    ctx.world = world
+    ctx.prefix = prefix.clone()
+    ctx.opt_names = rs2nika_opt_names(src)
+    ctx.parsed_names = rs2nika_parsed_names(src)
+    ctx.view = view
     rs2nika_enum_arity(ctx, src)
     let aliased = rs2nika_parsed_alias(ctx, src.clone())
     let pruned0 = rs2nika_rust_impls(ctx, aliased)
@@ -12497,14 +12518,14 @@ fn rs2nika_corpus(dir: String) -> i64 {
         eprintln(f"cannot read {dir}/manifest: {error}")
         return 1
     }
-    let mut bad = 0
+    // the files are read first, the cases converted on all cores, the lines printed in order
+    let mut cases: Vec[Rs2nikaCase] = []
     for line in manifest.lines() {
         let cols: Vec[String] = line.split(" ").map(fn(c) { c.clone() }).collect()
         if cols.len() < 3 {
             continue
         }
         let name: String = cols[0].clone()
-        let floor: i64 = text::parse_i64(cols[1].clone()) ?? 0
         let mut prefix: String = ""
         if cols.len() > 3 {
             prefix = cols[3].clone()
@@ -12517,15 +12538,121 @@ fn rs2nika_corpus(dir: String) -> i64 {
             eprintln(f"cannot read {dir}/{name}/after.nika: {error}")
             return 1
         }
-        let out = rs2nika_convert(before, cols[2], prefix, "", [])
-        let s = rs2nika_score(out.text, after)
-        println(f"{name}: kept {s.kept} of {s.total} lines")
-        if s.kept < floor {
-            println(f"{name}: below its floor {floor}")
+        cases.push(Rs2nikaCase { name: name, floor: text::parse_i64(cols[1].clone()) ?? 0, profile: cols[2].clone(), prefix: prefix, before: before, after: after })
+    }
+    let loaded = rs2nika_loaded("", cases.iter().any(fn(c) { c.profile.contains("+view") }))
+    let scores: Vec[Rs2nikaScore] = cases.par_iter().map(fn(c) { rs2nika_score(rs2nika_convert_in(loaded, c.before.clone(), c.profile.clone(), c.prefix.clone(), []).text, c.after.clone()) }).collect()
+    let mut bad = 0
+    let mut i = 0
+    for c in cases {
+        println(f"{c.name}: kept {scores[i].kept} of {scores[i].total} lines")
+        i = i + 1
+        if scores[i - 1].kept < c.floor {
+            println(f"{c.name}: below its floor {c.floor}")
             bad = bad + 1
         }
     }
     return bad
+}
+
+/// `--out DIR a.rs b.rs ..`: the repository is read once, the files are
+/// converted on all cores, and each gives `DIR/<name>.nika` and, where there
+/// is something to say, `DIR/<name>.notes`. Without `--prefix` each file's
+/// functions are prefixed with its name (`project_`). The number of files
+/// that could not be read or written.
+fn rs2nika_many(paths: ref Vec[String], out_dir: String, profile: String, prefix: String, repo: String, facts_path: String, whole: bool) -> i64 {
+    let mut jobs: Vec[Rs2nikaCase] = []
+    let mut facts: Vec[Vec[String]] = []
+    let mut bad = 0
+    for p in paths {
+        let text = fs::read_to_string(ref p, fs::Root::Anywhere) catch {
+            eprintln(f"cannot read {p}: {error}")
+            bad = bad + 1
+            continue
+        }
+        let mut name = rs2nika_file_stem(p)
+        // `a/seeds.rs` beside `b/seeds.rs`: the second is named by its path
+        if jobs.iter().any(fn(j) { j.name == name }) {
+            name = p.trim_end_matches(".rs").replace("/", "_").trim_start_matches("._").clone()
+        }
+        let mut own: String = prefix.clone()
+        if own == "" {
+            own = f"{name}_"
+        }
+        jobs.push(Rs2nikaCase { name: name, floor: 0, profile: profile.clone(), prefix: own, before: text, after: "" })
+        facts.push(rs2nika_read_facts(facts_path, p.clone()))
+    }
+    let loaded = rs2nika_loaded(repo, profile.contains("+view"))
+    let mut at: Vec[i64] = []
+    let mut i = 0
+    while i < jobs.len() {
+        at.push(i)
+        i = i + 1
+    }
+    let outs: Vec[Rs2nikaOut] = at.par_iter().map(fn(k) { rs2nika_convert_in(loaded, jobs[k].before.clone(), jobs[k].profile.clone(), jobs[k].prefix.clone(), facts[k]) }).collect()
+    fs::create_dir(ref out_dir, fs::Root::Anywhere; recursive: true) catch {
+        eprintln(f"cannot make {out_dir}: {error}")
+        return bad + 1
+    }
+    let mut k = 0
+    while k < jobs.len() {
+        let name: String = jobs[k].name.clone()
+        let mut text: String = f"{outs[k].text}\n"
+        if whole {
+            text = rs2nika_as_file(outs[k].text, rs2nika_state_of(profile))
+        }
+        let mut notes: String = ""
+        for t in outs[k].twins {
+            notes = f"{notes}// rs2nika: {t}\n"
+        }
+        if outs[k].missing.len() > 0 {
+            notes = f"{notes}// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): {rs2nika_join(outs[k].missing, ", ")}\n"
+        }
+        fs::write(f"{out_dir}/{name}.nika", fs::Root::Anywhere, text) catch {
+            eprintln(f"cannot write {out_dir}/{name}.nika: {error}")
+            bad = bad + 1
+        }
+        if notes != "" {
+            fs::write(f"{out_dir}/{name}.notes", fs::Root::Anywhere, notes) catch {
+                eprintln(f"cannot write {out_dir}/{name}.notes: {error}")
+                bad = bad + 1
+            }
+        }
+        println(f"{name}: {outs[k].text.lines().count()} lines, {outs[k].missing.len()} names missing")
+        k = k + 1
+    }
+    return bad
+}
+
+/// `parser/mod.rs` -> `parser`, `project.rs` -> `project`.
+fn rs2nika_file_stem(path: String) -> String {
+    let parts: Vec[String] = path.split("/").map(fn(p) { p.clone() }).collect()
+    let mut last: String = parts[parts.len() - 1].clone()
+    if last == "mod.rs" && parts.len() > 1 {
+        last = parts[parts.len() - 2].clone()
+    }
+    return last.trim_end_matches(".rs").clone()
+}
+
+/// The state type `--file` wraps a draft's functions for.
+fn rs2nika_state_of(profile: String) -> String {
+    if profile.starts_with("check") {
+        return "CheckState"
+    }
+    if profile.starts_with("emit") {
+        return "EmitState"
+    }
+    return "State"
+}
+
+/// One case of `--corpus`: a Rust file and the Nikaia a person wrote from it.
+struct Rs2nikaCase {
+    name: String,
+    floor: i64,
+    profile: String,
+    prefix: String,
+    before: String,
+    after: String,
 }
 
 fn main() throws {
@@ -12541,6 +12668,8 @@ fn main() throws {
     let mut facts_path: String = ""
     let mut only: String = ""
     let mut path: String = ""
+    let mut paths: Vec[String] = []
+    let mut out_dir: String = ""
     let mut lints: Vec[String] = []
     let mut args: Vec[String] = []
     for a in cli::args() {
@@ -12585,9 +12714,13 @@ fn main() throws {
         } else if arg == "--repo" {
             at = at + 1
             repo = args[at].clone()
+        } else if arg == "--out" {
+            at = at + 1
+            out_dir = args[at].clone()
         } else if lint || score {
             lints.push(arg)
         } else {
+            paths.push(arg.clone())
             path = arg
         }
         at = at + 1
@@ -12646,6 +12779,16 @@ fn main() throws {
     if repo == "?" {
         repo = rs2nika_find_repo()
     }
+    if out_dir != "" || paths.len() > 1 {
+        if out_dir == "" {
+            eprintln("several files are converted into a directory: `--out DIR`")
+            process::exit(2)
+        }
+        if rs2nika_many(paths, out_dir, profile, prefix, repo, facts_path, whole) > 0 {
+            process::exit(1)
+        }
+        return
+    }
     let mut text = fs::read_to_string(ref path, fs::Root::Anywhere) catch {
         eprintln(f"cannot read {path}: {error}")
         return
@@ -12659,13 +12802,7 @@ fn main() throws {
     }
     let out = rs2nika_convert(text, profile, prefix, repo, rs2nika_read_facts(facts_path, path))
     if whole {
-        let mut state: String = "State"
-        if profile == "check" {
-            state = "CheckState"
-        } else if profile == "emit" {
-            state = "EmitState"
-        }
-        print(rs2nika_as_file(out.text, state))
+        print(rs2nika_as_file(out.text, rs2nika_state_of(profile)))
     } else {
         println(out.text)
     }

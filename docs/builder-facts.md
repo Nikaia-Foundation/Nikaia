@@ -129,7 +129,10 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   `--lint F.nika` flags known defects in hand-written Nikaia, and
   `rs2nika.names` beside it maps Rust helpers to their Nikaia names;
   `--score DRAFT FINAL` prints how much of a draft the committed code kept
-  (the report's `Rs2nika:` field). Iterator chains (`.iter().map(..).sum()`,
+  (the report's `Rs2nika:` field). `--out DIR A.rs B.rs ..` converts many
+  files in one run, on all cores, reading the repository once: `DIR/<name>.nika`
+  and `DIR/<name>.notes` (the stderr lines), each prefixed `<name>_` unless
+  `--prefix` is given; `--corpus` also scores its cases in parallel. Iterator chains (`.iter().map(..).sum()`,
   `.any(..)`, `.filter(..).map(..).collect()`) are the house style in
   `tools/*.nika`, as the converter writes them (owner, 2026-10-27). Rust's
   types come from rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`); open
