@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1242] — 2026-10-27
+
+### A plain value in a tuple at a `T?` part is wrapped
+
+A plain value in a tuple literal at a `T?` part (an argument, a `let`, a `return`, a nested tuple) is wrapped as `Some(..)`, as it is when passed to a `T?` parameter: `let p: (i64?, String) = (1, "a")` compiles (#887).
+
 ## [0.0.1241] — 2026-10-27
 
 ### A `catch` on a call used as a statement drops the call's value
