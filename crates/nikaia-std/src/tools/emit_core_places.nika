@@ -191,6 +191,14 @@ impl EmitState {
 
     /// `(a, b)`.
     pub fn emit_core_tuple[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let sliced: Vec[bool] = []
+        self.emit_core_tuple_sliced(world, walk, out, host, parts, sliced, depth, flow, scope)
+    }
+
+    /// A tuple whose parts at the positions `sliced` marks are lent as
+    /// slices, `&(part)[..]`: a match subject whose arms put a list pattern
+    /// there (ADR-355 D5, #896).
+    pub fn emit_core_tuple_sliced[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[Expr], sliced: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         out.push("(")
         let mut i = 0
         for part in parts {
@@ -198,6 +206,12 @@ impl EmitState {
                 out.push(", ")
             }
             i += 1
+            if i <= sliced.len() && sliced[i - 1] {
+                out.push("&(")
+                self.emit_expr(world, walk, out, host, part, depth, flow, scope)
+                out.push(")[..]")
+                continue
+            }
             // **A part matched against a text literal is matched as a view**
             // (#890, `text_parts`).
             if self.facts.text_parts.contains_key(node_key(part)) {

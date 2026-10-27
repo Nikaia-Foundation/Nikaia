@@ -117,6 +117,25 @@ fn emit_match_subject[H: EmitHost](state: ref EmitState, world: ref EmitWorld, m
             list = true
         }
     }
+    // **A tuple whose arms put a list pattern at a position** matches that
+    // position as a slice, the others as they are (#896).
+    let parts: Vec[Expr] = match value {
+        Expr::Tuple(parts, _) => parts.clone(),
+        else => [],
+    }
+    if parts.len() > 0 {
+        let mut sliced: Vec[bool] = []
+        for _ in parts {
+            sliced.push(false)
+        }
+        for arm in arms {
+            emit_match_list_positions(arm.pattern, sliced)
+        }
+        if sliced.contains(true) {
+            state.emit_core_tuple_sliced(world, walk, out, host, parts, sliced, depth, flow, scope)
+            return
+        }
+    }
     // A slice is reached through the reference by itself.
     // **A `T?` of views of values that copy is matched as the values**
     // (ADR-231 D1, `copied_walks`).
@@ -155,6 +174,29 @@ fn emit_match_is_list(pattern: ref MatchPattern) -> bool {
         else => {}
     }
     return false
+}
+
+/// Marks the positions of a bare tuple pattern that are list patterns.
+fn emit_match_list_positions(pattern: ref MatchPattern, mut sliced: Vec[bool]) {
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            if path.len() == 0 && parts.len() == sliced.len() {
+                let mut k = 0
+                for part in parts {
+                    if emit_match_is_list(part) {
+                        sliced[k] = true
+                    }
+                    k += 1
+                }
+            }
+        },
+        MatchPattern::Or(alternatives) => {
+            for alternative in alternatives {
+                emit_match_list_positions(alternative, sliced)
+            }
+        },
+        else => {}
+    }
 }
 
 fn emit_match_path(world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol]) -> String {

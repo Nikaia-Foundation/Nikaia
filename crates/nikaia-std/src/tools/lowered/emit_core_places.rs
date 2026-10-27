@@ -103,11 +103,25 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_tuple<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let sliced: Vec<bool> = vec![];
+        self.emit_core_tuple_sliced(world, walk, out, host, parts, &sliced, depth, flow, scope)?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_tuple_sliced<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[Expr], sliced: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         out.push("(");
-        let mut i = 0;
+        let mut i: i64 = 0;
         for part in parts.iter() {
             if i > 0 { out.push(", "); }
             i += 1;
+            if ((i) as usize) <= sliced.len() && *nikaia_std::index::get(&sliced, nikaia_std::index::at(i - 1)) {
+                out.push("&(");
+                self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
+                out.push(")[..]");
+                continue;
+            }
             if self.facts.text_parts.contains_key(&node_key(part)) {
                 let nullable = nikaia_std::index::or(self.facts.text_parts.get(&node_key(part)), || false);
                 let plain = matches!(part, Expr::Variable(..) | Expr::Field { .. });

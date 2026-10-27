@@ -1,0 +1,40 @@
+// A list pattern at a position of a tuple subject matches that position as a
+// slice, `&(a.args)[..]`, and leaves the other positions as they are (#896).
+struct A { args: Vec[i64] }
+
+fn one(a: ref A, b: bool) -> String {
+    return match (ref a.args, b) {
+        ([], true) => "none",
+        ([x], true) => f"one {x}",
+        else => "more",
+    }
+}
+
+fn two(a: ref A, c: ref A) -> String {
+    return match (ref a.args, ref c.args) {
+        ([x], [y]) => f"pair {x} {y}",
+        ([], [] | [_]) => "left empty",
+        else => "other",
+    }
+}
+
+fn alone(a: ref A) -> String {
+    return match ref a.args {
+        [] => "empty",
+        [x] => f"single {x}",
+        else => "many",
+    }
+}
+
+fn main() {
+    println(one(A { args: [3] }, true))
+    println(one(A { args: [] }, true))
+    println(one(A { args: [1, 2] }, true))
+    println(one(A { args: [3] }, false))
+    println(two(A { args: [4] }, A { args: [5] }))
+    println(two(A { args: [] }, A { args: [5] }))
+    println(two(A { args: [4] }, A { args: [] }))
+    println(alone(A { args: [7] }))
+    println(alone(A { args: [] }))
+    println(alone(A { args: [7, 8] }))
+}

@@ -65,6 +65,19 @@ pub(crate) fn emit_match_subject<H: EmitHost>(state: &EmitState, world: &EmitWor
     }
     let mut list = false;
     for arm in arms.iter() { if emit_match_is_list(&arm.pattern) { list = true; } }
+    let parts: Vec<Expr> = match value {
+        Expr::Tuple(parts, _) => parts.to_owned(),
+        _ => vec![],
+    };
+    if !parts.is_empty() {
+        let mut sliced: Vec<bool> = vec![];
+        for _ in parts.iter() { sliced.push(false); }
+        for arm in arms.iter() { emit_match_list_positions(&arm.pattern, &mut sliced); }
+        if sliced.contains(&true) {
+            state.emit_core_tuple_sliced(world, walk, out, host, &parts, &sliced, depth, flow, scope)?;
+            return Ok(());
+        }
+    }
     let a_call = matches!(value, Expr::MethodCall { .. });
     let copied = !list && copied_view && !a_call;
     if list { out.push("&("); } else if copied {
@@ -83,6 +96,22 @@ pub(crate) fn emit_match_is_list(pattern: &MatchPattern) -> bool {
         _ => { },
     }
     false
+}
+
+pub(crate) fn emit_match_list_positions(pattern: &MatchPattern, sliced: &mut Vec<bool>) {
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            if path.is_empty() && (parts.len() as i64) == sliced.len() as i64 {
+                let mut k: i64 = 0;
+                for part in parts.iter() {
+                    if emit_match_is_list(part) { { let __nikaia_stored = true; nikaia_std::index::set(&mut *sliced, (k) as usize, __nikaia_stored); } }
+                    k += 1;
+                }
+            }
+        },
+        MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { emit_match_list_positions(alternative, sliced); } },
+        _ => { },
+    }
 }
 
 pub(crate) fn emit_match_path(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> String {
