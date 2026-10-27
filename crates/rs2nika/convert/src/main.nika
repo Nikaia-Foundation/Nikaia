@@ -226,6 +226,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R213 check profiles: `let parsed = self.parsed;` is dropped, `parsed` reads `self.parsed` to the end of the function",
         "R214 `println!(\"…{}\", a)` (also `eprintln!`, `print!`, `eprint!`) -> `println(f\"…{a}\")`; a text without holes stays plain, `println!()` -> `println(\"\")`",
         "R215 a reserved word renamed with `_` is renamed inside a text only where it is a hole: `\"with {with}\"` -> `\"with {with_}\"`",
+        "R216 a text continued with `\\` that no later line closes (a cut input) is named on stderr with its line",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -1034,6 +1035,52 @@ fn rs2nika_tidy(text: String) -> String {
         }
     }
     return out.replace(" )", ")").replace(" ]", "]")
+}
+
+/// R216: a text continued with `\` that no later line closes: the input was
+/// cut (an extraction that stopped inside the text), and everything after it
+/// would be read as text. Named on stderr with its line.
+fn rs2nika_open_texts(src: String) -> Vec[String] {
+    let lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut out: Vec[String] = []
+    let mut i = 0
+    while i < lines.len() {
+        let first = i
+        let mut quotes = 0
+        while i < lines.len() && lines[i].trim_end().ends_with("\\") {
+            quotes = quotes + rs2nika_quotes(lines[i])
+            i = i + 1
+        }
+        if i > first {
+            if i < lines.len() {
+                quotes = quotes + rs2nika_quotes(lines[i])
+            }
+            if quotes % 2 == 1 {
+                let at = first + 1
+                out.push(f"line {at}: a text continued with `\\` is not closed: the input is cut, the draft after it is garbled")
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+/// The `"` of a line that opens or closes a text: not `\"`, not `'"'`.
+fn rs2nika_quotes(l: String) -> i64 {
+    let c: Vec[scalar] = l.chars().collect()
+    let mut n = 0
+    let mut k = 0
+    while k < c.len() {
+        if c[k] == '\\' {
+            k = k + 2
+            continue
+        }
+        if c[k] == '"' && !(k > 0 && c[k - 1] == '\'' && k + 1 < c.len() && c[k + 1] == '\'') {
+            n = n + 1
+        }
+        k = k + 1
+    }
+    return n
 }
 
 /// R37: rustfmt's multi-line calls, patterns and struct literals on one line.
@@ -10551,6 +10598,7 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, src: String, profile_given: St
         missing = rs2nika_missing(ctx, text)
         twins = rs2nika_twins(ctx, src)
     }
+    twins.extend(rs2nika_open_texts(src))
     return Rs2nikaOut { text: text, hits: ctx.hits, missing: missing, twins: twins }
 }
 
