@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1232] — 2026-10-27
+
+**A clone of a trimmed `x ?? ""` copies text too** (#880). `copies_text`
+(`tools/buffers.nika`) now also counts `(x ?? "").trim().clone()` and its
+kin as a copy, the form rs2nika's R92 writes for a map's entry, so a
+`String` moved beside it stays owned. Test `string_move_not_view`.
+
 ## [0.0.1231] — 2026-10-27
 
 **A `String` moved after a clone of `x.strip_prefix(..) ?? ""` stays owned**
