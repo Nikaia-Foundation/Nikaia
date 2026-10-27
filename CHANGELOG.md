@@ -8,6 +8,18 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1248] — 2026-10-27
+
+### `replace` hands back text of its own
+
+The result of `replace` and `replacen` is text of its own, not a view of the text they are called on, so `s = out.replace(a, b)` no longer puts `out` into the frame's keep, and a pattern built in a loop and handed to `replace` stays an owned `String` (found in the converter; `&&String` was no pattern, and a kept buffer could not be pushed to).
+
+## [0.0.1247] — 2026-10-27
+
+### A value moved in an arm is handed over
+
+A value moved in an arm of an `if` or `match` is handed over: reading it after the statement is NK2105, as after `let s = t` (#892).
+
 ## [0.0.1246] — 2026-10-27
 
 ### A text literal in a tuple pattern, and a literal is the same part

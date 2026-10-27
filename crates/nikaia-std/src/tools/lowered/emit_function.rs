@@ -156,7 +156,6 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<String>, owner_declared_by: Option<String>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let __keep_frame = nikaia_std::tether::Keep::new();
         match &written.node {
             Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
@@ -492,8 +491,8 @@ impl EmitState {
                             match ret_type {
                                 Some(t) => {
                                     let escaped_type = escaped_name(&emit_text(world, t.name));
-                                    let before = __keep_frame.put(format!("{}<{}>", escaped_type, self.lifetime_args(&emit_text(world, t.name), "'r")));
-                                    let after = __keep_frame.put(format!("{}<{}>", escaped_type, found.fields.join(", ")));
+                                    let before = format!("{}<{}>", escaped_type, self.lifetime_args(&emit_text(world, t.name), "'r"));
+                                    let after = format!("{}<{}>", escaped_type, found.fields.join(", "));
                                     returned = nikaia_std::search::replacen(&returned, &before, &after, 1);
                                 },
                                 None => { },

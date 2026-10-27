@@ -55,7 +55,6 @@ impl EmitState {
         (String::from(""), String::from(""))
     }
     pub(crate) fn main_words_of(&self, world: &EmitWorld<'_, '_, '_, '_>, args: &[FnArg], config: &[ConfigParam], about: &str, types: &[String], passing: &[String]) -> (String, String) {
-        let __keep_frame = nikaia_std::tether::Keep::new();
         let mut checks: Vec<PreconditionCheck> = vec![];
         if self.facts.entries.contains_key("main") { checks = match self.facts.entries.get("main") { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) }.to_owned(); }
         let mut options: Vec<ConfigContract> = vec![];
@@ -73,7 +72,7 @@ impl EmitState {
         for index in 0..args.len() as i64 {
             let arg = nikaia_std::index::get(&args, (index) as usize);
             let param = world.words.resolve(arg.name).to_owned();
-            let local = __keep_frame.put(escaped_name(&param));
+            let local = escaped_name(&param);
             let ty = main_written_type(&arg.ty, world.words);
             let mut rust: String = String::from("_");
             if ((index) as usize) < types.len() { rust = (*nikaia_std::index::get(&types, (index) as usize)).to_owned(); }
@@ -98,7 +97,7 @@ impl EmitState {
             let option = nikaia_std::index::get(&config, (k) as usize);
             let at = args.len() as i64 + k;
             let param = world.words.resolve(option.name).to_owned();
-            let local = __keep_frame.put(escaped_name(&param));
+            let local = escaped_name(&param);
             let ty = main_written_type(&option.ty, world.words);
             let mut rust: String = String::from("_");
             if at < types.len() as i64 { rust = (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).to_owned(); }

@@ -151,7 +151,7 @@ pub fn taken_from(names: &winnow_grammar::InternerContext, value: &Expr) -> Opti
     }
 }
 
-pub(crate) const OWNED: [&str; 14] = ["to_owned", "clone_text", "len", "is_empty", "count", "starts_with", "ends_with", "contains", "contains_key", "parse", "to_uppercase", "to_lowercase", "join", "repeat"];
+pub(crate) const OWNED: [&str; 16] = ["to_owned", "clone_text", "len", "is_empty", "count", "starts_with", "ends_with", "contains", "contains_key", "parse", "to_uppercase", "to_lowercase", "join", "repeat", "replace", "replacen"];
 
 pub(crate) const KEEPS: [&str; 6] = ["push", "insert", "extend", "append", "push_front", "push_back"];
 

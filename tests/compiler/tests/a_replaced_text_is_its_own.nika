@@ -1,0 +1,31 @@
+// `replace` hands back text of its own: the buffer it was called on, built
+// with `push`, is not kept for the text that takes the result, and a pattern
+// made in a loop stays an owned `String`.
+fn view(given: String) -> String {
+    let mut s: String = given.replace("x", "y")
+    let c: Vec[scalar] = s.chars().collect()
+    let mut out: String = ""
+    let mut at = 0
+    while at < c.len() {
+        out.push(c[at])
+        at = at + 1
+    }
+    s = out.replace("a", "b")
+    return s
+}
+
+fn calls(names: ref Vec[String], given: String) -> String {
+    let mut s: String = given.clone()
+    let mut d = 0
+    while d < names.len() {
+        let what = f"self.{names[d]}("
+        s = s.replace(what, "x(")
+        d = d + 1
+    }
+    return s
+}
+
+fn main() {
+    println(view("abcx"))
+    println(calls(["f", "g"], "self.f(1) + self.g(2)"))
+}

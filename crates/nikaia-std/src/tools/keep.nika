@@ -238,7 +238,7 @@ pub fn taken_from(names: ref winnow_grammar::InternerContext, value: ref Expr) -
 }
 
 // Methods whose result is a value of its own, not a view of the receiver.
-comptime OWNED: Array[ref String, 14] = ["to_owned", "clone_text", "len", "is_empty", "count", "starts_with", "ends_with", "contains", "contains_key", "parse", "to_uppercase", "to_lowercase", "join", "repeat"]
+comptime OWNED: Array[ref String, 16] = ["to_owned", "clone_text", "len", "is_empty", "count", "starts_with", "ends_with", "contains", "contains_key", "parse", "to_uppercase", "to_lowercase", "join", "repeat", "replace", "replacen"]
 
 // Methods that keep what they are given in their receiver.
 comptime KEEPS: Array[ref String, 6] = ["push", "insert", "extend", "append", "push_front", "push_back"]
