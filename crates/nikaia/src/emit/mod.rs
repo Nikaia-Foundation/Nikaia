@@ -799,22 +799,11 @@ pub fn barrier_names(
     units: &[&Parsed],
     described: &crate::contracts::Ledger,
 ) -> std::collections::BTreeSet<String> {
-    seeds::Seeds::read_with(units, &described_maps(described)).barrier_names()
-}
-
-/// The functions of a described Rust crate with a map in their signature.
-fn described_maps(described: &crate::contracts::Ledger) -> Vec<String> {
-    described
-        .functions
-        .iter()
-        .filter(|(_, c)| {
-            c.signature.as_ref().is_some_and(|s| {
-                let text = s.text();
-                text.contains("HashMap") || text.contains("HashSet")
-            })
-        })
-        .map(|(key, _)| key.rsplit("::").next().unwrap_or(key).to_string())
-        .collect()
+    seeds::Seeds::read_with(
+        units,
+        &nikaia_std::tools::emit_tables::emit_tables_described_maps(described),
+    )
+    .barrier_names()
 }
 
 /// What a program's preamble has to say, over all of its files.
@@ -1089,10 +1078,6 @@ struct Emitter<'p> {
     main_params: std::cell::RefCell<Vec<String>>,
 }
 
-/// What an `impl` says about a method. Enough to adapt a `&mut self` method to
-/// the monoid a `par_fold` needs, and never more than the declaration states.
-use nikaia_std::tools::emit_kinds::EmitMethod as Method;
-
 /// **The functions of this file the build calls** (#446): what a `comptime`
 /// and an option's default call, and what those call in turn.
 ///
@@ -1243,71 +1228,22 @@ impl<'p> Emitter<'p> {
             if !all.iter().any(|p| std::ptr::eq(*p, parsed)) {
                 all.push(parsed);
             }
-            seeds::Seeds::read_with(&all, &described_maps(described))
+            seeds::Seeds::read_with(
+                &all,
+                &nikaia_std::tools::emit_tables::emit_tables_described_maps(described),
+            )
         };
-        let mut grammars: std::collections::BTreeMap<String, GrammarDef> =
-            std::collections::BTreeMap::new();
-        let mut structs = HashSet::new();
-        let mut methods: std::collections::BTreeMap<String, Method> =
-            std::collections::BTreeMap::new();
-        let mut by_name: std::collections::BTreeMap<String, Option<Method>> =
-            std::collections::BTreeMap::new();
-        let mut uses_std = false;
-        let mut fails = false;
-
-        for item in &parsed.program.items {
-            match &item.node {
-                Item::Grammar(def) => {
-                    grammars.insert(parsed.text(def.name).to_string(), def.clone());
-                }
-                Item::Struct { name, .. } => {
-                    structs.insert(*name);
-                }
-                Item::Import { .. } => uses_std = true,
-                Item::Fn {
-                    can_throw: true, ..
-                } => fails = true,
-                Item::Impl {
-                    trait_name: _,
-                    target,
-                    methods: body,
-                } => {
-                    for method in body {
-                        let Item::Fn {
-                            name: Some(name),
-                            receiver,
-                            args,
-                            ret_type,
-                            ..
-                        } = &method.node
-                        else {
-                            continue;
-                        };
-
-                        let info = Method {
-                            receiver: *receiver,
-                            returns_value: ret_type.is_some(),
-                            args: args.clone(),
-                        };
-                        methods.insert(
-                            format!("{}::{}", parsed.text(target.name), parsed.text(*name)),
-                            info.clone(),
-                        );
-                        by_name
-                            .entry(parsed.text(*name).to_string())
-                            .and_modify(|known| {
-                                // Two impls, one name: nothing here can tell
-                                // them apart, so neither is used.
-                                if known.is_some() {
-                                    *known = None;
-                                }
-                            })
-                            .or_insert(Some(info));
-                    }
-                }
-                _ => {}
-            }
-        }
+        let nikaia_std::tools::emit_tables::EmitTablesItems {
+            grammars,
+            structs,
+            methods,
+            by_name,
+            uses_std,
+            fails,
+        } = nikaia_std::tools::emit_tables::emit_tables_items(
+            &parsed.interner,
+            &parsed.program.items,
+        );
 
         // One type check, both of its answers about where a failure leaves.
         //
@@ -1412,28 +1348,33 @@ impl<'p> Emitter<'p> {
             .chain(beside.iter().copied())
             .collect();
         let package_wide = package_borrowing(&units);
+        let unit_views: Vec<_> = units
+            .iter()
+            .map(|p| crate::check::parsed_view_of(p))
+            .collect();
+        let beside_views: Vec<_> = beside
+            .iter()
+            .map(|p| crate::check::parsed_view_of(p))
+            .collect();
         let state = EmitState {
             described: described.clone(),
             view_slots: view_slots(&units, &package_wide)
                 .into_iter()
-                .chain(read_view_slots(described))
+                .chain(nikaia_std::tools::emit_tables::emit_tables_read_view_slots(
+                    described,
+                ))
                 .collect(),
             borrowing: borrowing_structs_beside(parsed, &package_wide)
                 .into_iter()
                 .map(|s| parsed.text(s).to_string())
                 .collect(),
-            tethered: tethered_types(&own_contracts)
-                .into_iter()
-                .chain(beside.iter().flat_map(|other| {
-                    borrowing_structs(other)
-                        .into_iter()
-                        .map(|s| other.text(s).to_string())
-                }))
-                .collect(),
-            declared_errors: std::iter::once(parsed)
-                .chain(beside.iter().copied())
-                .flat_map(declared_errors)
-                .collect(),
+            tethered: nikaia_std::tools::emit_tables::emit_tables_tethered(
+                &own_contracts,
+                &beside_views,
+            ),
+            declared_errors: nikaia_std::tools::emit_tables::emit_tables_declared_errors(
+                &unit_views,
+            ),
             carries_input: crate::views::carried(parsed, &own_contracts, library)
                 .into_iter()
                 .map(|(at, symbols)| {
@@ -1447,10 +1388,7 @@ impl<'p> Emitter<'p> {
                 })
                 .collect(),
             fold_callees: fold_callees(parsed, &grammars).into_iter().collect(),
-            by_name: by_name
-                .into_iter()
-                .filter_map(|(name, method)| Some((name, method?)))
-                .collect(),
+            by_name,
             grammars,
             methods,
             keep_plans: checked_plans
@@ -1460,23 +1398,10 @@ impl<'p> Emitter<'p> {
                 .into_iter()
                 .map(|plan| (plan.key.clone(), plan))
                 .collect(),
-            structs: structs
-                .into_iter()
-                .map(|s| parsed.text(s).to_string())
-                .collect(),
-            structs_beside: beside
-                .iter()
-                .flat_map(|other| {
-                    other
-                        .program
-                        .items
-                        .iter()
-                        .filter_map(|item| match &item.node {
-                            Item::Struct { name, .. } => Some(other.text(*name).to_string()),
-                            _ => None,
-                        })
-                })
-                .collect(),
+            structs,
+            structs_beside: nikaia_std::tools::emit_tables::emit_tables_structs_beside(
+                &beside_views,
+            ),
             template_holes: Default::default(),
             template_errors: Default::default(),
             hole_wraps: parsed
@@ -1931,53 +1856,6 @@ fn fold_callees(
     names
 }
 
-/// The types a ledger records a view-holding field for.
-///
-/// The package-wide half of [`Emitter::borrows`]. `tethered` is non-empty for
-/// exactly the structs [`borrowing_structs`] finds in the file that declares
-/// them (`Ledger::infer_checked` computes it from that set), so this carries the
-/// same fact across a file boundary rather than recomputing a different one.
-/// The types this unit declares an `impl Error for …` for.
-///
-/// The trait's name and nothing more: `Error` is the one trait this compiler
-/// reads by name (`NK1130`'s note says so), and Part I 7.1 makes the `impl`
-/// line the marker — *what is thrown implements `Error`, and the `impl` line
-/// says so*.
-fn declared_errors(parsed: &Parsed) -> std::collections::BTreeSet<String> {
-    nikaia_std::tools::emit_items::declared_errors(&parsed.interner, &parsed.program.items)
-}
-
-fn tethered_types(contracts: &crate::contracts::Ledger) -> std::collections::BTreeSet<String> {
-    contracts
-        .types
-        .iter()
-        .filter(|(_, contract)| !contract.tethered.is_empty())
-        .map(|(name, _)| name.clone())
-        .collect()
-}
-
-/// **The places of each type another package declares** (ADR-353 D7): the
-/// ledger's `tethered` lists its view fields in the order written, one
-/// lifetime each where there are two or more. An enum, and a type a function
-/// there throws, keeps one place.
-fn read_view_slots(
-    ledger: &crate::contracts::Ledger,
-) -> std::collections::BTreeMap<String, Vec<String>> {
-    let thrown: std::collections::BTreeSet<&String> = ledger
-        .functions
-        .values()
-        .flat_map(|f| f.fails_with.iter())
-        .collect();
-    ledger
-        .types
-        .iter()
-        .filter(|(name, contract)| {
-            contract.tethered.len() >= 2 && contract.variants.is_empty() && !thrown.contains(name)
-        })
-        .map(|(name, contract)| (name.clone(), contract.tethered.clone()))
-        .collect()
-}
-
 /// **The view-holding fields of each struct that holds two or more**
 /// (ADR-353 D1, D7): one lifetime each, `pub` or not, in the order written.
 /// An error keeps one place.
@@ -1995,15 +1873,6 @@ pub(crate) fn view_slots(
             )
         })
         .collect()
-}
-
-/// Which structs hold a view into the parser's input.
-///
-/// Part II, 10.6: a view is a slice of the input, so a struct holding one is
-/// tied to the input as well - transitively, which is why this is a fixpoint
-/// and not one pass.
-pub(crate) fn borrowing_structs(parsed: &Parsed) -> HashSet<Symbol> {
-    borrowing_structs_beside(parsed, &std::collections::BTreeSet::new())
 }
 
 /// **The same, with the types another file of the package declares**
@@ -2037,20 +1906,11 @@ pub(crate) fn holds_view(ty: &Type) -> bool {
 /// until nothing more is found - a struct in one file can hold an `enum` of a
 /// second that holds a struct of a third.
 pub(crate) fn package_borrowing(units: &[&Parsed]) -> std::collections::BTreeSet<String> {
-    let mut found = std::collections::BTreeSet::new();
-    loop {
-        let before = found.len();
-        for parsed in units {
-            let more: Vec<String> = borrowing_structs_beside(parsed, &found)
-                .into_iter()
-                .map(|s| parsed.text(s).to_string())
-                .collect();
-            found.extend(more);
-        }
-        if found.len() == before {
-            return found;
-        }
-    }
+    let views: Vec<_> = units
+        .iter()
+        .map(|p| crate::check::parsed_view_of(p))
+        .collect();
+    nikaia_std::tools::emit_tables::emit_tables_package_borrowing(&views)
 }
 
 /// Walk every expression in a block, including the ones inside statements.

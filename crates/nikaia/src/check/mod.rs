@@ -875,7 +875,7 @@ impl<'a> Checker<'a> {
 /// word was written down: a private `enum` a neighbouring file declares is a
 /// head, whatever its contract says.
 /// What the checker reads of a parsed file, borrowed (`tools/parsed_view.nika`).
-fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_, '_, '_, '_, '_, '_> {
+pub(crate) fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_, '_, '_, '_, '_, '_> {
     ParsedView {
         words: &parsed.interner,
         aliases: &parsed.aliases,

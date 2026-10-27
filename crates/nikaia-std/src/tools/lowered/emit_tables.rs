@@ -106,3 +106,124 @@ pub fn emit_tables_view_slots(words: &winnow_grammar::InternerContext, items: &[
     slots
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmitTablesItems {
+    pub grammars: collections::BTreeMap<String, GrammarDef>,
+    pub structs: collections::BTreeSet<String>,
+    pub methods: collections::BTreeMap<String, EmitMethod>,
+    pub by_name: collections::BTreeMap<String, EmitMethod>,
+    pub uses_std: bool,
+    pub fails: bool,
+}
+
+pub fn emit_tables_items(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> EmitTablesItems {
+    let mut tables = EmitTablesItems { grammars: collections::BTreeMap::new(), structs: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), by_name: collections::BTreeMap::new(), uses_std: false, fails: false };
+    let mut twice: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Grammar(def) => { tables.grammars.insert(words.resolve(def.name).to_owned(), def.clone()); },
+            Item::Struct { name, .. } => {
+                let name = *name;
+                tables.structs.insert(words.resolve(name).to_owned());
+            },
+            Item::Import { .. } => { tables.uses_std = true; },
+            Item::Fn { can_throw, .. } => {
+                let can_throw = *can_throw;
+                if can_throw { tables.fails = true; }
+            },
+            Item::Impl { target, methods, .. } => {
+                let owner = words.resolve(target.name).to_owned();
+                for method in methods.iter() { emit_tables_method_into(words, &owner, method, &mut tables, &mut twice); }
+            },
+            _ => { },
+        }
+    }
+    tables
+}
+
+pub(crate) fn emit_tables_method_into(words: &winnow_grammar::InternerContext, owner: &str, method: &Spanned<Item>, tables: &mut EmitTablesItems, twice: &mut collections::BTreeSet<String>) {
+    match &method.node {
+        Item::Fn { name, receiver, args, ret_type, .. } => {
+            let name = *name;
+            let named = match name { Some(__nikaia_value) => __nikaia_value, None => return };
+            let text = words.resolve(named).to_owned();
+            let info = EmitMethod { receiver: match receiver {
+                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                None => None,
+            }, returns_value: ret_type.is_some(), args: args.to_owned() };
+            tables.methods.insert(format!("{}::{}", owner, text), info.clone());
+            if twice.contains(&text) { return; }
+            if tables.by_name.contains_key(&text) {
+                tables.by_name.remove(&text);
+                twice.insert(text);
+                return;
+            }
+            tables.by_name.insert(text, info);
+        },
+        _ => { },
+    }
+}
+
+pub fn emit_tables_structs_beside(beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for other in beside.iter() {
+        for item in other.items.iter() {
+            match &item.node {
+                Item::Struct { name, .. } => {
+                    let name = *name;
+                    out.insert(other.text(name));
+                },
+                _ => { },
+            }
+        }
+    }
+    out
+}
+
+pub fn emit_tables_declared_errors(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for unit in units.iter() { for name in declared_errors(unit.words, unit.items) { out.insert(name); } }
+    out
+}
+
+pub fn emit_tables_tethered(own: &Ledger, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (name, contract) in own.types.iter() { if !contract.tethered.is_empty() { out.insert(name.to_owned()); } }
+    let none: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for other in beside.iter() { for held in emit_tables_borrowing_structs_beside(other.words, other.items, &none) { out.insert(other.text(held)); } }
+    out
+}
+
+pub fn emit_tables_read_view_slots(ledger: &Ledger) -> collections::BTreeMap<String, Vec<String>> {
+    let mut thrown: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (_, function) in ledger.functions.iter() { for name in function.fails_with.iter() { thrown.insert(name.to_owned()); } }
+    let mut out: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    for (name, contract) in ledger.types.iter() { if contract.tethered.len() >= 2 && contract.variants.is_empty() && !thrown.contains(name) { out.insert(name.to_owned(), contract.tethered.to_owned()); } }
+    out
+}
+
+pub fn emit_tables_described_maps(described: &Ledger) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for (key, contract) in described.functions.iter() {
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let text = signature.text();
+        if text.contains("HashMap") || text.contains("HashSet") { out.push(nikaia_std::index::or(key.rsplit("::").next(), || "").to_owned()); }
+    }
+    out
+}
+
+pub fn emit_tables_package_borrowing(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+    let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut grew = true;
+    while grew {
+        let before = found.len() as i64;
+        for unit in units.iter() {
+            let mut more: Vec<String> = vec![];
+            for held in emit_tables_borrowing_structs_beside(unit.words, unit.items, &found) { more.push(unit.text(held)); }
+            for name in more.iter() { found.insert(name.to_owned()); }
+        }
+        grew = (found.len() as i64) != before;
+    }
+    found
+}
+
