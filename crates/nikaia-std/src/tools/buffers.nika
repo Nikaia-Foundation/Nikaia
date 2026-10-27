@@ -539,6 +539,17 @@ fn copies_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
     }
 }
 
+// Whether a `clone` of this copies text, so the copy points into nothing:
+// what `copies_text` says, and **`opt ?? ""`** (#880), whose two sides have
+// one type: `dflt = (arg.strip_prefix("|") ?? "").clone()` keeps no view of
+// `arg`. Only for the origins: a `let` of it stays the owned value it was.
+fn clones_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match receiver {
+        Expr::Coalesce { value, fallback, .. } => clones_text(value, ask, walk) || clones_text(fallback, ask, walk),
+        else => copies_text(receiver, ask, walk),
+    }
+}
+
 fn text_local(name: ref String, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
     let local = local_of(name, walk) ?? return false
     if local.text {
@@ -1211,7 +1222,7 @@ fn method_origins(call: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> 
     // function's is (`answered_by`): where every method of this package by
     // that name hands back such a result, `into.add(length)` points nowhere,
     // and a number it answers kept nothing of `length` alive.
-    if hands_back_its_own(method) || (method == "clone" && copies_text(receiver, ask, walk)) || (keeping == null && owned_by_every_method(ask.own, ask.own_methods, method)) {
+    if hands_back_its_own(method) || (method == "clone" && clones_text(receiver, ask, walk)) || (keeping == null && owned_by_every_method(ask.own, ask.own_methods, method)) {
         for arg in args {
             origins_of(arg, ask, holes_of, unaliased, walk)
         }

@@ -1,0 +1,18 @@
+// #880: an owned `String` moved into another `String` variable is a move,
+// also where the other branch keeps a copy of a view of it: the copy
+// `(arg.strip_prefix("|") ?? "").clone()` is text of its own, so `arg` is no
+// view in the frame's keep and `dflt = arg` builds.
+fn pick(rest: String, first: bool) -> String {
+    let mut dflt: String = ""
+    let arg: String = rest.trim().clone()
+    if first {
+        dflt = arg
+    } else {
+        dflt = (arg.strip_prefix("|") ?? "").clone()
+    }
+    return dflt
+}
+
+fn main() {
+    print(f"{pick(" ab ", true)}|{pick("|x", false)}\n")
+}

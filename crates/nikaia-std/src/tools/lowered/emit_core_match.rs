@@ -389,7 +389,6 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let __keep_frame = nikaia_std::tether::Keep::new();
         let mut members: Vec<String> = vec![];
         let mut home: Vec<i64> = vec![];
         let mut catch_all = 0;
@@ -427,7 +426,7 @@ impl EmitState {
                 let held = self.sum_member_held(world, &member, "");
                 let mut bare = held.to_owned();
                 if held.starts_with("nikaia_std::error::Thrown<") && held.ends_with('>') {
-                    let opened = __keep_frame.put(nikaia_std::index::or(held.strip_prefix("nikaia_std::error::Thrown<"), || "").to_owned());
+                    let opened: String = nikaia_std::index::or(held.strip_prefix("nikaia_std::error::Thrown<"), || "").to_owned();
                     bare = nikaia_std::index::or(opened.strip_suffix('>'), || "").to_owned();
                 }
                 inside = EmitFlow { caught_named: own, ..flow };

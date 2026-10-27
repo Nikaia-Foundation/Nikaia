@@ -423,6 +423,13 @@ pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
     }
 }
 
+pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    match receiver {
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); clones_text(value, ask, walk) || clones_text(fallback, ask, walk) },
+        _ => copies_text(receiver, ask, walk),
+    }
+}
+
 pub(crate) fn text_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if local.text { return true; }
@@ -927,7 +934,7 @@ pub(crate) fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
     };
     let keeping = keeping_method_key(ask.own, ask.own_methods, (walk.target).as_deref(), on_self, &method);
     if keeping.is_some() { add_all(&call_source(nikaia_std::index::or(keeping.as_deref(), || ""), walk), &mut out); }
-    if hands_back_its_own(&method) || method == "clone" && copies_text(receiver, ask, &walk) || keeping.is_none() && owned_by_every_method(ask.own, ask.own_methods, &method) {
+    if hands_back_its_own(&method) || method == "clone" && clones_text(receiver, ask, &walk) || keeping.is_none() && owned_by_every_method(ask.own, ask.own_methods, &method) {
         for arg in args.iter() { origins_of(arg, ask, holes_of, unaliased, walk); }
         origins_of(receiver, ask, holes_of, unaliased, walk);
         return out;

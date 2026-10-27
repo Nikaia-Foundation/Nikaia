@@ -75,12 +75,11 @@ impl EmitState {
         out.push(&self.held_structs(world));
     }
     pub(crate) fn emit_program_entry_point<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut, host: &H) {
-        let __keep_frame = nikaia_std::tether::Keep::new();
         let channel = self.error_channel(world, "main", true, &EmitLifetimes::Elided.params(), &EmitLifetimes::Static.params(), false);
         let mut types: Vec<String> = vec![];
         let mut passing: Vec<String> = vec![];
         for param in host.main_params() {
-            let ty = __keep_frame.put(emit_program_param_type(&param));
+            let ty = emit_program_param_type(&param);
             if ty == "&str" {
                 types.push(String::from("String"));
                 passing.push(String::from("&{}"));
