@@ -9,7 +9,7 @@ fn first(a: i64?, b: i64?) -> i64 sync {
     return x
 }
 
-fn read(path: ref String) -> String sync throws {
+fn read(path: String) -> String sync throws {
     let text = std::fs::read_to_string(path) catch { let e = error; throw f"{path}: {e}" }
     let n = text::parse_i64(text.trim()) ?? throw "not a number"
     if n == 0 {
@@ -18,7 +18,7 @@ fn read(path: ref String) -> String sync throws {
     return text
 }
 
-fn count(path: ref String) -> i64 sync {
+fn count(path: String) -> i64 sync {
     return (read(path) catch { "" }).len()
 }
 
@@ -27,12 +27,12 @@ fn need(v: i64?) -> i64 sync throws {
     return x + 1
 }
 
-fn head(path: ref String) -> Vec[String] sync {
+fn head(path: String) -> Vec[String] sync {
     let text = read(path) catch { return [] }
     return [text]
 }
 
-fn digits(s: ref String) -> i64? sync {
+fn digits(s: String) -> i64? sync {
     let n = text::parse_i64(s) ?? return null
     return n
 }

@@ -20,7 +20,7 @@ impl Pt {
     }
 }
 
-fn tail(s: ref String) -> String sync {
+fn tail(s: String) -> String sync {
     let rest = s[2..]
     let all = s
     return f"{rest}{all}"

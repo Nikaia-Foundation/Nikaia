@@ -1,10 +1,10 @@
-fn mine(key: ref String, own: ref collections::BTreeMap[String, i64]) -> bool sync {
+fn mine(key: String, own: ref collections::BTreeMap[String, i64]) -> bool sync {
     return !(match key.split_once("::") { (package, _) => own.contains_key(package), null => false })
 }
-fn first_ok(name: ref String) -> bool sync {
+fn first_ok(name: String) -> bool sync {
     return (match name.strip_prefix("__t_") { k => !k.is_empty() && k.bytes().all(fn(b) { b.is_ascii_digit() }), null => false })
 }
-fn at(source: ref String, at: i64) -> i64 sync {
+fn at(source: String, at: i64) -> i64 sync {
     return (match source.char_indices().nth(at) { (byte, _) => byte, null => source.len() })
 }
 // ADAPTER: bleibt in Rust (`Ledger`)

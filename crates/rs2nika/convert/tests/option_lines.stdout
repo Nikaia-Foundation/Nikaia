@@ -1,4 +1,4 @@
-fn first_word(text: ref String) -> ref String? sync {
+fn first_word(text: String) -> ref String? sync {
     return text.split(' ').next()
 }
 

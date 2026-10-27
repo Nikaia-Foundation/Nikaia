@@ -13,7 +13,7 @@ fn flags(a_program: bool) -> i64 sync {
     }
     return 0
 }
-fn peeked(line: ref String, next: ref String?) -> bool sync {
+fn peeked(line: String, next: ref String?) -> bool sync {
     if line == "x" && next != null && next.starts_with("use ") {
         let n = next
         return true

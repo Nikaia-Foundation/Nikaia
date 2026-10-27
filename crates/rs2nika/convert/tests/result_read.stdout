@@ -4,7 +4,7 @@ fn host_target() -> Target? sync {
     return Target::read_triple(env!("HOST")) catch { return null }
 }
 
-fn flushed(mut file: File, line: ref String) sync {
+fn flushed(mut file: File, line: String) sync {
     std::io::stdout().flush() catch {}
     writeln!(file, "{line}") catch {}
 }
@@ -20,7 +20,7 @@ fn store(entry: ref Path) sync {
     done()
 }
 
-fn mode(other: ref String) -> bool sync {
+fn mode(other: String) -> bool sync {
     if text::parse_i64(other) != null {
         return true
     }

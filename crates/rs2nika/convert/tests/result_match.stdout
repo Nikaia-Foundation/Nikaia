@@ -1,4 +1,4 @@
-fn twice(text: ref String) -> Tree sync throws {
+fn twice(text: String) -> Tree sync throws {
     let again = read_tree(text) catch { bail!("does not parse: {error}") }
     return again
 }
@@ -17,17 +17,17 @@ fn format_all(files: Vec[String]) -> i64 sync {
     return code
 }
 
-fn stage(text: ref String) -> Stage sync {
+fn stage(text: String) -> Stage sync {
     lower(text) catch { return Stage::Refused }
     return Stage::Lowered
 }
 
-fn hole(text: ref String) -> Hole sync {
+fn hole(text: String) -> Hole sync {
     let expr = read_tree(text) catch { let e = error; return Hole::Refused(e.to_string()) }
     return Hole::Parsed(expr)
 }
 
-fn dump(ty: ref String) -> Computed sync {
+fn dump(ty: String) -> Computed sync {
     let dump = dumper(ty) catch {
         match error {
             Wall::NoForm { because } => {
@@ -85,13 +85,13 @@ fn report(said: Result[Out]) -> i64 sync {
     return 0
 }
 
-fn first_line(path: ref String) -> String sync {
+fn first_line(path: String) -> String sync {
     let text = read_file(path) catch { return "" }
     show(text)
     return path.to_string()
 }
 
-fn note(path: ref String) sync {
+fn note(path: String) sync {
     // TODO(rs2nika): `match` on `Ok`/`Err`: the `Ok` arm runs on success only and the program goes on after a failure: a `catch` leaves or hands back the value (Part I 7.1); `let v = call catch { return }` / `{ continue }` where the `match` ends the function or the loop body, otherwise a language question (#877)
     match read_file(path) {
         Ok(text) => {

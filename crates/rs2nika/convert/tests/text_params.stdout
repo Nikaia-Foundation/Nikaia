@@ -1,0 +1,16 @@
+pub struct Word {
+    text: String,
+}
+fn width(text: String, owned: String, n: i64) -> i64 sync {
+    return text.len() + owned.len() + n
+}
+fn head(line: String) -> String sync {
+    return line.trim()
+}
+fn fallback(name: ref String?) -> i64 sync {
+    return (name ?? "").len()
+}
+fn any_of(xs: ref Vec[String], f: fn(ref String) -> bool sync) -> bool sync {
+    return xs.iter().any(fn(x) { f(x) })
+}
+
