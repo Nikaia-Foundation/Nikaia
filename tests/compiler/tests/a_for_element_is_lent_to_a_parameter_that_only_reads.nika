@@ -1,0 +1,28 @@
+struct Person { name: String, age: int }
+
+fn greet(p: Person) {
+    println(f"Hello, {p.name}")
+}
+
+fn older(p: Person, than: int) -> bool {
+    return p.age > than
+}
+
+fn greet_all(team: ref Vec[Person]) {
+    for p in team {
+        if older(p, 30) {
+            greet(p)
+        }
+    }
+}
+
+fn main() {
+    let mut team: Vec[Person] = []
+    team.push(Person { name: "Ada", age: 36 })
+    for p in team {
+        greet(p)
+    }
+    team.push(Person { name: "Grace", age: 25 })
+    greet_all(team)
+    println(team.len())
+}

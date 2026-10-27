@@ -1,0 +1,15 @@
+struct Person { name: String, age: int }
+
+fn enrol(p: Person, mut into: Vec[Person]) {
+    into.push(p)
+}
+
+fn main() {
+    let mut team: Vec[Person] = []
+    team.push(Person { name: "Ada", age: 36 })
+    let mut club: Vec[Person] = []
+    for p in team {
+        enrol(p, club)
+    }
+    println(club.len())
+}

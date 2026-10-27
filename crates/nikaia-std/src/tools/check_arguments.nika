@@ -468,6 +468,12 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 notes.push(note.clone())
             }
             help = kept_why.help.clone()
+        } else if found_here.is_a_view() && unviewed_type(found_here).fits(want) {
+            // **A view where the callee keeps the value** (#872): one it only
+            // read would have been lent the view as it is.
+            notes.push(f"This is a view: it points into a `{want.text()}` that something else owns.")
+            notes.push(f"{capitalised(keeper)}, so it needs one of its own.")
+            help = f"Write `.clone()` to hand `{key}` a copy of its own."
         }
         let mut at_span = span.clone()
         if given_here != null {

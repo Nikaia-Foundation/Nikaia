@@ -30,5 +30,7 @@ error[NK1102]: `by_val` expects `e` to be `Entry`, but you're passing `ref Entry
     |            ^^^^^^^^^^^^^^^^
     |
     = note: It's declared as `by_val(e: Entry) -> Entry`.
-    = help: Make it an `Entry`, or change the declaration to `ref Entry`.
+    = note: This is a view: it points into an `Entry` that something else owns.
+    = note: `by_val` keeps its `e` after the call returns, so it needs one of its own.
+    = help: Write `.clone()` to hand `by_val` a copy of its own.
 4 type errors

@@ -2656,6 +2656,12 @@ Four kinds of argument are not lent and are passed owned: a parameter the body
 **keeps**, a value that **copies**, an argument that is **already a view**, and
 a **method's** argument.
 
+**A view handed to a parameter the body only reads is passed as it is**: in
+`for p in team { greet(p) }` the element `p` is a `ref Person`, and a
+`greet(p: Person)` that only reads `p` is lent that view, with no copy and
+no `ref` written. A parameter the body keeps needs a value of its own, so a
+view handed to it is refused (`NK1102`), with `.clone()` as the way out.
+
 **A value used after it was handed over is refused** with `NK2105`: an argument
 kept, a key or a value written into a container, a field, an element, a `let`
 that renames it, an assignment, and, inside a loop or a lambda, the next turn's

@@ -1,0 +1,11 @@
+error[NK1102]: `enrol` expects `p` to be `Person`, but you're passing `ref Person`.
+   --> tests/a_for_element_is_refused_to_a_parameter_that_keeps.nika:12:15
+    |
+ 12 |         enrol(p, club)
+    |               ^
+    |
+    = note: It's declared as `enrol(p: Person, mut into: Vec[Person])`.
+    = note: This is a view: it points into a `Person` that something else owns.
+    = note: `enrol` keeps its `p` after the call returns, so it needs one of its own.
+    = help: Write `.clone()` to hand `enrol` a copy of its own.
+1 type error

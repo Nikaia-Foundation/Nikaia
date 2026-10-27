@@ -312,6 +312,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let kept_why = match why { Some(__nikaia_value) => __nikaia_value, None => continue };
             for note in kept_why.notes.iter() { notes.push(note.to_owned()); }
             help = kept_why.help.to_owned();
+        } else if found_here.is_a_view() && unviewed_type(&found_here).fits(&want) {
+            notes.push(format!("This is a view: it points into a `{}` that something else owns.", want.text()));
+            notes.push(format!("{}, so it needs one of its own.", capitalised(&keeper)));
+            help = format!("Write `.clone()` to hand `{}` a copy of its own.", key);
         }
         let mut at_span = span.clone();
         if given_here.is_some() {

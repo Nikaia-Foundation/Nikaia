@@ -203,6 +203,7 @@ impl CheckState {
         // writes; a parameter written `Stats` and inferred lent gains its `&`
         // in the declaration too, so both sides move together.
         let mut fits = false
+        let mut already_a_view = false
         if want.is_a_view() {
             let lent = view_of_type(found)
             fits = lent.fits(want) || self.fits_through_deref(world, lent, want)
@@ -218,9 +219,22 @@ impl CheckState {
                     }
                 }
             }
+            // **An argument that is already a view is passed as it is** (Part
+            // I 6.6, #872): a `for` element `ref Person` handed to a `Person`
+            // the callee only reads is lent, and the view is the reference.
+            if !fits && !wrote_a_reference && found.is_a_view() {
+                let owned = unviewed_type(found)
+                if owned.fits(want) || self.fits_through_deref(world, owned, want) {
+                    already_a_view = true
+                    fits = true
+                }
+            }
         }
         if !fits {
             return false
+        }
+        if already_a_view {
+            return true
         }
         if wrote_a_reference {
             // **A type this compiler could not work out is not one to refuse

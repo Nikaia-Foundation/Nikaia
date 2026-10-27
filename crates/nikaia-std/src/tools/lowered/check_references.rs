@@ -133,14 +133,23 @@ impl CheckState {
         }
         let wrote_a_reference = check_reference_written(given_expr);
         let mut fits = false;
+        let mut already_a_view = false;
         if want.is_a_view() {
             let lent = view_of_type(found);
             fits = lent.fits(want) || self.fits_through_deref(world, &lent, want);
         } else {
             fits = found.fits(want) || self.fits_through_deref(world, found, want);
             if !fits && wrote_a_reference { for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { fits = true; } } }
+            if !fits && !wrote_a_reference && found.is_a_view() {
+                let owned = unviewed_type(found);
+                if owned.fits(want) || self.fits_through_deref(world, &owned, want) {
+                    already_a_view = true;
+                    fits = true;
+                }
+            }
         }
         if !fits { return false; }
+        if already_a_view { return true; }
         if wrote_a_reference {
             match found {
                 Ty::Unknown => { return false; },
