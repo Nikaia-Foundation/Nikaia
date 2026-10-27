@@ -1,7 +1,7 @@
 --profile
 check-free
 --out
-../../target/many_files
+out
 one.rs
 sub/one.rs
 sub/mod.rs
