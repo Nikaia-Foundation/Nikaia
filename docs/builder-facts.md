@@ -127,7 +127,11 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   markers where it cannot), names on stderr the callees not yet in Nikaia and
   the functions tools/*.nika may already have; `--rules` lists its rules,
   `--lint F.nika` flags known defects in hand-written Nikaia, and
-  `rs2nika.names` beside it maps Rust helpers to their Nikaia names. Rust's
+  `rs2nika.names` beside it maps Rust helpers to their Nikaia names;
+  `--score DRAFT FINAL` prints how much of a draft the committed code kept
+  (the report's `Rs2nika:` field). Iterator chains (`.iter().map(..).sum()`,
+  `.any(..)`, `.filter(..).map(..).collect()`) are the house style in
+  `tools/*.nika`, as the converter writes them (owner, 2026-10-27). Rust's
   types come from rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`); open
   lowering defects are GitHub issues, the language options against the usual
   hurdles in `docs/history/mitigation-hurdles.md`.

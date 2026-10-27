@@ -24,8 +24,13 @@ You build one small slice of an issue in the Nikaia repository and end.
   plan, the call graph and the issue yourself. A research task (no edits, no
   commit) writes such a brief, at most 80 lines, and reports its path.
 * **A move starts from the rs2nika draft** (`crates/rs2nika/convert`, see
-  `docs/builder-facts.md`), not from an empty file. Report in one line:
-  `rs2nika: kept N of M lines; fixed by hand: ...`.
+  `docs/builder-facts.md`), not from an empty file: convert each moved function
+  (`--only NAME`), keep what the draft got right, and at the end score it,
+  `rs2nika --score DRAFT FINAL` over the draft and the function as committed.
+  Its `kept N of M lines` goes into the report's `Rs2nika:` field (owner,
+  2026-10-27), with the three edits that cost most; a report of a move without
+  it is incomplete. The draft's iterator chains stay chains: rewrite one as a
+  loop only where it does not compile, and that is a finding.
 * **A compiler defect stops the slice.** Do not work around it in the moved
   code: fix it in the compiler as its own commit if the task allows, else stop
   and report it with a probe of a few lines.
