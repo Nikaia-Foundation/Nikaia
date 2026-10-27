@@ -1,0 +1,15 @@
+Result: done
+Files: crates/nikaia-std/src/arm.rs crates/nikaia-std/src/lib.rs crates/nikaia-std/src/tools/check_arguments.nika crates/nikaia-std/src/tools/check_arm_leaves.nika crates/nikaia-std/src/tools/check_facts.nika crates/nikaia-std/src/tools/check_references.nika crates/nikaia-std/src/tools/emit_core_args.nika crates/nikaia-std/src/tools/emit_expr.nika crates/nikaia-std/src/tools/lowered/check_arguments.rs crates/nikaia-std/src/tools/lowered/check_arm_leaves.rs crates/nikaia-std/src/tools/lowered/check_facts.rs crates/nikaia-std/src/tools/lowered/check_references.rs crates/nikaia-std/src/tools/lowered/emit_core_args.rs crates/nikaia-std/src/tools/lowered/emit_expr.rs tests/compiler/tests/a_lent_argument_from_arms_view_and_new.nika tests/compiler/tests/a_lent_argument_from_arms_view_and_new.stdout
+Commit: emit: an `if`/`match` lent whole with view arms and arms that make a value (#894)
+Body: A lent argument (declared `ref` or inferred lent) whose arms are a lent name and values made in the arm is put into one value made at the argument and lent through the call: `look(&*if c { nikaia_std::arm::Arm::View(t) } else { nikaia_std::arm::Arm::Own(P { .. }) })`, text through `EitherText` arm by arm (`either(..)`, the #562 leaves). The `Arm` is a temporary of the argument, so it outlives the call in edition 2024, which `&P { .. }` in an arm's tail does not; it needs no `Clone`, unlike `Cow`. New `nikaia_std::arm` (enum `Arm<'a, B: ?Sized, O>`, `Deref` to `B` via `O: Borrow<B>`), facts `lent_arms` / `lent_arm_leaves`, decided in `check_arguments` before ADR-282 D11 (`lent_arms_view_and_new` in `check_arm_leaves`). Only where an arm is a lent name; an arm that is `null`, a place of its own, or a non-name view leaves the argument to the rules before (keeps `emit_pattern`'s `if raw_any { "byte" } else { called.clone() }` as it was). `a_name_that_is_lent` became `pub`.
+Fixes: #894
+Pushed: b82ab265225472e0b0353472dde7beed2fd7524b
+Tests: new a_lent_argument_from_arms_view_and_new (if/match, declared ref and inferred lent, struct and String) failed on the unfixed compiler (rustc mismatched types at 4 sites); nikaia test --both-settings --project tests/compiler 186 passed; it handed_over text_tiers typecheck + guard set 214 passed; clippy clean; pre-push-check ok
+Gate: green
+Deviation: none
+Found: probe `struct P { name: String }` `fn look(p: ref P) -> i64 { return p.name.len() }` `fn f(t: ref P) -> i64 { return look(P { name: t.name + "!" }) }`: nikaia check passes, rustc "cannot move out of t.name behind a shared reference" (lowered `plus(t.name, "!")`); also `let t = P{..}; let a = look(if c { t } else { P{..} }); a + t.name.len()` moves the owned local t into the arm (rustc borrow of moved value)
+Needs: none
+Changelog: An `if` or a `match` handed to a lent parameter whose arms are a view and a value made in the arm now lowers to code that compiles: every arm is lent through the call.
+Owner: none
+Disk freed: 0 (test cache 2.5G, 18G free; new entry over 100 MB: run-bundle/65d964130cc06fb2 293 MB)
+Rs2nika: none
