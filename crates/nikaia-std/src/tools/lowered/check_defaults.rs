@@ -123,7 +123,7 @@ pub fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world
             state.a_constant_that_owns_memory(name, &declared, &computed, "a default", span);
             return;
         }
-        let owned = unwritable_in(&state, world, &computed, &|of, variant| { host.payload_of(of, variant) });
+        let owned = unwritable_in(&state, world, &computed, &|of, variant| { check_walked_payload_of(world, of, variant) });
         if owned.len() == 2 {
             state.a_field_that_owns_memory(name, nikaia_std::index::get(&owned, 0), nikaia_std::index::get(&owned, 1), "a default", span);
             return;

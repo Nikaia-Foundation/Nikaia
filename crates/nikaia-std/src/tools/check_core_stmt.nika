@@ -1013,7 +1013,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         }
     }
     // **A write to shared mutable state goes through a door** (ADR-281).
-    let written = host.written(value)
+    let written = check_walked_written(value, world.words)
     state.a_write_that_skips_the_door(world, target, into, written, span)
     // **A compound assignment on a map slot is written out** (ADR-293 D2).
     if op != null {

@@ -745,7 +745,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
             state.hands_over(world, value, &found, &to, span);
         }
     }
-    let written = host.written(value);
+    let written = check_walked_written(value, world.words);
     state.a_write_that_skips_the_door(world, target, &into, &written, span);
     if op.is_some() { check_core_a_compound_write_to_a_map_slot(state, world, host, target, span); }
     if op.is_some() && is_text_type(&into.unseen()) {

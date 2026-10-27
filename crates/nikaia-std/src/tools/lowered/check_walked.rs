@@ -117,16 +117,80 @@ pub fn check_walked_unrolling(walks_fields: &collections::BTreeMap<String, Strin
     out
 }
 
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub fn check_walked_written(value: &Expr, text: &impl Fn(winnow_grammar::Symbol) -> String) -> String {
+pub fn check_walked_written(value: &Expr, words: &winnow_grammar::InternerContext) -> String {
     match value {
         Expr::LitInt { value: n, negative, .. } => { let n = *n; let negative = *negative; if negative && n != 0u64 { format!("-{}", n) } else { format!("{}", n) } },
         Expr::LitBool(yes, _) => { let yes = *yes; format!("{}", yes) },
         Expr::LitStr { text: s, .. } => s.quoted(),
-        Expr::Variable(name, _) => { let name = *name; text(name) },
-        Expr::Unary { op: UnaryOp::Neg, expr, .. } => { let expr = nikaia_std::boxed::open(expr); format!("-{}", check_walked_written(expr, text)) },
+        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_owned() },
+        Expr::Unary { op: UnaryOp::Neg, expr, .. } => { let expr = nikaia_std::boxed::open(expr); format!("-{}", check_walked_written(expr, words)) },
         _ => String::from("…"),
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Grammar(def) => {
+                let mut entries: collections::BTreeSet<String> = collections::BTreeSet::new();
+                for rule in def.rules.iter() { if rule.is_entry { entries.insert(world.here.text(rule.name)); } }
+                state.grammars.insert(world.here.text(def.name), entries);
+            },
+            Item::Import { path, .. } => { if path.len() == 2 && world.here.text(*nikaia_std::index::get(&path, 0)) == "std" { state.std_in_scope.insert(world.here.text(*nikaia_std::index::get(&path, 1))); } },
+            Item::Extern { declarations, opaque, .. } => {
+                for handle in opaque.iter() { state.opaque_handles.insert(world.here.text(handle.node.name)); }
+                for declared in declarations.iter() { state.foreign_names.insert(world.here.text(declared.node.name)); }
+            },
+            _ => { },
+        }
+    }
+    let mut prefixes: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (key, _) in world.library.functions.iter() { check_walked_prefix_into(key, &mut prefixes); }
+    for (key, _) in world.library.types.iter() { check_walked_prefix_into(key, &mut prefixes); }
+    for prefix in prefixes.iter() { if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(&format!("{}::new", prefix)) { state.std_modules.insert(prefix.to_owned()); } }
+}
+
+pub(crate) fn check_walked_prefix_into(key: &str, prefixes: &mut collections::BTreeSet<String>) {
+    let cut = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
+    prefixes.insert(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_owned());
+}
+
+pub fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+    let here = check_payload_in(&world.here, ty, variant);
+    if here.is_some() { return std::convert::identity(here); }
+    for view in world.beside.iter() {
+        let found = check_payload_in(view, ty, variant);
+        if found.is_some() { return std::convert::identity(found); }
+    }
+    None
+}
+
+pub fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &str, here: i64) -> CheckPlace {
+    let none = CheckPlace { at: -1, function: None };
+    let rest = match place.strip_prefix('@') { Some(__nikaia_value) => __nikaia_value, None => return none }.to_owned();
+    let colon = match nikaia_std::search::find(&rest, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return none };
+    let unit = match text::parse_i64(nikaia_std::index::get(&rest, nikaia_std::index::at(0..colon))) { Some(__nikaia_value) => __nikaia_value, None => return none };
+    let byte = match text::parse_i64(nikaia_std::index::get(&rest, nikaia_std::index::at(colon + 1..))) { Some(__nikaia_value) => __nikaia_value, None => return none };
+    if unit < 0 || byte < 0 || byte > 4294967295i64 { return none; }
+    if unit == here { return CheckPlace { at: byte, function: None }; }
+    let mut function: Option<String> = None;
+    if world.here_at < 0 { if unit == 0 { function = check_walked_function_at(&world.here, byte); } else if unit - 1 < world.beside.len() as i64 { function = check_walked_function_at(nikaia_std::index::get(&world.beside, nikaia_std::index::at(unit - 1)), byte); } } else if unit < world.beside.len() as i64 { function = check_walked_function_at(nikaia_std::index::get(&world.beside, nikaia_std::index::at(unit)), byte); }
+    CheckPlace { at: -1, function }
+}
+
+pub(crate) fn check_walked_function_at(view: &ParsedView<'_, '_, '_, '_, '_, '_>, byte: i64) -> Option<String> {
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Fn { name, .. } => {
+                let name = *name;
+                let named = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if (item.span.start as i64) <= byte && byte < item.span.end as i64 { return Some(view.text(named)); }
+            },
+            _ => { },
+        }
+    }
+    None
 }
 

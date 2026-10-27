@@ -49,12 +49,9 @@ pub trait CheckHost {
     fn read(&self, path: &str) -> BtRead;
     fn assets_read_in(&self, value: &Expr, read: &collections::BTreeMap<String, String>) -> Expr;
     fn value_fn(&self) -> String;
-    fn place_of(&self, place: &str, here: i64) -> CheckPlace;
     fn an_escape_nothing_names(&self, text: &str) -> Option<NotAnEscape>;
-    fn written(&self, value: &Expr) -> String;
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)>;
     fn declared(&self, state: &mut CheckState, ty: &Type, span: &Span) -> Ty;
-    fn payload_of(&self, ty: &str, variant: &str) -> Option<Vec<Ty>>;
     fn float_text(&self, number: f64) -> String;
     fn type_of(&self, ty: &Type) -> Ty;
     fn constants_beside(&self) -> Vec<(String, Ty)>;
@@ -484,7 +481,7 @@ impl CheckState {
         match host.compute_comptime(&rewritten, found, bound, &outermost, &typed, self.flow.raised.0, self.flow.raised.1) {
             CheckComputed::Value(computed) => { return CheckCompiled { answered: true, value: Some(computed), said: false }; },
             CheckComputed::Forbidden { ref callee, ref because } => { self.a_body_that_may_not_run_at_build_time(callee, because, span); },
-            CheckComputed::Stopped(ref detail) => { self.a_build_time_run_that_stopped(host, bound, detail, here, span); },
+            CheckComputed::Stopped(ref detail) => { self.a_build_time_run_that_stopped(world, host, bound, detail, here, span); },
             CheckComputed::NotHere(ref why) => { self.a_build_time_value_not_compiled(bound, why, span); },
         }
         CheckCompiled { answered: true, value: None, said: true }
@@ -505,7 +502,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_build_time_run_that_stopped<H: CheckHost>(&mut self, host: &H, bound: &str, said: &str, here: i64, span: &Span) {
+    pub fn a_build_time_run_that_stopped<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, bound: &str, said: &str, here: i64, span: &Span) {
         for line in said.lines() {
             if line.starts_with("nikaia-build-time: ") {
                 let over = nikaia_std::index::or(line.strip_prefix("nikaia-build-time: "), || "");
@@ -523,7 +520,7 @@ impl CheckState {
             place = nikaia_std::index::get(&line, nikaia_std::index::at(0..at)).to_owned();
             why = nikaia_std::index::get(&line, nikaia_std::index::at(at + ": the program stopped: ".len() as i64..)).to_owned();
         }
-        let found = host.place_of(&place, here);
+        let found = check_walked_place_of(world, &place, here);
         self.a_build_time_run_that_stopped_at(bound, &why, found.at, (found.function).as_deref(), span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

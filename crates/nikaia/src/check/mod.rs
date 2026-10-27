@@ -72,20 +72,6 @@ impl CodeOps for Finding {
     }
 }
 
-/// What one variant declares it carries, by position.
-fn payload_of(
-    parsed_here: &Parsed,
-    beside: &[&Parsed],
-    ty: &str,
-    variant: &str,
-) -> Option<Vec<Ty>> {
-    std::iter::once(parsed_here)
-        .chain(beside.iter().copied())
-        .find_map(|parsed| {
-            nikaia_std::tools::check_items::check_payload_in(&parsed_view_of(parsed), ty, variant)
-        })
-}
-
 /// What one pass of the checker learned: its findings, the facts the emitter
 /// reads (`tools/check_facts.nika`), and what each function calls.
 #[derive(Debug, Clone)]
@@ -390,72 +376,8 @@ fn walked<'a>(
     };
     let mut s = core::hollow();
     s.flow = CheckFlow::start(computes, harvesting);
-    s.grammars = parsed
-        .program
-        .items
-        .iter()
-        .filter_map(|item| match &item.node {
-            Item::Grammar(def) => Some((
-                parsed.text(def.name).to_string(),
-                def.rules
-                    .iter()
-                    .filter(|r| r.is_entry)
-                    .map(|r| parsed.text(r.name).to_string())
-                    .collect(),
-            )),
-            _ => None,
-        })
-        .collect();
-    s.std_in_scope = parsed
-        .program
-        .items
-        .iter()
-        .filter_map(|item| match &item.node {
-            Item::Import { path, .. } if path.len() == 2 => {
-                (parsed.text(path[0]) == "std").then(|| parsed.text(path[1]).to_string())
-            }
-            _ => None,
-        })
-        .collect();
-    // The distinct prefixes first and the tests after, because there are a
-    // few dozen modules and some thousand keys: the test per key built a
-    // `format!` and an owned prefix for every one of them.
-    s.std_modules = library
-        .functions
-        .keys()
-        .chain(library.types.keys())
-        .filter_map(|key| key.split_once("::").map(|(prefix, _)| prefix))
-        .collect::<BTreeSet<&str>>()
-        .into_iter()
-        .filter(|prefix| {
-            !library.types.contains_key(*prefix)
-                && !library.functions.contains_key(&format!("{prefix}::new"))
-        })
-        .map(str::to_string)
-        .collect();
     s.modules = modules.clone();
-    s.opaque_handles = parsed
-        .program
-        .items
-        .iter()
-        .filter_map(|item| match &item.node {
-            Item::Extern { opaque, .. } => Some(opaque),
-            _ => None,
-        })
-        .flatten()
-        .map(|h| parsed.text(h.node.name).to_string())
-        .collect();
-    s.foreign_names = parsed
-        .program
-        .items
-        .iter()
-        .filter_map(|item| match &item.node {
-            Item::Extern { declarations, .. } => Some(declarations),
-            _ => None,
-        })
-        .flatten()
-        .map(|d| parsed.text(d.node.name).to_string())
-        .collect();
+    check_walked::check_walked_seed(&mut s, &world);
     s.dsl_drivers = crate::dsl::drivers(parsed).into_iter().collect();
     let mut checker = Checker {
         parsed,
@@ -747,14 +669,6 @@ fn propagation(
         computes,
     );
     checked.facts
-}
-
-/// The value as the author wrote it, where this compiler can say so: a literal,
-/// a name, a negation, and an ellipsis for the rest. `CheckHost::written`.
-pub(super) fn written_by(parsed: &Parsed, value: &Expr) -> String {
-    nikaia_std::tools::check_walked::check_walked_written(value, &|name| {
-        parsed.text(name).to_string()
-    })
 }
 
 impl From<Constant> for CheckConstant {

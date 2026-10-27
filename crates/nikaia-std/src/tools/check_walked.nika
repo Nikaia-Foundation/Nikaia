@@ -5,6 +5,7 @@
 // reads, and the unrolling report. Free functions over the state.
 
 use std::collections
+use std::text
 
 /// **`NK1245` comes after every other refusal** (ADR-286 D41): a type nothing
 /// can tell is most often what another refusal left behind, so where the file
@@ -175,15 +176,131 @@ pub fn check_walked_unrolling(walks_fields: ref collections::BTreeMap[String, St
 
 /// **The value as the author wrote it**, where this compiler can say so: a
 /// literal, a name, a negation, and an ellipsis for the rest
-/// (`CheckHost::written`). The text of a string literal is Rust's `{:?}`
-/// (`String::quoted`); `text` names a symbol.
-pub fn check_walked_written(value: ref Expr, text: fn(winnow_grammar::Symbol) -> String sync) -> String sync {
+/// (`CheckHost::written` once). The text of a string literal is Rust's `{:?}`
+/// (`String::quoted`); `words` names a symbol.
+pub fn check_walked_written(value: ref Expr, words: ref winnow_grammar::InternerContext) -> String {
     return match value {
         Expr::LitInt { value: n, negative, .. } => if negative && n != 0 { f"-{n}" } else { f"{n}" }
         Expr::LitBool(yes, _) => f"{yes}"
         Expr::LitStr { text: s, .. } => s.quoted()
-        Expr::Variable(name, _) => text(name)
-        Expr::Unary { op: UnaryOp::Neg, expr, .. } => f"-{check_walked_written(expr, text)}"
+        Expr::Variable(name, _) => words.resolve(name).clone()
+        Expr::Unary { op: UnaryOp::Neg, expr, .. } => f"-{check_walked_written(expr, words)}"
         else => "…"
     }
+}
+
+/// **What the walk reads off the item tree before it starts** (ADR-294,
+/// #125, C7-r1): the grammars of this file and their entry rules, the `std`
+/// modules it brings into scope, `std`'s modules, and the handles and
+/// functions its `extern` blocks declare.
+pub fn check_walked_seed(mut state: CheckState, world: ref CheckWorld) sync {
+    for item in world.here.items {
+        match item.node {
+            Item::Grammar(def) => {
+                let mut entries: collections::BTreeSet[String] = collections::BTreeSet()
+                for rule in def.rules {
+                    if rule.is_entry {
+                        entries.insert(world.here.text(rule.name))
+                    }
+                }
+                state.grammars.insert(world.here.text(def.name), entries)
+            }
+            Item::Import { path, .. } => {
+                if path.len() == 2 && world.here.text(path[0]) == "std" {
+                    state.std_in_scope.insert(world.here.text(path[1]))
+                }
+            }
+            Item::Extern { declarations, opaque, .. } => {
+                for handle in opaque {
+                    state.opaque_handles.insert(world.here.text(handle.node.name))
+                }
+                for declared in declarations {
+                    state.foreign_names.insert(world.here.text(declared.node.name))
+                }
+            }
+            else => {}
+        }
+    }
+    // The distinct prefixes first and the tests after, because there are a
+    // few dozen modules and some thousand keys.
+    let mut prefixes: collections::BTreeSet[String] = collections::BTreeSet()
+    for (key, _) in world.library.functions {
+        check_walked_prefix_into(key, prefixes)
+    }
+    for (key, _) in world.library.types {
+        check_walked_prefix_into(key, prefixes)
+    }
+    for prefix in prefixes {
+        if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(f"{prefix}::new") {
+            state.std_modules.insert(prefix.clone())
+        }
+    }
+}
+
+/// The part of a key before its first `::`, where it has one.
+fn check_walked_prefix_into(key: ref String, mut prefixes: collections::BTreeSet[String]) {
+    let cut = key.find("::") ?? return
+    prefixes.insert(key[0..<cut].clone())
+}
+
+/// **What one variant declares it carries**, by position, in whichever file
+/// of the program declares the `enum`: this one first.
+pub fn check_walked_payload_of(world: ref CheckWorld, ty: ref String, variant: ref String) -> Vec[Ty]? {
+    let here = check_payload_in(world.here, ty, variant)
+    if here != null {
+        return here
+    }
+    for view in world.beside {
+        let found = check_payload_in(view, ty, variant)
+        if found != null {
+            return found
+        }
+    }
+    return null
+}
+
+/// **Where a run that stopped at `place` (`@<file>:<byte>`) stopped**, seen
+/// from file `here`: a place in this file is shown, and one in another is
+/// named by the function it is in. The files are the program's, this one
+/// among them; a check handed none is this file alone, which then stands
+/// first.
+pub fn check_walked_place_of(world: ref CheckWorld, place: ref String, here: i64) -> CheckPlace {
+    let none = CheckPlace { at: -1, function: null }
+    let rest = (place.strip_prefix("@") ?? return none).clone()
+    let colon = rest.find(":") ?? return none
+    let unit = text::parse_i64(rest[0..<colon]) ?? return none
+    let byte = text::parse_i64(rest[colon + 1..]) ?? return none
+    if unit < 0 || byte < 0 || byte > 4294967295 {
+        return none
+    }
+    if unit == here {
+        return CheckPlace { at: byte, function: null }
+    }
+    let mut function: String? = null
+    if world.here_at < 0 {
+        if unit == 0 {
+            function = check_walked_function_at(world.here, byte)
+        } else if unit - 1 < world.beside.len() {
+            function = check_walked_function_at(world.beside[unit - 1], byte)
+        }
+    } else if unit < world.beside.len() {
+        function = check_walked_function_at(world.beside[unit], byte)
+    }
+    return CheckPlace { at: -1, function: function }
+}
+
+/// The name of the function of a file whose item holds `byte`.
+fn check_walked_function_at(view: ref ParsedView, byte: i64) -> String? {
+    for item in view.items {
+        match item.node {
+            Item::Fn { name, .. } => {
+                let named = name ?? continue
+                if item.span.start as i64 <= byte && byte < item.span.end as i64 {
+                    return view.text(named)
+                }
+            }
+            else => {}
+        }
+    }
+    return null
 }

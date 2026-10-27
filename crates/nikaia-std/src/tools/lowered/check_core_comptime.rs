@@ -252,7 +252,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         }, || Ty::Unknown);
         if is_fixed(&wanted) {
             let pairs = check_core_comptime_items((evaluated).as_ref());
-            let table = state.a_table_that_crosses(world, &bound, &wanted, &pairs, span, &|of, variant| { host.payload_of(of, variant) }, &|number| { host.float_text(number) });
+            let table = state.a_table_that_crosses(world, &bound, &wanted, &pairs, span, &|of, variant| { check_walked_payload_of(world, of, variant) }, &|number| { host.float_text(number) });
             if table.found {
                 crossed = true;
                 table_below = table.below.to_owned();
@@ -266,7 +266,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        written = written_below(&state, world, &computed, (want).as_ref(), &|of, variant| { host.payload_of(of, variant) }, &|number| { host.float_text(number) });
+        written = written_below(&state, world, &computed, (want).as_ref(), &|of, variant| { check_walked_payload_of(world, of, variant) }, &|number| { host.float_text(number) });
     }
     if crossed {
         below = Some(table_below);
@@ -278,7 +278,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        let part = unwritable_in(&state, world, &computed, &|of, variant| { host.payload_of(of, variant) });
+        let part = unwritable_in(&state, world, &computed, &|of, variant| { check_walked_payload_of(world, of, variant) });
         if part.len() == 2 {
             state.a_field_that_owns_memory(&bound, nikaia_std::index::get(&part, 0), nikaia_std::index::get(&part, 1), "a `comptime`", span);
             said_a_part = true;

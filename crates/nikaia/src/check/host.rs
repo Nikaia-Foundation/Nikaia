@@ -5,7 +5,7 @@
 
 use super::*;
 use nikaia_std::tools::build_eval::BtRead;
-use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost, CheckPlace};
+use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost};
 
 pub(super) struct Host<'a> {
     pub(super) parsed: &'a Parsed,
@@ -352,43 +352,6 @@ impl CheckHost for Host<'_> {
         crate::comptime_run::VALUE_FN.to_string()
     }
 
-    fn place_of(&self, place: &str, here: i64) -> CheckPlace {
-        let (files, _) = self.files();
-        let here = here as usize;
-        let stopped = Some(place)
-            .and_then(|place| place.strip_prefix(crate::comptime_run::STOPPED_AT))
-            .and_then(|rest| rest.split_once(':'))
-            .and_then(|(unit, byte)| {
-                Some((unit.parse::<usize>().ok()?, byte.parse::<u32>().ok()?))
-            });
-        let at = stopped
-            .filter(|(unit, _)| *unit == here)
-            .map(|(_, byte)| byte);
-        // `@<file>:<byte>`: a place in this file is shown, and one in another
-        // is named by the function it is in.
-        let function = stopped
-            .filter(|(unit, _)| *unit != here)
-            .and_then(|(unit, byte)| {
-                let file = files.get(unit)?;
-                file.program.items.iter().find_map(|item| match &item.node {
-                    Item::Fn {
-                        name: Some(name), ..
-                    } if (item.span.start..item.span.end).contains(&byte) => {
-                        Some(file.text(*name).to_string())
-                    }
-                    _ => None,
-                })
-            });
-        CheckPlace {
-            at: at.map_or(-1, i64::from),
-            function,
-        }
-    }
-
-    fn written(&self, value: &Expr) -> String {
-        super::written_by(self.parsed, value)
-    }
-
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)> {
         match literal {
             Expr::LitInterpolated { parts, .. } => crate::emit::interpolated_holes(parts)
@@ -408,10 +371,6 @@ impl CheckHost for Host<'_> {
     /// host's (`core::Core`), until the dispatcher moves (U-c7, U-c11).
     fn declared(&self, _state: &mut CheckState, _ty: &crate::ast::Type, _span: &Span) -> Ty {
         unreachable!("`declared` is asked of the core's host, not of the services")
-    }
-
-    fn payload_of(&self, ty: &str, variant: &str) -> Option<Vec<Ty>> {
-        super::payload_of(self.parsed, self.beside, ty, variant)
     }
 
     fn float_text(&self, number: f64) -> String {

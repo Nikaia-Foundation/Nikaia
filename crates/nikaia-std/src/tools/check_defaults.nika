@@ -164,7 +164,7 @@ pub fn check_defaults_computed_value[H: CheckHost](mut state: CheckState, world:
         }
         // **A struct is only as writable as its fields** (D4), named as a
         // `comptime`'s is.
-        let owned = unwritable_in(state, world, computed, fn(of, variant) { host.payload_of(of, variant) })
+        let owned = unwritable_in(state, world, computed, fn(of, variant) { check_walked_payload_of(world, of, variant) })
         if owned.len() == 2 {
             state.a_field_that_owns_memory(name, owned[0], owned[1], "a default", span)
             return

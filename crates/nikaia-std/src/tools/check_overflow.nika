@@ -216,7 +216,7 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
         let into = unsigned_from_signed(found, want) ?? ""
         if !literal && !into.is_empty() {
             let key = span.start as i64
-            let slot = CheckUnsignedSlot { node: id_of(given) as i64, found: found.clone(), want: want.clone(), into: into.clone(), written: host.written(given), span: span.clone(), refusal: null }
+            let slot = CheckUnsignedSlot { node: id_of(given) as i64, found: found.clone(), want: want.clone(), into: into.clone(), written: check_walked_written(given, world.words), span: span.clone(), refusal: null }
             let mut slots: Vec[CheckUnsignedSlot] = []
             if state.flow.unsigned_slots.contains_key(key) {
                 let held = state.flow.unsigned_slots.get(key) ?? return null

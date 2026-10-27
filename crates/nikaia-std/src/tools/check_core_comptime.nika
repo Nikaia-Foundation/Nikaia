@@ -322,7 +322,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
         let wanted: Ty = want?.clone() ?? Ty::Unknown
         if is_fixed(wanted) {
             let pairs = check_core_comptime_items(evaluated)
-            let table = state.a_table_that_crosses(world, bound, wanted, pairs, span, fn(of, variant) { host.payload_of(of, variant) }, fn(number) { host.float_text(number) })
+            let table = state.a_table_that_crosses(world, bound, wanted, pairs, span, fn(of, variant) { check_walked_payload_of(world, of, variant) }, fn(number) { host.float_text(number) })
             if table.found {
                 crossed = true
                 table_below = table.below.clone()
@@ -337,7 +337,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     let mut written: String? = null
     if evaluated != null {
         let computed: BuildValue = evaluated?.clone() ?? return Ty::Unknown
-        written = written_below(state, world, computed, want, fn(of, variant) { host.payload_of(of, variant) }, fn(number) { host.float_text(number) })
+        written = written_below(state, world, computed, want, fn(of, variant) { check_walked_payload_of(world, of, variant) }, fn(number) { host.float_text(number) })
     }
     if crossed {
         below = table_below
@@ -348,7 +348,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     let mut said_a_part = false
     if evaluated != null {
         let computed: BuildValue = evaluated?.clone() ?? return Ty::Unknown
-        let part = unwritable_in(state, world, computed, fn(of, variant) { host.payload_of(of, variant) })
+        let part = unwritable_in(state, world, computed, fn(of, variant) { check_walked_payload_of(world, of, variant) })
         if part.len() == 2 {
             state.a_field_that_owns_memory(bound, part[0], part[1], "a `comptime`", span)
             said_a_part = true

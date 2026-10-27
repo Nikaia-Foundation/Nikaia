@@ -19,7 +19,7 @@
 
 use super::*;
 use nikaia_std::tools::build_eval::BtRead;
-use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost, CheckPlace};
+use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost};
 use nikaia_std::tools::check_narrow::CheckNarrowing;
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
@@ -268,24 +268,12 @@ impl CheckHost for Core<'_, '_> {
         self.h.value_fn()
     }
 
-    fn place_of(&self, place: &str, here: i64) -> CheckPlace {
-        self.h.place_of(place, here)
-    }
-
-    fn written(&self, value: &Expr) -> String {
-        self.h.written(value)
-    }
-
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)> {
         self.h.holes_read(literal)
     }
 
     fn declared(&self, state: &mut CheckState, ty: &crate::ast::Type, span: &Span) -> Ty {
         self.hosted(state, |checker| checker.declared(ty, span))
-    }
-
-    fn payload_of(&self, ty: &str, variant: &str) -> Option<Vec<Ty>> {
-        self.h.payload_of(ty, variant)
     }
 
     fn float_text(&self, number: f64) -> String {

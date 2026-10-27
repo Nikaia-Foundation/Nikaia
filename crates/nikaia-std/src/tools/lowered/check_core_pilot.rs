@@ -53,7 +53,7 @@ pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut Check
             let read = check_core_expr(state, world, host, target, span);
             let nullable = matches!(read, Ty::Nullable(_));
             if !nullable { return; }
-            let slot = format!("{}[{}]", host.written(base), host.written(index));
+            let slot = format!("{}[{}]", check_walked_written(base, world.words), check_walked_written(index, world.words));
             let notes: Vec<String> = vec![String::from("A missing key is normal, not a bug, so this line has to say what a missing key counts as.")];
             let help: String = format!("Write it out with a fallback for a missing key: `{} = ({} ?? 0) + 1`.", slot, slot);
             state.findings.push(check_refusal("NK1162", span, format!("`{}` reads the map before writing it, and the key might not be there yet.", slot), notes, Some(help)));

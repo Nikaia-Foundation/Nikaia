@@ -144,7 +144,7 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         let into = nikaia_std::index::or(unsigned_from_signed(found, want), || "".into());
         if !literal && !into.is_empty() {
             let key = span.start as i64;
-            let slot = CheckUnsignedSlot { node: id_of(given) as i64, found: found.clone(), want: want.clone(), into: into.to_owned(), written: host.written(given), span: span.clone(), refusal: None };
+            let slot = CheckUnsignedSlot { node: id_of(given) as i64, found: found.clone(), want: want.clone(), into: into.to_owned(), written: check_walked_written(given, world.words), span: span.clone(), refusal: None };
             let mut slots: Vec<CheckUnsignedSlot> = vec![];
             if state.flow.unsigned_slots.contains_key(&key) {
                 let held = match state.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
