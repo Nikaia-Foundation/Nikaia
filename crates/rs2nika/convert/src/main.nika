@@ -142,6 +142,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R85  `-free` profiles: a function with no `self` is not marked `sync` (it threads no state, it does not pause)",
         "R86  `let v = xs.iter().find(|x| c)` / `.find_map(|x| e)` (also after `return`, or as the tail) -> a `for` loop with `break` / `return`, a closure block's `return None` -> `continue`",
         "R82  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
+        "R93  `for (i, x) in xs.iter().enumerate() {` -> `for i in 0..<xs.len() {` and `let x = xs[i]`; `for x in xs.iter().skip(n) {` -> `for at in n..<xs.len() {` the same (`Seq` has no `enumerate`/`skip`)",
+        "R94  iterator adapters as a `for` loop: `out.extend(xs.iter().cloned())` -> `for x in xs { out.push(x.clone()) }` (`.copied()`: `push(x)`); `let v = xs.iter().fold(init, |acc, x| e)` -> `let mut v = init` and `for x in xs { v = e }`; R59 also after `.cloned()`/`.copied()` before the `filter`",
     ]
 }
 
@@ -3280,6 +3282,19 @@ fn rs2nika_filter_cloned(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     if st.ends_with(";") {
         st = st[0..<st.len() - ";".len()].clone()
     }
+    // R94: `.iter().cloned().filter(..).collect()` is the same pipeline;
+    // `.copied()` pushes the element itself.
+    let mut push_clone = ".clone()"
+    for pre in [".iter().cloned().filter(|", ".iter().copied().filter(|"] {
+        if st.contains(pre) && st.ends_with(").collect()") && !st.ends_with(".cloned().collect()") {
+            if pre.contains("copied") {
+                push_clone = ""
+            }
+            let body: String = (st.replace(pre, ".iter().filter(|").strip_suffix(".collect()") ?? "").clone()
+            st = f"{body}.cloned().collect()"
+            rs2nika_hit(ctx, "R94")
+        }
+    }
     let tail = ".cloned().collect()"
     let mid = ".iter().filter(|"
     if !st.starts_with("let ") || !st.ends_with(tail) {
@@ -3307,7 +3322,7 @@ fn rs2nika_filter_cloned(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
             lines.push(chained[i].clone())
             i = i + 1
         }
-        lines.push(f"{ind}    {name}.push({var0}.clone())")
+        lines.push(f"{ind}    {name}.push({var0}{push_clone})")
         lines.push(f"{ind}}}")
         rs2nika_hit(ctx, "R59")
         return lines
@@ -3331,7 +3346,211 @@ fn rs2nika_filter_cloned(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let r = rs2nika_expr(ctx, recv)
     let b = rs2nika_expr(ctx, body)
     rs2nika_hit(ctx, "R59")
-    return [f"{ind}{head.trim()}", f"{ind}for {var} in {r} {{", f"{ind}    if {b} {{", f"{ind}        {name}.push({var}.clone())", f"{ind}    }}", f"{ind}}}"]
+    return [f"{ind}{head.trim()}", f"{ind}for {var} in {r} {{", f"{ind}    if {b} {{", f"{ind}        {name}.push({var}{push_clone})", f"{ind}    }}", f"{ind}}}"]
+}
+
+/// A place: a name or a chain of fields (`self.units`), no call, no index.
+fn rs2nika_is_place(text: ref String) -> bool {
+    if text == "" || text.starts_with(".") || text.ends_with(".") || text.contains("..") {
+        return false
+    }
+    for c in text.chars() {
+        if !(rs2nika_word(c) || c == ':' || c == '.') {
+            return false
+        }
+    }
+    return true
+}
+
+/// The first of `names` that `line` does not use as a name.
+fn rs2nika_fresh(line: ref String, names: ref Vec[String]) -> String {
+    for n in names {
+        if rs2nika_replace_name(line, n, "") == line {
+            return n.clone()
+        }
+    }
+    return names[names.len() - 1].clone()
+}
+
+/// `xs` of `xs.iter()`, `xs.into_iter()` or `&xs` when `xs` is a place, else
+/// `""`.
+fn rs2nika_iter_place(given: ref String) -> String {
+    let mut r: String = given.trim().clone()
+    let mut found = false
+    for m in [".iter()", ".into_iter()"] {
+        if !found && r.ends_with(m) {
+            r = (r.strip_suffix(m) ?? "").clone()
+            found = true
+        }
+    }
+    if !found && r.starts_with("&") && !r.starts_with("&mut ") {
+        r = (r.strip_prefix("&") ?? "").clone()
+        found = true
+    }
+    if !found || !rs2nika_is_place(r) {
+        return ""
+    }
+    return r
+}
+
+/// R93: `for (i, x) in xs.iter().enumerate() {` -> `for i in 0..<xs.len() {`
+/// and `let x = xs[i]`; `for x in xs.iter().skip(n) {` -> `for at in
+/// n..<xs.len() {` the same. A range, not a `while`: a `continue` in the body
+/// still steps the index. `iter_mut` and a `mut` element stay under the TODO.
+fn rs2nika_index_for(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let st: String = line.trim().clone()
+    if !st.starts_with("for ") || !st.ends_with(" {") {
+        return []
+    }
+    let inn = st.find(" in ") ?? return []
+    let pat: String = st["for ".len()..<inn].trim().clone()
+    let seq: String = st[inn + " in ".len()..<st.len() - " {".len()].trim().clone()
+    let mut index: String = ""
+    let mut elem: String = ""
+    let mut from: String = "0"
+    let mut recv: String = ""
+    if seq.ends_with(".enumerate()") {
+        if !pat.starts_with("(") || !pat.ends_with(")") {
+            return []
+        }
+        let parts: Vec[String] = rs2nika_split_args(((pat.strip_prefix("(") ?? "").strip_suffix(")") ?? "").clone())
+        if parts.len() != 2 {
+            return []
+        }
+        index = parts[0].trim().clone()
+        elem = parts[1].trim().clone()
+        if !rs2nika_is_path(index) || index == "_" || index.contains(":") {
+            return []
+        }
+        recv = rs2nika_iter_place(seq[0..<seq.len() - ".enumerate()".len()].clone())
+    } else if seq.ends_with(")") {
+        let at = seq.find(".skip(") ?? return []
+        let n: String = seq[at + ".skip(".len()..<seq.len() - ")".len()].trim().clone()
+        if !rs2nika_is_path(n) {
+            return []
+        }
+        from = n
+        elem = pat.clone()
+        recv = rs2nika_iter_place(seq[0..<at].clone())
+        index = rs2nika_fresh(line, ["at", "k", "skipped_at"])
+    } else {
+        return []
+    }
+    while elem.starts_with("&") && !elem.starts_with("&mut ") {
+        elem = (elem.strip_prefix("&") ?? "").clone()
+    }
+    if recv == "" || elem == "" || elem.contains("&") || elem.contains("mut ") {
+        return []
+    }
+    let mut out: Vec[String] = ["=", f"{ind}for {index} in {from}..{recv}.len() {{"]
+    if elem != "_" {
+        out.push(f"{ind}    let {elem} = {recv}[{index}]")
+    }
+    rs2nika_hit(ctx, "R93")
+    return out
+}
+
+/// R94: `out.extend(xs.iter().cloned());` -> `for x in xs { out.push(x.clone()) }`,
+/// `.copied()` the same with `push(x)`.
+fn rs2nika_extend_cloned(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let mut st: String = line.trim().clone()
+    if st.ends_with(";") {
+        st = st[0..<st.len() - ";".len()].clone()
+    }
+    if !st.ends_with("))") {
+        return []
+    }
+    let at = st.find(".extend(") ?? return []
+    let target: String = st[0..<at].clone()
+    let mut arg: String = st[at + ".extend(".len()..<st.len() - ")".len()].clone()
+    let mut how: String = ".clone()"
+    if arg.ends_with(".cloned()") {
+        arg = arg[0..<arg.len() - ".cloned()".len()].clone()
+    } else if arg.ends_with(".copied()") {
+        arg = arg[0..<arg.len() - ".copied()".len()].clone()
+        how = ""
+    } else {
+        return []
+    }
+    let recv = rs2nika_iter_place(arg)
+    if recv == "" || !rs2nika_is_place(target) {
+        return []
+    }
+    let x = rs2nika_fresh(line, ["x", "item", "one"])
+    rs2nika_hit(ctx, "R94")
+    return ["=", f"{ind}for {x} in {recv} {{", f"{ind}    {target}.push({x}{how})", f"{ind}}}"]
+}
+
+/// R94: `let v = xs.iter().fold(init, |acc, x| e);` -> `let mut v = init` and
+/// `for x in xs { v = e }`, `acc` read as `v`. A closure block of statements
+/// stays under the TODO.
+fn rs2nika_fold_for(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let mut st: String = line.trim().clone()
+    if st.ends_with(";") {
+        st = st[0..<st.len() - ";".len()].clone()
+    }
+    if !st.starts_with("let ") || !st.ends_with(")") {
+        return []
+    }
+    let eq = st.find(" = ") ?? return []
+    let at = st.find(".fold(") ?? return []
+    if at < eq {
+        return []
+    }
+    let mut name: String = st["let ".len()..<eq].trim().clone()
+    if name.starts_with("mut ") {
+        name = (name.strip_prefix("mut ") ?? "").trim().clone()
+    }
+    let colon = name.find(":") ?? name.len()
+    let var: String = name[0..<colon].trim().clone()
+    let recv = rs2nika_iter_place(st[eq + " = ".len()..<at].clone())
+    let c: Vec[scalar] = st.chars().collect()
+    let close = rs2nika_closing(c, at + ".fold".len(), '(', ')')
+    if recv == "" || close != c.len() - 1 || !rs2nika_is_path(var) || var.contains(":") {
+        return []
+    }
+    let inner: String = rs2nika_text(c, at + ".fold(".len(), close)
+    let split = inner.find(", |") ?? return []
+    let init: String = inner[0..<split].trim().clone()
+    let lam: String = inner[split + ", |".len()..<inner.len()].clone()
+    let bar = lam.find("|") ?? return []
+    let params: Vec[String] = rs2nika_split_args(lam[0..<bar].clone())
+    let mut body: String = lam[bar + 1..<lam.len()].trim().clone()
+    // a block of one expression is that expression
+    if body.starts_with("{") && body.ends_with("}") && !body.contains(";") {
+        body = ((body.strip_prefix("{") ?? "").strip_suffix("}") ?? "").trim().clone()
+    }
+    if params.len() != 2 || body.starts_with("{") || body == "" {
+        return []
+    }
+    let acc: String = params[0].trim().clone()
+    let mut x: String = params[1].trim().clone()
+    while x.starts_with("&") {
+        x = (x.strip_prefix("&") ?? "").clone()
+    }
+    if !rs2nika_is_path(acc) || acc.contains(":") || x.contains(":") || x.contains("&") || x.contains("mut ") {
+        return []
+    }
+    let b = rs2nika_replace_name(body, acc, var)
+    rs2nika_hit(ctx, "R94")
+    return ["=", f"{ind}let mut {name} = {init}", f"{ind}for {x} in {recv} {{", f"{ind}    {var} = {b}", f"{ind}}}"]
+}
+
+/// The rules that turn an iterator pipeline into a loop over the list (R93,
+/// R94).
+fn rs2nika_iter_loops(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let indexed = rs2nika_index_for(ctx, line)
+    if indexed.len() > 0 {
+        return indexed
+    }
+    let extended = rs2nika_extend_cloned(ctx, line)
+    if extended.len() > 0 {
+        return extended
+    }
+    return rs2nika_fold_for(ctx, line)
 }
 
 /// The statements of a closure body `{ a; b; tail }`, converted, one per line
@@ -4047,6 +4266,10 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let found = rs2nika_find_loop(ctx, line)
     if found.len() > 0 {
         return found
+    }
+    let looped = rs2nika_iter_loops(ctx, line)
+    if looped.len() > 0 {
+        return looped
     }
     let st: String = line.trim().clone()
     if st.starts_with("while let ") && st.ends_with(" {") {

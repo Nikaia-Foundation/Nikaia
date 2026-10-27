@@ -1,0 +1,40 @@
+fn walk(units: ref Vec[Unit], files: ref Vec[(String, String)], extra: ref Vec[String]) -> Vec[String] sync {
+    let mut out: Vec[String] = []
+    for at in 0..<units.len() {
+        let unit = units[at]
+        if unit.skipped {
+            continue
+        }
+        out.push(f"{at}")
+    }
+    for k in 0..<files.len() {
+        out.push(f"{k}")
+    }
+    for at in 1..<files.len() {
+        let (name, body) = files[at]
+        out.push(name.clone())
+    }
+    for x in extra {
+        out.push(x.clone())
+    }
+    let mut needs = Needs::empty()
+    for unit in units {
+        needs = needs.join(Needs::of(unit))
+    }
+    let mut more = Needs::empty()
+    for u in self.units {
+        more = more.join(Needs::of(u))
+    }
+    let mut theirs: Vec[ref Unit] = []
+    for u in units {
+        if u.package == needs.name {
+            theirs.push(u)
+        }
+    }
+    // TODO(rs2nika): `.enumerate()`: a `while` with an index
+    for (at, unit) in units.iter_mut().enumerate() {
+        unit.skipped = true
+    }
+    return out
+}
+
