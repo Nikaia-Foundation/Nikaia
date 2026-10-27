@@ -133,6 +133,9 @@ struct BufferWalk {
     struct_puts: collections::BTreeMap[String, String],
     taken: collections::BTreeMap[String, String],
     reassigned: collections::BTreeMap[i64, i64],
+    /// An assignment of a whole buffer local to another, by the `let` of the
+    /// local handed over (#883).
+    handed: collections::BTreeMap[i64, i64],
     captured: collections::BTreeMap[String, (i64, collections::BTreeSet[(i64, String)])],
     statement: i64,
     result_carries: bool,
@@ -225,7 +228,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => carries_maybe(ret_type, ask),
         else => false,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap() }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap() }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -308,6 +311,13 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                 if bound != null && (bound?.buffer ?? false) {
                     walk.reassigned.insert(at, bound?.at ?? 0)
                     given_up_inside(bound?.at ?? 0, ask, walk)
+                }
+                let from = match value {
+                    Expr::Variable(name, _) => local_of(ask.names.resolve(name), walk),
+                    else => null,
+                }
+                if from != null && (from?.buffer ?? false) {
+                    walk.handed.insert(at, from?.at ?? 0)
                 }
                 shed(root, walk)
             }
@@ -1577,6 +1587,12 @@ fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk
     // **A kept buffer assigned again goes into the same keep** (#293).
     for (statement, bound) in walk.reassigned {
         let keep = plan.puts[bound]?.clone() ?? continue
+        // **Not a buffer already kept** (#883): `st = after` hands over a
+        // view the keep holds; putting it in again would take it by value.
+        let from = walk.handed[statement] ?? -1
+        if from >= 0 && plan.puts.contains_key(from) {
+            continue
+        }
         plan.reputs.insert(statement.clone(), keep)
     }
     // **One keep per buffer, as many as the widest value needs** (ADR-283 D2).

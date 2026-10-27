@@ -1,0 +1,31 @@
+// #883: a String local assigned another kept String local, whose trimmed
+// view is the result, hands the kept view over and does not put it in again.
+
+fn tail(head: String) -> String {
+    let mut st: String = head.clone()
+    let after: String = ""
+    st = after
+    let n: String = st.trim()
+    return n
+}
+
+fn tail_untyped(head: String) -> String {
+    let mut st: String = head.clone()
+    let after: String = "  y  "
+    st = after
+    let n = st.trim()
+    return n
+}
+
+fn tail_returned(head: String) -> String {
+    let mut st: String = head.clone()
+    let after: String = f"  {head.trim()}z  "
+    st = after
+    return st.trim()
+}
+
+fn main() {
+    println(f"[{tail("  x  ")}]")
+    println(tail_untyped("  x  "))
+    println(tail_returned("  x  "))
+}
