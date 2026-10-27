@@ -1,4 +1,4 @@
-fn quoted(text: ref String, byte: u8) -> String sync {
+fn quoted(text: String, byte: u8) -> String sync {
     let mut out: String = ""
     out.push((byte as u8) as scalar)
     return out

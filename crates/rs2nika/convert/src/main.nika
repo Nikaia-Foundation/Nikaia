@@ -55,7 +55,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R1   statement `;` dropped",
         "R2   `&self` -> `ref self`, `&mut self` -> `ref mut self`",
         "R3   param `x: &mut T` -> `mut x: T`; `x: &T` -> `x: ref T`",
-        "R4   `&str`/`&String` -> `ref String`, `&[T]` -> `ref Vec[T]`, `Cow<str>` -> `String`",
+        "R4   `&str`/`&String` -> `String` (`ref String` warns, NK1261), `&[T]` -> `ref Vec[T]`, `Cow<str>` -> `String`",
         "R5   lifetimes dropped (`<'a>`, `&'a`, `'_`)",
         "R6   `Vec<T>` -> `Vec[T]` (any generic `<..>` in a type -> `[..]`)",
         "R7   `Option<T>` -> `T?`",
@@ -165,6 +165,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R111 `xs.iter().enumerate().map(|(i, x)| b)` -> `(0..<xs.len()).map(fn(i) { let x = xs[i]; b })` (`Seq` has no `enumerate`), also `filter_map`, `flat_map`, `any`, `all`; a `filter`/`skip_while`/`take_while` on the pair keeps the index, the next step takes the element",
         "R112 `.flat_map(..)` / `.skip(n)` on a `Seq` chain is a `Seq` method: no TODO",
         "R113 R94's fold also over any `Seq` chain, with a function for the closure (`v = f(v, x)`), with a closure block of statements, after `return` (`folded`, then `return folded`) and as a block's tail (`folded` last)",
+        "R130 `&str` stays `ref String` in a function type's parameter and in `Option<&str>`, where NK1261 does not hold (R4 writes `String` elsewhere)",
     ]
 }
 
@@ -384,7 +385,7 @@ fn rs2nika_ty(mut ctx: Rs2nikaCtx, given: ref String) -> String {
         }
         if inner == "str" || inner == "String" {
             rs2nika_hit(ctx, "R4")
-            return "ref String"
+            return "String"
         }
         if inner.starts_with("[") && inner.ends_with("]") {
             rs2nika_hit(ctx, "R4")
@@ -418,7 +419,7 @@ fn rs2nika_ty(mut ctx: Rs2nikaCtx, given: ref String) -> String {
         }
         if base == "Option" {
             rs2nika_hit(ctx, "R7")
-            let a = rs2nika_ty(ctx, args[0].clone())
+            let a = rs2nika_view_ty(ctx, args[0].clone())
             return f"{a}?"
         }
         if base == "Box" || base == "Rc" {
@@ -708,7 +709,7 @@ fn rs2nika_fn_param(mut ctx: Rs2nikaCtx, n: ref String, t: ref String) -> String
     let close = rs2nika_closing(c, rs2nika_char_index(t, open), '(', ')')
     let mut args: Vec[String] = []
     for a in rs2nika_split_args(rs2nika_text(c, rs2nika_char_index(t, open) + 1, close)) {
-        args.push(rs2nika_ty(ctx, a))
+        args.push(rs2nika_view_ty(ctx, a))
     }
     let joined = rs2nika_join(args, ", ")
     let after: String = rs2nika_text(c, close + 1, c.len()).trim().clone()
@@ -718,6 +719,19 @@ fn rs2nika_fn_param(mut ctx: Rs2nikaCtx, n: ref String, t: ref String) -> String
         r = f" -> {tt}"
     }
     return f"{n}: fn({joined}){r} sync"
+}
+
+/// R130: where `ref String` still says what NK1261 does not cover, `&str`
+/// stays `ref String`: a function type's parameter (`fn(String)` takes the
+/// text over) and `Option<&str>` (a `String?` parameter read with `??` or
+/// `match` is counted as kept).
+fn rs2nika_view_ty(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let r = rs2nika_ty(ctx, given)
+    if r == "String" && given.trim().starts_with("&") {
+        rs2nika_hit(ctx, "R130")
+        return "ref String"
+    }
+    return r
 }
 
 /// The scalar index of a byte index.

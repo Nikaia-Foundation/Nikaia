@@ -16,7 +16,7 @@ const HAND: &[(&str, &[&str])] = &[("a", &["b"])];
 pub comptime RT: Array[ref String, 2] = ["x86", "arm"]
 // TODO(rs2nika): `const` of a `char` or a 128-bit integer: a `comptime` holds integers up to 64 bits, floats, `bool`, text, lists, pairs and structs (Part II 10.2)
 const LIMIT_B: u128 = 1 << 60;
-comptime PAIRS: Array[(ref String, i64), 2] = [("a", 1), ("b", 2)]
+comptime PAIRS: Array[(String, i64), 2] = [("a", 1), ("b", 2)]
 // TODO(rs2nika): `const` of a `char` or a 128-bit integer: a `comptime` holds integers up to 64 bits, floats, `bool`, text, lists, pairs and structs (Part II 10.2)
 const SEP: char = ',';
 comptime HULLS: Array[ref String, 2] = [NAME, NAME]

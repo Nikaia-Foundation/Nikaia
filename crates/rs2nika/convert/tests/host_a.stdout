@@ -4,12 +4,12 @@ use std::text
         return self.reads.workshop().somewhere()
     }
 
-    fn decoded(ref self, world: ref CheckWorld, literal: ref String) -> String? sync {
+    fn decoded(ref self, world: ref CheckWorld, literal: String) -> String? sync {
         // TODO(rs2nika): `decoded` with `ascii_scalar`: a numbered escape above ASCII reads as no text
         return (decoded(literal) fn(n) { ascii_scalar(n) })
     }
 
-    fn read(ref self, world: ref CheckWorld, path: ref String) -> BtRead sync {
+    fn read(ref self, world: ref CheckWorld, path: String) -> BtRead sync {
         return match self.reads.read(path) {
             Ok(text) => BtRead { text: text, denied: null },
             Err(why) => BtRead { text: null, denied: why },
@@ -33,7 +33,7 @@ use std::text
         return comptime_run::VALUE_FN.to_string()
     }
 
-    fn place_of(ref self, world: ref CheckWorld, place: ref String, here: i64) -> CheckPlace sync {
+    fn place_of(ref self, world: ref CheckWorld, place: String, here: i64) -> CheckPlace sync {
         let (files, _) = self.files()
         let here = here
         // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
@@ -52,7 +52,7 @@ use std::text
         return super::written_by(world, value)
     }
 
-    fn newly_throws(ref self, world: ref CheckWorld, key: ref String) -> Vec[String]? sync {
+    fn newly_throws(ref self, world: ref CheckWorld, key: String) -> Vec[String]? sync {
         return self.newly.throws.get(key)?.clone()
     }
 

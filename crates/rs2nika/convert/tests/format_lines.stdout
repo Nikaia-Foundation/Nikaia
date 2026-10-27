@@ -1,4 +1,4 @@
-fn report(path: ref String, rows: ref Vec[Held]) -> String sync {
+fn report(path: String, rows: ref Vec[Held]) -> String sync {
     let hole_6 = count(fn(h) { (match h { Held::Proved => true, else => false }) })
     let hole_7 = count(fn(h) { (match h { Held::Refused => true, else => false }) })
     let hole_8 = if rows.len() > 2 { "many" } else { "few, some" }

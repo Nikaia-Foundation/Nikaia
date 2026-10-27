@@ -1,4 +1,4 @@
-fn gather(units: ref Vec[Unit], mut library: Library, contract: ref Contract, name: ref String) sync {
+fn gather(units: ref Vec[Unit], mut library: Library, contract: ref Contract, name: String) sync {
     // ADAPTER: bleibt in Rust (`Parsed`)
     let mut packages: collections::BTreeMap[String, Vec[Parsed]] = collections::BTreeMap()
     let mut counts: collections::BTreeMap[String, i64] = collections::BTreeMap()
