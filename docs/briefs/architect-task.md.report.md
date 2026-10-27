@@ -1,6 +1,5 @@
 Result: done
-Batch: c7-rest-plan.md b655-element-view-slots.md b655-null-arm-view.md
+Batch: b655-expr-view-in-tools.md c7-r1.md b655-two-ref-lifetime.md
 Owner: none
-Pushed: f958cf7 (briefs, batch.txt, common.part rule, architect State)
-Cut: b655-push-local-view was a false cut (keeping `check_arguments_at` was a choice the brief allowed); #655 step 1 done in 2e1ba5d, Changelog line in its report (version raise owed). Rule added to common.part: a choice the brief left open is no deviation.
-#655: commented; step 2 split into 2a (Vec element, tuple part) and 2b (`null` arm, then `check_arguments_at` removed); step 5 follows.
+Pushed: b3bf0e6 (briefs, batch.txt, architect.md State; comment on #655)
+Note: b655-null-arm-view's `Needs` is not an owner question: ADR-354 D1/D2 already say Expr/Ty are not words, so the NK1257 on `ref Expr = given[i]` in tools files is a defect (first brief). Version raise owed for 6c24a30 and da5a86e (Changelog lines in their reports).
