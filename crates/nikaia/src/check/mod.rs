@@ -46,7 +46,6 @@ pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
 use nikaia_std::tools::check_state::{CheckState, CheckWorld};
-use nikaia_std::tools::check_texts::{self};
 use nikaia_std::tools::check_walked;
 use nikaia_std::tools::check_widen::{self};
 use nikaia_std::tools::parsed_view::ParsedView;
@@ -614,63 +613,6 @@ fn finished(checker: Checker<'_>) -> Checked {
     }
 }
 
-/// Everything the emitter needs that only a type checker can answer: the loops
-/// whose step can fail, the method calls that can fail, and the places where a
-/// declared `Shared[T]` makes the first handle.
-///
-/// All three together because all three come out of one pass, and a second pass
-/// Which wrap a value standing in `want` needs, and `None` where it needs none.
-///
-/// One function for all four of Part I 2.3's positions, so the rule is stated
-/// once: the annotated `let`, the assignment, the `return`, and a struct
-/// literal's field — and a call's argument, which is the fourth written a fifth
-/// way. Before this they were four copies of the same three conditions, and the
-/// copies had already drifted in what they did with an unknown type.
-/// **Which of a statement's calls an argument belongs to**, as text both the
-/// checker and the emitter can produce from the same tree.
-///
-/// A key of statement, callee and position names a *parameter*; a statement may
-/// call one function more than once, and the argument itself is what tells the
-/// two calls apart. The alternatives were weighed and each fails on something
-/// this does not:
-///
-///   * **the argument's span** - an argument has none. One node type does:
-///     [ADR-081](../../docs/specification/adr/adr-081.md) D1 gave `Expr::Binary`
-///     a span of its own, for a key of exactly this kind. It is one node and an
-///     argument is rarely that one, so there is nothing general to key by -
-///     which is the reason this whole side table exists;
-///   * **the address of the `Expr`** - stable for a statement walked twice, and
-///     not for an `f"…"` hole, which is *text* until each pass parses it into a
-///     tree of its own ([`crate::emit::literal_expressions`]);
-///   * **the order the calls are walked in** - which would make the two passes
-///     agree by assumption rather than by construction.
-///
-/// So it is structural: the same expression, from either pass, renders the
-/// same. The interner is shared, so an identifier renders as the same `Symbol`
-/// on both sides - including in a re-parsed hole, which is parsed with that
-/// interner.
-///
-/// **Two textually identical arguments share an entry, and want the same
-/// answer**: the wrap is a function of the argument's type and the parameter's,
-/// and within one statement the same expression in the same position has the
-/// same type.
-///
-/// It is built only where a wrap was recorded for this statement, callee and
-/// position - which is rare - so the cost is not on the path every argument
-/// takes.
-/// Whether an expression **can only** be a value: a name, a literal, an
-/// operator, a field, an index.
-///
-/// Whether this expression **leaves** rather than coming to a value
-/// ([ADR-276](../../docs/specification/adr/adr-276.md) D20).
-///
-/// Its type is *never*, which is not a type this checker's `Ty` spells: what
-/// never means here is *this is not one of the answers that have to agree*, and
-/// that is a question about the expression rather than about a type. A block
-/// counts where its last statement is one of the four, which is the shape an
-/// arm written `=> { throw NotFound }` still has.
-impl Checker<'_> {}
-
 /// **The integer types a program writes** (Part I 2.2), as the type names
 /// they are.
 const INTEGERS: [&str; 5] = ["u8", "u32", "u64", "i32", "i64"];
@@ -1091,13 +1033,6 @@ impl MultiLock {
     }
 }
 
-/// **Whether a `'…'` as written is one ASCII character**, which is what makes
-/// it a byte as well as a scalar (Part I 2.6; `tools/check_texts.nika`).
-pub fn a_byte(written: &str) -> bool {
-    check_texts::literal_is_a_byte(written)
-}
-
-/// The byte a `'…'` that [`a_byte`] took is, as the language below writes one.
 /// **A `'…'` as the language below writes it** (ADR-320 D8): as written
 /// where it is one scalar, and the one scalar NFC composes it to, as
 /// `'\u{…}'`, where it is several - the checker has said `NK1213` there, and
@@ -1116,23 +1051,9 @@ pub fn char_literal(written: &str) -> String {
     }
 }
 
-pub fn byte_literal(written: &str) -> String {
-    nikaia_std::tools::check_texts::check_byte_literal(written)
-}
-
 pub fn value_node(expr: &Expr) -> i64 {
     crate::ast::id_of(expr) as i64
 }
-
-/// **`an i32` and `a u64`**: the article as the name is said (`NK1116`'s rule).
-/// A `u` is said *you*, so it takes `a`; the other vowels take `an`.
-pub fn an_or_a(ty: &str) -> String {
-    nikaia_std::tools::render::an_or_a(ty)
-}
-
-/// A view of a value that copies read as the value, and anything else as it is
-/// ([ADR-233](../../docs/specification/adr/adr-233.md) D4).
-impl Checker<'_> {}
 
 /// **`--asserts`** ([ADR-269](../../docs/specification/adr/adr-269.md) D7):
 /// every `assert` of one file, by line, and how the compiler holds it: proved,
@@ -1177,106 +1098,21 @@ pub fn claims_report(
     )
 }
 
-/// The prelude's claim ([ADR-269](../../docs/specification/adr/adr-269.md) D2).
-pub const ASSERT: &str = "assert";
-
-/// **A claim the compiler did not prove is refused** (`NK1300`,
-/// [ADR-380](../../docs/specification/adr/adr-380.md) D1): an `assert` it
-/// checks when the program runs, and a precondition some call does not prove.
-/// Not proved is not false, and the message says so. The build's
-/// `unproved-claims = "warn"` lowers each to a warning and keeps its check
-/// (D2); that is the project's, as `refuted-claims` is. A precondition of
-/// `main`, checked where the words arrive, a test's verdict and an `assume`
-/// are not asked; nor is a claim shown false (`NK1207`), which is worse than
-/// not proved and told already, or a precondition only calls that break it
-/// every time leave open.
+/// **A claim the compiler did not prove is refused** (`NK1300`, ADR-380 D1):
+/// `tools/check_claims.nika`.
 pub fn refuse_unproved_claims(checked: &mut Checked) {
-    use nikaia_std::tools::prover_results::ClaimHeld;
-    let refuted: Vec<&Finding> = checked
-        .findings
-        .iter()
-        .filter(|f| f.code == "NK1207")
-        .collect();
-    let mut unproved = Vec::new();
-    for ((start, _), claim) in &checked.facts.claims {
-        if claim.assumed || refuted.iter().any(|f| i64::from(f.span.start) == *start) {
-            continue;
-        }
-        let message = match &claim.held {
-            Some(ClaimHeld::AtRunTime(why)) => {
-                format!("`{}` is not proved: {why}.", claim.written)
-            }
-            Some(ClaimHeld::Precondition(f, n)) if f != "main" => {
-                // The calls `NK1207` told break it every time.
-                let broken = refuted
-                    .iter()
-                    .filter(|r| r.message.contains(&format!("`{f}`'s precondition")))
-                    .count() as i64;
-                let calls = match n - broken {
-                    n if n <= 0 => continue,
-                    1 => "one call does".to_string(),
-                    n => format!("{n} calls do"),
-                };
-                format!(
-                    "`{}`, the precondition of `{f}`, is not proved: {calls} not prove it.",
-                    claim.written
-                )
-            }
-            _ => continue,
-        };
-        let start = *start as u32;
-        unproved.push(Finding {
-            severity: Severity::Error,
-            span: Span {
-                start,
-                end: start + "assert".len() as u32,
-            },
-            code: "NK1300".to_string(),
-            message,
-            notes: vec![
-                "Not proved is not false: the compiler could not show the claim from what it \
-                 knows where it stands, and it may well hold."
-                    .to_string(),
-                "`nikaia check --asserts` lists every claim and why it is not proved.".to_string(),
-            ],
-            help: Some(
-                "Give the compiler what it needs to prove it, or build with \
-                 `unproved-claims = \"warn\"` to have it checked when the program runs."
-                    .to_string(),
-            ),
-            labels: Vec::new(),
-        });
-    }
+    let unproved = nikaia_std::tools::check_claims::check_claims_unproved(
+        &checked.findings,
+        &checked.facts.claims,
+    );
     checked.findings.extend(unproved);
 }
 
-/// **`std` assumes nothing** ([ADR-376](../../docs/specification/adr/adr-376.md)
-/// D3): every `assume` of a file of `std`'s Nikaia is refused (`NK1295`). The
-/// checker keeps each `assume` as a claim; only the caller that checks `std`
-/// knows the file is `std`'s.
+/// **`std` assumes nothing** (`NK1295`, ADR-376 D3): `tools/check_claims.nika`.
 pub fn refuse_assumes_in_std(checked: &mut Checked) {
-    for ((start, _), claim) in &checked.facts.claims {
-        if !claim.assumed {
-            continue;
-        }
-        let start = *start as u32;
-        checked.findings.push(Finding {
-            severity: Severity::Error,
-            span: Span {
-                start,
-                end: start + "assume".len() as u32,
-            },
-            code: "NK1295".to_string(),
-            message: "`std` assumes nothing: an `assume` is refused in `std`'s Nikaia.".to_string(),
-            notes: vec![
-                "`std`'s `unsafe` lives in the small crates of ADR-218, each listed.".to_string(),
-            ],
-            help: Some(
-                "Prove the claim with `assert`, or move the code into a listed crate.".to_string(),
-            ),
-            labels: Vec::new(),
-        });
-    }
+    let refused =
+        nikaia_std::tools::check_claims::check_claims_assumes_in_std(&checked.facts.claims);
+    checked.findings.extend(refused);
 }
 
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
@@ -1284,26 +1120,6 @@ pub fn written(parsed: &Parsed, expr: &Expr) -> String {
     nikaia_std::tools::written::written_expression(&parsed.interner, expr)
 }
 
-/// Whether handing a value of this type out takes nothing away.
-///
-/// Part I 2.2's numbers, `bool` and `char`, and any **view**: all of them are
-/// copied rather than moved in the language below, so a field of one may leave a
-/// borrowed subject freely. Everything else - a `String`, a `Vec`, a struct this
-/// program declares - is moved, which is what `NK1131` is about.
-///
-/// A short list on purpose, and the polarity is the usual one: a type not on it
 /// **Whether two values of this type may be compared** (ADR-204 D1):
 /// `tools/check_compare.nika`.
 use nikaia_std::tools::check_compare::CheckComparable as Comparable;
-
-/// How a member that may be boxed is named, the same in the checker and the
-/// emitter ([ADR-246](../../docs/specification/adr/adr-246.md)): a struct's
-/// field by its name, a variant's part as `Variant#0`, and a variant's named
-/// field as `Variant.name`.
-pub fn boxed_member(owner: &str, at: Option<usize>, field: Option<&str>) -> String {
-    nikaia_std::tools::check_words::boxed_member(
-        owner,
-        at.map_or(-1, |at| at as i64),
-        field.unwrap_or_default(),
-    )
-}

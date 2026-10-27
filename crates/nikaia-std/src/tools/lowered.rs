@@ -271,6 +271,14 @@ mod check_calls_lowered {
 #[allow(unused_imports)]
 pub use check_calls_lowered::*;
 
+mod check_claims_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/check_claims.rs");
+}
+#[allow(unused_imports)]
+pub use check_claims_lowered::*;
+
 mod check_collect_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1997,6 +2005,10 @@ pub mod check_buildtime2 {}
 pub mod check_calls {
     #[allow(unused_imports)]
     pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, a_paused_chain, a_pausing_sequence};
+}
+pub mod check_claims {
+    #[allow(unused_imports)]
+    pub use super::{check_claims_unproved, check_claims_assumes_in_std};
 }
 pub mod check_collect {
     #[allow(unused_imports)]

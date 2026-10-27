@@ -1,0 +1,83 @@
+// crates/nikaia-std/src/tools/check_claims.nika
+//
+// **The refusals of claims the checker kept** (ADR-294, #125, C-7 rest,
+// C7-r1): an `assert` or a precondition not proved (`NK1300`, ADR-380 D1) and
+// an `assume` in `std` (`NK1295`, ADR-376 D3). Free functions over the claims
+// and the findings so far; the Rust adapter adds what they return.
+
+use std::collections
+
+/// **A claim the compiler did not prove is refused** (`NK1300`, ADR-380 D1):
+/// an `assert` it checks when the program runs, and a precondition some call
+/// does not prove. Not proved is not false, and the message says so. The
+/// build's `unproved-claims = "warn"` lowers each to a warning and keeps its
+/// check (D2); that is the project's, as `refuted-claims` is. A precondition
+/// of `main`, checked where the words arrive, a test's verdict and an
+/// `assume` are not asked; nor is a claim shown false (`NK1207`), which is
+/// worse than not proved and told already, or a precondition only calls that
+/// break it every time leave open.
+pub fn check_claims_unproved(findings: ref Vec[CheckFinding], claims: ref collections::BTreeMap[(i64, i64), FactClaim]) -> Vec[CheckFinding] {
+    let mut unproved: Vec[CheckFinding] = []
+    for ((start, _), claim) in claims {
+        if claim.assumed || check_claims_refuted_at(findings, start) {
+            continue
+        }
+        let held = claim.held?.clone() ?? continue
+        let mut message = ""
+        match held {
+            ClaimHeld::AtRunTime(why) => {
+                message = f"`{claim.written}` is not proved: {why}."
+            }
+            ClaimHeld::Precondition(f, n) => {
+                if f == "main" {
+                    continue
+                }
+                // The calls `NK1207` told break it every time.
+                let mut broken = 0
+                for r in findings {
+                    if r.code == "NK1207" && r.message.contains(f"`{f}`'s precondition") {
+                        broken += 1
+                    }
+                }
+                let left = n - broken
+                if left <= 0 {
+                    continue
+                }
+                let mut calls = "one call does"
+                if left != 1 {
+                    calls = f"{left} calls do"
+                }
+                message = f"`{claim.written}`, the precondition of `{f}`, is not proved: {calls} not prove it."
+            }
+            else => continue,
+        }
+        let at = start as u32
+        unproved.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + "assert".len() as u32 }, code: "NK1300", message: message, notes: ["Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.", "`nikaia check --asserts` lists every claim and why it is not proved."], help: "Give the compiler what it needs to prove it, or build with `unproved-claims = \"warn\"` to have it checked when the program runs.", labels: [] })
+    }
+    return unproved
+}
+
+/// Whether a refusal `NK1207` starts where the claim does.
+fn check_claims_refuted_at(findings: ref Vec[CheckFinding], start: i64) -> bool {
+    for f in findings {
+        if f.code == "NK1207" && f.span.start as i64 == start {
+            return true
+        }
+    }
+    return false
+}
+
+/// **`std` assumes nothing** (ADR-376 D3): every `assume` of a file of
+/// `std`'s Nikaia is refused (`NK1295`). The checker keeps each `assume` as a
+/// claim; only the caller that checks `std` knows the file is `std`'s.
+pub fn check_claims_assumes_in_std(claims: ref collections::BTreeMap[(i64, i64), FactClaim]) -> Vec[CheckFinding] {
+    let mut refused: Vec[CheckFinding] = []
+    for ((start, _), claim) in claims {
+        if !claim.assumed {
+            continue
+        }
+        let at = start as u32
+        refused.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + "assume".len() as u32 }, code: "NK1295", message: "`std` assumes nothing: an `assume` is refused in `std`'s Nikaia.", notes: ["`std`'s `unsafe` lives in the small crates of ADR-218, each listed."], help: "Prove the claim with `assert`, or move the code into a listed crate.", labels: [] })
+    }
+    return refused
+}
