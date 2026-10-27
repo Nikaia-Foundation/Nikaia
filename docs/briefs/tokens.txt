@@ -72,3 +72,4 @@
 /home/user/Nikaia/docs/briefs/e12-3b.md 2176173 43
 /home/user/Nikaia/docs/briefs/architect-task.md 1981649 37
 /home/user/Nikaia/docs/briefs/b888-let-bound-proved-name.md 310396 5
+/home/user/Nikaia/docs/briefs/architect-task.md 580705 17
