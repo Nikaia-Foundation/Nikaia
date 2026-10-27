@@ -1,0 +1,20 @@
+error[NK1102]: This prints `i64?`, which may be `null`.
+  --> tests/an_assignment_to_a_prefix_ends_a_path_proof.nika:8:9
+   |
+ 8 |         println(o.inner.n + 1)
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.
+   = help: Print it with a fallback: `println(x ?? "none")`, or `println(x?.to_string() ?? "none")`.
+error[NK1102]: `+` is given `i64?`, which may be `null`.
+  --> tests/an_assignment_to_a_prefix_ends_a_path_proof.nika:8:17
+   |
+ 7 |         o.inner = Inner { n: null }
+   |         ------- assigned here, after the test
+ 8 |         println(o.inner.n + 1)
+   |                 ^^^^^^^^^ read here, where it may be `null`
+   |
+   = note: A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.
+   = note: A test before proved `o.inner.n` is not `null`, but `o.inner` is assigned after the test, and from there on `o.inner.n` is a `T?` again.
+   = help: Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.
+2 type errors

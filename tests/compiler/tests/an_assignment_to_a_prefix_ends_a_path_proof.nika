@@ -1,0 +1,10 @@
+struct Inner { n: i64? }
+struct Outer { inner: Inner }
+
+fn main() {
+    let mut o = Outer { inner: Inner { n: 1 } }
+    if o.inner.n != null {
+        o.inner = Inner { n: null }
+        println(o.inner.n + 1)
+    }
+}

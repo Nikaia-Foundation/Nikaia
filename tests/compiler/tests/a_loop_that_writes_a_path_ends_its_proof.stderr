@@ -1,0 +1,11 @@
+error[NK1102]: `a.n` may be `null` here: the loop around this read assigns `a.n` after it.
+  --> tests/a_loop_that_writes_a_path_ends_its_proof.nika:8:21
+   |
+ 8 |             println(a.n)
+   |                     ^^^ read here, on the next turn too
+ 9 |             a.n = null
+   |             --- assigned here, after the test
+   |
+   = note: A test before proved `a.n` is not `null`, but the next turn reaches this read after that write, and from there on `a.n` is a `T?` again.
+   = help: Test `a.n` inside the loop, or copy it into a local before it: `let x = a.n`.
+1 type error

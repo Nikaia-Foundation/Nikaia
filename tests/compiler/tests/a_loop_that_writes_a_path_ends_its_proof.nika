@@ -1,0 +1,13 @@
+struct Node { n: i64? }
+
+fn main() {
+    let mut a = Node { n: 1 }
+    if a.n != null {
+        let mut k = 0
+        while k < 2 {
+            println(a.n)
+            a.n = null
+            k += 1
+        }
+    }
+}

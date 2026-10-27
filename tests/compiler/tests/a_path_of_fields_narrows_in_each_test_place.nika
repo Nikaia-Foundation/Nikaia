@@ -1,0 +1,52 @@
+struct Inner { x: i64, tag: String? }
+struct Box { name: String?, count: i64?, inner: Inner? }
+
+fn early(b: ref Box) -> i64 {
+    if b.count == null {
+        return -1
+    }
+    return b.count + 1
+}
+
+fn main() {
+    let mut b = Box { name: "box", count: 2, inner: Inner { x: 7, tag: "t" } }
+    // `&&`
+    if b.name != null && b.name.len() == 3 {
+        println(f"and: {b.name}")
+    }
+    // `||`
+    if b.count == null || b.count > 1 {
+        println("or: ok")
+    }
+    // `!`
+    if !(b.name == null) {
+        println(f"not: {b.name.len()}")
+    }
+    // else branch
+    if b.inner == null {
+        println("none")
+    } else {
+        println(f"else: {b.inner.x}")
+    }
+    // a path inside a narrowed path
+    if b.inner != null && b.inner.tag != null {
+        println(f"deep: {b.inner.tag.len()}")
+    }
+    // early exit
+    println(f"early: {early(b)}")
+    // `while`
+    let mut turns = 0
+    while b.count != null && turns < 3 {
+        turns += b.count
+    }
+    println(f"while: {turns}")
+    // written through
+    if b.inner != null {
+        b.inner.x = 9
+        println(f"through: {b.inner.x}")
+    }
+    if b.count != null {
+        b.count += 1
+        println(f"count: {b.count ?? 0}")
+    }
+}

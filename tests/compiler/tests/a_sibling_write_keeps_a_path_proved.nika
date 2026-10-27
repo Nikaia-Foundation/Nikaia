@@ -1,0 +1,9 @@
+struct P { name: String?, age: i64 }
+
+fn main() {
+    let mut p = P { name: "ada", age: 1 }
+    if p.name != null {
+        p.age = 2
+        println(f"{p.name.len()} {p.age}")
+    }
+}

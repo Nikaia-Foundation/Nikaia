@@ -1,0 +1,15 @@
+struct Counter { last: i64? }
+
+impl Counter {
+    fn forget(ref mut self) {
+        self.last = null
+    }
+}
+
+fn main() {
+    let mut c = Counter { last: 3 }
+    if c.last != null {
+        c.forget()
+        println(c.last + 1)
+    }
+}
