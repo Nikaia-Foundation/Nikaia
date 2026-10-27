@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1245] — 2026-10-27
+
+### A proved name bound whole by a `let` is the value itself
+
+A name proved not `null` and bound whole by a `let`, or assigned to a place that owns it, is the value itself, so `let s: String = if b != null { b } else { "none" }` compiles (#888).
+
+- emit: the host's seed calls and `place`/`floor` move into Nikaia (E12-3b, #583).
+
 ## [0.0.1244] — 2026-10-27
 
 ### `??` on a part of a lent tuple
