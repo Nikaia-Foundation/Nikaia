@@ -64,3 +64,20 @@ fn more_either(args: ref Vec[Arg], ret: ref Ty?) -> bool {
     return all
 }
 
+fn more_gathered(first: ref Unit, beside: ref Vec[Unit], keys: ref collections::BTreeMap[String, Ty], more: ref collections::BTreeMap[String, Ty]) -> Vec[String] {
+    let mut seen: i64 = 0
+    // ADAPTER: bleibt in Rust (`std::iter::once(`)
+    let mut chained = [first]
+    chained.extend(beside.iter().collect())
+    for unit in chained {
+        seen += unit.len()
+    }
+    let mut chained_2 = keys.keys().collect()
+    chained_2.extend(more.keys().collect())
+    let names: Vec[String] = chained_2.iter().map(fn(x) { x.clone() }).collect()
+    let mut chained_3 = beside.iter().collect()
+    chained_3.extend(beside.iter().collect())
+    let all: Vec[ref Unit] = chained_3
+    return names
+}
+

@@ -211,6 +211,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R203 `visit_stmt_blocks(s, &mut |b| { .. })` (contracts::sync) -> `for b in check_visit_stmt_blocks(s) { .. }`, as R174",
         "R204 a radix literal's suffix: `0xcbf2_9ce4u64` -> `(0xcbf2_9ce4 as u64)`, as R106",
         "R205 `A.chain(B).any(F)` -> `A.any(F) || B.any(F)`, `.all(F)` with `&&` (`Seq` has no `chain`)",
+        "R206 a statement with `A.chain(B)`: `let mut chained = A.collect()` (`[x]` for `once(x)`), `chained.extend(B.collect())` first, the chain reads `chained` / `chained.iter()`",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -5804,6 +5805,7 @@ fn rs2nika_collect_seqs(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] 
 fn rs2nika_split_chains(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut sig: String = ""
+    let mut made = 0
     for line in given {
         let mut l: String = line.clone()
         if rs2nika_declared(l) != "" {
@@ -5852,9 +5854,84 @@ fn rs2nika_split_chains(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] 
             l = if bare { f"{before}{split}{after}" } else { f"{before}({split}){after}" }
             rs2nika_hit(ctx, "R205")
         }
+        if rs2nika_declared(l) != "" {
+            made = 0
+        }
+        let lifted = rs2nika_lift_chain(l, made)
+        if lifted.len() > 1 {
+            made = made + 1
+            rs2nika_hit(ctx, "R206")
+            for one in lifted {
+                out.push(one.clone())
+            }
+            continue
+        }
         out.push(l)
     }
     return out
+}
+
+/// R206: a statement (`let`, `for`, `return`, an assignment) with
+/// `A.chain(B)` outside a closure: the list is made first,
+/// `let mut chained = A.collect()` (`[x]` for `once(x)`) and
+/// `chained.extend(B.collect())`, and the chain reads `chained` (before
+/// `.collect()` or a `for` body) or `chained.iter()`. The lines, or the line
+/// alone.
+fn rs2nika_lift_chain(line: String, made: i64) -> Vec[String] {
+    let st: String = line.trim().clone()
+    let ind = rs2nika_indent(line)
+    let assigns = (st.split_once(" = ") ?? ("(", "")).0.chars().all(fn(ch) { rs2nika_word(ch) || ch == '.' })
+    if !(st.starts_with("let ") || st.starts_with("for ") || st.starts_with("return ") || assigns) {
+        return [line.clone()]
+    }
+    let c: Vec[scalar] = line.chars().collect()
+    let mut found = 0 - 1
+    let mut i = 0
+    let mut braces = 0
+    while i + 7 <= c.len() {
+        if c[i] == '{' {
+            braces = braces + 1
+        } else if c[i] == '}' {
+            braces = braces - 1
+        } else if braces == 0 && rs2nika_text(c, i, i + 7) == ".chain(" {
+            found = i
+            break
+        }
+        i = i + 1
+    }
+    if found < 0 {
+        return [line.clone()]
+    }
+    let close = rs2nika_tuple_close(c, found + 6)
+    if close < 0 {
+        return [line.clone()]
+    }
+    let start = rs2nika_recv_start(c, found)
+    let mut a = rs2nika_text(c, start, found)
+    let mut b = rs2nika_text(c, found + 7, close)
+    if a == "" || b == "" {
+        return [line.clone()]
+    }
+    for drop in [".copied()", ".cloned()"] {
+        if a.ends_with(drop) {
+            a = (a.strip_suffix(drop) ?? "").clone()
+        }
+        if b.ends_with(drop) {
+            b = (b.strip_suffix(drop) ?? "").clone()
+        }
+    }
+    let first = if a.starts_with("once(") && a.ends_with(")") { f"[{a["once(".len()..<a.len() - ")".len()]}]" } else if a.starts_with("std::iter::once(") && a.ends_with(")") { f"[{a["std::iter::once(".len()..<a.len() - ")".len()]}]" } else { f"{a}.collect()" }
+    let name = if made == 0 { "chained" } else { f"chained_{made + 1}" }
+    let before = rs2nika_text(c, 0, start)
+    let mut after = rs2nika_text(c, close + 1, c.len())
+    let mut read: String = f"{name}.iter()"
+    if after.starts_with(".collect()") {
+        after = (after.strip_prefix(".collect()") ?? "").clone()
+        read = name.clone()
+    } else if st.starts_with("for ") && after.trim() == "{" {
+        read = name.clone()
+    }
+    return [f"{ind}let mut {name} = {first}", f"{ind}{name}.extend({b}.collect())", f"{before}{read}{after}"]
 }
 
 /// R205: the half `x.iter()` of a nullable `x` (a parameter `x: T?`, a
@@ -8066,7 +8143,7 @@ fn rs2nika_iter_loops(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
 
 /// A step a `Seq` chain passes through on its way back to its root (R110-R113).
 fn rs2nika_seq_step(name: String) -> bool {
-    for s in ["filter", "map", "rev", "skip", "take", "filter_map", "flat_map", "zip", "copied", "cloned", "skip_while", "take_while", "enumerate"] {
+    for s in ["filter", "map", "rev", "skip", "take", "filter_map", "flat_map", "zip", "copied", "cloned", "skip_while", "take_while", "enumerate", "chain"] {
         if name == s {
             return true
         }

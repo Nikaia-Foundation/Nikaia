@@ -1,7 +1,9 @@
 // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
 fn payload(parsed_here: ref CheckWorld, beside: ref Vec[ref CheckWorld], ty: String) -> Vec[Ty]? sync {
     // ADAPTER: bleibt in Rust (`std::iter::once(`)
-    for parsed in std::iter::once(parsed_here).chain(beside.iter().copied()) {
+    let mut chained = [parsed_here]
+    chained.extend(beside.iter().collect())
+    for parsed in chained {
         let t = parsed_view_of(parsed)
         let found = check_payload_in(t, ty)
         if found != null {

@@ -64,3 +64,13 @@ fn either(args: &[Arg], ret: Option<&Ty>) -> bool {
     let all = args.iter().map(|a| &a.ty).chain(ret.iter().copied()).all(|t| t.lasting) && args.len() > 1;
     all
 }
+
+fn gathered(first: &Unit, beside: &[Unit], keys: &BTreeMap<String, Ty>, more: &BTreeMap<String, Ty>) -> Vec<String> {
+    let mut seen = 0;
+    for unit in std::iter::once(first).chain(beside.iter().copied()) {
+        seen += unit.len();
+    }
+    let names: Vec<String> = keys.keys().chain(more.keys()).cloned().collect();
+    let all: Vec<&Unit> = beside.iter().chain(beside.iter()).collect();
+    names
+}
