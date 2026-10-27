@@ -146,3 +146,12 @@ fn more_told(with_: String, throw_: i64) {
     print(f"{with_}: '{'x'}'")
 }
 
+fn more_lazy(xs: ref Vec[i64]) -> i64 {
+    let g = fn() {
+        let y = 1
+        y + 2
+    }
+    run(fn() { xs.len() + 1 })
+    return g()
+}
+

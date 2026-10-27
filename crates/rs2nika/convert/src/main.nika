@@ -94,7 +94,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R23  `if let Some(x) = x [&& g] {` -> `if x != null [&& g] {` (ADR-382); over a path of fields `if let Some(x) = &self.f [&& g] {` -> `if self.f != null [&& g] {` with `x` read as `self.f`, + `let x = self.f` only where the block writes the path (ADR-382 D7); over another name + `let x = e`; else R170",
         "R24  `if let P = e {` ... `} else {` ... `}` -> `match e { P => {..}, else => {..} }` (single let, optional `&& guard`)",
         "R25  `for x in &xs` / `xs.iter()` -> `for x in xs`",
-        "R26  closures `|x| e` -> `fn(x) { e }`; `.any`/`.all`/`.find` pass through (`Seq`), a function name `.any(f)` -> `.any(fn(x) { f(x) })`",
+        "R26  closures `|x| e` -> `fn(x) { e }`, `|| e` and `move || e` after `(`, `,` or `=` -> `fn() { e }`; `.any`/`.all`/`.find` pass through (`Seq`), a function name `.any(f)` -> `.any(fn(x) { f(x) })`",
         "R27  `.collect::<T>()` -> `.collect()`",
         "R28  path prefixes `crate::ast::`, `ast::`, `crate::types::`, `ty::`, `contracts::` dropped",
         "R29  `.as_ref()`, `.as_slice()`, `.as_str()`, `.as_deref()`, `.borrow()` dropped",
@@ -5039,8 +5039,9 @@ fn rs2nika_closures(mut ctx: Rs2nikaCtx, given: String) -> String {
         }
         let after_open = at > 0 && rs2nika_in(c[at - 1], "(,=")
         let after_space = at > 1 && c[at - 1] == ' ' && rs2nika_in(c[at - 2], "(,=")
-        if bar < c.len() && c[bar] == '|' && (after_open || after_space) && !(bar + 1 < c.len() && c[bar + 1] == '|') {
+        if bar < c.len() && c[bar] == '|' && (after_open || after_space) {
             let mut close = bar + 1
+            // `|| e` takes no arguments; after `(`, `,` or `=` it is no `or`
             while close < c.len() && c[close] != '|' {
                 close = close + 1
             }

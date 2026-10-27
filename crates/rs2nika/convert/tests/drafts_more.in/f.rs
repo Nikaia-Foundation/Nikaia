@@ -146,3 +146,12 @@ fn told(with: &str, throw: usize) {
     eprint!("no holes, with care");
     print!("{with}: '{}'", 'x');
 }
+
+fn lazy(xs: &[usize]) -> usize {
+    let g = move || {
+        let y = 1;
+        y + 2
+    };
+    run(|| xs.len() + 1);
+    g()
+}
