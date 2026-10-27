@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1226 (Draft)
+**Version:** 0.0.1227 (Draft)
 **Date:** 2026-10-27
 
 ---
@@ -589,7 +589,8 @@ it writes a conversion instead, which is right whether or not the value is
 already nullable.
 
 **A test that proves a `T?` is not `null` makes it a `T`** where the proof
-holds ([ADR-350](adr/adr-350.md)), for a local or a parameter:
+holds ([ADR-382](adr/adr-382.md)), for a local, a parameter, or a path of
+fields from one (`p.name`, `self.cache`):
 
 ```nika
 if x != null && x > 3 { use(x + 1) }   // `x` is an i64 on the right and in the body
@@ -607,6 +608,15 @@ the rest of a block after an `if` whose branch leaves with `return`, `break`,
 there, and a loop inside the proven region that assigns it ends it for the
 whole loop; a use that needs a `T` after that is `NK1102`, naming the
 assignment.
+
+A path of fields is proved like a name, at any depth. Its proof ends at an
+assignment to the path or to a path it is part of (`p.name = …`, `p = …`), at
+a `mut` hand-over of either (a `ref mut self` method called on it, a `mut`
+argument), and at a lambda, task, `overlap` branch or `select` arm that sees
+the root; a write to a sibling (`p.age = 3`) and a call that only reads keep
+it. A read through an index or a call (`v[i].f`, `f().x`) is not a path and
+proves nothing. A binding in a condition (`if let v = x`, `if x is Some(v)`)
+is refused: `match` binds the value an enum or a `T?` holds.
 
 `let m = null` with nothing beside it is not refused by the compiler:
 `let mut m = null` followed by `m = "hi"` is a correct program. Where nothing

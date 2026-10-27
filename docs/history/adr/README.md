@@ -290,3 +290,4 @@ carried it before they were archived.
 | [037](../../specification/adr/adr-037.md) D6 | [045](adr-045.md) D3 (narrows) | its coda that after D6 "no type answers `may not`" — the lock answers it at a foreign call, so `NK2501` and `NK2502` stop sharing one verdict |
 | [005](../../specification/adr/adr-005.md) §3 | [040](adr-040.md) D1 (narrows) | the ban on a clone the user did not write — it reaches a clone of **data** and no longer a **handle** on a shared value, which copies no data and produces no second value |
 | [032](adr-032.md) D5 | [035](adr-035.md) | a brace deciding a literal's type — the `f` decides it now |
+| [350](adr-350.md) | A Test That Proves a `T?` Is Not `null` Makes It a `T` | [ADR-382](../../specification/adr/adr-382.md) | D1→D1, D2→D2, D3→D3, D4→D4-D6 |

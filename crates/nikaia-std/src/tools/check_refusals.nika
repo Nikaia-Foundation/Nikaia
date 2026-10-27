@@ -45,7 +45,7 @@ impl CheckState {
     /// **`NK1102`: a `T?` as an operand of arithmetic, of an ordering or of a bit
     /// operator** (Part I 2.3). A `T?` has none of `T`'s operators: the
     /// operand is read with `??` first, or proved not `null` by a test before
-    /// it (ADR-350). The same holds for a name a `match` arm binds over a `T?`
+    /// it (ADR-382). The same holds for a name a `match` arm binds over a `T?`
     /// scrutinee, which is the whole `T?` (Part I 3.4).
     pub fn a_maybe_in_an_operation(ref mut self, op: BinaryOp, left: ref Ty, right: ref Ty, span: ref Span) sync {
         let mut maybe = left.clone()

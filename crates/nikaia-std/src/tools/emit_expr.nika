@@ -57,7 +57,7 @@ impl EmitState {
             out.push((walk.held.get(at) ?? "").clone())
             return
         }
-        // **A `T?` a test proved not `null` is read as the `T`** (ADR-350):
+        // **A `T?` a test proved not `null` is read as the `T`** (ADR-382):
         // the test runs before the read on every path, so the unwrap never
         // fails.
         let how = self.facts.narrowed_reads.get(at) ?? -1

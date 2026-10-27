@@ -8,6 +8,23 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1227] — 2026-10-27
+
+**ADR-382 replaces ADR-350: a `null` test narrows a path of fields too.**
+Decided, not yet built (Part I 2.3):
+
+* A path of fields from a local or a parameter (`p.name`, `self.cache`,
+  `a.b.c`) is proved not `null` and taken back like a name (D4). `v[i].f`,
+  `f().x` and a lock's value are not paths.
+* The proof ends at what can write the path (D5): an assignment to it or a
+  prefix, a `mut` hand-over (a `ref mut self` method, a `mut` argument), or a
+  lambda, task, `overlap` branch or `select` arm that sees the root. A sibling
+  write and a `ref` call keep it. `NK1102` names the write.
+* An enum's value is bound by `match` only: `if let` and `if x is v` are
+  refused (D6). `let x = self.f` stays, needed only to keep the old value (D7).
+* D1-D3 of ADR-350 carry over unchanged; ADR-350 is archived in
+  `docs/history/adr`, and every citation points at ADR-382.
+
 ## [0.0.1226] — 2026-10-27
 
 **lending fixes, views of locals, one statement a line, operator types, seeds tables in Nikaia (#655, #665, #848, #864-#867)**

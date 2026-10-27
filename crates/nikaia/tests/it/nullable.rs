@@ -1533,7 +1533,7 @@ fn none_is_answered_with_null() {
 }
 
 /// **A `T?` has no operator but `==` and `!=`, and no text of its own** (Part I
-/// 2.3, #586): `o + 1` where `o == null` held (ADR-350), a guard `n if n > 3` over an
+/// 2.3, #586): `o + 1` where `o == null` held (ADR-382), a guard `n if n > 3` over an
 /// `i64?` scrutinee (the name binds the whole `T?`, Part I 3.4) and `f"{o}"`
 /// passed the checker and reached rustc. Each is `NK1102`; `??` is the way out.
 #[test]
@@ -1702,7 +1702,7 @@ fn main() {
     assert_eq!(ran("plain-tail-nullable", source), "a - lit -\n8 0 v -\n");
 }
 
-/// **What a test proves not `null`, the compiler uses** (ADR-350, #619): the
+/// **What a test proves not `null`, the compiler uses** (ADR-382, #619): the
 /// right of `&&`, the right of `||` over `== null`, the branch, the `else`, the
 /// rest of a block after an early exit, a `while` body, a nested condition,
 /// and a `String?` used as text. Each runs and prints what it computed.
@@ -1770,7 +1770,7 @@ fn main() {
     );
 }
 
-/// **A struct or a list proved not `null` is a `T` too** (ADR-350, #621): a
+/// **A struct or a list proved not `null` is a `T` too** (ADR-382, #621): a
 /// `Rect?` parameter and a `Vec[i64]?` local, narrowed by `!= null &&`, by an
 /// early return and in a `while`; a field read, a method call, a call that
 /// lends it, and a hand-over that keeps it (`push`, `return`).
@@ -1851,7 +1851,7 @@ fn main() {
     );
 }
 
-/// **Where nothing proves it, the `T?` stays** (ADR-350 D2, D3): `||` over a
+/// **Where nothing proves it, the `T?` stays** (ADR-382 D2, D3): `||` over a
 /// test that is not about `null`, the `else` of `!= null`, and a name
 /// assigned after the test, whose refusal names the assignment.
 #[test]

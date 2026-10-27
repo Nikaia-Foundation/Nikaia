@@ -4,7 +4,7 @@
 // U-c10): `Binary`, `Coalesce`, `Closure` and `Spawn` of the checker's walk.
 // The form is the pilot's (`check_core_pilot.nika`): a free function over the
 // state, the world and a host; the walk comes back through the hub
-// `check_core_expr`. What the left side of `&&` and `||` proves not `null` (ADR-350)
+// `check_core_expr`. What the left side of `&&` and `||` proves not `null` (ADR-382)
 // and a proof a write took back are `check_narrow.nika`'s, and whether two types
 // compare is `host.a_type_that_does_not_compare`, which reads the parts beside.
 
@@ -237,7 +237,7 @@ fn check_core_ops_literal_beside(mut state: CheckState, op: BinaryOp, side: ref 
 }
 
 /// **The right of `&&` runs where the left held, and the right of `||` where
-/// it did not** (ADR-350 D2).
+/// it did not** (ADR-382 D2).
 fn check_core_ops_proved_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, cond: ref Expr, holds: bool, value: ref Expr, span: ref Span) -> Ty sync {
     let markers = check_narrow_proved_here(state, world, cond, holds)
     if markers.len() == 0 {

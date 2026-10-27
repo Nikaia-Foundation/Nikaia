@@ -6,7 +6,7 @@
 // literals, a name, a path, `-`/`!`/`&`, `?`, `throw`, `return`, `break` and
 // `continue`, a `dsl` block and `asm`. The form is the pilot's
 // (`check_core_pilot.nika`): a free function over the state, the world and a
-// host. What a test proves not `null` (ADR-350) is `check_narrow.nika`'s;
+// host. What a test proves not `null` (ADR-382) is `check_narrow.nika`'s;
 // a value's cleanup is `check_crossings_a_value_with_a_cleanup_made`.
 // One function per arm, so a deep expression's frames stay small.
 
@@ -349,7 +349,7 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
             }
             return Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
         }
-        // What a test proves not `null` is read as the `T` (ADR-350).
+        // What a test proves not `null` is read as the `T` (ADR-382).
         let nullable = match ty {
             Ty::Nullable(_) => true,
             else => false,

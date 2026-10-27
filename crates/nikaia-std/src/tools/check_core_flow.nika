@@ -5,7 +5,7 @@
 // `Unsafe` of the checker's walk (`Block` is the hub `check_core_block`). The
 // form is the pilot's (`check_core_pilot.nika`): a free function over the
 // state, the world and a host; the walk comes back through the hub
-// `check_core_expr`. What a test proves not `null` (ADR-350) is
+// `check_core_expr`. What a test proves not `null` (ADR-382) is
 // `check_narrow.nika`'s. One function per arm, and a `match` arm in a
 // function of its own, so a deep expression's frames stay small.
 
@@ -119,7 +119,7 @@ fn check_core_flow_leaves(state: ref CheckState, world: ref CheckWorld, block: r
     return state.block_exits(world, block) || state.block_leaves(world, block)
 }
 
-/// **A block walked with what `cond` proves when it `holds`** (ADR-350), in a
+/// **A block walked with what `cond` proves when it `holds`** (ADR-382), in a
 /// frame of its own where anything is proved.
 fn check_core_flow_proved_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, cond: ref Expr, holds: bool, block: ref Block) -> Ty sync {
     let markers = check_narrow_proved_here(state, world, cond, holds)
@@ -391,7 +391,7 @@ fn check_core_flow_else[H: CheckHost](mut state: CheckState, world: ref CheckWor
 
 /// **`if`** (Part I 3.2): a `bool` decides, a stamped condition reaches inward
 /// (ADR-281 D25), and what the test proves holds in each branch and, after an
-/// early exit, in the rest of the block (ADR-350).
+/// early exit, in the rest of the block (ADR-382).
 pub fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: ref Span) -> Ty sync {
     // **The condition is walked at its own place** (#810): a value it hands
     // over ends where the condition ends, so an `else if` after it, which is
@@ -430,7 +430,7 @@ pub fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckW
         else_leaves = check_core_flow_leaves(state, world, otherwise)
     }
     state.stamped_condition = outer_condition
-    // **An early exit proves the rest of the block** (ADR-350 D3).
+    // **An early exit proves the rest of the block** (ADR-382 D3).
     let then_leaves = check_core_flow_leaves(state, world, then_branch)
     if then_leaves && !else_leaves {
         check_narrow_proved_from_here(state, world, cond, false)
