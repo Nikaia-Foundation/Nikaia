@@ -57,3 +57,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 485286 17
 /home/user/Nikaia/docs/briefs/b883-reassigned-trim-result.md 220147 6
 /home/user/Nikaia/docs/briefs/architect-task.md 277120 10
+/home/user/Nikaia/docs/briefs/b-drive-rejected-push.md 460851 16
