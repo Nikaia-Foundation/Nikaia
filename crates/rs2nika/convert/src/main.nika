@@ -141,7 +141,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R122 R96 also where `e` is an option by its `.as_ref()`/`.as_deref()`, or is a name (or ends in a field) the file declares `: Option<..>` (or a function of it that hands back `Option<..>`, or a `let` of R96's sure kind)",
         "R123 the let-chains R97 leaves (`if let Some(P) = e && ..`, several `let`s, a tuple `P`): a `let` over a name is `e != null`; over anything else the test so far opens an `if`, then `let P = e`, and `P != null` opens the next; closed once for each `if`",
         "R106 an integer literal's suffix: `0usize` -> `0` (R10's types), `1u8` -> `(1 as u8)`",
-        "R107 a `char` needle of `find` / `rfind` / `replace` -> a text: `s.find(':')` -> `s.find(\":\")`; a needle that is a function, a closure or a list keeps a TODO",
+        "R107 a `char` needle of `find` / `rfind` / `replace` -> a text: `s.find(':')` -> `s.find(\":\")`; a needle that is a function, a closure or a list keeps a TODO, except a closure after an iterator (`xs.iter().find(|x| ..)` is `Seq::find`, R26)",
         "R108 the bytes of a text: `.as_bytes()` -> `.bytes` (the text's own, ADR-320 D11), a byte string `b\"ab\"` -> `\"ab\".bytes`",
         "R109 `e.parse::<T>()` / `e.parse()` (also `.ok()` after it) -> `text::parse_i64(e)` (`parse_u64`, `parse_u8` for those), and `use std::text` at the top",
         "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
@@ -2364,13 +2364,71 @@ fn rs2nika_literals(mut ctx: Rs2nikaCtx, given: String) -> String {
     return out
 }
 
+/// R107: whether the receiver ending at `at` is a sequence, not a text: it
+/// ends in a call to a method that starts or continues an iterator
+/// (`xs.iter()`, `.values()`, `.lines()`, `.rev()`, `.filter(..)`).
+fn rs2nika_seq_receiver(c: ref Vec[scalar], at: i64) -> bool {
+    if at == 0 || c[at - 1] != ')' {
+        return false
+    }
+    let mut depth = 0
+    let mut k = at - 1
+    while k >= 0 {
+        if c[k] == ')' {
+            depth = depth + 1
+        } else if c[k] == '(' {
+            depth = depth - 1
+            if depth == 0 {
+                break
+            }
+        }
+        k = k - 1
+    }
+    if k <= 0 {
+        return false
+    }
+    let mut s = k
+    while s > 0 && rs2nika_word(c[s - 1]) {
+        s = s - 1
+    }
+    if s == 0 || c[s - 1] != '.' {
+        return false
+    }
+    let mut name: String = ""
+    let mut i = s
+    while i < k {
+        name.push(c[i])
+        i = i + 1
+    }
+    for seq in ["iter", "into_iter", "iter_mut", "values", "values_mut", "keys", "lines", "chars", "bytes", "char_indices", "ancestors", "rev", "split_whitespace", "filter", "map", "skip", "take", "skip_while", "take_while", "enumerate", "zip", "chain", "flatten", "cloned", "copied", "peekable"] {
+        if name == seq {
+            return true
+        }
+    }
+    return false
+}
+
 /// R107: the TODO for a text search whose needle is a function, a closure or
 /// a list of `char`s (`s.find(char::is_whitespace)`, `s.split(|c| ..)`,
 /// `s.replace(['-', '.'], "_")`): Nikaia's take a text; `""` for any other.
 fn rs2nika_needle_todo(line: String) -> String {
+    let c: Vec[scalar] = line.chars().collect()
     for m in [".find(", ".rfind(", ".split(", ".rsplit(", ".split_once(", ".rsplit_once(", ".replace(", ".split_terminator(", ".trim_matches(", ".trim_start_matches(", ".trim_end_matches(", ".strip_prefix(", ".strip_suffix(", ".contains(", ".matches("] {
         for tail in [f"{m}char::", f"{m}|", f"{m}['", f"{m}&['"] {
-            if line.contains(tail) {
+            if tail == ".find(|" {
+                // `Iterator::find` with a closure is `Seq::find` (R26)
+                let mut from = 0
+                while true {
+                    let at = rs2nika_find_from(c, tail, from)
+                    if at < 0 {
+                        break
+                    }
+                    if !rs2nika_seq_receiver(c, at) {
+                        return f"`{m}..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle"
+                    }
+                    from = at + 1
+                }
+            } else if line.contains(tail) {
                 return f"`{m}..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle"
             }
         }

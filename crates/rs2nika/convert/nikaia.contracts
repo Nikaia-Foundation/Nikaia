@@ -1009,6 +1009,12 @@ touches = []
 views = ["line: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, line: String) -> String"
 
+[fn."rs2nika_seq_receiver"]
+sync = "inferred"
+touches = []
+views = ["c: borrowed"]
+signature = "(c: ref Vec[scalar], at: i64) -> bool"
+
 [fn."rs2nika_seq_rewrite"]
 sync = "inferred"
 touches = []

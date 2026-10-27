@@ -1,0 +1,12 @@
+fn seq_probe(outer: ref Vec[View], root: String, detail: String) -> i64? sync {
+    let held = outer.iter().rev().find(fn(v) { v.name == root }) ?? return null
+    let line = detail.lines().find(fn(line) { line.contains("stopped") }) ?? detail
+    // TODO(rs2nika): `.find(..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle
+    let cut = root.find(fn(c) { c.is_ascii_digit() }) ?? 0
+    // TODO(rs2nika): `.trim_start_matches(..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle
+    let short = root.trim_start_matches(fn(c) { c.is_ascii_digit() })
+    // TODO(rs2nika): `.replace(..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle
+    let shouted = root.to_uppercase().replace(['-', '.'], "_")
+    return (held.at + line.len() + cut + short.len() + shouted.len())
+}
+
