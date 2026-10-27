@@ -1,0 +1,17 @@
+fn emit_x_kind(func: ref Expr) -> u8 {
+    return match func {
+        Expr::Variable(..) => 1,
+        else => 0,
+    }
+}
+
+fn emit_x_jobs(text: String) -> i64 throws {
+    if text.is_empty() {
+        throw Refused::Because(f"`--jobs` takes a number, not `{text}`")
+    }
+    if text == "-" {
+        throw Refused::Because("`--jobs` takes no dash")
+    }
+    return 0
+}
+

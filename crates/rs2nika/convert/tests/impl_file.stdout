@@ -4,13 +4,13 @@ pub fn top(x: String) -> bool {
     return x.is_empty()
 }
 
-fn walk(mut state: CheckState, world: ref CheckWorld, a: String) -> bool sync {
-    note(state, world, a)
+fn walk(mut state: CheckState, a: String) -> bool sync {
+    note(a)
     state.errors += 1; state.host().x()
     return a.is_empty()
 }
 
-fn note(state: ref CheckState, world: ref CheckWorld, a: String) sync {
+fn note(a: String) sync {
     let _ = a
 }
 

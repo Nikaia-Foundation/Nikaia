@@ -197,7 +197,9 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R176 a method that reads one field of `self` only (and calls methods that do) -> a free function of that field: `&self` -> `tables: &EmitSeedsTables` (the type from the `struct`), `self.tables` -> `tables`, `self.m(a)` -> `m(&self.tables, a)`",
         "R177 `--view`: the parsed files are `ParsedView`s named `unit`, by the `[view]` table of rs2nika.names (or one in the working directory): `&Parsed` -> `ref ParsedView`, `&[&Parsed]` -> `ref Vec[ParsedView]`, `parsed.program.items` -> `unit.items`, `parsed.interner` -> `unit.words`, `parsed.text(*x).to_string()` -> `unit.text(x)`",
         "R178 (`-free`) an `impl Type {` whose methods all became free (none takes `self` any longer) loses its head and its closing brace, and its body moves out one level",
-        "R179 `let mut out = []` in a function that ends `return out` takes the list type it returns (`let mut out: Vec[Call] = []`); `match &*func` -> `match func`",
+        "R179 `let mut out = []` in a function that ends `return out` takes the list type it returns (`let mut out: Vec[Call] = []`); `match &*func` and `match *func` -> `match func`",
+        "R181 `refused!(\"..{x}\")` -> `throw Refused::Because(f\"..{x}\")`, the error the emitters throw",
+        "R180 (`-free`) a free function takes `state` and `world` only where its body uses them, itself or through one of the draft's functions it hands them to: `emit_x_pure(state, world, a)` -> `emit_x_pure(a)`",
     ]
 }
 
@@ -5321,16 +5323,198 @@ fn rs2nika_unwrap_impls(mut ctx: Rs2nikaCtx, given: String) -> String {
     return out.join("\n")
 }
 
+/// How often `w` stands in `text` as a name of its own: not part of a longer
+/// name, not a field (`x.state`).
+fn rs2nika_count_word(text: String, w: String) -> i64 {
+    let c: Vec[scalar] = text.chars().collect()
+    let n = w.chars().count()
+    let mut count = 0
+    let mut at = 0
+    while true {
+        let hit = rs2nika_find_from(c, w, at)
+        if hit < 0 {
+            break
+        }
+        at = hit + n
+        if (hit > 0 && (rs2nika_word(c[hit - 1]) || c[hit - 1] == '.')) || (hit + n < c.len() && rs2nika_word(c[hit + n])) {
+            continue
+        }
+        count = count + 1
+    }
+    return count
+}
+
+/// The calls `name(..)` in `line`, each as the list of its arguments; with
+/// `keep` false for an argument position, the line with those dropped.
+/// `drop` holds the argument names that go when they lead the call.
+fn rs2nika_lead_args(line: String, name: String, drop: ref Vec[String]) -> String {
+    let c: Vec[scalar] = line.chars().collect()
+    let pat = f"{name}("
+    let mut out: String = ""
+    let mut at = 0
+    while true {
+        let hit = rs2nika_find_from(c, pat, at)
+        if hit < 0 {
+            out.push_str(rs2nika_text(c, at, c.len()))
+            break
+        }
+        let open = hit + pat.chars().count()
+        if (hit > 0 && (rs2nika_word(c[hit - 1]) || c[hit - 1] == '.')) {
+            out.push_str(rs2nika_text(c, at, open))
+            at = open
+            continue
+        }
+        let end = rs2nika_group_end(c, open)
+        let args = rs2nika_split_args(rs2nika_text(c, open, end - 1))
+        let mut kept: Vec[String] = []
+        let mut leading = true
+        for a in args {
+            if leading && drop.contains(a) {
+                continue
+            }
+            leading = leading && (a == "state" || a == "world" || a == "host")
+            kept.push(a.clone())
+        }
+        out.push_str(rs2nika_text(c, at, open))
+        out.push_str(kept.join(", "))
+        out.push_str(")")
+        at = end
+    }
+    return out
+}
+
+/// R180 (`-free`): a free function takes `state` and `world` only where its
+/// body uses them, itself or by handing them to one of the draft's own
+/// functions that does; the parameter goes, and so does the argument at
+/// each call. `emit_x_pure(state, world, a)` -> `emit_x_pure(a)`.
+fn rs2nika_unused_hosts(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
+    if !ctx.free {
+        return given.clone()
+    }
+    let mut names: Vec[String] = []
+    let mut starts: Vec[i64] = []
+    let mut ends: Vec[i64] = []
+    let mut i = 0
+    while i < given.len() {
+        let name = rs2nika_fn_name(given[i])
+        let sig: String = given[i].clone()
+        if name != "" && sig.trim_end().ends_with("{") && (sig.contains("(state: ") || sig.contains("(mut state: ") || sig.contains("world: ref ")) {
+            let close = f"{rs2nika_indent(sig)}}}"
+            let mut e = i + 1
+            while e < given.len() && !given[e].starts_with(close) {
+                e = e + 1
+            }
+            names.push(name)
+            starts.push(i)
+            ends.push(e)
+        }
+        i = i + 1
+    }
+    if names.len() == 0 {
+        return given.clone()
+    }
+    // which of `state` and `world` each body uses itself, and whom it hands them
+    let mut uses: Vec[String] = []
+    let mut hands: Vec[String] = []
+    let mut f = 0
+    while f < names.len() {
+        let mut body: String = ""
+        let mut k = starts[f] + 1
+        while k < ends[f] {
+            body.push_str(given[k])
+            body.push_str("\n")
+            k = k + 1
+        }
+        for w in ["state", "world"] {
+            let mut own = rs2nika_count_word(body, w)
+            let mut g = 0
+            while g < names.len() {
+                let passed = rs2nika_lead_args(body, names[g], [w.clone()])
+                let handed = own - rs2nika_count_word(passed, w)
+                if handed > 0 {
+                    hands.push(f"{names[f]} {w} {names[g]}")
+                }
+                own = own - handed
+                g = g + 1
+            }
+            if own > 0 {
+                uses.push(f"{names[f]} {w}")
+            }
+        }
+        f = f + 1
+    }
+    let mut more = true
+    while more {
+        more = false
+        for h in hands.clone() {
+            let parts: Vec[String] = h.split(" ").map(fn(x) { x.clone() }).collect()
+            let mine = f"{parts[0]} {parts[1]}"
+            if !uses.contains(mine) && uses.contains(f"{parts[2]} {parts[1]}") {
+                uses.push(mine)
+                more = true
+            }
+        }
+    }
+    let mut out: Vec[String] = given.clone()
+    f = 0
+    while f < names.len() {
+        let mut drop: Vec[String] = []
+        for w in ["state", "world"] {
+            if !uses.contains(f"{names[f]} {w}") {
+                drop.push(w.clone())
+            }
+        }
+        if drop.len() > 0 {
+            rs2nika_hit(ctx, "R180")
+            // the signature: its parameters named `state` or `world`
+            let sig: String = out[starts[f]].clone()
+            let c: Vec[scalar] = sig.chars().collect()
+            let open = rs2nika_find_from(c, "(", 0) + 1
+            let end = rs2nika_group_end(c, open)
+            let mut params: Vec[String] = []
+            for p in rs2nika_split_args(rs2nika_text(c, open, end - 1)) {
+                let bare: String = p.trim_start_matches("mut ").clone()
+                let colon = bare.find(":") ?? bare.len()
+                if !drop.contains(bare[0..<colon].trim().clone()) {
+                    params.push(p.clone())
+                }
+            }
+            out[starts[f]] = f"{rs2nika_text(c, 0, open)}{params.join(", ")}){rs2nika_text(c, end, c.len())}"
+            // and every call
+            let mut k = 0
+            while k < out.len() {
+                if k != starts[f] {
+                    out[k] = rs2nika_lead_args(out[k], names[f], drop)
+                }
+                k = k + 1
+            }
+        }
+        f = f + 1
+    }
+    return out
+}
+
 /// R179: `let mut out = []` in a function that ends `return out` takes the
 /// list type the function returns: `let mut out: Vec[EmitSeedsCall] = []`.
 /// `match &*func` reads the boxed value as it is: `match func`.
+/// R181: `refused!("..")` -> `throw Refused::Because(f"..")`.
 fn rs2nika_typed_empty(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut i = 0
     while i < given.len() {
-        let mut line: String = given[i].replace("match &*", "match ")
+        let mut line: String = given[i].replace("match &*", "match ").replace("match *", "match ")
         if line != given[i] {
             rs2nika_hit(ctx, "R179")
+        }
+        // R181: the emitters' `refused!("..")` is the `Refused` they throw
+        let head: String = line.trim().clone()
+        if head.starts_with("refused!(\"") && head.ends_with("\")") {
+            let said: String = head["refused!(".len()..<head.len() - ")".len()].clone()
+            if rs2nika_split_args(said).len() == 1 {
+                let f = if said.contains("{") { "f" } else { "" }
+                line = f"{rs2nika_indent(line)}throw Refused::Because({f}{said})"
+                rs2nika_hit(ctx, "R181")
+            }
         }
         let st: String = line.trim().clone()
         if st.starts_with("let mut ") && st.ends_with(" = []") {
@@ -9178,7 +9362,8 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     let returned = rs2nika_tail_returns(ctx, armed)
     let matched = rs2nika_result_matches(ctx, returned)
     let done0 = rs2nika_result_reads(ctx, matched)
-    let done = rs2nika_typed_empty(ctx, done0)
+    let done1 = rs2nika_typed_empty(ctx, done0)
+    let done = rs2nika_unused_hosts(ctx, done1)
     // R100 after R45, which drops the `use` of an alias
     let named = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
     let mut named_lines: Vec[String] = []
