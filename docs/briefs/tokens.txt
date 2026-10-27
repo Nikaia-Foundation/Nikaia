@@ -86,3 +86,4 @@
 /home/user/Nikaia/docs/briefs/b893-commit.md 104517 6
 /home/user/Nikaia/docs/briefs/b894-lent-argument-arms.md 3592330 58
 /home/user/Nikaia/docs/briefs/architect-task.md 1082823 26
+/home/user/Nikaia/docs/briefs/b897-lent-field-plus-and-arm-local.md 1164202 29
