@@ -1,0 +1,47 @@
+use std::text
+
+fn load(path: ref Path) -> String? sync {
+    return std::fs::read_to_string(path) catch {
+        let e = error
+        eprintln(f"cannot read {path.display()}: {e}")
+        null
+    }
+}
+
+fn parse(s: String) -> i64 sync {
+    let n = text::parse_i64(s) catch { return -1 }
+    if n > 0 {
+        return n
+    }
+    return 0
+}
+
+fn direct(s: String) -> i64 sync {
+    return text::parse_i64(s) catch {
+        let err = error
+        eprintln(f"{err}")
+        0
+    }
+}
+
+fn reused(s: String) -> i64 sync {
+    let r = text::parse_i64(s)
+    let shown = f"{r}"
+    // TODO(rs2nika): `match` on `Ok`/`Err`: over a kept `Result` (not a call): Nikaia holds no `Result`; match where the call is made, `let v = call catch { <the Err arm> }`
+    return match r {
+        Ok(n) => n,
+        Err(_) => shown.len(),
+    }
+}
+
+fn later(s: String) -> i64 sync {
+    let r = text::parse_i64(s)
+    // TODO(rs2nika): `match` on `Ok`/`Err`: over a kept `Result` (not a call): Nikaia holds no `Result`; match where the call is made, `let v = call catch { <the Err arm> }`
+    match r {
+        Ok(n) => n,
+        Err(_) => 0,
+    }
+    // TODO(rs2nika): a `Result` read as a value (`.ok()`, `.is_ok()`, `.is_err()`, `.is_ok_and(..)`) not over a call: Nikaia holds no `Result`; read it where the call is made, `call catch { null }` (Part I 7.1)
+    return r.is_ok() as i64
+}
+

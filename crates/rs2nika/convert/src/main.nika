@@ -226,6 +226,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R213 check profiles: `let parsed = self.parsed;` is dropped, `parsed` reads `self.parsed` to the end of the function",
         "R214 `println!(\"…{}\", a)` (also `eprintln!`, `print!`, `eprint!`) -> `println(f\"…{a}\")`; a text without holes stays plain, `println!()` -> `println(\"\")`",
         "R215 a reserved word renamed with `_` is renamed inside a text only where it is a hole: `\"with {with}\"` -> `\"with {with_}\"`",
+        "R219 `return match call { Ok(v) if g => a, .., Ok(v) => b, Err(e) => d }`, one-line arms -> `let v = call catch { return d }`, `if g { return a }`, `return b`",
+        "R218 `let r = call` right before `match r {` (`Ok`/`Err` arms), `r` read nowhere else -> `match call {`, so R160 takes it",
         "R217 `std::fs::read_dir(d)` -> `fs::read_dir(d, fs::Root::Anywhere)`, names in byte order with no failure per entry: `.filter_map(|e| e.ok())` / `.flatten()` go, `e.path()` -> `d.join(e)`, `.file_name().into_string().ok()` -> `name.to_text().ok()`, the `.sort()` after it goes; `.with_context(|| format!(m))?` -> `catch { throw format!(m) }`, `.into_iter().flatten()` -> `catch { [] }`; `let Ok(es) = ..` keeps `d` for `for e in es`",
         "R216 a text continued with `\\` that no later line closes (a cut input) is named on stderr with its line",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
@@ -1713,6 +1715,14 @@ fn rs2nika_result_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
             i = i + 1
             continue
         }
+        let folded = rs2nika_kept_result(out, i, j)
+        if folded != "" {
+            out[i] = folded
+            out.remove(i - 1)
+            rs2nika_hit(ctx, "R218")
+            i = i - 1
+            continue
+        }
         let new = rs2nika_result_match(out, i, j, starts)
         let mut rebuilt: Vec[String] = []
         let mut r = 0
@@ -1743,6 +1753,101 @@ fn rs2nika_result_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
         out = rebuilt
     }
     return out
+}
+
+/// R218: `let r = call` right before `match r {`, `r` read nowhere else in its
+/// block -> `match call {` (Nikaia holds no `Result`, Part I 7.1), so that R160
+/// takes it; the `match` line as it becomes, or "" where it does not fit.
+fn rs2nika_kept_result(out: ref Vec[String], i: i64, j: i64) -> String {
+    if i == 0 {
+        return ""
+    }
+    let line: String = out[i].clone()
+    let ind = rs2nika_indent(line)
+    let (pre, rest) = line.split_once("match ") ?? ("", "")
+    let kept: String = (rest.strip_suffix(" {") ?? "").trim().clone()
+    let kc: Vec[scalar] = kept.chars().collect()
+    if kc.len() == 0 || !rs2nika_is_path(kept) || kept.contains(":") || kept.contains(".") || rs2nika_upper(kc[0]) {
+        return ""
+    }
+    let made: String = (out[i - 1].strip_prefix(f"{ind}let {kept} = ") ?? "").trim().clone()
+    if made == "" || !made.ends_with(")") {
+        return ""
+    }
+    // the arms cannot read `r`: the `match` moved it
+    let mut r = j + 1
+    while r < out.len() && (rs2nika_indent(out[r]).chars().count() >= ind.chars().count() || out[r].trim() == "") {
+        if rs2nika_replace_word(out[r], kept, "\u{a7}") != out[r] {
+            return ""
+        }
+        r = r + 1
+    }
+    return f"{pre}match {made} {{"
+}
+
+/// R219: `return match call { Ok(v) if g => a, .., Ok(v) => b, Err(e) => d }`,
+/// every arm one line, the `Err` arm last and the only one -> `let v = call
+/// catch { return d }` (`let e = error` first where `d` reads it), each guarded
+/// `Ok` arm `if g { return a }`, the last `return b`. Another shape keeps
+/// R160's guard TODO.
+fn rs2nika_guarded_ok(out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i64], ind: String, pre: String, subject: String) -> Vec[String] {
+    if pre != "return " || starts.len() < 3 || starts[starts.len() - 1] + 1 != j {
+        return rs2nika_r160_todo("guard")
+    }
+    let mut name: String = ""
+    let mut new: Vec[String] = []
+    let mut n = 0
+    while n < starts.len() {
+        if n + 1 < starts.len() && starts[n + 1] != starts[n] + 1 {
+            return rs2nika_r160_todo("guard")
+        }
+        let t: String = out[starts[n]].trim().trim_end_matches(",").clone()
+        let (pat, value) = t.split_once(" => ") ?? ("", "")
+        if value == "" || value.ends_with("{") {
+            return rs2nika_r160_todo("guard")
+        }
+        let last = n + 1 == starts.len()
+        if last {
+            let inner: String = ((pat.strip_prefix("Err(") ?? "").strip_suffix(")") ?? "").trim().clone()
+            let ic: Vec[scalar] = inner.chars().collect()
+            if ic.len() == 0 || !rs2nika_is_path(inner) || inner.contains(":") || rs2nika_upper(ic[0]) {
+                return rs2nika_r160_todo("guard")
+            }
+            let mut handler: String = f"return {value}"
+            if inner != "_" && inner != "error" && rs2nika_replace_word(value, inner, "\u{a7}") != value {
+                handler = f"let {inner} = error; return {value}"
+            }
+            let mut bound: String = name.clone()
+            if bound == "" {
+                bound = "_"
+            }
+            new.insert(0, f"{ind}let {bound} = {subject} catch {{ {handler} }}")
+            return new
+        }
+        let (head, guard) = pat.split_once(" if ") ?? (pat, "")
+        let v: String = ((head.strip_prefix("Ok(") ?? "").strip_suffix(")") ?? "").trim().clone()
+        let vc: Vec[scalar] = v.chars().collect()
+        if vc.len() == 0 || !rs2nika_is_path(v) || v.contains(":") || rs2nika_upper(vc[0]) || v.starts_with("mut ") {
+            return rs2nika_r160_todo("guard")
+        }
+        if v != "_" {
+            if name != "" && name != v {
+                return rs2nika_r160_todo("guard")
+            }
+            name = v.clone()
+        }
+        if guard != "" {
+            new.push(f"{ind}if {guard} {{")
+            new.push(f"{ind}    return {value}")
+            new.push(f"{ind}}}")
+        } else if n + 2 == starts.len() {
+            new.push(f"{ind}return {value}")
+        } else {
+            return rs2nika_r160_todo("guard")
+        }
+        n = n + 1
+    }
+    return rs2nika_r160_todo("guard")
 }
 
 /// R160 for the `match` from line `i` to its `}` at `j`, arms at `starts`:
@@ -1802,7 +1907,7 @@ fn rs2nika_result_match(out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i6
             after = rs2nika_text(tc, close + 1, tc.len()).trim().clone()
         }
         if after.starts_with("if ") {
-            return rs2nika_r160_todo("guard")
+            return rs2nika_guarded_ok(out, i, j, starts, ind, pre, subject)
         }
         if !after.starts_with("=> ") {
             return rs2nika_r160_todo("")
