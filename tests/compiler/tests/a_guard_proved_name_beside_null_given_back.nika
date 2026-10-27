@@ -1,0 +1,33 @@
+// A name the guard proves, handed back whole from a tuple arm with `null`
+// or a literal at another position, is given up by value (#889).
+struct Point { name: String }
+
+fn beside_null(a: String?, b: String?) -> String {
+    return match (a, b) {
+        (x, null) if x != null => x,
+        else => "none",
+    }
+}
+
+fn beside_literal(a: String?, n: i64) -> String {
+    return match (a, n) {
+        (x, 2) if x != null => x,
+        else => "none",
+    }
+}
+
+fn a_struct(a: Point?, b: Point?) -> Point {
+    return match (a, b) {
+        (x, null) if x != null => x,
+        else => Point { name: "none" },
+    }
+}
+
+fn main() {
+    println(beside_null("a", null))
+    println(beside_null("a", "b"))
+    println(beside_literal("c", 2))
+    println(beside_literal("c", 3))
+    println(a_struct(Point { name: "d" }, null).name)
+    println(a_struct(null, null).name)
+}
