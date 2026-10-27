@@ -83,3 +83,4 @@
 /home/user/Nikaia/docs/briefs/b893-optional-let-proved-arm.md 777036 26
 /home/user/Nikaia/docs/briefs/architect-task.md 490582 14
 /home/user/Nikaia/docs/briefs/b-fixforward-range-guard.md 104677 7
+/home/user/Nikaia/docs/briefs/b893-commit.md 104517 6
