@@ -64,3 +64,4 @@
 /home/user/Nikaia/docs/briefs/b-drive-restart.md 221749 10
 /home/user/Nikaia/docs/briefs/b887-tuple-nullable-wrap.md 2247076 56
 /home/user/Nikaia/docs/briefs/architect-task.md 587580 17
+/home/user/Nikaia/docs/briefs/b-commit-brief-name.md 470678 18
