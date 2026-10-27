@@ -1,0 +1,42 @@
+use std::text
+
+fn home() -> String? sync {
+    let h = std::env::var("HOME") catch { return null }
+    return h
+}
+
+fn port() -> i64? sync {
+    return (match std::env::var("PORT") catch { null } { p => text::parse_i64(p), null => null })
+}
+
+fn first(dir: ref Path) -> String? sync {
+    let text = (std::fs::read_to_string(dir.join("a")) catch { return null }).trim().to_string()
+    return text
+}
+
+fn manifest(dir: ref Path) -> Manifest? sync {
+    let m = Manifest::read(dir) catch { return null }
+    return m
+}
+
+// ADAPTER: bleibt in Rust (`Ledger`)
+fn ledger(text: String) -> Ledger? sync {
+    // ADAPTER: bleibt in Rust (`Ledger`)
+    return Ledger::parse(text) catch { return null }
+}
+
+fn ctx(path: ref Path) -> String sync throws {
+    let t = std::fs::read_to_string(path) catch { throw f"reading {path.display()}" }
+    return t
+}
+
+fn flag() -> bool sync {
+    return (match std::env::var("X") catch { null } { v => v == "1", null => null }) ?? false
+}
+
+fn ctx2(path: ref Path) -> i64 sync throws {
+    let n = (std::fs::read_to_string(path) catch { throw "reading" }).len()
+    let m = std::fs::read(path) catch { throw "bytes" }
+    return n + m.len()
+}
+

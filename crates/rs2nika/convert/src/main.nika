@@ -226,6 +226,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R213 check profiles: `let parsed = self.parsed;` is dropped, `parsed` reads `self.parsed` to the end of the function",
         "R214 `println!(\"…{}\", a)` (also `eprintln!`, `print!`, `eprint!`) -> `println(f\"…{a}\")`; a text without holes stays plain, `println!()` -> `println(\"\")`",
         "R215 a reserved word renamed with `_` is renamed inside a text only where it is a hole: `\"with {with}\"` -> `\"with {with_}\"`",
+        "R220 `x.with_context(|| format!(m))?` / `.with_context(|| m)?` / `.context(m)?` over a call -> `x catch { throw format!(m) }`",
         "R219 `return match call { Ok(v) if g => a, .., Ok(v) => b, Err(e) => d }`, one-line arms -> `let v = call catch { return d }`, `if g { return a }`, `return b`",
         "R218 `let r = call` right before `match r {` (`Ok`/`Err` arms), `r` read nowhere else -> `match call {`, so R160 takes it",
         "R217 `std::fs::read_dir(d)` -> `fs::read_dir(d, fs::Root::Anywhere)`, names in byte order with no failure per entry: `.filter_map(|e| e.ok())` / `.flatten()` go, `e.path()` -> `d.join(e)`, `.file_name().into_string().ok()` -> `name.to_text().ok()`, the `.sort()` after it goes; `.with_context(|| format!(m))?` -> `catch { throw format!(m) }`, `.into_iter().flatten()` -> `catch { [] }`; `let Ok(es) = ..` keeps `d` for `for e in es`",
@@ -1038,6 +1039,48 @@ fn rs2nika_tidy(text: String) -> String {
         }
     }
     return out.replace(" )", ")").replace(" ]", "]")
+}
+
+/// R220: anyhow's `x.with_context(|| format!(m))?` / `x.with_context(|| m)?` /
+/// `x.context(m)?` over a call -> `(x catch { throw format!(m) })` (`m` as
+/// given otherwise): Nikaia throws the text in place of the failure (Part I
+/// 7.1). The parentheses go where nothing follows.
+fn rs2nika_contexts(mut ctx: Rs2nikaCtx, line: String) -> String {
+    let mut s: String = line.clone()
+    for lead in [".with_context(", ".context("] {
+        let mut from = 0
+        while true {
+            let c: Vec[scalar] = s.chars().collect()
+            let at = rs2nika_find_from(c, lead, from)
+            if at < 0 {
+                break
+            }
+            from = at + 1
+            let open = at + lead.chars().count() - 1
+            let close = rs2nika_closing(c, open, '(', ')')
+            if close < 0 || !rs2nika_at(c, close + 1, "?") || at == 0 || c[at - 1] != ')' {
+                continue
+            }
+            let mut m: String = rs2nika_text(c, open + 1, close).trim().clone()
+            if lead == ".with_context(" {
+                m = (m.strip_prefix("||") ?? "").trim().clone()
+                if m == "" || m.starts_with("{") {
+                    continue
+                }
+            }
+            let start = rs2nika_recv_start(c, at)
+            let pre: String = rs2nika_text(c, 0, start)
+            let post: String = rs2nika_text(c, close + 2, c.len())
+            let mut put: String = f"{rs2nika_text(c, start, at)} catch {{ throw {m} }}"
+            if post.trim_start().starts_with(".") {
+                put = f"({put})"
+            }
+            s = f"{pre}{put}{post}"
+            rs2nika_hit(ctx, "R220")
+            from = 0
+        }
+    }
+    return s
 }
 
 /// R217: Rust's `std::fs::read_dir(d)` and its `DirEntry` results -> Nikaia's
@@ -5160,7 +5203,9 @@ fn rs2nika_opt_comb(given: String) -> String {
                 continue
             }
             let rest: String = body[vd + ".".len()..<body.len()].clone()
-            if rs2nika_replace_word(rest, v, "#") != rest {
+            // `x.parse()` is R109's function `text::parse_i64(x)`, no method
+            // to chain: R96 matches on the option instead
+            if rest.starts_with("parse(") || rest.starts_with("parse::<") || rs2nika_replace_word(rest, v, "#") != rest {
                 continue
             }
             let rc: Vec[scalar] = rest.chars().collect()
@@ -10681,7 +10726,8 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, src: String, profile_given: St
     let first = rs2nika_join_chains(ctx, hoisted)
     let split = rs2nika_join_split(ctx, first)
     let chained1 = rs2nika_join_chains(ctx, split)
-    let chained0 = rs2nika_read_dirs(ctx, chained1)
+    let chained00 = rs2nika_read_dirs(ctx, chained1)
+    let chained0 = chained00.iter().map(fn(l) { rs2nika_contexts(ctx, l) }).collect()
     let chained = rs2nika_results(ctx, chained0)
     for name in rs2nika_opt_lets(chained, ctx.opt_names) {
         ctx.opt_names.push(name.clone())
