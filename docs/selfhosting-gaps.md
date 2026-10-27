@@ -17,7 +17,7 @@ three commits, thirteen functions: `5755b65` (`several_errors`,
 
 | Rust form | Today | Written instead |
 | :--- | :--- | :--- |
-| `if let Some(x) = self.f { .. }` (a field) | `if self.f != null` does not narrow a field: NK1125 | `let x = self.f` first, then `if x != null` (a name narrows, ADR-350) |
+| `if let Some(x) = self.f { .. }` (a field) | `if self.f != null` does not narrow a field (NK1125): **not decided**, ADR-350 D4; `if let` itself is rejected (ADR-350 C) | `let x = self.f` first, then `if x != null` (a name narrows, ADR-350 D1) |
 | struct update `S { a: 1, ..p }` | parse error | every field written out |
 | `Option<Option<T>>` (`T??`) | parse error | a `bool` beside a `T?`, or two functions |
 | `map.entry(k).or_insert(..)` | NK1171, no `entry` in `std` | `get`, then `insert` |
