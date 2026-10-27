@@ -430,6 +430,7 @@ pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
             true => clones_text(inner, ask, walk),
             false => false,
         } },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); copies_text(base, ask, walk) },
         _ => copies_text(receiver, ask, walk),
     }
 }

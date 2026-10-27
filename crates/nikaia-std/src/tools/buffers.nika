@@ -552,6 +552,9 @@ fn clones_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
             true => clones_text(inner, ask, walk),
             false => false,
         },
+        // `st[f + " for ".len()..].clone()` (#881): a cut of a text, copied,
+        // keeps no view of it.
+        Expr::Index { base, .. } => copies_text(base, ask, walk),
         else => copies_text(receiver, ask, walk),
     }
 }

@@ -1,0 +1,28 @@
+// #881: a String local that starts as "" and is moved into a String cut and
+// cloned later (`st = st[f + " for ".len()..].clone()`) stays owned.
+fn tail(head: String) -> String {
+    let mut st: String = (head.trim().strip_prefix("impl") ?? "").clone()
+    if st.starts_with("<") {
+        let mut after: String = ""
+        for ch in st.chars() {
+            after.push(ch)
+        }
+        st = after
+    }
+    let f = st.rfind(" for ") ?? 0
+    if f > 0 {
+        st = st[f + " for ".len()..].clone()
+    }
+    let mut name: String = ""
+    for ch in st.trim().chars() {
+        if ch == ' ' {
+            return name
+        }
+        name.push(ch)
+    }
+    return name
+}
+
+fn main() {
+    print(tail("impl<T> Foo<T> {"))
+}
