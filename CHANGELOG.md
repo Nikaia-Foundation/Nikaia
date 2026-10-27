@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1244] — 2026-10-27
+
+### `??` on a part of a lent tuple
+
+`p.0 ?? ".."` on a part of a lent tuple parameter no longer fails in rustc: a part moved out by `??` keeps its parameter, and a tuple part is treated as a field (#891).
+
 ## [0.0.1243] — 2026-10-27
 
 ### A struct field narrows after its `null` arm
