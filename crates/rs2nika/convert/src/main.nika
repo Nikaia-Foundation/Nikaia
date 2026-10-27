@@ -207,6 +207,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R201 a method chain with comments between its links: the comments move above the joined line",
         "R202 a `match` arm `x @ P =>` (no `@` in Nikaia): over the subject `x` itself -> `P =>`; over another name `s` with a block -> `P => {` + `let x = s`",
         "R203 `visit_stmt_blocks(s, &mut |b| { .. })` (contracts::sync) -> `for b in check_visit_stmt_blocks(s) { .. }`, as R174",
+        "R204 a radix literal's suffix: `0xcbf2_9ce4u64` -> `(0xcbf2_9ce4 as u64)`, as R106",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -2699,7 +2700,12 @@ fn rs2nika_literals(mut ctx: Rs2nikaCtx, given: String) -> String {
         }
         if ch.is_ascii_digit() && !before_word {
             let mut end = at
-            while end < c.len() && (c[end].is_ascii_digit() || c[end] == '_') {
+            // `0xcbf2_9ce4u64`, `0b1010u8`: the radix's digits, then the suffix
+            let radix = ch == '0' && at + 1 < c.len() && rs2nika_in(c[at + 1], "xbo")
+            if radix {
+                end = at + 2
+            }
+            while end < c.len() && (c[end].is_ascii_digit() || c[end] == '_' || (radix && c[at + 1] == 'x' && rs2nika_in(c[end], "abcdefABCDEF"))) {
                 end = end + 1
             }
             let mut suffix: String = ""
@@ -2716,13 +2722,13 @@ fn rs2nika_literals(mut ctx: Rs2nikaCtx, given: String) -> String {
             }
             if rs2nika_is_int(suffix) || suffix == "i64" {
                 out.push_str(digits)
-                rs2nika_hit(ctx, "R106")
+                rs2nika_hit(ctx, if radix { "R204" } else { "R106" })
                 at = k
                 continue
             }
             if suffix == "u8" || suffix == "u64" {
                 out.push_str(f"({digits} as {suffix})")
-                rs2nika_hit(ctx, "R106")
+                rs2nika_hit(ctx, if radix { "R204" } else { "R106" })
                 at = k
                 continue
             }

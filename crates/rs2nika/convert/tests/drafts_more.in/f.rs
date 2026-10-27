@@ -1,4 +1,4 @@
-//! R188-R203: module lines, foreign `use`s, adapters, and patterns.
+//! R188-R204: module lines, foreign `use`s, adapters, and patterns.
 mod inner;
 pub(crate) mod helpers;
 use std::collections::{BTreeMap, BTreeSet};
@@ -50,4 +50,9 @@ fn chosen(names: &[String], body: &Block, expected: Option<Ty>, tail: Option<Spa
 
 fn evens(xs: &[i64]) -> impl Iterator<Item = i64> + '_ {
     xs.iter().copied().filter(|x| x % 2 == 0)
+}
+
+fn hashed() -> u64 {
+    let basis = 0xcbf2_9ce4_8422_2325u64;
+    basis ^ 0b1010u8 as u64 ^ 0xFFusize as u64
 }

@@ -1,4 +1,4 @@
-//! R188-R203: module lines, foreign `use`s, adapters, and patterns.
+//! R188-R204: module lines, foreign `use`s, adapters, and patterns.
 use std::collections
 
 // TODO(rs2nika): `static` behind a lock: no globals in tools/*.nika; a field of the state struct (the lock drops), set through `mut self`
@@ -49,5 +49,10 @@ fn more_chosen(names: ref Vec[String], body: ref Block, expected: Ty?, tail: Spa
 
 fn more_evens(xs: ref Vec[i64]) -> Vec[i64] {
     return xs.iter().filter(fn(x) { x % 2 == 0 }).collect()
+}
+
+fn more_hashed() -> u64 {
+    let basis = (0xcbf2_9ce4_8422_2325 as u64)
+    return basis ^ (0b1010 as u8) as u64 ^ 0xFF as u64
 }
 
