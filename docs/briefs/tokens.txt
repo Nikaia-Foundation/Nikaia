@@ -85,3 +85,4 @@
 /home/user/Nikaia/docs/briefs/b-fixforward-range-guard.md 104677 7
 /home/user/Nikaia/docs/briefs/b893-commit.md 104517 6
 /home/user/Nikaia/docs/briefs/b894-lent-argument-arms.md 3592330 58
+/home/user/Nikaia/docs/briefs/architect-task.md 1082823 26
