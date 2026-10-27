@@ -426,6 +426,10 @@ pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
 pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); clones_text(value, ask, walk) || clones_text(fallback, ask, walk) },
+        Expr::MethodCall { receiver: inner, method, .. } => { let inner = nikaia_std::boxed::open(inner); let method = *method; match ask.names.resolve(method) == "trim" || ask.names.resolve(method) == "trim_start" || ask.names.resolve(method) == "trim_end" || ask.names.resolve(method) == "clone" {
+            true => clones_text(inner, ask, walk),
+            false => false,
+        } },
         _ => copies_text(receiver, ask, walk),
     }
 }

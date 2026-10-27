@@ -541,11 +541,17 @@ fn copies_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
 
 // Whether a `clone` of this copies text, so the copy points into nothing:
 // what `copies_text` says, and **`opt ?? ""`** (#880), whose two sides have
-// one type: `dflt = (arg.strip_prefix("|") ?? "").clone()` keeps no view of
-// `arg`. Only for the origins: a `let` of it stays the owned value it was.
+// one type, trimmed or not: `dflt = (arg.strip_prefix("|") ?? "").clone()`
+// keeps no view of `arg`. Only for the origins: a `let` of it stays the
+// owned value it was.
 fn clones_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
     return match receiver {
         Expr::Coalesce { value, fallback, .. } => clones_text(value, ask, walk) || clones_text(fallback, ask, walk),
+        // `(opt ?? "").trim()`, and a copy of one.
+        Expr::MethodCall { receiver: inner, method, .. } => match ask.names.resolve(method) == "trim" || ask.names.resolve(method) == "trim_start" || ask.names.resolve(method) == "trim_end" || ask.names.resolve(method) == "clone" {
+            true => clones_text(inner, ask, walk),
+            false => false,
+        },
         else => copies_text(receiver, ask, walk),
     }
 }
