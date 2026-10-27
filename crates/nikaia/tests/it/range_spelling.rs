@@ -115,10 +115,27 @@ fn no_nika_source_in_the_tree_was_left_on_the_old_meaning() {
                 // A `for` head is the shape the corpus writes; an inclusive one
                 // would be deliberate, and none is. Only a head: a message that
                 // says *in* and names `...args` is text, not a range.
+                // String literals are blanked first: a `".."` is no range.
+                let mut blanked = String::new();
+                let mut in_string = false;
+                let mut chars = code.chars();
+                while let Some(c) = chars.next() {
+                    if in_string {
+                        if c == '\\' {
+                            chars.next();
+                        } else if c == '"' {
+                            in_string = false;
+                        }
+                    } else if c == '"' {
+                        in_string = true;
+                    } else {
+                        blanked.push(c);
+                    }
+                }
                 if code.starts_with("for ")
-                    && code.contains(" in ")
-                    && code.contains("..")
-                    && !code.contains("..<")
+                    && blanked.contains(" in ")
+                    && blanked.contains("..")
+                    && !blanked.contains("..<")
                 {
                     left.push(format!("{}:{}: {}", path.display(), n + 1, code));
                 }
