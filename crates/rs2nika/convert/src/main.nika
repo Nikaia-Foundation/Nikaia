@@ -47,6 +47,11 @@ struct Rs2nikaCtx {
     arity: Vec[String],
     host_fns: Vec[String],
     opt_names: Vec[String],
+    /// R52: the names the file declares `&Parsed` (a parameter), besides `parsed`.
+    parsed_names: Vec[String],
+    /// R207: inside the `impl` of a type other than the state (`impl Mark`):
+    /// its methods keep `ref self`, their names and `self`.
+    impl_other: bool,
     /// R205: the field names `tools/*.nika` declares only as `T?`.
     field_opts: collections::BTreeSet[String],
     /// R172: the arm lines a tuple `match` keeps as written, and why.
@@ -115,7 +120,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R49  `Ty::named(x)` / `Ty::view(x)` -> `Ty::Named { name: x, args: [], view: false/true }`",
         "R50  `&Span` -> `Span` (a span is copied, never lent)",
         "R51  a `fn` nested in a `fn` is hoisted to the top level",
-        "R52  profile: a `parsed: &Parsed` parameter -> `parsed: ref CheckWorld`, `parsed.text(x)` -> `parsed.words.resolve(x)`",
+        "R52  profile: a `parsed: &Parsed` parameter -> `parsed: ref CheckWorld`, `parsed.text(x)` -> `parsed.words.resolve(x)`, the same for any other `&Parsed` parameter",
         "R53  ranges: Rust's `a..b` stops before `b`, Nikaia's includes it: `a..b` -> `a..<b`, `a..=b` -> `a..b`",
         "R54  idioms Nikaia spells otherwise: `[\"A\", \"B\"].contains(&x)` -> `(x == \"A\" || x == \"B\")`, `x.rsplit(\"::\").next().unwrap_or(x)` -> `type_last_segment(x)`",
         "R55  `match` on an option with `Some(P)` arms -> `let given = e ?? <None arm>` then `match given { P => .. }`",
@@ -212,6 +217,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R204 a radix literal's suffix: `0xcbf2_9ce4u64` -> `(0xcbf2_9ce4 as u64)`, as R106",
         "R205 `A.chain(B).any(F)` -> `A.any(F) || B.any(F)`, `.all(F)` with `&&` (`Seq` has no `chain`)",
         "R206 a statement with `A.chain(B)`: `let mut chained = A.collect()` (`[x]` for `once(x)`), `chained.extend(B.collect())` first, the chain reads `chained` / `chained.iter()`",
+        "R207 profile: the methods of an `impl` of a type other than `Checker`/`Emitter` keep `ref self`, their names and `self.x`: no state, world or prefix",
+        "R208 a `{x};` inside a string literal keeps its `;` (only a block's `};` loses it)",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
         "R195 `if let Some(x) = &mut p { *x = e; }` -> `p = match p { x => e, null => null }`",
@@ -689,7 +696,7 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: String) -> String {
     }
     for p in rs2nika_split_args(params) {
         if p == "&self" || p == "&'a self" {
-            if ctx.free && !decl {
+            if ctx.free && !decl && !ctx.impl_other {
                 let state_ty = ctx.world.replace("World", "State")
                 out.push(f"state: ref {state_ty}")
             } else {
@@ -698,7 +705,7 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: String) -> String {
             has_self = true
             rs2nika_hit(ctx, "R2")
         } else if p == "&mut self" {
-            if ctx.free && !decl {
+            if ctx.free && !decl && !ctx.impl_other {
                 let state_ty = ctx.world.replace("World", "State")
                 out.push(f"mut state: {state_ty}")
             } else {
@@ -727,7 +734,7 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: String) -> String {
             }
         }
     }
-    if has_self && ctx.profile != "none" && !decl {
+    if has_self && ctx.profile != "none" && !decl && !ctx.impl_other {
         let w = f"world: ref {ctx.world}"
         let mut withw: Vec[String] = []
         let mut i = 0
@@ -786,7 +793,7 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: String) -> String {
     }
     let mut name: String = name0.clone()
     let pre: String = ctx.prefix.clone()
-    if pre != "" && !decl && !rs2nika_starts(name, pre) {
+    if pre != "" && !decl && !ctx.impl_other && !rs2nika_starts(name, pre) {
         rs2nika_hit(ctx, "R41")
         name = f"{ctx.prefix}{name0}"
     }
@@ -798,7 +805,7 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: String) -> String {
     let joined = rs2nika_join(out, ", ")
     // R85: a free function that threads no state does not pause, so it does not promise `sync`
     let mut sync_: String = " sync"
-    if ctx.free && !has_self && !decl {
+    if ctx.free && (!has_self || ctx.impl_other) && !decl {
         sync_ = ""
         rs2nika_hit(ctx, "R85")
     }
@@ -3792,7 +3799,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: String) -> String {
     s = rs2nika_ty_paths(s)
     s = rs2nika_ranges(ctx, s)
     s = rs2nika_rest(ctx, s)
-    if ctx.profile != "none" {
+    if ctx.profile != "none" && !ctx.impl_other {
         let mut s2: String = s.clone()
         for p in ["self.parsed.text(*", "self.parsed.text(", "self.parsed.name(*", "self.parsed.name(", "self.text(*", "self.text(", "self.name(*", "self.name(", "self.parsed.interner.resolve(*", "self.parsed.interner.resolve("] {
             s2 = s2.replace(p, "world.words.resolve(")
@@ -3801,6 +3808,13 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: String) -> String {
         s2 = rs2nika_replace_free(s2, "parsed.text(", "parsed.words.resolve(")
         s2 = rs2nika_replace_free(s2, "parsed.name(*", "parsed.words.resolve(")
         s2 = rs2nika_replace_free(s2, "parsed.name(", "parsed.words.resolve(")
+        if !ctx.view {
+            for n in ctx.parsed_names {
+                for m in [".text(*", ".text(", ".name(*", ".name("] {
+                    s2 = rs2nika_replace_free(s2, f"{n}{m}", f"{n}.words.resolve(")
+                }
+            }
+        }
         if !rs2nika_same(s2, s) {
             rs2nika_hit(ctx, "R31")
         }
@@ -4190,6 +4204,72 @@ fn rs2nika_path_call(path: String, x: String) -> String {
         }
     }
     return f"{path}({x})"
+}
+
+/// `};` -> `}` outside a string literal: a block's `;` goes, a `{x};` in a
+/// `format!` text stays (R208).
+fn rs2nika_block_semis(code: String) -> String {
+    let c: Vec[scalar] = code.chars().collect()
+    let mut out: String = ""
+    let mut quoted = false
+    let mut at = 0
+    while at < c.len() {
+        let ch = c[at]
+        if quoted && ch == '\\' && at + 1 < c.len() {
+            out.push(ch)
+            out.push(c[at + 1])
+            at = at + 2
+            continue
+        }
+        // a character `'"'` or `'\"'` opens no text
+        if !quoted && ch == '\'' && at + 2 < c.len() && c[at + 2] == '\'' {
+            out.push_str(rs2nika_text(c, at, at + 3))
+            at = at + 3
+            continue
+        }
+        if !quoted && ch == '\'' && at + 3 < c.len() && c[at + 1] == '\\' && c[at + 3] == '\'' {
+            out.push_str(rs2nika_text(c, at, at + 4))
+            at = at + 4
+            continue
+        }
+        if ch == '"' {
+            quoted = !quoted
+        }
+        out.push(ch)
+        if !quoted && ch == '}' && at + 1 < c.len() && c[at + 1] == ';' {
+            at = at + 1
+        }
+        at = at + 1
+    }
+    return out
+}
+
+/// For R52: the names a file declares `&Parsed` (`unit: &Parsed`), other
+/// than `parsed`, whose `.text(x)` is the world's `words.resolve(x)`.
+fn rs2nika_parsed_names(src: String) -> Vec[String] {
+    let mut names: Vec[String] = []
+    let c: Vec[scalar] = src.chars().collect()
+    let mut from = 0
+    while true {
+        let at = rs2nika_find_from(c, ": &Parsed", from)
+        if at < 0 {
+            break
+        }
+        from = at + 1
+        let end = at + ": &Parsed".len()
+        if end < c.len() && rs2nika_word(c[end]) {
+            continue
+        }
+        let mut b = at
+        while b > 0 && rs2nika_word(c[b - 1]) {
+            b = b - 1
+        }
+        let name: String = rs2nika_text(c, b, at)
+        if name != "" && name != "parsed" && !names.contains(name) {
+            names.push(name)
+        }
+    }
+    return names
 }
 
 /// For R122: the names a file declares `Option<..>` (a parameter, a field, a
@@ -9930,7 +10010,7 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     } else if profile == "emit" {
         world = "EmitWorld"
     }
-    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: rs2nika_opt_names(src), field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [] }
+    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: rs2nika_opt_names(src), parsed_names: rs2nika_parsed_names(src), impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [] }
     if repo != "" {
         rs2nika_load(ctx, repo)
     }
@@ -9949,8 +10029,9 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     for given in viewed.split("\n") {
         let raw = rs2nika_const_fn(ctx, given)
         lines.push(rs2nika_reserved(ctx, raw))
+        rs2nika_impl_track(ctx, raw)
         let name = rs2nika_fn_name(raw)
-        if name != "" {
+        if name != "" && !ctx.impl_other {
             if rs2nika_takes_self(raw) {
                 ctx.methods.push(name.clone())
             }
@@ -9960,6 +10041,7 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
             }
         }
     }
+    ctx.impl_other = false
     if free {
         rs2nika_host_fns(ctx, viewed)
     }
@@ -10036,6 +10118,7 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
                 out.push(konst2)
                 continue
             }
+            rs2nika_impl_track(ctx, raw)
             let head = rs2nika_impl_head(ctx, raw)
             if head != "" {
                 out.push(head)
@@ -10120,7 +10203,7 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
                     code = code[0..<code.len() - ";".len()].clone()
                     rs2nika_hit(ctx, "R1")
                 }
-                code = code.replace("};", "}")
+                code = rs2nika_block_semis(code)
                 code = rs2nika_arm_assign(ctx, code)
                 // R70: a hole hoisted out of a match arm goes into the arm's block
                 let arrow = code.find(" => ") ?? 0
@@ -11312,6 +11395,24 @@ fn rs2nika_shift(ctx: ref Rs2nikaCtx, skip: i64) -> String {
         k = k + 1
     }
     return out
+}
+
+/// R207: an `impl` header at the left margin of a type other than the
+/// state's (`impl Mark {`, `impl Code for Finding {`) opens `impl_other`;
+/// the `}` at the margin closes it.
+fn rs2nika_impl_track(mut ctx: Rs2nikaCtx, line: String) {
+    if line.trim_end() == "}" {
+        ctx.impl_other = false
+        return
+    }
+    if !(line.starts_with("impl ") || line.starts_with("impl<")) || !line.trim_end().ends_with("{") {
+        return
+    }
+    let name = rs2nika_impl_type(line)
+    ctx.impl_other = ctx.profile != "none" && name != "Checker" && name != "Emitter"
+    if ctx.impl_other {
+        rs2nika_hit(ctx, "R207")
+    }
 }
 
 /// R34: an `impl` header; `Checker`/`Emitter` become the state struct.

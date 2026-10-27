@@ -81,3 +81,26 @@ fn more_gathered(first: ref Unit, beside: ref Vec[Unit], keys: ref collections::
     return names
 }
 
+fn more_named(unit: ref CheckWorld, word: Word) -> bool {
+    return unit.words.resolve(word) == "x"
+}
+
+impl Mark {
+    fn text(ref self) -> String {
+        return self.places.join(", ")
+    }
+
+    fn read(text: String) -> Mark {
+        return Mark { places: [text] }
+    }
+}
+
+fn more_after_mark() -> i64 {
+    return 0
+}
+
+fn more_listed(places: String, c: scalar) -> String {
+    let q = if c == '"' { 1 } else { 2 }
+    return f"{places}; repeatable {q}"
+}
+

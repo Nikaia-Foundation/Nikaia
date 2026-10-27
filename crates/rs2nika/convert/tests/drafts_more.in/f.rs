@@ -74,3 +74,26 @@ fn gathered(first: &Unit, beside: &[Unit], keys: &BTreeMap<String, Ty>, more: &B
     let all: Vec<&Unit> = beside.iter().chain(beside.iter()).collect();
     names
 }
+
+fn named(unit: &Parsed, word: Word) -> bool {
+    unit.text(word) == "x"
+}
+
+impl Mark {
+    fn text(&self) -> String {
+        self.places.join(", ")
+    }
+
+    fn read(text: &str) -> Mark {
+        Mark { places: vec![text.to_string()] }
+    }
+}
+
+fn after_mark() -> usize {
+    0
+}
+
+fn listed(places: &str, c: char) -> String {
+    let q = if c == '"' { 1 } else { 2 };
+    format!("{places}; repeatable {q}")
+}

@@ -31,7 +31,7 @@ comptime PREFIX: ref String = "nk"
 impl Foo {
     // TODO(rs2nika): `const` in an `impl`: no associated constants in Nikaia; `LIMIT` is taken at the top of the file: rename it, move it above the `impl` as a `comptime`
     comptime LIMIT: i64 = 2
-    pub fn get(ref self, world: ref CheckWorld) -> i64 sync {
+    pub fn get(ref self) -> i64 sync {
         return MAX + self.a + PREFIX.len()
     }
 }
