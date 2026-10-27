@@ -90,7 +90,7 @@ impl CheckState {
                 }
             }
             MatchPattern::Named { path, fields, .. } => {
-                let key = self.pattern_variant(world, path, owner)
+                let key = self.named_pattern_key(world, path, on)
                 let declared = self.structs[key]?.clone() ?? []
                 for each in fields {
                     let name = world.words.resolve(each.name).clone()
@@ -129,6 +129,22 @@ impl CheckState {
             }
             at = at + 1
         }
+    }
+
+    /// **The ledger's key of a pattern with named fields** (#886): a plain
+    /// struct's own name where the pattern names the struct matched (`F {
+    /// name, .. }` over an `F`, no type arguments), the variant's key
+    /// otherwise.
+    pub fn named_pattern_key(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], on: ref Ty) -> String sync {
+        let (owner, plain) = match on {
+            Ty::Named { name, args, .. } => (name.clone(), args.len() == 0),
+            else => return "",
+        }
+        let key = self.pattern_variant(world, path, owner)
+        if plain && path.len() == 1 && !self.structs.contains_key(key) && world.words.resolve(path[0]) == owner {
+            return owner
+        }
+        return key
     }
 
     /// The ledger's key of the variant a pattern names: `Owner::One` for one

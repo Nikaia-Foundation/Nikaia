@@ -715,10 +715,124 @@ fn check_core_flow_set_tuple(mut state: CheckState, world: ref CheckWorld, arms:
     return Ty::Tuple(narrowed)
 }
 
+/// **A struct's field is its `T` once the arms before it cover `null`
+/// there** (ADR-352 D1 per position, #886), as a tuple's position is: a bare
+/// name at a `T?` field binds the `T` where an earlier unguarded arm of the
+/// same struct has `null` at that field and takes all, or says the same, at
+/// each other field it names; a variant or a literal there is matched
+/// against the `T`. The fields are kept for the lowering by their index in
+/// the pattern as written, which writes them `Some(…)`.
+fn check_core_flow_set_fields(mut state: CheckState, world: ref CheckWorld, arms: ref Vec[MatchArm], at: i64, typed: ref Ty) sync {
+    let fields: Vec[PatternField] = check_core_flow_named_parts(arms[at].pattern) ?? return
+    let key = check_core_flow_named_key(state, world, arms[at].pattern, typed)
+    let declared: Vec[FieldContract] = state.structs[key]?.clone() ?? return
+    let mut set: Vec[i64] = []
+    for i in 0..<fields.len() {
+        let name = world.words.resolve(fields[i].name).clone()
+        let ty: Ty = check_core_flow_field_type(declared, name) ?? continue
+        let nullable = match ty {
+            Ty::Nullable(_) => true,
+            else => false,
+        }
+        let mut covered = false
+        if nullable && check_core_flow_a_bare_name(state, world, fields[i].pat, ty) {
+            let mut before = 0
+            while before < at && !covered {
+                let arm = arms[before]
+                before += 1
+                if arm.guard != null || check_core_flow_named_key(state, world, arm.pattern, typed) != key {
+                    continue
+                }
+                let earlier: Vec[PatternField] = check_core_flow_named_parts(arm.pattern) ?? continue
+                covered = check_core_flow_covers_null_field(state, world, earlier, fields, name, declared)
+            }
+        } else if nullable && check_core_flow_a_value_part(state, world, fields[i].pat, ty) {
+            covered = true
+        }
+        if covered {
+            set.push(i)
+        }
+    }
+    if set.len() > 0 {
+        state.facts.set_positions.insert(id_of(arms[at].body) as i64, set)
+    }
+}
+
+/// The fields of a pattern with named fields, where the pattern is one.
+fn check_core_flow_named_parts(pattern: ref MatchPattern) -> Vec[PatternField]? sync {
+    return match pattern {
+        MatchPattern::Named { fields, .. } => fields.clone(),
+        else => null,
+    }
+}
+
+/// The ledger's key of a pattern with named fields; empty for another pattern.
+fn check_core_flow_named_key(state: ref CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty) -> String sync {
+    return match pattern {
+        MatchPattern::Named { path, .. } => state.named_pattern_key(world, path, typed),
+        else => "",
+    }
+}
+
+/// The declared type of the field `name`.
+fn check_core_flow_field_type(declared: ref Vec[FieldContract], name: ref String) -> Ty? sync {
+    for field in declared {
+        if field.name == name {
+            return field.ty.clone()
+        }
+    }
+    return null
+}
+
+/// Whether the earlier arm's fields take every value `parts` meets with
+/// `null` at the field `at`: `null` there, and at each other field it names
+/// it takes all, or `parts` says the same there.
+fn check_core_flow_covers_null_field(state: ref CheckState, world: ref CheckWorld, earlier: ref Vec[PatternField], parts: ref Vec[PatternField], at: ref String, declared: ref Vec[FieldContract]) -> bool sync {
+    let mut null_there = false
+    for each in earlier {
+        let name = world.words.resolve(each.name).clone()
+        if name == at {
+            null_there = shapes_is_null(each.pat)
+            continue
+        }
+        let ty: Ty = check_core_flow_field_type(declared, name) ?? return false
+        if check_core_flow_takes_all(state, world, each.pat, ty) {
+            continue
+        }
+        let mut same = false
+        for part in parts {
+            if world.words.resolve(part.name) == name {
+                same = check_core_flow_same_part(world, each.pat, part.pat)
+            }
+        }
+        if !same {
+            return false
+        }
+    }
+    return null_there
+}
+
+/// **What an arm's pattern binds, each struct field found set as its `T`**
+/// (#886): `check_core_flow_set_fields` kept the fields by their index.
+fn check_core_flow_arm_pattern_parts(state: ref CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty, body: ref Expr) -> collections::BTreeMap[String, Ty] sync {
+    let mut parts = state.pattern_parts(world, pattern, typed)
+    let fields: Vec[PatternField] = check_core_flow_named_parts(pattern) ?? return parts
+    let set: Vec[i64] = state.facts.set_positions.get(id_of(body) as i64)?.clone() ?? return parts
+    for i in set {
+        let name: String = match fields[i].pat {
+            MatchPattern::Path(one) => world.words.resolve(one[0]).clone(),
+            else => continue,
+        }
+        let ty: Ty = parts.get(name)?.clone() ?? continue
+        parts.insert(name, check_core_flow_inside(ty))
+    }
+    return parts
+}
+
 /// The parts a `match` arm binds, as its scope sees them (ADR-291, 0.0.252,
 /// #171).
-fn check_core_flow_parts(mut state: CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty, lendable: bool) -> collections::BTreeMap[String, Ty] sync {
-    let parts = state.pattern_parts(world, pattern, typed)
+fn check_core_flow_parts(mut state: CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty, lendable: bool, body: ref Expr) -> collections::BTreeMap[String, Ty] sync {
+    let parts = check_core_flow_arm_pattern_parts(state, world, pattern, typed, body)
     if lendable || !typed.is_a_view() {
         return parts
     }
@@ -737,7 +851,7 @@ fn check_core_flow_parts(mut state: CheckState, world: ref CheckWorld, pattern: 
 /// ADR-355 D5).
 fn check_core_flow_copied_parts(mut state: CheckState, world: ref CheckWorld, arm: ref MatchArm, typed: ref Ty, through_the_reference: bool) sync {
     let at = id_of(arm.body) as i64
-    let mut parts = state.pattern_parts(world, arm.pattern, typed)
+    let mut parts = check_core_flow_arm_pattern_parts(state, world, arm.pattern, typed, arm.body)
     state.typed_inside_boxes(world, arm.pattern, parts)
     // `text => …` over a `ref T?` held by value: the name is the payload,
     // which is already the view (`Some(text)` binds the `&T`), and nothing is
@@ -773,9 +887,9 @@ fn check_core_flow_binds_the_payload(pattern: ref MatchPattern, typed: ref Ty) -
 }
 
 /// **Owned text bound through a lent value is a `&String` below** (#125).
-fn check_core_flow_owned_texts(mut state: CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty) -> collections::BTreeSet[String] sync {
+fn check_core_flow_owned_texts(mut state: CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty, body: ref Expr) -> collections::BTreeSet[String] sync {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
-    let parts = state.pattern_parts(world, pattern, typed)
+    let parts = check_core_flow_arm_pattern_parts(state, world, pattern, typed, body)
     for (name, ty) in parts {
         if check_core_flow_owned_text(ty) {
             out.insert(name.clone())
@@ -896,7 +1010,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     state.a_pattern_inside_a_box(world, arm.pattern, span)
     state.a_struct_pattern_that_leaves_fields_out(world, arm.pattern, typed, span)
     check_core_flow_guard_box(state, world, host, arm.pattern, arm.body, arm.guard)
-    let parts = check_core_flow_parts(state, world, arm.pattern, typed, lendable)
+    let parts = check_core_flow_parts(state, world, arm.pattern, typed, lendable, arm.body)
     let a_list = check_core_flow_a_list(arm.pattern)
     if typed.is_a_view() || through_the_reference || a_list {
         check_core_flow_copied_parts(state, world, arm, typed, through_the_reference)
@@ -904,7 +1018,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let lent_parts = !lendable && typed.is_a_view()
     let mut owned_text: collections::BTreeSet[String] = collections::BTreeSet()
     if lent_parts {
-        owned_text = check_core_flow_owned_texts(state, world, arm.pattern, typed)
+        owned_text = check_core_flow_owned_texts(state, world, arm.pattern, typed, arm.body)
     }
     let frame = check_core_flow_frame(state, world, arm.pattern, id_of(arm.body) as i64, parts, lent_parts, owned_text)
     let mut in_place: collections::BTreeSet[i64] = collections::BTreeSet()
@@ -1037,6 +1151,7 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
         if set_tuple != null {
             arm_typed = set_tuple ?? arm_typed
         }
+        check_core_flow_set_fields(state, world, arms, taken, arm_typed)
         let got = check_core_flow_arm(state, world, host, value, on, arm, arm_typed, lendable, through_the_reference, mut_subject, choice, taken, span)
         taken += 1
         if got != null {

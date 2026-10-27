@@ -1,0 +1,14 @@
+// ADR-352 D1 per position, #886: `F { name: null, n: 3 }` does not take
+// `F { name: null, n: 1 }`, so `name` in the next arm may still be `null`.
+struct F { name: String?, n: i64 }
+
+fn len(v: F) -> i64 {
+    match v {
+        F { name: null, n: 3 } => 0,
+        F { name, .. } => name.len(),
+    }
+}
+
+fn main() {
+    println(len(F { name: "ada", n: 1 }))
+}

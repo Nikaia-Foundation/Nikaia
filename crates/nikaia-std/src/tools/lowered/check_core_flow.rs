@@ -583,8 +583,106 @@ pub(crate) fn check_core_flow_set_tuple(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_flow_parts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty, lendable: bool) -> collections::BTreeMap<String, Ty> {
-    let parts = state.pattern_parts(world, pattern, typed);
+pub(crate) fn check_core_flow_set_fields(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[MatchArm], at: i64, typed: &Ty) {
+    let fields: Vec<PatternField> = match check_core_flow_named_parts(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).pattern) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let key = check_core_flow_named_key(&state, world, &nikaia_std::index::get(&arms, nikaia_std::index::at(at)).pattern, typed);
+    let declared: Vec<FieldContract> = match match *nikaia_std::index::get(&state.structs, &key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut set: Vec<i64> = vec![];
+    for i in 0..fields.len() as i64 {
+        let name = world.words.resolve(nikaia_std::index::get(&fields, nikaia_std::index::at(i)).name).to_owned();
+        let ty: Ty = match check_core_flow_field_type(&declared, &name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let nullable = matches!(ty, Ty::Nullable(_));
+        let mut covered = false;
+        if nullable && check_core_flow_a_bare_name(&state, world, &nikaia_std::index::get(&fields, nikaia_std::index::at(i)).pat, &ty) {
+            let mut before: i64 = 0;
+            while before < at && !covered {
+                let arm = nikaia_std::index::get(&arms, (before) as usize);
+                before += 1;
+                if arm.guard.is_some() || check_core_flow_named_key(&state, world, &arm.pattern, typed) != key { continue; }
+                let earlier: Vec<PatternField> = match check_core_flow_named_parts(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                covered = check_core_flow_covers_null_field(&state, world, &earlier, &fields, &name, &declared);
+            }
+        } else if nullable && check_core_flow_a_value_part(&state, world, &nikaia_std::index::get(&fields, nikaia_std::index::at(i)).pat, &ty) { covered = true; }
+        if covered { set.push(i); }
+    }
+    if !set.is_empty() { state.facts.set_positions.insert(id_of(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).body) as i64, set); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_named_parts(pattern: &MatchPattern) -> Option<Vec<PatternField>> {
+    match pattern {
+        MatchPattern::Named { fields, .. } => Some(fields.to_owned()),
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_named_key(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty) -> String {
+    match pattern {
+        MatchPattern::Named { path, .. } => state.named_pattern_key(world, path, typed),
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_field_type(declared: &[FieldContract], name: &str) -> Option<Ty> {
+    for field in declared.iter() { if field.name == name { return Some(field.ty.clone()); } }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_covers_null_field(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, earlier: &[PatternField], parts: &[PatternField], at: &str, declared: &[FieldContract]) -> bool {
+    let mut null_there = false;
+    for each in earlier.iter() {
+        let name = world.words.resolve(each.name).to_owned();
+        if name == at {
+            null_there = shapes_is_null(&each.pat);
+            continue;
+        }
+        let ty: Ty = match check_core_flow_field_type(declared, &name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if check_core_flow_takes_all(state, world, &each.pat, &ty) { continue; }
+        let mut same = false;
+        for part in parts.iter() { if world.words.resolve(part.name) == name { same = check_core_flow_same_part(world, &each.pat, &part.pat); } }
+        if !same { return false; }
+    }
+    null_there
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_arm_pattern_parts(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty, body: &Expr) -> collections::BTreeMap<String, Ty> {
+    let mut parts = state.pattern_parts(world, pattern, typed);
+    let fields: Vec<PatternField> = match check_core_flow_named_parts(pattern) { Some(__nikaia_value) => __nikaia_value, None => return parts };
+    let set: Vec<i64> = match match state.facts.set_positions.get(&(id_of(body) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return parts };
+    for i in set.iter() {
+        let i = nikaia_std::num::value(i);
+        let name: String = match nikaia_std::index::get(&fields, nikaia_std::index::at(i)).pat {
+            MatchPattern::Path(ref one) => world.words.resolve(*nikaia_std::index::get(&one, 0)).to_owned(),
+            _ => continue,
+        };
+        let ty: Ty = match match parts.get(&name) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+        parts.insert(name, check_core_flow_inside(&ty));
+    }
+    parts
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_parts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty, lendable: bool, body: &Expr) -> collections::BTreeMap<String, Ty> {
+    let parts = check_core_flow_arm_pattern_parts(&state, world, pattern, typed, body);
     if lendable || !typed.is_a_view() { return parts; }
     let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     for (name, ty) in parts.iter() { if state.copied(world, ty) { out.insert(name.to_owned(), ty.clone()); } else { out.insert(name.to_owned(), view_of_type(ty)); } }
@@ -595,7 +693,7 @@ pub(crate) fn check_core_flow_parts(state: &mut CheckState, world: &CheckWorld<'
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_copied_parts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arm: &MatchArm, typed: &Ty, through_the_reference: bool) {
     let at = id_of(&arm.body) as i64;
-    let mut parts = state.pattern_parts(world, &arm.pattern, typed);
+    let mut parts = check_core_flow_arm_pattern_parts(&state, world, &arm.pattern, typed, &arm.body);
     state.typed_inside_boxes(world, &arm.pattern, &mut parts);
     let the_payload = !through_the_reference && check_core_flow_binds_the_payload(&arm.pattern, typed);
     if the_payload { return; }
@@ -619,9 +717,9 @@ pub(crate) fn check_core_flow_binds_the_payload(pattern: &MatchPattern, typed: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_flow_owned_texts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty) -> collections::BTreeSet<String> {
+pub(crate) fn check_core_flow_owned_texts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty, body: &Expr) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let parts = state.pattern_parts(world, pattern, typed);
+    let parts = check_core_flow_arm_pattern_parts(&state, world, pattern, typed, body);
     for (name, ty) in parts.iter() { if check_core_flow_owned_text(ty) { out.insert(name.to_owned()); } }
     out
 }
@@ -712,12 +810,12 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     state.a_pattern_inside_a_box(world, &arm.pattern, span);
     state.a_struct_pattern_that_leaves_fields_out(world, &arm.pattern, typed, span);
     check_core_flow_guard_box(state, world, host, &arm.pattern, &arm.body, (arm.guard).as_ref());
-    let parts = check_core_flow_parts(state, world, &arm.pattern, typed, lendable);
+    let parts = check_core_flow_parts(state, world, &arm.pattern, typed, lendable, &arm.body);
     let a_list = check_core_flow_a_list(&arm.pattern);
     if typed.is_a_view() || through_the_reference || a_list { check_core_flow_copied_parts(state, world, arm, typed, through_the_reference); }
     let lent_parts = !lendable && typed.is_a_view();
     let mut owned_text: collections::BTreeSet<String> = collections::BTreeSet::new();
-    if lent_parts { owned_text = check_core_flow_owned_texts(state, world, &arm.pattern, typed); }
+    if lent_parts { owned_text = check_core_flow_owned_texts(state, world, &arm.pattern, typed, &arm.body); }
     let frame = check_core_flow_frame(state, world, &arm.pattern, id_of(&arm.body) as i64, &parts, lent_parts, &owned_text);
     let mut in_place: collections::BTreeSet<i64> = collections::BTreeSet::new();
     for local in frame.iter() { if !state.copied(world, &local.ty) { in_place.insert(local.id); } }
@@ -808,6 +906,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
         if !several.is_empty() { arm_typed = check_core_flow_member(world, &several, &arm.pattern); }
         let set_tuple: Option<Ty> = check_core_flow_set_tuple(state, world, arms, taken, &arm_typed);
         if set_tuple.is_some() { arm_typed = nikaia_std::index::or(set_tuple, || arm_typed.into()); }
+        check_core_flow_set_fields(state, world, arms, taken, &arm_typed);
         let got = check_core_flow_arm(state, world, host, value, &on, arm, &arm_typed, lendable, through_the_reference, (mut_subject).as_deref(), choice, taken, span);
         taken += 1;
         if got.is_some() {

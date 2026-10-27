@@ -237,6 +237,39 @@ impl EmitState {
                     out.push(")");
                     return Ok(n);
                 },
+                MatchPattern::Named { path, fields, rest } => {
+                    let rest = *rest;
+                    out.push(&format!("{} {{ ", emit_match_path(world, path)));
+                    let mut n: i64 = 0;
+                    let mut first = true;
+                    let mut open = rest;
+                    let mut i: i64 = 0;
+                    for field in fields.iter() {
+                        let some = set.contains(&i);
+                        i += 1;
+                        let shorthand = emit_match_shorthand(world, field);
+                        if shorthand && wild && !some {
+                            open = true;
+                            continue;
+                        }
+                        if !first { out.push(", "); }
+                        first = false;
+                        if shorthand && !some {
+                            out.push(&self.emit_match_bound(world, field.name, wild, lent_key));
+                            continue;
+                        }
+                        out.push(&format!("{}: ", emit_text(world, field.name)));
+                        if some { out.push("Some("); }
+                        n = self.emit_core_pattern_written(world, walk, out, host, &field.pat, wild, lent_key, collect, n, depth, flow, scope)?;
+                        if some { out.push(")"); }
+                    }
+                    if open || first {
+                        if !first { out.push(", "); }
+                        out.push("..");
+                    }
+                    out.push(" }");
+                    return Ok(n);
+                },
                 _ => { },
             }
         }

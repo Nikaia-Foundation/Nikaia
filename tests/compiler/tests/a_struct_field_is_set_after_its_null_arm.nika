@@ -1,0 +1,55 @@
+// ADR-352 D1 per position, #886: a struct's field narrows as a tuple's
+// position does - a bare name at a `T?` field is the `T` once an earlier arm
+// took `null` there and everything else.
+enum Color { Red, Blue }
+
+struct F { name: String?, n: i64 }
+
+struct G { name: String?, c: Color }
+
+struct H { c: Color?, n: i64 }
+
+fn len(v: F) -> i64 {
+    match v { F { name: null, .. } => 0, F { name, .. } => name.len() }
+}
+
+fn renamed(v: F) -> i64 {
+    match v {
+        F { name: null, n } => n,
+        F { name: x, n } => x.len() + n,
+    }
+}
+
+fn same_variant(v: G) -> i64 {
+    match v {
+        G { name: null, c: Color::Red } => 0,
+        G { name, c: Color::Red } => name.len(),
+        G { name: null, .. } => 1,
+        G { name, .. } => name.len() + 10,
+    }
+}
+
+fn variant_at_the_field(v: H) -> i64 {
+    match v {
+        H { c: Color::Red, .. } => 1,
+        H { c: null, n } => n,
+        H { c, .. } => match c {
+            Color::Red => 2,
+            Color::Blue => 3,
+        },
+    }
+}
+
+fn main() {
+    println(len(F { name: "abc", n: 1 }))
+    println(len(F { name: null, n: 1 }))
+    println(renamed(F { name: "abcd", n: 1 }))
+    println(renamed(F { name: null, n: 7 }))
+    println(same_variant(G { name: "ab", c: Color::Red }))
+    println(same_variant(G { name: null, c: Color::Red }))
+    println(same_variant(G { name: null, c: Color::Blue }))
+    println(same_variant(G { name: "ab", c: Color::Blue }))
+    println(variant_at_the_field(H { c: Color::Red, n: 0 }))
+    println(variant_at_the_field(H { c: null, n: 5 }))
+    println(variant_at_the_field(H { c: Color::Blue, n: 0 }))
+}

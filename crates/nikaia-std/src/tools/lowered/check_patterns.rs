@@ -79,7 +79,7 @@ impl CheckState {
                 }
             },
             MatchPattern::Named { path, fields, .. } => {
-                let key = self.pattern_variant(world, path, &owner);
+                let key = self.named_pattern_key(world, path, on);
                 let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, &key) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -114,6 +114,17 @@ impl CheckState {
             if (rest_at < 0 || at != rest_at) && place >= 0 && place < types.len() as i64 { self.bind_a_part(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)), nikaia_std::index::get(&types, nikaia_std::index::at(place)), out); }
             at = at + 1;
         }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn named_pattern_key(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], on: &Ty) -> String {
+        let (owner, plain) = match on {
+            Ty::Named { name, args, .. } => (name.to_owned(), args.is_empty()),
+            _ => return String::from(""),
+        };
+        let key = self.pattern_variant(world, path, &owner);
+        if plain && path.len() == 1 && !self.structs.contains_key(&key) && world.words.resolve(*nikaia_std::index::get(&path, 0)) == owner { return owner; }
+        key
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
