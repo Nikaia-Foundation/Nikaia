@@ -36,8 +36,25 @@ fn cut_twice(given: ref Vec[String]) -> String {
     return f"{paths.len()} {out.len()} {paths[0]} {out[0]}"
 }
 
+// A cut of `opt ?? ""` (the converter's `for X in` line): the parts are text too.
+fn cut_stripped(given: ref Vec[String]) -> String {
+    let mut out: Vec[String] = []
+    let mut loops: Vec[String] = []
+    for l in given {
+        let line: String = l.clone()
+        let (looped, _) = (line.strip_prefix("for ") ?? "").split_once(" in") ?? ("", "")
+        if looped != "" {
+            loops.push(looped.trim().clone())
+            continue
+        }
+        out.push(line)
+    }
+    return f"{loops.len()} {out.len()} {loops[0]}"
+}
+
 fn main() {
     let given: Vec[String] = ["let a = b", "x"]
     println(cut_once(given))
     println(cut_twice(given))
+    println(cut_stripped(["for e in es {", "y"]))
 }

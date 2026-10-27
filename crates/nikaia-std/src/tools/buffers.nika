@@ -573,11 +573,12 @@ fn clones_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
 }
 
 // Whether a value is two texts cut from a text (#901): `split_once` or
-// `rsplit_once` of a text, or that `?? ("", "")`.
+// `rsplit_once` of a text (also `(opt ?? "")`, as `clones_text` reads it), or
+// that `?? ("", "")`.
 fn cuts_text(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
     return match value {
         Expr::Coalesce { value: cut, fallback, .. } => cuts_text(cut, ask, walk) && texts_pair(fallback, ask, walk),
-        Expr::MethodCall { receiver, method, .. } => (ask.names.resolve(method) == "split_once" || ask.names.resolve(method) == "rsplit_once") && copies_text(receiver, ask, walk),
+        Expr::MethodCall { receiver, method, .. } => (ask.names.resolve(method) == "split_once" || ask.names.resolve(method) == "rsplit_once") && clones_text(receiver, ask, walk),
         else => false,
     }
 }

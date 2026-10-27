@@ -444,7 +444,7 @@ pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
 pub(crate) fn cuts_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match value {
         Expr::Coalesce { value: cut, fallback, .. } => { let cut = nikaia_std::boxed::open(cut); let fallback = nikaia_std::boxed::open(fallback); cuts_text(cut, ask, walk) && texts_pair(fallback, ask, walk) },
-        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (ask.names.resolve(method) == "split_once" || ask.names.resolve(method) == "rsplit_once") && copies_text(receiver, ask, walk) },
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (ask.names.resolve(method) == "split_once" || ask.names.resolve(method) == "rsplit_once") && clones_text(receiver, ask, walk) },
         _ => false,
     }
 }

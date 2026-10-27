@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1250] — 2026-10-27
+
+### A cut of `opt ?? ""` is text too (#901)
+
+`(line.strip_prefix("for ") ?? "").split_once(" in") ?? ("", "")` gives two texts like a cut of a named text: a `.clone()` of a part keeps no view of `line`, so `line` stays movable (the converter's `for X in` line, R217).
+
 ## [0.0.1249] — 2026-10-27
 
 ### A part of `split_once` that is cloned keeps no view of the text it was cut from (#901)
