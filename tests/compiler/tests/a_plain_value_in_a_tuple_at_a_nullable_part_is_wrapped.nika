@@ -1,0 +1,26 @@
+// #887: a plain value in a tuple literal at a `T?` part goes inside the
+// option, as it does when passed to a `T?` parameter: in an argument, a
+// `let`, a `return`, and a tuple inside a tuple. `null` and a value that is
+// already a `T?` stay as written.
+fn pair(p: (String?, i64)) -> i64 { p.1 }
+
+fn measure(p: (String?, i64?)) -> i64 { (p.0?.len() ?? 0) + (p.1 ?? 0) }
+
+fn back(s: String) -> (String?, i64) {
+    return (s, 2)
+}
+
+fn main() {
+    println(pair(("xy", 1)))
+    let t: (String?, i64) = ("ab", 3)
+    println(t.0 ?? "-")
+    let s = f"local"
+    println(measure((s, 5)))
+    println(measure((null, 5)))
+    let o: String? = "already"
+    println(measure((o, null)))
+    println(back("r").0 ?? "-")
+    let n: ((String?, i64), i64?) = (("deep", 1), 7)
+    println(n.0.0 ?? "-")
+    println(n.1 ?? 0)
+}

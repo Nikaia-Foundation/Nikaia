@@ -447,6 +447,9 @@ impl CheckState {
             if got == null && check_core_stmt_element_view(self, world, parts[at], founds[at], wants[at]) == 1 {
                 self.facts.lent_reads.insert(node_key(parts[at]))
                 if check_overflow_a_nullable(wants[at]) {
+                    // Its option is this one; a wrap of the part as a plain
+                    // value (#887) would be a second.
+                    self.facts.wrapped.remove(id_of(parts[at]) as i64)
                     self.facts.nullable_args.insert(id_of(parts[at]) as i64, FactWrap::Constructor)
                 }
                 got = wants[at].clone()

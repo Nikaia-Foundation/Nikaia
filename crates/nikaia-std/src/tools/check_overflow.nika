@@ -254,6 +254,7 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
 pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
     let items = match given {
         Expr::ListLit { items, .. } => items,
+        Expr::Tuple(_, _) => return check_overflow_tuple_into_nullables(state, given, found, want),
         else => return false,
     }
     let wants_nullable = match want {
@@ -293,6 +294,49 @@ pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr
     for item in items {
         if !open || is_a_literal(item) {
             state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Constructor)
+            any = true
+        }
+    }
+    return any
+}
+
+/// **A tuple written out where a tuple with `T?` parts is wanted holds each
+/// such part as a `T?`** (Part I, 3.5; #887): `("xy", 1)` for `(String?,
+/// i64)` is `(Some(..), 1)`, as the same value passed to a `T?` parameter is.
+/// A part that is `null` or already a `T?` stays as written; a list or tuple
+/// inside is wrapped against its own part, at any depth. True where a part
+/// was wrapped.
+pub fn check_overflow_tuple_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
+    let items = match given {
+        Expr::Tuple(items, _) => items,
+        else => return false,
+    }
+    let wants = match want {
+        Ty::Tuple(parts) => parts,
+        else => return false,
+    }
+    let founds = match found {
+        Ty::Tuple(parts) => parts,
+        else => return false,
+    }
+    if wants.len() != items.len() || founds.len() != items.len() {
+        return false
+    }
+    let mut any = false
+    for i in 0..<items.len() {
+        let item = items[i]
+        let part = wants[i]
+        let had = founds[i]
+        let is_null = match item {
+            Expr::LitNull(_) => true,
+            else => false,
+        }
+        // A part lent as an optional view is wrapped by its own fact (#655).
+        let lent = state.facts.nullable_args.contains_key(id_of(item) as i64)
+        if check_overflow_a_nullable(part) && !check_overflow_a_nullable(had) && !is_null && !lent && (!had.is_unknown() || is_a_literal(item)) {
+            state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Constructor)
+            any = true
+        } else if check_overflow_list_into_nullables(state, item, had, part) {
             any = true
         }
     }

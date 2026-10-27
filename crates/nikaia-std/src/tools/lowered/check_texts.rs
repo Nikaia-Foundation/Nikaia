@@ -345,7 +345,10 @@ impl CheckState {
             if got.is_none() { got = self.tuple_literal(world, nikaia_std::index::get(&founds, nikaia_std::index::at(at)), nikaia_std::index::get(&wants, nikaia_std::index::at(at)), *nikaia_std::index::get(&parts, nikaia_std::index::at(at))); }
             if got.is_none() && check_core_stmt_element_view(self, world, *nikaia_std::index::get(&parts, nikaia_std::index::at(at)), nikaia_std::index::get(&founds, nikaia_std::index::at(at)), nikaia_std::index::get(&wants, nikaia_std::index::at(at))) == 1 {
                 self.facts.lent_reads.insert(node_key(*nikaia_std::index::get(&parts, nikaia_std::index::at(at))));
-                if check_overflow_a_nullable(nikaia_std::index::get(&wants, nikaia_std::index::at(at))) { self.facts.nullable_args.insert(id_of(*nikaia_std::index::get(&parts, nikaia_std::index::at(at))) as i64, FactWrap::Constructor); }
+                if check_overflow_a_nullable(nikaia_std::index::get(&wants, nikaia_std::index::at(at))) {
+                    self.facts.wrapped.remove(&(id_of(*nikaia_std::index::get(&parts, nikaia_std::index::at(at))) as i64));
+                    self.facts.nullable_args.insert(id_of(*nikaia_std::index::get(&parts, nikaia_std::index::at(at))) as i64, FactWrap::Constructor);
+                }
                 got = Some((*nikaia_std::index::get(&wants, nikaia_std::index::at(at))).clone());
             }
             if got.is_some() {

@@ -176,6 +176,7 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
     let items = match given {
         Expr::ListLit { items, .. } => items,
+        Expr::Tuple(_, _) => return check_overflow_tuple_into_nullables(state, given, found, want),
         _ => return false,
     };
     let wants_nullable = match want {
@@ -209,6 +210,37 @@ pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, 
             state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Constructor);
             any = true;
         }
+    }
+    any
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_overflow_tuple_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
+    let items = match given {
+        Expr::Tuple(items, _) => items,
+        _ => return false,
+    };
+    let wants = match want {
+        Ty::Tuple(parts) => parts,
+        _ => return false,
+    };
+    let founds = match found {
+        Ty::Tuple(parts) => parts,
+        _ => return false,
+    };
+    if (wants.len() as i64) != items.len() as i64 || (founds.len() as i64) != items.len() as i64 { return false; }
+    let mut any = false;
+    for i in 0..items.len() as i64 {
+        let item = nikaia_std::index::get(&items, (i) as usize);
+        let part = nikaia_std::index::get(&wants, (i) as usize);
+        let had = nikaia_std::index::get(&founds, (i) as usize);
+        let is_null = matches!(item, Expr::LitNull(_));
+        let lent = state.facts.nullable_args.contains_key(&(id_of(&item) as i64));
+        if check_overflow_a_nullable(&part) && !check_overflow_a_nullable(&had) && !is_null && !lent && (!had.is_unknown() || is_a_literal(&item)) {
+            state.facts.wrapped.insert(id_of(&item) as i64, FactWrap::Constructor);
+            any = true;
+        } else if check_overflow_list_into_nullables(state, &item, &had, &part) { any = true; }
     }
     any
 }
