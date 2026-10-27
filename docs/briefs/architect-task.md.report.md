@@ -1,4 +1,4 @@
 Result: done
-Batch: b883-reassigned-trim-result.md e12-3a.md
+Batch: b-drive-rejected-push.md e12-3a.md
 Owner: none
-Notes: #881 done (0fa94bb). b881's Found filed as #883 (`ready`, brief form). CI not red (3cb9fff's failure followed by green 5fd62eb, 3b975cf). e12-3a unchanged.
+Notes: cut at b883 was false (f95b026 `Fixes #883` is on develop; Changelog line in its report, version raise owed). Second false cut on `Pushed: rejected`: fixed at the source by brief b-drive-rejected-push.md (drive.nika records a commit it pushed itself).
