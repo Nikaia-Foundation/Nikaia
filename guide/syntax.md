@@ -308,10 +308,49 @@ the source stays the same.
 
 ## Memory
 
-There is nothing to write. There is no garbage collector and no `free`: a value is cleaned
-up at the end of the block that owns it, and a file or a socket is closed there too. When
-the compiler needs a copy that you did not ask for, it refuses and tells you to write
-`.clone()`, so every copy is visible in the source.
+A value is cleaned up at the end of the block that owns it, and a file or a socket is closed
+there too. What you decide is who owns a value, and the compiler tells you when it matters:
+
+```nika
+struct Person { name: String, age: int }
+
+fn greet(p: Person) {               // only reads `p`: it is lent
+    println(f"Hello, {p.name}")
+}
+
+fn main() {
+    let ada = Person { name: "Ada", age: 36 }
+    greet(ada)                      // Hello, Ada
+    greet(ada)                      // Hello, Ada: still ours
+
+    let mut team: Vec[Person] = []
+    team.push(ada.clone())          // the list keeps what it gets: give it a copy
+    println(ada.name)               // Ada
+
+    let age = ada.age               // a number is copied
+    println(age + ada.age)          // 72
+
+    team.push(ada)                  // the last use: no copy needed
+    println(team.len())             // 2
+    println(ada.name)               // does not compile: NK2105, `ada` is in the list now
+
+    for p in team {                 // a `for` lends the list
+        println(p.age)              // 36, twice
+    }
+    println(team.len())             // 2
+}
+```
+
+* A function that only reads a parameter is **lent** the value. The call writes nothing
+  extra, and the value is still yours afterwards.
+* A value that is **kept** somewhere else (pushed into a list, stored in a field, bound
+  to another name with `let`) is handed over. Using it after that is refused, with
+  `.clone()` named as the way out. If it is the last use, no copy is needed.
+* Numbers and `bool`s are copied; there is nothing to hand over.
+* A `for` lends the list, so it is still there after the loop.
+
+The compiler never copies a value behind your back: every copy is a `.clone()` in the
+source.
 
 **Specification:** [Part I, Chapter 6 Memory and ownership](../docs/specification/10-nikaia-light.md#chapter-6-memory-and-ownership)
 
