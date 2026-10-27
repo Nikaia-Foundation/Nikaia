@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1237] — 2026-10-27
+
+**A `Bytes` has `iter`, `starts_with` and `ends_with`** (#877). A `Bytes`,
+`s.bytes` among them, has `iter()` (a `Seq[ref(self) u8]`, as `Vec::iter`),
+`starts_with(prefix)` and `ends_with(suffix)` over a `ref Bytes`; they were
+NK1171 before. Test `bytes_iterate_and_compare_their_ends`.
+
 ## [0.0.1236] — 2026-10-27
 
 **A `String` parameter read through `find` stays lent** (#882). The keeps
