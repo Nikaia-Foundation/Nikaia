@@ -156,6 +156,7 @@ impl CheckState {
         }
         let mut viewed: Vec[i64] = []
         let mut made: Vec[i64] = []
+        let mut owned: Vec[i64] = []
         let mut text = false
         let mut names = 0
         for leaf in self.value_leaves(world, given) {
@@ -175,6 +176,12 @@ impl CheckState {
             if a_view {
                 names += 1
             }
+            // **An owned local is lent through the call** (#897), as
+            // `look(t)` lends it: `Arm::View(&t)`, and `t` stays usable.
+            if named && !a_view {
+                owned.push(node_key(leaf))
+                continue
+            }
             if a_view || (literal && ty.is_a_view()) {
                 viewed.push(node_key(leaf))
             } else if check_arm_is_a_place(leaf) || ty.is_a_view() {
@@ -183,10 +190,23 @@ impl CheckState {
                 made.push(node_key(leaf))
             }
         }
+        // **Arms that are owned locals and views, nothing made there**: each
+        // owned local is lent as it is, and the whole is a view to lend. Text
+        // goes through `EitherText` below: `&String` and `&str` are two types.
+        if made.len() == 0 && owned.len() > 0 && !text {
+            for node in owned {
+                self.facts.lent_reads.insert(node)
+            }
+            return true
+        }
         // A literal beside values made there is made one of them by the
         // rules before (ADR-282 D5): only a name lent here needs this.
-        if names == 0 || made.len() == 0 {
+        if names + owned.len() == 0 || made.len() + owned.len() == 0 {
             return false
+        }
+        for node in owned {
+            self.facts.lent_reads.insert(node)
+            viewed.push(node)
         }
         for node in viewed {
             if text {

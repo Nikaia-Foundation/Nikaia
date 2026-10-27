@@ -1,0 +1,39 @@
+// An owned local named in an arm of an argument to a lent parameter (#897) is
+// lent through the call, as `look(t)` lends it, and stays usable after it:
+// beside a value made there, beside another owned local, in an `if` and a
+// `match`, a struct and text.
+
+struct P { name: String }
+
+fn look(p: ref P) -> i64 { return p.name.len() }
+
+fn count(s: String) -> i64 { return s.len() }
+
+fn main() {
+    let c = true
+    let t = P { name: "a" }
+    let a = look(if c { t } else { P { name: "bb" } })
+    println(a + t.name.len())
+    let u = P { name: "ccc" }
+    let b = look(if !c { t } else { u })
+    println(b + t.name.len() + u.name.len())
+    let k = 2
+    let m = look(match k {
+        0 => t,
+        1 => u,
+        else => P { name: "dddd" },
+    })
+    println(m + t.name.len() + u.name.len())
+    let s = f"s{k}"
+    let x = count(if c { s } else { "longer" })
+    println(x + s.len())
+    let w = f"w{k}{k}"
+    let y = count(match k {
+        2 => w,
+        3 => s,
+        else => f"{k}",
+    })
+    println(y + w.len() + s.len())
+    let z = count(if c { s } else { w })
+    println(z + s.len() + w.len())
+}

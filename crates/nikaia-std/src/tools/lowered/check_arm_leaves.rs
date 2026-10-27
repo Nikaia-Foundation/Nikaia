@@ -107,8 +107,9 @@ impl CheckState {
         if !is_a_choice(given) { return false; }
         let mut viewed: Vec<i64> = vec![];
         let mut made: Vec<i64> = vec![];
+        let mut owned: Vec<i64> = vec![];
         let mut text = false;
-        let mut names = 0;
+        let mut names: i64 = 0;
         for leaf in self.value_leaves(world, given) {
             if ends_in_null(check_peeled(leaf)) { return false; }
             let ty = match self.arm_type_of(leaf) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -120,9 +121,25 @@ impl CheckState {
             };
             let a_view = named && (ty.is_a_view() || self.a_name_that_is_lent(world, leaf));
             if a_view { names += 1; }
+            if named && !a_view {
+                owned.push(node_key(leaf));
+                continue;
+            }
             if a_view || literal && ty.is_a_view() { viewed.push(node_key(leaf)); } else if check_arm_is_a_place(leaf) || ty.is_a_view() { return false; } else { made.push(node_key(leaf)); }
         }
-        if names == 0 || made.is_empty() { return false; }
+        if made.is_empty() && !owned.is_empty() && !text {
+            for node in owned.iter() {
+                let node = nikaia_std::num::value(node);
+                self.facts.lent_reads.insert(node);
+            }
+            return true;
+        }
+        if (names + owned.len() as i64) == 0 || (made.len() as i64 + owned.len() as i64) == 0 { return false; }
+        for node in owned.iter() {
+            let node = nikaia_std::num::value(node);
+            self.facts.lent_reads.insert(node);
+            viewed.push(node);
+        }
         for node in viewed.iter() {
             let node = nikaia_std::num::value(node);
             if text { self.facts.mixed_leaves.insert(node, false); } else { self.facts.lent_arm_leaves.insert(node, false); }
