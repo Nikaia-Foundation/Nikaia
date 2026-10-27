@@ -1,0 +1,19 @@
+error[NK1102]: `>` is given `i64?`, which may be `null`.
+  --> tests/a_field_read_through_an_index_or_a_call_does_not_narrow.nika:8:33
+   |
+ 8 |     if v[i].n != null && v[i].n > 0 {
+   |                                 ^^^
+   |
+   = note: A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.
+   = note: This read goes through an index, so it is not a path of fields from a name: an index is computed anew at each read, and a `null` test of it proves nothing here (ADR-382 D4). Copy it into a local and test that: `let x = …`.
+   = help: Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.
+error[NK1102]: `>` is given `i64?`, which may be `null`.
+   --> tests/a_field_read_through_an_index_or_a_call_does_not_narrow.nika:11:37
+    |
+ 11 |     if make().n != null && make().n > 0 {
+    |                                     ^^^
+    |
+    = note: A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.
+    = note: This read goes through a call's result, so it is not a path of fields from a name: a call's result is computed anew at each read, and a `null` test of it proves nothing here (ADR-382 D4). Copy it into a local and test that: `let x = …`.
+    = help: Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.
+2 type errors

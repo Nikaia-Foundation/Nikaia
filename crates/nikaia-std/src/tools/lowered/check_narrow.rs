@@ -30,6 +30,7 @@ pub struct CheckNarrowTurn {
 pub struct CheckNarrowing {
     pub narrows: collections::BTreeMap<(i64, i64, i64), CheckNarrow>,
     pub lost_reads: collections::BTreeMap<i64, CheckLost>,
+    pub not_paths: collections::BTreeMap<i64, String>,
     pub maybe_reads: collections::BTreeSet<i64>,
     pub operand_reads: collections::BTreeSet<i64>,
     pub handed_at: Vec<(String, i64)>,
@@ -40,7 +41,7 @@ pub struct CheckNarrowing {
 }
 
 impl CheckNarrowing {
-    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new(), handed_at: vec![], path_reads: vec![], turns: vec![], walls: vec![], target: -1 } }
+    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), not_paths: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new(), handed_at: vec![], path_reads: vec![], turns: vec![], walls: vec![], target: -1 } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -301,7 +302,13 @@ pub fn check_narrow_path_read(state: &mut CheckState, world: &CheckWorld<'_, '_,
     };
     let node = id_of(expr) as i64;
     if state.reading_only || node == state.narrowing.target || state.narrowing.maybe_reads.contains(&node) { return ty.clone(); }
-    let path: String = match dotted_path(world, expr) { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
+    let found_path: Option<String> = dotted_path(world, expr);
+    if found_path.is_none() {
+        let through: String = match check_narrow_not_a_path(expr) { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
+        state.narrowing.not_paths.insert(node, through);
+        return ty.clone();
+    }
+    let path: String = match found_path { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
     match check_narrow_proved(&state, &path, span.start as i64) {
         CheckProved::Yes(_) => {
             let narrow: CheckNarrow = match check_narrow_found(&state, &path) { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
@@ -314,6 +321,16 @@ pub fn check_narrow_path_read(state: &mut CheckState, world: &CheckWorld<'_, '_,
             return ty.clone();
         },
         CheckProved::No => { return ty.clone(); },
+    }
+}
+
+pub(crate) fn check_narrow_not_a_path(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_narrow_not_a_path(base) },
+        Expr::Index { .. } => Some(String::from("an index")),
+        Expr::Call { .. } => Some(String::from("a call's result")),
+        Expr::MethodCall { .. } => Some(String::from("a call's result")),
+        _ => None,
     }
 }
 
@@ -386,12 +403,27 @@ pub fn check_narrow_a_proof_taken_back(state: &mut CheckState, lhs: &Expr, rhs: 
     if (state.findings.len() as i64) == before { return; }
     let mut key = id_of(lhs) as i64;
     if !state.narrowing.lost_reads.contains_key(&key) { key = id_of(rhs) as i64; }
+    if state.findings.is_empty() { return; }
+    let mut through: Option<String> = match state.narrowing.not_paths.get(&(id_of(lhs) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if through.is_none() {
+        through = match state.narrowing.not_paths.get(&(id_of(rhs) as i64)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+    }
+    if through.is_some() {
+        let last = state.findings.len() as i64 - 1;
+        state.findings[nikaia_std::index::at(last)].notes.push(format!("This read goes through {}, so it is not a path of fields from a name: {} is computed anew at each read, and a `null` test of it proves nothing here (ADR-382 D4). Copy it into a local and test that: `let x = …`.", through.as_ref().unwrap(), through.as_ref().unwrap()));
+        return;
+    }
     let found: Option<CheckLost> = match state.narrowing.lost_reads.get(&key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
     let lost: CheckLost = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-    if state.findings.is_empty() { return; }
     let name = lost.name.to_owned();
     let last = state.findings.len() as i64 - 1;
     if lost.at == -1 {

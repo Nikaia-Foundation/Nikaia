@@ -1,0 +1,14 @@
+struct Node { n: i64? }
+
+fn make() -> Node { Node { n: 1 } }
+
+fn main() {
+    let v = [Node { n: 1 }]
+    let i = 0
+    if v[i].n != null && v[i].n > 0 {
+        println("through an index")
+    }
+    if make().n != null && make().n > 0 {
+        println("through a call")
+    }
+}

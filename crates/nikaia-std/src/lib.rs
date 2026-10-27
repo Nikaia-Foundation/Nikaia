@@ -216,8 +216,13 @@ pub mod runtime {
 /// **And `never_loop`**, a lint that denies by default: `for b in text.bytes()
 /// { …; break }` reads the first element: valid Nikaia, lowered as written,
 /// and the loop is what the author wrote (#586).
+///
+/// **And `unnecessary_unwrap`**: a local a `null` test proved is read as
+/// `.as_ref().unwrap()` after the test (ADR-382, Consequences), which rustc
+/// checks again; the test is the program's, the unwrap the lowering's.
 #[allow(
     unused_assignments,
+    clippy::unnecessary_unwrap,
     clippy::never_loop,
     unused_variables,
     unreachable_code,
