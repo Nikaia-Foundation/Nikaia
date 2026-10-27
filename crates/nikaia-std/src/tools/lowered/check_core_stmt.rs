@@ -686,7 +686,7 @@ pub(crate) fn check_core_stmt_shared(state: &CheckState, world: &CheckWorld<'_, 
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_owns_whole(ty: &Ty) -> bool {
     match ty {
-        Ty::Nullable(_) => false,
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_core_stmt_owns_whole(inner) },
         Ty::Unknown => false,
         _ => !ty.is_a_view(),
     }

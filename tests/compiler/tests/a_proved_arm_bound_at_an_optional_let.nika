@@ -1,0 +1,59 @@
+// A proved name at an arm tail bound at a `T?` place (#893, ADR-382): by a
+// `let`, an assignment and a `return`, with text and with a struct.
+struct Point { name: String, n: i64 }
+
+fn by_let(b: String?, c: String) -> String? {
+    let s: String? = if b != null { b } else { c }
+    return s
+}
+
+fn by_assign(b: String?, c: String) -> String? {
+    let mut s: String? = null
+    if c != "" {
+        s = if b != null { b } else { c }
+    }
+    return s
+}
+
+fn by_return(b: String?, c: String) -> String? {
+    return if b != null { b } else { c }
+}
+
+fn point_by_let(b: Point?, c: Point) -> Point? {
+    let s: Point? = if b != null { b } else { c }
+    return s
+}
+
+fn point_by_assign(b: Point?, c: Point) -> Point? {
+    let mut s: Point? = null
+    if c.n > 0 {
+        s = if b != null { b } else { c }
+    }
+    return s
+}
+
+fn point_by_return(b: Point?, c: Point) -> Point? {
+    return if b != null { b } else { c }
+}
+
+fn shown(p: Point?) -> String {
+    if p != null {
+        return f"{p.name} {p.n}"
+    }
+    return "none"
+}
+
+fn main() {
+    println(by_let("x", "y") ?? "n")
+    println(by_let(null, "y") ?? "n")
+    println(by_assign("x", "y") ?? "n")
+    println(by_assign(null, "y") ?? "n")
+    println(by_return("x", "y") ?? "n")
+    println(by_return(null, "y") ?? "n")
+    println(shown(point_by_let(Point { name: "a", n: 1 }, Point { name: "b", n: 2 })))
+    println(shown(point_by_let(null, Point { name: "b", n: 2 })))
+    println(shown(point_by_assign(Point { name: "a", n: 1 }, Point { name: "b", n: 2 })))
+    println(shown(point_by_assign(null, Point { name: "b", n: 2 })))
+    println(shown(point_by_return(Point { name: "a", n: 1 }, Point { name: "b", n: 2 })))
+    println(shown(point_by_return(null, Point { name: "b", n: 2 })))
+}

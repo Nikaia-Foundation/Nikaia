@@ -926,11 +926,14 @@ fn check_core_stmt_shared(state: ref CheckState, world: ref CheckWorld, target: 
 }
 
 /// **`x = v` and `x op= v`** (Part I 2.1).
-/// **A type a place owns whole** (#888): neither a view nor an option, whose
+/// **A type a place owns whole** (#888): neither a view nor an option of one, whose
 /// slot takes a proved read as it is.
 fn check_core_stmt_owns_whole(ty: ref Ty) -> bool sync {
     return match ty {
-        Ty::Nullable(_) => false,
+        // **A `T?` place owns its value whole when `T` does** (#893): the
+        // proved arm is unwrapped and the whole choice wrapped in `Some(..)`,
+        // as `return` from a `-> T?` function writes it.
+        Ty::Nullable(inner) => check_core_stmt_owns_whole(inner),
         Ty::Unknown => false,
         else => !ty.is_a_view(),
     }
