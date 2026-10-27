@@ -5,3 +5,18 @@ contracts::TEXT "String"
 tail_of tail_value_of
 ty::base( type_last_segment(
 base( type_last_segment(
+
+# [view]: what `--view` (R177) renames, in this order. The parsed files are
+# `ParsedView`s named `unit`. A bare word is renamed as a word (not after a
+# `.`); anything else is replaced as text.
+[view]
+&[&Parsed] &Vec<ParsedView>
+&[Parsed] &Vec<ParsedView>
+&Parsed &ParsedView
+parsed.program.items parsed.items
+&parsed.interner parsed.words
+parsed.interner parsed.words
+parsed unit
+unit.text(* unit.text(
+unit.name(* unit.text(
+unit.name( unit.text(

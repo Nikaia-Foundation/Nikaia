@@ -52,6 +52,8 @@ struct Rs2nikaCtx {
     tuple_why: Vec[String],
     /// R177: the parsed files are `ParsedView`s (`--view`).
     view: bool,
+    /// `--view`: rs2nika.names' `[view]`, `from` and `to` side by side
+    view_names: Vec[String],
 }
 
 /// The rules, as `--rules` prints them.
@@ -193,7 +195,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R174 a walk of the emitter `emit::visit_block(b, &mut |e| { .. });` (`visit_stmt`, `visit_expr`) -> `for e in visited_in_block(b) { .. }` (tools/emit_walk.nika), the closure's `return` -> `continue`",
         "R175 a method whose body is one call on a field of `self` (`self.tables.count(&parsed.interner, ty)`) is written out at each `self.count(..)`, its parameters replaced by the arguments",
         "R176 a method that reads one field of `self` only (and calls methods that do) -> a free function of that field: `&self` -> `tables: &EmitSeedsTables` (the type from the `struct`), `self.tables` -> `tables`, `self.m(a)` -> `m(&self.tables, a)`",
-        "R177 `--view`: the parsed files are `ParsedView`s named `unit`: `&Parsed` -> `ref ParsedView`, `&[&Parsed]` -> `ref Vec[ParsedView]`, `parsed.program.items` -> `unit.items`, `parsed.interner` -> `unit.words`, `parsed.text(*x).to_string()` -> `unit.text(x)`",
+        "R177 `--view`: the parsed files are `ParsedView`s named `unit`, by the `[view]` table of rs2nika.names (or one in the working directory): `&Parsed` -> `ref ParsedView`, `&[&Parsed]` -> `ref Vec[ParsedView]`, `parsed.program.items` -> `unit.items`, `parsed.interner` -> `unit.words`, `parsed.text(*x).to_string()` -> `unit.text(x)`",
         "R178 (`-free`) an `impl Type {` whose methods all became free (none takes `self` any longer) loses its head and its closing brace, and its body moves out one level",
         "R179 `let mut out = []` in a function that ends `return out` takes the list type it returns (`let mut out: Vec[Call] = []`); `match &*func` -> `match func`",
     ]
@@ -5367,34 +5369,81 @@ fn rs2nika_typed_empty(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
     return out
 }
 
-fn rs2nika_view(mut ctx: Rs2nikaCtx, given: String) -> String {
-    if !ctx.view {
-        return given.clone()
+/// The `[view]` section of rs2nika.names: what `--view` renames, in order,
+/// as `from` and `to` side by side.
+fn rs2nika_view_names(repo: String) -> Vec[String] {
+    // a test brings its own table, beside the file it converts
+    let mut table: String = fs::read_to_string("rs2nika.names", fs::Root::Anywhere) catch { "" }
+    for d in [repo.clone(), ".", "..", "../..", "../../..", "../../../..", "../../../../..", "../../../../../.."] {
+        if d != "" && d != "?" && table == "" {
+            table = fs::read_to_string(f"{d}/crates/rs2nika/convert/rs2nika.names", fs::Root::Anywhere) catch { "" }
+        }
     }
-    let mut s: String = given.replace("&[&Parsed]", "&Vec<ParsedView>").replace("&[Parsed]", "&Vec<ParsedView>").replace("&Parsed", "&ParsedView").replace("parsed.program.items", "parsed.items").replace("&parsed.interner", "parsed.words").replace("parsed.interner", "parsed.words")
-    let c: Vec[scalar] = s.chars().collect()
+    if table == "" {
+        eprintln("// rs2nika: `--view` found no rs2nika.names, so it renames nothing")
+        return []
+    }
+    let mut pairs: Vec[String] = []
+    let mut inside = false
+    for l in table.split("\n") {
+        if l.starts_with("[") {
+            inside = l.trim() == "[view]"
+            continue
+        }
+        let parts: Vec[String] = l.split_whitespace().map(fn(p) { p.clone() }).collect()
+        if inside && !l.starts_with("#") && parts.len() >= 2 {
+            pairs.push(parts[0].clone())
+            pairs.push(parts[1].clone())
+        }
+    }
+    return pairs
+}
+
+/// `from` renamed to `to` where it is a word of its own, not a field
+/// (`x.parsed`) or part of a longer name (`parsed_at`).
+fn rs2nika_rename_word(given: String, from: String, to: String) -> String {
+    let c: Vec[scalar] = given.chars().collect()
     let mut out: String = ""
     let mut at = 0
     while at < c.len() {
-        let hit = rs2nika_find_from(c, "parsed", at)
+        let hit = rs2nika_find_from(c, from, at)
         if hit < 0 {
             out.push_str(rs2nika_text(c, at, c.len()))
             break
         }
         out.push_str(rs2nika_text(c, at, hit))
-        let e = hit + "parsed".len()
+        let e = hit + from.chars().count()
         if (hit > 0 && (rs2nika_word(c[hit - 1]) || c[hit - 1] == '.')) || (e < c.len() && rs2nika_word(c[e])) {
-            out.push_str("parsed")
+            out.push_str(from)
         } else {
-            out.push_str("unit")
+            out.push_str(to)
         }
         at = e
     }
-    s = out.replace("unit.text(*", "unit.text(").replace("unit.name(*", "unit.text(").replace("unit.name(", "unit.text(")
+    return out
+}
+
+fn rs2nika_view(mut ctx: Rs2nikaCtx, given: String) -> String {
+    if !ctx.view {
+        return given.clone()
+    }
+    // the names are rs2nika.names' `[view]`
+    let mut s: String = given.clone()
+    let mut k = 0
+    while k + 1 < ctx.view_names.len() {
+        let from = ctx.view_names[k].clone()
+        let to = ctx.view_names[k + 1].clone()
+        if rs2nika_is_path(from) {
+            s = rs2nika_rename_word(s, from, to)
+        } else {
+            s = s.replace(from, to)
+        }
+        k = k + 2
+    }
     // `unit.text(x)` is a `String`: its `.to_string()` goes
     let d: Vec[scalar] = s.chars().collect()
     let mut o2: String = ""
-    at = 0
+    let mut at = 0
     while at < d.len() {
         let hit = rs2nika_find_from(d, "unit.text(", at)
         if hit < 0 {
@@ -8910,9 +8959,12 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
     } else if profile == "emit" {
         world = "EmitWorld"
     }
-    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: rs2nika_opt_names(src), tuple_line: [], tuple_why: [], view: view }
+    let mut ctx = Rs2nikaCtx { profile: base.clone(), free: free, world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: rs2nika_opt_names(src), tuple_line: [], tuple_why: [], view: view, view_names: [] }
     if repo != "" {
         rs2nika_load(ctx, repo)
+    }
+    if view {
+        ctx.view_names = rs2nika_view_names(repo)
     }
     rs2nika_enum_arity(ctx, src)
     let delegated = rs2nika_delegates(ctx, src)
@@ -10541,6 +10593,10 @@ fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: String) {
         return
     }
     for l in table.split("\n") {
+        // a `[section]` is another rule's table
+        if l.starts_with("[") {
+            break
+        }
         if l.trim() == "" || l.starts_with("#") {
             continue
         }
