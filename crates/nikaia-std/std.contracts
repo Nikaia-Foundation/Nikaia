@@ -5449,6 +5449,29 @@ sync = true
 touches = []
 signature = "(ref self) -> bool"
 
+# The bytes, one at a time, **lent**, as a list's `iter` lends its elements
+# (#877): where a pipeline over the bytes starts, `b.iter().filter(…)`.
+[fn."Bytes::iter"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self) -> Seq[ref(self) u8] sync ends sized"
+
+# Whether the bytes begin with `prefix`, byte for byte (#877); an empty
+# `prefix` begins every one.
+[fn."Bytes::starts_with"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self, prefix: ref Bytes) -> bool"
+
+# Whether the bytes end with `suffix`, byte for byte (#877).
+[fn."Bytes::ends_with"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self, suffix: ref Bytes) -> bool"
+
 # The bytes as text, where they are text (ADR-320 D7): a view into the
 # buffer, and `NotText` where the bytes are not UTF-8.
 [fn."Bytes::text"]

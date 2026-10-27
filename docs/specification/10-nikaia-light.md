@@ -779,7 +779,7 @@ it counts:
 
 | view | an element | reads |
 | :--- | :--- | :--- |
-| `s.bytes` | `u8` | `s.bytes[i]`, `s.bytes[a..<b]`, `s.bytes.len()`, `s.bytes.find(…)`, `for` |
+| `s.bytes` | `u8` | `s.bytes[i]`, `s.bytes[a..<b]`, `s.bytes.len()`, `s.bytes.find(…)`, `s.bytes.iter()`, `for` |
 | `s.scalars` | `scalar` | `take(n)`, `skip(n)`, `count()`, `for` |
 | `s.graphemes` | `ref String`, one grapheme | `take(n)`, `skip(n)`, `count()`, `for` |
 
@@ -858,7 +858,10 @@ while true {
 **A `Bytes` is one run of bytes, whatever holds its memory:** what it allocated, a `Vec[u8]` handed over with `Bytes(v)`, which copies nothing, or a mapped file (`fs::Mapped` is a `Bytes`, Part III 17.2). It reads the same in each case and is handed on by a count. A `ref Bytes` that a function only reads takes any of them, and a text's `s.bytes`.
 
 **A `Bytes` is read as a run of bytes:** `b[i] -> u8`, `b[a..<b]`, `b.len()`,
-`b.find(byte; from: i64) -> i64?`, and `b.text()`, which checks UTF-8 and is
+`b.find(byte; from: i64) -> i64?`, `b.iter()`, the bytes one at a time as a
+list's `iter` gives its elements, `b.starts_with(prefix)` and
+`b.ends_with(suffix)`, each a `ref Bytes` compared byte for byte, and
+`b.text()`, which checks UTF-8 and is
 `NotText` where it fails. An index outside stops the program, as a list's does.
 **A `Bytes` searches for a set of bytes** ([ADR-375](adr/adr-375.md)):
 `bytes::ByteSet([';', '\n'])` is such a set, of any bytes, built once. A set

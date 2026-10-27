@@ -1,0 +1,26 @@
+// A `Bytes` has `iter`, `starts_with` and `ends_with` (#877), as converted
+// Rust's `.as_bytes().iter()` and `.starts_with(b"..")` need.
+fn main() {
+    let s = "hello"
+    let mut sum = 0
+    for b in s.bytes.iter() {
+        sum = sum + b as i64
+    }
+    println(f"{sum}")
+    let ls = s.bytes.iter().filter(fn(b) { b == 'l' }).count()
+    println(f"{ls}")
+    println(f"{s.bytes.starts_with("he".bytes)} {s.bytes.starts_with("lo".bytes)}")
+    println(f"{s.bytes.ends_with("lo".bytes)} {s.bytes.ends_with("".bytes)}")
+    let v: Vec[u8] = [1, 2, 3]
+    let owned = Bytes(v)
+    let head: Vec[u8] = [1, 2]
+    let prefix = Bytes(head)
+    println(f"{owned.starts_with(prefix)} {prefix.starts_with(owned)}")
+    let mut odd = 0
+    for b in owned.iter() {
+        if b % 2 == 1 {
+            odd += 1
+        }
+    }
+    println(f"{odd}")
+}
