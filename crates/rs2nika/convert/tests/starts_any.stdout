@@ -3,7 +3,7 @@ fn an_or_a(ty: String) -> String sync {
 }
 
 fn wide(o: String?) -> bool sync {
-    return (o != null && match o ?? panic("rs2nika: checked above") { x => x.len() > 1 && x.len() < 5 })
+    return (match o { x => x.len() > 1 && x.len() < 5, null => false })
 }
 
 fn head(v: ref Vec[String]) -> i64? sync {

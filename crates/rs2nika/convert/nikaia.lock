@@ -4,7 +4,7 @@
 # what Cargo resolved, listed per name because one name can resolve twice.
 version = 1
 toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"
-compiler = "0e6372977856991dfdc6fdbfd203b92c6c2e1208ba61a4b4504f8d6a9d02327d"
+compiler = "b8e050c4775b713c332585a38b52117588f14c06c726edccaa63965ebb90b18b"
 
 [dependencies]
 ahash = ["0.8.12"]
@@ -79,4 +79,4 @@ zerocopy = ["0.8.63"]
 zerocopy-derive = ["0.8.63"]
 
 [units."src/main.nika"]
-source = "7f6445289b286fdf958db932bc48405af1884f5b304da31f49a6800775f537e8"
+source = "c53b51fd0253d1f4a9ad4e5b5f1ecfdff743ca2b9ea9859c046da114c40134d0"

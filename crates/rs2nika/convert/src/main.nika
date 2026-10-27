@@ -74,7 +74,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R20  `.unwrap_or(d)` / `.unwrap_or_else(|| d)` -> `?? d`; `.cloned()` / `.copied()` of an option -> `?.clone()` (R35 leaves that `?`)",
         "R21  `.is_some()` -> `!= null`, `.is_none()` -> `== null`",
         "R22  `let Some(x) = e else { return y };` -> `let x = e ?? return y` (also continue/break)",
-        "R23  `if let Some(x) = x [&& g] {` -> `if x != null [&& g] {` (ADR-382); over a path of fields `if let Some(x) = &self.f [&& g] {` -> `if self.f != null [&& g] {` with `x` read as `self.f`, + `let x = self.f` only where the block writes the path (ADR-382 D7); over another name + `let x = e`; else + `let x = e ?? panic(..)`",
+        "R23  `if let Some(x) = x [&& g] {` -> `if x != null [&& g] {` (ADR-382); over a path of fields `if let Some(x) = &self.f [&& g] {` -> `if self.f != null [&& g] {` with `x` read as `self.f`, + `let x = self.f` only where the block writes the path (ADR-382 D7); over another name + `let x = e`; else R170",
         "R24  `if let P = e {` ... `} else {` ... `}` -> `match e { P => {..}, else => {..} }` (single let, optional `&& guard`)",
         "R25  `for x in &xs` / `xs.iter()` -> `for x in xs`",
         "R26  closures `|x| e` -> `fn(x) { e }`; `.any`/`.all`/`.find` pass through (`Seq`), a function name `.any(f)` -> `.any(fn(x) { f(x) })`",
@@ -121,7 +121,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R66  `build_time::decoded(x)` -> `decoded(x) fn(n) { ascii_scalar(n) }` (escapes.nika), with a TODO: above ASCII it reads no text",
         "R65  `?` in a lambda -> `?? return null`; `x.starts_with([a, b])` -> `(x.starts_with(a) || x.starts_with(b))`",
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
-        "R63  what R79 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))` (used twice: `match o ?? panic(..) { x => p }`), `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
+        "R63  what R79 leaves of `o.is_some_and(..)`, `o` read once: `o.is_some_and(|x| p)` -> `(match o { x => p, null => false })`, `o.is_some_and(f)` -> `(match o { value => f(value), null => false })` (ADR-352)",
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
         "R68  a positional rest `V(a, ..)` and a slice pattern pass through; `rest @ ..` -> `..rest` (ADR-355)",
         "R70  a `format!` hole hoisted out of a match arm (R81) -> the arm becomes a block holding it",
@@ -181,6 +181,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R151 `x[..]` -> `x`; open cuts stay (`s[a..]`, `s[..<b]` are Nikaia's, R53); `.get(range)` keeps a TODO (no such method, NK1171)",
         "R160 a `match` on a call's `Result`: `let x = match call { Ok(v) => v, Err(e) => d }` -> `let x = call catch { d }` (`e` as `let e = error` where `d` names it; also `return match`); an `Ok` arm that is more than its value follows `let v = call catch { <the Err arm> }` where that arm leaves (or is a `return match`'s value); `Err(Variant)` arms -> `match error { Variant => .., else => .. }`; a guard, a kept `Result`, an `Err` arm that is `null` keep a TODO",
         "R161 a `Result` read as a value where Nikaia has the form: `x.parse().is_ok()` / `.is_err()` -> `text::parse_i64(x) != null` / `== null` (R109); `return x.ok()` in a `T?` function -> `return x catch { return null }`; a statement `x.ok()` over a call that hands back nothing (`flush()`, `writeln!`, `fs::create_dir_all` ..) -> `x catch {}`; `if x.is_err() {` / `if !x.is_ok() {` whose body leaves -> `x catch {`",
+        "R170 `if let Some(x) = e {` over anything but a plain name (a call, a field) -> `match e { x => {..}, null => {..} }`: `e` read once (ADR-352)",
     ]
 }
 
@@ -4009,9 +4010,9 @@ fn rs2nika_opt_comb_hit(mut ctx: Rs2nikaCtx, given: String) -> String {
     return matched
 }
 
-/// R63: what R79 leaves of `o.is_some_and(f)` on a plain path `o`:
-/// `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as
-/// `(o ?? panic(..))`, and `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`.
+/// R63: what R79 leaves of `o.is_some_and(f)` on a plain path `o`, `o`
+/// read once: `o.is_some_and(|x| p)` -> `(match o { x => p, null => false })`,
+/// `o.is_some_and(f)` -> `(match o { value => f(value), null => false })`.
 fn rs2nika_some_and(given: String) -> String {
     let mut s: String = given.clone()
     let mut from = 0
@@ -4038,40 +4039,29 @@ fn rs2nika_some_and(given: String) -> String {
             continue
         }
         let arg: String = rs2nika_text(c, open + 1, end).trim().clone()
-        let some: String = f"({recv} ?? panic(\"rs2nika: checked above\"))"
         let closure = arg.starts_with("|")
         if !closure && !rs2nika_is_path(arg) {
             continue
         }
-        // a path is called with the value; a closure's body overwrites this
-        let bare: String = ((some.strip_prefix("(") ?? "").strip_suffix(")") ?? "").clone()
-        let mut cond: String = f"{arg}({bare})"
+        // the option read once, its value bound by an arm (ADR-352)
+        let mut v: String = "value"
+        let mut body: String = f"{arg}(value)"
         if closure {
             let after: String = (arg.strip_prefix("|") ?? "").clone()
             let bar = after.find("|") ?? continue
-            let v: String = after[0..<bar].replace("&", "").trim().clone()
-            let mut body: String = after[bar + 1..<after.len()].trim().clone()
+            v = after[0..<bar].replace("&", "").trim().clone()
+            body = after[bar + 1..<after.len()].trim().clone()
             if body.starts_with("{") && body.ends_with("}") {
                 body = ((body.strip_prefix("{") ?? "").strip_suffix("}") ?? "").trim().clone()
             }
             if !rs2nika_is_path(v) || v.contains(":") || body.contains(";") {
                 continue
             }
-            let once = rs2nika_replace_word(body, v, "#")
-            if once.split("#").count() > 2 {
-                // used twice: unwrapped once, bound by a match arm
-                cond = f"match {bare} {{ {v} => {body} }}"
-                let pre2: String = rs2nika_text(c, 0, start)
-                let post2: String = rs2nika_text(c, end + 1, c.len())
-                s = f"{pre2}({recv} != null && {cond}){post2}"
-                from = 0
-                continue
-            }
-            cond = rs2nika_replace_word(body.replace(f"*{v}", v).replace(f"({v})", f"(#{v}#)"), v, some).replace(f"(#{some}#)", f"({bare})")
+            body = body.replace(f"*{v}", v)
         }
         let pre: String = rs2nika_text(c, 0, start)
         let post: String = rs2nika_text(c, end + 1, c.len())
-        s = f"{pre}({recv} != null && {cond}){post}"
+        s = f"{pre}(match {recv} {{ {v} => {body}, null => false }}){post}"
         from = 0
     }
     return s
@@ -7318,12 +7308,14 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
         }
         return [f"{ind}{p}if {v} != null {{", f"{ind}    let {name} = {v}"]
     }
+    // R170: any other subject is read once: `match e { x => {..}, null =>
+    // {..} }`, the arm binds the `T` beside the `null` arm (ADR-352)
     if name != "" && guard == "" {
         let v = rs2nika_expr(ctx, value)
-        rs2nika_hit(ctx, "R23")
+        rs2nika_hit(ctx, "R170")
         ctx.stack_ind.push(ind.clone())
-        ctx.stack_kind.push("if")
-        return [f"{ind}{p}if {v} != null {{", f"{ind}    let {name} = {v} ?? panic(\"rs2nika: checked above\")"]
+        ctx.stack_kind.push("ifletopt")
+        return [f"{ind}{p}match {v} {{", f"{ind}    {name} => {{"]
     }
     if name != "" {
         ctx.todo_extra.push("`if let Some(..) = e && guard`: write `let x = e ?? ..` then `if`")
@@ -8556,11 +8548,16 @@ fn rs2nika_close_iflet(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
         tail = tail[0..<tail.len() - ";".len()].clone()
     }
     let is_else = rest.trim_start().starts_with("else")
-    if kind == "iflet" {
+    if kind == "iflet" || kind == "ifletopt" {
+        // R170: the other arm of an `if let Some(x) = e` is `null`
+        let mut other = "else"
+        if kind == "ifletopt" {
+            other = "null"
+        }
         let e: String = rest.trim().clone()
         if e == "else {" {
             ctx.stack_kind[n - 1] = "iflet-else"
-            return [f"{ind}    }},", f"{ind}    else => {{"]
+            return [f"{ind}    }},", f"{ind}    {other} => {{"]
         }
         if e.starts_with("else if") {
             let mut cond: String = (e.strip_prefix("else if") ?? "").clone()
@@ -8569,11 +8566,11 @@ fn rs2nika_close_iflet(mut ctx: Rs2nikaCtx, line: String) -> Vec[String] {
             }
             let c2 = rs2nika_expr(ctx, cond.trim())
             ctx.stack_kind[n - 1] = "iflet-elseif"
-            return [f"{ind}    }},", f"{ind}    // TODO(rs2nika): `else if` after `if let`", f"{ind}    else => {{ if {c2} {{"]
+            return [f"{ind}    }},", f"{ind}    // TODO(rs2nika): `else if` after `if let`", f"{ind}    {other} => {{ if {c2} {{"]
         }
         ctx.stack_ind.pop()
         ctx.stack_kind.pop()
-        return [f"{ind}    }},", f"{ind}    else => {{}},", f"{ind}}}{tail}"]
+        return [f"{ind}    }},", f"{ind}    {other} => {{}},", f"{ind}}}{tail}"]
     }
     if kind == "iflet-else" && !is_else {
         ctx.stack_ind.pop()
