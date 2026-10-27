@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1239] — 2026-10-27
+
+### A `catch` whose block hands back `null` gives `T?`
+
+`let port = read_port() catch { null }` is an `i64?`, the way a `??` fallback or an `if` arm with `null` widens. A value that is already `T?` stays `T?`. A block that hands back another type is still NK1103, and its help now says "Hand back an `i64`, or `null` to make the value an `i64?`" instead of telling you to change a declaration a `catch` doesn't have. A `catch` may now also stand in the head of a `match`, `if`, `while` or `for`: `match parse(line) catch { null } { v => use(v), null => {} }` (#884).
+
 ## [0.0.1238] — 2026-10-27
 
 **A `String` local assigned whole from another kept `String` local compiles**
