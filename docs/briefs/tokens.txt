@@ -92,3 +92,4 @@
 /home/user/Nikaia/docs/briefs/b896a-slice-in-tuple-to-string.md 365461 12
 /home/user/Nikaia/docs/briefs/architect-task.md 1260776 25
 /home/user/Nikaia/docs/briefs/e12-4b-target.md 2945197 47
+/home/user/Nikaia/docs/briefs/architect-task.md 329221 10
