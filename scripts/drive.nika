@@ -22,6 +22,12 @@
 // output from FILE instead of running `cycle.nika` (for tests).
 // A builder's `Pushed: rejected` is rewritten when this driver pushed its commit.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
+// `nikaia run` compiles this script once, so a commit to it does nothing until a
+// restart: at the top of each round of a real run the driver reads
+// scripts/drive.nika again, and if it changed since the start it prints the one
+// final line `RESTART drive: scripts/drive.nika changed` and exits 3 (the main
+// session starts it again at once). `--changed OLDFILE` prints that line or
+// `same` (for tests).
 // The scripts are run as programs: a script cannot `use` another.
 
 use std::cli
@@ -272,6 +278,14 @@ fn main() throws {
         println(drive_rewrite(drive_read(args[2].clone()), drive_read(args[3].clone())))
         return
     }
+    if args.len() == 3 && args[1] == "--changed" {
+        if drive_read(args[2].clone()) != drive_read("scripts/drive.nika") {
+            println("RESTART drive: scripts/drive.nika changed")
+        } else {
+            println("same")
+        }
+        return
+    }
     let exe = drive_exe()
     if exe == "" {
         println("BUILD cargo build --profile fast -p nikaia")
@@ -282,7 +296,12 @@ fn main() throws {
     let mut bumps: i64 = 0
     let mut red_seen: String = ""
     let mut last_stop: String = ""
+    let own = drive_read("scripts/drive.nika")
     while runs <= max {
+        if !dry && drive_read("scripts/drive.nika") != own {
+            println("RESTART drive: scripts/drive.nika changed")
+            process::exit(3)
+        }
         let cyc = drive_cycle(exe.clone(), dir.clone(), lines_file.clone())
         let mut lines: Vec[String] = []
         for l in cyc.trim().split("\n") {

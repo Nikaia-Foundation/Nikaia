@@ -1,0 +1,34 @@
+// scripts/drive.nika --changed OLDFILE: RESTART when the file differs from the script.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn case(nikaia: String, repo: String, name: String, old: String) throws {
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--changed", old]; dir: repo)
+    println(f"== {name}")
+    println(out.stdout.trim())
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/old", fs::Root::Anywhere, "an older script\n")
+    process::run("cp", [f"{repo}/scripts/drive.nika", f"{tmp}/same"])
+    case(nikaia.clone(), repo.clone(), "changed", f"{tmp}/old")
+    case(nikaia.clone(), repo.clone(), "same", f"{tmp}/same")
+    process::run("rm", ["-rf", tmp])
+}
