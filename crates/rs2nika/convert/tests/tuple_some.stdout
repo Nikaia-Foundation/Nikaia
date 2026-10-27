@@ -51,8 +51,7 @@ fn kind(ext: String?, stem: String?) -> i64 sync {
 }
 
 fn named(item: ref Item) -> bool sync {
-    // TODO(rs2nika): a `Some(` in a struct pattern: a field does not narrow yet (#886); bind the field and test it with `!= null` in the arm
-    return match item { Item::Fn { name: Some(name), .. } => name != "main", Item::Const { .. } => false, else => true }
+    return match item { Item::Fn { name, .. } if name != null => name != "main", Item::Const { .. } => false, else => true }
 }
 
 fn declared(shape: Shape, path: String?) -> String sync {

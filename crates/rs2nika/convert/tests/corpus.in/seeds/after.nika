@@ -1,0 +1,193 @@
+fn emit_seeds_calls_of(unit: ref ParsedView, body: ref Block) -> Vec[EmitSeedsCall] {
+    let mut out: Vec[EmitSeedsCall] = []
+    for e in visited_in_block(body) {
+        match e {
+            Expr::MethodCall { method, args, .. } => {
+                out.push(EmitSeedsCall { callee: unit.text(method), roots: emit_seeds_roots(unit, args) })
+            },
+            Expr::Call { func, args, .. } => {
+                let callee = emit_seeds_callee(unit, func) ?? continue
+                out.push(EmitSeedsCall { callee: callee, roots: emit_seeds_roots(unit, args) })
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+fn emit_seeds_impls_of(units: ref Vec[ParsedView]) -> Vec[EmitSeedsBody] {
+    let mut out: Vec[EmitSeedsBody] = []
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Impl { trait_name, target, methods } => {
+                    if trait_name != null {
+                        continue
+                    }
+                    let mut calls: Vec[EmitSeedsCall] = []
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { receiver, body, .. } => {
+                                if receiver != null {
+                                    calls.extend(emit_seeds_calls_of(unit, body))
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                    out.push(EmitSeedsBody { name: emit_seeds_last(unit.text(target.name)), held: ["self"], calls: calls })
+                },
+                else => {},
+            }
+        }
+    }
+    return out
+}
+
+fn emit_seeds_read_barriers(mut tables: EmitSeedsTables, units: ref Vec[ParsedView]) {
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Trait { methods, .. } => {
+                    for m in methods {
+                        if emit_seeds_holds(tables, unit, m.node.args, m.node.ret_type) {
+                            tables.trait_maps = true
+                            tables.barriers.insert(unit.text(m.node.name))
+                        }
+                    }
+                },
+                Item::Impl { trait_name, methods, .. } => {
+                    if trait_name == null {
+                        continue
+                    }
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { name, args, ret_type, .. } => {
+                                if name != null && emit_seeds_holds(tables, unit, args, ret_type) {
+                                    tables.trait_maps = true
+                                    tables.barriers.insert(unit.text(name ?? continue))
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    // **A method whose result alone holds a map position**: a method call
+    // takes no turbofish here, so nothing could fill it. Its positions are
+    // the keyed map, like a barrier's.
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Impl { trait_name, methods, .. } => {
+                    if trait_name != null {
+                        continue
+                    }
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { name, args, ret_type, is_public, .. } => {
+                                if !is_public || name == null || ret_type == null {
+                                    continue
+                                }
+                                let ret = ret_type ?? continue
+                                let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+                                let mut given = 0
+                                for a in args {
+                                    given += tables.distinct(unit.words, a.ty, seen)
+                                }
+                                if tables.distinct(unit.words, ret, seen) > 0 && given == 0 {
+                                    tables.fixed.insert(unit.text(name ?? continue))
+                                    tables.functions = true
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    // **A private function with a map of its own in its signature** has
+    // the package's class for it, not a hidden parameter: a `pub` function
+    // that hands it a map it was given cannot say that the two are one
+    // type, so its positions are the keyed map, as a trait method's are
+    // (the package writes the keyed map in its own bodies, `seeded()`).
+    tables.private = collections::BTreeSet()
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Fn { name, args, ret_type, is_public, receiver, .. } => {
+                    if is_public || receiver != null || name == null {
+                        continue
+                    }
+                    let mut bare = 0
+                    for a in args {
+                        bare += emit_seeds_bare(unit.words, a.ty)
+                    }
+                    if ret_type != null {
+                        let ret = ret_type ?? continue
+                        bare += emit_seeds_bare(unit.words, ret)
+                    }
+                    if bare > 0 {
+                        tables.private.insert(unit.text(name ?? continue))
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    // The bodies the barrier closure looks at: the `pub` functions, then the
+    // methods that hand a map they were given (not `self`'s) on.
+    let mut bodies: Vec[EmitSeedsBody] = []
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Fn { name, args, body, is_public, receiver, .. } => {
+                    if is_public && receiver == null && name != null {
+                        emit_seeds_body(tables, bodies, unit, unit.text(name ?? continue), args, body)
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    for unit in units {
+        for item in unit.items {
+            match item.node {
+                Item::Impl { trait_name, methods, .. } => {
+                    if trait_name != null {
+                        continue
+                    }
+                    for m in methods {
+                        match m.node {
+                            Item::Fn { name, args, body, is_public, receiver, .. } => {
+                                if is_public && receiver != null && name != null {
+                                    emit_seeds_body(tables, bodies, unit, unit.text(name ?? continue), args, body)
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    tables.close_barriers(bodies)
+}
+
+fn emit_seeds_body(tables: ref EmitSeedsTables, mut bodies: Vec[EmitSeedsBody], unit: ref ParsedView, name: String, args: ref Vec[FnArg], body: ref Block) {
+    let mut held: Vec[String] = []
+    for a in args {
+        if tables.count(unit.words, a.ty) > 0 {
+            held.push(unit.text(a.name))
+        }
+    }
+    if !held.is_empty() {
+        bodies.push(EmitSeedsBody { name: name, held: held, calls: emit_seeds_calls_of(unit, body) })
+    }
+}

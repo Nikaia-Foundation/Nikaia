@@ -1,0 +1,23 @@
+pub struct Seeds {
+    tables: SeedTables,
+    shapes: collections::BTreeMap[String, Shape],
+}
+
+fn emit_x_names_of(unit: ref ParsedView) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for item in unit.items {
+        out.push(unit.text(item.name))
+    }
+    return out
+}
+
+fn emit_x_read(mut tables: SeedTables, units: ref Vec[ParsedView]) {
+    for unit in units {
+        let held = ["self"]
+        let n: i64 = tables.count(unit.words, unit.items[0].ty)
+        if n > 0 {
+            tables.found = true
+        }
+    }
+}
+
