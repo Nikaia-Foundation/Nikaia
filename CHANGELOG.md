@@ -8,6 +8,22 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1226] — 2026-10-27
+
+**lending fixes, views of locals, one statement a line, operator types, seeds tables in Nikaia (#655, #665, #848, #864-#867)**
+- An overlap whose branches meet on a changed binding is refused with NK2104
+- A view of an element pushed into a `Vec[ref E?]` or written as a part of a `(i64, ref E?)` tuple is lent and goes inside its option (`Some(&..)`) instead of failing in rustc or NK1103 (#655)
+- A field of a `mut` parameter read through `?? return` is lent, not moved (rustc E0507).
+- a statement begins a line; two on one line are a parse error (Part I 3.1).
+- NK1191 also refuses arithmetic on text and `bool`, `-` on a non-number and `!` on a non-bool non-integer.
+- The checker no longer refuses a view pushed into a local Vec that never leaves the function (NK2302).
+- A `let` over a field of a by-value parameter, then handed back or pushed, is a move; the contract keeps the parameter when the alias is handed on
+- std: m.get(k) ?? (tuple) answers views for every tuple of arity 2 and 3 that holds text
+- A view of a local built with `+` can be returned from a `String` function; the local lives in the caller's keep (#864)
+- A view of the `.to_string()` of a number expression (`len()`, arithmetic, `bool`, a call returning a number) may leave the function.
+- to_string of a local with an inferred number type, or of a tuple field bound to a number, is a buffer of its own (#866)
+- emit/seeds: the counting fixpoint of the `pub` structs' map positions, the barrier closure and the self-hander test move to `tools/emit_seeds.nika` (`EmitSeedsTables::count_types`, `close_barriers`, `self_handers`, `hands`); the Rust keeps the AST walks as collectors of plain facts (#867)
+
 ## [0.0.1225] — 2026-10-26
 
 **owned literals, NK1301, emit a_stmt in Nikaia (#856, #853, #857)**

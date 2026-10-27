@@ -1,0 +1,12 @@
+b645-overlap-shared-mut.md.report.md
+b655-element-view-slots.md.report.md
+b655-mut-param-coalesce.md.report.md
+b655-one-statement-a-line-redo.md.report.md
+b655-operator-types.md.report.md
+b655-push-local-view.md.report.md
+b665-lent-let-returned.md.report.md
+b848-map-get-tuple-text.md.report.md
+b864-plus-local-view.md.report.md
+b865-to-string-local-view.md.report.md
+b866-inferred-number-local.md.report.md
+b867-seeds-reader.md.report.md
