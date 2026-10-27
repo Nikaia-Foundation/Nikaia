@@ -22,7 +22,7 @@ fn chains(units: ref Vec[ref CheckWorld], errors: ref Vec[String], members: ref 
     // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
     let beside: Vec[ref CheckWorld] = (0..<units.len()).filter(fn(other) { other != at }).map(fn(i) { units[i] }).collect()
     let names: Vec[i64] = (0..<parsed.items.len()).filter_map(fn(i) { let item = parsed.items[i]; if item.public { i } else { null } }).collect()
-    let mut hash = 0u64
+    let mut hash = (0 as u64)
     for b in name.bytes() {
         hash = (hash ^ u64::from(b)).wrapping_mul(3)
     }

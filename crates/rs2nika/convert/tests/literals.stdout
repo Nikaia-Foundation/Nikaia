@@ -1,0 +1,27 @@
+use std::text
+
+fn a(s: ref String) -> i64? sync {
+    let at = 1 + (s.find(":") ?? return null)
+    let n = (s.find(",") ?? return null) + 1
+    let m = (s.get(1..) ?? return null).len()
+    return (at + n + m)
+}
+
+fn b(s: ref String) -> String sync {
+    let w = text::parse_i64(s) ?? 0
+    // TODO(rs2nika): `.find(..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle
+    let r = s.find(char::is_whitespace)
+    // TODO(rs2nika): `.replace(..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle
+    let q = s.replace(['-', '.'], "_")
+    let k = 7 + 0 as i64
+    let first = s.bytes[0]
+    let quote = s.rfind("'")
+    let bytes = "ab".bytes
+    return f"{w:>4}{k:x}{{}}"
+}
+
+fn c(one: scalar) -> String sync {
+    let s = f"'\\u{{{one as i64:x}}}'"
+    return f"{{{s}}}"
+}
+
