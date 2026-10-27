@@ -57,7 +57,7 @@ fn main() throws {
     println(f"refused: code={refused.code}")
     let today = process::run("date", ["+%F"]).stdout.trim().clone()
     process::run("mkdir", [f"{tmp}/cap"])
-    fs::write(f"{tmp}/cap/cost.txt", fs::Root::Anywhere, f"{today} 100.6\n{today} 99.6\n")
+    fs::write(f"{tmp}/cap/cost.txt", fs::Root::Anywhere, f"{today} 500.6\n{today} 499.6\n")
     let capped = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dir", f"{tmp}/cap", "--claude", fake.clone()]; dir: repo.clone())
     println(f"cap: code={capped.code} {capped.stdout.trim().split(' ').collect()[0]} escalate={fs::exists(f"{tmp}/cap/ESCALATE", fs::Root::Anywhere)}")
     process::run("mkdir", [f"{tmp}/small"])
