@@ -1,0 +1,8 @@
+error[NK1103]: This `catch` hands back `String`, but the value it guards is `i64`.
+   --> tests/a_catch_that_hands_back_another_type_is_refused.nika:23:5
+    |
+ 23 |     let v = half(7) catch { "none" }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Hand back an `i64`, or `null` to make the value an `i64?` (Part I 7.1).
+1 type error

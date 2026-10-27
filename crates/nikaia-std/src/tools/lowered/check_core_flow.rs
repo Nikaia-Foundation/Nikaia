@@ -762,6 +762,19 @@ pub(crate) fn check_core_flow_handler_text(state: &mut CheckState, world: &Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_widened_by_null(value: &Ty, answers: &Ty) -> bool {
+    let guarded = answers.unseen();
+    let given = value.unseen();
+    let already = matches!(guarded, Ty::Nullable(_));
+    if guarded.is_unknown() || already { return false; }
+    match given {
+        Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); inner.is_unknown() || inner.fits(&guarded) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
     let outer = state.flow.caught;
     state.flow.caught = true;
@@ -812,6 +825,10 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     state.flow.caught_one = single;
     state.scope.pop();
     let value = nikaia_std::index::or(literal, || handled.into());
+    if !state.block_leaves(world, handler) && check_core_flow_widened_by_null(&value, &answers) {
+        state.facts.nullable_catches.insert(node_key(guarded_expr));
+        return Ty::Nullable(Box::new(answers.clone()));
+    }
     if state.block_leaves(world, handler) || value.is_unknown() || value.fits(&answers) {
         if a_type_variable(&answers) && a_plain_string(&value) {
             state.facts.owned_catches.insert(node_key(guarded_expr));
@@ -819,7 +836,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
         }
         return answers;
     }
-    if !answers.is_unknown() && value.text() != "()" { state.expect_type(world, &value.owned(), &answers, span, "let", &|found, wanted| { format!("This `catch` hands back `{}`, but the value it guards is `{}`.", found, wanted) }); }
+    if !answers.is_unknown() && value.text() != "()" { state.expect_type(world, &value.owned(), &answers, span, "catch", &|found, wanted| { format!("This `catch` hands back `{}`, but the value it guards is `{}`.", found, wanted) }); }
     Ty::Unknown
 }
 

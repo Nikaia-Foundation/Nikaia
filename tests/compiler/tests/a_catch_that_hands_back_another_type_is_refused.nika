@@ -1,0 +1,25 @@
+// #884: only `null` widens the guarded type; a `catch` block that hands back
+// a value of another type is still refused (NK1103).
+enum Fault {
+    Odd(i64),
+}
+
+impl Error for Fault {
+    fn message(ref self) -> String {
+        match self {
+            Fault::Odd(n) => f"odd {n}"
+        }
+    }
+}
+
+fn half(n: i64) -> i64 throws {
+    if n % 2 != 0 {
+        throw Fault::Odd(n)
+    }
+    return n / 2
+}
+
+fn main() {
+    let v = half(7) catch { "none" }
+    println(f"{v}")
+}

@@ -1,0 +1,55 @@
+// #884: a `catch` whose block hands back `null` widens the guarded `T` to `T?`.
+enum Fault {
+    Odd(i64),
+}
+
+impl Error for Fault {
+    fn message(ref self) -> String {
+        match self {
+            Fault::Odd(n) => f"odd {n}"
+        }
+    }
+}
+
+fn half(n: i64) -> i64 throws {
+    if n % 2 != 0 {
+        throw Fault::Odd(n)
+    }
+    return n / 2
+}
+
+// Already `T?`: a `null` from the block keeps it `T?` (no `T??`).
+fn half_of_some(n: i64) -> i64? throws {
+    if n < 0 {
+        return null
+    }
+    return half(n)
+}
+
+fn show(v: i64?) -> String {
+    return match v {
+        null => "none",
+        n => f"{n}",
+    }
+}
+
+fn main() {
+    let port = half(8) catch { null }
+    let lost = half(7) catch { null }
+    println(f"{show(port)} {show(lost)}")
+    match half(10) catch { null } {
+        v => println(f"got {v}"),
+        null => {},
+    }
+    match half(3) catch { null } {
+        v => println(f"got {v}"),
+        null => println("nothing"),
+    }
+    let fine = (half(6) catch { null }) != null
+    let bad = (half(5) catch { null }) != null
+    println(f"{fine} {bad}")
+    let a = half_of_some(4) catch { null }
+    let b = half_of_some(-1) catch { null }
+    let c = half_of_some(9) catch { null }
+    println(f"{show(a)} {show(b)} {show(c)}")
+}

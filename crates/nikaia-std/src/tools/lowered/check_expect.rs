@@ -68,6 +68,7 @@ pub(crate) fn check_floats_beyond_f32(value: &Expr, want: &Ty) -> bool {
 pub(crate) fn expect_code(what: &str) -> String {
     match what {
         "let" => String::from("NK1103"),
+        "catch" => String::from("NK1103"),
         "returns" => String::from("NK1104"),
         "assign" => String::from("NK1105"),
         "field" => String::from("NK1106"),
@@ -105,6 +106,7 @@ impl CheckState {
         let want_text = want.text();
         let mut said: String = message(&found_text, &want_text);
         let mut help: String = way_out_of_a_mismatch(found, want);
+        if what == "catch" && help.ends_with(&format!(", or change the declaration to `{}`.", found_text)) { help = format!("Hand back a `{}`, or `null` to make the value a `{}?` (Part I 7.1).", want_text, want_text); }
         if !members.is_empty() {
             said = said.replace(&format!("`{}`", found_text), &format!("an error, one of {}", members_named(&members)));
             help = String::from("Take it apart first: `match error { … }`, and use what each arm binds.");

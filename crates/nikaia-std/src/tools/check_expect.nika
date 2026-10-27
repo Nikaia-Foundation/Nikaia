@@ -92,6 +92,7 @@ fn check_floats_beyond_f32(value: ref Expr, want: ref Ty) -> bool {
 fn expect_code(what: ref String) -> String sync {
     return match what {
         "let" => "NK1103",
+        "catch" => "NK1103",
         "returns" => "NK1104",
         "assign" => "NK1105",
         "field" => "NK1106",
@@ -150,6 +151,11 @@ impl CheckState {
         let want_text = want.text()
         let mut said: String = message(found_text, want_text)
         let mut help: String = way_out_of_a_mismatch(found, want)
+        // **A `catch` has no declaration to change** (#884): its block hands
+        // back the guarded type, or `null`, which widens it.
+        if what == "catch" && help.ends_with(f", or change the declaration to `{found_text}`.") {
+            help = f"Hand back a `{want_text}`, or `null` to make the value a `{want_text}?` (Part I 7.1)."
+        }
         if members.len() > 0 {
             said = said.replace(f"`{found_text}`", f"an error, one of {members_named(members)}")
             help = "Take it apart first: `match error { … }`, and use what each arm binds."

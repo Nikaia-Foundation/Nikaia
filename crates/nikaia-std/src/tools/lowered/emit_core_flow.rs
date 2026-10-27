@@ -609,7 +609,7 @@ impl EmitState {
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
         if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed { opening = Some(String::from("let error: Box<dyn std::error::Error> = error.into();")); }
-        if self.facts.owned_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => value.to_owned(),\n", pad)); } else { out.push(&format!(" {{\n{}Ok(value) => value,\n", pad)); }
+        if self.facts.nullable_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => Some(value),\n", pad)); } else if self.facts.owned_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => value.to_owned(),\n", pad)); } else { out.push(&format!(" {{\n{}Ok(value) => value,\n", pad)); }
         let passing = self.fatal_passing(world, guarded_expr, handler);
         let mut handler_takes: String = format!("Err({}) => ", bound);
         if !passing.is_empty() && nikaia_std::index::or(call_callee_name(world.words, world.aliases, guarded_expr), || "".into()) == "supervisor::run" {

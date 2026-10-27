@@ -3075,8 +3075,21 @@ Inside the block the error is named **`error`**. A handler that passes the
 error on writes `throw error`. A `catch` over an expression that cannot fail
 is refused (`NK1134`): the expression is the value, and the handler goes.
 
-The `catch` has the type of the value it guards: `config` above is what
-`load()` hands back, and a member of it is reached as on that value.
+The `catch` has the type of the value it guards, or that type with `?` where
+the block hands back `null`: `config` above is what `load()` hands back, and a
+member of it is reached as on that value. A `null` from the block widens a `T`
+to `T?`, the way a `??` fallback or an `if` arm with `null` widens (3.5); a `T`
+that is already `T?` stays `T?`, there is no `T??`. A block that hands back a
+value of another type is refused (`NK1103`).
+
+```nika
+let port = read_port() catch { null }                // i64?
+match parse(line) catch { null } {
+    v => use(v)
+    null => {}
+}
+let fine = (parse(line) catch { null }) != null      // bool
+```
 
 **Telling failures apart.** `error` is the sum of the errors that can arrive at
 this point, as the compiler inferred them. A handler tells them apart with the

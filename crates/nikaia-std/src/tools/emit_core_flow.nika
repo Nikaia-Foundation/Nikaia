@@ -941,7 +941,10 @@ impl EmitState {
             // A handle whose body cannot fail hands `Crashed` or `Late` bare.
             opening = "let error: Box<dyn std::error::Error> = error.into();"
         }
-        if self.facts.owned_catches.contains(node_key(guarded_expr)) {
+        if self.facts.nullable_catches.contains(node_key(guarded_expr)) {
+            // **A `null` from the handler widens the value to `T?`** (#884).
+            out.push(f" {{\n{pad}Ok(value) => Some(value),\n")
+        } else if self.facts.owned_catches.contains(node_key(guarded_expr)) {
             out.push(f" {{\n{pad}Ok(value) => value.to_owned(),\n")
         } else {
             out.push(f" {{\n{pad}Ok(value) => value,\n")
