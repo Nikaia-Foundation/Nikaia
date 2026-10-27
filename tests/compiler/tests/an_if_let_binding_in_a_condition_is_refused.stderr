@@ -1,0 +1,8 @@
+error: `let` is a reserved word, so it can't be used as a name here.
+  --> tests/an_if_let_binding_in_a_condition_is_refused.nika:3:8
+   |
+ 3 |     if let v = x {
+   |        ^^^
+   |
+   = note: Expected `!`, `-`, `false` or `true` here, but found `let`.
+   = help: Choose another name, such as `let_`.
