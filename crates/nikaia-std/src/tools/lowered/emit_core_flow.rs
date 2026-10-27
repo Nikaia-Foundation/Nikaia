@@ -545,6 +545,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_try_catch<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, guarded_expr: &Expr, handler: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let dropped = walk.dropped_catch == node_key(guarded_expr) || self.facts.dropped_catches.contains(&node_key(guarded_expr));
         out.push("match ");
         let mut guarded = flow.guarded();
         let a_scope_call = emit_catch_is_a_scope(world, guarded_expr);
@@ -609,7 +610,7 @@ impl EmitState {
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
         if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed { opening = Some(String::from("let error: Box<dyn std::error::Error> = error.into();")); }
-        if self.facts.nullable_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => Some(value),\n", pad)); } else if self.facts.owned_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => value.to_owned(),\n", pad)); } else { out.push(&format!(" {{\n{}Ok(value) => value,\n", pad)); }
+        if dropped { out.push(&format!(" {{\n{}Ok(_) => {{}},\n", pad)); } else if self.facts.nullable_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => Some(value),\n", pad)); } else if self.facts.owned_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => value.to_owned(),\n", pad)); } else { out.push(&format!(" {{\n{}Ok(value) => value,\n", pad)); }
         let passing = self.fatal_passing(world, guarded_expr, handler);
         let mut handler_takes: String = format!("Err({}) => ", bound);
         if !passing.is_empty() && nikaia_std::index::or(call_callee_name(world.words, world.aliases, guarded_expr), || "".into()) == "supervisor::run" {
@@ -648,7 +649,9 @@ impl EmitState {
             }
         }
         out.push(&format!("{}{}", pad, handler_takes));
-        self.emit_stmt_block_opening_with(world, walk, out, host, handler, depth + 1, inside, &inside_scope, EmitTail::Value, opening)?;
+        let mut handler_tail = EmitTail::Value;
+        if dropped { handler_tail = EmitTail::Statement; }
+        self.emit_stmt_block_opening_with(world, walk, out, host, handler, depth + 1, inside, &inside_scope, handler_tail, opening)?;
         out.push(&format!(",\n{}}}", close));
         Ok(())
     }

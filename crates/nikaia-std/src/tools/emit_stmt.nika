@@ -1016,6 +1016,20 @@ impl EmitState {
                     return
                 }
             },
+            Expr::TryCatch { expr: guarded, .. } => {
+                // **A `catch` in statement position drops its value** (#885):
+                // the guarded call's and the handler's, whatever it hands back.
+                // Keyed by the guarded expression, so a `catch` nested in it
+                // keeps its own.
+                if is_statement {
+                    let outer = walk.dropped_catch
+                    walk.dropped_catch = node_key(guarded)
+                    self.emit_expr(world, walk, out, host, expr, depth, flow, scope)
+                    walk.dropped_catch = outer
+                    out.push(";")
+                    return
+                }
+            },
             else => {}
         }
         // A `match` or `if` whose arms all leave has no value to wrap (#696):

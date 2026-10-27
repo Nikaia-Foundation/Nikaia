@@ -273,7 +273,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::Coalesce { value, fallback, .. } => check_core_ops_coalesce(state, world, host, expr, value, fallback, span),
         Expr::Index { base, index, .. } => check_core_index(state, world, host, expr, base, index, span),
         Expr::Range { start, end, .. } => check_core_range(state, world, host, start, end, span),
-        Expr::TryCatch { expr: guarded, handler, .. } => check_core_flow_try_catch(state, world, host, guarded, handler, span),
+        Expr::TryCatch { expr: guarded, handler, .. } => check_core_flow_try_catch(state, world, host, expr, guarded, handler, span),
         Expr::Spawn { body, .. } => check_core_ops_spawn(state, world, host, body, span),
         Expr::Dsl { target, package, context, content, .. } => check_core_expr_dsl(state, world, host, expr, target, package, context, content, span),
         // An `asm` block: what it produces is the business of the emitter

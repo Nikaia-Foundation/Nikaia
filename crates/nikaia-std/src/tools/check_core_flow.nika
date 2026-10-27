@@ -1182,7 +1182,7 @@ fn check_core_flow_widened_by_null(value: ref Ty, answers: ref Ty) -> bool sync 
 /// **`expr catch { … }`** (Part I 7.1): the guarded expression needs no
 /// `throws` (`NK2605`), the handler binds `error`, and the value is the
 /// guarded one's type where the handler agrees (0.0.230).
-pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, guarded_expr: ref Expr, handler: ref Block, span: ref Span) -> Ty sync {
+pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, whole: ref Expr, guarded_expr: ref Expr, handler: ref Block, span: ref Span) -> Ty sync {
     let outer = state.flow.caught
     state.flow.caught = true
     // **What a handler keeps is not the function's** (#725): the walk of
@@ -1227,6 +1227,13 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     let single: Ty? = state.flow.caught_one?.clone()
     state.flow.caught_one = one
     let from = state.taken_so_far()
+    // **A `catch` whose value is not used drops it** (#885): a call used as
+    // a statement has no value for the handler to match, so the block's
+    // tail is a statement too and is not asked for the guarded type.
+    let dropped = state.discarded.contains(id_of(whole) as i64)
+    if dropped {
+        check_core_stmt_body_discarded(state, handler)
+    }
     let handled = check_core_block(state, world, host, handler)
     let literal = check_core_flow_handler_text(state, world, answers, handler)
     let leaves = state.block_exits(world, handler)
@@ -1234,6 +1241,10 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     state.flow.caught_several = several
     state.flow.caught_one = single
     state.scope.pop()
+    if dropped {
+        state.facts.dropped_catches.insert(node_key(guarded_expr))
+        return check_core_stmt_unit()
+    }
     let value = literal ?? handled
     // **A `null` from the block widens the guarded `T` to `T?`** (Part I
     // 7.1, #884), as a `null` arm of an `if` does: the guarded value is

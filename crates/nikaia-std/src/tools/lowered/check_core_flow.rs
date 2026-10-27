@@ -916,7 +916,7 @@ pub(crate) fn check_core_flow_widened_by_null(value: &Ty, answers: &Ty) -> bool 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
+pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, whole: &Expr, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
     let outer = state.flow.caught;
     state.flow.caught = true;
     let swallowed_outer: Option<collections::BTreeSet<String>> = match state.flow.swallowed.as_ref() {
@@ -958,6 +958,8 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     };
     state.flow.caught_one = one;
     let from = state.taken_so_far();
+    let dropped = state.discarded.contains(&(id_of(whole) as i64));
+    if dropped { check_core_stmt_body_discarded(state, handler); }
     let handled = check_core_block(state, world, host, handler);
     let literal = check_core_flow_handler_text(state, world, &answers, handler);
     let leaves = state.block_exits(world, handler);
@@ -965,6 +967,10 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     state.flow.caught_several = several;
     state.flow.caught_one = single;
     state.scope.pop();
+    if dropped {
+        state.facts.dropped_catches.insert(node_key(guarded_expr));
+        return check_core_stmt_unit();
+    }
     let value = nikaia_std::index::or(literal, || handled.into());
     if !state.block_leaves(world, handler) && check_core_flow_widened_by_null(&value, &answers) {
         state.facts.nullable_catches.insert(node_key(guarded_expr));

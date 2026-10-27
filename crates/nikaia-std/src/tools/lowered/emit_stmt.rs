@@ -749,6 +749,17 @@ impl EmitState {
                     return Ok(());
                 }
             },
+            Expr::TryCatch { expr: guarded, .. } => {
+                let guarded = nikaia_std::boxed::open(guarded);
+                if is_statement {
+                    let outer = walk.dropped_catch;
+                    walk.dropped_catch = node_key(guarded);
+                    self.emit_expr(world, walk, out, host, expr, depth, flow, scope)?;
+                    walk.dropped_catch = outer;
+                    out.push(";");
+                    return Ok(());
+                }
+            },
             _ => { },
         }
         let is_null = matches!(expr, Expr::LitNull(_));

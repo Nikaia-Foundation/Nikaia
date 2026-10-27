@@ -1,0 +1,27 @@
+// #885: a call used as a statement drops its value, so its `catch` block
+// need not hand one back, and what it hands back is dropped too.
+enum Refused { Negative }
+impl Error for Refused { fn message(ref self) -> String { return "negative" } }
+fn half(n: i64) -> i64 throws {
+    if n < 0 { throw Refused::Negative }
+    return n / 2
+}
+fn last(n: i64) {
+    half(n) catch { println("caught at the tail") }
+}
+fn main() {
+    let mut failed = false
+    half(-4) catch { failed = true }
+    half(4) catch {}
+    half(1) catch { 0 }
+    half(-1) catch { "text" }
+    let mut caught = 0
+    for i in 0..<3 {
+        half(0 - i) catch { caught += 1 }
+    }
+    last(-2)
+    let kept = half(6) catch { 1 }
+    println(failed)
+    println(caught)
+    println(kept)
+}
