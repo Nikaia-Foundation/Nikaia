@@ -1,0 +1,31 @@
+struct E { n: i64 }
+
+fn pick(a: ref Vec[E], b: ref Vec[E], c: bool) -> ref E? {
+    if c { return a[0] }
+    return b[0]
+}
+
+fn pick_one(a: ref Vec[E], b: ref Vec[E], c: bool) -> ref E {
+    if c { return a[0] }
+    return b[0]
+}
+
+fn first(a: ref Vec[E], b: ref Vec[E]) -> ref E? {
+    return a[0]
+}
+
+fn single(a: ref Vec[E]) -> ref E? {
+    return a[0]
+}
+
+fn main() {
+    let a = [E { n: 1 }]
+    let b = [E { n: 2 }]
+    let e = pick(a, b, false) ?? return
+    println(e.n)
+    println(pick_one(a, b, false).n)
+    let f = first(a, b) ?? return
+    println(f.n)
+    let s = single(b) ?? return
+    println(s.n)
+}

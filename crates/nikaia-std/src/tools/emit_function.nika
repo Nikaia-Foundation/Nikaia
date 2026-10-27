@@ -405,8 +405,19 @@ impl EmitState {
                             }
                         }
                         let at = position ?? -1
-                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, key, recv, at, args[at]) && !self.borrows(world, args[at].ty.name) && args[at].ty.generics.is_empty() {
-                            found.push(at)
+                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, key, recv, at, args[at]) && !self.borrows(world, args[at].ty.name) {
+                            // A parameter whose type arguments hold views of
+                            // their own has two lifetimes, which one cannot
+                            // name; a `ref Vec[E]` of plain elements has one.
+                            let mut inside = false
+                            for g in args[at].ty.generics {
+                                if self.carries_a_view(world, g) {
+                                    inside = true
+                                }
+                            }
+                            if !inside {
+                                found.push(at)
+                            }
                         }
                     }
                     if found.len() == wanted.len() {
