@@ -61,3 +61,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 583970 17
 /home/user/Nikaia/docs/briefs/b885-catch-statement.md 2878907 53
 /home/user/Nikaia/docs/briefs/architect-task.md 816657 22
+/home/user/Nikaia/docs/briefs/b-drive-restart.md 221749 10
