@@ -1994,7 +1994,7 @@ pub mod check_arms {
 }
 pub mod check_attributes {
     #[allow(unused_imports)]
-    pub use super::{CheckAttributesMark, check_attributes_mark_text, check_attributes_all, check_attributes_an_attribute_read, check_attributes_literal_misfit};
+    pub use super::{CheckAttributesMark, check_attributes_mark_text, check_attributes_all, check_attributes_an_attribute_read, check_attributes_literal_misfit, check_attributes_inline_written};
 }
 pub mod check_binds {
     #[allow(unused_imports)]

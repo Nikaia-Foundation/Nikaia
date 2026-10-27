@@ -8,8 +8,9 @@
 // arguments are checked as a call's are, against the struct's fields: those
 // without a default by position, those with one by name after the `;`.
 //
-// `Mark` itself, `mark_of` and `@inline`'s `inline_written` stay Rust's: the
-// ledger and the emitter read them. The mark here is the checker's copy.
+// `Mark` itself and `mark_of` stay Rust's: the ledger reads them. The mark
+// here is the checker's copy. `@inline`'s word, which the emitter reads, is
+// `check_attributes_inline_written` (E12-1).
 
 use std::collections
 
@@ -718,4 +719,36 @@ pub fn check_attributes_literal_misfit(literal: ref Expr, want: ref Ty) -> Strin
         Ty::Named { name, args, .. } => check_attributes_misfit_named(literal, name, args.len() == 0),
         else => null,
     }
+}
+
+/// **What `@inline` asks, as Rust's attribute writes it** (ADR-370 D1):
+/// `@inline`, `@inline(always)`, `@inline(never)`. Null where none is written,
+/// or where the one written is refused (its words are the checker's to say).
+pub fn check_attributes_inline_written(words: ref winnow_grammar::InternerContext, attributes: ref Vec[Attribute]) -> String? {
+    for attribute in attributes {
+        if words.resolve(attribute.name) != "inline" {
+            continue
+        }
+        if !attribute.config.is_empty() {
+            return null
+        }
+        if attribute.args.is_empty() {
+            return "#[inline]"
+        }
+        if attribute.args.len() != 1 {
+            return null
+        }
+        let word = match attribute.args[0] {
+            Expr::Variable(name, _) => words.resolve(name).clone()
+            else => ""
+        }
+        if word == "always" {
+            return "#[inline(always)]"
+        }
+        if word == "never" {
+            return "#[inline(never)]"
+        }
+        return null
+    }
+    return null
 }

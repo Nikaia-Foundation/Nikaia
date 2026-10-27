@@ -474,7 +474,7 @@ impl EmitState {
                     }
                     let mut split: Option<EmitSplit> = None;
                     match ret_type {
-                        Some(ty) => { split = host.split_lifetimes(ty, nikaia_std::index::or(returns_text.as_deref(), || ""), &sources); },
+                        Some(ty) => { split = emit_split_lifetimes(self, world, ty, nikaia_std::index::or(returns_text.as_deref(), || ""), &sources); },
                         None => { },
                     }
                     match split {
@@ -546,7 +546,7 @@ impl EmitState {
                     out.push("#[allow(clippy::too_many_arguments)]\n");
                     out.push(&pad);
                 }
-                let written_hint: Option<String> = host.inline_written(&written.attributes);
+                let written_hint: Option<String> = check_attributes_inline_written(world.words, &written.attributes);
                 let mut hint: Option<String> = match written_hint.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -646,5 +646,80 @@ impl EmitState {
         }
         Ok(())
     }
+}
+
+pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type, returns: &str, sources: &[String]) -> Option<EmitSplit> {
+    if !ty.generics.is_empty() || ty.is_view || returns.is_empty() { return None; }
+    let slots = match state.view_slots.get(&emit_text(world, ty.name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut of_field: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    for entry in returns.split("),") {
+        let colon = match nikaia_std::search::find(&entry, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let path = nikaia_std::index::get(&entry, nikaia_std::index::at(0..colon)).trim();
+        let written = nikaia_std::index::get(&entry, nikaia_std::index::at(colon + 1..)).trim();
+        let opened = match written.strip_prefix("ref(") { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let mut params: Vec<String> = vec![];
+        for alternative in opened.trim_end_matches(')').split('|') {
+            for part in alternative.split(',') {
+                let param = part.trim();
+                if param.is_empty() { continue; }
+                if emit_split_index(sources, param) < 0 { return None; }
+                params.push(param.to_owned());
+            }
+        }
+        if params.is_empty() { return None; }
+        of_field.insert(path.to_owned(), params);
+    }
+    let mut group: Vec<i64> = vec![];
+    let mut at: i64 = 0;
+    while at < sources.len() as i64 {
+        group.push(at);
+        at += 1;
+    }
+    for (_, params) in of_field.iter() {
+        let first_at = emit_split_index(sources, nikaia_std::index::get(&params, 0));
+        let mut next: i64 = 1;
+        while ((next) as usize) < params.len() {
+            let first = emit_split_root(&group, first_at);
+            let other = emit_split_root(&group, emit_split_index(sources, nikaia_std::index::get(&params, (next) as usize)));
+            if first < other { { let __nikaia_stored = first; nikaia_std::index::set(&mut group, nikaia_std::index::at(other), __nikaia_stored); } } else { { let __nikaia_stored = other; nikaia_std::index::set(&mut group, nikaia_std::index::at(first), __nikaia_stored); } }
+            next += 1;
+        }
+    }
+    let mut named: collections::BTreeMap<i64, String> = collections::BTreeMap::new();
+    let mut own: Vec<EmitPair> = vec![];
+    at = 0;
+    for param in sources.iter() {
+        let root = emit_split_root(&group, at);
+        if !named.contains_key(&root) {
+            let count = named.len() as i64;
+            let mut lifetime: String = String::from("'r");
+            if count > 0 { lifetime = format!("'r{}", count); }
+            named.insert(root, lifetime);
+        }
+        own.push(EmitPair { first: param.to_owned(), second: nikaia_std::index::or(named.get(&root), || "").to_owned() });
+        at += 1;
+    }
+    let mut fields: Vec<String> = vec![];
+    for slot in slots.iter() {
+        let params = match of_field.get(slot) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let root = emit_split_root(&group, emit_split_index(sources, nikaia_std::index::get(&params, 0)));
+        fields.push(match named.get(&root) { Some(__nikaia_value) => __nikaia_value, None => return None }.to_owned());
+    }
+    Some(EmitSplit { own, fields })
+}
+
+pub(crate) fn emit_split_index(sources: &[String], name: &str) -> i64 {
+    let mut at: i64 = 0;
+    for source in sources.iter() {
+        if *source == name { return at; }
+        at += 1;
+    }
+    -1
+}
+
+pub(crate) fn emit_split_root(group: &[i64], at: i64) -> i64 {
+    let mut here = at;
+    while *nikaia_std::index::get(&group, nikaia_std::index::at(here)) != here { here = *nikaia_std::index::get(&group, nikaia_std::index::at(here)); }
+    here
 }
 

@@ -19,7 +19,7 @@
 //! same `Refused` the Rust side raises, with its position.
 
 use anyhow::Result;
-use nikaia_std::tools::emit_function::{EmitSeedsBegin, EmitSeedsEnd, EmitSplit};
+use nikaia_std::tools::emit_function::{EmitSeedsBegin, EmitSeedsEnd};
 use nikaia_std::tools::emit_host::EmitHost;
 use nikaia_std::tools::emit_item::emit_seeds_declared;
 use nikaia_std::tools::emit_kinds::EmitRefused;
@@ -27,7 +27,7 @@ use nikaia_std::tools::emit_seeds::{
     emit_seeds_declare, emit_seeds_declare_fn, emit_seeds_declare_type, emit_seeds_enter,
     emit_seeds_finish, emit_seeds_leave, emit_seeds_within,
 };
-use nikaia_std::tools::emit_state::{EmitPair, EmitWalk};
+use nikaia_std::tools::emit_state::EmitWalk;
 
 use super::{Emitter, Out};
 use crate::ast::{Block, Expr};
@@ -385,26 +385,6 @@ impl EmitHost for Emitter<'_> {
 
     fn seeded(&self, written: String) -> String {
         Emitter::seeded(self, written)
-    }
-
-    fn split_lifetimes(
-        &self,
-        ty: &crate::ast::Type,
-        returns: &str,
-        sources: &[String],
-    ) -> Option<EmitSplit> {
-        let (own, fields) = Emitter::split_lifetimes(self, Some(ty), Some(returns), sources)?;
-        Some(EmitSplit {
-            own: own
-                .into_iter()
-                .map(|(first, second)| EmitPair { first, second })
-                .collect(),
-            fields,
-        })
-    }
-
-    fn inline_written(&self, attributes: &[crate::ast::Attribute]) -> Option<String> {
-        crate::check::attributes::inline_written(self.parsed, attributes).map(str::to_string)
     }
 
     fn set_main_params(&self, params: &[String]) {

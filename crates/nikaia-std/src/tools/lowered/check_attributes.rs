@@ -545,3 +545,20 @@ pub fn check_attributes_literal_misfit(literal: &Expr, want: &Ty) -> Option<Stri
     }
 }
 
+pub fn check_attributes_inline_written(words: &winnow_grammar::InternerContext, attributes: &[Attribute]) -> Option<String> {
+    for attribute in attributes.iter() {
+        if words.resolve(attribute.name) != "inline" { continue; }
+        if !attribute.config.is_empty() { return None; }
+        if attribute.args.is_empty() { return Some(String::from("#[inline]")); }
+        if attribute.args.len() != 1 { return None; }
+        let word = match nikaia_std::index::get(&attribute.args, 0) {
+            Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_owned() },
+            _ => String::from(""),
+        };
+        if word == "always" { return Some(String::from("#[inline(always)]")); }
+        if word == "never" { return Some(String::from("#[inline(never)]")); }
+        return None;
+    }
+    None
+}
+

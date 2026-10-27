@@ -110,12 +110,6 @@ pub trait EmitHost {
     /// A type as written, with the seeds' hidden parameters in.
     fn seeded(ref self, written: String) -> String sync
 
-    /// The lifetimes of a result of several view fields (ADR-353 D1).
-    fn split_lifetimes(ref self, ty: ref Type, returns: ref String, sources: ref Vec[String]) -> EmitSplit? sync
-
-    /// The `#[inline..]` the program wrote, if any.
-    fn inline_written(ref self, attributes: ref Vec[Attribute]) -> String? sync
-
     /// The parameters of the program's own `main`.
     fn set_main_params(ref self, params: ref Vec[String]) sync
 

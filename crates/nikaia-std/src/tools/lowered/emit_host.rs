@@ -28,8 +28,6 @@ pub trait EmitHost {
     fn seeds_begin(&self, written: &Item, owner_target: Option<String>, owner_declared: bool) -> EmitSeedsBegin;
     fn seeds_end(&self, seeded: bool, base: i64) -> EmitSeedsEnd;
     fn seeded(&self, written: String) -> String;
-    fn split_lifetimes(&self, ty: &Type, returns: &str, sources: &[String]) -> Option<EmitSplit>;
-    fn inline_written(&self, attributes: &[Attribute]) -> Option<String>;
     fn set_main_params(&self, params: &[String]);
     fn main_params(&self) -> Vec<String>;
     fn refuse_unwritten_item(&self, written: &Spanned<Item>) -> Result<(), Box<dyn std::error::Error>>;

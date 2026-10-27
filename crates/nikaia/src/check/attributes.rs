@@ -8,33 +8,12 @@
 //! with one by name after the `;`.
 //!
 //! The checking is `tools/check_attributes.nika` (U-d2); what stays here is
-//! what the ledger and the emitter read: the mark's name and text, `@inline`'s word.
+//! what the ledger reads: the mark's name and text.
 
 use super::*;
 
 /// The mark itself, which `std` declares and nothing else may be.
 pub(crate) const MARK: &str = "meta::Attribute";
-
-/// **`@inline`, the language's own** ([ADR-370](../../../docs/specification/adr/adr-370.md)
-/// D1): no struct declares it, and it stands before a function or a method
-/// that has a body.
-pub(crate) const INLINE: &str = "inline";
-
-/// What `@inline` asks, as Rust's attribute writes it: `@inline`,
-/// `@inline(always)`, `@inline(never)`. `None` where none is written, or where
-/// the one written is refused (its words are the checker's to say).
-pub(crate) fn inline_written(unit: &Parsed, attributes: &[ast::Attribute]) -> Option<&'static str> {
-    let attribute = attributes.iter().find(|a| unit.text(a.name) == INLINE)?;
-    match (&attribute.args[..], attribute.config.is_empty()) {
-        ([], true) => Some("#[inline]"),
-        ([Expr::Variable(word, _)], true) => match unit.text(*word) {
-            "always" => Some("#[inline(always)]"),
-            "never" => Some("#[inline(never)]"),
-            _ => None,
-        },
-        _ => None,
-    }
-}
 
 /// **A mark as the ledger writes it**: `field, struct; repeatable` (ADR-331
 /// D8), read off its arguments (`tools/check_attributes.nika`).
