@@ -68,3 +68,4 @@
 /home/user/Nikaia/docs/briefs/e12-3a.md 458834 6
 /home/user/Nikaia/docs/briefs/architect-task.md 1071529 25
 /home/user/Nikaia/docs/briefs/b886-struct-field-narrowing.md 1855054 37
+/home/user/Nikaia/docs/briefs/b891-lent-tuple-part-coalesce.md 429424 17
