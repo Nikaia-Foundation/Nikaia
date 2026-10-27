@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1243] — 2026-10-27
+
+### A struct field narrows after its `null` arm
+
+In a `match`, `F { name, .. }` after `F { name: null, .. }` binds `name` as the `T`, as a tuple position does (ADR-352 D1, #886); the fields of a plain struct pattern are now typed (they were unknown).
+
+- emit/seeds: the reader's AST walks and `read_with`'s loops move from `emit/seeds.rs` to `tools/emit_seeds.nika` (E12-3a, #583).
+
 ## [0.0.1242] — 2026-10-27
 
 ### A plain value in a tuple at a `T?` part is wrapped
