@@ -52,13 +52,9 @@ fn run_it() sync {
 }
 
 fn open_cache() -> Cache? sync {
-    // TODO(rs2nika): `match` on `Ok`/`Err`: an `Err` arm whose value is `null`: a `catch` hands back the guarded type, never `null` (NK1103); Nikaia has no form for the value-or-`null` of a call that can fail (a language question, #877)
-    let cache = match Cache::open() {
-        Ok(cache) => cache,
-        Err(error) => {
-            eprintln!("warning: {error:#}")
-            null
-        }
+    let cache = Cache::open() catch {
+        eprintln!("warning: {error:#}")
+        null
     }
     return cache
 }
@@ -92,12 +88,11 @@ fn first_line(path: String) -> String sync {
 }
 
 fn note(path: String) sync {
-    // TODO(rs2nika): `match` on `Ok`/`Err`: the `Ok` arm runs on success only and the program goes on after a failure: a `catch` leaves or hands back the value (Part I 7.1); `let v = call catch { return }` / `{ continue }` where the `match` ends the function or the loop body, otherwise a language question (#877)
-    match read_file(path) {
-        Ok(text) => {
+    match read_file(path) catch { null } {
+        text => {
             show(text)
         },
-        else => {},
+        null => {},
     }
     done()
 }

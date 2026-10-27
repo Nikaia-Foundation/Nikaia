@@ -10,8 +10,7 @@ fn at(source: String, at: i64) -> i64 sync {
 // ADAPTER: bleibt in Rust (`Ledger`)
 fn committed(root: ref Path) -> Ledger? sync {
     // ADAPTER: bleibt in Rust (`Ledger`)
-    // TODO(rs2nika): a `Result` read as a value (`.ok()`, `.is_ok()`, `.is_err()`, `.is_ok_and(..)`): Nikaia has no value-or-`null` of a call that can fail (a `catch` hands back the guarded type, `catch { null }` is NK1103: a language question, #877); where the failure leaves, `e catch { <jump> }`; else `let mut ok = true` before, `e catch { ok = false; <a value of its type> }`
-    return (match std::fs::read_to_string(root.join("c")).ok() { text => Ledger::parse(text).ok(), null => null })
+    return (match std::fs::read_to_string(root.join("c")) catch { null } { text => (Ledger::parse(text) catch { null }), null => null })
 }
 fn stays(r: Result[i64, String]) -> i64 sync throws {
     // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body

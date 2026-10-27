@@ -179,8 +179,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R149 an `enum`'s variants: the payload's types by a field's rules (R10, R6, R9): `Dot(usize)` -> `Dot(i64)`, `Named { at: usize }` -> `Named { at: i64 }`",
         "R150 a turbofish whose type nests: `.collect::<BTreeSet<_>>()` -> `.collect()`; one into an `Option`/`Result` keeps a TODO",
         "R151 `x[..]` -> `x`; open cuts stay (`s[a..]`, `s[..<b]` are Nikaia's, R53); `.get(range)` keeps a TODO (no such method, NK1171)",
-        "R160 a `match` on a call's `Result`: `let x = match call { Ok(v) => v, Err(e) => d }` -> `let x = call catch { d }` (`e` as `let e = error` where `d` names it; also `return match`); an `Ok` arm that is more than its value follows `let v = call catch { <the Err arm> }` where that arm leaves (or is a `return match`'s value); `Err(Variant)` arms -> `match error { Variant => .., else => .. }`; a guard, a kept `Result`, an `Err` arm that is `null` keep a TODO",
-        "R161 a `Result` read as a value where Nikaia has the form: `x.parse().is_ok()` / `.is_err()` -> `text::parse_i64(x) != null` / `== null` (R109); `return x.ok()` in a `T?` function -> `return x catch { return null }`; a statement `x.ok()` over a call that hands back nothing (`flush()`, `writeln!`, `fs::create_dir_all` ..) -> `x catch {}`; `if x.is_err() {` / `if !x.is_ok() {` whose body leaves -> `x catch {`",
+        "R160 a `match` on a call's `Result`: `let x = match call { Ok(v) => v, Err(e) => d }` -> `let x = call catch { d }` (`e` as `let e = error` where `d` names it; also `return match`); an `Ok` arm that is more than its value follows `let v = call catch { <the Err arm> }` where that arm leaves (or is a `return match`'s value); `Err(Variant)` arms -> `match error { Variant => .., else => .. }`; an `Ok` arm that runs on success only (the `Err` arm does nothing, or is a value that does not leave) -> `match call catch { null } { v => .., null => <the Err arm> }`, `if (call catch { null }) != null {` where it binds nothing (#884); a guard, a kept `Result`, a `mut` binding keep a TODO",
+        "R161 a `Result` read as a value where Nikaia has the form: `x.parse().is_ok()` / `.is_err()` -> `text::parse_i64(x) != null` / `== null` (R109); `return x.ok()` in a `T?` function -> `return x catch { return null }`; a statement `x.ok()` over a call that hands back nothing (`flush()`, `writeln!`, `fs::create_dir_all` ..) -> `x catch {}`; `if x.is_err() {` / `if !x.is_ok() {` whose body leaves -> `x catch {`; else, over a call, `x.ok()` -> `x catch { null }`, `x.is_ok()` / `.is_err()` -> `(x catch { null }) != null` / `== null`, `x.is_ok_and(fn(v) { b })` -> `(match x catch { null } { v => b, null => false })` (#884)",
         "R170 `if let Some(x) = e {` over anything but a plain name (a call, a field) -> `match e { x => {..}, null => {..} }`: `e` read once (ADR-352)",
         "R171 `panic!(\"..{}..\", a)` / `unreachable!(..)` -> `panic(f\"..{a}..\")` (R15), `panic!(\"..\")` -> `panic(\"..\")`, `unreachable!()` -> `panic(\"unreachable\")`; R55's `None => panic!(..)` arm -> `?? panic(..)` and a tail panic (R42), no `return`",
     ]
@@ -1440,9 +1440,6 @@ fn rs2nika_result_match(out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i6
             ok_lines = body
             ok_block = block
         } else {
-            if last == "null" {
-                return rs2nika_r160_todo("null")
-            }
             if !rs2nika_leaves(last) {
                 leaves = false
             }
@@ -1517,7 +1514,7 @@ fn rs2nika_result_match(out: ref Vec[String], i: i64, j: i64, starts: ref Vec[i6
     let mut tail: Vec[String] = []
     if !identity {
         if !leaves && pre != "return " {
-            return rs2nika_r160_todo("on")
+            return rs2nika_success_only(ind, pre, subject, ok_name, ok_lines, ok_block, handler, variants.len())
         }
         if bound && ok_block {
             return rs2nika_r160_todo("")
@@ -1624,6 +1621,96 @@ fn rs2nika_in_opt_fn(out: ref Vec[String], i: i64) -> bool {
     return false
 }
 
+/// R161: each `Result` read as a value over a call in Nikaia's form (Part I
+/// 7.1, #884): `x.ok()` -> `x catch { null }`, `x.is_ok()` / `x.is_err()` ->
+/// `(x catch { null }) != null` / `== null` (a `!` before it turns the
+/// test), `x.is_ok_and(fn(v) { b })` -> `(match x catch { null } { v => b,
+/// null => false })`. The `catch` in parentheses unless it is the whole
+/// value of a `let`, a `return`, a statement or a `match` head. A read over
+/// a name stays (the `Result` is kept, R160's "kept").
+fn rs2nika_result_nulls(line: String) -> String {
+    let mut s: String = line.clone()
+    for read in [".is_ok_and(", ".is_ok()", ".is_err()", ".ok()"] {
+        let n = read.chars().count()
+        let mut from = 0
+        while true {
+            let c: Vec[scalar] = s.chars().collect()
+            let at = rs2nika_find_from(c, read, from)
+            if at < 0 {
+                break
+            }
+            from = at + 1
+            let after = rs2nika_text(c, at + n, c.len())
+            if read == ".ok()" && (after.starts_with("?") || after.starts_with(".unwrap_or")) {
+                continue
+            }
+            if read != ".is_ok_and(" && rs2nika_parsed_before(c, at) {
+                continue
+            }
+            if read != ".ok()" && read != ".is_ok_and(" && at >= 5 && rs2nika_text(c, at - 5, at) == ".ok()" && rs2nika_parsed_before(c, at - 5) {
+                continue
+            }
+            let start = rs2nika_recv_start(c, at)
+            let recv: String = rs2nika_text(c, start, at)
+            let rc: Vec[scalar] = recv.chars().collect()
+            if !recv.ends_with(")") || rc.len() == 0 || !rs2nika_word(rc[0]) {
+                continue
+            }
+            let mut prefix: String = rs2nika_text(c, 0, start)
+            let mut suffix: String = after.clone()
+            let mut put: String = ""
+            if read == ".ok()" {
+                put = f"{recv} catch {{ null }}"
+                let head: String = prefix.trim().clone()
+                let whole = suffix.trim() == "" && (head == "" || head == "return" || (prefix.ends_with(" = ") && head.starts_with("let ")))
+                if !whole && !(prefix.ends_with("match ") && suffix.starts_with(" {")) && !(prefix.ends_with("{ ") && suffix.starts_with(" }")) {
+                    put = f"({put})"
+                }
+            } else if read == ".is_ok_and(" {
+                let close = rs2nika_closing(c, at + n - 1, '(', ')')
+                if close < 0 {
+                    continue
+                }
+                let arg: String = rs2nika_text(c, at + n, close).trim().clone()
+                let ac: Vec[scalar] = arg.chars().collect()
+                if !arg.starts_with("fn(") || !arg.ends_with("}") {
+                    continue
+                }
+                let shut = rs2nika_closing(ac, 2, '(', ')')
+                if shut < 0 {
+                    continue
+                }
+                let param: String = rs2nika_text(ac, 3, shut).trim().clone()
+                let rest: String = rs2nika_text(ac, shut + 1, ac.len()).trim().clone()
+                if !rs2nika_is_path(param) || param.contains(":") || !rest.starts_with("{") {
+                    continue
+                }
+                let inside: String = rest.bytes[1..<rest.len() - 1].text() catch { continue }
+                put = f"(match {recv} catch {{ null }} {{ {param} => {inside.trim()}, null => false }})"
+                suffix = rs2nika_text(c, close + 1, c.len())
+            } else {
+                let mut ok = read == ".is_ok()"
+                if prefix.ends_with("!") && !prefix.ends_with("!=") {
+                    prefix = prefix.bytes[0..<prefix.len() - 1].text() catch { continue }
+                    ok = !ok
+                }
+                let mut op: String = "=="
+                if ok {
+                    op = "!="
+                }
+                put = f"({recv} catch {{ null }}) {op} null"
+                let next: String = suffix.trim_start().clone()
+                if next.starts_with(".") || next.starts_with("==") || next.starts_with("!=") || prefix.trim_end().ends_with("==") || prefix.trim_end().ends_with("!=") {
+                    put = f"({put})"
+                }
+            }
+            s = f"{prefix}{put}{suffix}"
+            from = prefix.chars().count() + put.chars().count()
+        }
+    }
+    return s
+}
+
 /// R161: a `Result` read as a value where Nikaia has its form (Part I 7.1),
 /// after R42 wrote the `return`s: `return x.ok()` in a `T?` function ->
 /// `return x catch { return null }`; a statement `x.ok()` over a call that
@@ -1670,15 +1757,21 @@ fn rs2nika_result_reads(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Stri
                 }
             }
         }
+        if new == "" && !st.starts_with("//") && rs2nika_result_read(line) {
+            let valued = rs2nika_result_nulls(line)
+            if valued != line {
+                new = valued
+            }
+        }
         if new == "" {
             i = i + 1
             continue
         }
         out[i] = new
         rs2nika_hit(ctx, "R161")
-        // the TODO above it, among the line's TODOs
+        // the TODO above it, among the line's TODOs, where no read is left
         let mut k = i - 1
-        while k >= 0 && out[k].trim().starts_with("// TODO(rs2nika):") {
+        while k >= 0 && !rs2nika_result_read(out[i]) && out[k].trim().starts_with("// TODO(rs2nika):") {
             if out[k].contains("a `Result` read as a value") {
                 let mut rebuilt: Vec[String] = []
                 let mut r = 0
@@ -1699,6 +1792,57 @@ fn rs2nika_result_reads(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Stri
     return out
 }
 
+/// R160 where the `Ok` arm runs on success only and the program goes on
+/// after a failure (#884): the failure made `null` (Part I 7.1), `match call
+/// catch { null } { v => <the Ok arm>, null => <the Err arm> }`, or `if (call
+/// catch { null }) != null { .. }` where the `Ok` arm binds nothing and the
+/// `Err` arm does nothing. One whose `Ok` arm binds a `mut` name (an arm binds
+/// none) or whose `Err` arms are more than one value keeps the TODO.
+fn rs2nika_success_only(ind: String, pre: String, subject: String, ok_name: String, ok_lines: ref Vec[String], ok_block: bool, handler: ref Vec[String], variants: i64) -> Vec[String] {
+    if variants > 0 || handler.len() != 1 || ok_name.starts_with("mut ") || ok_lines.len() == 0 {
+        return rs2nika_r160_todo("on")
+    }
+    let d: String = handler[0].trim().clone()
+    let nothing = d == "{}" || d == "()" || d == ""
+    let first: String = ok_lines[0].trim().clone()
+    if !ok_block && (first == "{}" || first == "()" || first == "") {
+        return rs2nika_r160_todo("")
+    }
+    let mut new: Vec[String] = []
+    if pre == "" && nothing && ok_name == "" {
+        new.push(f"{ind}if ({subject} catch {{ null }}) != null {{")
+        if ok_block {
+            for b in ok_lines {
+                new.push(rs2nika_moved(b, 4, ""))
+            }
+        } else {
+            new.push(f"{ind}    {first}")
+        }
+        new.push(f"{ind}}}")
+        return new
+    }
+    if ok_name == "" || (pre != "" && (nothing || ok_block)) {
+        return rs2nika_r160_todo("on")
+    }
+    let mut none: String = d.clone()
+    if nothing {
+        none = "{}"
+    }
+    new.push(f"{ind}{pre}match {subject} catch {{ null }} {{")
+    if ok_block {
+        new.push(f"{ind}    {ok_name} => {{")
+        for b in ok_lines {
+            new.push(b.clone())
+        }
+        new.push(f"{ind}    }},")
+    } else {
+        new.push(f"{ind}    {ok_name} => {first},")
+    }
+    new.push(f"{ind}    null => {none},")
+    new.push(f"{ind}}}")
+    return new
+}
+
 /// R160's TODO where it does not take a `match` on `Ok`/`Err`, by the reason.
 fn rs2nika_r160_todo(why: String) -> Vec[String] {
     let mut text: String = "not R160's shape (one `Ok(v)` arm, `Err` arms a variant or a name, `_` last, each one line or a block): Nikaia catches a failure, `let v = call catch { <the Err arm> }`, the `Ok` arm after it"
@@ -1708,10 +1852,8 @@ fn rs2nika_r160_todo(why: String) -> Vec[String] {
         text = "`binary_search`: its `Err` is the place to insert at, not a failure; Nikaia's `xs.binary_search(x)` (Part I) and a test of what it hands back"
     } else if why == "guard" {
         text = "a guard on an `Ok`/`Err` arm: `let v = call catch { <the Err arms> }`, a guard of `Err` as an `if` inside the block, one of `Ok` as an `if` after it"
-    } else if why == "null" {
-        text = "an `Err` arm whose value is `null`: a `catch` hands back the guarded type, never `null` (NK1103); Nikaia has no form for the value-or-`null` of a call that can fail (a language question, #877)"
     } else if why == "on" {
-        text = "the `Ok` arm runs on success only and the program goes on after a failure: a `catch` leaves or hands back the value (Part I 7.1); `let v = call catch { return }` / `{ continue }` where the `match` ends the function or the loop body, otherwise a language question (#877)"
+        text = "the `Ok` arm runs on success only, but binds a `mut` name (an arm binds none) or the `Err` arms are more than one value: the failure made `null` (Part I 7.1), `match call catch { null } { v => { let mut x = v; .. }, null => <the Err arm> }`"
     }
     return [f"// TODO(rs2nika): `match` on `Ok`/`Err`: {text}"]
 }
@@ -5005,7 +5147,7 @@ fn rs2nika_todos(line: String, opts: ref Vec[String]) -> Vec[String] {
         todo.push("`is_some_and`/`map_or`: `let x = e ?? <false>` then the test")
     }
     if rs2nika_result_read(line) {
-        todo.push("a `Result` read as a value (`.ok()`, `.is_ok()`, `.is_err()`, `.is_ok_and(..)`): Nikaia has no value-or-`null` of a call that can fail (a `catch` hands back the guarded type, `catch { null }` is NK1103: a language question, #877); where the failure leaves, `e catch { <jump> }`; else `let mut ok = true` before, `e catch { ok = false; <a value of its type> }`")
+        todo.push("a `Result` read as a value (`.ok()`, `.is_ok()`, `.is_err()`, `.is_ok_and(..)`) not over a call: Nikaia holds no `Result`; read it where the call is made, `call catch { null }` (Part I 7.1)")
     }
     if st.starts_with("let Err(") {
         todo.push("`let Err(e) = x else { .. }`: Nikaia has no `Result` value; the call under `catch { let e = error; .. }`, the jump after it")
