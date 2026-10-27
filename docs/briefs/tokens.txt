@@ -71,3 +71,4 @@
 /home/user/Nikaia/docs/briefs/b891-lent-tuple-part-coalesce.md 429424 17
 /home/user/Nikaia/docs/briefs/e12-3b.md 2176173 43
 /home/user/Nikaia/docs/briefs/architect-task.md 1981649 37
+/home/user/Nikaia/docs/briefs/b888-let-bound-proved-name.md 310396 5
