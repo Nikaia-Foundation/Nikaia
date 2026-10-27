@@ -74,3 +74,4 @@
 /home/user/Nikaia/docs/briefs/b888-let-bound-proved-name.md 310396 5
 /home/user/Nikaia/docs/briefs/architect-task.md 580705 17
 /home/user/Nikaia/docs/briefs/b890-text-literal-tuple-pattern.md 2167375 44
+/home/user/Nikaia/docs/briefs/architect-task.md 248545 10
