@@ -822,6 +822,12 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
 
+[fn."rs2nika_own_somes"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(line: String, end: i64) -> bool"
+
 [fn."rs2nika_panic"]
 sync = "inferred"
 touches = []
@@ -1107,6 +1113,11 @@ touches = []
 views = ["out: borrowed", "starts: borrowed", "pats: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, out: ref Vec[String], starts: ref Vec[i64], pats: ref Vec[String], j: i64) -> Vec[String]"
 
+[fn."rs2nika_some_field"]
+sync = "inferred"
+touches = []
+signature = "() -> String"
+
 [fn."rs2nika_some_matches"]
 sync = "inferred"
 touches = []
@@ -1118,6 +1129,17 @@ sync = "inferred"
 touches = []
 views = ["pat: borrowed"]
 signature = "(pat: String) -> String"
+
+[fn."rs2nika_some_todo"]
+sync = "inferred"
+touches = []
+views = ["head: borrowed"]
+signature = "(head: String) -> String"
+
+[fn."rs2nika_some_tuple"]
+sync = "inferred"
+touches = []
+signature = "() -> String"
 
 [fn."rs2nika_split_args"]
 sync = "inferred"
@@ -1253,6 +1275,97 @@ touches = []
 views = ["line: borrowed", "opts: borrowed"]
 signature = "(line: String, opts: ref Vec[String]) -> Vec[String]"
 
+[fn."rs2nika_tuple_all"]
+sync = "inferred"
+touches = []
+views = ["part: borrowed"]
+signature = "(part: String) -> bool"
+
+[fn."rs2nika_tuple_apart"]
+sync = "inferred"
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref Rs2nikaTupleArm, b: ref Rs2nikaTupleArm) -> bool"
+
+[fn."rs2nika_tuple_arm"]
+sync = "inferred"
+touches = []
+views = ["t: borrowed"]
+signature = "(t: String, width: i64) -> Rs2nikaTupleArm?"
+
+[fn."rs2nika_tuple_close"]
+sync = "inferred"
+keeps = ["from"]
+touches = []
+views = ["c: borrowed"]
+signature = "(c: ref Vec[scalar], from: i64) -> i64"
+
+[fn."rs2nika_tuple_left"]
+sync = "inferred"
+touches = []
+views = ["plan: borrowed"]
+signature = "(plan: ref Vec[Vec[String]]) -> i64"
+
+[fn."rs2nika_tuple_literal"]
+sync = "inferred"
+touches = []
+views = ["part: borrowed"]
+signature = "(part: String) -> bool"
+
+[fn."rs2nika_tuple_matches"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
+
+[fn."rs2nika_tuple_named"]
+sync = "inferred"
+touches = []
+views = ["arm: borrowed"]
+signature = "(arm: ref Rs2nikaTupleArm) -> i64"
+
+[fn."rs2nika_tuple_none_arm"]
+sync = "inferred"
+touches = []
+views = ["ind: borrowed", "last: borrowed"]
+signature = "(ind: String, width: i64, pos: i64, last: ref Rs2nikaTupleArm) -> Rs2nikaTupleArm"
+
+[fn."rs2nika_tuple_nones"]
+sync = "inferred"
+touches = []
+views = ["arm: borrowed"]
+signature = "(arm: ref Rs2nikaTupleArm) -> i64"
+
+[fn."rs2nika_tuple_parts"]
+sync = "inferred"
+touches = []
+views = ["pat: borrowed"]
+signature = "(pat: String) -> Vec[String]?"
+
+[fn."rs2nika_tuple_plan"]
+sync = "inferred"
+touches = []
+views = ["arms: borrowed", "order: borrowed"]
+signature = "(arms: ref Vec[Rs2nikaTupleArm], order: ref Vec[i64]) -> Vec[Vec[String]]"
+
+[fn."rs2nika_tuple_reorder"]
+sync = "inferred"
+touches = []
+views = ["arms: borrowed"]
+signature = "(arms: ref Vec[Rs2nikaTupleArm]) -> Vec[i64]"
+
+[fn."rs2nika_tuple_some"]
+sync = "inferred"
+touches = []
+views = ["part: borrowed"]
+signature = "(part: String) -> String"
+
+[fn."rs2nika_tuple_unit"]
+sync = "inferred"
+touches = []
+views = ["part: borrowed"]
+signature = "(part: String) -> bool"
+
 [fn."rs2nika_turbofish"]
 sync = "inferred"
 touches = []
@@ -1336,7 +1449,7 @@ views = ["text: borrowed", "path: borrowed"]
 signature = "(text: String, path: String) -> bool"
 
 [type."Rs2nikaCtx"]
-fields = ["profile: String", "free: bool", "world: ref String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]", "host_fns: Vec[String]", "opt_names: Vec[String]"]
+fields = ["profile: String", "free: bool", "world: ref String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]", "host_fns: Vec[String]", "opt_names: Vec[String]", "tuple_line: Vec[String]", "tuple_why: Vec[String]"]
 
 [type."Rs2nikaOut"]
 pub = true
@@ -1345,3 +1458,6 @@ fields = ["pub text: String", "pub hits: Vec[String]", "pub missing: Vec[String]
 [type."Rs2nikaScore"]
 pub = true
 fields = ["kept: i64", "total: i64", "kinds: Vec[String]"]
+
+[type."Rs2nikaTupleArm"]
+fields = ["lines: Vec[String]", "head: i64", "parts: Vec[String]", "guard: String", "after: String", "all: bool"]

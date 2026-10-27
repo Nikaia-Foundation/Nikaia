@@ -1,0 +1,66 @@
+fn shown(file: String?, function: String?) -> String sync {
+    return match (file, function) {
+        (null, null) => "nowhere",
+        (file, null) => file,
+        (null, function) => function,
+        (file, function) => f"{file}, {function}",
+    }
+}
+
+fn flags(encoded: String?, plain: String?) -> Vec[String] sync {
+    let flags: Vec[String] = match (encoded, plain) {
+        (null, null) => return [],
+        (null, p) => p.split(' ').map(String::from).collect(),
+        // the encoded ones first
+        (e, _) => e.split(',').map(String::from).collect(),
+    }
+    return flags
+}
+
+fn how(proved: bool, blocked: String?) -> String sync {
+    return match (proved, blocked) {
+        (true, _) => "proved",
+        // TODO(rs2nika): a `Some(` in a tuple pattern: no unguarded arm before `Some(why)` takes `None` there with `_`, a name, `None` or the same variant at each other position (a literal does not count), and no reorder or added `(None, _)` arm gives one (ADR-352 D1 per position)
+        (false, Some(why)) => f"checked: {why}",
+        (false, null) => "checked",
+    }
+}
+
+fn arity(owner: i64?, seeded: bool) -> i64 sync {
+    return match (owner, seeded) {
+        (null, _) => 0,
+        (o, true) => o + 1,
+        else => 0,
+    }
+}
+
+fn copied(built: String?, dir: String?) -> String? sync {
+    return match (built, dir) {
+        // TODO(rs2nika): a `Some(` in a tuple pattern: no unguarded arm before `Some(built)` takes `None` there with `_`, a name, `None` or the same variant at each other position (a literal does not count), and no reorder or added `(None, _)` arm gives one (ADR-352 D1 per position)
+        (Some(built), Some(_)) => (f"{built}!"),
+        (built, _) => built,
+    }
+}
+
+fn kind(ext: String?, stem: String?) -> i64 sync {
+    return match (ext, stem) {
+        // TODO(rs2nika): a `Some(` in a tuple pattern: a text inside `Some("out")` at a tuple position: the lowering matches a `&str` against the `String` (rustc E0308)
+        (Some("out"), Some(stem)) => stem.len(),
+        else => 0,
+    }
+}
+
+fn named(item: ref Item) -> bool sync {
+    // TODO(rs2nika): a `Some(` in a struct pattern: a field does not narrow yet (#886); bind the field and test it with `!= null` in the arm
+    return match item { Item::Fn { name: Some(name), .. } => name != "main", Item::Const { .. } => false, else => true }
+}
+
+fn declared(shape: Shape, path: String?) -> String sync {
+    return match (shape, path) {
+        (Shape::Rust, _) => "rust",
+        (_, null) => "nikaia",
+        (Shape::Path, path) => path,
+        else => "nikaia",
+    }
+}
+

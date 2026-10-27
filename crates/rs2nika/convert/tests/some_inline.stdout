@@ -6,7 +6,7 @@ fn dir(v: String?) -> String? sync {
     return t
 }
 fn pair(a: i64?, b: i64?) -> i64 sync {
-    // TODO(rs2nika): `match` on `Some`/`None`: `let x = e ?? <none arm>`
+    // TODO(rs2nika): a `Some(` in a tuple pattern of a `match` R172 does not read (one written on a line, or an arm it cannot split): `Some(p)` -> `p` once an arm before it takes `None` there (ADR-352 D1 per position, #879)
     let n = match (a, b) { (Some(x), _) => x, (null, _) => 0 }
     return n
 }
