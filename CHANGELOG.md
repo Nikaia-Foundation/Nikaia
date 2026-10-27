@@ -8,6 +8,39 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1236] — 2026-10-27
+
+**A `String` parameter read through `find` stays lent** (#882). The keeps
+walk (`tools/keeps.nika`) looked a `String` receiver's method up as
+`String::find`; the ledger names text methods `str::`, so it fell back to
+every `find`, `Seq::find` among them, which takes its receiver. Passing a
+text to a function that only searches it no longer hands the caller's text
+over (NK2105), a `for` element passes (NK1102), and the slice after it
+lowers to `&str`. A `String?` read through `??` or `match` is still kept
+(#882 stays open). Tests `a_text_parameter_read_through_find_stays_lent`,
+`a_for_element_is_lent_to_a_text_parameter_read_through_find`.
+
+## [0.0.1235] — 2026-10-27
+
+**`find`, `rfind`, `replace` and `replacen` take a scalar needle** (#877,
+Part I 2.6). `s.find(',')` was NK1102 while `contains` and `split` took a
+character; a needle is now a text or one scalar for all of them. Test
+`a_text_search_takes_a_scalar_needle`.
+
+## [0.0.1234] — 2026-10-27
+
+**Two `ref Array[T]` compare with `==` where their elements do** (#877,
+Part I 4.7). A view of a run was refused with NK1188 whatever it held; it
+now compares as the run does. A lent pointer of the C boundary still does
+not. Test `two_byte_views_compare_by_their_bytes`.
+
+## [0.0.1233] — 2026-10-27
+
+**A clone of a cut of a text copies text** (#881). A `String` local that
+starts as `""` and is moved into a variable that later takes
+`x[a..].clone()` of itself was lowered as a view, and rustc refused the
+move; it is lowered as a move. Test `string_empty_then_moved`.
+
 ## [0.0.1232] — 2026-10-27
 
 **A clone of a trimmed `x ?? ""` copies text too** (#880). `copies_text`
