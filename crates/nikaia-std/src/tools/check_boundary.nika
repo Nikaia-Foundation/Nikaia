@@ -161,8 +161,21 @@ impl CheckState {
         if !self.enums.contains_key(name) {
             return false
         }
-        let parts = self.enum_payloads[name] ?? return true
+        // An enum of another file or of a library has no payload list; its
+        // variants that hold something are in `variant_parts` or `structs`.
+        let parts = self.enum_payloads[name] ?? return self.a_ledger_enum_holds_nothing(name)
         return parts.len() == 0
+    }
+
+    fn a_ledger_enum_holds_nothing(ref self, name: ref String) -> bool sync {
+        let variants = self.enums[name] ?? return true
+        for variant in variants {
+            let key = f"{name}::{variant}"
+            if self.variant_parts.contains_key(key) || self.structs.contains_key(key) {
+                return false
+            }
+        }
+        return true
     }
 
     /// **Whether a `??` over a name may lend it** (ADR-279 D5), and how the

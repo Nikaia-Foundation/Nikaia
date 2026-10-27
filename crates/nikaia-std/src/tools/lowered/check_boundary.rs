@@ -109,8 +109,18 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_payloadless_enum(&self, name: &str) -> bool {
         if !self.enums.contains_key(name) { return false; }
-        let parts = match *nikaia_std::index::get(&self.enum_payloads, name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+        let parts = match *nikaia_std::index::get(&self.enum_payloads, name) { Some(__nikaia_value) => __nikaia_value, None => return self.a_ledger_enum_holds_nothing(name) };
         parts.is_empty()
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_ledger_enum_holds_nothing(&self, name: &str) -> bool {
+        let variants = match *nikaia_std::index::get(&self.enums, name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+        for variant in variants.iter() {
+            let key = format!("{}::{}", name, variant);
+            if self.variant_parts.contains_key(&key) || self.structs.contains_key(&key) { return false; }
+        }
+        true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -364,7 +364,7 @@ impl CheckState {
             if i < given.len() as i64 { ty = nikaia_std::index::or(self.text_literal(world, &want, nikaia_std::index::get(&given, nikaia_std::index::at(i)), true), || found_here.clone().into()); }
             if !views_into_text(&ty, &want) { continue; }
             let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
-            if i < given.len() as i64 { self.expect_kept_asked(world, &ty, &want, Some(nikaia_std::index::get(&given, nikaia_std::index::at(i))), &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); } else { self.expect_kept_asked(world, &ty, &want, None, &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); }
+            if i < given.len() as i64 { self.expect_kept_asked(world, &ty, &want, Some(&&*nikaia_std::index::get(&given, nikaia_std::index::at(i))), &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); } else { self.expect_kept_asked(world, &ty, &want, None, &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); }
         }
     }
 }
