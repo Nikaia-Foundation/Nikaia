@@ -226,6 +226,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R213 check profiles: `let parsed = self.parsed;` is dropped, `parsed` reads `self.parsed` to the end of the function",
         "R214 `println!(\"…{}\", a)` (also `eprintln!`, `print!`, `eprint!`) -> `println(f\"…{a}\")`; a text without holes stays plain, `println!()` -> `println(\"\")`",
         "R215 a reserved word renamed with `_` is renamed inside a text only where it is a hole: `\"with {with}\"` -> `\"with {with_}\"`",
+        "R217 `std::fs::read_dir(d)` -> `fs::read_dir(d, fs::Root::Anywhere)`, names in byte order with no failure per entry: `.filter_map(|e| e.ok())` / `.flatten()` go, `e.path()` -> `d.join(e)`, `.file_name().into_string().ok()` -> `name.to_text().ok()`, the `.sort()` after it goes; `.with_context(|| format!(m))?` -> `catch { throw format!(m) }`, `.into_iter().flatten()` -> `catch { [] }`; `let Ok(es) = ..` keeps `d` for `for e in es`",
         "R216 a text continued with `\\` that no later line closes (a cut input) is named on stderr with its line",
         "R198 `?` inside a `filter_map`/`find_map`/`and_then` closure -> `?? return null`",
         "R196 an empty `impl X {}` is dropped",
@@ -1035,6 +1036,172 @@ fn rs2nika_tidy(text: String) -> String {
         }
     }
     return out.replace(" )", ")").replace(" ]", "]")
+}
+
+/// R217: Rust's `std::fs::read_dir(d)` and its `DirEntry` results -> Nikaia's
+/// `fs::read_dir(d, fs::Root::Anywhere)`, the names in byte order with no
+/// failure per entry (Part III, *Metadata and directories*): the entry filter
+/// (`.filter_map(|e| e.ok())`, `.flatten()`) goes, `e.path()` is `d.join(name)`,
+/// `.file_name().into_string().ok()` is `name.to_text().ok()`, and the `.sort()`
+/// after the list goes. `.with_context(|| format!(m))?` -> `catch { throw
+/// format!(m) }`, `.into_iter().flatten()` -> `catch { [] }`; the directory of a
+/// `let Ok(es) = ..` / `if let Ok(es) = ..` is kept for `for e in es` and the
+/// chains on `es`, where `e.path()` is `e`.
+fn rs2nika_read_dirs(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut names: Vec[String] = []
+    let mut dirs: Vec[String] = []
+    let mut paths: Vec[String] = []
+    let mut sorted: String = ""
+    for l in given {
+        let st: String = l.trim().clone()
+        if sorted != "" && st == f"{sorted}.sort();" {
+            sorted = ""
+            rs2nika_hit(ctx, "R217")
+            continue
+        }
+        if st != "" {
+            sorted = ""
+        }
+        if rs2nika_fn_name(l) != "" {
+            names = []
+            dirs = []
+            paths = []
+        }
+        let mut line: String = l.clone()
+        for p in paths {
+            line = line.replace(f"{p}?.path()", p).replace(f"{p}.path()", p)
+        }
+        let c: Vec[scalar] = line.chars().collect()
+        let (before, _) = line.split_once("std::fs::read_dir(") ?? ("", "")
+        if line.contains("std::fs::read_dir(") {
+            let from = before.chars().count()
+            let open = from + "std::fs::read_dir".len()
+            let close = rs2nika_closing(c, open, '(', ')')
+            if close > open {
+                let dir: String = rs2nika_text(c, open + 1, close).trim().clone()
+                let d: String = rs2nika_unled(dir, "&")
+                let call = f"fs::read_dir({d}, fs::Root::Anywhere)"
+                let mut head: String = call.clone()
+                let mut k = close + 1
+                if rs2nika_at(c, k, ".with_context(|| format!(") {
+                    let wopen = k + ".with_context".len()
+                    let wclose = rs2nika_closing(c, wopen, '(', ')')
+                    let fopen = k + ".with_context(|| format!".len()
+                    let fclose = rs2nika_closing(c, fopen, '(', ')')
+                    if wclose > 0 && fclose > 0 && rs2nika_at(c, wclose + 1, "?") {
+                        let m = rs2nika_text(c, fopen + 1, fclose)
+                        head = f"({call} catch {{ throw format!({m}) }})"
+                        k = wclose + 2
+                    }
+                } else if rs2nika_at(c, k, ".into_iter().flatten()") {
+                    head = f"({call} catch {{ [] }})"
+                    k = k + ".into_iter().flatten()".len()
+                } else if rs2nika_at(c, k, ".map(|entries| entries.flatten().count()).unwrap_or(0)") {
+                    head = f"({call} catch {{ [] }}).len()"
+                    k = k + ".map(|entries| entries.flatten().count()).unwrap_or(0)".len()
+                }
+                let mut tail = rs2nika_entries(rs2nika_text(c, k, c.len()), d)
+                let lhs: String = rs2nika_text(c, 0, from).trim().clone()
+                line = f"{rs2nika_text(c, 0, from)}{head}{tail}"
+                rs2nika_hit(ctx, "R217")
+                if tail.trim() == "" && head.starts_with("(") {
+                    let bound: String = rs2nika_unled((lhs.strip_suffix(" =") ?? "").clone(), "let ")
+                    if bound != "" && !bound.contains(" ") {
+                        names.push(bound)
+                        dirs.push(d.clone())
+                    }
+                }
+                for lead in ["let Ok(", "if let Ok("] {
+                    let name: String = (lhs.strip_prefix(lead)?.strip_suffix(") =") ?? "").trim().clone()
+                    if name != "" {
+                        names.push(name)
+                        dirs.push(d.clone())
+                    }
+                }
+                sorted = rs2nika_sorted_name(lhs)
+            }
+        } else {
+            for (es, d) in names.iter().zip(dirs.iter()) {
+                let fors = f" in {es}"
+                let (head, rest) = line.split_once(fors) ?? ("", "")
+                let (var, _) = (st.strip_prefix("for ") ?? "").split_once(" in ") ?? ("", "")
+                if var != "" && (rest.starts_with(".") || rest.starts_with(" {")) {
+                    let mut after: String = rest.clone()
+                    for drop in [".filter_map(|entry| entry.ok())", ".flatten()"] {
+                        after = rs2nika_unled(after, drop)
+                    }
+                    let v: String = var.trim().clone()
+                    line = f"{head} in {es}.iter().map(|name| {d}.join(name)){after}"
+                    paths.push(v)
+                    rs2nika_hit(ctx, "R217")
+                } else {
+                    let (lead, chain) = line.split_once(f"= {es}.") ?? ("", "")
+                    if line.contains(f"= {es}.") {
+                        sorted = rs2nika_sorted_name(lead.trim().clone())
+                        let steps = rs2nika_entries(f".{chain}", d)
+                        line = f"{lead}= {es}{steps}"
+                        rs2nika_hit(ctx, "R217")
+                    }
+                }
+            }
+        }
+        out.push(line)
+    }
+    return out
+}
+
+/// The `v` of `let mut v: T =` / `let mut v =`, whose `v.sort();` R217 drops.
+fn rs2nika_sorted_name(lhs: String) -> String {
+    if !lhs.starts_with("let mut ") {
+        return ""
+    }
+    let rest: String = (lhs.strip_prefix("let mut ") ?? "").clone()
+    let (typed, _) = rest.split_once(":") ?? rest.split_once(" =") ?? ("", "")
+    return typed.trim().clone()
+}
+
+/// `r` without its start `lead`, or `r` when it does not start so.
+fn rs2nika_unled(r: String, lead: String) -> String {
+    if r.starts_with(lead) {
+        return (r.strip_prefix(lead) ?? "").clone()
+    }
+    return r.clone()
+}
+
+/// `r` without its start `lead`.
+fn rs2nika_after(r: String, lead: String) -> String {
+    return (r.strip_prefix(lead) ?? "").clone()
+}
+
+/// R217's entry steps at the start of `rest`, the directory `d`.
+fn rs2nika_entries(rest: String, d: String) -> String {
+    let mut r: String = rest.clone()
+    let mut raw = false
+    for drop in [".filter_map(|entry| entry.ok())", ".filter_map(|e| e.ok())", ".flatten()"] {
+        if r.starts_with(drop) {
+            r = (r.strip_prefix(drop) ?? "").clone()
+            raw = true
+        }
+    }
+    for v in ["entry", "e"] {
+        let lone = f".filter_map(|{v}| {v}.ok().map(|{v}| {v}.path()))"
+        let named = f".filter_map(|{v}| {v}.ok()?.file_name().into_string().ok())"
+        if r.starts_with(lone) {
+            return f".iter().map(|{v}| {d}.join({v})){rs2nika_after(r, lone)}"
+        }
+        if r.starts_with(named) {
+            return f".iter().filter_map(|name| name.to_text().ok()){rs2nika_after(r, named)}"
+        }
+        let mapped = f".map(|{v}| {v}.path())"
+        if raw && r.starts_with(mapped) {
+            return f".iter().map(|{v}| {d}.join({v})){rs2nika_after(r, mapped)}"
+        }
+    }
+    if raw {
+        return f".iter().map(|name| {d}.join(name)){r}"
+    }
+    return r
 }
 
 /// R216: a text continued with `\` that no later line closes: the input was
@@ -10394,7 +10561,8 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, src: String, profile_given: St
     let hoisted = rs2nika_hoist(ctx, inlined)
     let first = rs2nika_join_chains(ctx, hoisted)
     let split = rs2nika_join_split(ctx, first)
-    let chained0 = rs2nika_join_chains(ctx, split)
+    let chained1 = rs2nika_join_chains(ctx, split)
+    let chained0 = rs2nika_read_dirs(ctx, chained1)
     let chained = rs2nika_results(ctx, chained0)
     for name in rs2nika_opt_lets(chained, ctx.opt_names) {
         ctx.opt_names.push(name.clone())

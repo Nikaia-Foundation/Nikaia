@@ -1,0 +1,24 @@
+fn sources(dir: ref Path) -> Vec[PathBuf] sync throws {
+    let mut paths: Vec[PathBuf] = (fs::read_dir(dir, fs::Root::Anywhere) catch { throw f"reading {dir.display()}" }).iter().map(fn(entry) { dir.join(entry) }).collect()
+    return paths
+}
+
+fn stale(dir: ref Path) -> Vec[String] sync {
+    let mut names: Vec[String] = (fs::read_dir(dir, fs::Root::Anywhere) catch { [] }).iter().filter_map(fn(name) { name.to_text() catch { null } }).collect()
+    return names
+}
+
+fn walk(dir: ref Path) sync {
+    let entries = fs::read_dir(dir, fs::Root::Anywhere) catch { return }
+    for entry in entries.iter().map(fn(name) { dir.join(name) }) {
+        let path = entry
+        if path.is_dir() {
+            walk(path)
+        }
+    }
+}
+
+fn count(dir: ref Path) -> i64 sync {
+    return (fs::read_dir(dir, fs::Root::Anywhere) catch { [] }).len()
+}
+
