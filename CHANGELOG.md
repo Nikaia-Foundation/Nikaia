@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1266] — 2026-10-28
+
+**A grammar action stands after `->` again; a brace after a pattern is a bound (ADR-grammar-1 D1, #932)**
+- `rule pair -> Pair = key:string ":" => val:value -> { Pair { key, val } }`: each alternative's action follows its own `->`, as the engine writes it. `pattern { action }` is refused by name with the form to write; an arrow elsewhere in a pattern still names `=>`. A brace after a pattern is a bound wherever spaces stand (`digit{2}`, `digit { 2 }`), so no space decides what a grammar means. This withdraws ADR-296 D33.
+- `{ p }` as a delimiter in the input (Part II 10.8) is withdrawn; it was never built: write `"{" p "}"`.
+- A grammar's argument list takes a trailing comma, as every other list does.
+- Every grammar in the repository is rewritten (`scripts/grammar_arrow.nika`); the lowered Rust does not change. ADR-grammar-1 also records what #932 builds next: rule values (Subject ; Config), value bounds, `if(cond)` guards, `count(p)` as an `i64`.
+
 ## [0.0.1265] — 2026-10-28
 
 **A view of a list in a field is a slice, as a parameter's is (#125)**

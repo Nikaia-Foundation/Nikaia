@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1265 (Draft)
+**Version:** 0.0.1266 (Draft)
 **Date:** 2026-10-28
 
 ---
@@ -19,26 +19,26 @@ Nikaia grammars are **scannerless**: there is no separate tokenizer stage. A gra
 **Key features:**
 *   **Commit points (`=>`)** control backtracking. Once the parser passes a commit point, it stays in that branch. A later failure is an error, not a reason to try the next alternative.
 *   **Lexical and syntactic rules.** A rule whose name starts with an uppercase letter is **lexical**: no whitespace is skipped between its parts. A rule whose name starts with a lowercase letter is **syntactic**: whitespace is skipped.
-*   **Typed actions (`{ … }` after the pattern).** Each rule builds the program's own types directly.
+*   **Typed actions (`-> { … }` after the pattern).** Each rule builds the program's own types directly.
 
 ```nika
 grammar Json {
     entry rule value -> Value =
-        o:object { Value::Object(o) }
-      | a:array  { Value::Array(a) }
-      | s:string { Value::String(s) }
+        o:object -> { Value::Object(o) }
+      | a:array  -> { Value::Array(a) }
+      | s:string -> { Value::String(s) }
 
     // Commit point: once '{' matched, members and '}' MUST follow, or we error.
     rule object -> Object
         = "{" => members:list(pair, ",") "}"
-        { Object { members } }
+        -> { Object { members } }
 
-    rule pair -> Pair = key:string ":" => val:value { Pair { key, val } }
+    rule pair -> Pair = key:string ":" => val:value -> { Pair { key, val } }
 
     // Lexical rule (uppercase): no whitespace inside a hex byte. Two hex digits
     // always fit in a `u8`, so this action cannot fail; where one can, what its
     // failure means is decided by the commit point above it.
-    rule HEX -> u8 = d:hex_digit{2} { hex_byte(d) }
+    rule HEX -> u8 = d:hex_digit{2} -> { hex_byte(d) }
 }
 ```
 
@@ -550,7 +550,7 @@ Nikaia parallelises the *parse itself* when the grammar declares where the input
 // Up to ";" - or to the end of the frame, whichever comes first. `frame_end`
 // is the boundary of the frame this rule is reached from: written once, in
 // the attribute below, and referenced here.
-rule NAME -> ref String = s:until(";" | frame_end) { s }
+rule NAME -> ref String = s:until(";" | frame_end) -> { s }
 
 @frame(boundary: "\n")
 rule MEASUREMENT -> Reading =
@@ -598,8 +598,8 @@ Everything a grammar may write, one line each. An element not on this page is
 not in the language. Where a line says *text*, the value is a view of the input
 and nothing is copied (10.6).
 
-**A rule.** `rule name -> Type = pattern { action }`. The `->` names the
-result type; the block after the pattern is the action, one per alternative,
+**A rule.** `rule name -> Type = pattern -> { action }`. The first `->` names
+the result type; the block after the second, after the pattern, is the action, one per alternative,
 and it may read every binding of that alternative. `entry` before `rule` makes
 the rule an entry a call can reach (`Json::value(input)`).
 A rule may take arguments and be used as `list(pair, ",")` is.
@@ -637,9 +637,9 @@ and `rule WS = "" { }` skips nothing.
 | `p => q` | the **cut**: after `p`, `q` must follow; a failure in `q` is an error and no enclosing alternative is retried | as `p q` |
 | `p?` | `p` or nothing | a `T?` |
 | `p*`, `p+` | zero or more, one or more `p` | a list of what `p` yields, or the text matched where `p` is a character class |
-| `p{n}`, `p{n,}`, `p{n,m}` | exactly, at least, between `n` and `m` times; greedy and never giving one back — written with the brace against the digit, since `p { 1 }` is `p` with an action | as `p*` |
+| `p{n}`, `p{n,}`, `p{n,m}` | exactly, at least, between `n` and `m` times; greedy and never giving one back. A brace after a pattern is always a bound, since an action stands after `->` ([ADR-grammar-1](adr/adr-grammar-1.md) D1) | as `p*` |
 | `( p )` | grouping | as `p` |
-| `[ p ]`, `{ p }`, `paren( p )` | the delimiter around `p` in the **input**: `[`, `{`, `(` | as `p` |
+| `[ p ]`, `paren( p )` | the delimiter around `p` in the **input**: `[`, `(`; a brace in the input is written `"{" p "}"` (ADR-grammar-1 D5) | as `p` |
 | `not(p)` | succeeds where `p` does not match, consuming nothing | nothing |
 | `peek(p)` | `p` without consuming it | as `p` |
 | `until(p)` | everything up to `p`, not consuming `p`; an error where `p` never comes | text |

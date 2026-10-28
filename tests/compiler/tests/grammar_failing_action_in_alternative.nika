@@ -16,10 +16,10 @@ fn parse(t: String) -> i64 throws {
 }
 
 grammar G {
-    rule n -> i64 = t:text(digit+) { parse(t) }
-    entry rule soft -> i64 = x:n { x } | digit+ { -1 }
-    entry rule hard -> i64 = "#" => x:n { x } | "#" digit+ { -2 }
-    entry rule own -> i64 = "@" => t:text(digit+) { parse(t) } | "@" digit+ { -3 }
+    rule n -> i64 = t:text(digit+) -> { parse(t) }
+    entry rule soft -> i64 = x:n -> { x } | digit+ -> { -1 }
+    entry rule hard -> i64 = "#" => x:n -> { x } | "#" digit+ -> { -2 }
+    entry rule own -> i64 = "@" => t:text(digit+) -> { parse(t) } | "@" digit+ -> { -3 }
 }
 
 fn main() {

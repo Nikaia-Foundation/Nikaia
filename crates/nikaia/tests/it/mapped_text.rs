@@ -133,7 +133,7 @@ fn a_grammar_over_a_mapping_reports_the_bad_byte_where_it_is() {
 const WHOLE: &str = "use std::fs\n\
 \n\
 grammar Words {\n\
-\x20   entry rule words -> i64 = w:any* { w.len() }\n\
+\x20   entry rule words -> i64 = w:any* -> { w.len() }\n\
 }\n\
 \n\
 fn main() {\n\

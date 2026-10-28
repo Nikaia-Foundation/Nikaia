@@ -75,7 +75,7 @@ fn a_grammar_action_calls_a_dependency_at_build_time() {
         LIB,
         "use lib\n\n\
          fn plus_one(n: i64) -> i64 {\n    return n + 1\n}\n\n\
-         grammar Num {\n    entry rule n -> i64 = d:dec[i64](digit+) { lib::tripled(plus_one(d)) }\n}\n\n\
+         grammar Num {\n    entry rule n -> i64 = d:dec[i64](digit+) -> { lib::tripled(plus_one(d)) }\n}\n\n\
          comptime N: i64 = Num::n(\"13\")\n\n\
          fn main() {\n    println(f\"{N}\")\n}\n",
     );
@@ -261,7 +261,7 @@ fn a_grammar_action_calls_another_file_of_its_package() {
         "build-time-other-file",
         LIB,
         "use lib\n\n\
-         grammar Num {\n    entry rule n -> i64 = d:dec[i64](digit+) { lib::tripled(plus_one(d)) }\n}\n\n\
+         grammar Num {\n    entry rule n -> i64 = d:dec[i64](digit+) -> { lib::tripled(plus_one(d)) }\n}\n\n\
          comptime N: i64 = Num::n(\"13\")\n\n\
          fn main() {\n    println(f\"{N}\")\n}\n",
     );

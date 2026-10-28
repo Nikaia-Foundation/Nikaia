@@ -21,18 +21,18 @@ grammar Stock {
 
     // Up to the next `;` or the end of the line. A line missing its last field
     // then stops at the newline instead of eating the line after it.
-    rule FIELD -> String = s:until(";" | frame_end) { s }
+    rule FIELD -> String = s:until(";" | frame_end) -> { s }
 
-    rule COUNT -> i64 = n:dec[i64](digit+) { n }
+    rule COUNT -> i64 = n:dec[i64](digit+) -> { n }
 
     // `@frame` says an entry ends at a newline. The rule is uppercase, so it is
     // lexical: no whitespace is skipped, and ` Bolts` stays different from `Bolts`.
     @frame(boundary: "\n")
     rule ENTRY -> Entry =
         category:FIELD ";" => item:FIELD ";" count:COUNT frame_end
-        { Entry { category, item, count } }
+        -> { Entry { category, item, count } }
 
-    entry rule file -> Vec[Entry] = entries:ENTRY* { entries }
+    entry rule file -> Vec[Entry] = entries:ENTRY* -> { entries }
 }
 
 // `String`: the category and the item are slices of the input file, not

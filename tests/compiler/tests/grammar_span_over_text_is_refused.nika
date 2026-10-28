@@ -2,7 +2,7 @@
 // (#743): an entry of a grammar that uses one, handed a `String`, is refused
 // with `NK1187` (ADR-339 D1, #557).
 grammar G {
-    entry rule top -> u32 = alpha1 at:here { at }
+    entry rule top -> u32 = alpha1 at:here -> { at }
 }
 
 fn main() {

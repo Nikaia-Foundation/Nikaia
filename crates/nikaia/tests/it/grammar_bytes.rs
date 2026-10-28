@@ -10,7 +10,7 @@ use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
 
-const GRAMMAR: &str = "grammar Num {\n    entry rule num -> i64 = n:dec[i64](digit+) { n }\n}\n";
+const GRAMMAR: &str = "grammar Num {\n    entry rule num -> i64 = n:dec[i64](digit+) -> { n }\n}\n";
 
 fn emit(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -94,7 +94,7 @@ fn run(name: &str, source: &str, files: &[(&str, &[u8])]) -> String {
     String::from_utf8_lossy(&run.stdout).trim().to_string()
 }
 
-const PAIR: &str = "grammar Pair {\n    entry rule pair -> i64 = name:until(\";\") sep:\";\" rest:any* { name.len() * 100 + sep.len() * 10 + rest.len() }\n}\n";
+const PAIR: &str = "grammar Pair {\n    entry rule pair -> i64 = name:until(\";\") sep:\";\" rest:any* -> { name.len() * 100 + sep.len() * 10 + rest.len() }\n}\n";
 
 /// What Nikaia types as text is checked text over bytes (ADR-366 D2): an
 /// `until` and a literal's capture are taken through the backend's
@@ -118,7 +118,7 @@ fn what_is_text_over_bytes_is_checked_text() {
     assert_eq!(out, "212 212");
 }
 
-const REC: &str = "grammar Rec {\n    entry rule rec -> i64 = n:dec[i64](digit+) \":\" body:bytes(any*) { n * 1000 + body.len() }\n}\n";
+const REC: &str = "grammar Rec {\n    entry rule rec -> i64 = n:dec[i64](digit+) \":\" body:bytes(any*) -> { n * 1000 + body.len() }\n}\n";
 
 /// `bytes(p)` hands back the bytes `p` covered, over either input (ADR-366
 /// D4): the backend's `bytes(p)` over bytes, `text(p)` seen as its bytes over
@@ -186,7 +186,7 @@ fn an_entry_takes_text_or_bytes_only() {
 /// that are not UTF-8, kept by `bytes(p)` (ADR-366 D4).
 #[test]
 fn a_length_prefixed_binary_record() {
-    let source = "use std::fs\n\ngrammar Record {\n    entry rule record -> i64 = \"REC\" n:dec[i64](digit+) \":\" body:bytes(any*) { if body.len() == n { n * 10 } else { -1 } }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Record::record(raw) catch { -2 }\n    println(f\"{r}\")\n}\n";
+    let source = "use std::fs\n\ngrammar Record {\n    entry rule record -> i64 = \"REC\" n:dec[i64](digit+) \":\" body:bytes(any*) -> { if body.len() == n { n * 10 } else { -1 } }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Record::record(raw) catch { -2 }\n    println(f\"{r}\")\n}\n";
     let out = run(
         "grammar-bytes-record",
         source,
@@ -195,7 +195,7 @@ fn a_length_prefixed_binary_record() {
     assert_eq!(out, "40");
 }
 
-const ROW: &str = "use std::fs\n\ngrammar Row {\n    rule NAME -> ref String = s:until(\";\") { s }\n    entry rule row -> i64 = name:NAME \";\" t:dec[i64](digit+) { name.len() + t }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Row::row(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    println(f\"{r}\")\n}\n";
+const ROW: &str = "use std::fs\n\ngrammar Row {\n    rule NAME -> ref String = s:until(\";\") -> { s }\n    entry rule row -> i64 = name:NAME \";\" t:dec[i64](digit+) -> { name.len() + t }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Row::row(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    println(f\"{r}\")\n}\n";
 
 /// The first line of what the program printed.
 fn first_line(out: &str) -> &str {
@@ -235,7 +235,7 @@ fn a_bad_byte_in_a_digit_run_is_an_ordinary_parse_error() {
 /// over bytes.
 #[test]
 fn a_bad_byte_in_a_later_piece_counts_from_the_start() {
-    let source = "use std::fs\n\ngrammar Sum {\n    rule NAME -> ref String = s:until(\";\" | frame_end) { s }\n\n    @frame(boundary: \"\\n\")\n    rule ROW -> i64 = name:NAME \";\" => n:dec[i64](digit+) frame_end { n + name.len() }\n\n    entry rule total -> i64 = par_fold(ROW, zero, fn(acc, m) { acc + m }, add)\n}\n\nfn zero() -> i64 { return 0 }\nfn add(a: i64, b: i64) -> i64 { return a + b }\n\nfn main() {\n    let ok = fs::read(\"ok\", fs::Root::Anywhere) catch { return }\n    let okt = fs::read_to_string(\"ok\", fs::Root::Anywhere) catch { return }\n    let a = Sum::total(ok) catch { -1 }\n    let b = Sum::total(okt) catch { -1 }\n    println(f\"{a} {b}\")\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Sum::total(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    println(f\"{r}\")\n}\n";
+    let source = "use std::fs\n\ngrammar Sum {\n    rule NAME -> ref String = s:until(\";\" | frame_end) -> { s }\n\n    @frame(boundary: \"\\n\")\n    rule ROW -> i64 = name:NAME \";\" => n:dec[i64](digit+) frame_end -> { n + name.len() }\n\n    entry rule total -> i64 = par_fold(ROW, zero, fn(acc, m) { acc + m }, add)\n}\n\nfn zero() -> i64 { return 0 }\nfn add(a: i64, b: i64) -> i64 { return a + b }\n\nfn main() {\n    let ok = fs::read(\"ok\", fs::Root::Anywhere) catch { return }\n    let okt = fs::read_to_string(\"ok\", fs::Root::Anywhere) catch { return }\n    let a = Sum::total(ok) catch { -1 }\n    let b = Sum::total(okt) catch { -1 }\n    println(f\"{a} {b}\")\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Sum::total(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    println(f\"{r}\")\n}\n";
     let rows: Vec<u8> = (0..4000)
         .flat_map(|i| format!("r{i};{}\n", i % 10).into_bytes())
         .collect();
@@ -263,7 +263,7 @@ fn a_bad_byte_in_a_later_piece_counts_from_the_start() {
     );
 }
 
-const FIRST: &str = "use std::fs\n\ngrammar First {\n    entry rule first -> i64 = \"<\" c:any \";\" { if c == '\u{20AC}' { 3 } else if c == '\u{E4}' { 2 } else { 1 } }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let a = First::first(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    let t = fs::read_to_string(\"d\", fs::Root::Anywhere) catch {\n        println(f\"{a}\")\n        return\n    }\n    let b = First::first(t) catch { -1 }\n    println(f\"{a} {b}\")\n}\n";
+const FIRST: &str = "use std::fs\n\ngrammar First {\n    entry rule first -> i64 = \"<\" c:any \";\" -> { if c == '\u{20AC}' { 3 } else if c == '\u{E4}' { 2 } else { 1 } }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let a = First::first(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    let t = fs::read_to_string(\"d\", fs::Root::Anywhere) catch {\n        println(f\"{a}\")\n        return\n    }\n    let b = First::first(t) catch { -1 }\n    println(f\"{a} {b}\")\n}\n";
 
 /// **A lone `any` is one checked character over bytes too** (ADR-366 D2): the
 /// action that compares it with a character literal reads the same over a

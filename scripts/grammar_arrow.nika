@@ -1,0 +1,389 @@
+// Writes the arrow in front of every grammar action (#932): `pattern { action }`
+// becomes `pattern -> { action }`, as Part II 10.8 writes it again. A brace
+// that starts with a digit is a bound and stays; an action that already has its
+// arrow stays. A `.md` file is rewritten only inside its ```nika fences; a
+// `.rs` file in the grammars its strings hold, `\"` read as a quote there.
+//
+//     nikaia run scripts/grammar_arrow.nika -- FILE...
+
+use std::cli
+use std::fs
+
+struct Scan {
+    cs: Vec[scalar],
+    i: i64,
+    out: String,
+    // a grammar inside a Rust string: a quote is `\"`, a line ends at `\n`
+    escaped: bool,
+    added: i64,
+}
+
+fn at(s: ref Scan, k: i64) -> scalar {
+    if k >= 0 && k < s.cs.len() as i64 {
+        return s.cs[k]
+    }
+    return 0 as scalar
+}
+
+fn starts(s: ref Scan, word: String) -> bool {
+    let mut k = s.i
+    for w in word.chars() {
+        if at(s, k) != w {
+            return false
+        }
+        k += 1
+    }
+    return true
+}
+
+fn copy(mut s: Scan, n: i64) {
+    let mut k = 0
+    while k < n && s.i < s.cs.len() as i64 {
+        s.out.push(s.cs[s.i])
+        s.i += 1
+        k += 1
+    }
+}
+
+fn is_word(c: scalar) -> bool {
+    return c.is_alphanumeric() || c == '_'
+}
+
+// A quote opens a string here: `"`, or `\"` inside a Rust string.
+fn quote_len(s: ref Scan) -> i64 {
+    if s.escaped {
+        if at(s, s.i) == '\\' && at(s, s.i + 1) == '"' {
+            return 2
+        }
+        return 0
+    }
+    if at(s, s.i) == '"' {
+        return 1
+    }
+    return 0
+}
+
+fn copy_string(mut s: Scan) {
+    copy(s, quote_len(s))
+    while s.i < s.cs.len() as i64 {
+        if s.escaped {
+            if at(s, s.i) == '\\' && at(s, s.i + 1) == '\\' {
+                copy(s, 2)
+                continue
+            }
+            if at(s, s.i) == '\\' && at(s, s.i + 1) == '"' {
+                copy(s, 2)
+                return
+            }
+        } else {
+            if at(s, s.i) == '\\' {
+                copy(s, 2)
+                continue
+            }
+            if at(s, s.i) == '"' {
+                copy(s, 1)
+                return
+            }
+        }
+        copy(s, 1)
+    }
+}
+
+fn copy_comment(mut s: Scan) {
+    while s.i < s.cs.len() as i64 && at(s, s.i) != '\n' {
+        if s.escaped && at(s, s.i) == '\\' && at(s, s.i + 1) == 'n' {
+            return
+        }
+        copy(s, 1)
+    }
+}
+
+fn copy_char(mut s: Scan) -> bool {
+    if at(s, s.i) != '\'' {
+        return false
+    }
+    if at(s, s.i + 1) == '\\' && at(s, s.i + 3) == '\'' {
+        copy(s, 4)
+        return true
+    }
+    if at(s, s.i + 2) == '\'' {
+        copy(s, 3)
+        return true
+    }
+    return false
+}
+
+// One block, from its `{` to the `}` that closes it.
+fn copy_block(mut s: Scan) {
+    let mut depth = 0
+    while s.i < s.cs.len() as i64 {
+        let c = at(s, s.i)
+        if quote_len(s) > 0 {
+            copy_string(s)
+        } else if c == '/' && at(s, s.i + 1) == '/' {
+            copy_comment(s)
+        } else if copy_char(s) {
+            // copied
+        } else if c == '{' {
+            depth += 1
+            copy(s, 1)
+        } else if c == '}' {
+            depth -= 1
+            copy(s, 1)
+            if depth == 0 {
+                return
+            }
+        } else {
+            copy(s, 1)
+        }
+    }
+}
+
+// Whether what was written last, blanks aside, is `->`.
+fn after_arrow(s: ref Scan) -> bool {
+    let written: Vec[scalar] = s.out.chars().collect()
+    let mut k = written.len() as i64 - 1
+    while k >= 0 && (written[k] == ' ' || written[k] == '\n' || written[k] == '\t') {
+        k -= 1
+    }
+    return k >= 1 && written[k] == '>' && written[k - 1] == '-'
+}
+
+// A grammar's body, after its `{`, through the `}` that closes it.
+fn body(mut s: Scan) {
+    // inside a call's parentheses a brace is a lambda's body, never an action
+    let mut parens = 0
+    while s.i < s.cs.len() as i64 {
+        let c = at(s, s.i)
+        if c == '(' {
+            parens += 1
+            copy(s, 1)
+            continue
+        }
+        if c == ')' {
+            parens -= 1
+            copy(s, 1)
+            continue
+        }
+        if c == '{' && parens > 0 {
+            copy_block(s)
+            continue
+        }
+        if c == '}' {
+            copy(s, 1)
+            return
+        }
+        if quote_len(s) > 0 {
+            copy_string(s)
+        } else if c == '/' && at(s, s.i + 1) == '/' {
+            copy_comment(s)
+        } else if c == '{' && at(s, s.i + 1).is_ascii_digit() {
+            while s.i < s.cs.len() as i64 && at(s, s.i) != '}' {
+                copy(s, 1)
+            }
+            copy(s, 1)
+        } else if c == '{' {
+            if !after_arrow(s) {
+                if s.out.ends_with(" ") || s.out.ends_with("\t") {
+                    s.out.push_str("-> ")
+                } else if s.out.ends_with("\n") {
+                    s.out.push_str("-> ")
+                } else {
+                    s.out.push_str(" -> ")
+                }
+                s.added += 1
+            }
+            copy_block(s)
+        } else {
+            copy(s, 1)
+        }
+    }
+}
+
+// At `grammar Name {` (or `pub grammar`): the header, through its `{`.
+fn grammar_header(s: ref Scan) -> i64 {
+    // after `\n` in a Rust string a word character stands before it
+    let after_newline = at(s, s.i - 1) == 'n' && at(s, s.i - 2) == '\\'
+    if !starts(s, "grammar ") || (s.i > 0 && is_word(at(s, s.i - 1)) && !after_newline) {
+        return 0
+    }
+    let mut k = s.i + 8
+    if !at(s, k).is_uppercase() {
+        return 0
+    }
+    while is_word(at(s, k)) {
+        k += 1
+    }
+    while at(s, k) == ' ' {
+        k += 1
+    }
+    if at(s, k) != '{' {
+        return 0
+    }
+    return k + 1 - s.i
+}
+
+fn rewrite(text: String, rust: bool, markdown: bool) -> (String, i64) {
+    if rust {
+        return rewrite_rust(text)
+    }
+    let mut s = Scan { cs: text.chars().collect(), i: 0, out: "", escaped: false, added: 0 }
+    let mut fenced = false
+    while s.i < s.cs.len() as i64 {
+        if markdown && (s.i == 0 || at(s, s.i - 1) == '\n') && starts(s, "```") {
+            fenced = starts(s, "```nika")
+            copy(s, 3)
+            continue
+        }
+        let n = grammar_header(s)
+        if n > 0 && (!markdown || fenced) {
+            copy(s, n)
+            body(s)
+        } else {
+            copy(s, 1)
+        }
+    }
+    return (s.out.clone(), s.added)
+}
+
+// A grammar inside a string literal of its own; anything around it, other
+// strings and comments included, is copied as it stands.
+fn rewrite_literal(literal: String, escaped: bool) -> (String, i64) {
+    // a format string doubles its braces: written by hand
+    let chars: Vec[scalar] = literal.chars().collect()
+    let mut doubled = false
+    for k in 1..<chars.len() {
+        if chars[k] == '{' && chars[k - 1] == '{' {
+            doubled = true
+        }
+    }
+    if doubled {
+        return (literal.clone(), 0)
+    }
+    let mut s = Scan { cs: literal.chars().collect(), i: 0, out: "", escaped: escaped, added: 0 }
+    while s.i < s.cs.len() as i64 {
+        let n = grammar_header(s)
+        if n > 0 {
+            copy(s, n)
+            body(s)
+        } else {
+            copy(s, 1)
+        }
+    }
+    return (s.out.clone(), s.added)
+}
+
+// Rust source: each string literal on its own.
+fn rewrite_rust(text: String) -> (String, i64) {
+    let cs: Vec[scalar] = text.chars().collect()
+    let n = cs.len() as i64
+    let mut out: String = ""
+    let mut added = 0
+    let mut i = 0
+    while i < n {
+        let c = cs[i]
+        if c == '/' && i + 1 < n && cs[i + 1] == '/' {
+            while i < n && cs[i] != '\n' {
+                out.push(cs[i])
+                i += 1
+            }
+            continue
+        }
+        if c == '\'' && i + 2 < n && (cs[i + 2] == '\'' || (cs[i + 1] == '\\' && i + 3 < n && cs[i + 3] == '\'')) {
+            // a char literal, `'"'` among them
+            let len = if cs[i + 1] == '\\' { 4 } else { 3 }
+            for k in 0..<len {
+                out.push(cs[i + k])
+            }
+            i += len
+            continue
+        }
+        let raw = c == 'r' && i + 1 < n && (cs[i + 1] == '"' || cs[i + 1] == '#') && (i == 0 || !is_word(cs[i - 1]))
+        if raw {
+            let mut hashes = 0
+            let mut k = i + 1
+            while k < n && cs[k] == '#' {
+                hashes += 1
+                k += 1
+            }
+            if k < n && cs[k] == '"' {
+                let mut head: String = ""
+                for j in i..<(k + 1) {
+                    head.push(cs[j])
+                }
+                out.push_str(head)
+                let mut end = k + 1
+                let mut found = false
+                while end < n && !found {
+                    if cs[end] == '"' {
+                        let mut h = 0
+                        while h < hashes && end + 1 + h < n && cs[end + 1 + h] == '#' {
+                            h += 1
+                        }
+                        if h == hashes {
+                            found = true
+                            continue
+                        }
+                    }
+                    end += 1
+                }
+                let mut inner: String = ""
+                for j in (k + 1)..<end {
+                    inner.push(cs[j])
+                }
+                let (done, more) = rewrite_literal(inner, false)
+                out.push_str(done)
+                added += more
+                // the closing quote and its hashes
+                let mut j = end
+                while j < n && j <= end + hashes {
+                    out.push(cs[j])
+                    j += 1
+                }
+                i = j
+                continue
+            }
+        }
+        if c == '"' {
+            out.push(c)
+            let mut end = i + 1
+            while end < n && cs[end] != '"' {
+                if cs[end] == '\\' {
+                    end += 1
+                }
+                end += 1
+            }
+            let mut inner: String = ""
+            for j in (i + 1)..<end {
+                inner.push(cs[j])
+            }
+            let (done, more) = rewrite_literal(inner, true)
+            out.push_str(done)
+            added += more
+            if end < n {
+                out.push(cs[end])
+            }
+            i = end + 1
+            continue
+        }
+        out.push(c)
+        i += 1
+    }
+    return (out, added)
+}
+
+fn main() throws {
+    let mut first = true
+    for path in cli::args() {
+        if first {
+            first = false
+            continue
+        }
+        let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+        let (out, added) = rewrite(text, path.ends_with(".rs"), path.ends_with(".md"))
+        if added > 0 {
+            fs::write(path.clone(), fs::Root::Anywhere, out)
+            println(f"{path}: {added}")
+        }
+    }
+}

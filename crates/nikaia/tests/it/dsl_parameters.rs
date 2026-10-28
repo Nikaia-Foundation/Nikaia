@@ -403,7 +403,7 @@ fn a_package_where_a_grammar_stands_is_nk1228() {
 /// compiler's own template, both named bare.
 #[test]
 fn a_programs_grammar_and_html_stay_bare() {
-    let source = "use std::html\n\ngrammar Sql {\n    entry rule word -> ref String = w:until(\";\") { w }\n}\n\n\
+    let source = "use std::html\n\ngrammar Sql {\n    entry rule word -> ref String = w:until(\";\") -> { w }\n}\n\n\
                   fn main() {\n    let id: i64 = 3\n    \
                   let q = dsl Sql {\n        SELECT :id\n    } eod\n    \
                   let page = dsl html {\n        <p>hi</p>\n    } eod\n    \

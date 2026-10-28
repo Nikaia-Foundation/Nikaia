@@ -46,45 +46,45 @@ grammar Json_ {
     // mentions blanks, and `[1, 2]` and a document spread over forty lines
     // parse the same. `value` reaches `value` again through `[` and `{`.
     entry rule value -> Json =
-          "null" { Json::Null }
-        | "true" { Json::Bool(true) }
-        | "false" { Json::Bool(false) }
-        | n:NUMBER { Json::Number(n) }
-        | s:TEXT { Json::Text(s) }
-        | "[" "]" { Json::Array(Vec()) }
-        | "[" items:values "]" { Json::Array(items) }
-        | "{" "}" { Json::Object(Vec()) }
-        | "{" members:members "}" { Json::Object(members) }
+          "null" -> { Json::Null }
+        | "true" -> { Json::Bool(true) }
+        | "false" -> { Json::Bool(false) }
+        | n:NUMBER -> { Json::Number(n) }
+        | s:TEXT -> { Json::Text(s) }
+        | "[" "]" -> { Json::Array(Vec()) }
+        | "[" items:values "]" -> { Json::Array(items) }
+        | "{" "}" -> { Json::Object(Vec()) }
+        | "{" members:members "}" -> { Json::Object(members) }
 
     // A comma-separated list: a head and a repetition, collected in the
     // action. `values = values "," value` would never terminate.
     rule values -> Vec[Json] =
-        head:value tail:value_tail* {
+        head:value tail:value_tail* -> {
             let mut all = Vec()
             all.push(head)
             for v in tail.drain() { all.push(v) }
             all
         }
 
-    rule value_tail -> Json = "," v:value { v }
+    rule value_tail -> Json = "," v:value -> { v }
 
     rule members -> Vec[Member] =
-        head:member tail:member_tail* {
+        head:member tail:member_tail* -> {
             let mut all = Vec()
             all.push(head)
             for m in tail.drain() { all.push(m) }
             all
         }
 
-    rule member_tail -> Member = "," m:member { m }
+    rule member_tail -> Member = "," m:member -> { m }
 
-    rule member -> Member = k:TEXT ":" v:value { Member { key: k, value: v } }
+    rule member -> Member = k:TEXT ":" v:value -> { Member { key: k, value: v } }
 
     // An uppercase rule skips nothing, so the sign, the digits and the fraction
     // are one run with nothing between them. `dec[f64](…)` converts the text
     // the pattern matched.
     rule NUMBER -> f64 =
-        n:dec[f64](text("-"? digit+ ("." digit+)? )) { n }
+        n:dec[f64](text("-"? digit+ ("." digit+)? )) -> { n }
 
     // The body between the quotes, raw: escapes are kept as written. The body
     // `a\nb` is four characters in the file and three once decoded, so a JSON
@@ -93,10 +93,10 @@ grammar Json_ {
     // An escape is a backslash and whatever follows it; anything else is a
     // character that is neither a quote nor a backslash. `text(…)` hands back
     // the input the repetition covered, as a view: one slice, no copy.
-    rule TEXT -> String = "\"" s:text((ESC | PLAIN)*) "\"" { s }
+    rule TEXT -> String = "\"" s:text((ESC | PLAIN)*) "\"" -> { s }
 
-    rule ESC = "\\" any { }
-    rule PLAIN = not("\"") not("\\") any { }
+    rule ESC = "\\" any -> { }
+    rule PLAIN = not("\"") not("\\") any -> { }
 }
 
 // The document, printed back with two spaces per level.

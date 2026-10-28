@@ -26,7 +26,7 @@ grammar Calc {
     // `a - b - c` means `(a - b) - c`: the tails are collected and folded left to
     // right in the action. (`expr = expr "-" term` would never terminate.)
     entry rule expr -> i64 =
-        head:term tail:add_tail* {
+        head:term tail:add_tail* -> {
             let mut value = head
             for t in tail { value = value + t }
             value
@@ -34,15 +34,15 @@ grammar Calc {
 
     // Subtraction is addition of a negation, so the fold above needs no operator.
     rule add_tail -> i64 =
-          "+" t:term { t }
-        | "-" t:term { -t }
+          "+" t:term -> { t }
+        | "-" t:term -> { -t }
 
     // Division cannot be folded that way, so each operand travels with its
     // operator as a pair `(Op, i64)`, and `match` takes the pair apart.
     // `term` sits between `expr` and `factor`, which is why `*` binds tighter
     // than `+`: precedence is the order of the rules, not a table.
     rule term -> i64 =
-        head:factor tail:mul_tail* {
+        head:factor tail:mul_tail* -> {
             let mut value = head
             for step in tail {
                 match step {
@@ -54,11 +54,11 @@ grammar Calc {
         }
 
     rule mul_tail -> (Op, i64) =
-        op:mul_op f:factor { (op, f) }
+        op:mul_op f:factor -> { (op, f) }
 
     rule mul_op -> Op =
-          "*" { Op::Times }
-        | "/" { Op::Divide }
+          "*" -> { Op::Times }
+        | "/" -> { Op::Divide }
 
     // The recursion: `expr` is reached again inside the parentheses, so
     // `(10 - 4)` is a factor and multiplies like one.
@@ -66,15 +66,15 @@ grammar Calc {
     // `# "expression"` names the rule in error messages: `2 +` reports
     // `expected expression` rather than listing every way an operand can start.
     rule factor -> i64 # "expression" =
-          "(" e:expr ")" { e }
-        | "-" f:factor { -f }
-        | n:NUMBER { n }
+          "(" e:expr ")" -> { e }
+        | "-" f:factor -> { -f }
+        | n:NUMBER -> { n }
 
     // An uppercase rule is *lexical*: nothing is skipped between the digits, so
     // "1 2" is not one number. `dec[i64](…)` turns the digits into an `i64`; a
     // number too large for one is a parse error, not a silent wrap.
     rule NUMBER -> i64 =
-        n:dec[i64](digit+) { n }
+        n:dec[i64](digit+) -> { n }
 }
 
 fn main() throws {

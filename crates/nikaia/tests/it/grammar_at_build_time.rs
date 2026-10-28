@@ -69,13 +69,13 @@ const SETTINGS: &str = "pub struct Setting {\n\
      }\n\
      \n\
      grammar Cfg {\n\
-     \x20   rule WSE = multispace1 { }\n\
-     \x20   rule WS = (WSE | COMMENT)* { }\n\
-     \x20   rule COMMENT = \"#\" until(line_ending) { }\n\
-     \x20   rule NAME -> ref String = s:raw_ident { s }\n\
-     \x20   rule VALUE -> ref String = s:until(\"#\" | line_ending) { s.trim() }\n\
-     \x20   rule setting -> Setting = key:NAME \"=\" value:VALUE { Setting { key, value } }\n\
-     \x20   entry rule file -> Vec[Setting] = settings:setting* { settings }\n\
+     \x20   rule WSE = multispace1 -> { }\n\
+     \x20   rule WS = (WSE | COMMENT)* -> { }\n\
+     \x20   rule COMMENT = \"#\" until(line_ending) -> { }\n\
+     \x20   rule NAME -> ref String = s:raw_ident -> { s }\n\
+     \x20   rule VALUE -> ref String = s:until(\"#\" | line_ending) -> { s.trim() }\n\
+     \x20   rule setting -> Setting = key:NAME \"=\" value:VALUE -> { Setting { key, value } }\n\
+     \x20   entry rule file -> Vec[Setting] = settings:setting* -> { settings }\n\
      }\n";
 
 /// **The parse happens while the program is built, and what is left is the
@@ -160,15 +160,15 @@ fn invalid_input_fails_the_build_in_the_parsers_own_words() {
 const SHADES: &str = "enum Shade { Odd, Even, Named(ref String), Weight(f64) }\n\
      \n\
      grammar Pick {\n\
-     \x20   rule WSE = multispace1 { }\n\
-     \x20   rule WS = WSE* { }\n\
-     \x20   rule NUM -> f64 = n:dec[f64](text(digit+ (\".\" digit+)?)) { n }\n\
-     \x20   rule ONE -> Shade = \"odd\" { Shade::Odd }\n\
-     \x20   rule TWO -> Shade = \"even\" { Shade::Even }\n\
-     \x20   rule THREE -> Shade = \"n:\" s:raw_ident { Shade::Named(s) }\n\
-     \x20   rule FOUR -> Shade = \"w:\" n:NUM { Shade::Weight(n) }\n\
-     \x20   rule SHADE -> Shade = s:(ONE | TWO | THREE | FOUR) { s }\n\
-     \x20   entry rule many -> Vec[Shade] = shades:SHADE* { shades }\n\
+     \x20   rule WSE = multispace1 -> { }\n\
+     \x20   rule WS = WSE* -> { }\n\
+     \x20   rule NUM -> f64 = n:dec[f64](text(digit+ (\".\" digit+)?)) -> { n }\n\
+     \x20   rule ONE -> Shade = \"odd\" -> { Shade::Odd }\n\
+     \x20   rule TWO -> Shade = \"even\" -> { Shade::Even }\n\
+     \x20   rule THREE -> Shade = \"n:\" s:raw_ident -> { Shade::Named(s) }\n\
+     \x20   rule FOUR -> Shade = \"w:\" n:NUM -> { Shade::Weight(n) }\n\
+     \x20   rule SHADE -> Shade = s:(ONE | TWO | THREE | FOUR) -> { s }\n\
+     \x20   entry rule many -> Vec[Shade] = shades:SHADE* -> { shades }\n\
      }\n";
 
 /// **An `enum` crosses, by the variant the value *is*.**
@@ -235,8 +235,8 @@ fn a_variant_with_named_fields_is_refused_by_name() {
     let source = "enum Shape { Spot { x: i64 } }\n\
          \n\
          grammar Pick {\n\
-         \x20   rule WS = multispace0 { }\n\
-         \x20   entry rule one -> Shape = \"spot\" { Shape::Spot { x: 1 } }\n\
+         \x20   rule WS = multispace0 -> { }\n\
+         \x20   entry rule one -> Shape = \"spot\" -> { Shape::Spot { x: 1 } }\n\
          }\n\
          \n\
          comptime CHOICE: Shape = Pick::one(\"spot\")\n\
@@ -401,8 +401,8 @@ fn an_action_that_reaches_c_is_refused_once() {
          fn doubled(n: i64) -> i64 {\n    return n * 2 + unsafe { abs(-1) } as i64\n}\n\n\
          fn tripled(n: i64) -> i64 {\n    return n * 3\n}\n\n\
          grammar Num {\n    \
-         entry rule n -> i64 = d:dec[i64](digit+) { doubled(d) }\n    \
-         entry rule t -> i64 = d:dec[i64](digit+) { tripled(d) }\n}\n\n\
+         entry rule n -> i64 = d:dec[i64](digit+) -> { doubled(d) }\n    \
+         entry rule t -> i64 = d:dec[i64](digit+) -> { tripled(d) }\n}\n\n\
          comptime N: i64 = Num::n(\"21\")\n\
          comptime T: i64 = Num::t(\"21\")\n\n\
          fn main() {\n    println(f\"{N} {T}\")\n}\n";

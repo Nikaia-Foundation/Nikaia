@@ -63,10 +63,10 @@ fn a_1brc_measurement_takes_at_least_five_bytes() {
 
 const WIDTHS: &str = "\
 grammar Widths {
-    rule EMPTY -> String = s:text(\"a\"*) { s }
-    rule NESTED -> i64 = \"ab\" n:NESTED { n } | \"abc\" { 1 }
-    rule THREE -> i64 = digit{3} \"\\n\" { 1 }
-    entry rule file -> i64 = n:THREE { n }
+    rule EMPTY -> String = s:text(\"a\"*) -> { s }
+    rule NESTED -> i64 = \"ab\" n:NESTED -> { n } | \"abc\" -> { 1 }
+    rule THREE -> i64 = digit{3} \"\\n\" -> { 1 }
+    entry rule file -> i64 = n:THREE -> { n }
 }
 
 fn main() {
@@ -215,7 +215,7 @@ fn the_1brc_output_is_unchanged_without_the_counters_checks() {
 const TALLY: &str = "\
 grammar Lines {
     @frame(boundary: \"\\n\")
-    rule LINE -> i64 = digit+ frame_end { 1 }
+    rule LINE -> i64 = digit+ frame_end -> { 1 }
     entry rule file -> Tally = fold(LINE, Tally { lines: 0, total: 0 }, fn(acc, n) { acc.lines += 1
         acc.total -= 2 })
 }

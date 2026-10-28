@@ -145,12 +145,12 @@ use text
 grammar Temps {
     entry rule tenths -> i32 =
         neg:\"-\"? whole:dec[i32](digit{1,2}) \".\" frac:digit
-        {
+        -> {
             let value = whole * 10 + text::digit_value(frac)
             if neg != null { -value } else { value }
         }
 
-    entry rule any -> i64 = n:dec[i64](digit+) { n * 10 }
+    entry rule any -> i64 = n:dec[i64](digit+) -> { n * 10 }
 }
 
 fn flipped(n: i64) -> i64 {
@@ -216,7 +216,7 @@ const DIGITS: &str = "\
 grammar Digits {
     entry rule two -> i32 =
         x:digit{1,2}
-        {
+        -> {
             let mut n: i32 = 0
             for d in x.chars() {
                 n = n * 10 + (d as i32 - 48)
@@ -227,7 +227,7 @@ grammar Digits {
 
     entry rule many -> i64 =
         x:digit+
-        {
+        -> {
             x.len() * 2000000000000000000
         }
 }

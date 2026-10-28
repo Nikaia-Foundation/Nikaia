@@ -67,50 +67,50 @@ impl Error for Refused {
 grammar LedgerText {
 
     // Nothing is skipped: a line is read character by character.
-    rule WS = "" { }
+    rule WS = "" -> { }
 
     entry rule file -> Vec[LedgerLine] =
-        ls:line* last:BODY eof {
+        ls:line* last:BODY eof -> {
             let mut all = Vec()
             for l in ls.drain() { all.push(l) }
             all.push(last)
             all
         }
 
-    rule line -> LedgerLine = l:BODY line_ending { l }
+    rule line -> LedgerLine = l:BODY line_ending -> { l }
 
     // The spaces in front once, and then what the first character says the
     // line is: one choice per line rather than one per kind of line.
-    rule BODY -> LedgerLine = SP l:AFTER { l }
+    rule BODY -> LedgerLine = SP l:AFTER -> { l }
 
     rule AFTER -> LedgerLine =
-          "#" REST { LedgerLine::Nothing }
-        | "[" t:TABLE { t }
-        | peek(END) { LedgerLine::Nothing }
-        | k:text(KEY) "=" v:text(REST) { LedgerLine::Pair { key: k.trim(), value: v.trim() } }
-        | r:text(REST) { LedgerLine::Bad(r.trim()) }
+          "#" REST -> { LedgerLine::Nothing }
+        | "[" t:TABLE -> { t }
+        | peek(END) -> { LedgerLine::Nothing }
+        | k:text(KEY) "=" v:text(REST) -> { LedgerLine::Pair { key: k.trim(), value: v.trim() } }
+        | r:text(REST) -> { LedgerLine::Bad(r.trim()) }
 
     rule TABLE -> LedgerLine =
-          "sources]" SP peek(END) { LedgerLine::Sources }
-        | k:KIND ".\"" n:text(NAME) CLOSE { LedgerLine::Table { kind: k, name: n } }
-        | KIND ".\"" REST { LedgerLine::Unterminated }
+          "sources]" SP peek(END) -> { LedgerLine::Sources }
+        | k:KIND ".\"" n:text(NAME) CLOSE -> { LedgerLine::Table { kind: k, name: n } }
+        | KIND ".\"" REST -> { LedgerLine::Unterminated }
 
     rule KIND -> ref String =
-          "fn" { "fn" }
-        | "type" { "type" }
-        | "trait" { "trait" }
-        | "impl" { "impl" }
+          "fn" -> { "fn" }
+        | "type" -> { "type" }
+        | "trait" -> { "trait" }
+        | "impl" -> { "impl" }
 
-    rule SP = SPACE* { }
-    rule SPACE = " " { } | "\t" { }
-    rule END = line_ending { } | eof { }
+    rule SP = SPACE* -> { }
+    rule SPACE = " " -> { } | "\t" -> { }
+    rule END = line_ending -> { } | eof -> { }
     // The rest of a line, found in one scan to its end rather than a
     // character at a time: most of a ledger is comments (10.7).
-    rule REST = until(line_ending | eof) { }
-    rule CLOSE = "\"]" SP peek(END) { }
+    rule REST = until(line_ending | eof) -> { }
+    rule CLOSE = "\"]" SP peek(END) -> { }
     // A table's name and a key, each in one scan to what ends it.
-    rule NAME = until("\"]" | line_ending | eof) { }
-    rule KEY = until("=" | line_ending | eof) { }
+    rule NAME = until("\"]" | line_ending | eof) -> { }
+    rule KEY = until("=" | line_ending | eof) -> { }
 }
 
 // **A value's two shapes**, a quoted string and a list of them, each entry a
@@ -118,13 +118,13 @@ grammar LedgerText {
 // and a `\` before a character keeps it from ending one.
 grammar LedgerValue {
 
-    entry rule list -> Vec[ref String] = "[" items:list(QUOTED, ",") TRAILING "]" eof { items }
+    entry rule list -> Vec[ref String] = "[" items:list(QUOTED, ",") TRAILING "]" eof -> { items }
 
-    rule TRAILING = "," { } | empty { }
-    rule QUOTED -> ref String = "\"" s:text(INSIDE) "\"" { s }
-    rule INSIDE = PIECE* { }
-    rule PIECE = ESCAPED { } | not("\"") not("\\") any { }
-    rule ESCAPED = "\\" any { }
+    rule TRAILING = "," -> { } | empty -> { }
+    rule QUOTED -> ref String = "\"" s:text(INSIDE) "\"" -> { s }
+    rule INSIDE = PIECE* -> { }
+    rule PIECE = ESCAPED -> { } | not("\"") not("\\") any -> { }
+    rule ESCAPED = "\\" any -> { }
 }
 
 /// What a quoted string holds: `\n` is a line break, and a `\` before any
@@ -882,85 +882,85 @@ struct Signed {
 grammar SignatureText {
 
     entry rule signature -> Signed =
-        d:bracket "(" ps:list(part, ",") TRAILING ss:settings ")" r:result? eof {
+        d:bracket "(" ps:list(part, ",") TRAILING ss:settings ")" r:result? eof -> {
             Signed { declared: d, parts: ps, settings: ss, result: r }
         }
 
-    rule bracket -> Vec[Declared] = "[" ds:list(declared, ",") "]" { ds } | empty { Vec() }
+    rule bracket -> Vec[Declared] = "[" ds:list(declared, ",") "]" -> { ds } | empty -> { Vec() }
 
     rule declared -> Declared =
-          n:raw_ident COLON ts:list(BOUND, "+") { Declared { name: n, traits: ts } }
-        | n:raw_ident { Declared { name: n, traits: Vec() } }
+          n:raw_ident COLON ts:list(BOUND, "+") -> { Declared { name: n, traits: ts } }
+        | n:raw_ident -> { Declared { name: n, traits: Vec() } }
 
     rule part -> Piece =
-          REF MUT SELF { Piece::Owner { view: true, mutates: true } }
-        | REF SELF { Piece::Owner { view: true, mutates: false } }
-        | MUT SELF COLON t:TYPE { Piece::Typed { ty: t, mutates: true } }
-        | SELF COLON t:TYPE { Piece::Typed { ty: t, mutates: false } }
-        | SELF { Piece::Owner { view: false, mutates: false } }
-        | MUT n:raw_ident COLON t:TYPE { Piece::Named { name: n, ty: t, mutable: true } }
-        | n:raw_ident COLON t:TYPE { Piece::Named { name: n, ty: t, mutable: false } }
-        | t:TYPE { Piece::Typed { ty: t, mutates: false } }
+          REF MUT SELF -> { Piece::Owner { view: true, mutates: true } }
+        | REF SELF -> { Piece::Owner { view: true, mutates: false } }
+        | MUT SELF COLON t:TYPE -> { Piece::Typed { ty: t, mutates: true } }
+        | SELF COLON t:TYPE -> { Piece::Typed { ty: t, mutates: false } }
+        | SELF -> { Piece::Owner { view: false, mutates: false } }
+        | MUT n:raw_ident COLON t:TYPE -> { Piece::Named { name: n, ty: t, mutable: true } }
+        | n:raw_ident COLON t:TYPE -> { Piece::Named { name: n, ty: t, mutable: false } }
+        | t:TYPE -> { Piece::Typed { ty: t, mutates: false } }
 
-    rule settings -> Vec[Setting] = ";" ss:list(setting, ",") TRAILING { ss } | empty { Vec() }
+    rule settings -> Vec[Setting] = ";" ss:list(setting, ",") TRAILING -> { ss } | empty -> { Vec() }
 
     rule setting -> Setting =
-        n:raw_ident COLON t:SETTING_TYPE "=" d:DEFAULT { Setting { name: n, ty: t, default: d } }
+        n:raw_ident COLON t:SETTING_TYPE "=" d:DEFAULT -> { Setting { name: n, ty: t, default: d } }
 
-    rule result -> ref String = "->" t:REST { t }
+    rule result -> ref String = "->" t:REST -> { t }
 
     // The names a result points into: every `ref(a | b)` in it, and a word
     // that only ends in `ref` is not one.
-    entry rule pointed -> Vec[Vec[ref String]] = ps:POINTING* eof { ps }
+    entry rule pointed -> Vec[Vec[ref String]] = ps:POINTING* eof -> { ps }
 
     rule POINTING -> Vec[ref String] =
-          "ref(" ns:list(POINTED_NAME, "|") ")" { ns }
-        | WORD_CHARS { Vec() }
-        | any { Vec() }
+          "ref(" ns:list(POINTED_NAME, "|") ")" -> { ns }
+        | WORD_CHARS -> { Vec() }
+        | any -> { Vec() }
 
-    rule POINTED_NAME -> ref String = WS0 n:raw_ident WS0 { n }
-    rule WS0 = " "* { }
-    rule WORD_CHARS = WORD_CHAR+ { }
-    rule WORD_CHAR = alpha1 { } | digit { } | "_" { } | "$" { }
+    rule POINTED_NAME -> ref String = WS0 n:raw_ident WS0 -> { n }
+    rule WS0 = " "* -> { }
+    rule WORD_CHARS = WORD_CHAR+ -> { }
+    rule WORD_CHAR = alpha1 -> { } | digit -> { } | "_" -> { } | "$" -> { }
 
-    rule REF = "ref" not(WORD_CHAR) { }
-    rule MUT = "mut" not(WORD_CHAR) { }
-    rule SELF = "self" not(WORD_CHAR) { }
-    rule COLON = ":" not(":") { }
-    rule TRAILING = "," { } | empty { }
+    rule REF = "ref" not(WORD_CHAR) -> { }
+    rule MUT = "mut" not(WORD_CHAR) -> { }
+    rule SELF = "self" not(WORD_CHAR) -> { }
+    rule COLON = ":" not(":") -> { }
+    rule TRAILING = "," -> { } | empty -> { }
 
-    rule BOUND -> ref String = t:text(BOUND_RUN) { t.trim() }
-    rule BOUND_RUN = BOUND_PIECE+ { }
-    rule BOUND_PIECE = not("+") not(",") not("]") SPAN { }
+    rule BOUND -> ref String = t:text(BOUND_RUN) -> { t.trim() }
+    rule BOUND_RUN = BOUND_PIECE+ -> { }
+    rule BOUND_PIECE = not("+") not(",") not("]") SPAN -> { }
 
-    rule TYPE -> ref String = t:text(TYPE_RUN) { t.trim() }
-    rule TYPE_RUN = TYPE_PIECE+ { }
-    rule TYPE_PIECE = not(",") not(")") not(";") SPAN { }
+    rule TYPE -> ref String = t:text(TYPE_RUN) -> { t.trim() }
+    rule TYPE_RUN = TYPE_PIECE+ -> { }
+    rule TYPE_PIECE = not(",") not(")") not(";") SPAN -> { }
 
-    rule SETTING_TYPE -> ref String = t:text(SETTING_RUN) { t.trim() }
-    rule SETTING_RUN = SETTING_PIECE+ { }
-    rule SETTING_PIECE = not("=") not(",") not(")") SPAN { }
+    rule SETTING_TYPE -> ref String = t:text(SETTING_RUN) -> { t.trim() }
+    rule SETTING_RUN = SETTING_PIECE+ -> { }
+    rule SETTING_PIECE = not("=") not(",") not(")") SPAN -> { }
 
-    rule DEFAULT -> ref String = t:text(DEFAULT_RUN) { t.trim() }
-    rule DEFAULT_RUN = DEFAULT_PIECE+ { }
-    rule DEFAULT_PIECE = not(",") not(")") SPAN { }
+    rule DEFAULT -> ref String = t:text(DEFAULT_RUN) -> { t.trim() }
+    rule DEFAULT_RUN = DEFAULT_PIECE+ -> { }
+    rule DEFAULT_PIECE = not(",") not(")") SPAN -> { }
 
-    rule REST -> ref String = t:text(REST_RUN) { t.trim() }
-    rule REST_RUN = until(eof) { }
+    rule REST -> ref String = t:text(REST_RUN) -> { t.trim() }
+    rule REST_RUN = until(eof) -> { }
 
     // One unit of a type: a bracket group with what is inside it, a quoted
     // string, or one character.
     // A brace group too: a default may be a struct, `Point { x: 1, y: 2 }`
     // (ADR-318 D3), whose commas are its own.
-    rule SPAN = PARENS { } | BRACKETS { } | BRACES { } | STRING { } | any { }
-    rule PARENS = "(" IN_PARENS* ")" { }
-    rule BRACES = "{" IN_BRACES* "}" { }
-    rule IN_BRACES = not("}") SPAN { }
-    rule IN_PARENS = not(")") SPAN { }
-    rule BRACKETS = "[" IN_BRACKETS* "]" { }
-    rule IN_BRACKETS = not("]") SPAN { }
-    rule STRING = "\"" STRING_PIECE* "\"" { }
-    rule STRING_PIECE = "\\" any { } | not("\"") any { }
+    rule SPAN = PARENS -> { } | BRACKETS -> { } | BRACES -> { } | STRING -> { } | any -> { }
+    rule PARENS = "(" IN_PARENS* ")" -> { }
+    rule BRACES = "{" IN_BRACES* "}" -> { }
+    rule IN_BRACES = not("}") SPAN -> { }
+    rule IN_PARENS = not(")") SPAN -> { }
+    rule BRACKETS = "[" IN_BRACKETS* "]" -> { }
+    rule IN_BRACKETS = not("]") SPAN -> { }
+    rule STRING = "\"" STRING_PIECE* "\"" -> { }
+    rule STRING_PIECE = "\\" any -> { } | not("\"") any -> { }
 }
 
 /// **A signature read back from either spelling**, with what the file's

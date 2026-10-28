@@ -32,7 +32,7 @@ Expected type here, but found `=`. (line 2, column 12)
 Expected `:` here, but found `ref`. (line 2, column 10)
 
 === C2
-An action doesn't take an arrow. (line 2, column 33)
+An action stands after an arrow: write `pattern -> { action }`. (line 2, column 30)
 
 === C3
 Expected `)` here, but found `{`. (line 1, column 10)
@@ -50,7 +50,7 @@ A single `/` is division, and nothing stands before it to divide. (line 3, colum
 `=` gives a name a value; a condition compares with `==`. (line 2, column 10)
 
 === D3
-A pattern can't contain `->`: the only `->` in a rule is its result type. (line 2, column 28)
+A pattern can't contain `->` except in front of its action. (line 2, column 28)
 
 === E1
 Expected `}` here, but found `{`. (line 2, column 32)

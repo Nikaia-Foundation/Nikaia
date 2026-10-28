@@ -67,15 +67,15 @@ struct SelfHostingLet {
 }
 
 grammar SelfHostingMini {
-    rule WS = (" " | "\t")* { }
-    rule NL = ("\n" | " " | "\t")* { }
-    rule NAME -> String = s:raw_ident { s.clone() }
-    rule NUM -> i64 = d:digit+ { text::parse_i64(d) ?? 0 }
-    rule atom -> SelfHostingExpr = WS n:NUM WS { SelfHostingExpr::Num(n) } | WS s:NAME WS { SelfHostingExpr::Name(s) }
-    rule term -> SelfHostingExpr = a:atom "*" b:term { SelfHostingExpr::Mul(a, b) } | a:atom { a }
-    rule expr -> SelfHostingExpr = a:term "+" b:expr { SelfHostingExpr::Add(a, b) } | a:term { a }
-    rule line -> SelfHostingLet = NL "let" WS name:NAME WS "=" value:expr { SelfHostingLet { name, value } }
-    entry rule program -> Vec[SelfHostingLet] = lines:line* NL { lines }
+    rule WS = (" " | "\t")* -> { }
+    rule NL = ("\n" | " " | "\t")* -> { }
+    rule NAME -> String = s:raw_ident -> { s.clone() }
+    rule NUM -> i64 = d:digit+ -> { text::parse_i64(d) ?? 0 }
+    rule atom -> SelfHostingExpr = WS n:NUM WS -> { SelfHostingExpr::Num(n) } | WS s:NAME WS -> { SelfHostingExpr::Name(s) }
+    rule term -> SelfHostingExpr = a:atom "*" b:term -> { SelfHostingExpr::Mul(a, b) } | a:atom -> { a }
+    rule expr -> SelfHostingExpr = a:term "+" b:expr -> { SelfHostingExpr::Add(a, b) } | a:term -> { a }
+    rule line -> SelfHostingLet = NL "let" WS name:NAME WS "=" value:expr -> { SelfHostingLet { name, value } }
+    entry rule program -> Vec[SelfHostingLet] = lines:line* NL -> { lines }
 }
 
 fn self_hosting_emit(e: ref SelfHostingExpr) -> String {

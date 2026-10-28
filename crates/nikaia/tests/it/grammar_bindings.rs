@@ -27,27 +27,27 @@ fn a_rule_binding_is_the_rule_s_result() {
     let fine = r#"
 grammar Calc {
     entry rule expr -> i64 =
-        head:term tail:add_tail* {
+        head:term tail:add_tail* -> {
             let mut value = head
             for t in tail { value = value + t }
             value
         }
     rule add_tail -> i64 =
-          "+" t:term { t }
-        | "-" t:term { -t }
-    rule term -> i64 = n:dec[i64](digit+) { n }
+          "+" t:term -> { t }
+        | "-" t:term -> { -t }
+    rule term -> i64 = n:dec[i64](digit+) -> { n }
 }
 "#;
     assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
     let wrong = r#"
 grammar Calc {
     entry rule expr -> i64 =
-        head:term tail:term* {
+        head:term tail:term* -> {
             let b: bool = head
             let c: bool = tail
             0
         }
-    rule term -> i64 = n:dec[i64](digit+) { n }
+    rule term -> i64 = n:dec[i64](digit+) -> { n }
 }
 "#;
     assert!(refused_as(wrong, "i64"), "{:#?}", findings(wrong));
@@ -59,13 +59,13 @@ grammar Calc {
 fn until_binds_text() {
     let fine = r#"
 grammar Fields {
-    entry rule field -> ref String = s:until(";") { s.trim() }
+    entry rule field -> ref String = s:until(";") -> { s.trim() }
 }
 "#;
     assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
     let wrong = r#"
 grammar Fields {
-    entry rule field -> i64 = s:until(";") {
+    entry rule field -> i64 = s:until(";") -> {
         let n: i64 = s
         n
     }

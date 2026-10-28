@@ -231,13 +231,13 @@ test "a graph over a map of lists" {
 // An empty item between two separators is an item, and an empty input is an
 // empty list.
 grammar DefectsCsv {
-    entry rule row -> Vec[ref String] = cells:list(CELL, ",") eof { cells }
+    entry rule row -> Vec[ref String] = cells:list(CELL, ",") eof -> { cells }
 
-    rule CELL -> ref String = c:text(CELL_PIECE*) { c }
-    rule CELL_PIECE = not(",") any { }
+    rule CELL -> ref String = c:text(CELL_PIECE*) -> { c }
+    rule CELL_PIECE = not(",") any -> { }
 
-    entry rule numbers -> Vec[i64] = ns:list(number, ";") eof { ns }
-    rule number -> i64 = n:dec[i64](digit+) { n }
+    entry rule numbers -> Vec[i64] = ns:list(number, ";") eof -> { ns }
+    rule number -> i64 = n:dec[i64](digit+) -> { n }
 }
 
 test "a grammar reads a list with a separator" {

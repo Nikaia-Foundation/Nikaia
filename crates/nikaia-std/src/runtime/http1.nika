@@ -69,30 +69,30 @@ pub struct Read {
 grammar Http1 {
 
     // A space is part of what a request line says, so nothing is skipped.
-    rule WS = "" { }
+    rule WS = "" -> { }
 
     // The head, which ends in an empty line - the only one it has, since the
     // buffer hands over the text up to the first.
     entry rule head -> Written =
-        words:list(WORD, " ") "\r\n" lines:line* "\r\n" eof {
+        words:list(WORD, " ") "\r\n" lines:line* "\r\n" eof -> {
             Written { words, fields: fields(lines) }
         }
 
     // A word of the request line: anything up to a space or the line's end.
     // Two spaces in a row are an empty word between them, as they were.
-    rule WORD -> ref String = w:text(WORD_PIECE*) { w }
-    rule WORD_PIECE = not(" ") not("\r\n") any { }
+    rule WORD -> ref String = w:text(WORD_PIECE*) -> { w }
+    rule WORD_PIECE = not(" ") not("\r\n") any -> { }
 
     rule line -> Line =
-          n:text(NAME_PIECE*) ":" v:text(REST_PIECE*) "\r\n" {
+          n:text(NAME_PIECE*) ":" v:text(REST_PIECE*) "\r\n" -> {
               Line::Field(Field { name: n, value: v })
           }
-        | OTHER "\r\n" { Line::Skip }
+        | OTHER "\r\n" -> { Line::Skip }
 
-    rule NAME_PIECE = not(":") not("\r\n") any { }
-    rule REST_PIECE = not("\r\n") any { }
+    rule NAME_PIECE = not(":") not("\r\n") any -> { }
+    rule REST_PIECE = not("\r\n") any -> { }
     // A line with no colon, which says nothing this reads.
-    rule OTHER = REST_PIECE+ { }
+    rule OTHER = REST_PIECE+ -> { }
 }
 
 // The fields among the lines, in the order they came.

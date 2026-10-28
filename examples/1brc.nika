@@ -37,7 +37,7 @@ grammar Measurements {
     // The scan stops at the `;` or at `frame_end`, the line end that
     // MEASUREMENT below declares. A plain `until(";")` could run into the next
     // line, and the compiler rejects it here.
-    rule NAME -> String = s:until(";" | frame_end) { s }
+    rule NAME -> String = s:until(";" | frame_end) -> { s }
 
     // Temperatures always carry exactly one decimal, so they are parsed as
     // tenths and all the arithmetic stays in integers until printing.
@@ -47,7 +47,7 @@ grammar Measurements {
     // decode.
     rule TENTHS -> i32 =
         neg:"-"? whole:dec[i32](digit{1,2}) "." frac:digit
-        {
+        -> {
             let value = whole * 10 + text::digit_value(frac)
             if neg != null { -value } else { value }
         }
@@ -61,7 +61,7 @@ grammar Measurements {
     @frame(boundary: "\n")
     rule MEASUREMENT -> Reading =
         name:NAME ";" => temp:TENTHS frame_end
-        { Reading { name, temp } }
+        -> { Reading { name, temp } }
 
     // `MEASUREMENT*` would collect a billion readings into memory. A fold
     // instead passes each one to an accumulator, so the parse runs in

@@ -540,10 +540,10 @@ fn a_program_with_a_grammar_compiles_its_other_comptimes() {
                   }\n\
                   \n\
                   grammar Cfg {\n\
-                  \x20   rule NAME -> ref String = s:raw_ident { s }\n\
-                  \x20   rule VALUE -> ref String = s:until(line_ending) { s.trim() }\n\
-                  \x20   rule setting -> Setting = key:NAME \"=\" value:VALUE { Setting { key, value } }\n\
-                  \x20   entry rule file -> Vec[Setting] = settings:setting* { settings }\n\
+                  \x20   rule NAME -> ref String = s:raw_ident -> { s }\n\
+                  \x20   rule VALUE -> ref String = s:until(line_ending) -> { s.trim() }\n\
+                  \x20   rule setting -> Setting = key:NAME \"=\" value:VALUE -> { Setting { key, value } }\n\
+                  \x20   entry rule file -> Vec[Setting] = settings:setting* -> { settings }\n\
                   }\n\
                   \n\
                   fn triple(n: i64) -> i64 {\n\

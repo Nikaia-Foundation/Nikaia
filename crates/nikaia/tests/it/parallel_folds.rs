@@ -432,7 +432,7 @@ fn main() {
 /// merge are declared functions that change the accumulator in place.
 const GRAMMAR_IN_PLACE: &str = r#"grammar Nums {
     @frame(boundary: "\n")
-    rule LINE -> i64 = d:dec[i64](digit+) frame_end { d }
+    rule LINE -> i64 = d:dec[i64](digit+) frame_end -> { d }
 
     entry rule file -> Summary = par_fold(LINE, Summary, add_into, merge_ref)
 }
@@ -572,7 +572,7 @@ fn a_grammars_par_fold_takes_the_options_of_a_fold() {
             "use std::par\n\n\
              grammar Sum {{\n\
              \x20   @frame(boundary: \"\\n\")\n\
-             \x20   rule ROW -> i64 = n:dec[i64](digit+) frame_end {{ n }}\n\n\
+             \x20   rule ROW -> i64 = n:dec[i64](digit+) frame_end -> {{ n }}\n\n\
              \x20   entry rule total -> i64 = par_fold(ROW, zero, fn(acc, m) {{ acc + m }}, add; {options})\n\
              }}\n\n\
              fn zero() -> i64 {{ return 0 }}\n\

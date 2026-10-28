@@ -1,6 +1,6 @@
 grammar G {
-    rule n -> ref Bytes = s:bytes(until(";")) { s }
-    entry rule top -> i64 = x:n ";" { x.len() }
+    rule n -> ref Bytes = s:bytes(until(";")) -> { s }
+    entry rule top -> i64 = x:n ";" -> { x.len() }
 }
 fn main() {
     let r = G::top("abc;") catch { -1 }

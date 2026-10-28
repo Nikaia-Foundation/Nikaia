@@ -63,11 +63,11 @@ fn a_grammar_binding_of_a_float_and_of_a_choice_is_typed() {
     let found = errors(
         "enum Shade { Odd, Even }\n\n\
          grammar Pick {\n    \
-         rule NUM -> String = n:dec[f64](text(digit+ (\".\" digit+)?)) { n }\n    \
-         rule ONE -> Shade = \"odd\" { Shade::Odd }\n    \
-         rule TWO -> Shade = \"even\" { Shade::Even }\n    \
-         rule SHADE -> i64 = s:(ONE | TWO) { s }\n    \
-         entry rule many -> Vec[i64] = shades:SHADE* { shades }\n}\n\n\
+         rule NUM -> String = n:dec[f64](text(digit+ (\".\" digit+)?)) -> { n }\n    \
+         rule ONE -> Shade = \"odd\" -> { Shade::Odd }\n    \
+         rule TWO -> Shade = \"even\" -> { Shade::Even }\n    \
+         rule SHADE -> i64 = s:(ONE | TWO) -> { s }\n    \
+         entry rule many -> Vec[i64] = shades:SHADE* -> { shades }\n}\n\n\
          fn main() {\n    let r = Pick::many(\"odd\") catch { [] }\n    println(f\"{r.len()}\")\n}\n",
     );
     let said: Vec<&str> = found

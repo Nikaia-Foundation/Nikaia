@@ -2012,22 +2012,19 @@ grammar! {
 
         rule g_alt_tail -> GrammarAlt = "|" a:g_alt -> { a }
 
-        // **The action is the block after the pattern, with no second arrow**
-        // ([ADR-296](../../../../docs/specification/adr/adr-296.md) D33, Part II
-        // 10.8). The one `->` a rule writes is its result type, as a function's
-        // is; the arrow in front of the action was a wart from the days when the
-        // two sat on one line.
+        // **The action stands after an arrow**: `pattern -> { action }`
+        // ([ADR-grammar-1](../../../../docs/specification/adr/adr-grammar-1.md)
+        // D1, Part II 10.8, withdrawing ADR-296 D33). Without the arrow a brace
+        // after a pattern was a bound or an action by one space alone, and with
+        // values in a bound (`" "{m}`) both readings would be programs.
         //
         // An action block is required today (Part II, 10.1, note) - with one
         // exception that is not an omission: a `par_fold` must be the whole
         // body of its rule (ADR-296 D10), so there is nothing for an action to
         // add. The emitter supplies the binding such a rule needs.
         //
-        // **The old form is refused by name and not by *expected `{`***, which
-        // is what a reader of a program written a version ago would otherwise
-        // get. The arrow alternative stands first, so it is what matches when
-        // the arrow is there, and the `fail` stands **at** the arrow rather than
-        // after the block, so the caret is on the character to delete.
+        // **The form without the arrow is refused by name** and not by
+        // *expected `->`*, with the caret on the brace the arrow goes in front of.
         rule g_alt -> GrammarAlt =
             // **A fold first**: `par_fold` and `fold` are words of this
             // sublanguage and never a rule's name, and a fold with the wrong
@@ -2035,25 +2032,23 @@ grammar! {
             f:g_fold -> {
                 GrammarAlt { pattern: f, action: None }
             }
-          | p:g_seq "->" peek("{") fail(
-                "An action doesn't take an arrow. Write `pattern { action }`: the only \
-                 `->` in a rule is its result type."
-            ) -> {
-                // Never reached: `fail` has already ended the alternative. The
-                // binding is here because the action has to be well-typed.
-                GrammarAlt { pattern: p, action: None }
+          | p:g_seq "->" action:block -> {
+                GrammarAlt { pattern: p, action: Some(action) }
             }
           // **An arrow in the middle of a pattern** is most often the commit
-          // point written with the wrong arrow: `a:B -> C { 1 }`. Deleting it,
-          // as the message above says, would silently make a plain sequence.
+          // point written with the wrong arrow: `a:B -> C -> { 1 }`.
           | p:g_seq "->" fail(
-                "A pattern can't contain `->`: the only `->` in a rule is its result type. \
+                "A pattern can't contain `->` except in front of its action. \
                  To commit to this alternative once what comes before has matched, write `=>`."
             ) -> {
                 GrammarAlt { pattern: p, action: None }
             }
-          | p:g_seq action:block -> {
-                GrammarAlt { pattern: p, action: Some(action) }
+          | p:g_seq peek("{") fail(
+                "An action stands after an arrow: write `pattern -> { action }`."
+            ) -> {
+                // Never reached: `fail` has already ended the alternative. The
+                // binding is here because the action has to be well-typed.
+                GrammarAlt { pattern: p, action: None }
             }
 
         rule g_seq -> Spanned<Pattern> @=
@@ -2100,23 +2095,11 @@ grammar! {
           | "?" -> { Repeat::Optional }
           | r:g_bounds -> { r }
 
-        // A brace group is a bound only when its content starts with a digit,
-        // which is the rule the backend states for the same ambiguity
-        // (SYNTAX.md, "Braces").
-        //
-        // **And *immediately* starts with one**, which is what makes
-        // [ADR-296](../../../../docs/specification/adr/adr-296.md) D33's sentence
-        // true rather than nearly true. Since the action is the block after the
-        // pattern, `digit { 1 }` is a rule that matches a digit and yields `1`,
-        // and it is indistinguishable from a bound of one by *a digit follows the
-        // brace* alone. `G_BOUND_START` is **lexical**, so nothing is skipped
-        // inside it: `digit{1}` is a bound and `digit { 1 }` is an action, which
-        // is the one place in a grammar where a space decides something and is
-        // written down on the page for that reason.
+        // **A brace group after a pattern is a bound** (Part II 10.8): an
+        // action stands after `->` (ADR-grammar-1 D1), so a brace here is
+        // nothing else, and a space before it or inside it changes nothing.
         rule g_bounds -> Repeat =
-            peek(G_BOUND_START) "{" b:g_bound_body "}" -> { b }
-
-        rule G_BOUND_START -> () = "{" digit -> { () }
+            "{" b:g_bound_body "}" -> { b }
 
         rule g_bound_body -> Repeat =
             n:number "," m:number -> { Repeat::Between(n, m) }
@@ -2153,8 +2136,10 @@ grammar! {
                 )
             }
 
+        // A trailing comma is accepted, as in every other list: `nikaia fmt`
+        // writes one where it puts the arguments one per line.
         rule g_args -> Vec<Spanned<Pattern>> =
-            "(" head:g_choice tail:g_arg_tail* ")" -> {
+            "(" head:g_choice tail:g_arg_tail* ","? ")" -> {
                 let mut args = vec![head];
                 args.extend(tail);
                 args

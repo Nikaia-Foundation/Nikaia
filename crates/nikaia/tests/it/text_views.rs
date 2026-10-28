@@ -97,10 +97,10 @@ fn main() {
 #[test]
 fn a_rule_result_and_a_field_filled_by_an_action_are_views() {
     let program = r#"grammar Hits {
-    rule WS = "" { }
-    entry rule file -> Vec[Hit] = hits:hit* { hits }
-    rule hit -> Hit = p:WORD "\n" { Hit { path: p } }
-    rule WORD -> TEXT = s:until("\n") { s }
+    rule WS = "" -> { }
+    entry rule file -> Vec[Hit] = hits:hit* -> { hits }
+    rule hit -> Hit = p:WORD "\n" -> { Hit { path: p } }
+    rule WORD -> TEXT = s:until("\n") -> { s }
 }
 
 pub struct Hit {
@@ -127,13 +127,13 @@ fn main() {
 #[test]
 fn a_parameter_a_parse_views_is_lent() {
     let program = r#"grammar Stock {
-    rule FIELD -> TEXT = s:until(";" | frame_end) { s }
-    rule COUNT -> i64 = n:dec[i64](digit+) { n }
+    rule FIELD -> TEXT = s:until(";" | frame_end) -> { s }
+    rule COUNT -> i64 = n:dec[i64](digit+) -> { n }
     @frame(boundary: "\n")
     rule ENTRY -> Entry =
         category:FIELD ";" item:FIELD ";" count:COUNT frame_end
-        { Entry { category, item, count } }
-    entry rule file -> Vec[Entry] = entries:ENTRY* { entries }
+        -> { Entry { category, item, count } }
+    entry rule file -> Vec[Entry] = entries:ENTRY* -> { entries }
 }
 
 pub struct Entry {

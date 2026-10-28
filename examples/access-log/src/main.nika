@@ -25,12 +25,12 @@ grammar Log {
     // Up to the next blank or the end of the line. Without `frame_end`, a line
     // missing a field would run on into the next line; the compiler rejects
     // a scan like that inside a frame.
-    rule FIELD -> String = s:until(" " | frame_end) { s }
+    rule FIELD -> String = s:until(" " | frame_end) -> { s }
 
     // Exactly three digits: a status of "20" is a parse error here.
-    rule STATUS -> i32 = n:dec[i32](digit{3}) { n }
+    rule STATUS -> i32 = n:dec[i32](digit{3}) -> { n }
 
-    rule SIZE -> i64 = n:dec[i64](digit+) { n }
+    rule SIZE -> i64 = n:dec[i64](digit+) -> { n }
 
     // `@frame` says a request can be found from any offset by scanning to the
     // next newline, so the file can be cut into pieces and parsed in parallel.
@@ -40,7 +40,7 @@ grammar Log {
     @frame(boundary: "\n")
     rule ENTRY -> Hit =
         _ip:FIELD " " => method:FIELD " " path:FIELD " " status:STATUS " " bytes:SIZE frame_end
-        { Hit { path, status, bytes } }
+        -> { Hit { path, status, bytes } }
 
     // A fold hands each entry to an accumulator instead of collecting them
     // all, as `ENTRY*` would. `par_fold` also says how two partial reports

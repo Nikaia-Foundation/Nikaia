@@ -2,13 +2,13 @@
 // number - is the accumulator's first value, not a function to call.
 grammar Lines {
     @frame(boundary: "\n")
-    rule LINE -> i64 = d:dec[i64](digit+) frame_end { d }
+    rule LINE -> i64 = d:dec[i64](digit+) frame_end -> { d }
     entry rule file -> Tally = fold(LINE, Tally { lines: 0, total: 0 }, fn(acc, n) { acc.lines += 1
         acc.total += n })
 }
 
 grammar Sums {
-    rule N -> i64 = d:dec[i64](digit+) "\n" { d }
+    rule N -> i64 = d:dec[i64](digit+) "\n" -> { d }
     entry rule file -> i64 = fold(N, 10, fn(acc, n) { acc + n })
 }
 

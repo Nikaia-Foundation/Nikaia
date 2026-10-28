@@ -76,7 +76,7 @@ caret onto the operator whose operand is missing.
 | # | input | the reader needs | today |
 | :-- | :--- | :--- | :--- |
 | C1 | `struct S { name ref String }` | `:` | ✅ *Expected `:` here, but found `ref`.* |
-| C2 | `rule A -> i32 = n:digit+ -> { n }` | *the arrow is gone* | ✅ *An action doesn't take an arrow.*, naming `pattern { action }` |
+| C2 | `rule A -> i32 = n:digit+ { n }` | *the arrow is missing* | ✅ *An action stands after an arrow: write `pattern -> { action }`.* |
 | C3 | `fn main( {` | `)` or a parameter | ✅ *Expected `)` here, but found `{`.* |
 | C4 | `let 5 = x` | a name | ✅ *`let` names what it binds, but `5` is a value.* |
 | C5 | `impl S { struct T {} }` | a method | ✅ *An `impl` holds methods, and a `struct` can't be declared inside one.* |
@@ -85,9 +85,9 @@ C1 is the best row in the corpus and the model for the rest. It carried a
 note calling `ref` a reserved word until the note was asked whether a name was
 wanted there; it was not, and the note is gone. So is C5's.
 
-C2's arrow is refused by name, the reading ADR-296 D33 made necessary: the
-block after a pattern *is* the action, and a program written the old way is
-told the new one.
+C2's missing arrow is refused by name (ADR-grammar-1 D1, which withdrew
+ADR-296 D33): an action stands after `->`, and a program written the
+arrowless way is told the form to write.
 
 ## D. Almost the right token
 
@@ -95,12 +95,11 @@ told the new one.
 | :-- | :--- | :--- | :--- |
 | D1 | `/ a broken comment` at top level | `//` named | ✅ *A single `/` is division, and nothing stands before it to divide.*, help *A comment starts with `//`.* |
 | D2 | `if a = b { }` | `==` | ✅ *`=` gives a name a value; a condition compares with `==`.* |
-| D3 | `a:B -> C { 1 }` where `=>` was meant | the cut is `=>` | ✅ *A pattern can't contain `->`* … *write `=>`.* |
+| D3 | `a:B -> C -> { 1 }` where `=>` was meant | the cut is `=>` | ✅ *A pattern can't contain `->` except in front of its action.* … *write `=>`.* |
 
-D3 used to share C2's message, and following it — delete the arrow — gave
-`a:B C { 1 }`, which parses as a plain sequence: a program that silently meant
-something else. An arrow followed by a block is C2's; an arrow anywhere else in
-a pattern is D3's.
+Deleting D3's stray arrow would give `a:B C -> { 1 }`, a plain sequence: a
+program that silently meant something else. So an arrow is accepted only in
+front of a block, and anywhere else in a pattern it is D3's.
 
 ## E. Inside a `grammar` block
 
