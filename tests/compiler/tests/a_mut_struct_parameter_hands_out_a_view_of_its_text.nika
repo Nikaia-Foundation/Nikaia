@@ -1,0 +1,34 @@
+// A `mut` parameter is the caller's value, lent for the call: a view of its
+// text points into the caller's buffer, as `ref mut self`'s does (#929). The
+// text is built while the program runs, so the struct owns it.
+
+struct Cursor {
+    input: String,
+    pos: i64,
+}
+
+fn next_item(mut c: Cursor) -> String? {
+    let rest = c.input.lines().skip(c.pos).collect()
+    if rest.len() == 0 {
+        return null
+    }
+    c.pos += 1
+    return rest[0].trim()
+}
+
+fn main() {
+    let mut text: String = ""
+    for word in ["a: 1", "  b: two", "- x"] {
+        text.push_str(word)
+        text.push_str("\n")
+    }
+    let mut c = Cursor { input: text, pos: 0 }
+    while true {
+        let item = next_item(c)
+        if item == null {
+            break
+        }
+        println(f"item: {item}")
+    }
+    println(c.pos)
+}

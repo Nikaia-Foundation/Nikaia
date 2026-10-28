@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1261] — 2026-10-28
+
+**A `mut` parameter is a source of the result's views; text given to a `ref String` field is lent (#929, ADR-283 D25, ADR-282 D2)**
+- A function that hands back a view of the text in a `mut` parameter (`fn next(mut c: Cursor) -> String?` returning a piece of `c.input`) points into that parameter, as a method with `ref mut self` does: the ledger writes `ref(c)` and the lowering ties the result to it instead of `'static`, which rustc refused where the struct owns text read while the program runs.
+- `P { field: text }` where the field is written `ref String` lends `text`, as `ref text` does: the field says what `String` says (NK1261), so the literal is no longer refused with `NK1106`.
+
 ## [0.0.1260] — 2026-10-28
 
 **view_changes in Nikaia (ADR-294, #125; ADR-353 D3, D4)**

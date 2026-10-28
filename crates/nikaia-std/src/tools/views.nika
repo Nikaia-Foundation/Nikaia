@@ -2650,6 +2650,12 @@ fn rsrc_a_source(unit: ref Unit, asked: ref Asked, arg: ref FnArg, contract: ref
     if arg.ty.is_view || brings_buffer(unit, asked, arg.ty) {
         return true
     }
+    // **A `mut` parameter is the caller's value, lent for the call** (#929):
+    // a view of its text points into the caller's buffer, as `ref mut self`'s
+    // does.
+    if arg.mutable && !rsrc_scalar(asked, arg.ty) {
+        return true
+    }
     let own = contract ?? return false
     return lends_in_own(own, at, [asked.library])
 }

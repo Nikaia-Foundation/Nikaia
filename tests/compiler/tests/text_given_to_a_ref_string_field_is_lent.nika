@@ -1,0 +1,22 @@
+// A `ref String` field says what `String` says (NK1261): text given to it is
+// lent, as `ref text` would lend it (#929).
+
+struct Held {
+    input: ref String,
+}
+
+fn first(h: Held) -> String {
+    for l in h.input.lines() {
+        return l
+    }
+    return ""
+}
+
+fn main() {
+    let mut text: String = ""
+    text.push_str("first line\n")
+    text.push_str("second line\n")
+    let h = Held { input: text }
+    println(first(h))
+    println(text.lines().count())
+}

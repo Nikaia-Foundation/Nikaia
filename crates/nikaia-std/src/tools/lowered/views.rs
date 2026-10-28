@@ -1980,6 +1980,7 @@ pub(crate) fn rsrc_ty_names(ty: &Ty, out: &mut Vec<String>) {
 pub(crate) fn rsrc_a_source(unit: &Unit, asked: &Asked<'_, '_, '_>, arg: &FnArg, contract: Option<&FnContract>, at: i64) -> bool {
     if (*arg.ty.code).is_some() { return false; }
     if arg.ty.is_view || brings_buffer(unit, asked, &arg.ty) { return true; }
+    if arg.mutable && !rsrc_scalar(asked, &arg.ty) { return true; }
     let own = match contract { Some(__nikaia_value) => __nikaia_value, None => return false };
     lends_in_own(own, at, &vec![asked.library])
 }

@@ -417,6 +417,18 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
         state.a_run_this_body_owns(name, field, &found.text(), span);
         return true;
     }
+    let owned_text = match found {
+        Ty::Named { ref name, ref args, view } => !view && args.is_empty() && type_last_segment(name) == "String",
+        _ => false,
+    };
+    let text_view = match want {
+        Ty::Named { ref name, ref args, view } => view && args.is_empty() && (name == TEXT_VIEW || type_last_segment(name) == "String"),
+        _ => false,
+    };
+    if value.is_some() && text_view && owned_text {
+        let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
+        if state.facts.lent_fields.contains(&(id_of(v) as i64)) { found = want.clone(); }
+    }
     let keeper = format!("`{}` keeps its `{}` after this line", name, field);
     let how: Option<FactWrap> = check_widened_slot(state, world, host, &found, &want, value, span);
     if how.is_some() {

@@ -563,6 +563,23 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
         state.a_run_this_body_owns(name, field, found.text(), span)
         return true
     }
+    // **Text lent to a `ref String` field is a view of it** (D37, #929): the
+    // field says what `String` says (NK1261), so `P { s: text }` is
+    // `P { s: ref text }`.
+    let owned_text = match found {
+        Ty::Named { name, args, view } => !view && args.len() == 0 && type_last_segment(name) == "String",
+        else => false,
+    }
+    let text_view = match want {
+        Ty::Named { name, args, view } => view && args.len() == 0 && (name == TEXT_VIEW || type_last_segment(name) == "String"),
+        else => false,
+    }
+    if value != null && text_view && owned_text {
+        let v: ref Expr = value ?? return true
+        if state.facts.lent_fields.contains(id_of(v) as i64) {
+            found = want.clone()
+        }
+    }
     let keeper = f"`{name}` keeps its `{field}` after this line"
     let how: FactWrap? = check_widened_slot(state, world, host, found, want, value, span)
     if how != null {
