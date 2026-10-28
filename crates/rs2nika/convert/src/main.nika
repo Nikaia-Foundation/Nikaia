@@ -5845,7 +5845,11 @@ fn rs2nika_comb_match(given: String, opts: ref Vec[String]) -> String {
                 continue
             }
             let pat: String = rs2nika_text(ac, 1, bar).replace("&", "").trim().clone()
-            let body: String = rs2nika_text(ac, bar + 1, ac.len()).trim().clone()
+            let mut body: String = rs2nika_text(ac, bar + 1, ac.len()).trim().clone()
+            // `|x| { e }`, a block that is one expression, is `e`
+            if body.starts_with("{") && body.ends_with("}") && !body.contains(";") && !body.contains("\n") {
+                body = ((body.strip_prefix("{") ?? "").strip_suffix("}") ?? "").trim().clone()
+            }
             // a `?` in the closure leaves the closure, not the function; a
             // `match` in it would hand R12 a second `=>`
             if pat == "" || pat.contains(":") || body == "" || body.contains("?") || body.contains("=>") || recv.starts_with(".") || (start > 0 && c[start - 1] == '?') {

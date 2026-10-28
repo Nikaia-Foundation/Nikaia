@@ -456,15 +456,24 @@ impl TrEm {
     }
 
     /// A closure argument's one parameter and body, for an option's
-    /// combinators: `|x| e` -> ("x", "e"); ("", "") when it is not one.
+    /// combinators: `|x| e` (or `|x| { e }`) -> ("x", "e"); ("", "") when it is
+    /// not one.
     fn closure_parts(ref mut self, c: i64) -> (String, String) {
         if !self.t.is(c, "CLOSURE_EXPR") {
             return ("", "")
         }
         let params = self.t.kids_of(self.t.kid(c, "PARAM_LIST"), "PARAM")
         let ns = self.nodes(c)
-        let body = ns[ns.len() - 1]
-        if params.len() > 1 || self.t.is(body, "BLOCK_EXPR") {
+        let mut body = ns[ns.len() - 1]
+        if self.t.is(body, "BLOCK_EXPR") {
+            // `|| { e }`, a block that is only its value, is `|| e`
+            let inner = self.nodes(self.t.kid(body, "STMT_LIST"))
+            if inner.len() != 1 || self.t.is(inner[0], "LET_STMT") || self.t.is(inner[0], "EXPR_STMT") {
+                return ("", "")
+            }
+            body = inner[0]
+        }
+        if params.len() > 1 {
             return ("", "")
         }
         let mut p: String = "_"

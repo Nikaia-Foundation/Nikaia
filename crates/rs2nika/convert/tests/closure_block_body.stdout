@@ -1,0 +1,7 @@
+pub fn f(params: ref Vec[(String, i64)], index: i64) -> bool sync {
+    return (match params.get(index) { (name, n) => n > 0 && name.len() > 1, null => false })
+}
+pub fn g(x: i64?) -> i64 sync {
+    return x ?? 7
+}
+
