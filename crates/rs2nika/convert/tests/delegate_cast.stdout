@@ -1,0 +1,19 @@
+pub struct Walk {
+    pub names: ref Vec[String],
+    pub limit: i64,
+    pub found: Vec[String],
+}
+
+impl Walk {
+    fn visit(ref mut self, at: i64) sync {
+        if self.wanted(at) {
+            self.found.push(self.names[at].clone())
+            let n = self.names.len()
+        }
+    }
+
+    fn wanted(ref self, at: i64) -> bool sync {
+        return self.names[at].len() > self.limit
+    }
+}
+

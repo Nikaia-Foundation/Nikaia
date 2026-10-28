@@ -203,6 +203,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R77  `self.s.m(..)` (a `CheckState` method already in Nikaia) -> `self.m(..)`, name and arguments as written",
         "R78  a `struct`'s field `name: T,` -> `name: T'`, the type by the rules of a parameter's (R2-R5)",
         "R69  a Rust name Nikaia reserves (`grammar`, `throws`, `with`, ..) -> `name_`",
+        "R332 `for x in [&a.f, &a.g] { body }` (a list of borrowed places) -> the body once per place, `x` written as it: a list of a borrowed value's fields would own them (NK2106)",
         "R83  profile `check-free` / `emit-free`: a method is a free function, `self` is `state`: `ref self` -> `state: ref CheckState`, `ref mut self` -> `mut state: CheckState`, then `world: ref CheckWorld`, `host: ref H` and the generic `[H: CheckHost]`; `self.m(a)` -> `m(state, world, host, a)`, `self.x` -> `state.x`",
         "R84  `-free` profiles: `let mut x = \"..\"` / `String::new()` -> `let mut x: String = ..`, `let mut n = 0` -> `let mut n: i64 = 0`",
         "R87  `-free` profiles: the `impl Checker { .. }` shell goes (methods dedented), and the methods of that `impl` are not hoisted as nested functions (R51), also in `--file`",
@@ -7261,7 +7262,10 @@ fn rs2nika_delegates(mut ctx: Rs2nikaCtx, given: String) -> String {
         }
         let cast = body.find(" as ") ?? body.len()
         let call: String = body[0..<cast].trim().clone()
-        if (f[0].contains("(&self") || f[0].contains("(&mut self")) && call.starts_with("self.") && call.ends_with(")") && !call.contains(";") && call.matches("self.").count() == 1 {
+        // what follows the call is a cast alone (`as usize`), nothing more
+        let cast_to: String = (body[cast..<body.len()].trim().strip_prefix("as ") ?? "").trim().clone()
+        let only_cast = cast == body.len() || (cast_to != "" && cast_to.chars().all(fn(ch) { rs2nika_word(ch) }))
+        if (f[0].contains("(&self") || f[0].contains("(&mut self")) && only_cast && call.starts_with("self.") && call.ends_with(")") && !call.contains(";") && call.matches("self.").count() == 1 {
             names.push(f[3].clone())
             params.push(rs2nika_param_names(f[0]))
             bodies.push(call)
@@ -12129,7 +12133,13 @@ fn rs2nika_struct_field(mut ctx: Rs2nikaCtx, line: String) -> String {
         rest = rest.replace("Vec<u8>", "Bytes")
         rs2nika_hit(ctx, "R255")
     }
-    let ty = rs2nika_ty(ctx, rest)
+    let mut ty = rs2nika_ty(ctx, rest)
+    // a number, a `bool` or a `scalar` is copied at a read: a field holds it,
+    // never a `ref` of it (NK1257)
+    let lent: String = ty.strip_prefix("ref ") ?? ""
+    if ["i64", "u64", "i32", "u32", "u8", "f64", "f32", "bool", "scalar"].contains(lent) {
+        ty = lent.clone()
+    }
     rs2nika_hit(ctx, "R78")
     return f"{ind}{vis}{name}: {ty},"
 }
@@ -16652,6 +16662,82 @@ fn rs2nika_utf8_text(line: String) -> String {
     return s
 }
 
+/// R332: a loop over a list of borrowed places, `for set in [&a.f, &a.g] {
+/// body }` (also over several lines), is the body once for each place, its
+/// variable written as that place: `body[set := a.f]`, `body[set := a.g]`.
+/// A list of fields of a borrowed value would have to own them (NK2106); the
+/// places themselves are only read. A body that jumps (`break`, `continue`)
+/// or names a field of the same name (`.set`) stays a loop.
+pub fn rs2nika_place_lists(src: String) -> String {
+    let lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut out: Vec[String] = []
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        let st: String = l.trim().clone()
+        let (var, list0) = (st.strip_prefix("for ") ?? "").split_once(" in [") ?? ("", "")
+        if var == "" || !var.chars().all(fn(ch) { rs2nika_word(ch) }) {
+            out.push(l)
+            i = i + 1
+            continue
+        }
+        // the list, up to the line that ends it with `] {`
+        let mut list: String = list0.clone()
+        let mut head_end = i
+        while !list.trim_end().ends_with("] {") && head_end + 1 < lines.len() && head_end < i + 20 {
+            head_end = head_end + 1
+            list = f"{list} {lines[head_end].trim()}"
+        }
+        if !list.trim_end().ends_with("] {") {
+            out.push(l)
+            i = i + 1
+            continue
+        }
+        let inner: String = (list.trim_end().strip_suffix("] {") ?? "").clone()
+        let mut places: Vec[String] = []
+        let mut all_places = true
+        for e in rs2nika_split_args(inner) {
+            let p: String = e.trim().trim_start_matches("&mut ").trim_start_matches("&").trim().clone()
+            if p == "" {
+                continue
+            }
+            if !p.contains(".") || !p.chars().all(fn(ch) { rs2nika_word(ch) || ch == '.' }) {
+                all_places = false
+            }
+            places.push(p)
+        }
+        // the body, to the `}` at the loop's own indentation
+        let ind = rs2nika_indent(l)
+        let mut end = head_end + 1
+        while end < lines.len() && !(lines[end].starts_with(f"{ind}}}") && rs2nika_indent(lines[end]) == ind) {
+            end = end + 1
+        }
+        let mut plain = all_places && places.len() > 0 && end < lines.len() && lines[end].trim() == "}"
+        let mut k = head_end + 1
+        while plain && k < end {
+            let b: String = lines[k].clone()
+            if rs2nika_replace_word(b, "break", "\u{3}") != b || rs2nika_replace_word(b, "continue", "\u{3}") != b || b.contains(f".{var}") {
+                plain = false
+            }
+            k = k + 1
+        }
+        if !plain {
+            out.push(l)
+            i = i + 1
+            continue
+        }
+        for p in places {
+            k = head_end + 1
+            while k < end {
+                out.push(rs2nika_dedent4(rs2nika_replace_word(lines[k], var, p)))
+                k = k + 1
+            }
+        }
+        i = end + 1
+    }
+    return out.join("\n")
+}
+
 /// One file, from what `rs2nika_loaded` read: no file is read here.
 pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_given: String, prefix: String, facts: ref Vec[String]) -> Rs2nikaOut {
     // R83: `check-free` / `emit-free` turn the methods into free functions
@@ -16695,7 +16781,11 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
     // R256-R264: M2's decisions, on the Rust text
     // R296-R301: P4a's shapes, on the Rust text
     // R311-R331: P4b's shapes, on the Rust text
-    let src = rs2nika_p4b_rust(ctx, rs2nika_p4a_rust(ctx, rs2nika_reserved_params(ctx, rs2nika_m2_decisions(ctx, rs2nika_take_marks(ctx, given_src)))))
+    let unrolled = rs2nika_place_lists(given_src)
+    if unrolled != given_src {
+        rs2nika_hit(ctx, "R332")
+    }
+    let src = rs2nika_p4b_rust(ctx, rs2nika_p4a_rust(ctx, rs2nika_reserved_params(ctx, rs2nika_m2_decisions(ctx, rs2nika_take_marks(ctx, unrolled)))))
     ctx.opt_names = rs2nika_opt_names(src)
     for name in rs2nika_fact_options(src, facts) {
         if !ctx.opt_names.contains(name) {
@@ -16758,6 +16848,12 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
                     rs2nika_hit(ctx, "R258")
                 }
             }
+        } else if name != "" && nested && prefix != "" && !rs2nika_starts(name, prefix) && !ctx.renamed_from.contains(name) {
+            // R258: a function nested in a method of another type's `impl` is
+            // hoisted as well, and its calls take the prefix its definition gets
+            ctx.renamed_from.push(name.clone())
+            ctx.renamed_to.push(f"{prefix}{name}")
+            rs2nika_hit(ctx, "R258")
         }
     }
     ctx.impl_other = false
@@ -20627,7 +20723,7 @@ fn main() throws {
         return
     }
     if engine == "tree" {
-        let draft = tr_convert(rt_parse(text), profile, prefix)
+        let draft = tr_convert(rt_parse(rs2nika_place_lists(text)), profile, prefix)
         print(draft)
         return
     }

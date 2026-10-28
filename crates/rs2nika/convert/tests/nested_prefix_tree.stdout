@@ -1,0 +1,19 @@
+fn x_top() -> i64 {
+    return x_helper(3)
+}
+fn x_helper(a: i64) -> i64 {
+    return a * 2
+}
+struct S {
+    n: i64,
+}
+impl S {
+    fn outer(ref self) -> i64 {
+        let x = x_helper(1)
+        return x_inner(x)
+    }
+}
+
+fn x_inner(a: i64) -> i64 {
+    return a + 1
+}

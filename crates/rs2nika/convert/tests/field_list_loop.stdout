@@ -1,0 +1,18 @@
+use std::collections
+
+pub struct Facts {
+    pub a: collections::BTreeSet[i64],
+    pub b: collections::BTreeSet[i64],
+}
+
+pub fn all(facts: ref Facts) -> collections::BTreeSet[i64] sync {
+    let mut ids = collections::BTreeSet()
+    for x in facts.a {
+        ids.insert(x)
+    }
+    for x in facts.b {
+        ids.insert(x)
+    }
+    return ids
+}
+

@@ -1,0 +1,13 @@
+use std::collections
+
+pub struct Facts {
+    pub a: collections::BTreeSet[u32],
+    pub b: collections::BTreeSet[u32],
+}
+
+pub fn all(facts: ref Facts) -> collections::BTreeSet[u32] {
+    let mut ids = collections::BTreeSet()
+    ids.extend(facts.a.iter())
+    ids.extend(facts.b.iter())
+    return ids
+}

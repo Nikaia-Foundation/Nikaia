@@ -210,6 +210,13 @@ impl TrEm {
         for f in self.t.kids_of(0, "FN") {
             self.fns.insert(self.t.name_of(f).clone())
         }
+        // a function nested in a function is hoisted to the top level, where
+        // it takes the prefix as well (R258)
+        for i in 0..<self.t.nodes.len() {
+            if self.t.nodes[i].kind == "FN" && self.t.up(i, "FN") >= 0 {
+                self.fns.insert(self.t.name_of(i).clone())
+            }
+        }
         for i in 0..<self.t.nodes.len() {
             if self.t.nodes[i].kind != "IMPL" || self.t.has_tok(i, "FOR_KW") {
                 continue
