@@ -1,0 +1,24 @@
+// Text of either kind - its own here, a view of another text there - looks a
+// key up in a map keyed by text of its own (ADR-282 D14).
+use std::collections
+
+fn look(inner: String, named: ref collections::BTreeMap[String, i64], hashed: ref collections::HashMap[String, i64]) -> String {
+    let mut name: String = inner.clone()
+    let colon = inner.find(":")
+    if colon != null {
+        name = inner.bytes[0..<colon].text() catch { "" }
+    }
+    name = name.trim().clone()
+    let a = named[name] ?? -1
+    let b = hashed[name] ?? -1
+    return f"{a} {b}"
+}
+
+fn main() {
+    let mut named: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    named.insert("ab", 7)
+    let mut hashed: collections::HashMap[String, i64] = collections::HashMap()
+    hashed.insert("ab", 8)
+    println(look("ab:x", named, hashed))
+    println(look("c", named, hashed))
+}

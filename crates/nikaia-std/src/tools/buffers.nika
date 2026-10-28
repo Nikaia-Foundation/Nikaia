@@ -74,6 +74,10 @@ pub struct BufferPlan {
     pub escapes: Vec[(Source, Escape)],
     pub refusals: Vec[Finding],
     pub reputs: collections::BTreeMap[i64, KeepAt],
+    /// The buffer `let`s whose value is no text or bytes - a struct a call
+    /// handed back - put into their keep whole, where no view is found by
+    /// address (ADR-283 D15: one that leaves it is copied).
+    pub opaque_puts: collections::BTreeSet[i64],
 }
 
 /// What the walk is asked against, which does not change from one function to
@@ -140,6 +144,8 @@ struct BufferWalk {
     statement: i64,
     result_carries: bool,
     last_seen: collections::BTreeMap[String, Local],
+    /// A `let` of a struct of its own a call handed back, and its type.
+    holders: collections::BTreeMap[i64, String],
 }
 
 fn open_scope(mut walk: BufferWalk) {
@@ -228,7 +234,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => carries_maybe(ret_type, ask),
         else => false,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap() }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap() }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -419,6 +425,10 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
     let mut origins: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     match made {
         Buffer::Named(buffer) => {
+            // **The calls inside it are walked all the same**: in
+            // `let draft = count(parse(text))` the text `count` makes points
+            // into nothing, but `parse` still needs a keep for this statement.
+            origins_of(value, ask, holes_of, unaliased, walk)
             let no_callee: String = ""
             let id = (at, no_callee.clone())
             if !walk.sources.contains_key(id) {
@@ -429,6 +439,23 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
         }
         else => {
             origins = origins_of(value, ask, holes_of, unaliased, walk)
+            // **A struct of its own a call hands back holds text a view can
+            // point into**: `from_dump(res.out)` returned points into this
+            // frame's `res`, which then lives in the keep that view needs. Only
+            // a view of its text field does (`origins_of`'s `Expr::Field`); the
+            // struct moved or a field of another type taken is no view of it.
+            if names.len() == 1 {
+                let held = struct_made_by(value, ask, unaliased)
+                if held != null {
+                    let no_callee: String = ""
+                    let id = (at, no_callee)
+                    if !walk.sources.contains_key(id) {
+                        let source = Source::Buffer { at: at, name: ask.names.resolve(names[0]).clone(), ty: held?.clone() ?? "", span: span.clone() }
+                        walk.sources.insert(id, Sourced { source: source, path: walk.path.clone() })
+                    }
+                    walk.holders.insert(at, held ?? "")
+                }
+            }
         }
     }
     // A number with no type written (#866): `let n = 3`, or the elements of
@@ -506,6 +533,74 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
     return found
 }
 
+// The struct a call hands back as a value of its own, holding text of its own:
+// a struct of the program's or the library's, not one of views, with a field of
+// owned text or bytes.
+fn struct_made_by(value: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync) -> String? {
+    let func = match value {
+        Expr::Call { func, .. } => func,
+        Expr::TryCatch { expr, .. } => return struct_made_by(expr, ask, unaliased),
+        else => return null,
+    }
+    let named = written_callee(ask.names, func, unaliased) ?? return null
+    let contract = ask.own.functions[named] ?? ask.library.functions[named] ?? return null
+    if takes_a_keep(contract) {
+        return null
+    }
+    let signature = contract.signature ?? return null
+    let result = signature.result ?? return null
+    if a_struct_of_views(result, ask) {
+        return null
+    }
+    let name = match result {
+        Ty::Named { name, args, .. } => match args.is_empty() {
+            true => name.clone(),
+            false => return null,
+        },
+        else => return null,
+    }
+    let found = ask.own.types[name] ?? ask.library.types[name] ?? return null
+    for field in found.fields {
+        let text = match field.ty {
+            Ty::Named { name, .. } => a_viewed_buffer(name),
+            else => false,
+        }
+        if text {
+            return name
+        }
+    }
+    return null
+}
+
+// The `let` of the struct a view of `base.field` points into: `base` a local
+// holding a struct of its own (`walk.holders`), `field` one of its text.
+fn held_text_field(base: ref Expr, field: ref String, ask: ref BufferAsk, walk: ref BufferWalk) -> i64? {
+    let local = match base {
+        Expr::Variable(name, _) => local_of(ask.names.resolve(name), walk) ?? return null,
+        else => return null,
+    }
+    let held = walk.holders[local.at] ?? return null
+    let found = ask.own.types[held] ?? ask.library.types[held] ?? return null
+    for one in found.fields {
+        if one.name == field {
+            return match one.ty {
+                Ty::Named { name, .. } => match a_viewed_buffer(name) {
+                    true => local.at,
+                    false => null,
+                },
+                else => null,
+            }
+        }
+    }
+    return null
+}
+
+// Text or bytes a keep can find a view in by address (`tether::Viewed`).
+fn a_viewed_buffer(ty: ref String) -> bool {
+    let base = last_segment(ty)
+    return base == "String" || base == "Bytes" || base == "Mapped" || ty.starts_with("Vec[u8") || ty.starts_with("List[u8")
+}
+
 /// Whether a value is `+` with text on one side: a literal, a name of text, a
 /// copy of one, or such a sum.
 fn joins_text(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
@@ -568,6 +663,8 @@ fn clones_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
         // `st[f + " for ".len()..].clone()` (#881): a cut of a text, copied,
         // keeps no view of it.
         Expr::Index { base, .. } => copies_text(base, ask, walk),
+        // `owner.name.clone()`: the text field of a struct of its own, copied.
+        Expr::Field { base, name, .. } => held_text_field(base, ask.names.resolve(name), ask, walk) != null,
         else => copies_text(receiver, ask, walk),
     }
 }
@@ -1118,7 +1215,15 @@ fn origins_of(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[
         Expr::MethodCall { .. } => method_origins(expr, ask, holes_of, unaliased, walk),
         Expr::SafeMethod { .. } => method_origins(expr, ask, holes_of, unaliased, walk),
         Expr::Call { func, args, .. } => call_origins(func, args, ask, holes_of, unaliased, walk),
-        Expr::Field { base, .. } => origins_of(base, ask, holes_of, unaliased, walk),
+        Expr::Field { base, name, .. } => {
+            let mut out = origins_of(base, ask, holes_of, unaliased, walk)
+            let held = held_text_field(base, ask.names.resolve(name), ask, walk)
+            if held != null {
+                let no_callee: String = ""
+                out.insert((held ?? 0, no_callee))
+            }
+            out
+        }
         Expr::SafeField { base, .. } => origins_of(base, ask, holes_of, unaliased, walk),
         Expr::Index { base, index, .. } => {
             origins_of(index, ask, holes_of, unaliased, walk)
@@ -1392,7 +1497,38 @@ fn answered_by(contract: ref FnContract, named: ref String, args: ref Vec[Expr],
     }
     let signature = contract.signature ?? return false
     let result = signature.result ?? return false
-    return !a_ledger_type_with_a_view(result)
+    // **A struct that holds a view is no result of its own** either: a
+    // `Node` whose field views the argument, or a list of them, points into
+    // what it was made from.
+    return !a_ledger_type_with_a_view(result) && !holds_a_struct_of_views(result, ask)
+}
+
+fn holds_a_struct_of_views(ty: ref Ty, ask: ref BufferAsk) -> bool {
+    if a_struct_of_views(ty, ask) {
+        return true
+    }
+    return match ty {
+        Ty::Named { args, .. } => {
+            let mut any = false
+            for arg in args {
+                if holds_a_struct_of_views(arg, ask) {
+                    any = true
+                }
+            }
+            any
+        },
+        Ty::Nullable(inner) => holds_a_struct_of_views(inner, ask),
+        Ty::Tuple(parts) => {
+            let mut any = false
+            for part in parts {
+                if holds_a_struct_of_views(part, ask) {
+                    any = true
+                }
+            }
+            any
+        },
+        else => false,
+    }
 }
 
 // **An argument made in the call** (ADR-283 D24): lent to a callee that hands
@@ -1601,7 +1737,7 @@ fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk
     if body.stmts.len() > 0 {
         first = body.stmts[0].span.start as i64
     }
-    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap() }
+    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet() }
     for (id, found) in walk.sources {
         decide_source(id.clone(), found.source, found.path, walk, plan)
     }
@@ -1754,8 +1890,11 @@ fn decide_source(id: (i64, String), source: ref Source, path: ref Vec[(i64, bool
         }
     }
     match source {
-        Source::Buffer { at, .. } => {
+        Source::Buffer { at, ty, .. } => {
             plan.puts.insert(at.clone(), keep.clone())
+            if !a_viewed_buffer(ty) {
+                plan.opaque_puts.insert(at.clone())
+            }
         }
         Source::Call { at, callee, .. } => {
             plan.calls.insert((at.clone(), callee.clone()), keep.clone())

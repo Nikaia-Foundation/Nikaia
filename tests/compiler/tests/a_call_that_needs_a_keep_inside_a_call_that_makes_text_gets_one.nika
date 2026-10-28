@@ -1,0 +1,34 @@
+// A call whose result views a keep's text, handed to a call that makes text of
+// its own: the outer call's text points into nothing, and the inner one still
+// gets a keep for the statement.
+struct Node {
+    kind: String,
+}
+
+struct Tree {
+    nodes: Vec[Node],
+}
+
+fn from_dump(dump: String) -> Tree {
+    let mut tree = Tree { nodes: [] }
+    for line in dump.split("\n") {
+        let kind: String = line.bytes[0..<1].text() catch { "" }
+        tree.nodes.push(Node { kind: kind })
+    }
+    return tree
+}
+
+fn parse(src: String) -> Tree {
+    let dump = f"{src}\nc"
+    return from_dump(dump)
+}
+
+fn count(t: Tree) -> String {
+    return f"{t.nodes.len()} {t.nodes[2].kind}"
+}
+
+fn main() {
+    let text = f"a{1}\nb{2}"
+    let draft = count(parse(text))
+    println(draft)
+}

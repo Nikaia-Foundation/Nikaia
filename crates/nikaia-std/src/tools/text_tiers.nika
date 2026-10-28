@@ -3697,7 +3697,14 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         if handed_parameter(receiver, ask, walk) != null {
             return received
         }
-        return viewed(received)
+        // **A view of a call's result does not outlive the statement**: the
+        // text it hands back is a temporary, so `a(n).trim().to_string()`
+        // is text of its own, unless only static text flows in.
+        let kept = viewed(received)
+        if kept.view && read_off_a_call(receiver, ask) {
+            return owned_kinds()
+        }
+        return kept
     }
     if owns_its_text(method) {
         return owned_kinds()
@@ -3712,6 +3719,23 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         return view_kinds()
     }
     return owned_kinds()
+}
+
+/// Whether `value` is a call's result, or a view of one taken by methods
+/// that view what they are called on (`a(n).trim()`).
+fn read_off_a_call(value: ref Expr, ask: ref TierAsk) -> bool {
+    return match value {
+        Expr::Call { .. } => true,
+        Expr::MethodCall { receiver, method, .. } => {
+            let name = ask.names.resolve(method)
+            if views_what_it_is_called_on(name) {
+                read_off_a_call(receiver, ask)
+            } else {
+                true
+            }
+        }
+        else => false,
+    }
 }
 
 /// Whether `std` declares this method on the receiver's type: `self.head.path()`

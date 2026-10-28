@@ -224,10 +224,12 @@ impl Plan {
 /// to another function that takes one. Monotone - a function never stops taking
 /// a keep once it does - so it ends.
 pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
+    let package = beside(units);
     for _ in 0..32 {
         let mut changed = false;
         for parsed in units.iter().copied() {
-            for plan in plans(parsed, ledger, library) {
+            let found = buffer_plans(parsed, Some(&package), ledger, library);
+            for plan in found.into_iter().map(from_nikaia) {
                 let Some(contract) = ledger.functions.get_mut(&plan.key) else {
                     continue;
                 };
@@ -274,20 +276,50 @@ fn keeping_positions(plan: &Plan) -> BTreeSet<String> {
 /// the keep each buffer goes into. What is left here is the plan in the types
 /// the emitter reads.
 pub fn plans(parsed: &Parsed, ledger: &Ledger, library: &Ledger) -> Vec<Plan> {
-    buffer_plans(parsed, ledger, library)
+    buffer_plans(parsed, None, ledger, library)
         .into_iter()
         .map(from_nikaia)
         .collect()
 }
 
+/// What the units of a package declare about views, together: the structs and
+/// enums that hold one, and every struct.
+pub(crate) fn beside(units: &[&Parsed]) -> Context {
+    let mut all = Context {
+        borrowing: crate::emit::package_borrowing(units),
+        structs: Default::default(),
+    };
+    for unit in units {
+        let theirs = Context::of(&unit.interner, &unit.program.items);
+        for (name, declared) in theirs.structs {
+            all.structs.entry(name).or_insert(declared);
+        }
+    }
+    all
+}
+
 /// The same, as Nikaia hands them back.
+///
+/// `beside` is what the package's other units declare (`beside`): **a struct
+/// of views declared in another file is one here** as well, so a view pushed
+/// into a field of one is seen leaving.
 pub(crate) fn buffer_plans(
     parsed: &Parsed,
+    beside: Option<&Context>,
     ledger: &Ledger,
     library: &Ledger,
 ) -> Vec<nikaia_std::tools::buffers::BufferPlan> {
     use nikaia_std::tools::buffers::{self as nika, BufferAsk};
-    let context = Context::of(&parsed.interner, &parsed.program.items);
+    let mut context = Context::of(&parsed.interner, &parsed.program.items);
+    if let Some(theirs) = beside {
+        context.borrowing.extend(theirs.borrowing.iter().cloned());
+        for (name, declared) in &theirs.structs {
+            context
+                .structs
+                .entry(name.clone())
+                .or_insert_with(|| declared.clone());
+        }
+    }
     // The buffers given a new value in a nested block while a view of them is
     // used afterwards (ADR-353 D3): they live in the frame's keep.
     let given_up: std::collections::BTreeMap<i64, String> = crate::view_changes::analyse(

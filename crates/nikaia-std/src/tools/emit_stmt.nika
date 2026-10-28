@@ -73,13 +73,17 @@ fn emit_stmt_tuple_part(names: ref Vec[String], shape: ref Vec[i64], mut at: i64
 
 /// What a buffer put into a keep is written with: `put_viewed` where the views
 /// are held one by one (ADR-283 D14) or a task's `Holding` finds them (ADR-218
-/// D4), `put` otherwise.
-fn emit_stmt_put_call(keep: ref KeepAt) -> String {
+/// D4), `put` otherwise - and for a buffer that is no text or bytes, which no
+/// view is found in by address.
+fn emit_stmt_put_call(keep: ref KeepAt, opaque: bool) -> String {
     let method = match keep {
         KeepAt::Element(_) => "put_viewed",
         KeepAt::Task => "put_viewed",
         KeepAt::Param => "put_viewed",
         else => "put",
+    }
+    if opaque {
+        return f"{emit_keep_expr(keep, false)}.put("
     }
     return f"{emit_keep_expr(keep, false)}.{method}("
 }
@@ -404,7 +408,7 @@ impl EmitState {
         let mut put: String? = null
         let keep = plan.puts.get(at)
         if keep != null {
-            put = emit_stmt_put_call(keep ?? return emit_stmt_kept_none())
+            put = emit_stmt_put_call(keep ?? return emit_stmt_kept_none(), plan.opaque_puts.contains(at))
         }
         // **A binding a task takes with it is packed with the task's keep**
         // (D3), and every use of it reads through the handle.
@@ -423,7 +427,7 @@ impl EmitState {
         let key = self.keep_plan_key(walk, function) ?? return null
         let plan = self.keep_plans.get(key) ?? return null
         let keep = plan.reputs.get(at) ?? return null
-        return emit_stmt_put_call(keep)
+        return emit_stmt_put_call(keep, false)
     }
 
     /// The annotation of a single-name `let`: the written type, or the type a

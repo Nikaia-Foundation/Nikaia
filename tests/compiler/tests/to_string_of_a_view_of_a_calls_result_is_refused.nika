@@ -1,0 +1,13 @@
+// `to_string()` of text is the text itself (ADR-282 D8): of a view of a call's
+// result it is that view, which a function's `String` result cannot hand back.
+fn made(n: i64) -> String {
+    return f" x{n} "
+}
+
+fn trimmed(n: i64) -> String {
+    return made(n).trim().to_string()
+}
+
+fn main() {
+    println(trimmed(1))
+}

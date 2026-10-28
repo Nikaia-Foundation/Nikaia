@@ -1,0 +1,11 @@
+error[NK1104]: You're returning `ref String`, but the function is declared to return `String`.
+  --> tests/to_string_of_a_view_of_a_calls_result_is_refused.nika:8:12
+   |
+ 8 |     return made(n).trim().to_string()
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: This is a view: it points into text that something else owns.
+   = note: The function returns it, and the caller keeps it after the call ends, so it needs text of its own.
+   = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+   = help: Write `.clone()` to copy it here.
+1 type error

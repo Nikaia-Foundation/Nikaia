@@ -2757,13 +2757,27 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
     if method == "filter" || method == "rev" || method == "skip" || method == "take" || method == "step_by" { return received; }
     if method == "to_string" && args.is_empty() && (!no_text(&received) || a_text_read_whole(receiver, ask, &walk)) {
         if handed_parameter(Some(receiver), ask, &walk).is_some() { return received; }
-        return viewed(&received);
+        let kept = viewed(&received);
+        if kept.view && read_off_a_call(receiver, ask) { return owned_kinds(); }
+        return kept;
     }
     if owns_its_text(method) { return owned_kinds(); }
     if views_what_it_is_called_on(method) || cuts_in_two(method) { return viewed(&received); }
     if hands_back_an_element(method) { return received; }
     if std_method_views(method, (of).as_deref(), ask) { return view_kinds(); }
     owned_kinds()
+}
+
+pub(crate) fn read_off_a_call(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>) -> bool {
+    match value {
+        Expr::Call { .. } => true,
+        Expr::MethodCall { receiver, method, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            if views_what_it_is_called_on(name) { read_off_a_call(receiver, ask) } else { true }
+        },
+        _ => false,
+    }
 }
 
 pub(crate) fn std_declares(method: &str, of: Option<&str>, ask: &TierAsk<'_, '_, '_, '_>) -> bool {

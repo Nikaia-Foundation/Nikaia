@@ -45,13 +45,14 @@ pub(crate) fn emit_stmt_tuple_part(names: &[String], shape: &[i64], at: &mut i64
     format!("({})", parts.join(", "))
 }
 
-pub(crate) fn emit_stmt_put_call(keep: &KeepAt) -> String {
+pub(crate) fn emit_stmt_put_call(keep: &KeepAt, opaque: bool) -> String {
     let method = match keep {
         KeepAt::Element(_) => "put_viewed",
         KeepAt::Task => "put_viewed",
         KeepAt::Param => "put_viewed",
         _ => "put",
     };
+    if opaque { return format!("{}.put(", emit_keep_expr(keep, false)); }
     format!("{}.{}(", emit_keep_expr(keep, false), method)
 }
 
@@ -290,7 +291,7 @@ impl EmitState {
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() };
         let mut put: Option<String> = None;
         let keep = plan.puts.get(&at);
-        if keep.is_some() { put = Some(emit_stmt_put_call(match keep { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() })); }
+        if keep.is_some() { put = Some(emit_stmt_put_call(match keep { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() }, plan.opaque_puts.contains(&at))); }
         let packed = nikaia_std::index::or(plan.tethered.get(bound), || -1) == at;
         let mut holding: Option<i64> = None;
         if plan.element_keepers.contains(bound) { holding = Some(nikaia_std::index::or(plan.widths.get(bound), || 1)); }
@@ -300,7 +301,7 @@ impl EmitState {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let keep = match plan.reputs.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(emit_stmt_put_call(&keep))
+        Some(emit_stmt_put_call(&keep, false))
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_stmt_annotation<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: Option<&Type>, at: i64, count: Count, kept: bool) -> String {

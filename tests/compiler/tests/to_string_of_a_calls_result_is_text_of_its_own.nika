@@ -1,0 +1,39 @@
+// `to_string()` of a call's result, or of a view of one, hands back text of
+// its own: the text the call made does not outlive the statement, so the
+// function's `String` result cannot become a view of it.
+struct Doc {
+    parts: Vec[String],
+}
+
+impl Doc {
+    fn text(ref self, n: i64) -> String {
+        let mut out: Vec[String] = []
+        out.push(self.parts[n].clone())
+        return out.join("")
+    }
+
+    fn whole(ref self, n: i64) -> String {
+        return self.text(n).to_string()
+    }
+
+    fn trimmed(ref self, n: i64) -> String {
+        return self.text(n).trim().clone()
+    }
+}
+
+fn made(n: i64) -> String {
+    return f" x{n} "
+}
+
+fn copied(n: i64) -> String {
+    return made(n).to_string()
+}
+
+fn main() {
+    let mut parts: Vec[String] = []
+    parts.push(f" a{1} ")
+    let doc = Doc { parts: parts }
+    println(f"[{doc.whole(0)}]")
+    println(f"[{doc.trimmed(0)}]")
+    println(f"[{copied(2)}]")
+}

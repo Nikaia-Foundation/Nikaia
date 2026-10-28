@@ -466,6 +466,34 @@ where
     }
 }
 
+/// **Text of either kind read out of a map keyed by text of its own**
+/// (ADR-282 D14): a name both kinds of text flow into is lent to the brackets
+/// as it is lent anywhere, and looked up as the `str` it holds.
+impl<V, S> Get<&crate::either_text::EitherText<'_>> for crate::hash::HashMap<String, V, S>
+where
+    S: std::hash::BuildHasher,
+{
+    type Out<'a>
+        = Found<'a, V>
+    where
+        Self: 'a;
+
+    fn get(&self, key: &crate::either_text::EitherText<'_>) -> Found<'_, V> {
+        Found(crate::hash::HashMap::get(self, key.as_str()))
+    }
+}
+
+impl<V> Get<&crate::either_text::EitherText<'_>> for std::collections::BTreeMap<String, V> {
+    type Out<'a>
+        = Found<'a, V>
+    where
+        Self: 'a;
+
+    fn get(&self, key: &crate::either_text::EitherText<'_>) -> Found<'_, V> {
+        Found(std::collections::BTreeMap::get(self, key.as_str()))
+    }
+}
+
 /// **A key read out of a map whose key type the checker could not pin**
 /// (0.0.235): what `index::key(k)` wraps.
 ///

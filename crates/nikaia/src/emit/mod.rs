@@ -862,9 +862,13 @@ impl<'p> Emitter<'p> {
                     described,
                 ))
                 .collect(),
+            // **A type of another file of the package that holds a view
+            // borrows here too**: `impl TrEm` in a second file declares the
+            // lifetime the struct was written with in the first.
             borrowing: borrowing_structs_beside(parsed, &package_wide)
                 .into_iter()
                 .map(|s| parsed.text(s).to_string())
+                .chain(package_wide.iter().cloned())
                 .collect(),
             tethered: nikaia_std::tools::emit_tables::emit_tables_tethered(
                 &own_contracts,
@@ -895,7 +899,12 @@ impl<'p> Emitter<'p> {
             methods,
             keep_plans: checked_plans
                 .unwrap_or_else(|| {
-                    crate::contracts::keep::buffer_plans(parsed, &own_contracts, library)
+                    crate::contracts::keep::buffer_plans(
+                        parsed,
+                        Some(&crate::contracts::keep::beside(&units)),
+                        &own_contracts,
+                        library,
+                    )
                 })
                 .into_iter()
                 .map(|plan| (plan.key.clone(), plan))

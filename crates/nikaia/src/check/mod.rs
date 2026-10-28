@@ -487,7 +487,12 @@ fn walked<'a>(
         // make a buffer is what they say.
         // The plans once, kept for the emitter where they are its own: made
         // against `std` alone, as it makes them (#727).
-        let plans = crate::contracts::keep::buffer_plans(parsed, own, library);
+        let plans = crate::contracts::keep::buffer_plans(
+            parsed,
+            Some(&crate::contracts::keep::beside(beside)),
+            own,
+            library,
+        );
         let std = crate::contracts::std_ledger();
         if std::ptr::eq(library, std) || library == std {
             checker.s.facts.keep_plans = Some(plans.clone());

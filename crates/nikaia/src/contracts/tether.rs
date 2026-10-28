@@ -309,7 +309,7 @@ pub fn report(parsed: &Parsed, ledger: &Ledger) -> String {
     let here: std::collections::BTreeSet<String> =
         Ledger::infer(parsed).functions.keys().cloned().collect();
     let library = crate::contracts::std_ledger();
-    let plans = super::keep::buffer_plans(parsed, ledger, library);
+    let plans = super::keep::buffer_plans(parsed, None, ledger, library);
     nikaia_std::tools::tether::tethers_report(&parsed.text_tiers, ledger, &here, &plans, library)
 }
 
@@ -340,7 +340,7 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<crate::chec
     // views through `push`, `for`, fields and calls, which the walk that stood
     // here did not, and it refuses only what it cannot lower or what no
     // declaration permits.
-    refusals_of(super::keep::buffer_plans(parsed, own, library))
+    refusals_of(super::keep::buffer_plans(parsed, None, own, library))
 }
 
 /// [`check`]'s refusals, of plans already made.

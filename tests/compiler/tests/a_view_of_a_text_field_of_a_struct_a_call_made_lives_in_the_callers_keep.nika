@@ -1,0 +1,42 @@
+// A struct a call hands back holds text of its own: a view of its text field
+// that leaves the function, through a result made of views, keeps the struct
+// in the caller's keep. Its other fields, moved or copied, are no view of it.
+struct Node {
+    kind: String,
+}
+
+struct Tree {
+    nodes: Vec[Node],
+}
+
+fn from_dump(dump: String) -> Tree {
+    let mut tree = Tree { nodes: [] }
+    for line in dump.split("\n") {
+        let kind: String = line.bytes[0..<1].text() catch { "" }
+        tree.nodes.push(Node { kind: kind })
+    }
+    return tree
+}
+
+struct Run {
+    out: String,
+    code: i64,
+    names: Vec[String],
+}
+
+fn ran(n: i64) -> Run {
+    return Run { out: f"a{n}\nb{n + 1}", code: n, names: ["x", "y"] }
+}
+
+fn parse(n: i64) -> Tree {
+    let res = ran(n)
+    let copied = res.out.clone()
+    println(f"{copied.len()} {res.code} {res.names.len()}")
+    return from_dump(res.out)
+}
+
+fn main() {
+    let t = parse(1)
+    println(t.nodes[0].kind)
+    println(t.nodes[1].kind)
+}

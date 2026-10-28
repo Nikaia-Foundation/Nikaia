@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1258] — 2026-10-28
+
+**A keep for a struct of views a call makes, across the files of a package; text of either kind looks a key up (ADR-283, ADR-282 D14)**
+- A struct that a call makes and that holds text the call viewed lives in the caller's keep. A view of one of its text fields stays valid for as long as the struct does, and `to_string` of it is text of its own. A call that needs a keep, written inside another call that makes text (`count(parse(text))`), gets one. A struct of views declared in another file of the package counts as one here, both for the keep plans and for the ledger (`keep::beside`). An opaque value put into a keep is put as itself, never through a view (`Keep::put`).
+- A name that both kinds of text flow into looks a key up in a map keyed by text of its own (`named[name]`, `BTreeMap` and `HashMap`).
+
 ## [0.0.1257] — 2026-10-28
 
 **std::regex: run-time patterns without positions; a match over error names a type by its name (#673, ADR-regex-1, ADR-357)**
