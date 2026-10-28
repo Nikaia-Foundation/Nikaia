@@ -362,9 +362,12 @@ fn uses_of(
         hands_back_its_last: ret_type.is_some() && !returns_a_view,
         unresolved,
         // **A receiver's declared type narrows the method it reaches** (#791).
+        // A generic one by its name: `re: regex::Regex[regex::Dynamic]`
+        // reaches `regex::Regex::find`, not `Seq::find`, which keeps its
+        // receiver.
         types: args
             .iter()
-            .filter(|a| a.ty.generics.is_empty() && !a.ty.is_slice)
+            .filter(|a| !a.ty.is_slice)
             .map(|a| {
                 (
                     parsed.text(a.name).to_string(),

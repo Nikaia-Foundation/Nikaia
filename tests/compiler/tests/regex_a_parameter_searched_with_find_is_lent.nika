@@ -1,0 +1,16 @@
+// A parameter of a generic `std` type is lent to its own method: `re.find(s)`
+// is `regex::Regex::find`, which only reads `re`, and not `Seq::find`, which
+// takes its sequence whole, so `first` lends `re` and the caller uses it again.
+use std::regex
+
+fn first(re: regex::Regex[regex::Dynamic], s: String) -> String {
+    let m = re.find(s) ?? return ""
+    return m.text().clone()
+}
+
+fn main() throws {
+    let re = regex::dynamic("[a-z]+")
+    println(first(re, "12 xy 3"))
+    println(first(re, "ab"))
+    println(f"{re.is_match("q")}")
+}
