@@ -7,7 +7,7 @@
 // in) on one line; `batch.nika` reads it for its `NEXT` line.
 //
 // Reads BRIEF's frontmatter (agent, model, max_turns, budget_usd), runs
-// `claude -p` within 90 minutes, writes BRIEF.run.json, appends the cost to
+// `claude -p` within 150 minutes (larger steps, owner 2026-10-28), writes BRIEF.run.json, appends the cost to
 // DIR/tokens.txt (through `batch.nika --tokens`) and DIR/cost.txt, and prints
 // `done <sha8> report <path> cost <usd> turns <n>`. A failed run writes
 // DIR/ESCALATE (one line) and exits 2. A report with `Gate: red ...` writes
@@ -268,7 +268,7 @@ fn main() throws {
     }
     if spent > 1000 * 1000000 { agent_escalate(dir.clone(), f"cost today {spent / 1000000} USD above 1000") }
 
-    let out = process::run(claude, claude_args; within: 90.minutes())
+    let out = process::run(claude, claude_args; within: 150.minutes())
     let json = out.stdout.clone()
     fs::write(f"{abs}.run.json", fs::Root::Anywhere, json.clone())
     let cost = agent_json(json.clone(), "total_cost_usd")
@@ -298,7 +298,7 @@ fn main() throws {
             fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, with_run + f"{today} {more}\n")
         }
     }
-    if out.timed_out { agent_escalate(dir.clone(), "timed out after 90 minutes") }
+    if out.timed_out { agent_escalate(dir.clone(), "timed out after 150 minutes") }
     if !out.ok { agent_escalate(dir.clone(), f"claude exited with code {out.code}") }
     if agent_json(json.clone(), "is_error") != "false" { agent_escalate(dir.clone(), "is_error") }
     if reason != "completed" { agent_escalate(dir.clone(), f"terminal_reason {reason}") }
