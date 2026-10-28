@@ -1,2 +1,2 @@
-b905-variant-list-part.md
+p2-project-check-summary.md
 p2-large-files-plan.md

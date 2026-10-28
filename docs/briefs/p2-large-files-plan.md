@@ -4,25 +4,25 @@ model: opus
 max_turns: 70
 budget_usd: 15
 ---
-# Brief: a slice plan for `comptime_run.rs`, `sysroot.rs` and the rest of `emit/mod.rs` (research, docs only, Part #125)
+# Brief: a slice plan for `sysroot.rs`, `modules.rs` and the rest of `emit/mod.rs` (research, docs only, Part #125)
 
-Score: self-hosting lane (`docs/priorities.md`, owner's direction 2026-10-27: moves first, the largest Rust files first; every batch carries at least two moves). The brief before this one (`p1-large-files-plan.md`) plans `project.rs` and `parser/mod.rs`; this one plans the next three by size, so the batches after it have moves from four files to choose from without touching the same file twice in a row. S=2 (4 685 Rust lines without a plan), O~5 M (a planned slice costs about 10 k tokens a line, against 15+ unplanned, `c7-rest-plan`), C~2 M (reading and converter runs only).
+Score: self-hosting lane (`docs/priorities.md`, owner's direction 2026-10-27: moves first, the largest Rust files first; every batch carries at least two moves). The brief before this one (`p1-large-files-plan.md`) plans `project.rs` and `parser/mod.rs`; it also planned `comptime_run.rs` (rows K1, K2); this one plans the next three by size, so the batches after it have moves from four files to choose from without touching the same file twice in a row. S=2 (4 685 Rust lines without a plan), O~5 M (a planned slice costs about 10 k tokens a line, against 15+ unplanned, `c7-rest-plan`), C~2 M (reading and converter runs only).
 
 ## Facts
-* Line counts at d8264d0: `crates/nikaia/src/comptime_run.rs` 1699, `crates/nikaia/src/sysroot.rs` 1575, `crates/nikaia/src/emit/mod.rs` 1411 (after E12-1..4b). Next by size: `modules.rs` 1398, `contracts/mod.rs` 1326, `check/mod.rs` 1039.
+* Line counts at d8264d0: `crates/nikaia/src/sysroot.rs` 1575, `crates/nikaia/src/emit/mod.rs` 1411 (after E12-1..4b), `crates/nikaia/src/modules.rs` 1398 (`comptime_run.rs` is planned already, K1/K2). Next by size: `contracts/mod.rs` 1326, `check/mod.rs` 1039.
 * `emit/mod.rs` keeps `Build`, `host_target()`, `default_target()` in Rust on purpose (E12-4 row: the host triple from `env!`, the orphan rule): name them under *Stays Rust*, do not plan them.
 * `sysroot.rs` holds the lowered-file cache (#667: per-file keys, `LoweredBefore`, `in_parallel`) and Cargo calls: separate the pure parts (key computation, table walks) from the file system and process parts.
-* The model of a slice table is `## C-7 rest and E12: what is left` in `docs/selfhosting-plan.md` (columns, *Stays Rust* list with one-line reasons, known risk per slice). `p1-large-files-plan.md` may already have appended `## Large files: project.rs and parser/mod.rs`: append after it, do not change it.
+* The model of a slice table is `## C-7 rest and E12: what is left` in `docs/selfhosting-plan.md` (columns, *Stays Rust* list with one-line reasons, known risk per slice). `## Large files: project.rs and parser/mod.rs` is there (p1): append after it, do not change it.
 * Each move starts from an `rs2nika` draft (`docs/builder-facts.md`, *The converter*).
 
 ## To build (one commit, `docs/selfhosting-plan.md` only)
 1. Read the three files; resolve callers with `target/fast/nikaia run scripts/where.nika -- NAME...`, not `grep -r`.
 2. Run the converter (`rs2nika --profile check --file`) over each candidate slice once (a scratch `.rs` per slice under your scratch dir, not committed) and note the share of lines it drafts without a TODO.
-3. Append `## Large files 2: comptime_run.rs, sysroot.rs, emit/mod.rs` to `docs/selfhosting-plan.md`: one row per slice of 300-1200 Rust lines, in build order: id (`CR1`.. for `comptime_run.rs`, `S1`.. for `sysroot.rs`, `E13-1`.. for `emit/mod.rs`), the Rust functions (file:line ranges), the target `tools/*.nika` file (new or existing), host callbacks added/removed, prerequisite (another slice, an open issue, or none), Rust lines, and the converter's draft share. Mark what must stay Rust with one line why each. Name the first two slices to brief, from different files, and the one known risk of each.
-Nothing is built; `Tests: none, docs only`. Commit `docs: selfhosting-plan, slices of comptime_run.rs, sysroot.rs, emit/mod.rs (#125)`; no `Fixes`. `Rs2nika: none` (no move).
+3. Append `## Large files 2: sysroot.rs, modules.rs, emit/mod.rs` to `docs/selfhosting-plan.md`: one row per slice of 300-1200 Rust lines, in build order: id (`M1`.. for `modules.rs`, `S1`.. for `sysroot.rs`, `E13-1`.. for `emit/mod.rs`), the Rust functions (file:line ranges), the target `tools/*.nika` file (new or existing), host callbacks added/removed, prerequisite (another slice, an open issue, or none), Rust lines, and the converter's draft share. Mark what must stay Rust with one line why each. Name the first two slices to brief, from different files, and the one known risk of each.
+Nothing is built; `Tests: none, docs only`. Commit `docs: selfhosting-plan, slices of sysroot.rs, modules.rs, emit/mod.rs (#125)`; no `Fixes`. `Rs2nika: none` (no move).
 
 ## Stop and report if
-A file turns out to be mostly what must stay Rust (then say so in the table and plan `modules.rs` instead); an error in another agent's file.
+A file turns out to be mostly what must stay Rust (then say so in the table and plan `contracts/mod.rs` instead); an error in another agent's file.
 
 Read `docs/builder-facts.md`.
 
