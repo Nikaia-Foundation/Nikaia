@@ -1,0 +1,10 @@
+pub fn as_functions(mut items: Vec[Spanned[Item]]) sync {
+    let mut kept: Vec[Spanned[Item]] = []
+    for item in items.drain() {
+        let (name, body) = match item.node { Item::Test { name, body } => (name, body), else => { kept.push(item); continue } }
+        let node = Item::Fn { name: name.clone(), body: body.clone() }
+        kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })
+    }
+    items.extend(kept)
+}
+

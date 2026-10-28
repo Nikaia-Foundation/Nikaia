@@ -5,7 +5,7 @@ pub fn how(claim: ref Claim) -> String sync {
         Held::AtRunTime(why) => f"checked at run time: {why}",
         Held::Refused => {
             "refused"
-        }
+        },
     }
 }
 

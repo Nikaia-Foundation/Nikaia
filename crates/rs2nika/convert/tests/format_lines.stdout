@@ -1,6 +1,6 @@
 pub fn report(path: String, rows: ref Vec[Held]) -> String sync {
-    let hole_8 = count(fn(h) { (match h { Held::Proved => true, else => false }) })
-    let hole_9 = count(fn(h) { (match h { Held::Refused => true, else => false }) })
+    let hole_8 = count(fn(h) { match h { Held::Proved => true, else => false } })
+    let hole_9 = count(fn(h) { match h { Held::Refused => true, else => false } })
     let hole_10 = if rows.len() > 2 { "many" } else { "few, some" }
     return f"asserts in {path}: {rows.len()} - proved {hole_8}, refused {hole_9}, {hole_10}\n"
 }

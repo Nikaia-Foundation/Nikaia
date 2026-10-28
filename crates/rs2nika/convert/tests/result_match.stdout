@@ -1,5 +1,5 @@
 pub fn twice(text: String) -> Tree sync throws {
-    let again = read_tree(text) catch { bail!("does not parse: {error}") }
+    let again = read_tree(text) catch { throw f"does not parse: {error}" }
     return again
 }
 
@@ -32,10 +32,10 @@ pub fn dump(ty: String) -> Computed sync {
         match error {
             Wall::NoForm { because } => {
                 return Computed::NotHere(because)
-            }
+            },
             else => {
                 return Computed::NotHere("no")
-            }
+            },
         }
     }
     return Computed::Value(dump)
@@ -73,10 +73,10 @@ pub fn report(said: Result[Out]) -> i64 sync {
     match said {
         Ok(out) => {
             show(out)
-        }
+        },
         Err(error) => {
             eprintln(f"{error}")
-        }
+        },
     }
     return 0
 }

@@ -1,0 +1,12 @@
+pub fn count(e: ref Expr, mut n: i64) sync {
+    match e {
+        Expr::Variable(_) => {
+            n += 1
+        },
+        Expr::Call(_) => {
+            n += 2
+        },
+        else => {},
+    }
+}
+

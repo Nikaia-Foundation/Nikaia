@@ -1,0 +1,13 @@
+pub fn note(e: ref Expr, mut names: collections::BTreeSet[String]) {
+    match e {
+        Expr::Lit(parts) => {
+            for part in parts {
+                for e in visited_in_expr(part) {
+                    note(e, names)
+                }
+            }
+        },
+        else => {},
+    }
+}
+

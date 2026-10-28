@@ -17,7 +17,7 @@ pub fn walks(generics: ref Vec[G], parsed: ref CheckWorld) sync {
     // TODO(rs2nika): the type of `walked` (an option of the element)
     let mut walked = null
     for g in generics {
-        let parameter = parsed.words.resolve(g.name).to_string()
+        let parameter = parsed.words.resolve(g.name).clone()
         let asked = g.bounds.iter().any(fn(b) { shape(b) })
         let found = asked.then_some(parameter)
         if found != null {

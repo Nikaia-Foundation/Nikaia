@@ -11,9 +11,7 @@ pub fn chain_probe(items: ref Vec[Item], key: String, bad: ref Vec[String]) -> i
         }
         if item.ok {
             match item.shape {
-                Shape::Square(side) if side > 2 => {
-                    n += side
-                },
+                Shape::Square(side) if side > 2 => n += side,
                 else => {},
             }
         }

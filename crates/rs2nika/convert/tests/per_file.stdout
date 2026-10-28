@@ -1,0 +1,22 @@
+/// Every name a file's functions call.
+pub fn modules_called_in(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], mut out: collections::BTreeSet[String]) {
+
+    for item in items {
+        match item.node {
+            Item::Fn { body, .. } => {
+                for e in visited_in_block(body) {
+                    modules_note(names, e, out)
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+fn modules_note(names: ref winnow_grammar::InternerContext, e: ref Expr, mut out: collections::BTreeSet[String]) {
+    match e {
+        Expr::Variable(n, _) => out.insert(names.resolve(n).clone()),
+        else => {},
+    }
+}
+

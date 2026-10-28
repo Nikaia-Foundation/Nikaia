@@ -1,0 +1,13 @@
+pub fn method_of(e: ref Expr) -> String sync {
+    return match e {
+        Expr::MethodCall { method, .. } => {
+            method.clone()
+        },
+        Expr::SafeMethod { method, .. } => {
+            method.clone()
+        },
+        Expr::Call { .. } | Expr::Index { .. } => "",
+        else => "",
+    }
+}
+

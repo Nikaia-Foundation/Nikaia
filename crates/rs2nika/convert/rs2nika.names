@@ -14,6 +14,7 @@ crate::contracts::sync::Pause ModulesPause # modules.rs's pause, `ModulesPause` 
 sync::Pause ModulesPause # the same, by its short path (M1)
 verdict project_tests_verdict # `verdict` is a test runner's word other tools may want: prefixed (project_tests.nika, P3a)
 difference project_tests_difference # the same: diffs.nika has `differing_lines` beside it (P3a)
+is_a_test_function prover_a_test_function # modules.rs had it without a caller; prover_walk.nika answers the same question (M2 deleted the Rust one)
 
 # [view]: what `--view` (R177) renames, in this order. The parsed files are
 # `ParsedView`s named `unit`. A bare word is renamed as a word (not after a
@@ -59,3 +60,5 @@ Package.files = files: Vec[(String, String)] # sysroot.rs's packed package, one 
 [forms]
 {x}.sync_claim == Sync::Inferred = inferred_sync({x}.sync_claim) # `Sync` stays Rust: modules.nika asks `inferred_sync` (M1)
 {x}.absorb_renaming( = absorb_into({x}, # `Ledger::absorb_renaming` is ledger_ops.nika's free `absorb_into` (M1)
+{x}.span.at() = ({x}.span.start as i64) # `Span::at` is a Rust helper of the lowered `Span`; Nikaia reads the field (modules.nika, M2)
+{x}.span.stop() = ({x}.span.end as i64) # the same, its end (M2)

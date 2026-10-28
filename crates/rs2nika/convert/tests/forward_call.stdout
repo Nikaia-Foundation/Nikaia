@@ -1,0 +1,6 @@
+// rs2nika: `test_function` only forwards to tools/modules.nika `test_function`: its callers call `test_function` (R256)
+
+pub fn modules_second_test() -> String {
+    return test_function(2 as i64)
+}
+

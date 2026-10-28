@@ -1,0 +1,8 @@
+pub fn named(e: Expr) -> String sync throws {
+    return match e {
+        Expr::Variable(name) => name,
+        Expr::Call(f) => throw f"`{f}` is a call",
+        else => throw "not a name",
+    }
+}
+

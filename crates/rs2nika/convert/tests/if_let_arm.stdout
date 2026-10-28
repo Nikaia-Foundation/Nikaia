@@ -1,0 +1,9 @@
+pub fn bodies(methods: ref Vec[Spanned[Item]], mut out: Vec[Block]) sync {
+    for method in methods {
+        match method.node {
+            Item::Fn { body, .. } => out.push(body.clone()),
+            else => {},
+        }
+    }
+}
+

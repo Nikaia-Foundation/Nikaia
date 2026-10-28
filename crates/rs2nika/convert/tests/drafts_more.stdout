@@ -27,16 +27,12 @@ pub fn more_chosen(names: ref Vec[String], body: ref Block, expected: Ty?, tail:
         }
     }
     match (expected, body.stmts.last()?.node) {
-        (expected, Stmt::Expr(value)) if expected != null => {
-            use_both(value, expected)
-        },
+        (expected, Stmt::Expr(value)) if expected != null => use_both(value, expected),
         else => {},
     }
     match how {
-        Wrap::Widen(_) | Wrap::Constructor => {
-            keep(how)
-        }
-        else => {}
+        Wrap::Widen(_) | Wrap::Constructor => keep(how),
+        else => {},
     }
     // a comment between two links
     // TODO(rs2nika): `.get(range)`: Nikaia has no `get` of a range (NK1171); test the bounds, then cut `s[a..]` / `s[a..<b]`

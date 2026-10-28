@@ -4,7 +4,7 @@ pub fn first_word(found: (String, i64)?, text: String) -> i64 sync {
         // TODO(rs2nika): `is_some_and`/`map_or`: `let x = e ?? <false>` then the test
         (head, n) if text.chars().next().is_some_and(char::is_alphanumeric) => {
             n + head.len()
-        }
+        },
         (_, n) => n,
     }
 }

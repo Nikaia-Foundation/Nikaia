@@ -1,5 +1,5 @@
 pub fn counted(rows: ref Vec[Held]) -> i64 sync {
-    return count(rows, fn(h) { (match h { Held::Proved => true, else => false }) })
+    return count(rows, fn(h) { match h { Held::Proved => true, else => false } })
 }
 
 fn count(rows: ref Vec[Held], want: fn(ref Held) -> bool sync) -> i64 sync {

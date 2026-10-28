@@ -1,0 +1,4 @@
+pub fn tests(items: ref Vec[Spanned[Item]]) -> i64 sync {
+    return items.iter().filter(fn(item) { match item.node { Item::Test { .. } => true, else => false } }).count()
+}
+

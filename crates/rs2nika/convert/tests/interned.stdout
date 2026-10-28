@@ -1,0 +1,6 @@
+pub fn rename(mut items: Vec[Name], interner: ref Interner, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Symbol sync throws {
+    let main = intern("main")
+    let other = intern("other")
+    return main
+}
+
