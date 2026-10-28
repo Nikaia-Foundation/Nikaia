@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1257] — 2026-10-28
+
+**std::regex: run-time patterns without positions; a match over error names a type by its name (#673, ADR-regex-1, ADR-357)**
+- std::regex: regex::dynamic(pattern) compiles a run-time pattern to a regex::Regex[regex::Dynamic] (throws regex::Error) with is_match, find, find_all, captures (group, named), replace_all, split; a match is a text::Match with m.text(), a view of the searched text; no positions yet (ADR-regex-1 D3, D8). A function taking a generic std type lends it to that type's own methods. A match over error names a type by its bare name or path and is complete when it names every type that can arrive, without else; a bare name that is not a type arriving there is NK1103 (ADR-357 D1, D2, D5; ADR-023 D4 rewritten).
+
 ## [0.0.1256] — 2026-10-28
 
 **a catch block that begins with an arm is a match over error (ADR-catch-1)**
