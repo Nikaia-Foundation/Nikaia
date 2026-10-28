@@ -100,3 +100,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1188954 24
 /home/user/Nikaia/docs/briefs/b905-variant-list-part.md 8105275 92
 /home/user/Nikaia/docs/briefs/architect-task.md 1015655 23
+/home/user/Nikaia/docs/briefs/p2-project-check-summary.md 1462293 33
