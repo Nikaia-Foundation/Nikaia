@@ -1,0 +1,11 @@
+use std::path::Path;
+
+impl Kept {
+    fn second(&self) -> usize {
+        2
+    }
+}
+
+fn whole() -> bool {
+    true
+}

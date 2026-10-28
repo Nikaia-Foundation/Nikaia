@@ -176,6 +176,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
         "--engine lines|tree picks the converter: `tree` parses the Rust after the line engine's passes on its text and writes Nikaia from the syntax tree, then runs the line engine's later stages that help it (the default); `lines` is the line engine alone (`--out` uses it)",
         "--check DRAFT --as NAME checks the draft as tools/NAME.nika in a copy of std's source, its findings grouped by code",
+        "--cut PATH:A-B (repeated) prints the whole items of PATH that lines A-B touch, a method inside its `impl`, with the `use` lines: the Rust a brief's `Cut:` lines name, ready for `--file`",
         "R68  a positional rest `V(a, ..)` and a slice pattern pass through; `rest @ ..` -> `..rest` (ADR-355)",
         "R70  a `format!` hole hoisted out of a match arm (R81) -> the arm becomes a block holding it",
         "R71  a `None =>` / `None if guard =>` arm -> `null =>` / `null if guard =>` (ADR-352)",
@@ -2300,8 +2301,10 @@ fn rs2nika_mapped_fallbacks(mut ctx: Rs2nikaCtx, given: String) -> String {
 /// `remove(p, fs::Root::Anywhere)`, `remove_dir_all(p)` with `recursive:
 /// true`; a `&` before an argument goes. `.unwrap_or_default()` after a read
 /// -> `catch { "" }` (`catch { [] }` for `read`), `.ok()?` -> `catch {
-/// return null }`.
-fn rs2nika_std_fs(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+/// return null }`. For the tree (`rust`), the text stays Rust: a recursive
+/// call names `RS2NIKA_RECURSIVE` as its last argument (`rs2nika_tree`
+/// writes `; recursive: true`), and what follows the call is left to it.
+fn rs2nika_std_fs(mut ctx: Rs2nikaCtx, rust: bool, given: ref Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
     for l in given {
         // `std::path::PathBuf` is `PathBuf`, which rs2nika.names' `[types]` names
@@ -2350,6 +2353,12 @@ fn rs2nika_std_fs(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
                 call = f"fs::remove({args[0]}, {root}; recursive: true)"
             }
             if call == "" {
+                continue
+            }
+            if rust {
+                call = call.replace("; recursive: true)", ", RS2NIKA_RECURSIVE)")
+                line = f"{rs2nika_text(c, 0, at)}{call}{rs2nika_text(c, close + 1, c.len())}"
+                rs2nika_hit(ctx, "R237")
                 continue
             }
             let mut rest: String = rs2nika_text(c, close + 1, c.len())
@@ -16947,11 +16956,12 @@ fn rs2nika_rust_passes(mut ctx: Rs2nikaCtx, lines: ref Vec[String], facts: ref V
     let mut chained1: Vec[String] = split.clone()
     if !skip.contains("join_chains") { chained1 = rs2nika_join_chains(ctx, split) }
     let chained1b = rs2nika_loop_lets(ctx, rs2nika_map_updates(ctx, rs2nika_let_wraps(ctx, chained1)))
-    let chained000 = rs2nika_text_lines(ctx, rs2nika_byte_parts(ctx, rs2nika_tuple_closures(ctx, rs2nika_std_fs(ctx, rs2nika_paths(ctx, rs2nika_read_dirs(ctx, chained1b))))))
+    let chained000 = rs2nika_text_lines(ctx, rs2nika_byte_parts(ctx, rs2nika_tuple_closures(ctx, rs2nika_std_fs(ctx, skip.contains("fs_forms"), rs2nika_paths(ctx, rs2nika_read_dirs(ctx, chained1b))))))
     // R239 again: an arm it wrote may hold a `last_mut()?`
     let mut chained00: Vec[String] = chained000.clone()
     if !skip.contains("text_lines") { chained00 = rs2nika_text_lines(ctx, chained000) }
-    let chained0 = chained00.iter().map(fn(l) { rs2nika_contexts(ctx, l) }).collect()
+    let mut chained0: Vec[String] = chained00.clone()
+    if !skip.contains("contexts") { chained0 = chained00.iter().map(fn(l) { rs2nika_contexts(ctx, l) }).collect() }
     let mut chained: Vec[String] = chained0.clone()
     if !skip.contains("results") { chained = rs2nika_results(ctx, chained0) }
     for name in rs2nika_opt_lets(chained, ctx.opt_names) {
@@ -20539,7 +20549,7 @@ fn rs2nika_corpus(dir: String, engine: String) -> i64 {
 fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, prefix: String, facts: ref Vec[String]) -> String {
     let mut ctx: Rs2nikaCtx = loaded.clone()
     let (src, viewed) = rs2nika_front(ctx, given_src, profile, prefix, facts)
-    let scanned = rs2nika_scan(ctx, viewed, prefix)
+    let scanned = rs2nika_scan(ctx, rs2nika_unbail(viewed), prefix)
     // The line engine's passes on the Rust text first: the tree parses what
     // they wrote.
     let parsed = rs2nika_rust_passes(ctx, scanned, facts, rs2nika_tree_skips()).join("\n")
@@ -20548,7 +20558,7 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
     if ctx.free {
         world = ctx.world.clone()
     }
-    let drafted = tr_convert(t, profile, prefix, world, ctx.host_fns)
+    let drafted = tr_convert(t, profile, prefix, world, ctx.host_fns).replace(", RS2NIKA_RECURSIVE)", "; recursive: true)")
     // The line engine's later stages that help the tree's draft (measured on
     // the corpus: each of the others changes nothing or costs lines).
     let stages: Vec[String] = ["renames", "names", "tail", "rmatch", "m2", "consts", "texts", "p4apre", "forms", "p3b", "p4b", "p4a", "uses", "typed"]
@@ -20612,9 +20622,128 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
 /// The line engine's passes the tree engine skips: they write Nikaia's text
 /// for an option's `match` (`let given = e ?? return ..` is not Rust, the
 /// parse loses the arm) or join a chain the tree writes itself (measured on
-/// both corpora: each costs lines).
+/// both corpora: each costs lines). `fs_forms` keeps R237's text Rust.
+/// R263's `rs2nika_throw_ X` back to `bail!(X)`: the tree reads the macro.
+fn rs2nika_unbail(src: String) -> String {
+    let mark = "rs2nika_throw_ "
+    let mut l: String = src.clone()
+    while l.contains(mark) {
+        let c: Vec[scalar] = l.chars().collect()
+        let at = rs2nika_find_from(c, mark, 0)
+        let from = at + mark.len()
+        let rest: String = rs2nika_text(c, from, c.len())
+        if rest.starts_with("format!(") {
+            let open = from + "format!".len()
+            let close = rs2nika_closing(c, open, '(', ')')
+            if close < 0 { break }
+            l = f"{rs2nika_text(c, 0, at)}bail!({rs2nika_text(c, open + 1, close)}){rs2nika_text(c, close + 1, c.len())}"
+        } else if rest.starts_with("\"") {
+            let mut end = from + 1
+            while end < c.len() && c[end] != '"' {
+                if c[end] == '\\' { end += 1 }
+                end += 1
+            }
+            if end >= c.len() { break }
+            l = f"{rs2nika_text(c, 0, at)}bail!({rs2nika_text(c, from, end + 1)}){rs2nika_text(c, end + 1, c.len())}"
+        } else {
+            break
+        }
+    }
+    return l
+}
+
 fn rs2nika_tree_skips() -> Vec[String] {
-    return ["join_chains", "join_split", "results", "option_matches", "some_matches", "field_tests"]
+    return ["join_chains", "join_split", "results", "option_matches", "some_matches", "field_tests", "fs_forms", "contexts"]
+}
+
+/// `--cut PATH:A-B` (repeated): the whole items of PATH that lines A to B
+/// touch, in the file's order, with its `use` lines. A method keeps its
+/// `impl` (or `trait`) around it, with the other touched methods only: a
+/// brief's line span that starts inside a block or ends before its brace
+/// still gives Rust that parses.
+fn rs2nika_cut(path: String, spans: ref Vec[(i64, i64)]) -> String throws {
+    let src = fs::read_to_string(path, fs::Root::Anywhere)
+    // the byte where each line starts (line 1 at 0)
+    let mut starts: Vec[i64] = [0]
+    let b = src.bytes
+    for i in 0..<b.len() {
+        if b[i] == 10 {
+            starts.push(i + 1)
+        }
+    }
+    let mut ranges: Vec[(i64, i64)] = []
+    for (a, z) in spans {
+        if a < 1 || a > starts.len() {
+            continue
+        }
+        let to = if z < starts.len() { starts[z] } else { b.len() }
+        ranges.push((starts[a - 1], to))
+    }
+    let t = rt_parse(src)
+    if t.nodes.len() == 0 {
+        return ""
+    }
+    let mut out: Vec[String] = []
+    for n in t.nodes[0].kids {
+        if t.nodes[n].tok {
+            continue
+        }
+        let s = t.nodes[n].start
+        let e = t.nodes[n].end
+        let mut touched = false
+        let mut whole = false
+        for (a, z) in ranges {
+            if a < e && s < z {
+                touched = true
+            }
+            if a <= s && e <= z {
+                whole = true
+            }
+        }
+        if t.nodes[n].kind == "USE" {
+            out.push(rs2nika_cut_text(src, s, e))
+            continue
+        }
+        if !touched {
+            continue
+        }
+        let mut list = t.kid(n, "ASSOC_ITEM_LIST")
+        if list < 0 {
+            list = t.kid(n, "ITEM_LIST")
+        }
+        if whole || list < 0 {
+            out.push(rs2nika_cut_text(src, s, e))
+            continue
+        }
+        // the block's head to its `{`, the touched members, its `}`
+        let open = t.nodes[list].start + 1
+        let mut parts: Vec[String] = [rs2nika_cut_text(src, s, open)]
+        for k in t.nodes[list].kids {
+            if t.nodes[k].tok {
+                continue
+            }
+            let ks = t.nodes[k].start
+            let ke = t.nodes[k].end
+            for (a, z) in ranges {
+                if a < ke && ks < z {
+                    // from the start of its line: its indent with it
+                    let mut from = ks
+                    while from > 0 && b[from - 1] != 10 && (b[from - 1] == 32 || b[from - 1] == 9) {
+                        from = from - 1
+                    }
+                    parts.push(rs2nika_cut_text(src, from, ke))
+                    break
+                }
+            }
+        }
+        parts.push("}")
+        out.push(parts.join("\n"))
+    }
+    return out.join("\n\n") + "\n"
+}
+
+fn rs2nika_cut_text(src: ref String, s: i64, e: i64) -> String {
+    return src.bytes[s..<e].text() catch { "" }
 }
 
 /// `--passes`: the Rust the tree engine parses, after the line engine's
@@ -20751,6 +20880,7 @@ fn main() throws {
     let mut engine: String = "tree"
     let mut dump_tree = false
     let mut passes = false
+    let mut cuts: Vec[(String, i64, i64)] = []
     let mut args: Vec[String] = []
     for a in cli::args() {
         args.push(a)
@@ -20786,6 +20916,11 @@ fn main() throws {
             dump_tree = true
         } else if arg == "--passes" {
             passes = true
+        } else if arg == "--cut" {
+            at = at + 1
+            let (file, span) = args[at].rsplit_once(":") ?? ("", "")
+            let (a, z) = span.split_once("-") ?? (span, span)
+            cuts.push((file.clone(), text::parse_i64(a) ?? 0, text::parse_i64(z) ?? 0))
         } else if arg == "--engine" {
             at = at + 1
             engine = args[at].clone()
@@ -20820,6 +20955,25 @@ fn main() throws {
             path = arg
         }
         at = at + 1
+    }
+    if cuts.len() > 0 {
+        // the files in the order first named, each with its spans
+        let mut files: Vec[String] = []
+        for (f, _, _) in cuts {
+            if !files.contains(f) {
+                files.push(f.clone())
+            }
+        }
+        for f in files {
+            let mut spans: Vec[(i64, i64)] = []
+            for (g, a, z) in cuts {
+                if g == f {
+                    spans.push((a, z))
+                }
+            }
+            print(rs2nika_cut(f, spans))
+        }
+        return
     }
     if check != "" {
         if check_as == "" {

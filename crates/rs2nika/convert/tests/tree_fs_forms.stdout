@@ -1,0 +1,30 @@
+use std::collections
+use std::fs
+
+pub struct Own {
+    pub root: fs::Path,
+    pub variant: String?,
+}
+
+impl Own {
+    fn tag(ref self) -> String {
+        let mut named = self.root.display()
+        if self.variant != null {
+            let variant = self.variant.clone()
+            named.push_str(variant)
+        }
+        return named
+    }
+
+    fn copy(root: ref fs::Path, built: ref fs::Path) -> fs::Path throws {
+        let dir = root.join("bin")
+        fs::create_dir(dir, fs::Root::Anywhere; recursive: true)
+        let name = (built.file_name() ?? throw Refused::Because("a program has a file name"))
+        let own = dir.join(name)
+        fs::remove(own, fs::Root::Anywhere) catch {}
+        if fs::exists(own, fs::Root::Anywhere) {
+            throw Refused::Because(f"still there: {own.display()}")
+        }
+        return own
+    }
+}

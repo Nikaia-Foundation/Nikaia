@@ -245,6 +245,10 @@ impl TrEm {
         if init < 0 {
             return [f"{ind}let {name}{ty}"]
         }
+        // `let _ = call;` lets its failure go: `call catch {}` (NK1144)
+        if self.t.is(p, "WILDCARD_PAT") && els < 0 && (self.t.is(init, "CALL_EXPR") || self.t.is(init, "METHOD_CALL_EXPR")) {
+            return [f"{ind}{self.expr(init)} catch {{}}"]
+        }
         if init >= 0 && self.optional_expr(init) && self.t.is(p, "IDENT_PAT") {
             self.optional.insert(self.t.name_of(p).clone())
         }
@@ -519,7 +523,9 @@ impl TrEm {
             let mut out: Vec[String] = [f"{ind}if {e} != null {{"]
             let bound = self.pat(some_inner)
             if bound != e && bound != "_" {
-                out.push(f"{inner}let {bound} = {e}")
+                // a field is read, not taken: the binding is a copy (NK1131)
+                let read = if e.contains(".") { f"{e}.clone()" } else { e.clone() }
+                out.push(f"{inner}let {bound} = {read}")
             }
             for l in self.block(then_b, inner.clone(), mode) {
                 out.push(l)
@@ -595,7 +601,9 @@ impl TrEm {
             let mut out: Vec[String] = [f"{ind}if {e} != null {{"]
             let bound = self.pat(some_inner)
             if bound != e && bound != "_" {
-                out.push(f"{inner}let {bound} = {e}")
+                // a field is read, not taken: the binding is a copy (NK1131)
+                let read = if e.contains(".") { f"{e}.clone()" } else { e.clone() }
+                out.push(f"{inner}let {bound} = {read}")
             }
             for l in self.chain(conds, at + 1, then_b, inner.clone(), mode, flag) {
                 out.push(l)
@@ -699,7 +707,8 @@ impl TrEm {
             } else {
                 pat_text = self.pat(p)
             }
-            if self.t.is(p, "WILDCARD_PAT") {
+            // `Some(_)` is `_`: after the `null` arm, the catch-all
+            if self.t.is(p, "WILDCARD_PAT") || pat_text == "_" {
                 pat_text = "else"
             }
             let guard = self.t.kid(a, "MATCH_GUARD")

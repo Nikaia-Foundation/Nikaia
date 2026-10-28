@@ -124,6 +124,15 @@ impl TrEm {
 
     /// A control-flow expression read as a value: its lines from the
     /// statement's indentation, the first one without it.
+    /// A refusal's text as what is thrown: only an error can be (NK1161),
+    /// and a tools file has std's `Refused::Because`; elsewhere the text.
+    fn refusal(ref self, said: String) -> String {
+        if self.profile == "none" || self.profile == "" {
+            return said
+        }
+        return f"Refused::Because({said})"
+    }
+
     fn flow_value(ref mut self, n: i64) -> String {
         let ind = self.ind.clone()
         let lines = self.flow(n, ind.clone(), "value")
@@ -519,6 +528,26 @@ impl TrEm {
         if (m == "as_str" || m == "as_ref" || m == "as_mut" || m == "borrow" || m == "borrow_mut" || m == "as_slice" || m == "as_deref" || m == "as_mut_slice" || m == "by_ref" || m == "into" || m == "as_path" || m == "into_owned") && a.len() == 0 {
             return r
         }
+        // anyhow's `.context(m)` / `.with_context(|| m)` after a call that
+        // answers an option: `(o ?? throw m)` (`bail!`'s refusal)
+        if (m == "context" || m == "with_context") && a.len() == 1 && self.t.is(recv_n, "METHOD_CALL_EXPR") {
+            let inner = self.src(self.t.kid(recv_n, "NAME_REF"))
+            if ["file_name", "file_stem", "extension", "parent", "first", "last", "get", "next", "pop", "find", "position", "split_once", "rsplit_once", "strip_prefix", "strip_suffix"].contains(inner) {
+                let mut said: String = a[0].clone()
+                if m == "with_context" {
+                    let (p, body) = self.closure_parts(arg_nodes[0])
+                    if p != "_" {
+                        return f"{r}.{m}({al})"
+                    }
+                    said = body
+                }
+                return f"({r} ?? throw {self.refusal(said)})"
+            }
+        }
+        // a path's text: `p.to_string_lossy()` -> `p.display()`
+        if m == "to_string_lossy" && a.len() == 0 {
+            return f"{r}.display()"
+        }
         if (m == "to_owned" || m == "to_vec") && a.len() == 0 {
             if r.starts_with("\"") {
                 return r
@@ -559,6 +588,10 @@ impl TrEm {
                 return f"({r} catch {{ let {p} = error\n{self.ind}    {body} }})"
             }
             return f"({r} ?? {a[0]}())"
+        }
+        if m == "unwrap_or_default" && a.len() == 0 && (r.starts_with("fs::read_to_string(") || r.starts_with("fs::read(")) {
+            let empty = if r.starts_with("fs::read(") { "[]" } else { "\"\"" }
+            return f"({r} catch {{ {empty} }})"
         }
         if m == "unwrap_or_default" && a.len() == 0 {
             return self.todo("`unwrap_or_default` (write the default: `?? 0`, `?? \"\"`, `?? []`)", n)
@@ -912,6 +945,8 @@ impl TrEm {
             let mut said = self.fstring(args)
             if name == "refused" || name == "refuse" {
                 said = f"Refused::Because({said})"
+            } else {
+                said = self.refusal(said)
             }
             if name == "refuse" || name == "bail" {
                 return f"throw {said}"
