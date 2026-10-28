@@ -722,3 +722,79 @@ by side). Known risk of each:
 * K1: the draft is 48%, under the 60% rule: three of its four TODO items are
   *`collect` into an `Option`* (the fourth is a `Some(` in a struct pattern, #886); the
   converter should write that loop itself before K1 is briefed, else it is hand work.
+
+## Large files 2: sysroot.rs, modules.rs, emit/mod.rs
+
+Read at bcb60d1 (`sysroot.rs` 1,575 lines, `modules.rs` 1,398, `emit/mod.rs` 1,411,
+`contracts/mod.rs` 1,326). Line ranges are at that commit: re-grep the names before
+cutting. *Draft* is as in the section above: the share of code lines (not comments, not
+blank) that `rs2nika --profile check --file` drafted in items without a TODO, over a
+scratch cut of exactly the listed ranges (a code block inside a function wrapped in a
+scratch `fn` of its free variables).
+
+**`emit/mod.rs` is mostly what stays Rust**, so `contracts/mod.rs` is planned with it
+(`C` rows). Of its 844 code lines, `with_contracts` (710-1033) is the run of the Rust
+analyses (`propagation`, `bounds::proven`, `sharing`, `trust`, `views::carried`,
+`keep`, `view_changes`) that fills `EmitState`; the rest are the driver's entry points
+(`emit_program*`, `emit_std_*`, `emit_module_body_at`, `branch_starts_first`,
+`barrier_names`), `Build` with `host_target()`/`default_target()` (E12-4), `Emitter`
+and its crossing (`unit`, `ty`, `seeded`), `OutText`, and one-line adapters over
+Nikaia. What is pure is `SourceMap` and the table expressions of the `EmitState`
+literal: about 160 lines (E13-1), below a slice.
+
+| Id | Rust (file:lines) | Target (`tools/`) | Host | Prerequisite | Rust lines | Draft |
+| :--- | :--- | :--- | :--- | :--- | ---: | ---: |
+| M1 | `modules.rs`: `Program::of` (675-835: the dependency ledgers merged into `library`, `contracts`, `as_its_own`), `shown_paths`, `could_promise`, `lost_sync` (865-936), `contracts_as_promised`, `package_names`, `is_single_file` (836-966); `declared_once`, `declared_names` (299-336), `groups` (411-426), `as_promised` (497-529) | `modules.nika` (exists: `could_promise`, `pause_path`, `lost_sync_unplaced` are there) | added: `package_ledger(group) -> Ledger` (contract inference and the shipped ledger stay Rust), `render_finding(finding, path, source) -> String` (`diagnostics`); the own groups' loop stays Rust (it holds `Vec<Checked>`), Nikaia merges the ledgers it returns; `Program`/`Unit` stay Rust structs (they hold `Parsed`) and pass `package`, `renames`, paths | none | ~380 | 71% |
+| S2 | `sysroot.rs`: `Sysroot` paths, `std_modules`, `tool_modules`, `nika_in` (88-199), `cpu_levels` and the parsing half of `native_cpu` (223-274), `tools_sources` (459-472), `Package` with `committed`, `inlined`, `contains`, `drift`, `stale`, `pack`, `unpack` (777-878), `LoweredBefore` `key`, `get`, `put` (1320-1418), the `interface`/`file_key` keys of `lower_tools_files_cached` (599-633) | new `sysroot_cache.nika` (`std::fs` reads, writes, `read_dir`, as `sources.nika`) | added: `sha256_hex(ref Vec[u8]) -> String` (`std` has no SHA-256), `rustc_cpus(triple, args) -> String throws`, `use_entry(dir)` and `user_cache_dir()` (`orchestrator::cache`), `unique_beside(path)` (`comptime_run`); the `ASKED` memo of `native_cpu` stays Rust around the Nikaia parse | P3's probe that `std::fs` in `tools/*.nika` reads and writes bytes (build it here if P3 has not) | ~445 | 90% |
+| M2 | `modules.rs`: `test_function`, `is_a_test_function` (607-621), `with_tests_as_functions` (1180-1306), `names_in` (1312-1375) | `modules.nika` (`test_dispatcher`, `test_function` are there) | added: `parse_to_ast(text) -> Parsed` for the entry re-parsed with its dispatcher; Nikaia rewrites `Item::Test` into `Item::Fn` over `mut Vec[Spanned[Item]]` and takes `emit_walk::visited_in_*` for `names_in` | M1; a name for `__nikaia_test_K` interned from Nikaia (today `parser::parse_expression`): probe that `InternerContext` can intern from a tools file, else a callback. Below 300 lines: it goes with M1 if that builder has room | ~205 | 36% |
+| S1 | `sysroot.rs`: `Codegen` with `render` (293-327), `every_refusal` (404-439), `without_bodies` (487-538), `shared`, `raw_string` (887-1044), `facade` (1180-1229), the assembly of `lowered.rs` in `lower_tools_files_cached` (698-771: imports hoisted, `mod X_lowered`, the facades, the header) | new `sysroot_package.nika` (text only) | added: `render_finding` (as M1); `Codegen::new` stays Rust (`toml::Value`) and passes the rendered table; `escaped` is `emit_misc::is_reserved` | the converter first: `.get(range)` on a `String` (NK1171, twice in `shared`), `else if let`, and `facade`'s or-pattern of struct patterns with `Some(name)` (#886), where the draft also ran `raw_string` and `facade` into one line | ~405 | 44% |
+| C1 | `contracts/mod.rs`: the declared-items loop of `infer_package_noted` (391-642: functions, impls, externs, traits, enums, structs and their literal defaults, grammars), the `stored` fold (678-689), `lookup`, `candidates` (791-844), `Computed`, `computed_defaults` (1070-1108), the walk of `attribute_values` (1109-1191), `expression_ensures` (1301-1326) | `ledger_items.nika` (the loop; `declared_*` are in `declared.nika`), `ledger_defaults.nika` (the attribute walk) | added: `computed_literal(unit, name, expr, ty) -> String?` (`build_time`, `comptime_run`), `reads_back` (`prove`), `mark_text` until `check/attributes.rs` moves (C7-r1); `Computed` holds a unit index and the item's position instead of `&'a Expr` | the converter first: `.entry(k).or_default().insert(v)` (one TODO line in the loop, one in the fold) | ~465 | 45% |
+| E13-1 | `emit/mod.rs`: `SourceMap` (229-314); the table expressions of the `EmitState` literal in `with_contracts` (`order_proofs` 799-815, `carries_input`, `hole_wraps`, `believed_arithmetic`, `proven_*` 945-970) | `emit_out.nika` (`EmitMapEntry` is there), `emit_tables.nika` | `Lowered.map` becomes the Nikaia `SourceMap`; `modules.rs` and the diagnostics call its `locate`, `placed`, `extend`, `rows` | below a slice: not briefed; it goes with the move of `with_contracts`' analyses, or with C1 if that builder has room | ~160 | 100% (`SourceMap`) |
+
+**Stays Rust** (each until the named module moves, not by itself):
+
+* `sysroot.rs` `lower_std_module`, `lower_std`, `lower_tools*`, the run of
+  `lower_tools_files_cached` (544-697: parse, `declared_once`, the described ledger,
+  `infer_package_checked`, `trust`, `check_against`, `emit_std_items_against_at`):
+  the driver; they own `Parsed` and the ledgers.
+* `in_parallel` (scoped threads with a 256 MB stack, `AtomicUsize`), `Phases`
+  (`Instant`, `NIKAIA_LOWER_TIMES`, `eprintln!` of durations): threads and clocks.
+* `Sysroot::resolve` (`env!("CARGO_MANIFEST_DIR")`), `rlib_cache`
+  (`env!("NIKAIA_RUSTC_VERSION")`, `orchestrator::cache::Key`), `COMPILER_IDENTITY`
+  (`env!`), `rustc_cpus` (a `rustc` process), `tools_build` (`Build`, E12-4),
+  `impl Display for Package`, `mod tests` (Rust tests, #821).
+* `modules.rs` `collect*`, `package_at`, `collect_one`, `read_unit`, `check_imports`,
+  `one_namespace`: the file system with the parser and `diagnostics::refuse`, `anyhow`
+  context; `Unit`, `Program`, `Dependency`, `TestCase` (hold `Parsed`, `PathBuf`).
+* `modules.rs` `package_ledger*`, `shipped_ledger`, `sources_of` (contract inference
+  returning `Checked`, SHA-256), `emit`, `emit_reading` (999-1188: `proofs::for_unit`,
+  `emit_module_body_at`, `keyed_functions`, `barrier_names`, the abort table),
+  `foreign_beside`, `described_beside` (`Manifest`, `project::Foreign`).
+* `emit/mod.rs`: everything but E13-1, as said above.
+* `contracts/mod.rs` the trait impls (`LedgerOps`, `SignatureOps`, `VariantOps`,
+  `SyncOps`: one-line adapters over `ledger_ops`, `ledger_text`, `ledger`), the run
+  of analyses in `infer_package_noted` (643-768: `check_for_the_ledger`, `sync`,
+  `throws`, `touch`, `keeps` to a fixed point, `sharing`, `maps`, `locks`, `tether`),
+  `evaluate_defaults`, `computed_literal` (`build_time`, `comptime_run`), `std_ledger`
+  (`OnceLock`), `toolchain` (`env!`), `read_beside` (until `std::fs` is probed, then
+  with S2's pattern).
+
+Of `sysroot.rs` about 850 lines are in S1-S2, of `modules.rs` about 585 in M1-M2, of
+`contracts/mod.rs` about 465 in C1, of `emit/mod.rs` about 160 in E13-1.
+
+**First two slices to brief: M1, then S2** (different files, both at or above 60%;
+S2 adds `sysroot_cache.nika` and its row in `scripts/self_hosting.py`, M1 adds to an
+existing file, so they may run side by side). Known risk of each:
+
+* M1: `library` grows group by group (a dependency's ledger is absorbed before the
+  next is inferred against it), so the callback is called inside the Nikaia loop,
+  not before it; and the draft marks every `Ledger` parameter `ADAPTER: bleibt in
+  Rust` although `Ledger` is `ty.nika`'s: the converter's table should learn that
+  before the brief, or the builder deletes the markers by hand.
+* S2: the keys hash Rust `Debug` text (`{own:?}`, `{build:?}{provenance:?}`); the
+  Nikaia text differs, so every cache key changes once (one cold `lower-std`, which is
+  accepted) and must then be stable from run to run: a test lowers twice and expects
+  every file from the cache. The draft wrote `interface` as one line of closures over
+  a `mut Vec[u8]` (`part`): a nested `fn` there.
+* S1 and C1 wait for the converter fixes named in their rows (both drafts are under
+  60%: the rule stops the pipeline).
