@@ -656,8 +656,11 @@ exactly the listed ranges.
   the parser. ADR-339 decided it moves as a Nikaia grammar, but #557's *To build*
   (`span(p)`, `here`, `same_line`, the `doc` rule) is not built, and ADR-339 D3
   forbids a grammar state while 71 actions draw node ids from `Trivia`
-  (`_state.user().id()`) and 27 record spans (`.at()`). Where a Nikaia grammar's
-  nodes get their ids is not decided: an owner question before any `R` row.
+  (`_state.user().id()`) and 27 record spans (`.at()`). Decided (owner,
+  2026-10-28, ADR-383): the grammar gives no ids; a numbering pass right after
+  the parse, before `one_variant::expand`, numbers the tree in input order and
+  writes the span table. Built by #903 (*To build* 1-4), in Rust's grammar first;
+  the `R` rows wait for #903 and #557.
 * R-4 (the old plan's non-grammar leaves) is built: `PrTrivia` is in
   `parser_leaves.nika`, `number_at` in `parse_numbers.nika`, the error texts in
   `parse_errors.nika`. What is left in 1-925 is winnow glue (`doc_here`,
