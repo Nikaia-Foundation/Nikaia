@@ -1,0 +1,21 @@
+
+
+
+
+
+
+/// Each unit's path.
+pub fn first_path(units: ref Vec[Unit], entry_shown_as: String?, at: i64) -> String {
+    // TODO(rs2nika): `is_single_file(..)` is a method of `Program`: pass it the fields it reads
+    if is_single_file() {
+        return units[0].path.clone()
+    }
+    let shown = entry_shown_as.clone().unwrap_or_default()
+    return f"{shown} {units[at].path}"
+}
+
+
+
+
+
+

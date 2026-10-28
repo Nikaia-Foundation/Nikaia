@@ -1,0 +1,16 @@
+// ADAPTER: bleibt in Rust (`Ledger`)
+fn as_promised(mut ledger: Ledger, another: fn(ref String) -> bool sync) -> Ledger {
+    let mut changed: Vec[String] = []
+    for (key, contract) in ledger.functions {
+        if contract.sync_claim == Sync::Inferred && another(key) {
+            changed.push(key.clone())
+        }
+    }
+    for key in changed {
+        let mut contract = (ledger.functions[key] ?? continue).clone()
+        contract.sync_claim = Sync::Unpromised
+        ledger.functions.insert(key.clone(), contract)
+    }
+    return ledger
+}
+

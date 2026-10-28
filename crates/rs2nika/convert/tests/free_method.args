@@ -1,0 +1,5 @@
+--profile
+check-free
+--only
+first_path
+f.rs

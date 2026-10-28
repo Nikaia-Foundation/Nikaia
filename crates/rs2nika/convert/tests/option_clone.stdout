@@ -1,0 +1,8 @@
+fn names(units: ref Vec[Unit]) -> collections::BTreeSet[String] {
+    for unit in units {
+        let package = unit.package?.clone() ?? continue
+        println(f"{package}")
+    }
+    return units.iter().filter_map(fn(u) { u.package?.clone() }).collect()
+}
+

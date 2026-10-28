@@ -1,0 +1,3 @@
+pub struct Ledger {
+    pub functions: collections::BTreeMap[String, i64],
+}

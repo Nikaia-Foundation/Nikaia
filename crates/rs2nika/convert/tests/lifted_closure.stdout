@@ -1,6 +1,6 @@
 fn sum_summary(all: ref Vec[Finding], extra: i64) -> String {
     let findings: Vec[ref Finding] = all.iter().filter(fn(f) { f.error }).collect()
-    let mut refused = []
+    let mut refused: Vec[String] = []
     let more = fn(n) { n + extra }
     let kept = fn(f) { f.code != "NK1" }
     let types = sum_count(findings, "NK1")

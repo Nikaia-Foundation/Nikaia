@@ -1,0 +1,10 @@
+fn groups(units: ref Vec[Unit]) -> Vec[i64] sync {
+    let mut out: Vec[i64] = []
+    let mut notes: Vec[String] = []
+    notes.push(f"{units.len()} units")
+    // ADAPTER: bleibt in Rust (`Ledger`)
+    let mut plain: collections::BTreeMap[String, Ledger] = collections::BTreeMap()
+    out.push(plain.len())
+    return out
+}
+

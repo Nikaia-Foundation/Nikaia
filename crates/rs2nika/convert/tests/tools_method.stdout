@@ -1,0 +1,13 @@
+impl Ledger {
+
+
+
+
+    pub fn merged(ref self, other: Ledger) -> Ledger {
+        let mut out = self.clone()
+        out.functions.extend(other.functions)
+        return out
+    }
+
+}
+

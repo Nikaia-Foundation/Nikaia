@@ -7,8 +7,7 @@ fn shape_shapes(attribute: ref Attribute, names: ref Names, mut state: State) ->
         Expr::Variable(word, _) => names.text(word).to_string(),
         else => null,
     } }
-    let required: Vec[ref Field] =
-        fields.iter().filter(fn(f) { f.default.is_empty() }).collect()
+    let required: Vec[ref Field] = fields.iter().filter(fn(f) { f.default.is_empty() }).collect()
     return match (ref attribute.args, required.is_empty()) {
         ([], true) => null,
         ([arg], _) => word(arg),

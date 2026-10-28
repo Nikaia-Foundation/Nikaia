@@ -1,0 +1,7 @@
+--profile
+check-free
+--repo
+.
+--only
+merged
+f.rs

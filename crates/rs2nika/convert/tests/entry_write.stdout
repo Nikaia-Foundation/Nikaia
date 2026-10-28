@@ -5,16 +5,16 @@ fn gather(units: ref Vec[Unit], mut library: Library, contract: ref Contract, na
     for unit in units {
         let mut slot = packages[unit.name]?.clone() ?? []
         slot.push(unit.parsed)
-        packages[unit.name.clone()] = slot
-        counts[unit.name.clone()] = (counts[unit.name] ?? 0) + 1
+        packages.insert(unit.name.clone(), slot)
+        counts.insert(unit.name.clone(), (counts[unit.name] ?? 0) + 1)
     }
-    if library.functions[name] == null {
-        library.functions[name.clone()] = contract.clone()
+    if !library.functions.contains_key(name) {
+        library.functions.insert(name.clone(), contract.clone())
     }
     let mut slot = library.seen[name]?.clone() ?? collections::BTreeSet()
     slot.insert(contract.id)
-    library.seen[name.clone()] = slot
-    // TODO(rs2nika): `.entry(..)`: read with `??`, then write `m[k] = v`
+    library.seen.insert(name.clone(), slot)
+    // TODO(rs2nika): `.entry(..)`: read with `??`, then write `m.insert(k, v)`
     let held = counts.entry(name.clone()).or_default()
     if project.entry() == name {
         return

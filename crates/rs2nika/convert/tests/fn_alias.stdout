@@ -1,0 +1,11 @@
+fn notes_of(chain: ref Vec[String]) -> Vec[String] {
+    let mut notes: Vec[String] = []
+    notes.push(f"{pause_path(chain)}, which pauses here.")
+    return notes
+}
+
+fn shown(chain: ref Vec[String], unit: ref Unit) -> String {
+    let path = pause_path
+    return f"{path(chain)} at {unit.path()}"
+}
+
