@@ -73,6 +73,20 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_map_read_handed_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, body: &Block) {
+        for value in block_tail(body) {
+            let node = id_of(value) as i64;
+            if !self.flow.map_read_sites.contains(&node) { return; }
+            let read = match found {
+                Ty::Nullable(read) => { let read = nikaia_std::boxed::open(read); read.clone() },
+                _ => return,
+            };
+            if read.is_a_view() || read.is_unknown() { return; }
+            if self.copied(world, &read) { let added = self.facts.copied_reads.insert(node); }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_map_read_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, into: &Ty, value: &Expr, span: &Span) {
         match value {
             Expr::Coalesce { value: read, fallback, .. } => {

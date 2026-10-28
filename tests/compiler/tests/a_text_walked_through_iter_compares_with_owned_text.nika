@@ -1,0 +1,33 @@
+// A `for` over `xs.iter()` binds a view of each text, and a comparison with
+// an owned text reads both sides as text (found moving `project_members`, P4a).
+
+fn renamed(pairs: ref Vec[(String, String)]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for (key, path) in pairs.iter() {
+        let canonical: String = f"{path}"
+        if canonical != key {
+            out.push(f"{key} -> {canonical}")
+        }
+    }
+    return out
+}
+
+fn same(keys: ref Vec[String]) -> i64 {
+    let mut n = 0
+    for key in keys.iter() {
+        let owned: String = f"{key}"
+        if owned == key {
+            n += 1
+        }
+    }
+    return n
+}
+
+fn main() {
+    let pairs: Vec[(String, String)] = [("a", "a"), ("b", "c")]
+    for line in renamed(pairs) {
+        println(line)
+    }
+    let keys: Vec[String] = ["x", "y"]
+    println(f"{same(keys)}")
+}

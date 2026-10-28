@@ -355,6 +355,7 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
     state.handed_over = CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() }
     let outer = check_core_lambda_enter(state)
     let walked = check_core_block(state, world, host, body)
+    state.a_map_read_handed_back(world, walked, body)
     let tail = check_core_lambda_leave(state, outer, walked, body)
     let seen: CheckHanded? = state.handed_over?.clone()
     state.handed_over = null

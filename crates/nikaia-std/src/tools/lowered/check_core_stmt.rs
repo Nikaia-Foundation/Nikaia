@@ -922,6 +922,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let mut bound = element.clone();
         if lent && !copied && !declared_copy && named { bound = view_of_type(&element); }
         let id = state.a_new_binding();
+        if !lent && name != "_" && state.flow.lent_walks.contains(&(id_of(iter) as i64)) && check_owned_text(&bound) { state.flow.lent_text_params.insert(id); }
         let mut local = CheckLocal::free(name, bound, id);
         local.written_mut = false;
         local.lent = lent && !copied && !a_view;

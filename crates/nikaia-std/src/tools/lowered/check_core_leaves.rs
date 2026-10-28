@@ -301,6 +301,7 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     state.handed_over = Some(CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() });
     let outer = check_core_lambda_enter(state);
     let walked = check_core_block(state, world, host, body);
+    state.a_map_read_handed_back(world, &walked, body);
     let tail = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
     let seen: Option<CheckHanded> = match state.handed_over.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),

@@ -111,6 +111,28 @@ impl CheckState {
         self.findings.push(check_refusal("NK1102", span, f"This keeps a `{want.text()}` of its own, and a map's read is a view of what the map keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens."], "Write `?.clone()` after the read: `m[k]?.clone()`."))
     }
 
+    /// **A map's read a lambda hands back** (ADR-293 D15): the lambda's result
+    /// is a `T?` of its own, so a value that copies is copied out, as a kept
+    /// read is. One that does not copy stays the view it was.
+    pub fn a_map_read_handed_back(ref mut self, world: ref CheckWorld, found: ref Ty, body: ref Block) sync {
+        for value in block_tail(body) {
+            let node = id_of(value) as i64
+            if !self.flow.map_read_sites.contains(node) {
+                return
+            }
+            let read = match found {
+                Ty::Nullable(read) => read.clone(),
+                else => return,
+            }
+            if read.is_a_view() || read.is_unknown() {
+                return
+            }
+            if self.copied(world, read) {
+                let added = self.facts.copied_reads.insert(node)
+            }
+        }
+    }
+
     /// **A map's read, past a jump, assigned to a place that owns its value**
     /// (ADR-293 D15, #492): `x = m[k] ?? return …` reads a view of what the map
     /// keeps, as `let found = m[k] ?? return …` binds one.

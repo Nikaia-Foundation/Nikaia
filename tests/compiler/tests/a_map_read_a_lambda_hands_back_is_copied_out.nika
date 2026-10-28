@@ -1,0 +1,14 @@
+// A lambda that hands back a map's read of a number hands back the number,
+// as a kept read does (ADR-293 D15; found moving `project_members`, P4a).
+
+use std::collections
+
+fn main() {
+    let mut at_of: collections::HashMap[String, i64] = collections::HashMap()
+    at_of.insert("x", 1)
+    at_of.insert("z", 3)
+    let names: Vec[String] = ["x", "y", "z"]
+    let found: collections::BTreeSet[i64] = names.iter().filter_map(fn(d) { at_of.get(d) }).collect()
+    let each: Vec[i64?] = names.iter().map(fn(d) { at_of.get(d) }).collect()
+    println(f"{found.len()} {each.len()} {each[1] == null}")
+}

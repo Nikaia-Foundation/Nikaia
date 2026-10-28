@@ -1286,6 +1286,12 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             bound = view_of_type(element)
         }
         let id = state.a_new_binding()
+        // **A text handed by a walk that lends is a view of it** (#688's rule,
+        // for a `for`): `xs.iter()` hands `&String` below, so a comparison
+        // reads it as `str`.
+        if !lent && name != "_" && state.flow.lent_walks.contains(id_of(iter) as i64) && check_owned_text(bound) {
+            state.flow.lent_text_params.insert(id)
+        }
         let mut local = CheckLocal::free(name, bound, id)
         local.written_mut = false
         local.lent = lent && !copied && !a_view
