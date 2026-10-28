@@ -115,13 +115,12 @@ fn two_functions_with_one_set_share_a_type() {
 // D4: the refusal
 // ---------------------------------------------------------------------------
 
-/// **A `match` over a `catch`'s error always needs `else`** (D4). The variants
-/// **within** one error type are closed and the set of error **types** is open
-/// ([ADR-023](../../../docs/specification/adr/adr-023.md) D4), so a handler that
-/// names variants of two of them has covered no set at all: a callee that gains
-/// a failure sends a third type here.
+/// **A `match` over a `catch`'s error names every type that can arrive**
+/// ([ADR-357](../../../docs/specification/adr/adr-357.md) D1, which changed
+/// D18 here): the set is closed, so a handler that names one variant of
+/// `io::IoError` is told the variants it misses, not asked for `else`.
 #[test]
-fn a_match_over_two_error_types_needs_an_else() {
+fn a_match_over_two_error_types_names_what_it_misses() {
     let found: Vec<_> = findings(&format!(
         "{TWO_WAYS}fn main() {{\n\
          \x20   let text = load(\"x\") catch {{\n\
@@ -137,7 +136,16 @@ fn a_match_over_two_error_types_needs_an_else() {
     .filter(|f| f.code == "NK1151")
     .collect();
     assert_eq!(found.len(), 1, "{found:#?}");
-    assert!(found[0].message.contains("else"), "{}", found[0].message);
+    assert!(
+        found[0].message.contains("`io::IoError::NotText`"),
+        "{}",
+        found[0].message
+    );
+    assert!(
+        !found[0].message.contains("NotFound"),
+        "{}",
+        found[0].message
+    );
 }
 
 /// **A member with one variant draws no warning** (#542): its half of the

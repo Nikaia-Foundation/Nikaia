@@ -1,0 +1,16 @@
+// A library's struct error named by its path (ADR-357 D1, #673):
+// `regex::dynamic` throws only a `regex::Error`, so the `match` that names it
+// is complete without `else`, and it is lowered as that type's arm.
+use std::regex
+
+fn main() throws {
+    let re = regex::dynamic("(") catch {
+        match error {
+            regex::Error => {
+                println("bad pattern")
+                return
+            }
+        }
+    }
+    println(f"compiled {re.is_match("(")}")
+}

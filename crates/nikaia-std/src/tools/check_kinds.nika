@@ -365,6 +365,40 @@ impl CheckState {
         }
     }
 
+    /// **`NK1103` for a type named whole that cannot arrive** (ADR-357 D1,
+    /// #673): over `error`, an arm naming a type by its bare name or its path
+    /// takes that member of the set, and a type outside the set is no
+    /// pattern of it. Where the set is not known nothing is claimed.
+    pub fn a_type_that_cannot_arrive(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+        let mut members: Vec[String] = []
+        for member in several_errors_of(on) {
+            members.push(member.text())
+        }
+        if members.len() == 0 {
+            match on {
+                Ty::Named { name, args, .. } => {
+                    if args.len() == 0 {
+                        members.push(name.clone())
+                    }
+                },
+                else => {},
+            }
+        }
+        if members.len() == 0 {
+            return
+        }
+        for arm in arms {
+            let named = self.a_type_named_whole(world, arm.pattern) ?? continue
+            if members.contains(named) {
+                continue
+            }
+            let written = written_expression(world.words, value)
+            let shown = if members.len() == 1 { f"a `{members[0]}`" } else { f"one of `{members.join("`, `")}`" }
+            self.findings.push(check_refusal("NK1103", span, f"`{written}` is {shown}, so the pattern `{named}` can't match it.", ["Over `error`, an arm's pattern names a type that can arrive at this `catch`, or one of its variants."], "Name a type that can arrive, or `else => …` for the rest."))
+            return
+        }
+    }
+
     /// What a matched value certainly is: `number`, `text`, `bool`, `char`,
     /// or the name of one of the program's structs or enums.
     fn kind_of_the_matched(ref self, on: ref Ty) -> String? sync {

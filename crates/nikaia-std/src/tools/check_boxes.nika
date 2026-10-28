@@ -220,7 +220,11 @@ impl CheckState {
     /// **Over a `T?` with a `null` arm** (ADR-352 D2) the nothing is covered by
     /// an unguarded `null` arm or by `else`, and the other arms are counted
     /// against the `T`: a bare name there binds the `T` and covers it.
-    pub fn a_match_that_misses_a_case(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], span: ref Span) sync {
+    ///
+    /// **Over `error`, a type named whole covers that type** (ADR-357 D1,
+    /// #673): its bare name or its path, and the `match` is complete when
+    /// every type that can arrive is covered.
+    pub fn a_match_that_misses_a_case(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], over_error: bool, span: ref Span) sync {
         match on {
             Ty::Nullable(inner) => {
                 if shapes_has_a_null_arm(arms) {
@@ -234,18 +238,19 @@ impl CheckState {
                         self.a_case_is_missing("null", span)
                         return
                     }
-                    self.a_match_that_misses_a_case_of(world, inner, arms, span)
+                    self.a_match_that_misses_a_case_of(world, inner, arms, over_error, span)
                     return
                 }
             }
             else => {}
         }
-        self.a_match_that_misses_a_case_of(world, on, arms, span)
+        self.a_match_that_misses_a_case_of(world, on, arms, over_error, span)
     }
 
-    fn a_match_that_misses_a_case_of(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_match_that_misses_a_case_of(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], over_error: bool, span: ref Span) sync {
         for arm in arms {
-            if arm.guard == null && catches_everything(arm.pattern) {
+            let a_type = over_error && self.a_type_named_whole(world, arm.pattern) != null
+            if arm.guard == null && catches_everything(arm.pattern) && !a_type {
                 return
             }
         }
@@ -254,15 +259,21 @@ impl CheckState {
             Ty::Named { name: written, args, view } => {
                 if written == "Error" && args.len() > 1 && !view {
                     // **A closed set's members are each named** (ADR-351
-                    // D3): several that arrive by name take `else` instead.
-                    if !self.flow.caught_several {
-                        self.a_closed_set_that_misses_a_case(world, args, arms, span)
-                    }
+                    // D3, ADR-357 D1): every type that can arrive, by its
+                    // variants or by its name.
+                    self.a_closed_set_that_misses_a_case(world, args, arms, span)
                     return
                 }
                 name = written.clone()
             }
             else => return
+        }
+        if over_error {
+            for arm in arms {
+                if arm.guard == null && (self.a_type_named_whole(world, arm.pattern) ?? "") == name {
+                    return
+                }
+            }
         }
         if name == "bool" {
             let mut has_true = false
@@ -327,6 +338,30 @@ impl CheckState {
         }
     }
 
+    /// **The type an arm's pattern names whole** (ADR-357 D1): a bare name of
+    /// one of the program's types, or a path that is a type of the program's
+    /// or of a library's (`regex::Error`). `null` for a binding, a variant
+    /// and every other pattern.
+    pub fn a_type_named_whole(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> String? sync {
+        let mut parts: Vec[String] = []
+        match pattern {
+            MatchPattern::Path(path) => {
+                for symbol in path {
+                    parts.push(world.words.resolve(symbol).clone())
+                }
+            },
+            else => return null,
+        }
+        let written = parts.join("::")
+        if self.structs.contains_key(written) || self.enums.contains_key(written) {
+            return written
+        }
+        if parts.len() >= 2 && (world.library.types.contains_key(written) || world.own.types.contains_key(written)) {
+            return written
+        }
+        return null
+    }
+
     // Every member of a closed set of errors, and each case of one that is an
     // enum, has an arm.
     fn a_closed_set_that_misses_a_case(ref mut self, world: ref CheckWorld, members: ref Vec[Ty], arms: ref Vec[MatchArm], span: ref Span) sync {
@@ -385,6 +420,13 @@ fn check_boxes_path(world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol]
         out.insert(world.words.resolve(path[0]).clone())
     } else if n >= 2 {
         out.insert(f"{world.words.resolve(path[n - 2])}::{world.words.resolve(path[n - 1])}")
+        // **And whole**, as a library's member is named: `io::IoError::NotFound`
+        // and `regex::Error` (ADR-357 D1).
+        let mut whole: Vec[String] = []
+        for symbol in path {
+            whole.push(world.words.resolve(symbol).clone())
+        }
+        out.insert(whole.join("::"))
     }
 }
 

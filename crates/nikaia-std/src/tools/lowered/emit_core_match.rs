@@ -169,19 +169,19 @@ impl EmitState {
             },
             MatchPattern::Literal(value) => { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; },
             MatchPattern::Path(p) => {
-                if p.len() == 1 {
+                let named = emit_match_path(world, p);
+                if p.len() == 1 && error_kind(&self.declared_errors, world.library, &named) == 1 { out.push("_"); } else if p.len() == 1 {
                     for one in p.iter() {
                         let one = *one;
                         out.push(&self.emit_match_bound(world, one, wild, lent_key));
                     }
                 } else {
-                    let named = emit_match_path(world, p);
-                    let kind = self.own_contracts.types.get(&named);
-                    let whole = match kind {
-                        Some(entry) => entry.variants.is_empty(),
-                        None => false,
+                    let own = self.own_contracts.types.get(&named);
+                    let whole = match own {
+                        None => world.library.types.contains_key(&named),
+                        _ => true,
                     };
-                    out.push(&if whole { format!("{} {{ .. }}", named) } else { named.to_owned() });
+                    out.push(&if whole { String::from("_") } else { named.to_owned() });
                 }
             },
             MatchPattern::Tuple { path, parts } => {
@@ -422,10 +422,7 @@ impl EmitState {
             if at < 0 { catch_all += 1; }
             home.push(at);
         }
-        if catch_all == 0 {
-            let covered = if members.len() > 1 { members.len() as i64 } else { 1 };
-            return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `match error` needs an `else` arm: it covers {} error types, but other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.", covered), at: Some(flow.statement) }, &"emit_core_match_over_a_sum"));
-        }
+        if catch_all == 0 { for at in 0..members.len() as i64 { if !home.contains(&at) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `match error` doesn't handle `{}`: add an arm for it, or `else => …` for everything else.", *nikaia_std::index::get(&members, nikaia_std::index::at(at))), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); } } }
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let inner = "    ".repeat(nikaia_std::count::of(depth + 2));
         let close = "    ".repeat(nikaia_std::count::of(depth));

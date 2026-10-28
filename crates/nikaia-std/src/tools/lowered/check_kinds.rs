@@ -277,6 +277,27 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_type_that_cannot_arrive(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+        let mut members: Vec<String> = vec![];
+        for member in several_errors_of(on) { members.push(member.text()); }
+        if members.is_empty() {
+            match on {
+                Ty::Named { name, args, .. } => { if args.is_empty() { members.push(name.to_owned()); } },
+                _ => { },
+            }
+        }
+        if members.is_empty() { return; }
+        for arm in arms.iter() {
+            let named = match self.a_type_named_whole(world, &arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if nikaia_std::list::contains(&members, &named) { continue; }
+            let written = written_expression(world.words, value);
+            let shown = if members.len() == 1 { format!("a `{}`", *nikaia_std::index::get(&members, 0)) } else { format!("one of `{}`", members.join("`, `")) };
+            self.findings.push(check_refusal("NK1103", span, format!("`{}` is {}, so the pattern `{}` can't match it.", written, shown, named), vec![String::from("Over `error`, an arm's pattern names a type that can arrive at this `catch`, or one of its variants.")], Some(String::from("Name a type that can arrive, or `else => …` for the rest."))));
+            return;
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn kind_of_the_matched(&self, on: &Ty) -> Option<String> {
         match on {
             Ty::Named { name, .. } => {

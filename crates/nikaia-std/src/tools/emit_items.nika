@@ -169,8 +169,18 @@ pub fn library_error_path(name: ref String, is_std: bool) -> String {
 
 /// The error a `match` arm's pattern names, written `Error::Variant`: the path
 /// without its last segment, if that names an error.
+///
+/// **A bare name of an error type the program declares** is that type
+/// (ADR-357 D1, #673): `Bad =>` over a `match error` takes the `Bad`s.
 pub fn member_of(words: ref winnow_grammar::InternerContext, declared: ref collections::BTreeSet[String], library: ref Ledger, pattern: ref MatchPattern) -> String? {
     let path = match_path(pattern) ?? return null
+    if path.len() == 1 {
+        let bare = words.resolve(path[0]).clone()
+        if error_kind(declared, library, bare) == 1 {
+            return bare
+        }
+        return null
+    }
     if path.len() < 2 {
         return null
     }

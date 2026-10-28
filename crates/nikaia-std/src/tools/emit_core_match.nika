@@ -285,21 +285,26 @@ impl EmitState {
             },
             MatchPattern::Literal(value) => self.emit_expr(world, walk, out, host, value, depth, flow, scope),
             MatchPattern::Path(p) => {
-                if p.len() == 1 {
+                // **A type named whole** (`Bad =>`, `regex::Error =>` over a
+                // `match error`) matches every value of the type it is over,
+                // whatever its fields or variants (ADR-357 D1, #673): the
+                // checker proved the type is the subject's, or the member's
+                // whose half this is, so it is Rust's `_` - never a binding,
+                // and never a path Rust reads as a unit struct.
+                let named = emit_match_path(world, p)
+                if p.len() == 1 && error_kind(self.declared_errors, world.library, named) == 1 {
+                    out.push("_")
+                } else if p.len() == 1 {
                     for one in p {
                         out.push(self.emit_match_bound(world, one, wild, lent_key))
                     }
                 } else {
-                    // **A struct's name as a pattern** (`json::Error =>` over a
-                    // `match error`) matches the type whatever its fields: Rust
-                    // reads a bare path as a unit struct, so it is `Path { .. }`.
-                    let named = emit_match_path(world, p)
-                    let kind = self.own_contracts.types.get(named)
-                    let whole = match kind {
-                        entry => entry.variants.len() == 0,
-                        null => false,
+                    let own = self.own_contracts.types.get(named)
+                    let whole = match own {
+                        null => world.library.types.contains_key(named),
+                        else => true,
                     }
-                    out.push(if whole { f"{named} {{ .. }}" } else { named.clone() })
+                    out.push(if whole { "_" } else { named.clone() })
                 }
             },
             // **The parts are patterns**, so this recurses (ADR-291 D10). An empty
@@ -651,9 +656,15 @@ impl EmitState {
         }
         // **The set of error types is open** (ADR-023 D4), so no `match` over it can
         // be exhaustive and every one of them needs a catch-all.
+        // *Changed by ADR-357 D5:* a `match` naming every type that can arrive
+        // is complete and has no catch-all; the checker proved it (D1), and a
+        // member no arm takes is refused here rather than by `rustc`.
         if catch_all == 0 {
-            let covered = if members.len() > 1 { members.len() } else { 1 }
-            throw EmitRefused { message: f"This `match error` needs an `else` arm: it covers {covered} error types, but other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.", at: flow.statement }
+            for at in 0..<members.len() {
+                if !home.contains(at) {
+                    throw EmitRefused { message: f"This `match error` doesn't handle `{members[at]}`: add an arm for it, or `else => …` for everything else.", at: flow.statement }
+                }
+            }
         }
         let pad = "    ".repeat(depth + 1)
         let inner = "    ".repeat(depth + 2)

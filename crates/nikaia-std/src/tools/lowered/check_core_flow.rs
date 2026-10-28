@@ -375,7 +375,13 @@ pub(crate) fn check_core_flow_member(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
             at += 1;
         }
     }
-    for member in members.iter() { if member.text() == owner { return member.clone(); } }
+    let mut whole: Vec<String> = vec![];
+    for symbol in path.iter() {
+        let symbol = *symbol;
+        whole.push(world.words.resolve(symbol).to_owned());
+    }
+    let written = whole.join("::");
+    for member in members.iter() { if member.text() == owner || member.text() == written { return member.clone(); } }
     Ty::Unknown
 }
 
@@ -1031,9 +1037,10 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
         }
     }
     state.stamped_condition = outer_condition;
-    state.a_match_over_several_error_types(world, value, arms, span);
     let over = check_core_flow_caught(&state, world, &on, value);
-    if !state.a_some_or_none_over_a_nullable(world, &over, value, arms, span) { state.a_match_that_misses_a_case(world, &over, arms, span); }
+    state.a_match_over_several_error_types(world, &over, value, arms, span);
+    let over_error = subject == "error";
+    if !state.a_some_or_none_over_a_nullable(world, &over, value, arms, span) { state.a_match_that_misses_a_case(world, &over, arms, over_error, span); }
     state.a_variant_matched_on_a_nullable(world, &over, value, arms, span);
     state.a_null_arm_on_a_plain_value(world, &over, value, arms, span);
     let copied = match on {
@@ -1042,6 +1049,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     };
     if copied { state.facts.copied_walks.insert(id_of(value) as i64); }
     state.a_pattern_of_another_type(world, &over, value, arms, span);
+    if over_error { state.a_type_that_cannot_arrive(world, &over, value, arms, span); }
     if any && agree { return seen; }
     check_core_flow_meet(state, world, expr, &answered, span)
 }

@@ -115,6 +115,11 @@ pub fn library_error_path(name: &str, is_std: bool) -> String {
 
 pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections::BTreeSet<String>, library: &Ledger, pattern: &MatchPattern) -> Option<String> {
     let path = match match_path(pattern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if path.len() == 1 {
+        let bare = words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
+        if error_kind(declared, library, &bare) == 1 { return Some(bare); }
+        return None;
+    }
     if path.len() < 2 { return None; }
     let mut whole: Vec<String> = vec![];
     for symbol in path.iter() {

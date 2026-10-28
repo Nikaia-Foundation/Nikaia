@@ -1,0 +1,9 @@
+error[NK1103]: `error` is a `Bad`, so the pattern `Worse` can't match it.
+   --> tests/a_catch_naming_a_type_that_cannot_arrive_is_refused.nika:23:9
+    |
+ 23 |         match error {
+    |         ^^^^^^^^^^^^^
+    |
+    = note: Over `error`, an arm's pattern names a type that can arrive at this `catch`, or one of its variants.
+    = help: Name a type that can arrive, or `else => …` for the rest.
+1 type error

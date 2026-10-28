@@ -1,0 +1,36 @@
+// Two struct error types arriving at one `catch`, each named by its bare
+// name (ADR-357 D1, D5, #673): each failure takes its own arm, and the
+// `match` that names both is complete without `else`.
+struct Bad { why: String }
+impl Error for Bad { fn message(ref self) -> String { return self.why.clone() } }
+
+struct Worse { code: i64 }
+impl Error for Worse { fn message(ref self) -> String { return f"code {self.code}" } }
+
+fn risky(n: i64) -> i64 throws {
+    if n < 0 {
+        throw Bad { why: "negative" }
+    }
+    if n > 10 {
+        throw Worse { code: n }
+    }
+    return n
+}
+
+fn main() {
+    for n in [-1, 20, 3] {
+        let v = risky(n) catch {
+            match error {
+                Bad => {
+                    println(f"bad: {error}")
+                    0
+                }
+                Worse => {
+                    println(f"worse: {error}")
+                    1
+                }
+            }
+        }
+        println(f"{v}")
+    }
+}

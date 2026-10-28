@@ -1,0 +1,29 @@
+// A type named whole that cannot arrive at the `catch` is no pattern of
+// `error` (`NK1103`, ADR-357 D1, #673): only `Bad` can arrive here.
+struct Bad { why: String }
+impl Error for Bad { fn message(ref self) -> String { return self.why.clone() } }
+
+struct Worse { code: i64 }
+impl Error for Worse { fn message(ref self) -> String { return f"code {self.code}" } }
+
+fn risky(n: i64) -> i64 throws {
+    if n < 0 {
+        throw Bad { why: "negative" }
+    }
+    return n
+}
+
+fn other() throws {
+    throw Worse { code: 1 }
+}
+
+fn main() throws {
+    other()
+    let v = risky(1) catch {
+        match error {
+            Worse => 1
+            Bad => 0
+        }
+    }
+    println(f"{v}")
+}

@@ -123,8 +123,8 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, arms: &[MatchArm], span: &Span) {
-        if !self.flow.caught_several { return; }
+    pub fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+        if !self.flow.caught_several || !several_errors_of(on).is_empty() { return; }
         let is_error = match value {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "error" },
             _ => false,

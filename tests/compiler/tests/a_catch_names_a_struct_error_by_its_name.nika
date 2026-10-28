@@ -1,0 +1,26 @@
+// A struct error type named by its bare name in a `match` over `error`
+// (Part I 7.1, ADR-357 D1, #673): the arm takes that type, and with the one
+// type that can arrive named, the `match` is complete without `else`.
+struct Bad { why: String }
+impl Error for Bad { fn message(ref self) -> String { return self.why.clone() } }
+
+fn risky(n: i64) -> i64 throws {
+    if n < 0 {
+        throw Bad { why: "negative" }
+    }
+    return n
+}
+
+fn main() {
+    for n in [-1, 4] {
+        let v = risky(n) catch {
+            match error {
+                Bad => {
+                    println(f"bad: {error}")
+                    0
+                }
+            }
+        }
+        println(f"{v}")
+    }
+}

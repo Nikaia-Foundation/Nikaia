@@ -176,8 +176,12 @@ impl CheckState {
     /// variants within one error type are closed and the set of error types is
     /// open, so a handler that names variants of two of them has covered no set
     /// at all; `else` is what says the rest.
-    pub fn a_match_over_several_error_types(ref mut self, world: ref CheckWorld, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
-        if !self.flow.caught_several {
+    ///
+    /// *Changed by ADR-357 D1, D2:* where the set is known, closed, a `match`
+    /// naming every type in it is complete (`a_closed_set_that_misses_a_case`
+    /// asks that); `else` stays needed where the set cannot be named.
+    pub fn a_match_over_several_error_types(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+        if !self.flow.caught_several || several_errors_of(on).len() > 0 {
             return
         }
         let is_error = match value {

@@ -136,7 +136,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], span: &Span) {
+    pub fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], over_error: bool, span: &Span) {
         match on {
             Ty::Nullable(inner) => {
                 let inner = nikaia_std::boxed::open(inner);
@@ -147,30 +147,34 @@ impl CheckState {
                         self.a_case_is_missing("null", span);
                         return;
                     }
-                    self.a_match_that_misses_a_case_of(world, inner, arms, span);
+                    self.a_match_that_misses_a_case_of(world, inner, arms, over_error, span);
                     return;
                 }
             },
             _ => { },
         }
-        self.a_match_that_misses_a_case_of(world, on, arms, span);
+        self.a_match_that_misses_a_case_of(world, on, arms, over_error, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_match_that_misses_a_case_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], span: &Span) {
-        for arm in arms.iter() { if arm.guard.is_none() && catches_everything(&arm.pattern) { return; } }
+    pub(crate) fn a_match_that_misses_a_case_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], over_error: bool, span: &Span) {
+        for arm in arms.iter() {
+            let a_type = over_error && self.a_type_named_whole(world, &arm.pattern).is_some();
+            if arm.guard.is_none() && catches_everything(&arm.pattern) && !a_type { return; }
+        }
         let mut name: String = String::from("");
         match on {
             Ty::Named { name: written, args, view } => {
                 let view = *view;
                 if written == "Error" && args.len() > 1 && !view {
-                    if !self.flow.caught_several { self.a_closed_set_that_misses_a_case(world, args, arms, span); }
+                    self.a_closed_set_that_misses_a_case(world, args, arms, span);
                     return;
                 }
                 name = written.to_owned();
             },
             _ => { return; },
         }
+        if over_error { for arm in arms.iter() { if arm.guard.is_none() && nikaia_std::index::or(self.a_type_named_whole(world, &arm.pattern), || "".into()) == name { return; } } }
         if name == "bool" {
             let mut has_true = false;
             let mut has_false = false;
@@ -217,6 +221,24 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_type_named_whole(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
+        let mut parts: Vec<String> = vec![];
+        match pattern {
+            MatchPattern::Path(path) => {
+                for symbol in path.iter() {
+                    let symbol = *symbol;
+                    parts.push(world.words.resolve(symbol).to_owned());
+                }
+            },
+            _ => { return None; },
+        }
+        let written = parts.join("::");
+        if self.structs.contains_key(&written) || self.enums.contains_key(&written) { return Some(written); }
+        if parts.len() >= 2 && (world.library.types.contains_key(&written) || world.own.types.contains_key(&written)) { return Some(written); }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_closed_set_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, members: &[Ty], arms: &[MatchArm], span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         for arm in arms.iter() { if arm.guard.is_none() { check_boxes_qualified(world, &arm.pattern, &mut named); } }
@@ -260,7 +282,15 @@ pub(crate) fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 // this was written - see `contracts::sync`.
 pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
     let n = path.len() as i64;
-    if n == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned()); } else if n >= 2 { out.insert(format!("{}::{}", world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 2))), world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 1))))); }
+    if n == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned()); } else if n >= 2 {
+        out.insert(format!("{}::{}", world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 2))), world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 1)))));
+        let mut whole: Vec<String> = vec![];
+        for symbol in path.iter() {
+            let symbol = *symbol;
+            whole.push(world.words.resolve(symbol).to_owned());
+        }
+        out.insert(whole.join("::"));
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
