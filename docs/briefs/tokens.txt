@@ -119,3 +119,4 @@
 /home/user/Nikaia/docs/briefs/lane-bugs-557a-span-here.md 0 0
 /home/user/Nikaia/docs/briefs/p4b-project-foreign.md 506014 6
 /home/user/Nikaia/docs/briefs/p1-project-settings.md 2717148 43
+/home/user/Nikaia/docs/briefs/architect-task.md 3122543 40
