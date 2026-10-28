@@ -144,8 +144,11 @@ the small patterns that are most of them).
 1. **The matches the specification defines** (D1). Rust's crate, which runs
    `regex::Dynamic` (D8), is the oracle: a pattern compiled by `compile` and by
    `dynamic` gives the same matches on the same text, checked by a
-   differential test in Nikaia and by fuzzing. A crate version that disagrees
-   with the specification is a finding, not the new meaning.
+   differential test in Nikaia and by fuzzing. The test runs each pattern
+   through **every engine that accepts it**, not only the one the build
+   chooses, so that an engine chosen rarely is checked as often as one chosen
+   always. A crate version that disagrees with the specification is a finding,
+   not the new meaning.
 2. **Linear** in the text, with **bounded memory**, for every pattern.
 3. **Nothing at run time that the build could do** for a pattern the build
    knows: no parsing, no compiling, no check of a table, as far as the stage
@@ -164,10 +167,23 @@ the small patterns that are most of them).
 |---|---|---|---|
 | S0 | `Literal` | a literal, or a few alternatives of literals | `find`, `ByteSet`, a literal search; no automaton |
 | S1 | `OnePass` | a pattern with one way on at every byte | straight-line code, groups included, no set of states |
-| S2 | `Dfa` | a DFA | under the unroll limit, the DFA as code: a block per state, a comparison per byte range, a state that loops on a set of bytes skipping them with `ByteSet`; over it, or for a pattern that reached the call through a run-time value, the DFA's table, read in place (D7) - one engine, `@unroll(up_to: N)` deciding (ADR-specialization-1 D3) |
+| S2 | `Dfa` | a DFA, forward for a match's end and reverse, anchored at that end, for its start | under the unroll limit, the DFA as code: a block per state, a comparison per byte range, a state that loops on a set of bytes skipping them with `ByteSet`; over it, or for a pattern that reached the call through a run-time value, the DFA's table, read in place (D7) - one engine, `@unroll(up_to: N)` deciding (ADR-specialization-1 D3) |
 | S3 | `TaggedDfa` | capturing groups, not one-pass, a tagged DFA under its limit | a DFA whose transitions write positions into registers; no NFA at run time |
 | S4 | `BitNfa` | up to as many NFA positions as the widest vector the build has | one bit a position, a step a few word or vector operations per byte (Glushkov, as Hyperscan) |
 | S5 | `FlatNfa` | anything larger | a flat NFA read in place, run by an NFA simulation and a lazily built DFA of our own |
+
+**Every engine gives the match D1 defines, and the choice of engine never
+changes which match that is.** A match is found in two steps. **Locating it** -
+whether there is one, where it ends, where it starts - is done by an engine
+that searches unanchored with D1's preference: S0, a literal set searched with
+the alternatives' order as preference (leftmost-first, never the longest or the
+first found); S2, forward for the end and reverse, anchored at that end, for the
+start; S5. **Extracting groups** is done over the located span, anchored at its
+start, by S1, S3 or S5. S1 and S3 are anchored by nature - a one-pass or tagged
+DFA cannot search unanchored, since the prefix that makes a search unanchored
+(`(?s-u:.)*?`) leaves no pattern one-pass - and run alone only for a pattern
+anchored at its start (`^…`). S4 answers `is_match` and finds candidates that S2
+or S5 confirm, until it is shown to give D1's preferred end itself.
 
 The engine is chosen by the pattern and the limits alone. The limits are
 numbers the build can be given; their defaults are set by measurement. A stage
@@ -186,10 +202,18 @@ stays as the last stage, not as the answer.
 
 ### D7 — What the program reads lies in the binary in the form it is used in.
 
-A table crosses as an aligned `ref Array[u32]` ([ADR-311](adr-311.md)) in the
-target's byte order and is read where it lies. The crate's DFA is opened with
+A table crosses as an aligned `ref Array[u32]` ([ADR-311](adr-311.md)) and is
+read where it lies. **It is written for the target, not for the host** the
+build runs on: the crate's DFA is serialized in the target's byte order
+(`to_bytes_little_endian` or `to_bytes_big_endian`) and its words are packed in
+the same order; an engine of our own crosses its words as integer literals,
+which the language below lays out for the target. No table depends on the
+host's pointer width: the crate stores its counts as `u32`. The crate's DFA is opened with
 `from_bytes_unchecked`, which reads its header and nothing else; the bytes come
-from the same build with the same crate, and the header carries its version.
+from the same build with the same crate, and the header carries its label, its
+byte order, its version and its alignment. That header is the only check at run
+time: a table written for another target is an error when it is opened, never
+a wrong match.
 The call is `unsafe` and lives in a crate of its own under `crates/unsafe`
 ([ADR-218](adr-218.md)). An engine of our own (S3-S5) is laid out flat: states
 as `u32` words, references as indices into the same table, names in one byte
@@ -267,7 +291,8 @@ differ from it.
   test (D5.1) and built one at a time, each after a measurement says it pays.
 * Code per pattern adds build time and binary size; the limits, the type and
   the report (D9) are how that is kept in view.
-* A table in the binary is in the target's byte order; a build for another
-  target writes the target's.
+* A table in the binary is in the target's byte order, whatever the host's; a
+  test cross-builds for a target of the other byte order once the toolchain
+  builds one (today every target it builds is little-endian).
 * `std` gains `regex-automata`, `regex-syntax` and, through them,
   `aho-corasick`; `Cargo.lock` is where their versions are decided.
