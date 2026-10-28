@@ -1,0 +1,213 @@
+/// Everything the compiler decides for itself, before it emits a line of Rust.
+///
+/// Two rules today, and one mechanism under both: the ledger (ADR-020) is what
+/// makes either possible across the `std` boundary. A call to
+/// `io::read_to_string` is a `sync` violation only if something says that
+/// function can pause, and it takes the wrong number of arguments only if
+/// something says how many it takes - `std.contracts` is where both are said.
+///
+/// Types are reported before suspension because a call that passes the wrong
+/// thing is usually why the rest of the file reads strangely.
+///
+/// **What this build links against, and what has been described**
+/// ([ADR-290](../../docs/specification/adr/adr-290.md) D1).
+///
+/// Two sets rather than one map, because the question is a difference: a crate
+/// the manifest declares and no ledger describes is the one D1 refuses. Both
+/// empty is a loose file with no project around it, where nothing was declared
+/// and therefore nothing is undescribed.
+///
+/// **And the entries themselves**, which is D1's first sentence rather than an
+/// addition to it: *every analysis reaches to the boundary and reads an entry
+/// there*. `NK2504`'s own message promises a reader that four questions — what
+/// may cross a thread, what the call may reach, whether it pauses, whether it
+/// can fail — are answered by the file they are told to write. For two records
+/// the file answered none of them: it was parsed to see whether it parsed, the
+/// answer was thrown away, and its only effect was silencing the refusal that
+/// asked for it. Measured on a three-line project, where a description saying
+/// `() -> i64` left the call's result untyped and `n.no_such_method()` went
+/// through.
+pub struct ProjectMembersForeign {
+    /// `[dependencies]` with `type = "rust"`, under the name a program writes
+    /// (`manifest::foreign_crates`).
+    pub declared: collections::BTreeSet[String],
+    /// The crates a `contracts/<crate>.contracts` was found for, beside the
+    /// project's own ledger (D5).
+    pub described: collections::BTreeSet[String],
+    /// The described crates whose **sources have moved** since the description
+    /// was reviewed, with the files that hash differently
+    /// ([ADR-290](../../docs/specification/adr/adr-290.md) D5, on
+    /// [ADR-100](../../docs/specification/adr/adr-100.md) D3's rule).
+    ///
+    /// **Empty where nothing can be compared**, which is the polarity and not
+    /// an omission: a version dependency's sources are in Cargo's registry
+    /// cache and a description with no `[sources]` recorded nothing, so in both
+    /// cases there is no hash to disagree with. A refusal resting on an absence
+    /// is what [ADR-281](../../docs/specification/adr/adr-281.md) D34 keeps
+    /// `NK2201` from doing, and it would here refuse every crate that comes
+    /// from a registry — [Part III C.4](../../docs/specification/30-nikaia-tooling.md)'s
+    /// correct program refused.
+    pub moved: collections::BTreeMap[String, Vec[String]],
+    /// Every described crate's entries, in one ledger under the qualified names
+    /// a program writes (`hyper_shim::serve_once`).
+    ///
+    /// **One ledger and not one per crate**, because a name is resolved in one
+    /// place (ADR-296 D17) and the crate a name belongs to is the prefix on it.
+    /// Two descriptions cannot disagree about a name without disagreeing about
+    /// whose it is.
+    pub descriptions: Ledger,
+    /// **The Rust crates the Nikaia packages beneath this one declare**
+    /// ([ADR-286](../../docs/specification/adr/adr-286.md) D31, #488). A
+    /// package's files are checked in this build, and `shim::plus_one` in a
+    /// dependency names a head that dependency's manifest declares; this build's
+    /// own manifest does not. Only a head: what the crate's items are is the
+    /// dependency's description, and nothing here reads it.
+    pub beneath: collections::BTreeSet[String],
+}
+
+pub fn project_members_no_foreign() -> ProjectMembersForeign {
+    return ProjectMembersForeign { declared: collections::BTreeSet(), described: collections::BTreeSet(), moved: collections::BTreeMap(), descriptions: Ledger::blank(), beneath: collections::BTreeSet() }
+}
+
+
+/// The Rust crates every path dependency of `root` declares, and theirs in
+/// turn. A manifest that cannot be read adds nothing: the build reads it
+/// itself and says so.
+fn project_members_crates_beneath[M: ProjectMembersHost](root: ref fs::Path, mut seen: collections::HashSet[fs::Path], mut out: collections::BTreeSet[String], manifests: ref M) {
+    let manifest = manifests.manifest_at(root.join("nikaia.toml")) ?? return
+    for (_, path) in manifest.paths.iter() {
+        let at = project_members_canonical(root.join(path))
+        if seen.contains(at) {
+            continue
+        }
+        seen.insert(at.clone())
+        let theirs = manifests.manifest_at(at.join("nikaia.toml"))
+        match theirs {
+            theirs => {
+                for x in theirs.foreign.iter() {
+                    out.insert(x.clone())
+                }
+            },
+            null => {},
+        }
+        project_members_crates_beneath(at, seen, out, manifests)
+    }
+}
+
+/// What a build of `root` is at its boundary.
+///
+/// A manifest that cannot be read is **no declarations**, not a failure: the
+/// build has read it already and said so, and a second refusal from here
+/// would be the same mistake twice.
+pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeignHost](root: ref fs::Path, manifests: ref M, host: ref H) -> ProjectMembersForeign {
+    let declared = manifests.manifest_at(root.join("nikaia.toml")) ?? throw ProjectMembersRefusal::Manifest?.foreign_crates().unwrap_or_default()
+    let mut described: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut descriptions = host.empty_ledger()
+    let mut moved: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for name in declared {
+        let ledger = project_members_description_at(root, name, host) ?? continue
+        described.insert(name.clone())
+        let differing = project_members_sources_that_moved(root, name, ledger, host)
+        if !differing.is_empty() {
+            moved.insert(name.clone(), differing)
+        }
+        // `None`: a description's names are already qualified with the crate
+        // word a program writes (`hyper_shim::serve_once`), so there is
+        // nothing to put in front of them.
+        descriptions = host.absorb(descriptions, ledger)
+    }
+    let mut beneath: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut seen: collections::HashSet[fs::Path] = collections::HashSet()
+    project_members_crates_beneath(root, seen, beneath, manifests)
+    return ProjectMembersForeign { declared: declared, described: described, descriptions: descriptions, moved: moved, beneath: beneath }
+}
+
+impl ProjectMembersForeign {
+    /// The words a program may write in front of a `::` **because the manifest
+    /// declared them**, added to the ones its own packages give it.
+    ///
+    /// Without this the merge above would make `hyper_shim` a **`std` module**,
+    /// since that set is derived from the library ledger's own key prefixes —
+    /// and the first thing a program calling one would be told is to write
+    /// `use std::hyper_shim`, which is not a sentence about anything. A crate is
+    /// reached because the manifest declares it (D1), not because a file
+    /// imported it.
+    pub fn packages(ref self, modules: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+        let mut out = modules.clone()
+        for x in self.described {
+            out.insert(x.clone())
+        }
+        // **A crate the manifest declares is a head** (ADR-286 D31), described
+        // or not: an undescribed one is `NK2504`'s to refuse, with its way out.
+        for x in self.declared {
+            out.insert(x.clone())
+        }
+        for x in self.beneath {
+            out.insert(x.clone())
+        }
+        return out
+    }
+}
+/// Which of the files a description was derived from hash differently now
+/// ([ADR-290](../../docs/specification/adr/adr-290.md) D5).
+///
+/// **Only what can be compared is compared.** A description that recorded no
+/// `[sources]` and a crate whose sources this build cannot find both answer
+/// *nothing moved*, because there is no hash to disagree with — the honest
+/// answer, and the one that keeps a registry crate from being refused for
+/// coming from a registry (Part III, C.4).
+fn project_members_sources_that_moved[H: ProjectMembersForeignHost](root: ref fs::Path, name: String, ledger: ref Ledger, host: ref H) -> Vec[String] {
+    if ledger.sources.is_empty() {
+        return []
+    }
+    let crate_root = host.crate_root(root, name.clone()) ?? return []
+    let mut out: Vec[String] = []
+    for (file, recorded) in ledger.sources {
+        // **A file that cannot be read is not a file that moved.** A
+        // checkout without the path dependency beside it is a build that
+        // will fail for its own reasons, and a second message about it
+        // would be this compiler guessing at the first.
+        let bytes = fs::read(crate_root.join(file), fs::Root::Anywhere) catch { continue }
+        let mut read: Vec[u8] = []
+        for b in bytes.iter() {
+            read.push(b)
+        }
+        if host.sha256_hex(read) != recorded {
+            out.push(file.clone())
+        }
+    }
+    return out
+}
+
+/// The digest of `nikaia.proofs` and of every certificate in `nikaia.proofs.d/`,
+/// empty where there is no file (#448).
+pub fn project_members_proofs_digest[H: ProjectMembersForeignHost](root: ref fs::Path, host: ref H) -> String {
+    let book = fs::read(root.join("nikaia.proofs"), fs::Root::Anywhere) catch { return "" }
+    let mut all: Vec[u8] = []
+    for b in book.iter() {
+        all.push(b)
+    }
+    let dir = root.join("nikaia.proofs.d")
+    let names = fs::read_dir(dir, fs::Root::Anywhere) catch { [] }
+    for name in names {
+        for b in name.text_of().bytes() {
+            all.push(b)
+        }
+        let file = fs::read(dir.join(name), fs::Root::Anywhere) catch { continue }
+        for b in file.iter() {
+            all.push(b)
+        }
+    }
+    return host.sha256_hex(all)
+}
+
+/// `contracts/<crate>.contracts`, where it is there **and parses as a ledger**.
+///
+/// Parsing is the test rather than existence, for
+/// [ADR-100](../../docs/specification/adr/adr-100.md) D3's reason one file over:
+/// a file that does not parse is not an answer, and treating it as one would
+/// let a boundary be described by something nobody can read.
+fn project_members_description_at[H: ProjectMembersForeignHost](root: ref fs::Path, name: String, host: ref H) -> Ledger? {
+    return host.read_beside(root.join("contracts").join(f"{name}.contracts"))
+}
+

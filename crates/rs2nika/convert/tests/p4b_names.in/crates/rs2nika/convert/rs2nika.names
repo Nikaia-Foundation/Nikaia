@@ -1,0 +1,41 @@
+# P4b's decisions, cut from rs2nika.names (8394790)
+cache::sha256_hex host.sha256_hex # `std` has no SHA-256: a `SysrootHost` method (sysroot_cache.nika, S2)
+foreign_empty project_members_no_foreign # P4b's `Default` of `Foreign` (R312, R313): the build with no project around it, named for what it is
+
+[types]
+PathBuf = fs::Path # std's file name (S2)
+&Path = ref fs::Path # the same, lent (S2)
+
+[prefixed]
+project_members_ # P4a prefixed every name it moved into project_members.nika (3620d27)
+
+# [types X_] / [forms X_]: a move's decisions for the file `--prefix X_`
+# names only (R309), so they reach no other file's draft.
+[types project_members_]
+Manifest = ProjectMembersManifest # Manifest stays Rust: the walk reads its view, filled by project.rs (P4a)
+modules::Dependency = ProjectMembersDependency # modules.rs's Dependency is project_members.nika's now (P4a)
+Member = ProjectMembersMember # Member stays Rust (it holds the Manifest); the walk builds this one (P4a)
+BTreeMap<PathBuf,String> = collections::HashMap[fs::Path, String] # a map of paths only looked up, never walked in order (P4a)
+BTreeMap<PathBuf,usize> = collections::HashMap[fs::Path, i64] # the same (P4a's `seen`)
+BTreeMap<&Path,usize> = collections::HashMap[fs::Path, i64] # the same, its keys owned (P4a's `at_of`)
+BTreeSet<PathBuf> = collections::HashSet[fs::Path] # a set of paths only asked, never walked in order (P4b's `seen`)
+
+[forms project_members_]
+{x}.package_name() = {x}.name # the manifest view's fields (ProjectMembersManifest, P4a)
+{x}.has_build_section() = {x}.has_build # the same
+{x}.foreign_crates() = {x}.foreign # the same
+{x}.dependencies().keys() = {x}.keys.iter() # the same: every dependency's key
+{x}.dependencies()|Dependency::Path = {x}.paths.iter() # the same: the path dependencies, a loop keeping `Dependency::Path` (R308)
+ProjectMembersManifest::read({a}) = manifests.manifest_at({a}) ?? throw ProjectMembersRefusal::Manifest # a manifest is read by project.rs, through ProjectMembersHost (R295, R314's `manifests`); one that did not read is its error, kept there
+Ledger::empty() = host.empty_ledger() # `Ledger` stays Rust: the foreign host makes one (ProjectMembersForeignHost, P4b)
+Ledger::read_beside({a}) = host.read_beside({a}) # the same: a description is read by the host (P4b)
+{x}.absorb(null, = {x} = host.absorb({x}, # the same: the host merges one ledger into another and hands it back (P4b)
+crate_root({a}, {b}) = host.crate_root({a}, {b}.clone()) # describe.rs's `crate_root` stays Rust, behind the foreign host (P4b)
+Refused::Because( = ProjectMembersRefusal::Refused( # the file's refusal, turned back into the same anyhow error in project.rs (P4a)
+
+# [hosts X_]: `parameter = Bound: Trait`, the host parameters a function of
+# the file takes for the calls on them (R314), in the order its signature
+# lists them; none: one `host`, bound by the prefix's `<Prefix>Host` (R295).
+[hosts project_members_]
+manifests = M: ProjectMembersHost # P4b: the manifests come from project.rs's host, P4a's trait (P4a's own functions call it `host`; the move kept them)
+host = H: ProjectMembersForeignHost # P4b: the ledger and the crate sources are the foreign host's (8394790)

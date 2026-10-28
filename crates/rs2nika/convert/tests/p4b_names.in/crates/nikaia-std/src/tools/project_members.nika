@@ -1,0 +1,10 @@
+pub struct ProjectMembersManifest {
+    pub paths: Vec[(String, fs::Path)],
+    pub foreign: Vec[String],
+}
+pub trait ProjectMembersHost {
+    fn manifest_at(ref self, path: ref fs::Path) -> ProjectMembersManifest? sync
+}
+pub fn project_members_canonical(path: ref fs::Path) -> fs::Path {
+    return fs::canonical(path, fs::Root::Anywhere) catch { path.clone() }
+}

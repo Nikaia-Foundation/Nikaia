@@ -1,0 +1,3 @@
+pub trait SysrootHost {
+    fn sha256_hex(ref self, read: ref Vec[u8]) -> String sync
+}
