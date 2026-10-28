@@ -65,7 +65,9 @@ whenever the target file prefixes its names (most do, R245): without it the
 draft keeps the Rust names and every signature and call is rewritten (P4b kept
 21 of 79 lines, its costliest edit). Name in the brief what the
 builder would otherwise look up: the callees' locations (`where.nika`), the
-syntax gaps the draft hits, the tests to run between steps. Cut 400-600 lines
+syntax gaps the draft hits, the tests to run between steps, and the
+callers of what moves including `crates/nikaia/tests/it/` (P4b found four
+test files only from clippy, after the build). Cut 400-600 lines
 a brief.
 
 **Issues are written in brief form** (owner, 2026-10-25): when the architect

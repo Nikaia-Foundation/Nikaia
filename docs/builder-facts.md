@@ -26,6 +26,8 @@ the same dirty lock file). Read once; the brief adds only what is specific.
   `.nika` changed the self-hosting share: run `python3 scripts/badges.py` and
   add `assets/badges/self-hosted.svg` to `Files:` (the only badge you touch).
 * `cargo test ... --test it -- a:: b::`: the `--` before the filters is needed.
+* `export A=1 && S=x cmd &` sends the whole chain to the background, and the
+  output is lost (P4b ran clippy and its tests twice): put the `&` on `cmd` alone.
 * A `nikaia run` script cannot `use` another script and cannot find its own
   binary; a test program cannot set `RUSTFLAGS` or see git state. Such a
   change is checked by hand runs; say so under `Deviation`.
@@ -105,6 +107,11 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * `a..b` includes `b` (Part I, ranges); the half-open range is `a..<b`;
   * the catch-all arm of a `match` is `else =>`; `_ =>` and `None =>` are refused;
   * a `String?` field needs `x?.clone()` before it can be matched.
+  * collections (P4b): a `BTreeMap` is walked with `for (k, v) in m` (no
+    `.iter()`), a `BTreeSet` has no `extend` (`insert` in a loop); `fs::read`
+    is async and gives `Bytes` (the Rust caller needs `block_on`; a `Vec[u8]`
+    is filled by a loop, as `sysroot_cache.nika` does); `read_dir` gives sorted
+    names, not paths. Two host parameters `[M: A, H: B]` lower.
 * **Lowered types:** `String` is `&str` where a view suffices and `String`
   where it is owned (the compiler decides, ADR-282 D2), `ref T` is `&T`, `Vec[String]` is
   `Vec<String>` (a `ref` one a slice), `String?` is `Option<String>`. Most Rust
