@@ -5,6 +5,8 @@
 // between them. A nested item (a `fn` inside a `fn`) goes to the top level,
 // after the item that held it.
 
+use std::collections
+
 impl TrEm {
     /// The whole file.
     pub fn file(ref mut self, root: i64) -> String {
@@ -191,6 +193,8 @@ impl TrEm {
         let params_n = self.t.kid(n, "PARAM_LIST")
         let mut ps: Vec[String] = []
         let saved_optional = self.optional.clone()
+        let saved_texts = self.texts.clone()
+        self.texts = collections::BTreeSet()
         let mut has_self = false
         for p in self.nodes(params_n) {
             if self.t.is(p, "SELF_PARAM") {
@@ -217,6 +221,9 @@ impl TrEm {
             let (ty, is_mut) = self.param_ty(ty_n)
             if ty.ends_with("?") {
                 self.optional.insert(pname.clone())
+            }
+            if ty == "String" || ty == "ref String" || ty == "mut String" {
+                self.texts.insert(pname.clone())
             }
             if is_mut || self.t.is(pat_n, "IDENT_PAT") && self.t.has_tok(pat_n, "MUT_KW") {
                 pname = f"mut {pname}"
@@ -299,6 +306,7 @@ impl TrEm {
         self.opt = saved_opt
         self.unit = saved_unit
         self.optional = saved_optional
+        self.texts = saved_texts.clone()
         return out
     }
 
@@ -431,6 +439,10 @@ impl TrEm {
         let mut out: Vec[String] = [head]
         let inner = f"{ind}    "
         let list = self.t.kid(n, "ASSOC_ITEM_LIST")
+        if list < 0 {
+            self.self_ty = saved
+            return self.todo_item("an `impl` without a body", n, ind)
+        }
         let mut gap = false
         let mut first = true
         let mut consts: Vec[String] = []

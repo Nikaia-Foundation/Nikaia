@@ -25,6 +25,30 @@ fn tr_raw_string(text: String) -> String {
     return f"\"{esc}\""
 }
 
+/// A Rust text literal without its line continuations: a `\\` at a line's
+/// end drops the line break and the next line's leading blanks.
+fn tr_continued(text: String) -> String {
+    if !text.contains("\\\n") {
+        return text
+    }
+    let parts: Vec[String] = text.split("\n").map(fn(p) { p.to_string() }).collect()
+    let mut out: String = ""
+    let mut glued = false
+    for p in parts {
+        let piece: String = if glued { p.trim_start().to_string() } else { p.clone() }
+        if out != "" && !glued {
+            out.push_str("\n")
+        }
+        glued = piece.ends_with("\\") && !piece.ends_with("\\\\")
+        if glued {
+            out.push_str(piece.bytes[0..<piece.len() - 1].text() catch { "" })
+        } else {
+            out.push_str(piece)
+        }
+    }
+    return out
+}
+
 impl TrEm {
     pub fn ty(ref mut self, n: i64) -> String {
         let kind = self.t.kind(n)
@@ -441,7 +465,7 @@ impl TrEm {
             if text.starts_with("r") {
                 return tr_raw_string(text)
             }
-            return text
+            return tr_continued(text)
         } else if kind == "BYTE" {
             let inner: String = text.bytes[2..<text.len() - 1].text() catch { "" }
             return tr_byte_value(inner)

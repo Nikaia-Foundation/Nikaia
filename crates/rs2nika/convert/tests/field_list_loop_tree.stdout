@@ -7,7 +7,11 @@ pub struct Facts {
 
 pub fn all(facts: ref Facts) -> collections::BTreeSet[u32] {
     let mut ids = collections::BTreeSet()
-    ids.extend(facts.a.iter())
-    ids.extend(facts.b.iter())
+    for x in facts.a.iter() {
+        ids.insert(x.clone())
+    }
+    for x in facts.b.iter() {
+        ids.insert(x.clone())
+    }
     return ids
 }

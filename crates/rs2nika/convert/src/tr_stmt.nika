@@ -251,6 +251,14 @@ impl TrEm {
         if els >= 0 {
             return self.let_else(p, init, els, ind)
         }
+        let tested = self.opt_test(init, ind.clone())
+        if tested.len() > 0 {
+            let mut out: Vec[String] = [f"{ind}let {name}{ty} = {tested[0].trim_start()}"]
+            for l in tested[1..<tested.len()] {
+                out.push(l.clone())
+            }
+            return out
+        }
         let mut value: String = ""
         if self.is_flow(init) {
             value = tr_unindent(self.flow(init, ind.clone(), "value"), ind.clone())
@@ -258,6 +266,43 @@ impl TrEm {
             value = self.expr(init)
         }
         return [f"{ind}let {name}{ty} = {value}"]
+    }
+
+    /// `o.is_none_or(|w| e)` -> `match o { null => true, w => e, }`,
+    /// `is_some_and` the same with `false`; [] for anything else.
+    fn opt_test(ref mut self, n: i64, ind: String) -> Vec[String] {
+        if !self.t.is(n, "METHOD_CALL_EXPR") {
+            return []
+        }
+        let m = self.src(self.t.kid(n, "NAME_REF"))
+        if m != "is_none_or" && m != "is_some_and" {
+            return []
+        }
+        let args = self.nodes(self.t.kid(n, "ARG_LIST"))
+        if args.len() != 1 {
+            return []
+        }
+        let (p, body) = self.closure_parts(args[0])
+        if body == "" {
+            return []
+        }
+        let mut recv = self.t.nth(n, 0)
+        while self.t.is(recv, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(recv, "ARG_LIST")).len() == 0 {
+            let inner = self.src(self.t.kid(recv, "NAME_REF"))
+            if inner != "as_ref" && inner != "as_deref" && inner != "as_mut" {
+                break
+            }
+            recv = self.t.nth(recv, 0)
+        }
+        let mut value: String = body.clone()
+        if value.starts_with("return ") {
+            value = value["return ".len()..<value.len()].clone()
+        }
+        let mut absent = "true"
+        if m == "is_some_and" {
+            absent = "false"
+        }
+        return [f"{ind}match {self.expr(recv)} {{", f"{ind}    null => {absent},", f"{ind}    {p} => {value},", f"{ind}}}"]
     }
 
     /// `let P = e else { .. };`: one jump over an option or a result is
@@ -274,6 +319,49 @@ impl TrEm {
             lhs = f"({names.join(", ")})"
         }
         let path = self.last_seg(self.t.kid(p, "PATH"))
+        // `let Some((_, x)) = v.first() else { .. }` -> `if v.is_empty() { .. }`
+        // and `let x = v[0].1`
+        if self.is_some_pat(p) && self.t.is(init, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(init, "ARG_LIST")).len() == 0 {
+            let m = self.src(self.t.kid(init, "NAME_REF"))
+            let inner = self.t.nth(p, 1)
+            if m == "first" || m == "last" {
+                let v = self.expr(self.t.nth(init, 0))
+                let mut at = "0"
+                if m == "last" {
+                    at = f"{v}.len() - 1"
+                }
+                let mut bound: String = ""
+                let mut field: String = ""
+                if self.t.is(inner, "IDENT_PAT") {
+                    bound = self.pat(inner)
+                } else if self.t.is(inner, "TUPLE_PAT") {
+                    let elems = self.nodes(inner)
+                    let mut k = 0
+                    for el in elems {
+                        if self.t.is(el, "IDENT_PAT") {
+                            if bound != "" {
+                                bound = "?"
+                            } else {
+                                bound = self.pat(el)
+                                field = f".{k}"
+                            }
+                        } else if !self.t.is(el, "WILDCARD_PAT") {
+                            bound = "?"
+                        }
+                        k = k + 1
+                    }
+                }
+                if bound != "" && bound != "?" {
+                    let mut out: Vec[String] = [f"{ind}if {v}.is_empty() {{"]
+                    for l in self.block(b, f"{ind}    ", "stmt") {
+                        out.push(l.clone())
+                    }
+                    out.push(f"{ind}}}")
+                    out.push(f"{ind}let {bound} = {v}[{at}]{field}")
+                    return out
+                }
+            }
+        }
         if body.len() == 1 && tr_leaves(body[0]) {
             let jump = body[0].trim().clone()
             let inner = self.t.nth(p, 1)
@@ -308,6 +396,9 @@ impl TrEm {
 
     fn if_expr(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String] {
         let parts = self.nodes(n)
+        if parts.len() < 2 {
+            return [f"{ind}{self.todo("an `if`", n)}"]
+        }
         let cond = parts[0]
         let then_b = parts[1]
         let mut else_n = -1
@@ -555,7 +646,17 @@ impl TrEm {
             for a in arms {
                 let ns = self.nodes(a)
                 let body = ns[ns.len() - 1]
-                if self.is_flow(body) || self.t.is(body, "RETURN_EXPR") || self.t.is(body, "MACRO_EXPR") || self.src(body).starts_with("Err(") {
+                // a refusal or a panic is a value's place too: `x => throw e,`
+                let mut valued = !self.is_flow(body) && !self.t.is(body, "RETURN_EXPR")
+                if self.t.is(body, "BLOCK_EXPR") || self.is_flow(body) {
+                    // a block ending in a value: `else => { if c { a } else { b } },`
+                    valued = self.t.find(body, "RETURN_EXPR") < 0 && self.t.find(body, "TRY_EXPR") < 0 && self.t.find(body, "BREAK_EXPR") < 0 && self.t.find(body, "CONTINUE_EXPR") < 0 && !self.t.is(body, "FOR_EXPR") && !self.t.is(body, "WHILE_EXPR") && !self.t.is(body, "LOOP_EXPR")
+                }
+                if self.t.is(body, "MACRO_EXPR") {
+                    let m = self.last_seg(self.t.kid(body, "MACRO_CALL"))
+                    valued = m == "refused" || m == "refuse" || m == "bail" || m == "panic" || m == "unreachable" || m == "todo" || m == "format" || m == "vec" || m == "matches"
+                }
+                if !valued {
                     simple = false
                 }
             }
@@ -572,7 +673,19 @@ impl TrEm {
             let ns = self.nodes(a)
             let p = ns[0]
             let body = ns[ns.len() - 1]
-            let mut pat_text = self.pat(p)
+            let mut pat_text: String = ""
+            // R202: `x @ P` -> `P`; over another name than the subject, the
+            // arm binds `let x = subject` first
+            let mut bound: String = ""
+            if self.t.is(p, "IDENT_PAT") && self.t.nth(p, 1) >= 0 {
+                pat_text = self.pat(self.t.nth(p, 1))
+                let x = tr_ident(self.t.name_of(p))
+                if x != subject {
+                    bound = f"{inner}    let {x} = {subject}"
+                }
+            } else {
+                pat_text = self.pat(p)
+            }
             if self.t.is(p, "WILDCARD_PAT") {
                 pat_text = "else"
             }
@@ -580,7 +693,14 @@ impl TrEm {
             if guard >= 0 {
                 pat_text = f"{pat_text} if {self.expr(self.t.nth(guard, 0))}"
             }
-            let lines = self.arm(body, inner.clone(), arm_mode.clone())
+            let mut lines = self.arm(body, inner.clone(), arm_mode.clone())
+            if bound != "" {
+                if lines.len() == 1 && !lines[0].starts_with(f"{inner}    ") {
+                    lines = [bound, f"{inner}    {lines[0].trim()}"]
+                } else {
+                    lines.insert(0, bound)
+                }
+            }
             if a == wild && option && !has_none {
                 for l in self.arm_lines("null", lines, inner.clone()) {
                     out.push(l)
@@ -590,6 +710,18 @@ impl TrEm {
                         out.push(l)
                     }
                 }
+                continue
+            }
+            // `P => { s; }`, a statement, keeps its braces
+            let mut keep = false
+            if self.t.is(body, "BLOCK_EXPR") && lines.len() == 1 {
+                let stmts = self.nodes(self.t.kid(body, "STMT_LIST"))
+                keep = stmts.len() == 1 && self.t.is(stmts[0], "EXPR_STMT") && self.t.has_tok(stmts[0], "SEMICOLON")
+            }
+            if keep {
+                out.push(f"{inner}{pat_text} => {{")
+                out.push(lines[0].clone())
+                out.push(f"{inner}}},")
                 continue
             }
             for l in self.arm_lines(pat_text, lines, inner.clone()) {
@@ -619,7 +751,10 @@ impl TrEm {
             // an assignment is no value: it keeps its braces
             let assigns = one.contains(" = ") || one.contains(" += ") || one.contains(" -= ") || one.starts_with("let ")
             if !assigns && !one.starts_with("//") {
-                return [f"{ind}{pat_text} => {one}"]
+                if one.ends_with(",") || one.ends_with("{") {
+                    return [f"{ind}{pat_text} => {one}"]
+                }
+                return [f"{ind}{pat_text} => {one},"]
             }
         }
         let mut out: Vec[String] = [f"{ind}{pat_text} => {{"]
@@ -770,7 +905,7 @@ impl TrEm {
                     out.push(l)
                 }
                 out.push(f"{inner}    }}")
-                out.push(f"{inner}    else => break")
+                out.push(f"{inner}    else => break,")
                 out.push(f"{inner}}}")
             }
             out.push(f"{ind}}}")

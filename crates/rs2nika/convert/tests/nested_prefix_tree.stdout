@@ -1,4 +1,4 @@
-fn x_top() -> i64 {
+pub fn x_top() -> i64 {
     return x_helper(3)
 }
 fn x_helper(a: i64) -> i64 {

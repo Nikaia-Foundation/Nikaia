@@ -38,6 +38,8 @@ pub struct TrEm {
     pub margs: collections::BTreeMap[i64, i64],
     /// names the Rust declares `Option<..>` (locals, parameters, fields)
     pub optional: collections::BTreeSet[String],
+    /// the parameters that are texts (`&str`, `String`): R183
+    pub texts: collections::BTreeSet[String],
     pub todos: i64,
     /// the file's own top-level functions (a `prefix` renames them)
     pub fns: collections::BTreeSet[String],
@@ -64,6 +66,7 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String) -> String {
         ctors: collections::BTreeSet(),
         margs: collections::BTreeMap(),
         optional: collections::BTreeSet(),
+        texts: collections::BTreeSet(),
         todos: 0,
         fns: collections::BTreeSet(),
         hoisted: [],
@@ -329,7 +332,7 @@ impl TrEm {
 
 /// The macros whose first argument is a format string.
 fn tr_format_like(name: String) -> bool {
-    return name == "format" || name == "print" || name == "println" || name == "eprint" || name == "eprintln" || name == "panic" || name == "write" || name == "writeln" || name == "unreachable" || name == "format_args"
+    return name == "format" || name == "print" || name == "println" || name == "eprint" || name == "eprintln" || name == "panic" || name == "write" || name == "writeln" || name == "unreachable" || name == "format_args" || name == "refused" || name == "refuse" || name == "bail" || name == "anyhow" || name == "format_err" || name == "ensure"
 }
 
 /// `s` without `p` at its front, if it starts with it.

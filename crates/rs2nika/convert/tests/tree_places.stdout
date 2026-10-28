@@ -1,28 +1,28 @@
 use std::collections
 
-struct Tally {
-    seen: collections::HashMap[String, i64],
-    names: Vec[String],
-    total: i64,
+pub struct Tally {
+    pub seen: collections::HashMap[String, i64],
+    pub names: Vec[String],
+    pub total: i64,
 }
 
-struct Walk {
-    names: ref Vec[String],
-    tally: Tally,
+pub struct Walk {
+    pub names: ref Vec[String],
+    pub tally: Tally,
 }
 
-fn t_count(names: ref Vec[String]) -> Tally {
-    let walk = Walk { names, tally: Tally { seen: collections::HashMap(), names: [], total: 0 } }
+pub fn t_count(names: ref Vec[String]) -> Tally {
+    let walk = Walk { names: names, tally: Tally { seen: collections::HashMap(), names: [], total: 0 } }
     return walk.tally
 }
 
-fn t_grow(mut views: Vec[Tally], from: i64) {
+pub fn t_grow(mut views: Vec[Tally], from: i64) {
     for at_1 in from..<views.len() {
         views[at_1].total += 1
     }
 }
 
-fn t_says(count: i64) -> String {
+pub fn t_says(count: i64) -> String {
     let msg = f"a message long enough that the syntax tree's dump shortens it: {count}"
     return msg
 }
