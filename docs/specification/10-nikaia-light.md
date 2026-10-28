@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1253 (Draft)
+**Version:** 0.0.1254 (Draft)
 **Date:** 2026-10-28
 
 ---
@@ -808,24 +808,28 @@ finds the first match at or after `from` (default `s.start()`), `s.rfind(needle)
 `m.text()`, the matched text. A needle is a text or one scalar, `s.find(',')`,
 as the pattern of `contains`, `starts_with`, `split` and `replace` is (#877).
 
-**A pattern is searched with `std::regex`** ([ADR-regex-1](adr/adr-regex-1.md)):
-`regex::compile("(\\d{4})-(\\d{2})") -> regex::Regex throws regex::Error`. The
-dialect is RE2's, as Rust's `regex` crate writes it: no backreference, no
+**A pattern is searched with `std::regex`** ([ADR-regex-1](adr/adr-regex-1.md)).
+The dialect is RE2's, as Rust's `regex` crate writes it: no backreference, no
 lookaround, a search in time proportional to the text times the pattern. A match
 is the leftmost one, among those the one the pattern prefers. Text is matched by
-scalar, and `\d`, `\w`, `\s` are Unicode classes. `re.is_match(s) -> bool`,
-`re.find(s; from: text::Pos) -> text::Match?`, `re.find_all(s) -> Seq[text::Match]`
-(not overlapping), `re.captures(s; from: text::Pos) -> regex::Captures?` with
-`c.group(i)` and `c.named(name)`, each a `text::Match?` (group 0 the whole
-match), `re.replace_all(s, with) -> String` (`$1`, `${name}` in `with`) and
-`re.split(s) -> Seq[ref String]`. Every position is a `text::Pos` of `s`.
-
-A pattern the build knows - a literal, a text composed of `comptime` values,
-`asset("…")` - is source in the pattern language: `comptime DATE =
-regex::compile("…")` is compiled while the program is built, and a pattern
-that does not parse stops the build (`NK1244`). A pattern known only at run
-time is compiled then and fails with `regex::Error`. `--comptime` prints for
-each known pattern how it was compiled.
+scalar, and `\d`, `\w`, `\s` are Unicode classes; `(?:…)` does not capture.
+A regular expression is a `regex::Regex[E]`, `E` its engine, a type implementing
+`regex::Engine`: `regex::Literal`, `regex::OnePass`, `regex::Dfa`,
+`regex::TaggedDfa`, `regex::BitNfa`, `regex::FlatNfa`, or `regex::Dynamic` for a
+pattern compiled at run time. `regex::compile(comptime pattern) ->
+regex::Regex[E]` takes a pattern the build knows - a literal, a text composed of
+`comptime` values, `asset("…")` - and the build chooses `E` from it; a type
+written where the result is received is held to, and a pattern that does not
+parse stops the build (`NK1244`). `regex::dynamic(pattern) ->
+regex::Regex[regex::Dynamic] throws regex::Error` takes a pattern known only at
+run time. `regex::Any` holds a regular expression of any engine (`re.any()`).
+`re.is_match(s) -> bool`, `re.find(s; from: text::Pos) -> text::Match?`,
+`re.find_all(s) -> Seq[text::Match]` (not overlapping), `re.captures(s; from:
+text::Pos) -> regex::Captures?` with `c.group(i)` and `c.named(name)`, each a
+`text::Match?` (group 0 the whole match), `re.replace_all(s, with) -> String`
+(`$1`, `${name}` in `with`) and `re.split(s) -> Seq[ref String]`. Every position
+is a `text::Pos` of `s`. `--comptime` prints for each known pattern its engine
+and what the calls on it became.
 
 **A text is cut by name, at its own positions:** `s.before(p)`, `s.after(p)`,
 `s.between(p, q)`, and `s.split_at(p)` for the first two at once. Each is a
@@ -1839,6 +1843,18 @@ server.get("/orders/{id}") fn(id: i64) { … }       // "/orders/{id}" is read w
 ```
 
 A caller that passes its own parameter on declares it `comptime` too.
+
+**A parameter marked `comptime?` may be a build-time value** ([ADR-specialization-1](adr/adr-specialization-1.md)):
+a call whose argument is one calls a copy of the function made for that value,
+two calls with equal values share it, and any other call calls the function as
+written. `self` may be marked. A value is a build-time value by rule: a
+`comptime` binding, a literal, a `comptime` or `comptime?` parameter inside its
+copy, a field, element or part of one, a call the build may run over them
+(Part II 10.2); a `let` is not one. Inside the function, the parameter may not
+stand where only a build-time value is allowed (`NK1305`), since the function
+as written receives run-time values. **A result type may be computed** from
+the function's `comptime` parameters by a call the build may run:
+`fn compile(comptime pattern: String) -> Regex[engine_for(pattern)]`.
 
 **A `comptime` parameter in a function's brackets is read off its arguments' types**, as `T` is:
 

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1254] — 2026-10-28
+
+**std::regex typed by its engine; a function specialised per build-time value: comptime?, @unroll, decided branches (ADR-regex-1, ADR-specialization-1, #673, #906)**
+- A regular expression is regex::Regex[E], typed by its engine; regex::Any holds a mix; regex::compile(comptime p) chooses the engine while building, regex::dynamic(p) compiles at run time; std's calls take comptime? self (ADR-regex-1 D3-D10, Part I 2.6). A comptime? parameter makes a copy per build-time value; @unroll / @unroll(up_to: N) makes a loop variable a build-time value (NK1304, NK1305); an if or match on a known value is decided while building; a result type may be computed from comptime parameters (ADR-specialization-1, Part I 4.6, Part II 10.3). Decided and written down; not yet built.
+
 ## [0.0.1253] — 2026-10-28
 
 **Node ids from a pass of their own; owned parts and parameters; `?.` on a file's name**
