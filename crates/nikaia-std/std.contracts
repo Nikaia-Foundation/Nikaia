@@ -351,6 +351,17 @@ touches = ["file(path) read"]
 throws = ["io::IoError"]
 signature = "(path: ref fs::Path, root: ref fs::Root) -> bool"
 
+# **The absolute name, every link, `.` and `..` resolved** (Part III 17.1,
+# ADR-319 D3 amended 2026-10-28). `NotFound` for a name that does not exist;
+# under `fs::Root::Dir` `Outside` where the resolved name leaves the store.
+# `sync`, as `exists` is: one system call.
+[fn."fs::canonical"]
+pub = true
+sync = true
+touches = ["file(path) read"]
+throws = ["io::IoError"]
+signature = "(path: ref fs::Path, root: ref fs::Root) -> fs::Path"
+
 # **Making, removing, renaming and copying names** (Part III 17.1, #546). Each
 # resolves its names under the root first, as `exists` does: a name that leaves
 # an `fs::Root::Dir` throws `Outside` before anything is touched. `sync`, as
@@ -4215,6 +4226,22 @@ pub = true
 sync = true
 touches = []
 signature = "(self: ref fs::Path, extension: ref fs::Path) -> fs::Path"
+
+# The rest after `base`'s whole parts, or `null` where they do not lead the
+# name (ADR-319 D3, amended 2026-10-28). It reads no file system.
+[fn."fs::Path::strip_prefix"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref fs::Path, base: ref fs::Path) -> fs::Path?"
+
+# A copy of the name, owned by whoever asked for it: how a lent name is kept
+# beyond the call that lent it.
+[fn."fs::Path::clone"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref fs::Path) -> fs::Path"
 
 [fn."fs::Path::join"]
 pub = true

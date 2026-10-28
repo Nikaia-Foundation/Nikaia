@@ -1276,6 +1276,7 @@ Every function below may fail for environmental reasons, so every one of them `t
 pub fn read(path: Path, root: Root) -> Bytes throws                  // whole file, as bytes
 pub fn read_to_string(path: Path, root: Root) -> String throws       // whole file, UTF-8 validated
 pub fn walk(path: Path, root: Root) -> Vec[Path] throws             // every file under a directory
+pub fn canonical(path: Path, root: Root) -> Path throws         // the absolute name, links and . and .. resolved
 pub fn write(path: Path, root: Root, data: ref Array[u8]; append: bool = false, create: bool = true) throws
 ```
 
@@ -1284,8 +1285,11 @@ encoding — the bytes as they are on Unix, WTF-8 on Windows, UTF-8 where names 
 stands wherever a `Path` is asked, as a view without a copy, so a literal or a `String` is a path.
 A `Path` is made from text, by the operating system (`walk`, `read_dir`, a program's arguments,
 the environment) or by the operations on one: `==` against a path or text, `starts_with`,
-`ends_with`, `file_name`, `extension`, `with_extension`, `parent` and `join`, each handing back a
-`Path`. There is no constructor from arbitrary bytes, so no call fails for a name's encoding. An
+`ends_with`, `file_name`, `extension`, `with_extension`, `parent`, `join` and `strip_prefix`,
+each handing back a `Path`. `p.strip_prefix(base)` is the rest of `p` after the whole parts of
+`base`, or `null` where they do not lead it; it reads no file system. `fs::canonical(path, root)`
+is the absolute name with every link, `.` and `..` resolved; it throws `NotFound` for a name that
+does not exist and, under `Dir(store)`, `Outside` where the resolved name leaves the store. There is no constructor from arbitrary bytes, so no call fails for a name's encoding. An
 `f"…"` builds a `Path` where its use asks for one (Part I 2.5). `p.to_text()` gives the
 `String`; it `throws io::IoError::NotText` for a path whose source is the operating system, on
 every target, and never for one made from text. `p.display()` gives text for showing, with `�`

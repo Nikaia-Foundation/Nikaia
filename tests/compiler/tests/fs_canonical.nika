@@ -1,0 +1,49 @@
+// `Path.strip_prefix` cuts on whole parts and reads no file system;
+// `fs::canonical` resolves `.` and `..` to the absolute name, throws `NotFound`
+// for a name that is not there and `Outside` for one that leaves its root
+// (ADR-319 D3, amended 2026-10-28); `clone` copies a name. No absolute name is printed: each is cut
+// by the root's own canonical name. `std::fs` makes no link, so the symlink
+// case is `fs.rs`'s own unit test.
+use std::fs
+use std::io
+
+fn shown(p: fs::Path?) -> String {
+    match p {
+        null => return "null",
+        rest => return f"[{rest.display()}]",
+    }
+}
+
+fn tried(name: String, root: ref fs::Root) -> String {
+    let base = fs::canonical(".", root) catch {
+        return "no root"
+    }
+    let found = fs::canonical(name, root) catch {
+        match error {
+            io::IoError::NotFound(p) => return f"NotFound {p.display()}",
+            io::IoError::Outside(p) => return f"Outside {p.display()}",
+            else => return "other",
+        }
+    }
+    return shown(found.strip_prefix(base))
+}
+
+fn main() throws {
+    let abc: fs::Path = "a/b/c"
+    println(shown(abc.strip_prefix("a")))
+    println(shown(abc.strip_prefix("a/b/c")))
+    let ab: fs::Path = "ab/c"
+    println(shown(ab.strip_prefix("a")))
+    println(shown(abc.strip_prefix("b")))
+    let kept = abc.clone()
+    println(shown(kept.strip_prefix("a/b")))
+
+    let root = fs::scratch()
+    fs::create_dir("x/y", root; recursive: true)
+    println(tried("x/y", root))
+    println(tried("x/./y/../y", root))
+    println(tried(".", root))
+    println(tried("x/gone", root))
+    println(tried("..", root))
+    println(tried("x/../..", root))
+}

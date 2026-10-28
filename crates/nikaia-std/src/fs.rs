@@ -53,6 +53,20 @@ pub mod path {
         p.with_extension(extension.as_os_str())
     }
 
+    /// **The rest of the name after `base`'s whole parts** (ADR-319 D3,
+    /// amended 2026-10-28), or `None` where they do not lead it: `a/b/c`
+    /// after `a` is `b/c`, `a/b` after `a/b` the empty name, and `ab/c` after
+    /// `a` is `None`. It reads no file system.
+    pub fn strip_prefix(p: &FilePath, base: &FilePath) -> Option<PathBuf> {
+        p.strip_prefix(base).ok().map(FilePath::to_path_buf)
+    }
+
+    /// A copy of the name, owned by whoever asked for it: how a lent name is
+    /// kept beyond the call that lent it.
+    pub fn clone(p: &FilePath) -> PathBuf {
+        p.to_path_buf()
+    }
+
     /// The name with another part after it.
     pub fn join(p: &FilePath, part: &FilePath) -> PathBuf {
         p.join(part)
@@ -308,6 +322,29 @@ pub fn exists(path: impl AsRef<FilePath>, root: &Root) -> Result<bool, crate::io
     let asked = path.as_ref();
     let resolved = resolve(asked, root)?;
     std::fs::exists(&resolved).map_err(|e| crate::io::IoError::of(e, asked))
+}
+
+/// **The absolute name, with every link, `.` and `..` resolved** (Part III
+/// 17.1, ADR-319 D3 amended 2026-10-28). The name has to exist: `NotFound`
+/// otherwise. Under `Root::Dir(store)` a name whose resolution leaves the
+/// store's own canonical name is `Outside`, as for [`exists`].
+///
+/// **Not `async`**, as `exists` is not: one system call.
+pub fn canonical(
+    path: impl AsRef<FilePath>,
+    root: &Root,
+) -> Result<std::path::PathBuf, crate::io::IoError> {
+    let asked = path.as_ref();
+    let resolved = resolve(asked, root)?;
+    let found = std::fs::canonicalize(&resolved).map_err(|e| crate::io::IoError::of(e, asked))?;
+    if let Root::Dir(dir) = root {
+        let outside = || crate::io::IoError::Outside(asked.to_path_buf());
+        let base = std::fs::canonicalize(FilePath::new(dir)).map_err(|_| outside())?;
+        if !found.starts_with(&base) {
+            return Err(outside());
+        }
+    }
+    Ok(found)
 }
 
 /// **Making, removing, renaming and copying names** (Part III 17.1, #546).
