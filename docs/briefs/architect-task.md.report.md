@@ -1,5 +1,4 @@
 Result: done
-Batch: n903b-node-numbers-pass.md p2-large-files-plan.md
+Batch: b905-variant-list-part.md, p2-large-files-plan.md
 Owner: none
-RED: since c6626c2 (spec date left at 2026-10-27 by the 0.0.1251 raise); already fixed forward by 43942ee, its run was in progress. No new brief needed; if 43942ee's run is red, that is a new stop line.
-Cut: n903a's Deviation was real (architect's brief said "read issue #903"; builders have no GitHub). n903b now copies #903's text, the n903a API (NodeId::parsed/at/span/is_parsed, ast::spanned), locations, and the expr_ids test update.
+Notes: cut at n903b on Found (#903 done, ee19152; Changelog line in its report, version raise owed). Found widened by probes on 42c0246 and filed as #905 (ready): a variant's Vec[String] part bound in a match over an owned value is typed Vec[ref String] (return, hand-on, for refused; let-bound match reaches rustc); in tools a drained part lowers to an unused `let mut`. RED was the empty state file; CI on 00451bf..42c0246 running. Next after the batch: brief #557.
