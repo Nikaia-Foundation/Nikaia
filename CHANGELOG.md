@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1267] — 2026-10-28
+
+**A text field taken whole from a struct a call made is moved, not viewed; comptime's tree work in Nikaia (#125)**
+- `said = if out.ok { out.stdout } else { out.stderr }` after `let out = process::run(...)` no longer puts `out` in a keep: a text field taken whole is moved out of its struct, and only one lent to a call (`from_dump(res.out)`, `res.out.trim()`) is a view the struct must outlive. Since 0.0.1258 every such field counted as a view, and rustc refused the move with E0507 (`tests/guide`, the accepted-programs sweep).
+- The sub-program's tree work of `comptime_run` moves into Nikaia (`tools/comptime_tree.nika`).
+
 ## [0.0.1266] — 2026-10-28
 
 **A grammar action stands after `->` again; a brace after a pattern is a bound (ADR-grammar-1 D1, #932)**

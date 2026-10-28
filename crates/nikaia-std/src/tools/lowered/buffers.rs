@@ -917,6 +917,22 @@ pub(crate) fn put_into(root: &str, at: i64, of: &collections::BTreeSet<(i64, Str
     walk.puts_into.insert(key, PutsAt { by_arg });
 }
 
+pub(crate) fn lent_origins(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+    let mut out = origins_of(expr, ask, holes_of, unaliased, walk);
+    match expr {
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let held = held_text_field(base, ask.names.resolve(name), ask, &walk);
+            if held.is_some() {
+                let no_callee: String = String::from("");
+                out.insert((nikaia_std::index::or(held, || 0), no_callee));
+            }
+        },
+        _ => { },
+    }
+    out
+}
+
 pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     match expr {
@@ -924,16 +940,7 @@ pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
         Expr::MethodCall { .. } => method_origins(expr, ask, holes_of, unaliased, walk),
         Expr::SafeMethod { .. } => method_origins(expr, ask, holes_of, unaliased, walk),
         Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); call_origins(func, args, ask, holes_of, unaliased, walk) },
-        Expr::Field { base, name, .. } => {
-            let base = nikaia_std::boxed::open(base); let name = *name;
-            let mut out = origins_of(base, ask, holes_of, unaliased, walk);
-            let held = held_text_field(base, ask.names.resolve(name), ask, &walk);
-            if held.is_some() {
-                let no_callee: String = String::from("");
-                out.insert((nikaia_std::index::or(held, || 0), no_callee));
-            }
-            out
-        },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); origins_of(base, ask, holes_of, unaliased, walk) },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); origins_of(base, ask, holes_of, unaliased, walk) },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
@@ -1051,8 +1058,8 @@ pub(crate) fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
         origins_of(receiver, ask, holes_of, unaliased, walk);
         return out;
     }
-    add_all(&origins_of(receiver, ask, holes_of, unaliased, walk), &mut out);
-    for arg in args.iter() { add_all(&origins_of(arg, ask, holes_of, unaliased, walk), &mut out); }
+    add_all(&lent_origins(receiver, ask, holes_of, unaliased, walk), &mut out);
+    for arg in args.iter() { add_all(&lent_origins(arg, ask, holes_of, unaliased, walk), &mut out); }
     out
 }
 
@@ -1082,7 +1089,7 @@ pub(crate) fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '
     let borrowed = borrowed_positions(&named, ask);
     let mut position = 0;
     for arg in args.iter() {
-        let of = origins_of(arg, ask, holes_of, unaliased, walk);
+        let of = lent_origins(arg, ask, holes_of, unaliased, walk);
         let lent = borrowed.is_empty() || borrowed.contains(&position);
         if lent && !(variant && is_the_buffer(arg, ask, &walk)) { add_all(&of, &mut by_args); }
         position += 1;

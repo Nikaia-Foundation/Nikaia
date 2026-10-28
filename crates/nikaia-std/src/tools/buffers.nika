@@ -442,7 +442,7 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
             // **A struct of its own a call hands back holds text a view can
             // point into**: `from_dump(res.out)` returned points into this
             // frame's `res`, which then lives in the keep that view needs. Only
-            // a view of its text field does (`origins_of`'s `Expr::Field`); the
+            // a view of its text field does (`lent_origins`); the
             // struct moved or a field of another type taken is no view of it.
             if names.len() == 1 {
                 let held = struct_made_by(value, ask, unaliased)
@@ -1207,6 +1207,24 @@ fn put_into(root: ref String, at: i64, of: ref collections::BTreeSet[(i64, Strin
     walk.puts_into.insert(key, PutsAt { by_arg: by_arg })
 }
 
+// **The origins of a value lent to a call**: those of `origins_of`, and a text
+// field of a struct of its own (`walk.holders`), which the call's result may
+// point into (`from_dump(res.out)`, `res.out.trim()`).
+fn lent_origins(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) -> collections::BTreeSet[(i64, String)] {
+    let mut out = origins_of(expr, ask, holes_of, unaliased, walk)
+    match expr {
+        Expr::Field { base, name, .. } => {
+            let held = held_text_field(base, ask.names.resolve(name), ask, walk)
+            if held != null {
+                let no_callee: String = ""
+                out.insert((held ?? 0, no_callee))
+            }
+        }
+        else => {}
+    }
+    return out
+}
+
 // **The origins of an expression's value**: where its views may point.
 fn origins_of(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) -> collections::BTreeSet[(i64, String)] {
     let none: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
@@ -1215,15 +1233,9 @@ fn origins_of(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[
         Expr::MethodCall { .. } => method_origins(expr, ask, holes_of, unaliased, walk),
         Expr::SafeMethod { .. } => method_origins(expr, ask, holes_of, unaliased, walk),
         Expr::Call { func, args, .. } => call_origins(func, args, ask, holes_of, unaliased, walk),
-        Expr::Field { base, name, .. } => {
-            let mut out = origins_of(base, ask, holes_of, unaliased, walk)
-            let held = held_text_field(base, ask.names.resolve(name), ask, walk)
-            if held != null {
-                let no_callee: String = ""
-                out.insert((held ?? 0, no_callee))
-            }
-            out
-        }
+        // A text field taken whole is moved out, no view of its struct: only
+        // one lent to a call is (`lent_origins`).
+        Expr::Field { base, .. } => origins_of(base, ask, holes_of, unaliased, walk),
         Expr::SafeField { base, .. } => origins_of(base, ask, holes_of, unaliased, walk),
         Expr::Index { base, index, .. } => {
             origins_of(index, ask, holes_of, unaliased, walk)
@@ -1374,9 +1386,9 @@ fn method_origins(call: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> 
         origins_of(receiver, ask, holes_of, unaliased, walk)
         return out
     }
-    add_all(origins_of(receiver, ask, holes_of, unaliased, walk), out)
+    add_all(lent_origins(receiver, ask, holes_of, unaliased, walk), out)
     for arg in args {
-        add_all(origins_of(arg, ask, holes_of, unaliased, walk), out)
+        add_all(lent_origins(arg, ask, holes_of, unaliased, walk), out)
     }
     return out
 }
@@ -1413,7 +1425,7 @@ fn call_origins(func: ref Expr, args: ref Vec[Expr], ask: ref BufferAsk, holes_o
     let borrowed = borrowed_positions(named, ask)
     let mut position = 0
     for arg in args {
-        let of = origins_of(arg, ask, holes_of, unaliased, walk)
+        let of = lent_origins(arg, ask, holes_of, unaliased, walk)
         // **Only what the result borrows from is a source** (#735): a
         // parameter used as a map key or only compared hands nothing back.
         let lent = borrowed.is_empty() || borrowed.contains(position)

@@ -1,0 +1,14 @@
+// A text field of a struct a call made, taken whole, is moved out of it: no
+// view of the struct (`said = out.stdout` failed in rustc with E0507 when it
+// counted as one, and `out` was put in a keep the view would need).
+use std::process
+
+fn main() throws {
+    let mut said: String = "nothing yet"
+    println(said)
+    for word in ["out", "again"] {
+        let out = process::run("echo", [word.clone()])
+        said = if out.ok { out.stdout } else { out.stderr }
+        print(said)
+    }
+}
