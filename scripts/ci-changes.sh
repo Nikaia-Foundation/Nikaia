@@ -59,7 +59,7 @@ echo "$changed" | sed 's/^/  /'
 if echo "$changed" | grep -q '^\.github/workflows/\|^scripts/ci-changes\.sh$'; then
     all
 fi
-code=$(echo "$changed" | grep -v -E '^(guide|_includes|_layouts)/|^(_config\.yml|index\.html|robots\.txt|favicon\.ico)$' |
+code=$(echo "$changed" | grep -v -E '^(guide|website)/' |
     grep -v -E '^(CHANGELOG\.md|(crates|packages|examples|benches|tools|scripts|tests|docs/specification)/.*)$' |
     grep -v -E '\.md$' || true)
 code2=$(echo "$changed" | grep -E '^(CHANGELOG\.md|(crates|packages|examples|benches|tools|scripts|tests|docs/specification)/)' || true)

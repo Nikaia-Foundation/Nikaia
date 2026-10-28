@@ -1,8 +1,9 @@
 // The Worker that serves the documentation site at nikaia-lang.org.
 //
-// It has no script: `_site`, which `scripts/site-build.sh` writes, is served
-// as static assets. Cloudflare Workers Builds runs that script as its build
-// command and `npx wrangler deploy` as its deploy command.
+// It has no script: `website/_site`, which `scripts/site-build.sh` writes, is
+// served as static assets (the directory below is relative to this file).
+// Cloudflare Workers Builds runs that script as its build command and
+// `npx wrangler deploy --config website/wrangler.jsonc` as its deploy command.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nikaia-lang",

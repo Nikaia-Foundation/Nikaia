@@ -1,6 +1,10 @@
 # Jekyll configuration of the documentation site, which
 # `scripts/site-build.sh` builds and a Cloudflare Worker serves.
 #
+# It lives in `website/` with the rest of what only the site needs; the build
+# lays `website/` onto the root of a copy of the repository, so the paths below
+# are the repository's (`docs/`, `assets/`, ...), as if this file stood there.
+#
 # This file publishes the documentation that already exists in this repository.
 # It copies nothing and restates nothing: every page on the site is one of the
 # Markdown files below, rendered where it lies. The plugins that make that work
@@ -21,7 +25,7 @@ description: >-
   and the notes they were argued from.
 
 # Where the site lives: a Cloudflare Worker serves it at its own domain
-# (`wrangler.jsonc`, built by `scripts/site-build.sh`). Canonical links and
+# (`website/wrangler.jsonc`, built by `scripts/site-build.sh`). Canonical links and
 # the sitemap name this host.
 url: https://nikaia-lang.org
 baseurl: /
@@ -31,7 +35,7 @@ theme: jekyll-theme-primer
 # Every page on this site is a Markdown file with no front matter, and a page
 # that names no layout is published as a bare fragment: no `<head>`, no
 # stylesheet, no viewport. The theme above was built and served all along and
-# nothing ever linked to it. This is what names it. `_layouts/default.html`
+# nothing ever linked to it. This is what names it. `website/_layouts/default.html`
 # overrides the theme's own layout of that name and adds the theme picker.
 #
 # The second entry takes the layout back off `assets/`, where the theme's

@@ -52,6 +52,8 @@ node_modules/
 
 # The documentation site, as `scripts/site-build.sh` builds it, and what the
 # build and `wrangler` leave beside it.
+/website/_site/
+/website/.wrangler/
 /_site/
 /.jekyll-cache/
 /.sass-cache/

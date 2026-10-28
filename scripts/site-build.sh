@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# Builds the documentation site into `_site/`. This is the build command
-# Cloudflare Workers Builds runs for nikaia-lang.org (see `wrangler.jsonc`);
-# it runs locally too.
+# Builds the documentation site into `website/_site/`. This is the build
+# command Cloudflare Workers Builds runs for nikaia-lang.org (see
+# `website/wrangler.jsonc`); it runs locally too.
+#
+# The site's source is two trees laid on top of each other: the repository's
+# own Markdown where it lies (`README.md` as `/`, `docs/`, `guide/`, ...), and
+# `website/`, which holds what only the site needs (the Jekyll configuration,
+# the layouts and includes, the hand-written pages, the stylesheet, scripts and
+# images). `website/` is laid onto the root of the copy, so `website/easy/` is
+# `/easy/` on the site and `website/_config.yml` is the copy's `_config.yml`.
 #
 # Every step runs on a throwaway copy of the repository, never on the checkout
 # itself: fencing the braces and writing the menu change files, and a local
@@ -14,12 +21,21 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# The copy: everything but what is built, installed or fetched.
+SITE="$ROOT/website/_site"
+
+# The copy: everything but what is built, installed or fetched, and `website/`,
+# which comes next.
 tar -C "$ROOT" -cf - \
-  --exclude=./.git --exclude=./target --exclude=./_site \
+  --exclude=./.git --exclude=./target --exclude=./website --exclude=./_site \
   --exclude=./vendor --exclude=./.bundle --exclude=node_modules \
   --exclude=./.jekyll-cache --exclude=./.sass-cache \
   --exclude=./.wrangler . | tar -C "$WORK" -xf -
+# ... and `website/` laid onto its root. No file in it has a namesake in the
+# rest of the repository (`assets/` is shared: the badges stay beside the
+# README, the stylesheet, scripts and images are in `website/assets/`).
+tar -C "$ROOT/website" -cf - \
+  --exclude=./_site --exclude=./.wrangler --exclude=./.jekyll-cache \
+  --exclude=./.sass-cache . | tar -C "$WORK" -xf -
 
 # The open-issue index and one page per issue. The workflow keeps their bundle
 # on the branch `site-issues` (`scripts/site-issues.py`); expand it before the
@@ -59,7 +75,7 @@ bundle install --quiet
 # The theme, laid into the copy as files rather than named as `theme:`. A
 # theme gem's own dependencies are loaded with it, and `jekyll-theme-primer`'s
 # include `jekyll-github-metadata` (`scripts/site-jekyll/Gemfile` says why that
-# stays out). The repository's own files win: `_layouts/default.html` overrides the
+# stays out). The repository's own files win: `website/_layouts/default.html` overrides the
 # theme's layout of that name, here as on Pages.
 THEME="$(bundle exec ruby -e 'print Gem.loaded_specs["jekyll-theme-primer"].full_gem_path')"
 python3 - "$THEME" "$WORK" <<'PY'
@@ -117,18 +133,18 @@ github:
   repository_url: https://github.com/Nikaia-Language/Nikaia
   branch: main
 YAML
-rm -rf "$ROOT/_site"
+rm -rf "$SITE"
 # From inside the copy: Jekyll 3 also reads `_layouts/` in the directory it is
 # started from, and that must be the copy's.
 cd "$WORK"
 bundle exec jekyll build \
-  --source "$WORK" --destination "$ROOT/_site" \
+  --source "$WORK" --destination "$SITE" \
   --config "$WORK/_config.yml,$WORK/_config.build.yml"
 
 # The redirects `site-prepare.py` wrote, which Cloudflare reads from the assets
 # directory. Jekyll skips every file whose name starts with `_`.
-cp "$WORK/_redirects" "$ROOT/_site/_redirects"
+cp "$WORK/_redirects" "$SITE/_redirects"
 
 # Nikaia code blocks, highlighted from the editor grammar.
 npm ci --prefix "$ROOT/scripts/site-highlight" --no-audit --no-fund
-node "$ROOT/scripts/site-highlight/highlight.mjs" "$ROOT/_site"
+node "$ROOT/scripts/site-highlight/highlight.mjs" "$SITE"
