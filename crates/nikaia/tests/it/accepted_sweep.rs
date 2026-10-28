@@ -42,7 +42,7 @@ use nikaia::emit::Build;
 const KNOWN: &[(&str, &str)] = &[
     // Left to `rustc` on purpose.
     (
-        "018870a09f6d362e",
+        "d4364f4f2ea3f337",
         "fold_lambdas: `par_fold` over a rule that is not a frame, the grammar backend's refusal (ADR-296 D9)",
     ),
     (
@@ -167,8 +167,10 @@ fn rustc_refuses(purpose: &str, rust: &str, crate_type: &str) -> Option<String> 
 
 /// The Rust of one program, or why it was not lowered: `nikaia check` refuses
 /// it alone (its test checked it against a ledger the test wrote), or the
-/// lowering does.
-fn checked_and_lowered(path: &Path) -> Result<String, String> {
+/// lowering does. `Ok(None)` for a program with no `fn main`, asked of its
+/// items: a text that holds a line `fn main() {` (the sub-program
+/// `comptime_driver.nika` writes) is not one.
+fn checked_and_lowered(path: &Path) -> Result<Option<String>, String> {
     let checked = Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .arg("check")
         .arg(path)
@@ -180,10 +182,19 @@ fn checked_and_lowered(path: &Path) -> Result<String, String> {
     }
     let read =
         nikaia::modules::Program::read_one(path).map_err(|e| format!("does not read: {e:#}"))?;
+    let has_main = read.units.iter().any(|unit| {
+        unit.parsed.program.items.iter().any(|item| {
+            matches!(&item.node, nikaia::ast::Item::Fn { name: Some(n), .. }
+                if unit.parsed.text(*n) == "main")
+        })
+    });
+    if !has_main {
+        return Ok(None);
+    }
     let emitted = read
         .emit(Build::default())
         .map_err(|e| format!("does not lower: {e:#}"))?;
-    Ok(emitted.rust)
+    Ok(Some(emitted.rust))
 }
 
 /// The lowered program as a module of a batch.
@@ -212,7 +223,7 @@ fn every_program_a_checker_test_accepts_compiles() {
     // Each is checked and lowered alone, as `nikaia check` and `nikaia lower`
     // do it: in a directory of its own, since a check writes its ledger
     // beside the file.
-    let lowered: Vec<Result<String, String>> = in_parallel(&programs, |program| {
+    let lowered: Vec<Result<Option<String>, String>> = in_parallel(&programs, |program| {
         let dir = common::scratch_dir("sweep-source");
         let path = dir.join(format!("p_{}.nika", program.hash));
         std::fs::copy(&program.path, &path).expect("copy a dumped program");
@@ -226,8 +237,8 @@ fn every_program_a_checker_test_accepts_compiles() {
     for (program, result) in programs.iter().zip(lowered) {
         match result {
             Err(_) => not_lowered += 1,
-            Ok(rust) if !rust.contains("\nfn main(") => no_main += 1,
-            Ok(rust) => good.push((program, rust)),
+            Ok(None) => no_main += 1,
+            Ok(Some(rust)) => good.push((program, rust)),
         }
     }
     let lowered_at = started.elapsed();
