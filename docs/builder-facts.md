@@ -42,6 +42,8 @@ the same dirty lock file). Read once; the brief adds only what is specific.
 * **CI has no `target/fast`.** CI builds `target/release` only; a test that runs the toolchain takes the `nikaia` that runs it (`readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe`), never a fixed `target/fast/nikaia` (four script tests kept develop red that way, 2026-10-26). A red test that passes locally: check what CI lacks first.
 * **A parser change runs the whole `it` binary** (`cargo test --profile fast -p nikaia --test it`, no filter): many `it` tests hold one-line programs as Rust strings, and `accepted_compiles` lowers the corpus; 9936c70 ran `-- parse` only and turned `develop` red (2026-10-26).
 * **A change to `scripts/X.nika` runs the tests that name it** (`grep -l X tests/compiler/tests`), also from the main session: a `--dry-run` line added without its `.stdout` kept `develop` red (7970db8, `drive_actions`, 2026-10-26).
+* **Test with your own copy of the binary.** In the shared checkout another agent may rebuild `target/fast/nikaia` mid-run: after your build, `cp target/fast/nikaia "$SCRATCH/nikaia"` and run long tests (`nikaia test --project tests/compiler`) with that copy (P5a lost two runs, 2026-10-28). An untracked test another agent is writing may fail: name it under `Tests:`, do not touch it.
+* **A converter draft of `impl` methods, when the brief wants free functions**: keep the bodies, redo the signatures at once (`self.x` -> a parameter); do not edit method by method (P5a kept 6 of 104 lines, 2026-10-28).
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 

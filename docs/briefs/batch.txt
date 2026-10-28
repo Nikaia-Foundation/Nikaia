@@ -1,2 +1,2 @@
-p5a-project-settings.md
 m3a-modules-collect.md
+mf-manifest-file.md

@@ -23,7 +23,7 @@ The driver converts these before you start and names the draft (`.draft.nika`, `
 * **`read_dir`'s order**: Rust sorted `PathBuf`s (:111 of the cut); Nikaia's `read_dir` gives sorted names. Check both orders agree on names with `.`, `_` and digits, and say so in `Body:`; if they can differ, sort the way Rust did.
 * Every refusal text and its path display stays byte for byte (`tests/compiler` `.stderr`; `crates/nikaia/tests/it/` tests on modules, packages, `use`).
 * `std` has no `Seq.chain` (#924): write loops. Known open lowering defects, not yours: #909, #916.
-* Do not touch `crates/rs2nika/` (the converter lane's uncommitted `convert/nikaia.{contracts,derived,proofs}`), `contracts/*`, `check/*`, `emit/*` (lane 2), nor `project.rs` (P5a, the previous brief, may still be committing).
+* Do not touch `crates/rs2nika/` (the converter lane's uncommitted `convert/nikaia.{contracts,derived,proofs}`), `contracts/*`, `check/*`, `emit/*` (lane 2), nor `project.rs` (P5a is on develop, 2e13458; its rest waits on #933/#934), nor `tools/text_tiers.nika`/`lowered/text_tiers.rs` and the untracked `tests/compiler/tests/a_view_list_lent_to_a_ref_list_parameter_beside_its_own_text_is_refused.*` (other agents' uncommitted files; that test may fail `tests/compiler`: name it under `Tests:`).
 * Tests that exercise this code: `it` tests filtered on `modules package use_ import namespace collect`; `--lib modules::`.
 
 ## To build
