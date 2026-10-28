@@ -143,7 +143,9 @@ def citations():
             continue
         # The history is read as it was written; a section it cites may since
         # have left a record. Build output is not ours to check.
-        if f.startswith("docs/history/") or "/target/" in f:
+        # A brief may cite the decision it asks a builder to write (R0's
+        # ADR-294 D21): it is a plan, checked once the decision exists.
+        if f.startswith(("docs/history/", "docs/briefs/")) or "/target/" in f:
             continue
         try:
             text = open(f, encoding="utf-8", errors="ignore").read()

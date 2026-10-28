@@ -23,7 +23,7 @@ hand-over was mis-transmitted):**
    piece.
 4. **The compiler's Nikaia leaves the `std` crate.** Its 242 `.nika` stand in
    `crates/nikaia-std/src/tools` and read from outside as part of the standard
-   library; they move to `crates/nikaia-compiler/src` (R0, #921, ADR-294 D21),
+   library; they move to `crates/nikaia-compiler/src` (R0, #921, ADR-294's new D21),
    with the thin Rust adapter `crates/nikaia` beside it.
 
 Counts are code lines of `scripts/self_hosting.py` (no comments, no blanks).
