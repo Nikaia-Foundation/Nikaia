@@ -1,0 +1,65 @@
+// The specification's code blocks survive an editorial pass.
+//
+// Compares every ```nika block of the three parts in the working tree with the
+// same file at a git revision (default HEAD): same count, same order, same
+// bytes. Prose may change freely; the blocks are the tests.
+//
+//     nikaia run scripts/check-spec-blocks.nika -- [REV]
+
+use std::cli
+use std::fs
+use std::process
+
+fn spec_blocks(text: String) -> Vec[String] throws {
+    let lines: Vec[String] = text.split("\n").collect()
+    let mut out: Vec[String] = []
+    let mut at = 0
+    while at < lines.len() {
+        if lines[at].trim() == "```nika" {
+            let mut end = at + 1
+            while end < lines.len() && lines[end].trim() != "```" { end += 1 }
+            let mut body = ""
+            for i in at + 1..<end {
+                if i > at + 1 { body = body + "\n" }
+                body = body + lines[i]
+            }
+            out.push(body)
+            at = end + 1
+        } else {
+            at += 1
+        }
+    }
+    return out
+}
+
+fn spec_head(s: String) -> String throws {
+    if s.len() <= 200 { return s }
+    return s.bytes[0..<200].text().clone()
+}
+
+fn main() throws {
+    let mut args: Vec[String] = []
+    for a in cli::args() { args.push(a) }
+    let rev = if args.len() > 1 { args[1].clone() } else { "HEAD" }
+    let mut bad = 0
+    for part in ["10-nikaia-light.md", "20-nikaia-advance.md", "30-nikaia-tooling.md"] {
+        let shown = process::run("git", ["show", f"{rev}:docs/specification/{part}"])
+        if !shown.ok { process::exit(1) }
+        let a = spec_blocks(shown.stdout.clone())
+        let b = spec_blocks(fs::read_to_string(f"docs/specification/{part}", fs::Root::Anywhere))
+        if a.len() != b.len() {
+            println(f"{part}: {a.len()} blocks at {rev}, {b.len()} now")
+            bad += 1
+        }
+        let n = if a.len() < b.len() { a.len() } else { b.len() }
+        for i in 0..<n {
+            if a[i] != b[i] {
+                println(f"{part} #{i + 1}: block changed\n--- {rev}\n{spec_head(a[i].clone())}\n--- now\n{spec_head(b[i].clone())}")
+                bad += 1
+                break
+            }
+        }
+        if bad == 0 { println(f"{part}: {b.len()} blocks unchanged") }
+    }
+    if bad > 0 { process::exit(1) }
+}
