@@ -2827,7 +2827,7 @@ pub mod traits {
 }
 pub mod tree_build {
     #[allow(unused_imports)]
-    pub use super::{Postfix, split_mut, params_of, guarded, fold_binary, grouped, fold_postfix};
+    pub use super::{Postfix, split_mut, unpacked, params_of, guarded, fold_binary, grouped, fold_postfix};
 }
 pub mod trust {
     #[allow(unused_imports)]
