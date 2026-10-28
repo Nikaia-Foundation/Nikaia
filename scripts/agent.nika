@@ -77,6 +77,7 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
 // read). Returns the draft's path, or "" without Cut: lines or converter.
 fn agent_draft(abs: String, body: String) -> String throws {
     let converter = "crates/rs2nika/convert/target/nikaia/bin/rs2nika"
+    let mut cuts: Vec[String] = []
     let mut rust: Vec[String] = []
     let mut options: Vec[String] = []
     for line in body.split("\n") {
@@ -87,6 +88,8 @@ fn agent_draft(abs: String, body: String) -> String throws {
             if at.len() == 2 {
                 let span = at[1].replace("-", ",")
                 rust.push(process::run("sed", ["-n", f"{span}p", at[0].clone()]).stdout.clone())
+                cuts.push("--cut")
+                cuts.push(cut.clone())
             }
         } else if t.starts_with("Convert: ") {
             for word in (t.strip_prefix("Convert: ") ?? "").trim().split(" ") { if word != "" { options.push(word.clone()) } }
@@ -96,7 +99,11 @@ fn agent_draft(abs: String, body: String) -> String throws {
     let mut stem = abs.clone()
     if abs.ends_with(".md") { stem = (abs.strip_suffix(".md") ?? "").clone() }
     let draft = f"{stem}.draft.nika"
-    fs::write(f"{draft}.rs", fs::Root::Anywhere, rust.join(""))
+    // the converter cuts whole items (a method inside its `impl`); the bare
+    // lines only when it cannot parse the file
+    let whole = process::run(converter, cuts).stdout.clone()
+    let given = if whole.trim() != "" { whole } else { rust.join("") }
+    fs::write(f"{draft}.rs", fs::Root::Anywhere, given)
     options.push("--file")
     options.push(f"{draft}.rs")
     let out = process::run(converter, options)
