@@ -57,10 +57,14 @@ impl CheckState {
         let mut frame: i64 = 0;
         if !self.scope.is_empty() { frame = self.scope.len() as i64 - 1; }
         for index in 0..names.len() as i64 {
-            let bound = world.words.resolve(*nikaia_std::index::get(&names, (index) as usize)).to_owned();
+            let bound = world.words.resolve(*nikaia_std::index::get(&names, (index) as usize)).to_string();
             self.nameable(&bound, span, "a `let`");
             self.a_tuple_part_is_lent(lent, &bound, nikaia_std::index::get(&parts, (index) as usize), at, frame);
-            self.bind_with(bound, (*nikaia_std::index::get(&parts, (index) as usize)).clone(), None);
+            self.bind_with(bound.to_string(), (*nikaia_std::index::get(&parts, (index) as usize)).clone(), None);
+            if check_owned_text(nikaia_std::index::get(&parts, (index) as usize)) && (lent || (*nikaia_std::index::get(&parts, (index) as usize)).is_a_view()) {
+                let local = match self.binding(&bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                self.flow.lent_text_params.insert(local.id);
+            }
         }
         Ty::Tuple(vec![])
     }
@@ -154,8 +158,21 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_tuple_part_is_lent(&mut self, lent: bool, bound: &str, part: &Ty, at: i64, frame: i64) {
-        if !lent || bound == "_" { return; }
-        if a_copy_by_value(part) { self.facts.copied_tuple_parts.insert((at, bound.to_owned())); } else { self.lent_lets.insert((bound.to_owned(), frame)); }
+        if bound == "_" { return; }
+        let viewed = match part {
+            Ty::Named { name, args, view } => { let view = *view; view && a_copy_by_value(&Ty::Named { name: name.to_string(), args: args.to_owned(), view: false }) },
+            _ => false,
+        };
+        if viewed {
+            self.facts.copied_tuple_parts.insert((at, bound.to_string()));
+            return;
+        }
+        let a_view = match part {
+            Ty::Named { view, .. } => { let view = *view; view },
+            _ => false,
+        };
+        if !lent && !a_view { return; }
+        if a_copy_by_value(part) { self.facts.copied_tuple_parts.insert((at, bound.to_string())); } else { self.lent_lets.insert((bound.to_string(), frame)); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -171,7 +188,7 @@ impl CheckState {
             None => None,
         } };
         self.flow.loops = 0;
-        self.flow.barrier = Some(what.to_owned());
+        self.flow.barrier = Some(what.to_string());
         self.narrowing.walls.push(self.scope.len() as i64);
         self.handed_over = None;
         self.inside_a_sync_function = None;
@@ -226,7 +243,7 @@ pub(crate) fn binds_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
                 let p = *p;
                 if at < types.len() as i64 {
                     match *nikaia_std::index::get(&types, (at) as usize) {
-                        Ty::Var { ref name, view } => { if name == held { out.push((world.words.resolve(p).to_owned(), view)); } },
+                        Ty::Var { ref name, view } => { if name == held { out.push((world.words.resolve(p).to_string(), view)); } },
                         _ => { },
                     }
                 }

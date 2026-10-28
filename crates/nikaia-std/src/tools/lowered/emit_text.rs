@@ -47,13 +47,13 @@ pub fn top_level_parts(inside: &str) -> Vec<String> {
             continue;
         }
         if c == '"' { in_text = true; } else if c == '{' || c == '(' || c == '[' { depth += 1; } else if c == '}' || c == ')' || c == ']' { depth -= 1; } else if c == ',' && depth == 0 {
-            parts.push(current.trim().to_owned());
+            parts.push(current.trim().to_string());
             current = String::from("");
             continue;
         }
         current.push(c);
     }
-    if !current.trim().is_empty() { parts.push(current.trim().to_owned()); }
+    if !current.trim().is_empty() { parts.push(current.trim().to_string()); }
     parts
 }
 
@@ -114,12 +114,12 @@ pub fn held_literal(literal: &str, ty: &Ty) -> String {
     if owned_text(ty) && literal.starts_with("\"") { return format!("String::from({})", literal); }
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); held_nullable(literal, inner) },
-        _ => literal.to_owned(),
+        _ => literal.to_string(),
     }
 }
 
 pub(crate) fn held_nullable(literal: &str, inner: &Ty) -> String {
-    if literal == "None" { return literal.to_owned(); }
+    if literal == "None" { return literal.to_string(); }
     if owned_text(inner) && literal.starts_with("\"") { return format!("Some(String::from({}))", literal); }
     format!("Some({})", literal)
 }
@@ -133,7 +133,7 @@ pub fn plain_rust_spelling(ty: &Ty) -> String {
 }
 
 pub(crate) fn plain_named(written: &str, args: &[Ty], view: bool) -> String {
-    let mut name = written.to_owned();
+    let mut name = written.to_string();
     if name == "List" { name = String::from("Vec"); }
     let mut inner: String = String::from("");
     if !args.is_empty() {

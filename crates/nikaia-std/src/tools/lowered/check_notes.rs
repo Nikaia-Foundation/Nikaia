@@ -35,7 +35,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_sequence_that_cannot_do_this(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol, contract: &FnContract, found: &[Ty], span: &Span) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
-        let written = world.words.resolve(method).to_owned();
+        let written = world.words.resolve(method).to_string();
         let receiver_lacks = !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" && self.a_sequence_lacks(&written, &nikaia_std::index::get(&signature.params, 0).1, on, span);
         if receiver_lacks { return; }
         let arguments = call_arguments(signature);
@@ -85,7 +85,7 @@ impl CheckState {
     pub fn a_cleanup_that_moved(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, param: &str, moved_now: bool, moved_ty: &str, want: &Ty, given: Option<&Expr>, span: &Span) {
         let expr = match given { Some(__nikaia_value) => __nikaia_value, None => return };
         let value = match expr {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
             _ => return,
         };
         let how = match self.tears_down(world, want, &mut collections::BTreeSet::new()) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -131,7 +131,7 @@ impl CheckState {
             return;
         }
         let ty: String = match left {
-            Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && note_an_integer(name) { name.to_owned() } else { String::from("i64") } },
+            Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && note_an_integer(name) { name.to_string() } else { String::from("i64") } },
             _ => String::from("i64"),
         };
         self.a_shift_too_far(&ty, &count, span);
@@ -172,7 +172,7 @@ impl CheckState {
         if count.value.negative { written = format!("-{}", count.value.magnitude); }
         let article = if an_or_a(ty) == "an" { "an" } else { "a" };
         let last = width - 1u64;
-        self.findings.push(check_refusal("NK1116", span, format!("This shifts {} `{}` by {} places, and it has {} bits.", article, ty, written, width), vec![String::from("A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen.")], Some(format!("Shift by 0 to {} places.", last).to_owned())));
+        self.findings.push(check_refusal("NK1116", span, format!("This shifts {} `{}` by {} places, and it has {} bits.", article, ty, written, width), vec![String::from("A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen.")], Some(format!("Shift by 0 to {} places.", last).to_string())));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -183,7 +183,7 @@ impl CheckState {
             if one == name { written = true; }
         }
         let asked = self.flow.at_a_write_door && !written;
-        let mut local = CheckLocal::free(world.words.resolve(name).to_owned(), ty, self.a_new_binding());
+        let mut local = CheckLocal::free(world.words.resolve(name).to_string(), ty, self.a_new_binding());
         if asked { local.immutable = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter }); }
         let opened = self.flow.open_params.remove(&local.name);
         if self.flow.lent_params.remove(&local.name) {
@@ -198,7 +198,7 @@ impl CheckState {
     pub fn the_one_error(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<Ty> {
         let name = match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
-                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
                 Expr::Path(segments, _) => note_joined(world, segments),
                 _ => return None,
             } },
@@ -207,7 +207,7 @@ impl CheckState {
         };
         let key = world.here.unaliased(&name);
         let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if contract.fails_with.len() == 1 && *nikaia_std::index::get(&contract.fails_with, 0) != "?" { return Some(Ty::Named { name: (*nikaia_std::index::get(&contract.fails_with, 0)).to_owned(), args: vec![], view: false }); }
+        if contract.fails_with.len() == 1 && *nikaia_std::index::get(&contract.fails_with, 0) != "?" { return Some(Ty::Named { name: (*nikaia_std::index::get(&contract.fails_with, 0)).to_string(), args: vec![], view: false }); }
         None
     }
 }
@@ -216,7 +216,7 @@ pub(crate) fn note_joined(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segmen
     let mut parts: Vec<String> = vec![];
     for segment in segments.iter() {
         let segment = *segment;
-        parts.push(world.words.resolve(segment).to_owned());
+        parts.push(world.words.resolve(segment).to_string());
     }
     parts.join("::")
 }

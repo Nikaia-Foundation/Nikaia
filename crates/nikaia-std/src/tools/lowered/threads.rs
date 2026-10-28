@@ -33,7 +33,7 @@ impl Crossing {
     pub fn may(&self) -> bool { matches!(self, Crossing::May) }
     pub fn refused_part(&self) -> Option<String> {
         match self {
-            Crossing::MayNot { part, .. } => Some(part.to_owned()),
+            Crossing::MayNot { part, .. } => Some(part.to_string()),
             _ => None,
         }
     }
@@ -66,7 +66,7 @@ impl Crossing {
 
 pub(crate) fn a_copy_of(text: Option<&str>) -> Option<String> {
     let there = match text { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(there.to_owned())
+    Some(there.to_string())
 }
 
 pub(crate) fn way_out_of(why: Refusal) -> String {
@@ -146,7 +146,7 @@ pub(crate) fn described_crossing(ty: &Ty, name: &str, args: &[Ty], walking: &Wal
     if contract.crosses.may_not() { return Crossing::MayNot { part: ty.text(), at: None, why: Refusal::Said }; }
     if contract.crosses.may() && args.is_empty() { return Crossing::May; }
     if contract.fields.is_empty() { return Crossing::Undecided { part: ty.text() }; }
-    if !seen.insert(name.to_owned()) { return Crossing::May; }
+    if !seen.insert(name.to_string()) { return Crossing::May; }
     let mut worst = Crossing::May;
     for field in contract.fields.iter() {
         let answer = name_the_field(&field.name, crossing_walk(&field.ty, walking, seen, depth - 1));
@@ -181,8 +181,8 @@ pub(crate) fn name_the_field(field: &str, answer: Crossing) -> Crossing {
 }
 
 pub(crate) fn field_named_at(field: &str, part: &str, at: Option<&str>, why: &Refusal) -> Crossing {
-    let already = match at { Some(__nikaia_value) => __nikaia_value, None => return Crossing::MayNot { part: part.to_owned(), at: Some(field.to_owned()), why: why.clone() } };
-    Crossing::MayNot { part: part.to_owned(), at: Some(already.to_owned()), why: why.clone() }
+    let already = match at { Some(__nikaia_value) => __nikaia_value, None => return Crossing::MayNot { part: part.to_string(), at: Some(field.to_string()), why: why.clone() } };
+    Crossing::MayNot { part: part.to_string(), at: Some(already.to_string()), why: why.clone() }
 }
 
 pub(crate) fn ledger_type(name: &str, own: &Ledger, library: &Ledger) -> Option<TypeContract> {
@@ -204,7 +204,7 @@ pub(crate) fn in_one_ledger(name: &str, suffix: &str, ledger: &Ledger) -> Option
 
 pub(crate) fn base_name(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned()
+    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string()
 }
 
 pub(crate) fn one_of(names: &[&str], name: &str) -> bool {
@@ -222,7 +222,7 @@ pub fn held_across_a_pause(bound: &[(String, i64)], pauses: &[i64], named: &coll
         let last = match *nikaia_std::index::get(&named, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
         for pause in pauses.iter() {
             let pause = nikaia_std::num::value(pause);
-            if pause > at && last > pause { out.insert(name.to_owned()); }
+            if pause > at && last > pause { out.insert(name.to_string()); }
         }
     }
     out

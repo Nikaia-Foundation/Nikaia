@@ -23,9 +23,9 @@ pub fn common_integer(a: &str, b: &str) -> Option<String> {
         high = x;
     }
     let names = vec!["u8", "u32", "u64", "i32", "i64"];
-    if low == 0 { return Some((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_owned()); }
+    if low == 0 { return Some((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_string()); }
     if low == 1 {
-        if high <= 2 { return Some((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_owned()); }
+        if high <= 2 { return Some((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_string()); }
         return Some(String::from("i64"));
     }
     if low == 2 {
@@ -40,7 +40,7 @@ pub fn common_integer(a: &str, b: &str) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn an_integer_named(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && integer_rank(name) >= 0 { Some(name.to_owned()) } else { None } },
+        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && integer_rank(name) >= 0 { Some(name.to_string()) } else { None } },
         _ => None,
     }
 }
@@ -49,7 +49,7 @@ pub(crate) fn an_integer_named(ty: &Ty) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_plain_name(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Named { name, args, .. } => if args.is_empty() { Some(name.to_owned()) } else { None },
+        Ty::Named { name, args, .. } => if args.is_empty() { Some(name.to_string()) } else { None },
         _ => None,
     }
 }
@@ -61,7 +61,7 @@ pub fn widened_into(found: &Ty, want: &Ty) -> Option<String> {
     let into = nikaia_std::index::or(an_integer_named(want), || "".into());
     if from.is_empty() || into.is_empty() || from == into { return None; }
     let common = nikaia_std::index::or(common_integer(&from, &into), || "".into());
-    if common == into { return Some(into.to_owned()); }
+    if common == into { return Some(into.to_string()); }
     None
 }
 
@@ -113,7 +113,7 @@ pub fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
         _ => { },
     }
     let name = match want {
-        Ty::Named { name, .. } => name.to_owned(),
+        Ty::Named { name, .. } => name.to_string(),
         _ => return None,
     };
     if is_whole(&name) { return None; }
@@ -317,19 +317,19 @@ impl CheckState {
                 scan = scan + 1;
             }
             if seen < 0 {
-                variables.push(variable.to_owned());
-                types.push(ty.to_owned());
+                variables.push(variable.to_string());
+                types.push(ty.to_string());
                 places.push(here);
                 continue;
             }
-            let bound = (*nikaia_std::index::get(&types, nikaia_std::index::at(seen))).to_owned();
+            let bound = (*nikaia_std::index::get(&types, nikaia_std::index::at(seen))).to_string();
             let there = *nikaia_std::index::get(&places, nikaia_std::index::at(seen));
             if bound == ty { continue; }
             let mut narrow: i64 = here;
-            let mut wide = bound.to_owned();
+            let mut wide = bound.to_string();
             let common = common_integer(&bound, &ty);
             if common.is_some() {
-                wide = nikaia_std::index::or(common.as_deref(), || "").to_owned();
+                wide = nikaia_std::index::or(common.as_deref(), || "").to_string();
                 if wide != bound { narrow = there; }
             }
             let mut name: String = String::from("…");
@@ -344,7 +344,7 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_variable_by_value(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Var { name, view } => { let view = *view; if !view { Some(name.to_owned()) } else { None } },
+        Ty::Var { name, view } => { let view = *view; if !view { Some(name.to_string()) } else { None } },
         _ => None,
     }
 }

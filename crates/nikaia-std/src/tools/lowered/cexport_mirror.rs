@@ -7,7 +7,7 @@ pub fn cx_converted(part: &CxPart, records: &[CxRecord], plains: &[CxPlain], of:
         CxPart::Choice(at) => { let at = *at; cx_converted_choice(nikaia_std::index::get(&plains, nikaia_std::index::at(at)), of) },
         CxPart::Record(at) => {
             let at = *at;
-            let inner = nikaia_std::index::get(&records, nikaia_std::index::at(at)).name.to_owned();
+            let inner = nikaia_std::index::get(&records, nikaia_std::index::at(at)).name.to_string();
             (format!("__nikaia_c_{}", inner), format!("{}.into_nikaia()", of), format!("__nikaia_c_{}::from_nikaia({})", inner, of))
         },
         CxPart::Array(_, _) => ("".to_string(), "".to_string(), "".to_string()),
@@ -16,7 +16,7 @@ pub fn cx_converted(part: &CxPart, records: &[CxRecord], plains: &[CxPlain], of:
 
 pub(crate) fn cx_converted_value(shape: &CxByValue, of: &str) -> (String, String, String) {
     if shape.scalar { return ("u32".to_string(), format!("char::from_u32({})", of), format!("{} as u32", of)); }
-    (shape.rust.to_owned(), format!("Some({})", of), of.to_owned())
+    (shape.rust.to_string(), format!("Some({})", of), of.to_string())
 }
 
 pub(crate) fn cx_converted_choice(plain: &CxPlain, of: &str) -> (String, String, String) {
@@ -47,7 +47,7 @@ pub(crate) fn cx_field_mirror(part: &CxPart, records: &[CxRecord], plains: &[CxP
 }
 
 pub fn cx_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) -> String {
-    let ty = record.name.to_owned();
+    let ty = record.name.to_string();
     let mut fields: String = String::from("");
     let mut into: Vec<String> = vec![];
     let mut from: Vec<String> = vec![];
@@ -62,7 +62,7 @@ pub fn cx_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) ->
 }
 
 pub fn cx_tagged_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) -> String {
-    let ty = record.name.to_owned();
+    let ty = record.name.to_string();
     let mut out: String = String::from("");
     let mut members: Vec<String> = vec![];
     let mut into: Vec<String> = vec![];
@@ -85,7 +85,7 @@ pub fn cx_tagged_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPla
         let mut bound: Vec<String> = vec![];
         for (field, part) in variant.fields.iter() {
             let local = cx_escaped(field);
-            let mut named = local.to_owned();
+            let mut named = local.to_string();
             if variant.positional { named = format!("__nikaia{}", local); }
             let (lowered, inward, outward) = cx_field_mirror(part, records, plains, &format!("v.{}", local), &named);
             fields.push_str(&format!("    {}: {},\n", local, lowered));

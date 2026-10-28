@@ -235,7 +235,7 @@ pub(crate) fn check_claim_held(held: Option<&ClaimHeld>) -> String {
     let given = match held { Some(__nikaia_value) => __nikaia_value, None => return String::from("refused: a claim about data from outside the program") };
     match given {
         ClaimHeld::Proved => String::from("proved"),
-        ClaimHeld::ProvedThrough(how) => how.to_owned(),
+        ClaimHeld::ProvedThrough(how) => how.to_string(),
         ClaimHeld::Precondition(f, n) => {
             let n = *n;
             if f == "main" { String::from("precondition of `main`, checked where the words arrive") } else if n == 0 { format!("precondition of `{}`: proved at every call the compiler sees; any other reaches the entry that checks it", f) } else if n == 1 { format!("precondition of `{}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it", f) } else { format!("precondition of `{}`: {} calls check it when they run; any other call proves it or reaches the entry that checks it", f, n) }
@@ -295,7 +295,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
             through_loops += 1;
             proved.push(row);
         } else if how.starts_with("precondition of `main`") {
-            mains.insert(claim.written.to_owned());
+            mains.insert(claim.written.to_string());
             arrives.push(row);
         } else if how.starts_with("precondition") && how.contains("proved at every call") { preconditions.push(row); } else if how.starts_with("precondition") || how.starts_with("checked at run time") { at_run_time.push(row); } else if how.starts_with("checked when") { by_the_test.push(row); } else if claim.held.is_some() { refused.push(row); }
     }

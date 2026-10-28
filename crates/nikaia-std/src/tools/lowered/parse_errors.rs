@@ -29,7 +29,7 @@ pub(crate) fn missing_value_message(prev: &str) -> String {
     String::from("")
 }
 
-pub(crate) fn reading_at(at: i64, word: &str, message: &str, help: &str) -> ParseReading { ParseReading { at, word: word.to_owned(), message: message.to_owned(), notes: vec![], help: Some(help.to_owned()) } }
+pub(crate) fn reading_at(at: i64, word: &str, message: &str, help: &str) -> ParseReading { ParseReading { at, word: word.to_string(), message: message.to_string(), notes: vec![], help: Some(help.to_string()) } }
 
 pub(crate) fn lists(what: &[String], one: &str) -> bool {
     for e in what.iter() { if e == one { return true; } }
@@ -75,9 +75,9 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
     let prev = previous_token(&source, prev_end);
     let before = upto(c, at);
     let has_found = error.has_found;
-    let found_word = error.found.to_owned();
+    let found_word = error.found.to_string();
     if has_found {
-        let word = found_word.to_owned();
+        let word = found_word.to_string();
         let __nikaia_held_0 = last_line_to(c, at);
         let head = __nikaia_held_0.trim_start();
         let in_head = head.starts_with("if ") || head.starts_with("while ") || head.starts_with("} else if ");
@@ -89,7 +89,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
     }
     let mut wrong_closer = false;
     if has_found {
-        let word = found_word.to_owned();
+        let word = found_word.to_string();
         wrong_closer = (word == "}" || word == ")" || word == "]") && !lists(&error.expected, &format!("`{}`", word));
     }
     if (!has_found || wrong_closer) && (lists(&error.expected, "`}`") || lists(&error.expected, "`)`") || lists(&error.expected, "`]`")) {
@@ -103,7 +103,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
         return Some(reading_at(open, &format!("{}", bracket), &format!("This `{}` is never closed.", bracket), &format!("Add the `{}` where it's meant to end; {}.", close, why)));
     }
     if has_found {
-        let word = found_word.to_owned();
+        let word = found_word.to_string();
         if word == "struct" || word == "enum" || word == "trait" || word == "impl" || word == "grammar" {
             let open = unclosed_bracket(&before);
             if open >= 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(open)) == '{' {
@@ -116,12 +116,12 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
     }
     if has_found && found_word == "/" && last_line_to(c, at).trim().is_empty() && !(at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '/') { return Some(reading_at(at, "/", "A single `/` is division, and nothing stands before it to divide.", "A comment starts with `//`.")); }
     if has_found {
-        let quote = found_word.to_owned();
+        let quote = found_word.to_string();
         if quote == "“" || quote == "”" || quote == "‘" || quote == "’" || quote == "„" { return Some(reading_at(at, &quote, &format!("`{}` isn't a quote the language reads.", quote), "Text is written between straight quotes: `\"hi\"`.")); }
     }
     let mut closes = !has_found;
     if has_found {
-        let word = found_word.to_owned();
+        let word = found_word.to_string();
         closes = word == "}" || word == ")" || word == "]" || word == "newline";
     }
     if lists(&error.expected, "expression") && closes {
@@ -131,7 +131,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
     }
     if has_found && found_word == "{" && (prev == "if" || prev == "while") { return Some(reading_at(prev_end - prev.len() as i64, &prev, &format!("`{}` needs a condition before its `{{`.", prev), &format!("Write `{} cond {{ … }}`.", prev))); }
     if (prev == "let" || prev == "mut") && has_found {
-        let word = found_word.to_owned();
+        let word = found_word.to_string();
         if !word.is_empty() {
             let letters: Vec<scalar> = nikaia_std::list::chars(word.chars());
             let first = *nikaia_std::index::get(&letters, 0);
@@ -149,7 +149,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
     }
     let closer_wanted = lists(&error.expected, "`}`") || lists(&error.expected, "`)`") || lists(&error.expected, "`]`");
     if closer_wanted && has_found {
-        let word = found_word.to_owned();
+        let word = found_word.to_string();
         if !word.is_empty() {
             let letters: Vec<scalar> = nikaia_std::list::chars(word.chars());
             let first = *nikaia_std::index::get(&letters, 0);
@@ -164,7 +164,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
 
 pub(crate) fn reserved_word_note(has_found: bool, found: &str, c: &[scalar], at: i64, stops_at: &impl Fn(&str) -> i64) -> Option<String> {
     if !has_found { return None; }
-    let token = found.to_owned();
+    let token = found.to_string();
     let mut listed = false;
     for word in RESERVED_WORDS.iter() {
         let word = *word;
@@ -195,10 +195,10 @@ pub(crate) fn sorted_words(list: &[String]) -> Vec<String> {
         if ((at) as usize) < out.len() && *nikaia_std::index::get(&out, (at) as usize) == *item { seen = true; }
         if !seen {
             let mut rest: Vec<String> = vec![];
-            for k in at..out.len() as i64 { rest.push((*nikaia_std::index::get(&out, nikaia_std::index::at(k))).to_owned()); }
+            for k in at..out.len() as i64 { rest.push((*nikaia_std::index::get(&out, nikaia_std::index::at(k))).to_string()); }
             while out.len() > ((at) as usize) { out.pop(); }
-            out.push(item.to_owned());
-            for r in rest.iter() { out.push(r.to_owned()); }
+            out.push(item.to_string());
+            for r in rest.iter() { out.push(r.to_string()); }
         }
     }
     out
@@ -209,18 +209,18 @@ pub(crate) fn what_was_expected(error: &Failure) -> String {
     let from = if_empty(&error.expected, &error.also);
     for e in from.iter() {
         if e == "whitespace" || e == "block comment" || e == "`//`" || error.has_found && e == "end of input" { continue; }
-        listed.push(e.to_owned());
+        listed.push(e.to_string());
     }
     let expected = sorted_words(&listed);
     let mut wanted: Option<String> = None;
-    if expected.len() == 1 { wanted = Some((*nikaia_std::index::get(&expected, 0)).to_owned()); } else if expected.len() >= 2 && expected.len() <= 4 {
+    if expected.len() == 1 { wanted = Some((*nikaia_std::index::get(&expected, 0)).to_string()); } else if expected.len() >= 2 && expected.len() <= 4 {
         let mut head: Vec<String> = vec![];
-        for k in 0..expected.len() as i64 - 1 { head.push((*nikaia_std::index::get(&expected, (k) as usize)).to_owned()); }
+        for k in 0..expected.len() as i64 - 1 { head.push((*nikaia_std::index::get(&expected, (k) as usize)).to_string()); }
         wanted = Some(format!("{} or {}", head.join(", "), *nikaia_std::index::get(&expected, nikaia_std::index::at(expected.len() as i64 - 1))));
     }
     let mut found: Option<String> = None;
     if error.has_found {
-        let word = error.found.to_owned();
+        let word = error.found.to_string();
         if word == "newline" { found = Some(String::from("the end of the line")); } else { found = Some(format!("`{}`", word)); }
     }
     if wanted.is_some() && found.is_some() { return format!("Expected {} here, but found {}.", nikaia_std::index::or(wanted.as_deref(), || ""), nikaia_std::index::or(found.as_deref(), || "")); }
@@ -231,7 +231,7 @@ pub(crate) fn what_was_expected(error: &Failure) -> String {
 
 pub(crate) fn if_empty(first: &[String], second: &[String]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    if first.is_empty() { for s in second.iter() { out.push(s.to_owned()); } } else { for s in first.iter() { out.push(s.to_owned()); } }
+    if first.is_empty() { for s in second.iter() { out.push(s.to_string()); } } else { for s in first.iter() { out.push(s.to_string()); } }
     out
 }
 
@@ -248,16 +248,16 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
     let mut message = what_was_expected(error);
     if error.has_message {
         let parts = first_sentence(&error.message);
-        message = (*nikaia_std::index::get(&parts, 0)).to_owned();
-        if parts.len() > 1 { help = Some((*nikaia_std::index::get(&parts, 1)).to_owned()); }
+        message = (*nikaia_std::index::get(&parts, 0)).to_string();
+        if parts.len() > 1 { help = Some((*nikaia_std::index::get(&parts, 1)).to_string()); }
     }
     let mut notes: Vec<String> = vec![];
-    let said_word = error.found.to_owned();
+    let said_word = error.found.to_string();
     let reserved = reserved_word_note(error.has_found, &error.found, &c, at, stops_at);
     if reserved.is_some() {
         if error.has_message { notes.push(nikaia_std::index::or(reserved, || "".into())); } else {
-            notes.push(message.to_owned());
-            message = nikaia_std::index::or(reserved.as_deref(), || "").to_owned();
+            notes.push(message.to_string());
+            message = nikaia_std::index::or(reserved.as_deref(), || "").to_string();
             help = Some(format!("Choose another name, such as `{}_`.", said_word));
         }
     }
@@ -269,8 +269,8 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
         let pairs = vec![coalesce_fallback_note(&said_word, &before)];
         for pair in pairs.iter() {
             if pair.len() >= 2 {
-                notes.push((*nikaia_std::index::get(&pair, 0)).to_owned());
-                help = Some((*nikaia_std::index::get(&pair, 1)).to_owned());
+                notes.push((*nikaia_std::index::get(&pair, 0)).to_string());
+                help = Some((*nikaia_std::index::get(&pair, 1)).to_string());
             }
         }
     }

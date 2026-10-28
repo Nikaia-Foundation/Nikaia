@@ -21,8 +21,8 @@ impl KeepContext {
                 Item::Struct { name, generics, fields, .. } => {
                     let name = *name;
                     let mut written: Vec<(String, Type)> = vec![];
-                    for field in fields.iter() { written.push((names.resolve(field.name).to_owned(), field.ty.clone())); }
-                    structs.insert(names.resolve(name).to_owned(), DeclaredStruct { generic: !generics.is_empty(), fields: written });
+                    for field in fields.iter() { written.push((names.resolve(field.name).to_string(), field.ty.clone())); }
+                    structs.insert(names.resolve(name).to_string(), DeclaredStruct { generic: !generics.is_empty(), fields: written });
                 },
                 _ => { },
             }
@@ -51,7 +51,7 @@ impl KeepContext {
         let declared = match *nikaia_std::index::get(&self.structs, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if declared.generic { return Some(format!("`{}`, a struct of views with type parameters", name)); }
         for one in seen.iter() { if one == name { return None; } }
-        seen.push(name.to_owned());
+        seen.push(name.to_string());
         for (field, ty) in declared.fields.iter() {
             let why = self.not_held(names, ty, seen);
             if why.is_some() {
@@ -70,7 +70,7 @@ impl KeepContext {
 
 pub fn struct_in(names: &winnow_grammar::InternerContext, ty: &Type, borrowing: &collections::BTreeSet<String>) -> Option<String> {
     let name = names.resolve(ty.name);
-    if borrowing.contains(name) { return Some(name.to_owned()); }
+    if borrowing.contains(name) { return Some(name.to_string()); }
     for argument in ty.generics.iter() {
         let found = struct_in(names, argument, borrowing);
         if found.is_some() { return std::convert::identity(found); }
@@ -117,7 +117,7 @@ pub fn keeping_method_key(ledger: &Ledger, methods: &MethodIndex, target: Option
         let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if takes_a_keep(contract) {
             if found.is_some() { return None; }
-            found = Some(key.to_owned());
+            found = Some(key.to_string());
         }
     }
     found
@@ -125,7 +125,7 @@ pub fn keeping_method_key(ledger: &Ledger, methods: &MethodIndex, target: Option
 
 pub fn written_callee(names: &winnow_grammar::InternerContext, func: &Expr, unaliased: &impl Fn(&str) -> String) -> Option<String> {
     match func {
-        Expr::Variable(name, _) => { let name = *name; Some(names.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(names.resolve(name).to_string()) },
         Expr::Path(segments, _) => Some(unaliased(&joined_segments(segments, names))),
         _ => None,
     }
@@ -133,7 +133,7 @@ pub fn written_callee(names: &winnow_grammar::InternerContext, func: &Expr, unal
 
 pub fn root_of(names: &winnow_grammar::InternerContext, expr: &Expr) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; Some(names.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(names.resolve(name).to_string()) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); root_of(names, base) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); root_of(names, base) },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); root_of(names, base) },

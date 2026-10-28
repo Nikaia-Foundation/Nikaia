@@ -83,6 +83,14 @@ fn check_core_stmt_read_through_a_jump(state: ref CheckState, world: ref CheckWo
     }
 }
 
+/// A list's `get`, `first` or `last` of a tuple, whose fallback jumps.
+fn check_core_stmt_a_lent_list_read(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Coalesce { value: read, fallback, .. } => state.flow.lent_list_reads.contains(id_of(read) as i64) && state.jumps(world, fallback),
+        else => false,
+    }
+}
+
 /// An option field read whose fallback jumps: `c.field ?? return`.
 fn check_core_stmt_a_field_jump(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
@@ -526,6 +534,11 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         if n != "_" {
             state.written_at.push((n.clone(), span.start as i64))
         }
+    }
+    // **A list's element past a jump is a view of it**: `let it = v.get(i) ??
+    // return` binds what the list holds, as `let it = v[i]` does.
+    if !mutable && ty == null && check_core_stmt_a_lent_list_read(state, world, value) {
+        check_core_stmt_lent_let(state, world, names, span)
     }
     // **A `let` over a place is a view of it** (ADR-094 D4).
     // **Moved out of its owner, it is no view** (#665): the name owns what it holds.
@@ -1289,7 +1302,9 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         // **A text handed by a walk that lends is a view of it** (#688's rule,
         // for a `for`): `xs.iter()` hands `&String` below, so a comparison
         // reads it as `str`.
-        if !lent && name != "_" && state.flow.lent_walks.contains(id_of(iter) as i64) && check_owned_text(bound) {
+        // So is a part that the walk's item types as a view of text
+        // (`enumerate`'s `(i64, ref String)`).
+        if !lent && name != "_" && (state.flow.lent_walks.contains(id_of(iter) as i64) || element.is_a_view()) && check_owned_text(bound) {
             state.flow.lent_text_params.insert(id)
         }
         let mut local = CheckLocal::free(name, bound, id)

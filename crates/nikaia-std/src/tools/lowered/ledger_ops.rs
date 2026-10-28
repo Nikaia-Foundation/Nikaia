@@ -4,11 +4,11 @@
 pub fn published_entries(ledger: &Ledger, foreign: &collections::BTreeSet<String>) -> Ledger {
     let mut out = ledger.clone();
     out.functions = collections::BTreeMap::new();
-    for (key, contract) in ledger.functions.iter() { if !of_another(key, foreign) { out.functions.insert(key.to_owned(), contract.clone()); } }
+    for (key, contract) in ledger.functions.iter() { if !of_another(key, foreign) { out.functions.insert(key.to_string(), contract.clone()); } }
     out.types = collections::BTreeMap::new();
-    for (key, contract) in ledger.types.iter() { if !of_another(key, foreign) { out.types.insert(key.to_owned(), contract.clone()); } }
+    for (key, contract) in ledger.types.iter() { if !of_another(key, foreign) { out.types.insert(key.to_string(), contract.clone()); } }
     out.traits = collections::BTreeMap::new();
-    for (key, methods) in ledger.traits.iter() { if !of_another(key, foreign) { out.traits.insert(key.to_owned(), methods.to_owned()); } }
+    for (key, methods) in ledger.traits.iter() { if !of_another(key, foreign) { out.traits.insert(key.to_string(), methods.to_owned()); } }
     out
 }
 
@@ -21,18 +21,18 @@ pub fn stale_units(ledger: &Ledger, sources: &collections::BTreeMap<String, Stri
     let mut moved: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (unit, hash) in sources.iter() {
         let recorded = nikaia_std::index::or(*nikaia_std::index::get(&ledger.sources, unit), || "");
-        if !ledger.sources.contains_key(unit) || recorded != hash { moved.insert(unit.to_owned()); }
+        if !ledger.sources.contains_key(unit) || recorded != hash { moved.insert(unit.to_string()); }
     }
-    for (unit, _) in ledger.sources.iter() { if !sources.contains_key(unit) { moved.insert(unit.to_owned()); } }
+    for (unit, _) in ledger.sources.iter() { if !sources.contains_key(unit) { moved.insert(unit.to_string()); } }
     let mut out: Vec<String> = vec![];
-    for unit in moved.iter() { out.push(unit.to_owned()); }
+    for unit in moved.iter() { out.push(unit.to_string()); }
     out
 }
 
 pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collections::BTreeMap<String, String>, other: &Ledger) {
     let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for (name, _) in other.types.iter() { declared.insert(name.to_owned()); }
-    for (name, _) in other.traits.iter() { declared.insert(name.to_owned()); }
+    for (name, _) in other.types.iter() { declared.insert(name.to_string()); }
+    for (name, _) in other.traits.iter() { declared.insert(name.to_string()); }
     let prefix = nikaia_std::index::or(match module {
         Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
@@ -41,14 +41,14 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
     for (field, holds) in other.code_locks.iter() {
         let holds = *holds;
         let parts: Vec<&str> = field.splitn(2, '.').collect::<Vec<_>>();
-        if qualified && declared.contains(*nikaia_std::index::get(&parts, 0)) { ledger.code_locks.insert(format!("{}::{}", prefix, field), holds.clone()); } else { ledger.code_locks.insert(field.to_owned(), holds.clone()); }
+        if qualified && declared.contains(*nikaia_std::index::get(&parts, 0)) { ledger.code_locks.insert(format!("{}::{}", prefix, field), holds.clone()); } else { ledger.code_locks.insert(field.to_string(), holds.clone()); }
     }
     for (field, set) in other.code_throws.iter() {
         let parts: Vec<&str> = field.splitn(2, '.').collect::<Vec<_>>();
-        if qualified && declared.contains(*nikaia_std::index::get(&parts, 0)) { ledger.code_throws.insert(format!("{}::{}", prefix, field), set.to_owned()); } else { ledger.code_throws.insert(field.to_owned(), set.to_owned()); }
+        if qualified && declared.contains(*nikaia_std::index::get(&parts, 0)) { ledger.code_throws.insert(format!("{}::{}", prefix, field), set.to_owned()); } else { ledger.code_throws.insert(field.to_string(), set.to_owned()); }
     }
     let mut kept: collections::BTreeMap<String, String> = collections::BTreeMap::new();
-    for (from, to) in renames.iter() { if !qualified || *from != prefix { kept.insert(from.to_owned(), to.to_owned()); } }
+    for (from, to) in renames.iter() { if !qualified || *from != prefix { kept.insert(from.to_string(), to.to_string()); } }
     for (name, contract) in other.functions.iter() {
         let mut entry = contract.clone();
         if entry.signature.is_some() {
@@ -57,7 +57,7 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
                 None => None,
             }, || Signature::empty());
             let mut params: Vec<(String, Ty)> = vec![];
-            for (param, ty) in signature.params.iter() { params.push((param.to_owned(), qualified_ty(ty, &prefix, qualified, &declared, &kept))); }
+            for (param, ty) in signature.params.iter() { params.push((param.to_string(), qualified_ty(ty, &prefix, qualified, &declared, &kept))); }
             signature.params = params;
             let mut options: Vec<ConfigContract> = vec![];
             for option in signature.config.iter() {
@@ -78,7 +78,7 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
         }
         if qualified {
             let mut fails: Vec<String> = vec![];
-            for kind in contract.fails_with.iter() { if declared.contains(kind) { fails.push(format!("{}::{}", prefix, kind)); } else { fails.push(kind.to_owned()); } }
+            for kind in contract.fails_with.iter() { if declared.contains(kind) { fails.push(format!("{}::{}", prefix, kind)); } else { fails.push(kind.to_string()); } }
             entry.fails_with = fails;
         }
         ledger.functions.insert(key_under(name, &prefix, qualified), entry);
@@ -128,7 +128,7 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
         let mut widened = types.to_owned();
         if qualified { for ty in types.iter() { widened.insert(format!("{}::{}", prefix, ty)); } }
         if qualified { widen(ledger, format!("{}::{}", prefix, trait_name), &widened); }
-        widen(ledger, trait_name.to_owned(), &widened);
+        widen(ledger, trait_name.to_string(), &widened);
     }
     for (name, methods) in other.traits.iter() { ledger.traits.insert(key_under(name, &prefix, qualified), methods.to_owned()); }
 }
@@ -138,7 +138,7 @@ pub(crate) fn widen(ledger: &mut Ledger, name: String, types: &collections::BTre
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || collections::BTreeSet::new().into());
-    for ty in types.iter() { all.insert(ty.to_owned()); }
+    for ty in types.iter() { all.insert(ty.to_string()); }
     ledger.implementations.insert(name, all);
 }
 
@@ -189,7 +189,7 @@ pub(crate) fn qualified_default(text: &str, prefix: &str, declared: &collections
 
 pub(crate) fn key_under(name: &str, prefix: &str, qualified: bool) -> String {
     if qualified { return format!("{}::{}", prefix, name); }
-    name.to_owned()
+    name.to_string()
 }
 
 pub(crate) fn qualified_ty(ty: &Ty, prefix: &str, qualified: bool, declared: &collections::BTreeSet<String>, renames: &collections::BTreeMap<String, String>) -> Ty {

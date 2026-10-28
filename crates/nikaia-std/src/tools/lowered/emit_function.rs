@@ -121,7 +121,7 @@ impl EmitState {
     }
     pub(crate) fn emit_fn_returns(&self, key: &str) -> Option<String> {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(c.returns.to_owned())
+        Some(c.returns.to_string())
     }
     pub(crate) fn emit_fn_declared_pausing(&self, key: &str) -> bool {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -178,7 +178,7 @@ impl EmitState {
                     Some(each) => emit_text(world, each),
                     None => String::from("new"),
                 };
-                let key: String = if has_owner { format!("{}::{}", target, own_name) } else { own_name.to_owned() };
+                let key: String = if has_owner { format!("{}::{}", target, own_name) } else { own_name.to_string() };
                 let standalone = !has_owner && !is_public && generics.is_empty() && name.is_some();
                 let begun = emit_seeds_begin(&self.seeds, world, walk, host, &written.node, &match owner_target.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -221,13 +221,13 @@ impl EmitState {
                     for entry in self.emit_fn_stores(&key) {
                         match entry.split_once(":") {
                             Some(pair) => {
-                                let stored = pair.0.to_owned();
-                                let source = pair.1.to_owned();
+                                let stored = pair.0.to_string();
+                                let source = pair.1.to_string();
                                 if !carries_input.contains(&source) {
                                     for each in args.iter() {
                                         if emit_text(world, each.name) == stored {
                                             let spelled = self.emit_fn_ty(world, walk, host, &each.ty, EmitLifetimes::Named, &key, &stored);
-                                            if spelled.contains("'a") { stores.push(EmitPair { first: stored.to_owned(), second: source.to_owned() }); }
+                                            if spelled.contains("'a") { stores.push(EmitPair { first: stored.to_string(), second: source.to_string() }); }
                                             break;
                                         }
                                     }
@@ -268,7 +268,7 @@ impl EmitState {
                 let receiver_is_shared = receiver.is_none() || nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
                 if has_borrows && plain_signature && named.len() >= 2 && receiver_is_shared && !has_kept && source_at.is_none() {
                     let mut wanted: Vec<String> = vec![];
-                    for each in named.iter() { if receiver.is_none() || each != "self" { wanted.push(each.to_owned()); } }
+                    for each in named.iter() { if receiver.is_none() || each != "self" { wanted.push(each.to_string()); } }
                     let mut found: Vec<i64> = vec![];
                     for each in wanted.iter() {
                         let mut position: Option<i64> = None;
@@ -312,7 +312,7 @@ impl EmitState {
                         None => { },
                     }
                 }
-                let sig = EmitSig { key: key.to_owned(), lifetimes, has_kept, kept: kept_lt, stores: stores.to_owned(), inner_views, carries_input: carries_input.to_owned(), source_kept, source_name };
+                let sig = EmitSig { key: key.to_string(), lifetimes, has_kept, kept: kept_lt, stores: stores.to_owned(), inner_views, carries_input: carries_input.to_owned(), source_kept, source_name };
                 let mut lengths: Vec<String> = vec![];
                 let mut open: Vec<String> = vec![];
                 let mut at = 0;
@@ -415,11 +415,11 @@ impl EmitState {
                 let mut declared: Vec<String> = vec![];
                 if walk.specialising.is_some() {
                     if has_dsl { declared.push(String::from("NikaiaDsl")); }
-                    for each in open.iter() { declared.push(each.to_owned()); }
+                    for each in open.iter() { declared.push(each.to_string()); }
                 } else {
                     for each in generics.iter() { declared.push(emit_bounded(world, each)); }
                     if has_dsl { declared.push(String::from("NikaiaDsl")); }
-                    for each in open.iter() { declared.push(each.to_owned()); }
+                    for each in open.iter() { declared.push(each.to_string()); }
                 }
                 if has_kept && emit_is_kept(kept_lt) { declared.insert(0, String::from("'k")); }
                 if emit_is_elided(lifetimes) && (!input_empty || inner_views.is_some() || !stores.is_empty()) { declared.insert(0, String::from("'a")); }
@@ -432,8 +432,8 @@ impl EmitState {
                         if emit_text(world, ty.name) == "Self::dsl" {
                             if !has_dsl {
                                 let message = "`Self::dsl` stands for the function's `...args: Self::dsl` parameters, but this function has none.";
-                                if !body.stmts.is_empty() { return Err(nikaia_std::error::throwing(EmitRefused { message: message.to_owned(), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
-                                return Err(nikaia_std::error::throwing(EmitRefused { message: message.to_owned(), at: None }, &"emit_function"));
+                                if !body.stmts.is_empty() { return Err(nikaia_std::error::throwing(EmitRefused { message: message.to_string(), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
+                                return Err(nikaia_std::error::throwing(EmitRefused { message: message.to_string(), at: None }, &"emit_function"));
                             }
                             returned = String::from("NikaiaDsl");
                         } else {
@@ -506,7 +506,7 @@ impl EmitState {
                             let mut offset: i64 = 0;
                             for each in found.own.iter() {
                                 if each.second != "'r" {
-                                    declared.insert(nikaia_std::count::of(at + offset), each.second.to_owned());
+                                    declared.insert(nikaia_std::count::of(at + offset), each.second.to_string());
                                     offset += 1;
                                 }
                             }
@@ -517,7 +517,7 @@ impl EmitState {
                 let mut ret: String = String::from("");
                 if throws_ { ret = format!(" -> Result<{}, {}>", returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
                 let ended = emit_seeds_end(walk, begun.seeded, begun.base);
-                for each in ended.declared.iter() { declared.push(each.to_owned()); }
+                for each in ended.declared.iter() { declared.push(each.to_string()); }
                 let outer_unpinned = walk.unpinned;
                 walk.unpinned = ended.hidden > 0 || begun.in_seeded_impl;
                 let mut vis: String = String::from("");
@@ -575,13 +575,13 @@ impl EmitState {
                         Some(ref text) => { hint_line = format!("{}{}\n", pad, text); },
                         None => { },
                     }
-                    let mut call: String = emitted.to_owned();
+                    let mut call: String = emitted.to_string();
                     if receiver.is_some() { call = format!("self.{}", emitted); } else if has_owner { call = format!("Self::{}", emitted); }
                     let mut names: Vec<String> = vec![];
                     for each in params.iter() {
                         if !each.ends_with("self") {
                             let head = nikaia_std::index::or(each.split(':').next(), || "").trim();
-                            names.push(nikaia_std::index::or(head.strip_prefix("mut "), || std::convert::AsRef::<str>::as_ref(head)).to_owned());
+                            names.push(nikaia_std::index::or(head.strip_prefix("mut "), || std::convert::AsRef::<str>::as_ref(head)).to_string());
                         }
                     }
                     let mut entry: String = format!("{}#[allow(dead_code)]\n{}{}", pad, hint_line, pad);
@@ -662,11 +662,11 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
                 let param = part.trim();
                 if param.is_empty() { continue; }
                 if emit_split_index(sources, param) < 0 { return None; }
-                params.push(param.to_owned());
+                params.push(param.to_string());
             }
         }
         if params.is_empty() { return None; }
-        of_field.insert(path.to_owned(), params);
+        of_field.insert(path.to_string(), params);
     }
     let mut group: Vec<i64> = vec![];
     let mut at: i64 = 0;
@@ -695,14 +695,14 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
             if count > 0 { lifetime = format!("'r{}", count); }
             named.insert(root, lifetime);
         }
-        own.push(EmitPair { first: param.to_owned(), second: nikaia_std::index::or(named.get(&root), || "").to_owned() });
+        own.push(EmitPair { first: param.to_string(), second: nikaia_std::index::or(named.get(&root), || "").to_string() });
         at += 1;
     }
     let mut fields: Vec<String> = vec![];
     for slot in slots.iter() {
         let params = match of_field.get(slot) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let root = emit_split_root(&group, emit_split_index(sources, nikaia_std::index::get(&params, 0)));
-        fields.push(match named.get(&root) { Some(__nikaia_value) => __nikaia_value, None => return None }.to_owned());
+        fields.push(match named.get(&root) { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string());
     }
     Some(EmitSplit { own, fields })
 }

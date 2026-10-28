@@ -9,7 +9,7 @@ pub enum CxRefused {
 impl CxRefused {
     pub(crate) fn message(&self) -> String {
         match self {
-            CxRefused::Because(why) => why.to_owned(),
+            CxRefused::Because(why) => why.to_string(),
         }
     }
 }
@@ -152,11 +152,11 @@ pub struct CxEntry {
 
 impl CxEntry {
     pub fn key(&self) -> String {
-        let owner = match self.owner.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return self.name.to_owned() };
+        let owner = match self.owner.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return self.name.to_string() };
         format!("{}::{}", owner, self.name)
     }
     pub fn written(&self) -> String {
-        let owner = match self.owner.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return self.name.to_owned() };
+        let owner = match self.owner.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return self.name.to_string() };
         format!("{}.{}", owner, self.name)
     }
     pub fn of_a_record(&self, records: &[CxRecord]) -> bool {
@@ -211,7 +211,7 @@ pub fn cx_escaped(name: &str) -> String {
         let word = *word;
         if word == name { return format!("r#{}", name); }
     }
-    name.to_owned()
+    name.to_string()
 }
 
 pub fn cx_not_yet(written: &str, what: &str) -> String { format!("`{}` is an entry point whose {} this compiler does not export yet: what is built is numbers, `bool`, `scalar` and an `enum` without payload in and out, text and bytes in and out, a run of numbers in, and a `pub struct` as a handle, of a function in `src/main.nika` (ADR-284 D5).", written, what) }
@@ -296,11 +296,11 @@ pub fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spanned<Item
         match &item.node {
             Item::Struct { name, is_extern, .. } => {
                 let is_extern = *is_extern; let name = *name;
-                if is_extern { declared.push(words.resolve(name).to_owned()); }
+                if is_extern { declared.push(words.resolve(name).to_string()); }
             },
             Item::Enum { name, is_extern, .. } => {
                 let is_extern = *is_extern; let name = *name;
-                if is_extern { declared.push(words.resolve(name).to_owned()); }
+                if is_extern { declared.push(words.resolve(name).to_string()); }
             },
             _ => { },
         }
@@ -311,10 +311,10 @@ pub fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spanned<Item
             Item::Struct { name, fields, is_extern, .. } => {
                 let is_extern = *is_extern; let name = *name;
                 if !is_extern { continue; }
-                let ty = words.resolve(name).to_owned();
+                let ty = words.resolve(name).to_string();
                 let mut made: Vec<(String, CxPart)> = vec![];
                 for field in fields.iter() {
-                    let field_name = words.resolve(field.name).to_owned();
+                    let field_name = words.resolve(field.name).to_string();
                     let at = cx_part(words, plains, &declared, &field.ty, &format!("{}.{}", ty, field_name))?;
                     made.push((field_name, at));
                 }
@@ -323,10 +323,10 @@ pub fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spanned<Item
             Item::Enum { name, variants, is_extern, .. } => {
                 let is_extern = *is_extern; let name = *name;
                 if !is_extern { continue; }
-                let ty = words.resolve(name).to_owned();
+                let ty = words.resolve(name).to_string();
                 let mut alternatives: Vec<CxAlternative> = vec![];
                 for variant in variants.iter() {
-                    let variant_name = words.resolve(variant.name).to_owned();
+                    let variant_name = words.resolve(variant.name).to_string();
                     let mut positional = false;
                     let mut fields: Vec<(String, CxPart)> = vec![];
                     match &variant.fields {
@@ -342,7 +342,7 @@ pub fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spanned<Item
                         },
                         VariantFields::Named(named) => {
                             for field in named.iter() {
-                                let field_name = words.resolve(field.name).to_owned();
+                                let field_name = words.resolve(field.name).to_string();
                                 let part = cx_part(words, plains, &declared, &field.ty, &format!("{}::{}.{}", ty, variant_name, field_name))?;
                                 fields.push((field_name, part));
                             }
@@ -406,11 +406,11 @@ pub fn cx_plain_enums(words: &winnow_grammar::InternerContext, items: &[Spanned<
                         VariantFields::Unit => { },
                         _ => { plain = false; },
                     }
-                    names.push(words.resolve(variant.name).to_owned());
+                    names.push(words.resolve(variant.name).to_string());
                 }
                 if plain {
                     let ty = words.resolve(name);
-                    out.push(CxPlain { name: ty.to_owned(), variants: names, stem: ty.to_uppercase() });
+                    out.push(CxPlain { name: ty.to_string(), variants: names, stem: ty.to_uppercase() });
                 }
             },
             _ => { },
@@ -527,17 +527,17 @@ pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
         for c in list.chars() {
             if c == '<' || c == '(' || c == '[' { depth += 1; } else if c == '>' && previous == '-' { depth += 0; } else if c == '>' || c == ')' || c == ']' { depth -= 1; }
             if c == ',' && depth == 0 {
-                names.push(current.trim().to_owned());
+                names.push(current.trim().to_string());
                 current = "".to_string();
             } else { current.push(c); }
             previous = c;
         }
-        names.push(current.trim().to_owned());
+        names.push(current.trim().to_string());
     }
     let mut out: Vec<String> = vec![];
     for param in names.iter() {
         let pieces: Vec<&str> = param.split(':').collect::<Vec<_>>();
-        out.push((*nikaia_std::index::get(&pieces, 0)).trim().to_owned());
+        out.push((*nikaia_std::index::get(&pieces, 0)).trim().to_string());
     }
     out
 }
@@ -550,8 +550,8 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                 if is_public && !is_extern && generics.is_empty() {
                     let mut shown: Vec<(String, Type)> = vec![];
-                    for field in fields.iter() { if field.is_public { shown.push((words.resolve(field.name).to_owned(), field.ty.clone())); } }
-                    out.push(CxHandled { name: words.resolve(name).to_owned(), fields: shown, variants: vec![] });
+                    for field in fields.iter() { if field.is_public { shown.push((words.resolve(field.name).to_string(), field.ty.clone())); } }
+                    out.push(CxHandled { name: words.resolve(name).to_string(), fields: shown, variants: vec![] });
                 }
             },
             Item::Enum { name, variants, is_public, is_extern } => {
@@ -565,12 +565,12 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
                     }
                 }
                 if !payload { continue; }
-                let ty = words.resolve(name).to_owned();
+                let ty = words.resolve(name).to_string();
                 let mut made: Vec<CxShown> = vec![];
                 for variant in variants.iter() {
-                    let variant_name = words.resolve(variant.name).to_owned();
+                    let variant_name = words.resolve(variant.name).to_string();
                     let path = format!("{}::{}", ty, cx_escaped(&variant_name));
-                    let mut pattern = path.to_owned();
+                    let mut pattern = path.to_string();
                     let mut fields: Vec<(String, String, Type)> = vec![];
                     match &variant.fields {
                         VariantFields::Unit => { },
@@ -591,7 +591,7 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
                         VariantFields::Named(named) => {
                             pattern = format!("{} {{ .. }}", path);
                             for field in named.iter() {
-                                let label = words.resolve(field.name).to_owned();
+                                let label = words.resolve(field.name).to_string();
                                 fields.push((format!("{}_{}", variant_name, label), format!("{} {{ {}: __nikaia_v, .. }}", path, cx_escaped(&label)), field.ty.clone()));
                             }
                         },
@@ -631,7 +631,7 @@ pub fn cx_entries_in(words: &winnow_grammar::InternerContext, items: &[Spanned<I
         match &item.node {
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
-                if trait_name.is_none() { for method in methods.iter() { cx_take(words, Some(words.resolve(target.name).to_owned()), &method.node, first, out)?; } }
+                if trait_name.is_none() { for method in methods.iter() { cx_take(words, Some(words.resolve(target.name).to_string()), &method.node, first, out)?; } }
             },
             _ => { cx_take(words, None, &item.node, first, out)?; },
         }
@@ -645,7 +645,7 @@ pub(crate) fn cx_take(words: &winnow_grammar::InternerContext, owner: Option<Str
             let is_extern = *is_extern; let name = *name;
             if !is_extern { return Ok(()); }
             let mut written: String = String::from("new");
-            if name.is_some() { written = words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }).to_owned(); }
+            if name.is_some() { written = words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }).to_string(); }
             if !first { return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(&written, "file")), &"cx_take")); }
             let mut hold: Option<CxHold> = None;
             let mut exclusive = false;
@@ -659,7 +659,7 @@ pub(crate) fn cx_take(words: &winnow_grammar::InternerContext, owner: Option<Str
             let mut arg_names: Vec<String> = vec![];
             let mut arg_types: Vec<Type> = vec![];
             for arg in args.iter() {
-                arg_names.push(words.resolve(arg.name).to_owned());
+                arg_names.push(words.resolve(arg.name).to_string());
                 arg_types.push(arg.ty.clone());
             }
             out.push(CxEntry { owner, name: written, receiver: hold, exclusive, arg_names, arg_types, ret_type: match ret_type {
@@ -676,7 +676,7 @@ pub fn cx_variant_codes(words: &winnow_grammar::InternerContext, items: &[Spanne
     let mut thrown: collections::BTreeSet<String> = collections::BTreeSet::new();
     for entry in entries.iter() {
         let contract = match *nikaia_std::index::get(&contracts.functions, &(entry.key())) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        for error in contract.fails_with.iter() { thrown.insert(error.to_owned()); }
+        for error in contract.fails_with.iter() { thrown.insert(error.to_string()); }
     }
     let mut next: i64 = 100000;
     let mut out: Vec<CxRaising> = vec![];
@@ -684,11 +684,11 @@ pub fn cx_variant_codes(words: &winnow_grammar::InternerContext, items: &[Spanne
         match &item.node {
             Item::Enum { name, variants, .. } => {
                 let name = *name;
-                let error = words.resolve(name).to_owned();
+                let error = words.resolve(name).to_string();
                 if !thrown.contains(&error) { continue; }
                 let mut codes: Vec<CxCode> = vec![];
                 for variant in variants.iter() {
-                    let variant_name = words.resolve(variant.name).to_owned();
+                    let variant_name = words.resolve(variant.name).to_string();
                     next += 1;
                     codes.push(CxCode { constant: variant_name.to_uppercase(), variant: Some(variant_name), number: next - 1, errno: None });
                 }
@@ -699,14 +699,14 @@ pub fn cx_variant_codes(words: &winnow_grammar::InternerContext, items: &[Spanne
     }
     for error in thrown.iter() {
         let codes = cx_std_codes(error, target);
-        if !codes.is_empty() { out.push(CxRaising { error: error.to_owned(), codes }); }
+        if !codes.is_empty() { out.push(CxRaising { error: error.to_string(), codes }); }
     }
     out
 }
 
-pub(crate) fn cx_one_code(variant: Option<String>, number: i64, constant: &str, errno: Option<String>) -> CxCode { CxCode { variant, number, constant: constant.to_owned(), errno } }
+pub(crate) fn cx_one_code(variant: Option<String>, number: i64, constant: &str, errno: Option<String>) -> CxCode { CxCode { variant, number, constant: constant.to_string(), errno } }
 
-pub(crate) fn cx_numbered(target: &str, variant: &str, constant: &str, errno: &str) -> CxCode { CxCode { variant: Some(variant.to_owned()), number: cx_errno(target, errno), constant: constant.to_owned(), errno: Some(errno.to_owned()) } }
+pub(crate) fn cx_numbered(target: &str, variant: &str, constant: &str, errno: &str) -> CxCode { CxCode { variant: Some(variant.to_string()), number: cx_errno(target, errno), constant: constant.to_string(), errno: Some(errno.to_string()) } }
 
 pub fn cx_std_codes(error: &str, target: &str) -> Vec<CxCode> {
     if error == "io::IoError" { return vec![cx_numbered(target, "NotFound", "IO_NOT_FOUND", "ENOENT"), cx_numbered(target, "PermissionDenied", "IO_PERMISSION_DENIED", "EACCES"), cx_numbered(target, "NotText", "IO_NOT_TEXT", "EILSEQ"), cx_one_code(Some(String::from("Outside")), 1000, "IO_OUTSIDE", None), cx_one_code(Some(String::from("Other")), 1001, "IO_OTHER", None)]; }

@@ -135,7 +135,7 @@ pub fn said(text: &str) -> String {
 }
 
 pub fn headed(level: &str, code: &str) -> String {
-    if code.is_empty() { return level.to_owned(); }
+    if code.is_empty() { return level.to_string(); }
     format!("{}[{}]", level, code)
 }
 

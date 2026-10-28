@@ -88,7 +88,7 @@ pub fn a_high_byte(literal: &str) -> Option<i64> {
 }
 
 pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
-    let mut written = so_far.to_owned();
+    let mut written = so_far.to_string();
     let mut end = from;
     while end < from + 2 && end < c.len() as i64 {
         written.push(*nikaia_std::index::get(&c, nikaia_std::index::at(end)));
@@ -105,7 +105,7 @@ pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i6
 }
 
 pub(crate) fn a_character(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
-    let mut written = so_far.to_owned();
+    let mut written = so_far.to_string();
     if from >= c.len() as i64 || *nikaia_std::index::get(&c, nikaia_std::index::at(from)) != '{' { return not_an_escape(&written, "`\\u` takes its digits in braces, as `\\u{1F600}`"); }
     written.push('{');
     let mut end = from + 1;
@@ -186,5 +186,5 @@ pub(crate) fn a_control_character(c: scalar) -> bool {
     n < 32 || n >= 127 && n <= 159
 }
 
-pub(crate) fn not_an_escape(written: &str, why: &str) -> EscapeRead { EscapeRead::Nothing { refused: NotAnEscape { written: written.to_owned(), why: why.to_owned() } } }
+pub(crate) fn not_an_escape(written: &str, why: &str) -> EscapeRead { EscapeRead::Nothing { refused: NotAnEscape { written: written.to_string(), why: why.to_string() } } }
 

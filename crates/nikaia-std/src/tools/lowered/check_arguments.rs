@@ -86,7 +86,7 @@ pub(crate) fn check_arguments_a_byte_set(ty: &Ty) -> bool {
 pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: Option<&Expr>) -> Option<String> {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match given {
-        Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_string()) },
         _ => None,
     }
 }
@@ -172,7 +172,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     for argument in expanded.iter() {
         let at = argument.at;
         let given_here: Option<&Expr> = argument.given;
-        let name = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).0.to_owned();
+        let name = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).0.to_string();
         let want = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1.clone();
         let mut found_here = argument.found.clone();
         if is_a_view_of_a_string(&found_here) { found_here = text_view.clone(); }
@@ -207,7 +207,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         let mut lent = if own { lends_in_own(contract, at + offset, &vec![world.library]) } else { lends_in(contract, at + offset, &vec![world.library]) };
         lent = lent || at == 0 && is_a_lookup(key) || check_arguments_a_print(key);
-        let text_method: String = nikaia_std::index::or(key.strip_prefix("str::"), || "").to_owned();
+        let text_method: String = nikaia_std::index::or(key.strip_prefix("str::"), || "").to_string();
         lent = lent || text_method != "" && check_core_method_pattern_at(&text_method) == at;
         let kept = !lent;
         if kept && !want.is_a_view() && !nikaia_std::list::contains(&signature.mutable, &name) && !state.foreign_names.contains(written) && given_here.is_some() {
@@ -285,11 +285,11 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let mut message: String = format!("`{}` takes a shared value, but this isn't one.", key);
             let mut help: String = format!("Make it {} `{}`.", an_or_a(&want.text()), want.text());
             let hull: String = match want {
-                Ty::Named { ref name, .. } => name.to_owned(),
+                Ty::Named { ref name, .. } => name.to_string(),
                 _ => String::from(""),
             };
             if value.is_some() {
-                let shown = nikaia_std::index::or(value.as_deref(), || "").to_owned();
+                let shown = nikaia_std::index::or(value.as_deref(), || "").to_string();
                 message = format!("`{}` takes a shared value, but `{}` isn't one.", key, shown);
                 if !hull.is_empty() { help = format!("Wrap it: `{}({})`.", hull, shown); }
             } else if !hull.is_empty() { help = format!("Wrap it: `{}(…)`.", hull); }
@@ -311,8 +311,8 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         let why = state.a_view_kept(&found_here, &want, (named).as_deref(), &keeper);
         if why.is_some() {
             let kept_why = match why { Some(__nikaia_value) => __nikaia_value, None => continue };
-            for note in kept_why.notes.iter() { notes.push(note.to_owned()); }
-            help = kept_why.help.to_owned();
+            for note in kept_why.notes.iter() { notes.push(note.to_string()); }
+            help = kept_why.help.to_string();
         } else if found_here.is_a_view() && unviewed_type(&found_here).fits(&want) {
             notes.push(format!("This is a view: it points into a `{}` that something else owns.", want.text()));
             notes.push(format!("{}, so it needs one of its own.", capitalised(&keeper)));

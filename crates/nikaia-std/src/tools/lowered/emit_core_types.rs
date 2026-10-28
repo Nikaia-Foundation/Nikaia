@@ -44,7 +44,7 @@ impl EmitState {
     pub fn emit_core_ty(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes) -> String { self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, Count::Atomic) }
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_ty_counted(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes, count: Count) -> String {
-        let written = world.words.resolve(ty.name).to_owned();
+        let written = world.words.resolve(ty.name).to_string();
         let name = if written == "int" { String::from("i64") } else { written };
         self.emit_core_ty_named(world, walk, crossings, overlaps, ty, &name, lifetimes, count)
     }
@@ -63,9 +63,9 @@ impl EmitState {
             if ty.is_nullable { return format!("Option<({})>", parts.join(", ")); }
             return format!("({})", parts.join(", "));
         }
-        let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_owned();
+        let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string();
         if walk.specialising.is_some() && ty.generics.is_empty() && (*ty.code).is_none() && name == parameter {
-            let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_owned();
+            let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string();
             let held = match walk.specialising.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -98,7 +98,7 @@ impl EmitState {
                     let mut called: Vec<String> = vec![];
                     for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count))); }
                     let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count);
-                    let mut each = inner.to_owned();
+                    let mut each = inner.to_string();
                     if code.can_throw { each = format!("Result<{}, Box<dyn std::error::Error>>", inner); }
                     if runs { return format!("impl for<'call> Fn({}) -> {}", called.join(", "), each); }
                     let mut crossing: &'static str = "";

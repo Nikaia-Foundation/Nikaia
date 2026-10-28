@@ -23,10 +23,10 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
         let cut = nikaia_std::index::or(nikaia_std::search::find(&key, &"::", 0), || 0);
         if over_bytes && cut > 0 {
             state.facts.bytes_entries.insert(id_of(arg) as i64);
-            state.facts.bytes_grammars.insert(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_owned());
+            state.facts.bytes_grammars.insert(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_string());
         }
         if over_text && cut > 0 {
-            match grammar_positions_over_text(world, key, &nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_owned(), span) {
+            match grammar_positions_over_text(world, key, &nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_string(), span) {
                 Some(refused) => { state.findings.push(refused); },
                 None => { },
             }
@@ -43,7 +43,7 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
         };
         let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
         guarded.fallible = true;
-        for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_owned()); }
+        for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_string()); }
         state.flow.guarded = Some(guarded);
     }
     let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
@@ -77,26 +77,26 @@ pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: 
     let given = check_core_expr(state, world, host, nikaia_std::index::get(&args, 0), span);
     state.findings.truncate(nikaia_std::count::of(before));
     let on: String = match given {
-        Ty::Named { ref name, .. } => name.to_owned(),
+        Ty::Named { ref name, .. } => name.to_string(),
         _ => return,
     };
     let fields = match state.shape_of(&world.here, world, &on) { Some(__nikaia_value) => __nikaia_value, None => return };
     state.facts.unrolled_calls.insert(call, check_specialised(name, &on));
-    state.facts.unrolled.insert((name.to_owned(), on.to_owned()), fields);
+    state.facts.unrolled.insert((name.to_string(), on.to_string()), fields);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, what: &str) {
     let name: String = match value {
-        Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_owned() },
+        Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
         _ => return,
     };
     let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
     if !local.changing { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_a_view() && what == "handed back" {
-        let notes: Vec<String> = vec![format!("`mut {}: {}` changes the caller's view in place, so handing it back hands back a view of the caller's view.", name, ty.text()).to_owned()];
+        let notes: Vec<String> = vec![format!("`mut {}: {}` changes the caller's view in place, so handing it back hands back a view of the caller's view.", name, ty.text()).to_string()];
         let help: String = format!("Take `{}: {}` without `mut`, and walk a local of its own: `let mut at = {}`, then `return at`.", name, ty.text(), name);
         state.findings.push(check_refusal("NK1131", span, format!("You can't hand back `{}` here: a `mut` parameter that is a view is only borrowed.", name), notes, Some(help)));
         return;

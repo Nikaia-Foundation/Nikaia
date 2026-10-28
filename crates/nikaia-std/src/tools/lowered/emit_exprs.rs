@@ -53,7 +53,7 @@ pub(crate) fn emit_changes(contract: &FnContract, i: i64) -> bool {
     false
 }
 
-pub(crate) fn emit_two(before: &str, after: &str) -> (String, String) { (before.to_owned(), after.to_owned()) }
+pub(crate) fn emit_two(before: &str, after: &str) -> (String, String) { (before.to_string(), after.to_string()) }
 
 pub fn emit_around(how: Option<&FactWrap>) -> (String, String) {
     let held = match how { Some(__nikaia_value) => __nikaia_value, None => return emit_two("", "") };
@@ -155,7 +155,7 @@ impl EmitState {
             Item::Fn { name, .. } => {
                 let name = *name;
                 let held = match name { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let text = world.words.resolve(held).to_owned();
+                let text = world.words.resolve(held).to_string();
                 if self.facts.walks_fields.contains_key(&text) { return Some(text); }
             },
             _ => { },
@@ -176,7 +176,7 @@ impl EmitState {
         }
     }
     pub(crate) fn method_emits_as_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr]) -> bool {
-        let name = world.words.resolve(method).to_owned();
+        let name = world.words.resolve(method).to_string();
         truncating(&name).is_some() || is_length(&name, args) || self.is_counted(receiver, &name, args)
     }
     pub fn ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
@@ -200,14 +200,14 @@ impl EmitState {
             if name == "HashMap" { return String::from("TrustedMap"); }
             if name == "HashSet" { return String::from("TrustedSet"); }
         }
-        name.to_owned()
+        name.to_string()
     }
     pub fn mapped_path(&self, trusting: bool, name: &str) -> String {
         let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
         if parts.len() < 2 { return self.map_name(trusting, name); }
-        let last = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned();
+        let last = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string();
         let mut module: Vec<String> = vec![];
-        for at in 0..parts.len() as i64 - 1 { module.push((*nikaia_std::index::get(&parts, (at) as usize)).to_owned()); }
+        for at in 0..parts.len() as i64 - 1 { module.push((*nikaia_std::index::get(&parts, (at) as usize)).to_string()); }
         format!("{}::{}", module.join("::"), self.map_name(trusting, &last))
     }
 }

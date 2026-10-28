@@ -5,9 +5,9 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
-            out.insert(words.resolve(name).to_owned());
+            out.insert(words.resolve(name).to_string());
         },
-        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(words.resolve(*nikaia_std::index::get(&segments, 0)).to_owned()); } },
+        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(words.resolve(*nikaia_std::index::get(&segments, 0)).to_string()); } },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             names_in(func, words, out);
@@ -17,14 +17,14 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             names_in(receiver, words, out);
-            out.insert(words.resolve(method).to_owned());
+            out.insert(words.resolve(method).to_string());
             for arg in args.iter() { names_in(arg, words, out); }
             for setting in config.iter() { names_in(&setting.value, words, out); }
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             names_in(receiver, words, out);
-            out.insert(words.resolve(method).to_owned());
+            out.insert(words.resolve(method).to_string());
             for arg in args.iter() { names_in(arg, words, out); }
             for setting in config.iter() { names_in(&setting.value, words, out); }
         },
@@ -62,9 +62,9 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
         },
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
-            out.insert(words.resolve(name).to_owned());
+            out.insert(words.resolve(name).to_string());
             for field in fields.iter() {
-                out.insert(words.resolve(field.name).to_owned());
+                out.insert(words.resolve(field.name).to_string());
                 maybe_names_in((field.value).as_ref(), words, out);
             }
         },
@@ -72,7 +72,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             let base = nikaia_std::boxed::open(base);
             names_in(base, words, out);
             for field in fields.iter() {
-                out.insert(words.resolve(field.name).to_owned());
+                out.insert(words.resolve(field.name).to_string());
                 maybe_names_in((field.value).as_ref(), words, out);
             }
         },
@@ -124,13 +124,13 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
         },
         Expr::Dsl { target, package, context, content, .. } => {
             let context = *context; let package = *package; let target = *target;
-            out.insert(words.resolve(target).to_owned());
+            out.insert(words.resolve(target).to_string());
             a_symbol(package, words, out);
             a_symbol(context, words, out);
             words_of(content, out);
         },
         Expr::Asm { bindings, code, .. } => {
-            for binding in bindings.iter() { out.insert(words.resolve(binding.variable).to_owned()); }
+            for binding in bindings.iter() { out.insert(words.resolve(binding.variable).to_string()); }
             words_of(code, out);
         },
         Expr::LitInt { .. } => { },
@@ -173,14 +173,14 @@ pub(crate) fn maybe_names_in_block(block: Option<&Block>, words: &winnow_grammar
 
 pub(crate) fn a_symbol(name: Option<winnow_grammar::Symbol>, words: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<String>) {
     let named = match name { Some(__nikaia_value) => __nikaia_value, None => return };
-    out.insert(words.resolve(named).to_owned());
+    out.insert(words.resolve(named).to_string());
 }
 
 pub(crate) fn words_of(text: &str, out: &mut collections::BTreeSet<String>) {
     let mut word: String = String::from("");
     for c in text.chars() {
         if c.is_alphanumeric() || c == '_' { word.push(c); } else {
-            if !word.is_empty() { out.insert(word.to_owned()); }
+            if !word.is_empty() { out.insert(word.to_string()); }
             word = String::from("");
         }
     }

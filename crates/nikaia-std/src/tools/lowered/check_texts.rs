@@ -111,7 +111,7 @@ pub(crate) fn a_string_type() -> Ty { Ty::Named { name: String::from("String"), 
 // this was written - see `contracts::sync`.
 pub(crate) fn method_word(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> String {
     match expr {
-        Expr::MethodCall { method, args, .. } => { let method = *method; if args.is_empty() { world.words.resolve(method).to_owned() } else { String::from("") } },
+        Expr::MethodCall { method, args, .. } => { let method = *method; if args.is_empty() { world.words.resolve(method).to_string() } else { String::from("") } },
         _ => String::from(""),
     }
 }
@@ -186,7 +186,7 @@ impl CheckState {
                         }, || (2, Span { start: 0, end: 0 }.into()));
                         let length = wide.0;
                         let note = "A `'…'` is a `u8` only where it is one ASCII character or a `'\\xNN'` (Part I 2.6); in UTF-8 any other scalar is two to four bytes.";
-                        self.findings.push(check_refusal("NK1212", &wide.1, format!("`'{}'` is a scalar of {} bytes, and a `u8` is one.", written, length), vec![note.to_owned()], Some(format!("Its bytes are a text literal's: `\"{}\".bytes`; where one character is meant, ask for a `scalar`.", written))));
+                        self.findings.push(check_refusal("NK1212", &wide.1, format!("`'{}'` is a scalar of {} bytes, and a `u8` is one.", written, length), vec![note.to_string()], Some(format!("Its bytes are a text literal's: `\"{}\".bytes`; where one character is meant, ask for a `scalar`.", written))));
                     }
                     return Some(Ty::Named { name: String::from("u8"), args: vec![], view: false });
                 }
@@ -198,7 +198,7 @@ impl CheckState {
                     _ => false,
                 };
                 if u8_wanted {
-                    let name = world.words.resolve(symbol).to_owned();
+                    let name = world.words.resolve(symbol).to_string();
                     let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let found = match *nikaia_std::index::get(&self.flow.open_chars, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let mut open = found.clone();
@@ -364,7 +364,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn list_of_tuple_literals(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let name = match want {
-            Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { name.to_owned() } },
+            Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { name.to_string() } },
             _ => return None,
         };
         let wanted_args = named_arguments(want);
@@ -468,7 +468,7 @@ pub(crate) fn check_texts_a_byte_as_a_scalar(written: &str, name: Option<String>
     let note = "Above `\\x7F` a `'\\xNN'` names a byte, which is a `u8` and no `scalar`: the scalar of that number is another character, two bytes in UTF-8 (Part I 2.6).";
     let mut annotated = format!("`let b: u8 = '{}'`", written);
     if name.is_some() { annotated = format!("`let {}: u8 = '{}'`", nikaia_std::index::or(name.as_deref(), || ""), written); }
-    check_refusal("NK1212", span, format!("`'{}'` is the byte {}, and it is used as a `scalar`.", written, value), vec![note.to_owned()], Some(format!("For the scalar U+00{}, write `'\\u{{{}}}'`; for the byte, declare it a `u8`: {}.", hex.to_uppercase(), hex, annotated)))
+    check_refusal("NK1212", span, format!("`'{}'` is the byte {}, and it is used as a `scalar`.", written, value), vec![note.to_string()], Some(format!("For the scalar U+00{}, write `'\\u{{{}}}'`; for the byte, declare it a `u8`: {}.", hex.to_uppercase(), hex, annotated)))
 }
 
 impl CheckState {
@@ -494,8 +494,8 @@ impl CheckState {
                     later = scalar_at.clone();
                 }
                 let note = "A `'…'` takes its type from how it's used, `u8` or `scalar`, and these uses want both.";
-                self.findings.push(check_refusal("NK1200", &later, format!("You're using `{}` as {} `{}` and here as {} `{}`.", open.name, an_or_a(first), first, an_or_a(second), second), vec![note.to_owned()], Some(format!("Declare its type, `let {}: u8 = '{}'`, and convert with `as` where the other one is needed.", open.name, open.written))));
-            } else if first_byte.is_some() { self.facts.byte_literals.insert(open.literal); } else if a_high_byte(&open.written).is_some() { self.findings.push(check_texts_a_byte_as_a_scalar(&open.written, Some(open.name.to_owned()), &open.at)); }
+                self.findings.push(check_refusal("NK1200", &later, format!("You're using `{}` as {} `{}` and here as {} `{}`.", open.name, an_or_a(first), first, an_or_a(second), second), vec![note.to_string()], Some(format!("Declare its type, `let {}: u8 = '{}'`, and convert with `as` where the other one is needed.", open.name, open.written))));
+            } else if first_byte.is_some() { self.facts.byte_literals.insert(open.literal); } else if a_high_byte(&open.written).is_some() { self.findings.push(check_texts_a_byte_as_a_scalar(&open.written, Some(open.name.to_string()), &open.at)); }
         }
         self.flow.open_chars = collections::BTreeMap::new();
         for (literal, held) in self.flow.high_bytes.iter() {

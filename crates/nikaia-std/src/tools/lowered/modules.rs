@@ -15,18 +15,18 @@ pub fn a_use_refused(names: &winnow_grammar::InternerContext, items: &[Spanned<I
     for item in items.iter() {
         let segments = use_segments(names, &item.node);
         if segments.is_empty() || *nikaia_std::index::get(&segments, 0) == "std" { continue; }
-        let first = (*nikaia_std::index::get(&segments, 0)).to_owned();
+        let first = (*nikaia_std::index::get(&segments, 0)).to_string();
         if segments.len() > 1 {
             let written = segments.join("::");
             return Some(format!("`use {}` in {}: `use` takes a package name only, not a path into it. Write `use {}`, and `{}` where you need it.", written, here, first, written));
         }
         let called = alias_of(names, &item.node);
-        if !called.is_empty() { named.push((first, called)); } else { named.push((first.to_owned(), first)); }
+        if !called.is_empty() { named.push((first, called)); } else { named.push((first.to_string(), first)); }
     }
     let mut once: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (_, called) in named.iter() {
         if once.contains(called) { return Some(format!("`{}` is used twice in {}. Two packages can't have the same name in one file. Write `use … as …` to give one of them another name.", called, here)); }
-        once.insert(called.to_owned());
+        once.insert(called.to_string());
     }
     for (package, _) in named.iter() {
         if reachable.contains(package) { continue; }
@@ -43,7 +43,7 @@ pub(crate) fn use_segments(names: &winnow_grammar::InternerContext, item: &Item)
         Item::Import { path, .. } => {
             for segment in path.iter() {
                 let segment = *segment;
-                out.push(names.resolve(segment).to_owned());
+                out.push(names.resolve(segment).to_string());
             }
         },
         _ => { },
@@ -66,7 +66,7 @@ pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, 
         let contract = match *nikaia_std::index::get(&contracts.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if of_a_dependency(key, theirs) || !contract.public || !no_sync(&contract.sync_claim) { continue; }
         let mut named: Vec<String> = vec![];
-        for lambda in lambdas.iter() { if !nikaia_std::list::contains(&contract.keeps, &lambda) { named.push(lambda.to_owned()); } }
+        for lambda in lambdas.iter() { if !nikaia_std::list::contains(&contract.keeps, &lambda) { named.push(lambda.to_string()); } }
         if (named.len() as i64) == lambdas.len() as i64 { through.push(format!("`{}` (`sync({})`)", key, named.join(", "))); }
     }
     let mut out: String = String::from("");
@@ -149,14 +149,14 @@ pub fn lost_sync_unplaced(message: &str, help: &str) -> String { format!("warnin
 pub fn declared_once(paths: &[String], declared: &[Vec<String>]) -> Option<String> {
     let mut seen: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for at in 0..paths.len() as i64 {
-        let path = (*nikaia_std::index::get(&paths, (at) as usize)).to_owned();
+        let path = (*nikaia_std::index::get(&paths, (at) as usize)).to_string();
         for name in (*nikaia_std::index::get(&declared, (at) as usize)).iter() {
             if seen.contains_key(name) {
-                let first = nikaia_std::index::or(*nikaia_std::index::get(&seen, name), || "").to_owned();
+                let first = nikaia_std::index::or(*nikaia_std::index::get(&seen, name), || "").to_string();
                 if first == path { continue; }
                 return Some(format!("`{}` is declared twice in this package: in {} and in {}.\nAll files of a package share their names. Rename one of the two, or keep one declaration and use it from the other file.", name, first, path));
             }
-            seen.insert(name.to_owned(), path.to_owned());
+            seen.insert(name.to_string(), path.to_string());
         }
     }
     None
@@ -175,11 +175,11 @@ pub fn groups(packages: &[Option<String>]) -> Vec<(i64, i64)> {
 
 pub fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) {
     let mut unpromised: Vec<String> = vec![];
-    for (key, contract) in ledger.functions.iter() { if inferred_sync(&contract.sync_claim) && another(key) { unpromised.push(key.to_owned()); } }
+    for (key, contract) in ledger.functions.iter() { if inferred_sync(&contract.sync_claim) && another(key) { unpromised.push(key.to_string()); } }
     for key in unpromised.iter() {
         let mut entry = match *nikaia_std::index::get(&ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue }.clone();
         entry.sync_claim = Sync::Unpromised;
-        ledger.functions.insert(key.to_owned(), entry);
+        ledger.functions.insert(key.to_string(), entry);
     }
 }
 
@@ -191,15 +191,15 @@ pub fn contracts_as_promised(contracts: &Ledger, theirs: &collections::BTreeMap<
 
 #[allow(clippy::too_many_arguments)]
 pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, described: &Ledger, packages: &[Option<String>], renames: &[collections::BTreeMap<String, String>], reaches: &collections::BTreeMap<String, collections::BTreeSet<String>>, their_renames: &collections::BTreeMap<String, collections::BTreeMap<String, String>>, package_ledger: &impl Fn(i64, i64) -> Ledger) -> collections::BTreeMap<String, Ledger> {
-    for (name, contract) in described.functions.iter() { if !library.functions.contains_key(name) { library.functions.insert(name.to_owned(), contract.clone()); } }
-    for (name, contract) in described.types.iter() { if !library.types.contains_key(name) { library.types.insert(name.to_owned(), contract.clone()); } }
+    for (name, contract) in described.functions.iter() { if !library.functions.contains_key(name) { library.functions.insert(name.to_string(), contract.clone()); } }
+    for (name, contract) in described.types.iter() { if !library.types.contains_key(name) { library.types.insert(name.to_string(), contract.clone()); } }
     let mut plain: collections::BTreeMap<String, Ledger> = collections::BTreeMap::new();
     for (from, to) in groups(packages) {
         let package = match match nikaia_std::index::get(&packages, nikaia_std::index::at(from)) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let module: Option<String> = Some(package.to_owned());
+        let module: Option<String> = Some(package.to_string());
         let own = package_ledger(from, to);
         let mut promised = own.clone();
         as_promised(&mut promised, &|key| { true });
@@ -220,15 +220,15 @@ pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, describe
             None => None,
         }, || collections::BTreeMap::new().into());
         for word in words.iter() {
-            let ours = nikaia_std::index::or(*nikaia_std::index::get(&renamed, word), || word).to_owned();
+            let ours = nikaia_std::index::or(*nikaia_std::index::get(&renamed, word), || word).to_string();
             if ours == *package { continue; }
             let theirs = match *nikaia_std::index::get(&plain, &ours) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut promised = theirs.clone();
             as_promised(&mut promised, &|key| { true });
-            let module: Option<String> = Some(word.to_owned());
+            let module: Option<String> = Some(word.to_string());
             absorb_into(&mut seen_by_it, (module).as_deref(), &none, &promised);
         }
-        as_its_own.insert(package.to_owned(), seen_by_it);
+        as_its_own.insert(package.to_string(), seen_by_it);
     }
     as_its_own
 }
@@ -246,7 +246,7 @@ pub fn shown_paths(paths: &[String], shown_as: Option<&str>) -> Vec<String> {
                 Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                 None => None,
             }, || "".into())
-        } else { (*nikaia_std::index::get(&paths, nikaia_std::index::at(at))).to_owned() }
+        } else { (*nikaia_std::index::get(&paths, nikaia_std::index::at(at))).to_string() }
     }).collect::<Vec<_>>()
 }
 
@@ -364,22 +364,22 @@ pub fn modules_names_in(names: &winnow_grammar::InternerContext, items: &[Spanne
 
 pub(crate) fn modules_note(names: &winnow_grammar::InternerContext, e: &Expr, out: &mut collections::BTreeSet<String>) {
     match e {
-        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(names.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_owned()); } },
+        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(names.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string()); } },
         Expr::Variable(n, _) => {
             let n = *n;
-            out.insert(names.resolve(n).to_owned());
+            out.insert(names.resolve(n).to_string());
         },
         Expr::MethodCall { method, .. } => {
             let method = *method;
-            out.insert(names.resolve(method).to_owned());
+            out.insert(names.resolve(method).to_string());
         },
         Expr::SafeMethod { method, .. } => {
             let method = *method;
-            out.insert(names.resolve(method).to_owned());
+            out.insert(names.resolve(method).to_string());
         },
         Expr::StructLit { name, .. } => {
             let name = *name;
-            out.insert(names.resolve(name).to_owned());
+            out.insert(names.resolve(name).to_string());
         },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {

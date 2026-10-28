@@ -25,7 +25,7 @@ impl ProjectMembersRefusal {
     pub(crate) fn message(&self) -> String {
         match self {
             ProjectMembersRefusal::Manifest => String::from("a manifest did not read"),
-            ProjectMembersRefusal::Refused(why) => why.to_owned(),
+            ProjectMembersRefusal::Refused(why) => why.to_string(),
             ProjectMembersRefusal::Unreadable { what, why } => format!("{}: {}", what, why),
         }
     }
@@ -49,7 +49,7 @@ pub fn project_members_packages_of<H: ProjectMembersHost>(manifest: &ProjectMemb
     let mut out: Vec<ProjectMembersDependency> = vec![];
     let mut seen: collections::HashMap<fs::Path, String> = collections::HashMap::<_, _>::default();
     let mut here: collections::HashMap<fs::Path, String> = collections::HashMap::<_, _>::default();
-    for (name, path) in manifest.paths.iter() { here.insert(project_members_canonical(&nikaia_std::fs::path::join(&(root), &path)), name.to_owned()); }
+    for (name, path) in manifest.paths.iter() { here.insert(project_members_canonical(&nikaia_std::fs::path::join(&(root), &path)), name.to_string()); }
     for (name, path) in manifest.paths.iter() {
         let root = project_members_canonical(&nikaia_std::fs::path::join(&(root), &path));
         let first = seen.get(&root);
@@ -57,12 +57,12 @@ pub fn project_members_packages_of<H: ProjectMembersHost>(manifest: &ProjectMemb
             Some(first) => { return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Refused(format!("`{}` and `{}` are the same package: both are {}.\nThe same path is the same package, so two names for it would be two copies of every type it declares - name it once.", name, first, nikaia_std::fs::path::display(&(root)))), &"project_members_packages_of")); },
             None => { },
         }
-        seen.insert(nikaia_std::fs::path::clone(&(root)), name.to_owned());
+        seen.insert(nikaia_std::fs::path::clone(&(root)), name.to_string());
         let dependency = match host.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Manifest, &"project_members_packages_of")) };
         if announce && dependency.has_build { eprintln!("note: `{}`'s own `[build]` is ignored: a package is built with the settings of the program that uses it.", name); }
-        let mut reachable: collections::BTreeSet<String> = dependency.keys.iter().map(|x| { x.to_owned() }).collect();
-        for name in dependency.foreign.iter() { reachable.insert(name.to_owned()); }
-        out.push(ProjectMembersDependency { name: name.to_owned(), renames: project_members_renames_in(&dependency, &root, &here, host)?, root, reachable });
+        let mut reachable: collections::BTreeSet<String> = dependency.keys.iter().map(|x| { x.to_string() }).collect();
+        for name in dependency.foreign.iter() { reachable.insert(name.to_string()); }
+        out.push(ProjectMembersDependency { name: name.to_string(), renames: project_members_renames_in(&dependency, &root, &here, host)?, root, reachable });
     }
     Ok(out)
 }
@@ -72,13 +72,13 @@ pub(crate) fn project_members_renames_in<H: ProjectMembersHost>(dependency: &Pro
     for (key, path) in dependency.paths.iter() {
         let at = project_members_canonical(&nikaia_std::fs::path::join(&(dependency_root), &path));
         let canonical: String = match here.get(&at) {
-            Some(ours) => ours.to_owned(),
+            Some(ours) => ours.to_string(),
             None => {
                 let read = match host.manifest_at(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Manifest, &"project_members_renames_in")) };
-                nikaia_std::index::or(read.name, || key.to_owned().into())
+                nikaia_std::index::or(read.name, || key.to_string().into())
             },
         };
-        if AsRef::<str>::as_ref(&(canonical)) != AsRef::<str>::as_ref(&(key)) { out.insert(key.to_owned(), canonical); }
+        if AsRef::<str>::as_ref(&(canonical)) != AsRef::<str>::as_ref(&(key)) { out.insert(key.to_string(), canonical); }
     }
     Ok(out)
 }
@@ -195,7 +195,7 @@ pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::
         seen.insert(nikaia_std::fs::path::clone(&(at)));
         let theirs = manifests.manifest_at(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml"))));
         match theirs {
-            Some(ref theirs) => { for name in theirs.foreign.iter() { out.insert(name.to_owned()); } },
+            Some(ref theirs) => { for name in theirs.foreign.iter() { out.insert(name.to_string()); } },
             None => { },
         }
         project_members_crates_beneath(&at, seen, out, manifests);
@@ -208,15 +208,15 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
         Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
         None => None,
     }, || vec![].into());
-    let declared: collections::BTreeSet<String> = foreign.iter().map(|x| { x.to_owned() }).collect();
+    let declared: collections::BTreeSet<String> = foreign.iter().map(|x| { x.to_string() }).collect();
     let mut described: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut descriptions = host.empty_ledger();
     let mut moved: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for name in declared.iter() {
         let ledger = match project_members_description_at(root, name, host) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        described.insert(name.to_owned());
+        described.insert(name.to_string());
         let differing = project_members_sources_that_moved(root, name, &ledger, host).await;
-        if !differing.is_empty() { moved.insert(name.to_owned(), differing); }
+        if !differing.is_empty() { moved.insert(name.to_string(), differing); }
         descriptions = host.absorb(descriptions, ledger);
     }
     let mut beneath: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -228,16 +228,16 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
 impl ProjectMembersForeign {
     pub fn packages(&self, modules: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
         let mut out = modules.to_owned();
-        for x in self.described.iter() { out.insert(x.to_owned()); }
-        for x in self.declared.iter() { out.insert(x.to_owned()); }
-        for x in self.beneath.iter() { out.insert(x.to_owned()); }
+        for x in self.described.iter() { out.insert(x.to_string()); }
+        for x in self.declared.iter() { out.insert(x.to_string()); }
+        for x in self.beneath.iter() { out.insert(x.to_string()); }
         out
     }
 }
 
 pub(crate) async fn project_members_sources_that_moved<H: ProjectMembersForeignHost>(root: &std::path::Path, name: &str, ledger: &Ledger, host: &H) -> Vec<String> {
     if ledger.sources.is_empty() { return vec![]; }
-    let crate_root = match host.crate_root(root, name.to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let crate_root = match host.crate_root(root, name.to_string()) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<String> = vec![];
     for (file, recorded) in ledger.sources.iter() {
         let bytes = match fs::read(&nikaia_std::fs::path::join(&(crate_root), std::path::Path::new(&(file))), &fs::Root::Anywhere).await {
@@ -246,7 +246,7 @@ pub(crate) async fn project_members_sources_that_moved<H: ProjectMembersForeignH
         };
         let mut read: Vec<u8> = vec![];
         for b in bytes.iter().copied() { read.push(b); }
-        if host.sha256_hex(&read) != *recorded { out.push(file.to_owned()); }
+        if host.sha256_hex(&read) != *recorded { out.push(file.to_string()); }
     }
     out
 }

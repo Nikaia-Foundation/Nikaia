@@ -12,7 +12,7 @@ pub struct ParsedView<'a, 'a1, 'a2, 'a3, 'a4, 'a5> {
 }
 
 impl<'a> ParsedView<'a, 'a, 'a, 'a, 'a, 'a> {
-    pub fn text(&self, sym: winnow_grammar::Symbol) -> String { self.words.resolve(sym).to_owned() }
+    pub fn text(&self, sym: winnow_grammar::Symbol) -> String { self.words.resolve(sym).to_string() }
     pub fn unaliased(&self, name: &str) -> String { unaliased_in(self.aliases, name) }
 }
 

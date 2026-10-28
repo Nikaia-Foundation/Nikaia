@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn pattern_named(name: &str, view: bool) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view } }
+pub(crate) fn pattern_named(name: &str, view: bool) -> Ty { Ty::Named { name: name.to_string(), args: vec![], view } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -24,7 +24,7 @@ pub(crate) fn list_of_known(item: Ty) -> Ty {
 // this was written - see `contracts::sync`.
 pub(crate) fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> String {
     match pattern {
-        Pattern::Ref { name, generics, args } => { let name = *name; if generics.is_empty() && args.is_empty() { world.words.resolve(name).to_owned() } else { String::from("") } },
+        Pattern::Ref { name, generics, args } => { let name = *name; if generics.is_empty() && args.is_empty() { world.words.resolve(name).to_string() } else { String::from("") } },
         _ => String::from(""),
     }
 }
@@ -77,7 +77,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn reference_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[Type], args: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
-        let called = world.words.resolve(name).to_owned();
+        let called = world.words.resolve(name).to_string();
         if rules.contains(&called) {
             return nikaia_std::index::or(match *nikaia_std::index::get(&self.rule_results, &called) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -85,7 +85,7 @@ impl CheckState {
             }, || Ty::Unknown);
         }
         if called == "dec" && generics.len() == 1 {
-            let written = world.words.resolve(nikaia_std::index::get(&generics, 0).name).to_owned();
+            let written = world.words.resolve(nikaia_std::index::get(&generics, 0).name).to_string();
             if nikaia_std::index::get(&generics, 0).generics.is_empty() && an_offered_number_name(&written) { return pattern_named(&written, false); }
             return Ty::Unknown;
         }
@@ -112,7 +112,7 @@ impl CheckState {
                 let pat = nikaia_std::boxed::open(pat); let name = *name;
                 let ty = self.pattern_type(world, &pat.node, rules);
                 self.next_binding = self.next_binding + 1;
-                out.push(CheckLocal::free(world.words.resolve(name).to_owned(), ty, self.next_binding));
+                out.push(CheckLocal::free(world.words.resolve(name).to_string(), ty, self.next_binding));
                 for inner in self.bindings_of(world, &pat.node, rules) { out.push(inner); }
             },
             Pattern::Seq(parts) => { for part in parts.iter() { for inner in self.bindings_of(world, &part.node, rules) { out.push(inner); } } },
@@ -138,7 +138,7 @@ pub(crate) fn grammar_position_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     match pattern {
         Pattern::Ref { name, generics, args } => {
             let name = *name;
-            let called = world.words.resolve(name).to_owned();
+            let called = world.words.resolve(name).to_string();
             let built_in = !rules.contains(&called) && generics.is_empty();
             if built_in && (called == "span" && args.len() == 1 || called == "here" && args.is_empty()) { return called; }
             grammar_position_in_any(world, args, rules)

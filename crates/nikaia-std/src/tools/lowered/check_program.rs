@@ -51,7 +51,7 @@ pub fn check_program_program<H: CheckHost>(state: &mut CheckState, world: &Check
             Item::Comptime { .. } => { },
             Item::Extern { abi, .. } => {
                 if abi.is_some() {
-                    let written = abi.as_ref().unwrap().to_owned();
+                    let written = abi.as_ref().unwrap().to_string();
                     check_program_extern_convention(state, &written, &item.span);
                 }
             },
@@ -98,7 +98,7 @@ pub fn check_program_instantiations_beside<H: CheckHost>(state: &mut CheckState,
                 let name = *name;
                 let written = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let spelled = world.here.text(written);
-                if state.walks_fields.contains_key(&spelled) { mine.insert(spelled.to_owned()); }
+                if state.walks_fields.contains_key(&spelled) { mine.insert(spelled.to_string()); }
             },
             _ => { },
         }
@@ -117,13 +117,13 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         };
-        state.flow.unrolling = Some(CheckUnrolling { on: on.to_owned(), field: field.clone() });
+        state.flow.unrolling = Some(CheckUnrolling { on: on.to_string(), field: field.clone() });
         check_function_function(state, world, host, item, span, &None);
         state.flow.unrolling = outer;
         let mut already: collections::BTreeSet<(String, u32)> = collections::BTreeSet::new();
         let mut at: i64 = 0;
         while at < before {
-            already.insert((nikaia_std::index::get(&state.findings, (at) as usize).code.to_owned(), nikaia_std::index::get(&state.findings, (at) as usize).span.start));
+            already.insert((nikaia_std::index::get(&state.findings, (at) as usize).code.to_string(), nikaia_std::index::get(&state.findings, (at) as usize).span.start));
             at += 1;
         }
         let isenum = state.enums.contains_key(on);
@@ -142,8 +142,8 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
         let mut next = before;
         while next < state.findings.len() as i64 {
             let mut found = (*nikaia_std::index::get(&state.findings, nikaia_std::index::at(next))).clone();
-            if !already.contains(&(found.code.to_owned(), found.span.start)) {
-                found.notes.push(said.to_owned());
+            if !already.contains(&(found.code.to_string(), found.span.start)) {
+                found.notes.push(said.to_string());
                 fresh.push(found);
             }
             next += 1;
@@ -157,7 +157,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
 // this was written - see `contracts::sync`.
 pub fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     let mut instantiations: Vec<(String, String, Vec<FieldContract>)> = vec![];
-    for ((name, on), fields) in state.facts.unrolled.iter() { instantiations.push((name.to_owned(), on.to_owned(), fields.to_owned())); }
+    for ((name, on), fields) in state.facts.unrolled.iter() { instantiations.push((name.to_string(), on.to_string(), fields.to_owned())); }
     for (name, on, fields) in instantiations.iter() {
         for item in world.here.items.iter() {
             match &item.node {

@@ -14,7 +14,7 @@ pub struct CxNode {
 
 pub(crate) fn cx_node_scalar(shape: &CxByValue) -> String {
     if shape.scalar { return String::from("scalar"); }
-    if shape.rust == "i32" || shape.rust == "i64" || shape.rust == "u8" || shape.rust == "f64" { return shape.rust.to_owned(); }
+    if shape.rust == "i32" || shape.rust == "i64" || shape.rust == "u8" || shape.rust == "f64" { return shape.rust.to_string(); }
     String::from("bool")
 }
 
@@ -28,24 +28,24 @@ impl CxNode {
         let before = *nikaia_std::index::get(&self.members, owner);
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for one in held.iter() { list.push(one.to_owned()); }
+            for one in held.iter() { list.push(one.to_string()); }
         }
         list.push(text);
-        self.members.insert(owner.to_owned(), list);
+        self.members.insert(owner.to_string(), list);
     }
     pub(crate) fn add_method(&mut self, owner: &str, name: String, function: String) {
         let mut list: Vec<(String, String)> = vec![];
         let before = *nikaia_std::index::get(&self.methods, owner);
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for (a, b) in held.iter() { list.push((a.to_owned(), b.to_owned())); }
+            for (a, b) in held.iter() { list.push((a.to_string(), b.to_string())); }
         }
         list.push((name, function));
-        self.methods.insert(owner.to_owned(), list);
+        self.methods.insert(owner.to_string(), list);
     }
     pub fn empty() -> CxNode { CxNode { functions: vec![], trampolines: vec![], exported: vec![], members: collections::BTreeMap::new(), constructors: collections::BTreeMap::new(), methods: collections::BTreeMap::new(), any_async: false } }
     pub fn entry(&mut self, words: &winnow_grammar::InternerContext, ctx: &CxCtx, entry: &CxEntry, symbol: &str, text_out: bool, pauses: bool) {
-        let prefix = ctx.prefix.to_owned();
+        let prefix = ctx.prefix.to_string();
         let by_value = entry.of_a_record(&ctx.records);
         let owner_name = match entry.owner.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -63,7 +63,7 @@ impl CxNode {
         let mut position: i64 = 0;
         let written = entry.written();
         if entry.receiver.is_some() && owner_name.is_some() {
-            let owner = owner_text.to_owned();
+            let owner = owner_text.to_string();
             if by_value {
                 locals.push(format!("{}_{} self_value;", prefix, owner));
                 steps.push(format!("if (!nk_in_{}(env, argv[0], \"self\", &self_value)) goto done;", owner));
@@ -77,7 +77,7 @@ impl CxNode {
         }
         let mut place: i64 = 0;
         while ((place) as usize) < entry.arg_names.len() {
-            let name = (*nikaia_std::index::get(&entry.arg_names, (place) as usize)).to_owned();
+            let name = (*nikaia_std::index::get(&entry.arg_names, (place) as usize)).to_string();
             let ty = (*nikaia_std::index::get(&entry.arg_types, (place) as usize)).clone();
             place += 1;
             let at: i64 = position;
@@ -99,7 +99,7 @@ impl CxNode {
                         locals.push(format!("size_t p{}_len = 0;", at));
                         steps.push(format!("if (!nk_text(env, {}, \"{}\", &kept, &p{}, &p{}_len)) goto done;", value, name, at, at));
                     } else {
-                        let kind = cx_node_scalar(&CxByValue { rust: rust.to_owned(), c: c.to_owned(), scalar: false });
+                        let kind = cx_node_scalar(&CxByValue { rust: rust.to_string(), c: c.to_string(), scalar: false });
                         locals.push(format!("{} *p{} = NULL;", c, at));
                         locals.push(format!("uint32_t p{}_len = 0;", at));
                         steps.push(cx_node_run(&value, &name, at, &format!("if (!nk_{}(env, one, \"{}\", &p{}[i])) goto done;", kind, name, at)));
@@ -120,13 +120,13 @@ impl CxNode {
                     args.push(format!("({}_{})p{}", prefix, nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(which)).name, at));
                 },
                 CxIn::Handle(which) => {
-                    let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_owned();
+                    let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_string();
                     locals.push(format!("{}_{} *p{} = NULL;", prefix, ty, at));
                     steps.push(format!("if (!nk_held_{}(env, {}, \"{}\", &p{})) goto done;", ty, value, name, at));
                     args.push(format!("p{}", at));
                 },
                 CxIn::AbsentHandle(which) => {
-                    let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_owned();
+                    let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_string();
                     locals.push(format!("{}_{} *p{} = NULL;", prefix, ty, at));
                     steps.push(format!("if (!nk_absent(env, {}) && !nk_held_{}(env, {}, \"{}\", &p{})) goto done;", value, ty, value, name, at));
                     args.push(format!("p{}", at));
@@ -139,13 +139,13 @@ impl CxNode {
                     args.push(format!("p{}_len", at));
                 },
                 CxIn::Record(which) => {
-                    let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name.to_owned();
+                    let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name.to_string();
                     locals.push(format!("{}_{} p{};", prefix, ty, at));
                     steps.push(format!("if (!nk_in_{}(env, {}, \"{}\", &p{})) goto done;", ty, value, name, at));
                     args.push(format!("p{}", at));
                 },
                 CxIn::Records { record, .. } => {
-                    let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(record)).name.to_owned();
+                    let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(record)).name.to_string();
                     locals.push(format!("{}_{} *p{} = NULL;", prefix, ty, at));
                     locals.push(format!("uint32_t p{}_len = 0;", at));
                     steps.push(cx_node_run(&value, &name, at, &format!("if (!nk_in_{}(env, one, \"{}\", &p{}[i])) goto done;", ty, name, at)));
@@ -183,7 +183,7 @@ impl CxNode {
                     let mut early: &'static str = "return;";
                     if result.is_some() {
                         let shape = match result { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        c_result = shape.c.to_owned();
+                        c_result = shape.c.to_string();
                         back = format!("{} back = 0;\n    if (!nk_{}(call->env, result, \"the callback's result\", &back)) {{\n        call->failed = true;\n        return 0;\n    }}\n    return back;\n", shape.c, cx_node_scalar(&shape));
                         early = "return 0;";
                     }
@@ -229,11 +229,11 @@ impl CxNode {
                         again.push(String::from("&written"));
                         body.push(format!("status = {}({});", symbol, asked.join(", ")));
                         body.push(format!("if (status == -2) {{\n        room = nk_keep(env, &kept, written);\n        if (!room) goto done;\n        status = {}({});\n    }}", symbol, again.join(", ")));
-                        body.push(check.to_owned());
+                        body.push(check.to_string());
                         if text_out { body.push(String::from("napi_create_string_utf8(env, (const char *)room, written, &result);")); } else { body.push(String::from("napi_create_buffer_copy(env, written, room, NULL, &result);")); }
                     },
                     CxOut::Records(_) => {
-                        let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(cx_out_index(out))).name.to_owned();
+                        let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(cx_out_index(out))).name.to_string();
                         locals.push(format!("{}_{} small[16];", prefix, ty));
                         locals.push(format!("{}_{} *room = small;", prefix, ty));
                         locals.push(String::from("size_t written = 0;"));
@@ -247,7 +247,7 @@ impl CxNode {
                         again.push(String::from("&written"));
                         body.push(format!("status = {}({});", symbol, asked.join(", ")));
                         body.push(format!("if (status == -2) {{\n        room = nk_keep(env, &kept, sizeof *room * written);\n        if (!room) goto done;\n        status = {}({});\n    }}", symbol, again.join(", ")));
-                        body.push(check.to_owned());
+                        body.push(check.to_string());
                         body.push(format!("napi_create_array_with_length(env, written, &result);\n    for (size_t i = 0; i < written; i++) {{\n        napi_set_element(env, result, (uint32_t)i, nk_out_{}(env, &room[i]));\n    }}", ty));
                     },
                     _ => {
@@ -266,11 +266,11 @@ impl CxNode {
                             asked.push(String::from("&present"));
                         }
                         body.push(format!("status = {}({});", symbol, asked.join(", ")));
-                        body.push(check.to_owned());
+                        body.push(check.to_string());
                         if !constructor {
                             has_finish = true;
-                            finish_c = Some(c.to_owned());
-                            finish_back = back.to_owned();
+                            finish_c = Some(c.to_string());
+                            finish_back = back.to_string();
                             finish_flagged = out.flagged();
                         }
                         body.push(back);
@@ -279,7 +279,7 @@ impl CxNode {
             },
             _ => {
                 body.push(format!("status = {};", call_text));
-                body.push(check.to_owned());
+                body.push(check.to_string());
                 body.push(String::from("napi_get_undefined(env, &result);"));
                 has_finish = true;
                 finish_back = String::from("napi_get_undefined(env, &result);");
@@ -338,13 +338,13 @@ impl CxNode {
             self.functions.push(async_text);
             promised = format!("{}_async", function);
         }
-        let name = entry.name.to_owned();
+        let name = entry.name.to_string();
         if !promised.is_empty() {
             let property = format!("{}_async", name);
             if owner_name.is_none() { self.exported.push((property, promised)); } else if entry.receiver.is_some() { self.add_member(&owner_text, format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_default_method, NULL }}", property, promised)); } else { self.add_member(&owner_text, format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_static, NULL }}", property, promised)); }
         }
         if owner_name.is_none() { self.exported.push((name, function)); } else {
-            let owner = owner_text.to_owned();
+            let owner = owner_text.to_string();
             if by_value { self.add_method(&owner, name, function); } else if entry.getter { self.add_member(&owner, format!("{{ \"{}\", NULL, NULL, {}, NULL, NULL, napi_enumerable, NULL }}", name, function)); } else if entry.receiver.is_some() { self.add_member(&owner, format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_default_method, NULL }}", name, function)); } else if constructor { self.constructors.insert(owner, function); } else { self.add_member(&owner, format!("{{ \"{}\", NULL, {}, NULL, NULL, NULL, napi_static, NULL }}", name, function)); }
         }
     }
@@ -408,7 +408,7 @@ impl CxNode {
         }
         for place in exported.iter() {
             let place = nikaia_std::num::value(place);
-            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name.to_owned();
+            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name.to_string();
             let made_by = *nikaia_std::index::get(&self.constructors, &ty);
             let mut made = format!("napi_throw_type_error(env, NULL, \"{} has no constructor: the library makes it\");\n    return NULL;", ty);
             if made_by.is_some() {
@@ -423,12 +423,12 @@ impl CxNode {
         out.push_str(&format!("    {{\n        napi_property_descriptor functions[] = {{\n            {}\n        }};\n        napi_define_properties(env, exports, sizeof functions / sizeof *functions, functions);\n    }}\n", functions.join(",\n            ")));
         for place in exported.iter() {
             let place = nikaia_std::num::value(place);
-            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name.to_owned();
+            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name.to_string();
             let mut members: Vec<String> = vec![format!("{{ \"close\", NULL, nk_close_{}, NULL, NULL, NULL, napi_default_method, NULL }}", ty)];
             let own = *nikaia_std::index::get(&self.members, &ty);
             if own.is_some() {
                 let held = match own { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-                for one in held.iter() { members.push(one.to_owned()); }
+                for one in held.iter() { members.push(one.to_string()); }
             }
             out.push_str(&format!("    {{\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value class;\n        napi_define_class(env, \"{}\", NAPI_AUTO_LENGTH, nk_class_{}, NULL, sizeof members / sizeof *members, members, &class);\n        napi_create_reference(env, class, 1, &state->{});\n        napi_set_named_property(env, exports, \"{}\", class);\n    }}\n", members.join(",\n            "), ty, ty, ty, ty));
         }
@@ -452,31 +452,31 @@ impl CxNode {
 }
 
 pub(crate) fn cx_node_back(out: &CxOut, ctx: &CxCtx, constructor: bool, owner: &str) -> (String, String) {
-    let prefix = ctx.prefix.to_owned();
+    let prefix = ctx.prefix.to_string();
     match out {
-        CxOut::Value(shape) => (shape.c.to_owned(), format!("result = nk_from_{}(env, out);", cx_node_scalar(shape))),
-        CxOut::AbsentValue(shape) => (shape.c.to_owned(), cx_node_absent(&format!("result = nk_from_{}(env, out);", cx_node_scalar(shape)))),
+        CxOut::Value(shape) => (shape.c.to_string(), format!("result = nk_from_{}(env, out);", cx_node_scalar(shape))),
+        CxOut::AbsentValue(shape) => (shape.c.to_string(), cx_node_absent(&format!("result = nk_from_{}(env, out);", cx_node_scalar(shape)))),
         CxOut::AbsentRecord(which) => {
             let which = *which;
-            let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name.to_owned();
+            let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name.to_string();
             (format!("{}_{}", prefix, ty), cx_node_absent(&format!("result = nk_out_{}(env, &out);", ty)))
         },
         CxOut::Choice(which) => { let which = *which; (format!("{}_{}", prefix, nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(which)).name), "result = nk_from_i32(env, (int32_t)out);".to_string()) },
         CxOut::Record(which) => {
             let which = *which;
-            let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name.to_owned();
+            let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name.to_string();
             (format!("{}_{}", prefix, ty), format!("result = nk_out_{}(env, &out);", ty))
         },
         CxOut::Handle(which) => {
             let which = *which;
-            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_owned();
+            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_string();
             let mut back = format!("result = nk_made_{}(env, out);", ty);
             if constructor && owner == ty { back = format!("result = nk_adopt_{}(env, self, out);", ty); }
             (format!("{}_{} *", prefix, ty), back)
         },
         CxOut::AbsentHandle(which) => {
             let which = *which;
-            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_owned();
+            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_string();
             (format!("{}_{} *", prefix, ty), format!("if (out) {{\n        result = nk_made_{}(env, out);\n    }} else {{\n        napi_get_null(env, &result);\n    }}", ty))
         },
         _ => ("".to_string(), "".to_string()),
@@ -514,7 +514,7 @@ pub(crate) fn cx_node_field_code(field: &str, part: &CxPart, owner: &str, at: &s
 }
 
 pub(crate) fn cx_node_record_text(record: &CxRecord, ctx: &CxCtx) -> String {
-    let ty = record.name.to_owned();
+    let ty = record.name.to_string();
     let mut reads: String = String::from("");
     let mut writes: String = String::from("");
     if record.is_enum() {
@@ -528,7 +528,7 @@ pub(crate) fn cx_node_record_text(record: &CxRecord, ctx: &CxCtx) -> String {
             for (field, part) in variant.fields.iter() { cx_node_field_code(field, part, &format!("{}::{}.", ty, variant.name), &format!("{}.", variant.member), ctx, &mut variant_reads, &mut variant_writes); }
             chosen.push(format!("if (strcmp(kind, \"{}\") == 0) {{\n    out->tag = {};\n{}    }}", variant.name, tag, variant_reads));
             cases.push(format!("    case {}:\n    napi_create_string_utf8(env, \"{}\", NAPI_AUTO_LENGTH, &field);\n    napi_set_named_property(env, target, \"kind\", field);\n{}    break;\n", tag, variant.name, variant_writes));
-            names.push(variant.name.to_owned());
+            names.push(variant.name.to_string());
             tag += 1;
         }
         reads.push_str(&format!("    char kind[64];\n    size_t kind_len = 0;\n    napi_get_named_property(env, value, \"kind\", &field);\n    if (napi_get_value_string_utf8(env, field, kind, sizeof kind, &kind_len) != napi_ok)\n        return nk_wrong(env, name, \"a {} with a kind\");\n    {} else {{\n        return nk_wrong(env, name, \"a {}: {}\");\n    }}\n", ty, chosen.join(" else "), ty, names.join(", ")));

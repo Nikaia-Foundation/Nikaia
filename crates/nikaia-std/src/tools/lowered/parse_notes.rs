@@ -104,12 +104,12 @@ pub fn first_sentence(text: &str) -> Vec<String> {
     let mut quoted = false;
     for at in 0..c.len() as i64 {
         if *nikaia_std::index::get(&c, (at) as usize) == '`' { quoted = !quoted; } else if *nikaia_std::index::get(&c, (at) as usize) == '.' && !quoted && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == ' ' {
-            let rest = slice(&c, at + 1, c.len() as i64).trim().to_owned();
+            let rest = slice(&c, at + 1, c.len() as i64).trim().to_string();
             if rest.is_empty() { return vec![slice(&c, 0, at + 1)]; }
             return vec![slice(&c, 0, at + 1), rest];
         }
     }
-    vec![text.to_owned()]
+    vec![text.to_string()]
 }
 
 pub fn the_spelling_ref_replaced_note(found: &str) -> Option<String> {

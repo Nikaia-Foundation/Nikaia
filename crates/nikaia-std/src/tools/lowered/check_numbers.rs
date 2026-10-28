@@ -28,7 +28,7 @@ pub fn a_number_that_does_not_fit(value: &Integer, beyond: bool, bare: bool, ty:
     if !beyond && integer_fits(value, ty) { return None; }
     let article = an_or_a(ty);
     let written = integer_text(value);
-    let mut comes_to = written.to_owned();
+    let mut comes_to = written.to_string();
     if beyond && value.negative { comes_to = format!("less than -{}", U64_HIGHEST); } else if beyond { comes_to = format!("more than {}", U64_HIGHEST); }
     let mut message = format!("This comes to {}, which doesn't fit in {} `{}`.", comes_to, article, ty);
     if bare { message = format!("`{}` doesn't fit in {} `{}`.", written, article, ty); }

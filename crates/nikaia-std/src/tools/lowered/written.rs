@@ -4,7 +4,7 @@
 pub fn written_expression(names: &winnow_grammar::InternerContext, expr: &Expr) -> String {
     match expr {
         Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if negative && value > 0u64 { format!("-{}", value) } else { format!("{}", value) } },
-        Expr::LitFloat(text, _) => text.to_owned(),
+        Expr::LitFloat(text, _) => text.to_string(),
         Expr::LitBool(value, _) => { let value = *value; if value { String::from("true") } else { String::from("false") } },
         Expr::LitChar(text, _) => format!("'{}'", text),
         Expr::LitStr { text, .. } => format!("\"{}\"", text),
@@ -19,7 +19,7 @@ pub fn written_expression(names: &winnow_grammar::InternerContext, expr: &Expr) 
             format!("f\"{}\"", body)
         },
         Expr::LitNull(_) => String::from("null"),
-        Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_owned() },
+        Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_string() },
         Expr::Path(segments, _) => path_written(names, segments),
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; format!("{}.{}", operand(names, base), names.resolve(name)) },
         Expr::SafeField { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; format!("{}?.{}", operand(names, base), names.resolve(name)) },
@@ -55,7 +55,7 @@ pub(crate) fn path_written(names: &winnow_grammar::InternerContext, segments: &[
     let mut parts: Vec<String> = vec![];
     for segment in segments.iter() {
         let segment = *segment;
-        parts.push(names.resolve(segment).to_owned());
+        parts.push(names.resolve(segment).to_string());
     }
     parts.join("::")
 }

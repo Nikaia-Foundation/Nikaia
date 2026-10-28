@@ -115,7 +115,7 @@ impl EmitState {
         let carries = self.emit_item_carries(i64::from(method.span.start));
         let st = out.mark();
         out.push("    ");
-        self.emit_function(world, walk, out, host, method, 1, lifetimes, &carries, Some(target.to_owned()), declared_by, bridged)?;
+        self.emit_function(world, walk, out, host, method, 1, lifetimes, &carries, Some(target.to_string()), declared_by, bridged)?;
         out.record(&method.span, st);
         Ok(())
     }
@@ -314,7 +314,7 @@ impl EmitState {
         let generics = impl_parameters(world.words, target, &declared);
         let mut head_parts: Vec<String> = vec![];
         if borrows { head_parts.push(String::from("'a")); }
-        for g in generics.iter() { head_parts.push(g.to_owned()); }
+        for g in generics.iter() { head_parts.push(g.to_string()); }
         let mut target_parts: Vec<String> = vec![];
         if borrows { target_parts.push(self.lifetime_args(&target_name, "'a")); }
         for g in target.generics.iter() { target_parts.push(self.emit_item_ty(world, walk, host, g, EmitLifetimes::Elided)); }
@@ -355,7 +355,7 @@ impl EmitState {
             emit_seeds_enter(&mut walk.place, &target_name, &emit_seeds_applied(0, hidden));
         }
         let mut declared_by: Option<String> = None;
-        if has_trait { declared_by = Some(trait_text.to_owned()); }
+        if has_trait { declared_by = Some(trait_text.to_string()); }
         let mut wider: Vec<Option<TraitMethod>> = vec![];
         let mut any_wider = false;
         for method in methods.iter() {
@@ -423,7 +423,7 @@ impl EmitState {
         }
         for option in method.config.iter() { params.push(format!("{}: {}", escaped_name(&emit_text(world, option.name)), self.emit_item_ty(world, walk, host, &option.ty, EmitLifetimes::Elided))); }
         let returned = self.emit_trait_returned(world, walk, host, (method.ret_type).as_ref(), foreign);
-        let mut outcome = returned.to_owned();
+        let mut outcome = returned.to_string();
         if method.can_throw { outcome = format!("Result<{}, Box<dyn std::error::Error>>", returned); }
         let mut ret: String = String::from("");
         if !is_sync {
@@ -484,14 +484,14 @@ impl EmitState {
         let mut written = EmitOut::empty();
         self.emit_trait_method(world, walk, &mut written, host, declared, declared.is_sync, false)?;
         let trimmed = written.buf.trim_end();
-        let signature = nikaia_std::index::or(trimmed.strip_suffix(';'), || std::convert::AsRef::<str>::as_ref(trimmed)).to_owned();
+        let signature = nikaia_std::index::or(trimmed.strip_suffix(';'), || std::convert::AsRef::<str>::as_ref(trimmed)).to_string();
         let mut passed: Vec<String> = vec![];
         if declared.receiver.is_some() { passed.push(String::from("self")); }
         for a in declared.args.iter() { passed.push(escaped_name(&emit_text(world, a.name))); }
         for o in declared.config.iter() { passed.push(escaped_name(&emit_text(world, o.name))); }
         let awaited = if call_pauses(&self.own_contracts, &format!("{}::{}", target, name)) { ".await" } else { "" };
         let called = format!("Self::{}({}){}", escaped_name(&name), passed.join(", "), awaited);
-        let mut body = called.to_owned();
+        let mut body = called.to_string();
         if declared.can_throw && !own_throws { body = format!("Ok({})", called); }
         if !declared.is_sync { body = format!("async move {{ {} }}", body); }
         out.push(&format!("{} {{ {} }}\n", signature, body));

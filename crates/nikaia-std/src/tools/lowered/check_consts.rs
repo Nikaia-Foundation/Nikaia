@@ -72,8 +72,8 @@ pub fn rust_array_type(items: &[BuildValue]) -> Option<String> {
             BuildValue::Int(n) => if integer_fits(n, "i32") { String::from("i32") } else { String::from("i64") },
             BuildValue::Float(_) => String::from("f64"),
             BuildValue::Text(_) => String::from("&str"),
-            BuildValue::Struct { name, .. } => name.to_owned(),
-            BuildValue::Variant { ty, .. } => ty.to_owned(),
+            BuildValue::Struct { name, .. } => name.to_string(),
+            BuildValue::Variant { ty, .. } => ty.to_string(),
             BuildValue::List(inner) => {
                 let held = match rust_array_type(inner) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 format!("[{}; {}]", held, inner.len() as i64)
@@ -228,7 +228,7 @@ pub(crate) fn no_table(said: bool) -> CheckTable { CheckTable { found: false, be
 
 pub(crate) fn text_of_value(value: &BuildValue) -> Option<String> {
     match value {
-        BuildValue::Text(text) => Some(text.to_owned()),
+        BuildValue::Text(text) => Some(text.to_string()),
         _ => None,
     }
 }
@@ -264,7 +264,7 @@ pub(crate) fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, 
 pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
     match value {
         BuildValue::Struct { name, fields } => {
-            let own = state.unwritable_field(world, &Ty::Named { name: name.to_owned(), args: vec![], view: false });
+            let own = state.unwritable_field(world, &Ty::Named { name: name.to_string(), args: vec![], view: false });
             if !own.is_empty() { return own; }
             for (_, held) in fields.iter() {
                 let inner = unwritable_in(state, world, held, payloads);
@@ -385,7 +385,7 @@ impl CheckState {
         let mut value_below: String = String::from("");
         let mut borrow: &'static str = "";
         let constant = rust_constant_type(world.library, &held);
-        if constant.is_some() { value_below = nikaia_std::index::or(constant.as_deref(), || "").to_owned(); } else {
+        if constant.is_some() { value_below = nikaia_std::index::or(constant.as_deref(), || "").to_string(); } else {
             let declared = match self.declared_below(world, &held) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
             value_below = format!("&'static {}", declared);
             borrow = "&";
@@ -407,8 +407,8 @@ impl CheckState {
                 self.a_table_with_one_key_twice(bound, &key, first, at, span);
                 return no_table(true);
             }
-            seen.insert(key.to_owned(), at);
-            keys.push(key.to_owned());
+            seen.insert(key.to_string(), at);
+            keys.push(key.to_string());
             let text = match written_below(self, world, nikaia_std::index::get(&parts, 1), (some_held).as_ref(), &payloads, &float_text) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
             values.push(format!("{}{}", borrow, text));
             at = at + 1;
@@ -424,7 +424,7 @@ impl CheckState {
         let mut written_values: Vec<String> = vec![];
         for place in table.order.iter() {
             let place = nikaia_std::num::value(place);
-            written_values.push((*nikaia_std::index::get(&values, nikaia_std::index::at(place))).to_owned());
+            written_values.push((*nikaia_std::index::get(&values, nikaia_std::index::at(place))).to_string());
         }
         CheckTable { found: true, below: format!("Fixed<{}>", value_below), written: format!("Fixed::new({}, &[{}], &[{}], &[{}])", table.seed, disps.join(", "), written_keys.join(", "), written_values.join(", ")), said: false }
     }

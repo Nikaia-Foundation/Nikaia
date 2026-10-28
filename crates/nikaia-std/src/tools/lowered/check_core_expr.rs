@@ -3,9 +3,9 @@
 
 pub(crate) const CHECK_CORE_EXPR_ESCAPES: &str = "\\n \\r \\t \\0 \\\\ \\' \\\" \\xNN \\u{…}";
 
-pub(crate) fn check_core_expr_named(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: false } }
+pub(crate) fn check_core_expr_named(name: &str) -> Ty { Ty::Named { name: name.to_string(), args: vec![], view: false } }
 
-pub(crate) fn check_core_expr_view(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: true } }
+pub(crate) fn check_core_expr_view(name: &str) -> Ty { Ty::Named { name: name.to_string(), args: vec![], view: true } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -118,7 +118,7 @@ pub(crate) fn check_core_expr_open_receiver(state: &mut CheckState, expr: &Expr,
                 Expr::LitInt { value, negative, .. } => {
                     let negative = *negative; let value = *value;
                     let key = id_of(receiver) as i64;
-                    let own: String = nikaia_std::index::or(state.facts.unsigned_literals.get(&key), || "").to_owned();
+                    let own: String = nikaia_std::index::or(state.facts.unsigned_literals.get(&key), || "").to_string();
                     if own != "" && check_core_expr_its_own(&ty, &own) {
                         state.flow.literal_receivers.push((key, integer(value, negative)));
                         return Ty::Unknown;
@@ -172,7 +172,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::LitInterpolated { parts, .. } => check_core_expr_interpolated(state, world, host, expr, parts, span),
         Expr::LitChar(text, _) => {
             if a_high_byte(text).is_some() {
-                state.flow.high_bytes.insert(id_of(expr) as i64, (text.to_owned(), span.clone()));
+                state.flow.high_bytes.insert(id_of(expr) as i64, (text.to_string(), span.clone()));
                 return check_core_expr_named("scalar");
             }
             check_core_expr_escapes(state, host, text, span);
@@ -264,8 +264,8 @@ pub(crate) fn check_core_expr_empty_list(state: &CheckState, name: &str) -> i64 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, symbol: winnow_grammar::Symbol, span: &Span) -> Ty {
-    let name = world.words.resolve(symbol).to_owned();
-    state.read_at.push((name.to_owned(), span.start as i64));
+    let name = world.words.resolve(symbol).to_string();
+    state.read_at.push((name.to_string(), span.start as i64));
     let at = check_core_expr_empty_list(&state, &name);
     if at >= 0 { state.flow.empty_lists.remove(&at); }
     let found: Option<Ty> = state.lookup(&name);
@@ -278,7 +278,7 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
         if world.here.viewed_arms.contains(&node_key(expr)) && ty == a_string_type() {
             let already_lent = nikaia_std::index::or(state.binding(&name).as_ref().map(|__nikaia_it| __nikaia_it.lent), || false);
             if !already_lent { state.facts.lent_reads.insert(node_key(expr)); }
-            return Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true };
+            return Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true };
         }
         let nullable = matches!(ty, Ty::Nullable(_));
         if !nullable || state.reading_only { return ty; }
@@ -295,8 +295,8 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
     let as_value: Option<Ty> = state.function_as_a_value(world, &name);
     if as_value.is_some() {
         let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(AS_VALUE), || CheckStoredCode::empty());
-        entry.free.insert(name.to_owned());
-        state.stored_code.insert(AS_VALUE.to_owned(), entry);
+        entry.free.insert(name.to_string());
+        state.stored_code.insert(AS_VALUE.to_string(), entry);
         return nikaia_std::index::or(as_value, || Ty::Unknown);
     }
     if state.structs.contains_key(&name) || state.enums.contains_key(&name) {
@@ -330,12 +330,12 @@ pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_
     let mut names: Vec<String> = vec![];
     for segment in segments.iter() {
         let segment = *segment;
-        names.push(world.words.resolve(segment).to_owned());
+        names.push(world.words.resolve(segment).to_string());
     }
     state.a_constructor_written_as_new(world, &names.join("::"), span);
     if names.len() == 2 {
-        let ty = (*nikaia_std::index::get(&names, 0)).to_owned();
-        let member = (*nikaia_std::index::get(&names, 1)).to_owned();
+        let ty = (*nikaia_std::index::get(&names, 0)).to_string();
+        let member = (*nikaia_std::index::get(&names, 1)).to_string();
         if state.is_variant(&ty, &member) { return check_core_expr_named(&ty); }
         let as_value: Option<Ty> = state.function_as_a_value(world, &format!("{}::{}", ty, member));
         if as_value.is_some() { return nikaia_std::index::or(as_value, || Ty::Unknown); }
@@ -384,7 +384,7 @@ pub(crate) fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world:
         UnaryOp::Neg => {
             let literal = matches!(inner, Expr::LitInt { .. });
             match value_of_a_copy(&found.unseen()) {
-                Ty::Named { ref name, ref args, view } => { if !view && args.is_empty() && (name == "i32" || name == "i64") && !literal { state.facts.negations.insert(id_of(whole) as i64, name.to_owned()); } },
+                Ty::Named { ref name, ref args, view } => { if !view && args.is_empty() && (name == "i32" || name == "i64") && !literal { state.facts.negations.insert(id_of(whole) as i64, name.to_string()); } },
                 _ => { },
             }
             if !literal { state.a_negation_that_overflows(world, inner, span); }
@@ -430,7 +430,7 @@ pub(crate) fn check_core_expr_dsl<H: CheckHost>(state: &mut CheckState, world: &
         check_core_expr_unanswered(state);
         return Ty::Unknown;
     }
-    let name = world.words.resolve(target).to_owned();
+    let name = world.words.resolve(target).to_string();
     let plain = bare && context.is_none();
     let deferred = is_deferred(&name, content);
     if plain && !deferred && check_core_expr_one_entry(&state, &name) { return check_core_a_block_over_a_grammar(state, world, host, expr, target, content, span); }

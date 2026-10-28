@@ -11,13 +11,13 @@ pub fn types_declared_in(items: &[Spanned<Item>], words: &winnow_grammar::Intern
         match &item.node {
             Item::Struct { name, .. } => {
                 let name = *name;
-                declared.insert(words.resolve(name).to_owned());
+                declared.insert(words.resolve(name).to_string());
             },
             Item::Enum { name, .. } => {
                 let name = *name;
-                declared.insert(words.resolve(name).to_owned());
+                declared.insert(words.resolve(name).to_string());
             },
-            Item::Extern { opaque, .. } => { for handle in opaque.iter() { declared.insert(words.resolve(handle.node.name).to_owned()); } },
+            Item::Extern { opaque, .. } => { for handle in opaque.iter() { declared.insert(words.resolve(handle.node.name).to_string()); } },
             _ => { },
         }
     }
@@ -29,7 +29,7 @@ pub fn impl_parameters(words: &winnow_grammar::InternerContext, target: &Type, d
     for slot in target.generics.iter() {
         if !slot.generics.is_empty() || slot.is_tuple || slot.is_view || slot.is_nullable { continue; }
         let name = words.resolve(slot.name);
-        if !is_offered(name) && !declared.contains(name) { out.push(name.to_owned()); }
+        if !is_offered(name) && !declared.contains(name) { out.push(name.to_string()); }
     }
     out
 }
@@ -59,13 +59,13 @@ pub fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collec
         let mut declared = declared_trait_method(words, aliases, "", &declaration.node, false);
         declared.contract.sync_claim = Sync::Asserted;
         declared.contract.fails_with = vec![];
-        out.push(DeclaredFn { key: words.resolve(declaration.node.name).to_owned(), contract: declared.contract });
+        out.push(DeclaredFn { key: words.resolve(declaration.node.name).to_string(), contract: declared.contract });
     }
     out
 }
 
 pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, definition: &GrammarDef) -> Vec<DeclaredFn> {
-    let owner = words.resolve(definition.name).to_owned();
+    let owner = words.resolve(definition.name).to_string();
     let mut out: Vec<DeclaredFn> = vec![];
     for rule in definition.rules.iter() {
         if !rule.is_entry { continue; }
@@ -172,11 +172,11 @@ pub fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, 
         Stmt::Return(returned) => match returned { Some(__nikaia_value) => __nikaia_value, None => return None },
         _ => return None,
     };
-    let key = words.resolve(symbol).to_owned();
+    let key = words.resolve(symbol).to_string();
     let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if !contract.sync_claim.is_sync() || !contract.ensures.is_empty() { return None; }
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for arg in args.iter() { names.insert(words.resolve(arg.name).to_owned()); }
+    for arg in args.iter() { names.insert(words.resolve(arg.name).to_string()); }
     let mut nodes: Vec<SolverTerm> = vec![];
     let term = match lin_term(value, words, &|candidate| { names.contains(candidate) }, &|name| { nothing_pinned(name) }, &mut nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let text = term_ledger_text(term, &|at| { (*nikaia_std::index::get(&nodes, nikaia_std::index::at(at))).clone() });

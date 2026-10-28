@@ -16,7 +16,7 @@ pub(crate) fn cx_python_name(name: &str) -> String {
         let word = *word;
         if word == name { return format!("{}_", name); }
     }
-    name.to_owned()
+    name.to_string()
 }
 
 pub(crate) fn cx_python_scalar(shape: &CxByValue) -> String {
@@ -42,10 +42,10 @@ impl CxPython {
         let before = *nikaia_std::index::get(&self.classes, owner);
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for one in held.iter() { list.push(one.to_owned()); }
+            for one in held.iter() { list.push(one.to_string()); }
         }
         list.push(text);
-        self.classes.insert(owner.to_owned(), list);
+        self.classes.insert(owner.to_string(), list);
     }
     pub fn empty() -> CxPython { CxPython { functions: vec![], classes: collections::BTreeMap::new(), signatures: vec![], any_async: false, any_stream: false } }
     pub fn entry(&mut self, words: &winnow_grammar::InternerContext, ctx: &CxCtx, entry: &CxEntry, symbol: &str, text_out: bool, pauses: bool) {
@@ -78,14 +78,14 @@ impl CxPython {
             let name = cx_python_name(nikaia_std::index::get(&entry.arg_names, nikaia_std::index::at(position)));
             let ty = (*nikaia_std::index::get(&entry.arg_types, nikaia_std::index::at(position))).clone();
             position += 1;
-            def_params.push(name.to_owned());
+            def_params.push(name.to_string());
             let taken = cx_taken(words, &ctx.plains, &ctx.handles, &ctx.records, &ty);
             if taken.is_none() { continue; }
             let kind_taken = match taken { Some(__nikaia_value) => __nikaia_value, None => continue };
             match kind_taken {
                 CxIn::Value(ref shape) => {
                     argtypes.push(cx_python_scalar(shape));
-                    if shape.scalar { args.push(format!("ord({})", name)); } else { args.push(name.to_owned()); }
+                    if shape.scalar { args.push(format!("ord({})", name)); } else { args.push(name.to_string()); }
                 },
                 CxIn::Run { ref rust, as_text, .. } => {
                     let mut element: &'static str = "ctypes.c_bool";
@@ -108,11 +108,11 @@ impl CxPython {
                     args.push(format!("int({}({}))", nikaia_std::index::get(&ctx.plains, (at) as usize).name, name));
                 },
                 CxIn::Record(at) => {
-                    argtypes.push(nikaia_std::index::get(&ctx.records, (at) as usize).name.to_owned());
-                    args.push(name.to_owned());
+                    argtypes.push(nikaia_std::index::get(&ctx.records, (at) as usize).name.to_string());
+                    args.push(name.to_string());
                 },
                 CxIn::Records { record, .. } => {
-                    let record_name = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(record)).name.to_owned();
+                    let record_name = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(record)).name.to_string();
                     argtypes.push(format!("ctypes.POINTER({})", record_name));
                     argtypes.push(String::from("ctypes.c_size_t"));
                     before.push(format!("{}_at, {}_len = _run({}, {})", name, name, record_name, name));
@@ -170,7 +170,7 @@ impl CxPython {
                         default = "0";
                     }
                     let kind = format!("ctypes.CFUNCTYPE({}, {})", restype, c_args.join(", "));
-                    argtypes.push(kind.to_owned());
+                    argtypes.push(kind.to_string());
                     argtypes.push(String::from("ctypes.c_void_p"));
                     before.push(format!("{}_raised = []", name));
                     before.push(format!("{}_c = {}(lambda {}: _calling({}_raised, {}, {}, {}))", name, kind, params.join(", "), name, default, name, handed.join(", ")));
@@ -205,7 +205,7 @@ impl CxPython {
                     },
                     CxOut::Records(_) => {
                         buffered = true;
-                        let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(cx_out_index(out))).name.to_owned();
+                        let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(cx_out_index(out))).name.to_string();
                         argtypes.push(format!("ctypes.POINTER({})", record));
                         argtypes.push(String::from("ctypes.c_size_t"));
                         argtypes.push(String::from("ctypes.POINTER(ctypes.c_size_t)"));
@@ -256,7 +256,7 @@ impl CxPython {
             async_lines.push(format!("return _start(_lib.{}_async, [{}], finish, done)", symbol, handed_args.join(", ")));
         }
         let mut lines: Vec<String> = before.to_owned();
-        if raising.is_empty() { lines.push(body_call.to_owned()); } else {
+        if raising.is_empty() { lines.push(body_call.to_string()); } else {
             lines.push(String::from("try:"));
             lines.push(format!("    {}", body_call));
             lines.push(String::from("finally:"));
@@ -292,8 +292,8 @@ impl CxPython {
             let mut place: i64 = 0;
             while ((place) as usize) < def_params.len() {
                 if place != *nikaia_std::index::get(&streams, 0) {
-                    others.push((*nikaia_std::index::get(&def_params, (place) as usize)).to_owned());
-                    forwarded.push((*nikaia_std::index::get(&def_params, (place) as usize)).to_owned());
+                    others.push((*nikaia_std::index::get(&def_params, (place) as usize)).to_string());
+                    forwarded.push((*nikaia_std::index::get(&def_params, (place) as usize)).to_string());
                 } else { forwarded.push(String::from("each")); }
                 place += 1;
             }
@@ -309,7 +309,7 @@ impl CxPython {
         }
         let python = cx_python_name(&entry.name);
         if owner_name.is_none() { self.functions.push(format!("def {}({}):\n{}", python, def_params.join(", "), cx_indent(&lines, "    "))); } else {
-            let owner = owner_text.to_owned();
+            let owner = owner_text.to_string();
             if entry.getter { self.add_class(&owner, format!("    @property\n    def {}(self):\n{}", python, cx_indent(&lines, "        "))); } else if entry.receiver.is_some() {
                 let mut params: Vec<String> = vec![String::from("self")];
                 params.extend(def_params);
@@ -338,30 +338,30 @@ impl CxPython {
             let name = *name;
             number -= 1;
             out.push_str(&format!("class {}(BoundaryError):\n    code = {}\n\n\n", name, number));
-            errors.push((name.to_owned(), number));
-            taken.insert(name.to_owned());
+            errors.push((name.to_string(), number));
+            taken.insert(name.to_string());
         }
         for raising in ctx.codes.iter() {
-            let error = raising.error.to_owned();
+            let error = raising.error.to_string();
             let spelled = error.replace("::", "");
             for code in raising.codes.iter() {
                 let word: String = nikaia_std::index::or(match code.variant.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || "".into());
-                let mut what = error.to_owned();
+                let mut what = error.to_string();
                 let mut name: String = format!("{}{}", spelled, word);
                 if code.variant.is_some() {
                     what = format!("{}::{}", error, word);
                     if !taken.contains(&word) {
-                        taken.insert(word.to_owned());
-                        name = word.to_owned();
+                        taken.insert(word.to_string());
+                        name = word.to_string();
                     }
                 } else {
                     let mut capital: String = String::from("");
                     for c in spelled.chars() { if capital == "" { capital = format!("{}", c).to_uppercase(); } else { capital = format!("{}{}", capital, c); } }
                     name = capital;
-                    taken.insert(name.to_owned());
+                    taken.insert(name.to_string());
                 }
                 let code_number = code.number;
                 let errno = match code.errno.as_ref() {
@@ -397,7 +397,7 @@ impl CxPython {
         for place in cx_records_in_order(&ctx.records) {
             let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(place));
             if record.is_enum() {
-                let ty = record.name.to_owned();
+                let ty = record.name.to_string();
                 let mut members: Vec<String> = vec![];
                 for variant in record.variants.iter() {
                     if variant.fields.is_empty() { continue; }
@@ -425,7 +425,7 @@ impl CxPython {
         let mut at: i64 = 0;
         while ((at) as usize) < ctx.handles.len() {
             if *nikaia_std::index::get(&held, (at) as usize) {
-                let ty = nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_owned();
+                let ty = nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_string();
                 out.push_str(&format!("_lib.{}_{}_free.argtypes = [ctypes.c_void_p]\n_lib.{}_{}_free.restype = ctypes.c_int\n\n\nclass {}:\n    \"\"\"A handle (ADR-284 D5): `close()` frees it, as leaving a `with` does.\"\"\"\n\n    _ptr = None\n\n    @classmethod\n    def _from(cls, ptr):\n        made = cls.__new__(cls)\n        made._ptr = ptr\n        return made\n\n    def _live(self):\n        if not self._ptr:\n            raise ArgumentError(\"the handle is closed\")\n        return self._ptr\n\n    def close(self):\n        if self._ptr:\n            ptr, self._ptr = self._ptr, None\n            _check(_lib.{}_{}_free(ptr))\n\n    def __enter__(self):\n        return self\n\n    def __exit__(self, *_):\n        self.close()\n\n    def __del__(self):\n        try:\n            self.close()\n        except Exception:\n            pass\n\n", prefix, ty, prefix, ty, ty, prefix, ty));
                 let own = *nikaia_std::index::get(&self.classes, &ty);
                 if own.is_some() {
@@ -456,7 +456,7 @@ pub(crate) fn cx_python_field_type(part: &CxPart, ctx: &CxCtx) -> String {
     match part {
         CxPart::Value(shape) => cx_python_scalar(shape),
         CxPart::Choice(_) => String::from("ctypes.c_int"),
-        CxPart::Record(at) => { let at = *at; nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_owned() },
+        CxPart::Record(at) => { let at = *at; nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string() },
         CxPart::Array(element, count) => { let element = nikaia_std::boxed::open(element); let count = *count; format!("{} * {}", cx_python_field_type(element, ctx), count) },
     }
 }
@@ -471,9 +471,9 @@ pub(crate) fn cx_python_back(out: &CxOut, ctx: &CxCtx) -> (String, String) {
     match out {
         CxOut::Value(shape) => (cx_python_scalar(shape), cx_python_value(shape)),
         CxOut::AbsentValue(shape) => (cx_python_scalar(shape), format!("{} if present.value else None", cx_python_value(shape))),
-        CxOut::AbsentRecord(at) => { let at = *at; (nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_owned(), "out if present.value else None".to_string()) },
+        CxOut::AbsentRecord(at) => { let at = *at; (nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string(), "out if present.value else None".to_string()) },
         CxOut::Choice(at) => { let at = *at; ("ctypes.c_int".to_string(), format!("{}(out.value)", nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(at)).name)) },
-        CxOut::Record(at) => { let at = *at; (nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_owned(), "out".to_string()) },
+        CxOut::Record(at) => { let at = *at; (nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string(), "out".to_string()) },
         CxOut::Handle(at) => { let at = *at; ("ctypes.c_void_p".to_string(), format!("{}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
         CxOut::AbsentHandle(at) => { let at = *at; ("ctypes.c_void_p".to_string(), format!("None if not out.value else {}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
         _ => ("".to_string(), "".to_string()),

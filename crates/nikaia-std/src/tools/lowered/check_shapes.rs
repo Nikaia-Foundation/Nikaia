@@ -82,11 +82,11 @@ pub fn rust_constant_type(library: &Ledger, ty: &Ty) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_named_constant_type(library: &Ledger, name: &str, args: &[Ty], view: bool) -> Option<String> {
     if args.is_empty() && !view {
-        if name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" { return Some(name.to_owned()); }
+        if name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" { return Some(name.to_string()); }
         let entry = *nikaia_std::index::get(&library.types, name);
         if entry.is_some() {
             let held = match entry { Some(__nikaia_value) => __nikaia_value, None => return None };
-            if !held.constant.is_empty() { return Some(name.to_owned()); }
+            if !held.constant.is_empty() { return Some(name.to_string()); }
         }
         return None;
     }
@@ -163,7 +163,7 @@ pub fn constructed(constructor: &str) -> Option<String> {
     let mut kept: Vec<String> = vec![];
     let mut at: i64 = 0;
     while at < parts.len() as i64 - 1 {
-        kept.push((*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).to_owned());
+        kept.push((*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).to_string());
         at = at + 1;
     }
     Some(kept.join("::"))

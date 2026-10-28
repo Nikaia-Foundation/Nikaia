@@ -40,10 +40,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_list_whose_elements_disagree(&mut self, first_kind: &str, first: &str, other_kind: &str, other: &Ty, span: &Span) {
-        let mut one = first_kind.to_owned();
+        let mut one = first_kind.to_string();
         if first != "?" && !first.is_empty() { one = format!("`{}`", first); }
         let other_text = other.text();
-        let mut two = other_kind.to_owned();
+        let mut two = other_kind.to_string();
         if other_text != "?" && !other_text.is_empty() { two = format!("`{}`", other_text); }
         self.findings.push(check_refusal("NK1154", span, format!("This list mixes {} and {}, but a list holds one type.", one, two), vec![String::from("The first element with a known type sets the type for the rest.")], Some(String::from("Convert the element that doesn't fit, or use two lists."))));
     }

@@ -36,7 +36,7 @@ pub(crate) fn emit_place_already_lent(world: &EmitWorld<'_, '_, '_, '_>, node: &
 
 impl EmitState {
     pub(crate) fn emit_place_reach(&self, base: &Expr, place: &str, flattens: bool) -> String {
-        let view = match self.facts.viewed_reaches.get(&node_key(base)) { Some(__nikaia_value) => __nikaia_value, None => return place.to_owned() };
+        let view = match self.facts.viewed_reaches.get(&node_key(base)) { Some(__nikaia_value) => __nikaia_value, None => return place.to_string() };
         match view {
             FactViewed::Text => emit_place_text_reach(place, flattens),
             FactViewed::Plain => emit_place_plain_reach(place, flattens),
@@ -52,7 +52,7 @@ impl EmitState {
         format!("None::<{}>", plain_rust_spelling(&contract.ty))
     }
     pub(crate) fn emit_place_around(&self, node: &Expr, field: &str, value: Option<&Expr>) -> (String, String) {
-        let held = match self.facts.nullable_fields.get(&(node_key(node), field.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
+        let held = match self.facts.nullable_fields.get(&(node_key(node), field.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
         let present = match value { Some(__nikaia_value) => __nikaia_value, None => return emit_around_held(&held) };
         let compound = matches!(present, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Cast { .. } | Expr::Range { .. } | Expr::Coalesce { .. });
         let conversion = matches!(held, FactWrap::Conversion);
@@ -73,7 +73,7 @@ impl EmitState {
         let mut lent: &'static str = "";
         if self.facts.lent_reaches.contains(&node_key(receiver)) && !emit_place_already_lent(world, receiver) { lent = ".as_ref()"; }
         out.push("match ");
-        let name = nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_owned();
+        let name = nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_string();
         if walk.held.contains_key(&node_key(receiver)) { out.push(&name); } else if lent == "" && emit_place_an_index(receiver) {
             if self.a_list_read(receiver) { out.push("&"); }
             self.emit_expr(world, walk, out, host, receiver, depth, flow, scope)?;
@@ -363,11 +363,11 @@ impl EmitState {
             let written = escaped_name(&emit_text(world, field.name));
             let plain = emit_text(world, field.name);
             out.push(&written);
-            let wrapped = self.facts.nullable_fields.contains_key(&(node_key(node), plain.to_owned()));
+            let wrapped = self.facts.nullable_fields.contains_key(&(node_key(node), plain.to_string()));
             let (around_before, around_after) = self.emit_place_around(node, &plain, (field.value).as_ref());
             let boxed = self.is_boxed_field(&owner, &plain);
-            let mut before = around_before.to_owned();
-            let mut after = around_after.to_owned();
+            let mut before = around_before.to_string();
+            let mut after = around_after.to_string();
             if boxed {
                 before = format!("Box::new({}", around_before);
                 after = format!("{})", around_after);
@@ -405,9 +405,9 @@ impl EmitState {
                 if self.facts.lent_fields.contains(&node_key(value)) { out.push("&"); }
                 self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                 out.push(&after);
-            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_owned())) {
-                let mut put = written.to_owned();
-                if self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_owned())) { put = format!("nikaia_std::bytes::Bytes::from({})", written); }
+            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) {
+                let mut put = written.to_string();
+                if self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) { put = format!("nikaia_std::bytes::Bytes::from({})", written); }
                 if wrapped { put = format!("Some({})", put); }
                 if boxed { out.push(&format!(": Box::new({})", put)); } else { out.push(&format!(": {}", put)); }
             }
@@ -433,7 +433,7 @@ impl EmitState {
     pub fn emit_core_with<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, fields: &[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let known = self.facts.with_types.get(&node_key(node));
         if known.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The type of this `with` is unknown. This is a compiler bug: the check should have reported it first."), at: Some(at as i64) }, &"emit_core_with")); }
-        let owner = nikaia_std::index::or(known, || "").to_owned();
+        let owner = nikaia_std::index::or(known, || "").to_string();
         let a_name = matches!(base, Expr::Variable(_, _));
         let whole = a_name && emit_core_with_names_every_field(world, &owner, fields.len() as i64);
         if whole {

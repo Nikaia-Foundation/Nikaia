@@ -28,8 +28,8 @@ pub(crate) fn emit_is_element(keep: &KeepAt, at: i64) -> bool {
 
 impl EmitState {
     pub(crate) fn keep_plan_key(&self, walk: &EmitWalk, function: &str) -> Option<String> {
-        if self.keep_plans.contains_key(function) { return Some(function.to_owned()); }
-        if self.keep_plans.contains_key(&walk.keep_function) { return Some(walk.keep_function.to_owned()); }
+        if self.keep_plans.contains_key(function) { return Some(function.to_string()); }
+        if self.keep_plans.contains_key(&walk.keep_function) { return Some(walk.keep_function.to_string()); }
         None
     }
     pub fn keep_prelude(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
@@ -63,7 +63,7 @@ impl EmitState {
     pub fn keep_handed(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let keep = match plan.calls.get(&(statement, callee.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let keep = match plan.calls.get(&(statement, callee.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(emit_keep_expr(&keep, true))
     }
     pub fn kept_lifetimes(&self, key: &str, lifetimes: EmitLifetimes) -> Option<EmitLifetimes> {

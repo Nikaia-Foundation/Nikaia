@@ -176,7 +176,7 @@ pub struct EmitRefused {
 }
 
 impl EmitRefused {
-    pub(crate) fn message(&self) -> String { self.message.to_owned() }
+    pub(crate) fn message(&self) -> String { self.message.to_string() }
 }
 impl std::fmt::Display for EmitRefused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

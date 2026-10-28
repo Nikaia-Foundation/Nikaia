@@ -21,7 +21,7 @@ pub(crate) fn emit_stmt_first(buf: &str, what: &str, from: i64) -> i64 { nikaia_
 
 pub(crate) fn emit_stmt_tuple_pattern(names: &[String], shape: &[i64]) -> String {
     if shape.is_empty() {
-        if names.len() == 1 { return (*nikaia_std::index::get(&names, 0)).to_owned(); }
+        if names.len() == 1 { return (*nikaia_std::index::get(&names, 0)).to_string(); }
         return format!("({})", names.join(", "));
     }
     if *nikaia_std::index::get(&shape, 0) == -1 { return format!("({})", names.join(", ")); }
@@ -36,7 +36,7 @@ pub(crate) fn emit_stmt_tuple_part(names: &[String], shape: &[i64], at: &mut i64
     *at += 1;
     if width <= 0 {
         let mut name: String = String::from("_");
-        if *next < names.len() as i64 { name = (*nikaia_std::index::get(&names, nikaia_std::index::at(*next))).to_owned(); }
+        if *next < names.len() as i64 { name = (*nikaia_std::index::get(&names, nikaia_std::index::at(*next))).to_string(); }
         *next += 1;
         return name;
     }
@@ -346,7 +346,7 @@ impl EmitState {
         }
         let bound = emit_text(world, *nikaia_std::index::get(&names, 0));
         let count = self.count_at(host.crossings_are_possible(), &scope.function, &bound);
-        let inner = EmitScope { bound: bound.to_owned(), ..scope.clone() };
+        let inner = EmitScope { bound: bound.to_string(), ..scope.clone() };
         let kept = self.emit_stmt_kept(&walk, &scope.function, at, &bound);
         walk.holding = kept.holding;
         let annotation = self.emit_stmt_annotation(world, walk, host, ty, at, count, kept.put.is_some() || kept.packed);
@@ -630,8 +630,8 @@ impl EmitState {
     pub(crate) fn emit_stmt_for<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], iter: &Expr, body: &Block, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = span.start as i64;
         if walk.specialising.is_some() {
-            let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_owned();
-            let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_owned();
+            let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string();
+            let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string();
             let fields = self.unrolls_here(world, &parameter, &on, iter);
             if fields.is_some() {
                 let mut first: String = String::from("");
@@ -642,7 +642,7 @@ impl EmitState {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     };
-                    walk.at_field = Some(EmitPair { first: first.to_owned(), second: field.name.to_owned() });
+                    walk.at_field = Some(EmitPair { first: first.to_string(), second: field.name.to_string() });
                     self.emit_core_block(world, walk, out, host, body, depth, flow, scope, EmitTail::Statement)?;
                     walk.at_field = outer;
                 }
@@ -700,7 +700,7 @@ impl EmitState {
             }
         }
         let mut opening: Option<String> = None;
-        if copied == "" { opening = unwrap; } else if unwrap.is_none() { opening = Some(copied.to_owned()); } else { opening = Some(format!("{} {}", nikaia_std::index::or(unwrap.as_deref(), || ""), copied)); }
+        if copied == "" { opening = unwrap; } else if unwrap.is_none() { opening = Some(copied.to_string()); } else { opening = Some(format!("{} {}", nikaia_std::index::or(unwrap.as_deref(), || ""), copied)); }
         self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))?;
         Ok(())
     }

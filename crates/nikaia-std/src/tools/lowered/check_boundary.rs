@@ -14,7 +14,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_declared_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, args: &[Ty], view: bool) -> Option<String> {
-        if !view && args.is_empty() && (self.fields_of(world, name).is_some() || self.enums.contains_key(name)) { return Some(name.to_owned()); }
+        if !view && args.is_empty() && (self.fields_of(world, name).is_some() || self.enums.contains_key(name)) { return Some(name.to_string()); }
         if !view && name == "Array" && args.len() == 2 {
             return match nikaia_std::index::get(&args, 1) {
                 Ty::Count(n) => { let n = *n; self.a_run_of(world, nikaia_std::index::get(&args, 0), "[", &format!("; {}]", n)) },
@@ -35,7 +35,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn unwritable_field(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Vec<String> {
         let name = match ty {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return vec![],
         };
         let fields = match self.fields_of(world, &name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
@@ -46,7 +46,7 @@ impl CheckState {
                 continue;
             }
             if self.names_a_struct(world, &field.ty) && self.unwritable_field(world, &field.ty).is_empty() { continue; }
-            return vec![field.name.to_owned(), field.ty.text()];
+            return vec![field.name.to_string(), field.ty.text()];
         }
         vec![]
     }
@@ -149,7 +149,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn rooted_at(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &Expr) -> Option<String> {
         match place {
-            Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
+            Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_string()) },
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.rooted_at(world, base) },
             Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); self.rooted_at(world, base) },
             Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.rooted_at(world, base) },

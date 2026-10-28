@@ -20,7 +20,7 @@ pub fn types_checked(names: &winnow_grammar::InternerContext, items: &[Spanned<I
     for k in 0..items.len() as i64 {
         let mut here = known.to_owned();
         for parameter in generic_names(names, &nikaia_std::index::get(&items, (k) as usize).node) { here.insert(parameter); }
-        for parameter in (*nikaia_std::index::get(&impl_parameters, (k) as usize)).iter() { here.insert(parameter.to_owned()); }
+        for parameter in (*nikaia_std::index::get(&impl_parameters, (k) as usize)).iter() { here.insert(parameter.to_string()); }
         bounds_of(names, &nikaia_std::index::get(&items, (k) as usize).node, &traits, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
         item_types(names, &nikaia_std::index::get(&items, (k) as usize).node, &here, &plain, views, "", &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
         inherent_at_home(names, &nikaia_std::index::get(&items, (k) as usize).node, library, declared, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
@@ -30,7 +30,7 @@ pub fn types_checked(names: &winnow_grammar::InternerContext, items: &[Spanned<I
 
 pub(crate) fn inherent_at_home(names: &winnow_grammar::InternerContext, item: &Item, library: &Ledger, declared: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) {
     let target = match item {
-        Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; if trait_name.is_none() { names.resolve(target.name).to_owned() } else { return; } },
+        Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; if trait_name.is_none() { names.resolve(target.name).to_string() } else { return; } },
         _ => return,
     };
     if declared.contains(&target) || target == "Self" { return; }
@@ -43,11 +43,11 @@ pub(crate) fn known_traits(names: &winnow_grammar::InternerContext, items: &[Spa
     let mut known: collections::BTreeSet<String> = collections::BTreeSet::new();
     for shape in SHAPE_BOUNDS.iter() {
         let shape = *shape;
-        known.insert(shape.to_owned());
+        known.insert(shape.to_string());
     }
     for standard in STANDARD_BOUNDS.iter() {
         let standard = *standard;
-        known.insert(standard.to_owned());
+        known.insert(standard.to_string());
     }
     for (key, _) in own.traits.iter() { with_its_last_segment(key, &mut known); }
     for (key, _) in library.traits.iter() { with_its_last_segment(key, &mut known); }
@@ -55,7 +55,7 @@ pub(crate) fn known_traits(names: &winnow_grammar::InternerContext, items: &[Spa
         match &item.node {
             Item::Trait { name, .. } => {
                 let name = *name;
-                known.insert(names.resolve(name).to_owned());
+                known.insert(names.resolve(name).to_string());
             },
             _ => { },
         }
@@ -64,7 +64,7 @@ pub(crate) fn known_traits(names: &winnow_grammar::InternerContext, items: &[Spa
 }
 
 pub(crate) fn with_its_last_segment(key: &str, known: &mut collections::BTreeSet<String>) {
-    known.insert(key.to_owned());
+    known.insert(key.to_string());
     let c: Vec<scalar> = nikaia_std::list::chars(key.chars());
     let mut last: i64 = -1;
     for at in 0..c.len() as i64 { if ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) == ':' && *nikaia_std::index::get(&c, (at + 1) as usize) == ':' { last = at; } }
@@ -75,19 +75,19 @@ pub(crate) fn known_names(own: &Ledger, library: &Ledger, declared: &collections
     let mut known: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in BUILT_IN.iter() {
         let name = *name;
-        known.insert(name.to_owned());
+        known.insert(name.to_string());
     }
-    for (key, _) in library.types.iter() { known.insert(key.to_owned()); }
+    for (key, _) in library.types.iter() { known.insert(key.to_string()); }
     for (key, _) in own.types.iter() { with_its_last_segment(key, &mut known); }
-    for name in declared.iter() { known.insert(name.to_owned()); }
+    for name in declared.iter() { known.insert(name.to_string()); }
     known
 }
 
 pub(crate) fn generic_names(names: &winnow_grammar::InternerContext, item: &Item) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     match item {
-        Item::Fn { generics, .. } => { for parameter in generics.iter() { out.push(names.resolve(parameter.name).to_owned()); } },
-        Item::Struct { generics, .. } => { for parameter in generics.iter() { out.push(names.resolve(parameter.name).to_owned()); } },
+        Item::Fn { generics, .. } => { for parameter in generics.iter() { out.push(names.resolve(parameter.name).to_string()); } },
+        Item::Struct { generics, .. } => { for parameter in generics.iter() { out.push(names.resolve(parameter.name).to_string()); } },
         _ => { },
     }
     out
@@ -105,7 +105,7 @@ pub(crate) fn bounds_in(names: &winnow_grammar::InternerContext, generics: &[Gen
     for parameter in generics.iter() {
         for bound in parameter.bounds.iter() {
             let bound = *bound;
-            let name = names.resolve(bound.to_owned()).to_owned();
+            let name = names.resolve(bound.to_owned()).to_string();
             if !name.contains("::") && !traits.contains(&name) { out.push(refusal("NK1135", span.clone(), format!("There's no trait called `{}`.", name), vec![String::from("A bound names a trait the caller's type has to implement, and no trait by this name is declared.")], format!("Declare `{}` with `trait`, or remove the bound. (Without a bound, the value can only be moved and passed on.)", name))); }
         }
     }
@@ -146,17 +146,17 @@ pub(crate) fn kind_declared(item: &Item) -> &'static str {
 pub(crate) fn name_declared(names: &winnow_grammar::InternerContext, item: &Item) -> String {
     match item {
         Item::Fn { name, .. } => { let name = *name; a_symbols_text(names, name) },
-        Item::Struct { name, .. } => { let name = *name; names.resolve(name).to_owned() },
-        Item::Enum { name, .. } => { let name = *name; names.resolve(name).to_owned() },
-        Item::Trait { name, .. } => { let name = *name; names.resolve(name).to_owned() },
-        Item::Grammar(def) => names.resolve(def.name).to_owned(),
+        Item::Struct { name, .. } => { let name = *name; names.resolve(name).to_string() },
+        Item::Enum { name, .. } => { let name = *name; names.resolve(name).to_string() },
+        Item::Trait { name, .. } => { let name = *name; names.resolve(name).to_string() },
+        Item::Grammar(def) => names.resolve(def.name).to_string(),
         _ => String::from(""),
     }
 }
 
 pub(crate) fn a_symbols_text(names: &winnow_grammar::InternerContext, name: Option<winnow_grammar::Symbol>) -> String {
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-    names.resolve(symbol).to_owned()
+    names.resolve(symbol).to_string()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -164,7 +164,7 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
     match item {
         Item::Fn { name, args, config, ret_type, body, is_extern, .. } => {
             let is_extern = *is_extern; let name = *name;
-            let mut key = owner.to_owned();
+            let mut key = owner.to_string();
             if name.is_some() { key.push_str(names.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return })); } else { key.push_str("new"); }
             let mut at = 0;
             for arg in args.iter() {
@@ -194,7 +194,7 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
         },
         Item::Struct { name, fields, is_extern, .. } => {
             let is_extern = *is_extern; let name = *name;
-            let of = names.resolve(name).to_owned();
+            let of = names.resolve(name).to_string();
             for field in fields.iter() {
                 written_at(names, &field.ty, known, false, span, out);
                 widths_written(names, &field.ty, is_extern, span, out);
@@ -204,7 +204,7 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
         },
         Item::Enum { name, variants, is_extern, .. } => {
             let is_extern = *is_extern; let name = *name;
-            let of = names.resolve(name).to_owned();
+            let of = names.resolve(name).to_string();
             for variant in variants.iter() {
                 match &variant.fields {
                     VariantFields::Unit => { },
@@ -239,7 +239,7 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
         Item::Trait { methods, .. } => {
             for method in methods.iter() {
                 let mut here = known.to_owned();
-                for parameter in method.node.generics.iter() { here.insert(names.resolve(parameter.name).to_owned()); }
+                for parameter in method.node.generics.iter() { here.insert(names.resolve(parameter.name).to_string()); }
                 for arg in method.node.args.iter() {
                     written_at(names, &arg.ty, &here, true, &method.span, out);
                     widths_written(names, &arg.ty, false, &method.span, out);
@@ -275,7 +275,7 @@ pub(crate) fn types_word_by_ref(names: &winnow_grammar::InternerContext, ty: &Ty
 
 pub(crate) fn types_word_by_ref_here(names: &winnow_grammar::InternerContext, ty: &Type, plain: &collections::BTreeSet<String>, position: &str, span: &Span, out: &mut Vec<Finding>) {
     if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || !ty.generics.is_empty() { return; }
-    let name = names.resolve(ty.name).to_owned();
+    let name = names.resolve(ty.name).to_string();
     let words = vec!["int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"];
     let mut a_word = plain.contains(&name);
     for word in words.iter() {
@@ -283,7 +283,7 @@ pub(crate) fn types_word_by_ref_here(names: &winnow_grammar::InternerContext, ty
         if word == name { a_word = true; }
     }
     if !a_word { return; }
-    let mut written = name.to_owned();
+    let mut written = name.to_string();
     if ty.is_nullable { written = format!("{}?", name); }
     out.push(refusal("NK1257", span.clone(), format!("A `{}` is copied at a read, so a {} can't be a `ref {}`.", name, position, written), vec![String::from("A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects.")], format!("Write `{}` without `ref`; a parameter the function changes is `mut name: {}`.", written, written)));
 }
@@ -314,7 +314,7 @@ pub(crate) fn types_plain_enums(names: &winnow_grammar::InternerContext, items: 
                         _ => { holds = true; },
                     }
                 }
-                if !holds { plain.insert(names.resolve(name).to_owned()); }
+                if !holds { plain.insert(names.resolve(name).to_string()); }
             },
             _ => { },
         }
@@ -323,7 +323,7 @@ pub(crate) fn types_plain_enums(names: &winnow_grammar::InternerContext, items: 
 }
 
 pub(crate) fn widths_written(names: &winnow_grammar::InternerContext, ty: &Type, at_c: bool, span: &Span, out: &mut Vec<Finding>) {
-    let name = names.resolve(ty.name).to_owned();
+    let name = names.resolve(ty.name).to_string();
     if at_c && name == "int" {
         out.push(refusal("NK1262", span.clone(), String::from("`int` can't be written where C sees the value."), vec![String::from("An `int` holds the values of an `i64`, but how it is stored is the compiler's choice (ADR-285 D37); C reads the bytes, so the width has to be written.")], String::from("Write `i64` here, or the fixed width the C side declares.")));
         return;
@@ -428,14 +428,14 @@ pub(crate) fn written_at_the_boundary(names: &winnow_grammar::InternerContext, t
         out.push(refusal("NK1158", span.clone(), String::from("`ref mut` can only be used when talking to C."), vec![String::from("`ref mut` is only for `extern \"C\"` declarations. Everywhere else, Nikaia has its own way to say it.")], String::from("Put `mut` in front of the name instead: `fn fill(mut out: Vec[i64])`.")));
         return;
     }
-    let name = names.resolve(ty.name).to_owned();
+    let name = names.resolve(ty.name).to_string();
     if name == "char" {
         out.push(refusal("NK1135", span.clone(), String::from("There's no type called `char`."), vec![String::from("One Unicode character is a `scalar`, and one byte of text is a `u8`: which of the two a character is depends on how the text is read (Part I 2.6).")], String::from("Write `scalar` for a character, or `u8` for a byte.")));
         return;
     }
     simd_written(names, &name, ty, span, out);
     if !a_parameter && !ty.is_view && !ty.is_slice && ty.count.is_none() && ty.generics.len() == 1 && name == "Array" {
-        let element = names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_owned();
+        let element = names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_string();
         out.push(refusal("NK1182", span.clone(), format!("`Array[{}]` needs a length here.", element), vec![format!("`Array[{}]` without a length only works for a parameter, where each call supplies the length. A field or a result has no call to take it from.", element)], format!("Use `Vec[{}]` for a list that can grow, `ref Array[{}]` to look at elements something else keeps, or `Array[{}, N]` to write the length down.", element, element, element)));
         return;
     }

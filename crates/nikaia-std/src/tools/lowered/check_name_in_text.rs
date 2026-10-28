@@ -23,7 +23,7 @@ impl CheckState {
             Expr::LitStr { .. } => true,
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_owned();
+                let name = world.words.resolve(symbol).to_string();
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 check_name_is_text(&found.ty) || self.flow.text_paths.contains(&found.id)
             },
@@ -38,7 +38,7 @@ impl CheckState {
             },
             Expr::MethodCall { receiver, method, args, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                let word = world.words.resolve(method).to_owned();
+                let word = world.words.resolve(method).to_string();
                 if word != "join" && word != "with_extension" { return false; }
                 if !self.made_from_text(world, receiver) { return false; }
                 for arg in args.iter() { if !self.made_from_text(world, arg) { return false; } }
@@ -53,7 +53,7 @@ impl CheckState {
         match hole {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_owned();
+                let name = world.words.resolve(symbol).to_string();
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 let a_path = match found.ty {
                     Ty::Named { ref name, .. } => name == "fs::Path",
@@ -99,8 +99,8 @@ impl CheckState {
     pub(crate) fn a_name_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, span: &Span) {
         let written = written_expression(world.words, hole);
         let shown = match hole {
-            Expr::Variable(_, _) => written.to_owned(),
-            Expr::Field { .. } => written.to_owned(),
+            Expr::Variable(_, _) => written.to_string(),
+            Expr::Field { .. } => written.to_string(),
             _ => format!("({})", written),
         };
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1201"), message: format!("You can't put the file name `{}` in an `f\"…\"` that is text.", written), notes: vec![String::from("A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.")], help: Some(format!("Write `{{{}.to_text()}}` to use it as text where it is text, or `{{{}.display()}}` to show it.", shown, shown)), labels: vec![] });

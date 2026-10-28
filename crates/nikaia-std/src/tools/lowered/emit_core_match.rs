@@ -181,7 +181,7 @@ impl EmitState {
                         None => world.library.types.contains_key(&named),
                         _ => true,
                     };
-                    out.push(&if whole { String::from("_") } else { named.to_owned() });
+                    out.push(&if whole { String::from("_") } else { named.to_string() });
                 }
             },
             MatchPattern::Tuple { path, parts } => {
@@ -340,7 +340,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let mut taken_apart = lead.to_owned();
+        let mut taken_apart = lead.to_string();
         for at in 0..nest_count {
             let mut written = EmitOut::empty();
             self.emit_core_nest_written(world, walk, &mut written, host, pattern, at, 0, false, depth, flow, scope)?;
@@ -349,10 +349,10 @@ impl EmitState {
         let opened = self.boxed_bindings(world, pattern);
         let read = self.emit_holes_names_read(world, host, body);
         let mut copied: Vec<String> = vec![];
-        for name in host.copied_bindings(node_key(body)) { if nikaia_std::list::contains(&read, &name) && self.facts.changed_copies.contains(&(node_key(body), name.to_owned())) { copied.push(format!("let mut {} = *{}; ", name, name)); } else if nikaia_std::list::contains(&read, &name) { copied.push(format!("let {} = *{}; ", name, name)); } }
+        for name in host.copied_bindings(node_key(body)) { if nikaia_std::list::contains(&read, &name) && self.facts.changed_copies.contains(&(node_key(body), name.to_string())) { copied.push(format!("let mut {} = *{}; ", name, name)); } else if nikaia_std::list::contains(&read, &name) { copied.push(format!("let {} = *{}; ", name, name)); } }
         for one in self.facts.changed_bindings.iter() { if one.0 == node_key(body) { copied.push(format!("let mut {} = {}; ", one.1, one.1)); } }
         let mut cloned: Vec<String> = vec![];
-        for one in self.facts.cloned_bindings.iter() { if one.0 == node_key(body) { cloned.push(one.1.to_owned()); } }
+        for one in self.facts.cloned_bindings.iter() { if one.0 == node_key(body) { cloned.push(one.1.to_string()); } }
         let statements = flow.arms_are_statements;
         let inside = EmitFlow { arms_are_statements: false, ..flow };
         let plain = opened.is_empty() && copied.is_empty() && cloned.is_empty() && nest_count == 0 && lead.is_empty();
@@ -378,12 +378,12 @@ impl EmitState {
         }
         match body {
             Expr::Block(block, _) => {
-                let mut opening = taken_apart.to_owned();
+                let mut opening = taken_apart.to_string();
                 for name in opened.iter() { opening.push_str(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
                 for copy in copied.iter() { opening.push_str(copy); }
                 for name in cloned.iter() { opening.push_str(&format!("let {} = {}.clone(); ", name, name)); }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
-                let trimmed: Option<String> = Some(opening.trim_end().to_owned());
+                let trimmed: Option<String> = Some(opening.trim_end().to_string());
                 self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, tail, trimmed)?;
                 return Ok(());
             },
@@ -431,7 +431,7 @@ impl EmitState {
         for member in members.iter() {
             let own = self.name_of_error(world, member) != 0;
             let inside = EmitFlow { caught_named: own, ..flow };
-            let named_member: Option<String> = Some(member.to_owned());
+            let named_member: Option<String> = Some(member.to_string());
             let inside_scope = EmitScope { caught_member: named_member, ..scope.clone() };
             let variant = sum_variant(member);
             if own && member == "supervisor::Handed" {
@@ -441,7 +441,7 @@ impl EmitState {
                     k += 1;
                     let foreign = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
                     if at >= 0 || foreign.is_none() || arm.guard.is_some() { continue; }
-                    let ty = nikaia_std::index::or(foreign.as_deref(), || "").to_owned();
+                    let ty = nikaia_std::index::or(foreign.as_deref(), || "").to_string();
                     if ty.contains("::") { continue; }
                     let mut tested = EmitOut::empty();
                     self.emit_core_pattern_written(world, walk, &mut tested, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
@@ -500,7 +500,7 @@ impl EmitState {
                 }
                 if at < 0 {
                     at = k;
-                    members.push(named.to_owned());
+                    members.push(named.to_string());
                 }
             }
             if at < 0 { catch_all += 1; }
@@ -517,16 +517,16 @@ impl EmitState {
             let mut inside = flow;
             let mut inside_scope = scope.clone();
             if m < count {
-                let member = (*nikaia_std::index::get(&members, (m) as usize)).to_owned();
+                let member = (*nikaia_std::index::get(&members, (m) as usize)).to_string();
                 let own = self.name_of_error(world, &member) != 0;
                 let held = self.sum_member_held(world, &member, "");
-                let mut bare = held.to_owned();
+                let mut bare = held.to_string();
                 if held.starts_with("nikaia_std::error::Thrown<") && held.ends_with('>') {
-                    let opened: String = nikaia_std::index::or(held.strip_prefix("nikaia_std::error::Thrown<"), || "").to_owned();
-                    bare = nikaia_std::index::or(opened.strip_suffix('>'), || "").to_owned();
+                    let opened: String = nikaia_std::index::or(held.strip_prefix("nikaia_std::error::Thrown<"), || "").to_string();
+                    bare = nikaia_std::index::or(opened.strip_suffix('>'), || "").to_string();
                 }
                 inside = EmitFlow { caught_named: own, ..flow };
-                let named_member: Option<String> = Some(member.to_owned());
+                let named_member: Option<String> = Some(member.to_string());
                 inside_scope = EmitScope { caught_member: named_member, ..scope.clone() };
                 out.push(&format!("{}error if nikaia_std::error::holds::<{}>(&*error) => {{ let error = nikaia_std::error::opened::<{}>(error); ", pad, bare, bare));
                 if own { out.push("let (error, __nikaia_site) = nikaia_std::error::Thrown::from(error).split(); "); }
@@ -609,12 +609,12 @@ impl EmitState {
             if over_a_list && emit_match_is_otherwise(&arm.pattern) { out.push("#[allow(unreachable_patterns)] "); }
             let key = node_key(&arm.body);
             if arm.guard.is_none() && !self.looks_inside_a_box(world, &arm.pattern) && self.facts.taking_arms.contains_key(&key) {
-                let stand_in = nikaia_std::index::or(self.facts.taking_arms.get(&key), || "").to_owned();
+                let stand_in = nikaia_std::index::or(self.facts.taking_arms.get(&key), || "").to_string();
                 self.emit_core_arm_pattern_written(world, walk, out, host, arm, true, -1, false, depth + 1, flow, scope)?;
                 out.push(" => ");
                 let mut place = EmitOut::empty();
                 self.emit_expr(world, walk, &mut place, host, value, depth, flow, scope)?;
-                let mut place_text = place.buf.to_owned();
+                let mut place_text = place.buf.to_string();
                 if !emit_match_is_variable(value) { place_text = format!("&mut {}", place.buf); }
                 let mut bound = EmitOut::empty();
                 self.emit_core_arm_pattern_written(world, walk, &mut bound, host, arm, false, -1, false, depth + 1, flow, scope)?;

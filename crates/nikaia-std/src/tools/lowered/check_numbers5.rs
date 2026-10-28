@@ -18,7 +18,7 @@ pub(crate) fn checked_constant(folded: &Folded) -> Option<CheckConstant> {
 
 pub(crate) fn pinned_or_none(pinned: &str) -> Option<String> {
     if pinned.is_empty() { return None; }
-    Some(pinned.to_owned())
+    Some(pinned.to_string())
 }
 
 pub(crate) fn a_list_named(name: &str) -> bool {
@@ -35,7 +35,7 @@ pub(crate) fn named_beside(want: Option<&Ty>) -> Option<String> {
 
 pub(crate) fn an_unsigned(named: Option<&str>) -> Option<String> {
     let found = match named { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if found == "u32" || found == "u64" { return Some(found.to_owned()); }
+    if found == "u32" || found == "u64" { return Some(found.to_string()); }
     None
 }
 
@@ -80,7 +80,7 @@ impl CheckState {
     pub(crate) fn an_open_comptime_named(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Option<CheckOpenComptime> {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let at = match (*nikaia_std::index::get(&self.open_comptimes, &local.id)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(CheckOpenComptime { name: local.name.to_owned(), at: at.clone() })
+        Some(CheckOpenComptime { name: local.name.to_string(), at: at.clone() })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -149,7 +149,7 @@ impl CheckState {
         for literal in literals.iter() { if nikaia_std::index::or(self.facts.unsigned_literals.get(&literal.0), || "") != ty { done = false; } }
         if done { return; }
         self.literal_shifts_as(world, value, ty, span);
-        for literal in literals.iter() { self.facts.unsigned_literals.insert(literal.0, ty.to_owned()); }
+        for literal in literals.iter() { self.facts.unsigned_literals.insert(literal.0, ty.to_string()); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -181,8 +181,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn type_it_answers_to(&self, named: Option<&str>, folded: &CheckConstant) -> Option<String> {
-        if named.is_some() { return Some(match named { Some(__nikaia_value) => __nikaia_value, None => return None }.to_owned()); }
-        if folded.pinned.is_some() { return Some(match folded.pinned.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None }.to_owned()); }
+        if named.is_some() { return Some(match named { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string()); }
+        if folded.pinned.is_some() { return Some(match folded.pinned.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string()); }
         if folded.beyond || !integer_fits(&folded.value, "i64") { return Some(String::from("i64")); }
         None
     }
@@ -191,8 +191,8 @@ impl CheckState {
     pub(crate) fn labelled_with_its_comptime(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &str, span: &Span) {
         let found = match self.an_open_comptime_in(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut finding = match self.findings.pop() { Some(__nikaia_value) => __nikaia_value, None => return };
-        finding.labels.push(CheckLabel { span: span.clone(), word: found.name.to_owned(), text: format!("taken as a `{}` here", ty), main: true });
-        finding.labels.push(CheckLabel { span: found.at.clone(), word: found.name.to_owned(), text: format!("`{}` is computed here", found.name), main: false });
+        finding.labels.push(CheckLabel { span: span.clone(), word: found.name.to_string(), text: format!("taken as a `{}` here", ty), main: true });
+        finding.labels.push(CheckLabel { span: found.at.clone(), word: found.name.to_string(), text: format!("`{}` is computed here", found.name), main: false });
         self.findings.push(finding);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

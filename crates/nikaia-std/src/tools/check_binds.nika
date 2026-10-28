@@ -80,7 +80,13 @@ impl CheckState {
             let bound = world.words.resolve(names[index]).clone()
             self.nameable(bound, span, "a `let`")
             self.a_tuple_part_is_lent(lent, bound, parts[index], at, frame)
-            self.bind_with(bound, parts[index].clone(), null)
+            self.bind_with(bound.clone(), parts[index].clone(), null)
+            // **A text among the parts that is a view** is `&String` or
+            // `&&str` below, so a comparison reads it as `str` (#688).
+            if check_owned_text(parts[index]) && (lent || parts[index].is_a_view()) {
+                let local = self.binding(bound) ?? continue
+                self.flow.lent_text_params.insert(local.id)
+            }
         }
         return Ty::Tuple([])
     }
@@ -203,7 +209,26 @@ impl CheckState {
     }
 
     fn a_tuple_part_is_lent(ref mut self, lent: bool, bound: ref String, part: ref Ty, at: i64, frame: i64) sync {
-        if !lent || bound == "_" {
+        if bound == "_" {
+            return
+        }
+        // **A part that is itself a view of a number** - a map's pair is
+        // `(ref K, ref V)` - is read out of it, lent or not.
+        let viewed = match part {
+            Ty::Named { name, args, view } => view && a_copy_by_value(Ty::Named { name: name.clone(), args: args.clone(), view: false }),
+            else => false,
+        }
+        if viewed {
+            self.facts.copied_tuple_parts.insert((at, bound.clone()))
+            return
+        }
+        // Any other view among the parts is a lent binding, as a part of a
+        // lent tuple is.
+        let a_view = match part {
+            Ty::Named { view, .. } => view,
+            else => false,
+        }
+        if !lent && !a_view {
             return
         }
         if a_copy_by_value(part) {

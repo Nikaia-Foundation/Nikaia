@@ -27,7 +27,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, thrown: &Ty, span: &Span) {
         let name: String = match thrown {
-            Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else { name.to_owned() } },
+            Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else { name.to_string() } },
             _ => String::from(""),
         };
         if name == "" || name.contains("::") || name == "Self" { return; }
@@ -55,7 +55,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_length_that_may_not_fit(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, buffer: &Expr, span: &Span) {
         let named = match buffer {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
             _ => String::from("the buffer"),
         };
         self.findings.push(check_refusal("NK1159", span, format!("`{}` takes this as the length of `{}`, but it might be longer than the buffer.", written, named), vec![String::from("C trusts the count completely, so a count longer than the buffer would read or write past its end.")], Some(format!("Pass `{}.len()`, or a constant no bigger than the buffer. An `Array[T, N]` knows its length; a `Vec[T]` doesn't until the program runs.", named))));

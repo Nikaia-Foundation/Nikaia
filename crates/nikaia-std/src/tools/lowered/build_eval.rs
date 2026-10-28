@@ -67,7 +67,7 @@ pub(crate) struct BtState {
     pub(crate) resolving: Vec<String>,
 }
 
-pub(crate) fn bt_not_folded(what: String) -> BtRefusal { BtRefusal::NotHere { what, why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() } }
+pub(crate) fn bt_not_folded(what: String) -> BtRefusal { BtRefusal::NotHere { what, why: BT_NOT_FOLDED.to_string(), way_out: BT_FOLD_WAY_OUT.to_string() } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -381,12 +381,12 @@ pub(crate) fn bt_constant_item<H: BtHost>(name: &str, host: &H, state: &mut BtSt
     for held in state.resolving.iter() {
         if held == name {
             let mut ring = state.resolving.to_owned();
-            ring.push(name.to_owned());
+            ring.push(name.to_string());
             return Err(nikaia_std::error::throwing(BtRefusal::Circular { ring }, &"bt_constant_item"));
         }
     }
     let value = match host.constant(state.unit, name) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_constant_item")) };
-    state.resolving.push(name.to_owned());
+    state.resolving.push(name.to_string());
     let out = bt_expr(&value, host, state)?;
     state.resolving.pop();
     Ok(out)
@@ -397,7 +397,7 @@ pub(crate) fn bt_constant_item<H: BtHost>(name: &str, host: &H, state: &mut BtSt
 pub(crate) fn bt_asset<H: BtHost>(args: &[Expr], host: &H) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
     if args.len() != 1 { return Err(nikaia_std::error::throwing(BtRefusal::PathIsComputed, &"bt_asset")); }
     let written = match nikaia_std::index::get(&args, 0) {
-        Expr::LitStr { text, .. } => text.to_owned(),
+        Expr::LitStr { text, .. } => text.to_string(),
         _ => { return Err(nikaia_std::error::throwing(BtRefusal::PathIsComputed, &"bt_asset")) },
     };
     let path = decoded(&written, &|n| { host.char_of(n) });

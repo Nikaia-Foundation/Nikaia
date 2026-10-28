@@ -26,7 +26,7 @@ pub(crate) fn check_attributes_places_text() -> String {
 
 pub(crate) fn check_attributes_place_or_field(place: &str) -> String {
     if place == "" { return String::from("field"); }
-    place.to_owned()
+    place.to_string()
 }
 
 pub(crate) fn check_attributes_same_word(left: &str, right: &str) -> bool {
@@ -72,7 +72,7 @@ pub(crate) fn check_attributes_mark_read(text: &str) -> CheckAttributesMark {
         }
         if c == ',' || c == ';' {
             let trimmed = word.trim();
-            if trimmed != "" { places.insert(trimmed.to_owned()); }
+            if trimmed != "" { places.insert(trimmed.to_string()); }
             word = String::from("");
             if c == ';' { after = true; }
             continue;
@@ -81,7 +81,7 @@ pub(crate) fn check_attributes_mark_read(text: &str) -> CheckAttributesMark {
     }
     if !after {
         let trimmed = word.trim();
-        if trimmed != "" { places.insert(trimmed.to_owned()); }
+        if trimmed != "" { places.insert(trimmed.to_string()); }
     }
     CheckAttributesMark { places, repeatable: rest.trim() == "repeatable" }
 }
@@ -130,8 +130,8 @@ pub(crate) fn check_attributes_marks_in(unit: &ParsedView<'_, '_, '_, '_, '_, '_
 // this was written - see `contracts::sync`.
 pub(crate) fn check_attributes_marks(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, CheckAttributesMark> {
     let mut marks: collections::BTreeMap<String, CheckAttributesMark> = collections::BTreeMap::new();
-    for (key, contract) in world.library.types.iter() { if contract.mark != "" { marks.insert(key.to_owned(), check_attributes_mark_read(&contract.mark)); } }
-    for (key, contract) in world.own.types.iter() { if contract.mark != "" { marks.insert(key.to_owned(), check_attributes_mark_read(&contract.mark)); } }
+    for (key, contract) in world.library.types.iter() { if contract.mark != "" { marks.insert(key.to_string(), check_attributes_mark_read(&contract.mark)); } }
+    for (key, contract) in world.own.types.iter() { if contract.mark != "" { marks.insert(key.to_string(), check_attributes_mark_read(&contract.mark)); } }
     check_attributes_marks_in(&world.here, &mut marks);
     for unit in world.beside.iter() { check_attributes_marks_in(unit, &mut marks); }
     marks
@@ -218,7 +218,7 @@ pub(crate) fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &
             check_attributes_the_inline(state, world, attribute, place, inlines);
             continue;
         }
-        let mut here: String = place.to_owned();
+        let mut here: String = place.to_string();
         if place == trait_fn { here = String::from("fn"); }
         if name == mark_name {
             check_attributes_the_mark(state, world, attribute, &here);
@@ -237,7 +237,7 @@ pub(crate) fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &
         }
         let mut count: i64 = 1;
         if seen.contains_key(&name) { count = nikaia_std::index::or(seen.get(&name), || 0) + 1; }
-        seen.insert(name.to_owned(), count);
+        seen.insert(name.to_string(), count);
         if count == 2 && !check_attributes_repeats(marks, &name) { check_attributes_written_twice(state, &name, &attribute.span); }
         check_attributes_arguments(state, world, host, &name, &fields, attribute);
     }
@@ -408,7 +408,7 @@ pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, wo
         return;
     }
     let found = check_core_expr(state, world, host, arg, span);
-    let field_name = field.name.to_owned();
+    let field_name = field.name.to_string();
     let kind = check_attributes_literal_misfit(arg, &want);
     if kind.is_some() {
         let said = match kind { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -462,7 +462,7 @@ pub fn check_attributes_an_attribute_read(state: &mut CheckState, world: &CheckW
 pub(crate) fn check_attributes_names_of(contract: &TypeContract) -> Option<Vec<String>> {
     if contract.variants.is_empty() { return None; }
     let mut names: Vec<String> = vec![];
-    for variant in contract.variants.iter() { names.push(variant.name.to_owned()); }
+    for variant in contract.variants.iter() { names.push(variant.name.to_string()); }
     Some(names)
 }
 
@@ -474,7 +474,7 @@ pub(crate) fn check_attributes_variants_of_type(state: &CheckState, world: &Chec
     if state.enums.contains_key(name) {
         let set = match state.enums.get(name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut names: Vec<String> = vec![];
-        for variant in set.iter() { names.push(variant.to_owned()); }
+        for variant in set.iter() { names.push(variant.to_string()); }
         return Some(names);
     }
     let own = world.own.types.get(name);
@@ -552,7 +552,7 @@ pub fn check_attributes_inline_written(words: &winnow_grammar::InternerContext, 
         if attribute.args.is_empty() { return Some(String::from("#[inline]")); }
         if attribute.args.len() != 1 { return None; }
         let word = match nikaia_std::index::get(&attribute.args, 0) {
-            Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_owned() },
+            Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
             _ => String::from(""),
         };
         if word == "always" { return Some(String::from("#[inline(always)]")); }

@@ -3680,6 +3680,24 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
             demote_inside(found.owner, ty, [], ask, walk)
         }
     }
+    // **`fold`'s first value is what its lambda hands back** below - one type
+    // - so where the lambda makes text of its own, the name it starts from
+    // holds text of its own too.
+    if method == "fold" && args.len() == 2 && given.len() == 2 {
+        match args[1] {
+            Expr::Closure { params, body, .. } => {
+                let made = mapped(params, body, received, ask, walk)
+                if made.owned {
+                    let word = text_source_word(args[0], ask, walk)
+                    if word != null {
+                        flow_word(word ?? "", owned_kinds(), walk)
+                    }
+                }
+                return kinds_joined(given[0], made)
+            },
+            else => {}
+        }
+    }
     // **What `map` makes is what its lambda hands back**, with the lambda's
     // parameter bound to what came in (ADR-293 D26).
     if method == "map" && args.len() == 1 {

@@ -16,7 +16,7 @@ pub(crate) fn ld_type_named(ledger: &Ledger, library: &Ledger, name: &str) -> Op
 
 pub(crate) fn ld_variant_named(ledger: &Ledger, library: &Ledger, name: &str, word: &str) -> Option<String> {
     let held = match ld_type_named(ledger, library, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    for variant in held.variants.iter() { if check_attributes_same_word(&variant.name, word) { return Some(variant.name.to_owned()); } }
+    for variant in held.variants.iter() { if check_attributes_same_word(&variant.name, word) { return Some(variant.name.to_string()); } }
     None
 }
 
@@ -27,7 +27,7 @@ pub(crate) fn ld_argument_text(ledger: &Ledger, library: &Ledger, words: &winnow
             let word = *word;
             match ty {
                 Ty::Named { name, .. } => {
-                    let spelled = words.resolve(word).to_owned();
+                    let spelled = words.resolve(word).to_string();
                     let variant = ld_variant_named(ledger, library, name, &spelled);
                     if variant.is_some() {
                         let shown = nikaia_std::index::or(variant, || "".into());
@@ -59,7 +59,7 @@ pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar
                 if given < 0 && words.resolve(option.name) == field.name { given = at; }
                 at += 1;
             }
-            if given >= 0 { value = match ld_argument_text(ledger, library, words, &field.ty, &nikaia_std::index::get(&attribute.config, nikaia_std::index::at(given)).value, computed) { Some(__nikaia_value) => __nikaia_value, None => return None }; } else { value = field.default.to_owned(); }
+            if given >= 0 { value = match ld_argument_text(ledger, library, words, &field.ty, &nikaia_std::index::get(&attribute.config, nikaia_std::index::at(given)).value, computed) { Some(__nikaia_value) => __nikaia_value, None => return None }; } else { value = field.default.to_string(); }
         }
         written.push(format!("{}: {}", field.name, value));
     }
@@ -126,7 +126,7 @@ pub fn write_result_sources(ledger: &mut Ledger, units: i64, sources: &impl Fn(i
             for kept in stored(unit, &ledger) { fresh.insert(kept.key, kept.stores); }
         }
         let mut keys: Vec<String> = vec![];
-        for (key, _) in ledger.functions.iter() { keys.push(key.to_owned()); }
+        for (key, _) in ledger.functions.iter() { keys.push(key.to_string()); }
         for key in keys.iter() {
             let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             contract.stores = nikaia_std::index::or(fresh.remove(key), || vec![].into());

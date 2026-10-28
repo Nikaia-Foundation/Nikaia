@@ -4,7 +4,7 @@
 pub(crate) fn check_finding_of(found: &Finding) -> CheckFinding {
     let mut severity = CheckSeverity::Error;
     if found.warning { severity = CheckSeverity::Warning; }
-    CheckFinding { severity, span: found.span.clone(), code: found.code.to_owned(), message: found.message.to_owned(), notes: found.notes.to_owned(), help: match found.help.as_ref() {
+    CheckFinding { severity, span: found.span.clone(), code: found.code.to_string(), message: found.message.to_string(), notes: found.notes.to_owned(), help: match found.help.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, labels: vec![] }
@@ -62,7 +62,7 @@ impl CheckState {
                     if ask.2 {
                         let mut place = beside.len() as i64;
                         while place > 0 && nikaia_std::index::get(&beside, nikaia_std::index::at(place - 1)).1.start > ask.1.start { place = place - 1; }
-                        beside.insert(nikaia_std::count::of(place), (ask.0.to_owned(), ask.1.clone()));
+                        beside.insert(nikaia_std::count::of(place), (ask.0.to_string(), ask.1.clone()));
                     } else { indexed = true; }
                 }
             }
@@ -70,7 +70,7 @@ impl CheckState {
             for ask in beside.iter() {
                 let mut seen = false;
                 for one in types.iter() { if one.0 == ask.0 { seen = true; } }
-                if !seen { types.push((ask.0.to_owned(), ask.1.clone())); }
+                if !seen { types.push((ask.0.to_string(), ask.1.clone())); }
             }
             if types.len() >= 2 {
                 if self.flow.open_map_parts.contains_key(&head_at) {
@@ -84,9 +84,9 @@ impl CheckState {
                 continue;
             }
             let mut decided: Option<String> = None;
-            if !types.is_empty() { decided = Some(nikaia_std::index::get(&types, 0).0.to_owned()); } else if indexed { decided = Some(String::from("i64")); }
+            if !types.is_empty() { decided = Some(nikaia_std::index::get(&types, 0).0.to_string()); } else if indexed { decided = Some(String::from("i64")); }
             let mut held: String = String::from("i32");
-            if decided.is_some() { held = nikaia_std::index::or(decided.as_deref(), || "").to_owned(); } else {
+            if decided.is_some() { held = nikaia_std::index::or(decided.as_deref(), || "").to_string(); } else {
                 for member in members.iter() {
                     for given in member.1.given.iter() { if given.0.beyond || !integer_fits(&given.0.value, "i32") { held = String::from("i64"); } }
                     for shifted in member.1.shifted.iter() { if shifted.beyond || !integer_fits(&shifted.value, "i32") { held = String::from("i64"); } }
@@ -94,7 +94,7 @@ impl CheckState {
             }
             let mut why: Option<String> = None;
             if decided.is_some() {
-                let ty = nikaia_std::index::or(decided.as_deref(), || "").to_owned();
+                let ty = nikaia_std::index::or(decided.as_deref(), || "").to_string();
                 if head.element { why = Some(format!("the elements of `{}` are `{}`s because of how they are used", head.name, ty)); } else { why = Some(format!("`{}` is {} `{}` because of how it is used", head.name, an_or_a(&ty), ty)); }
             }
             let before = self.findings.len() as i64;
@@ -127,28 +127,28 @@ impl CheckState {
             for member in members.iter() {
                 typed = typed || member.1.typed;
                 for cast in member.1.casts.iter() {
-                    let from = Ty::Named { name: held.to_owned(), args: vec![], view: false };
-                    let into = Ty::Named { name: cast.1.to_owned(), args: vec![], view: false };
+                    let from = Ty::Named { name: held.to_string(), args: vec![], view: false };
+                    let into = Ty::Named { name: cast.1.to_string(), args: vec![], view: false };
                     self.record_cast(&from, &into, cast.0);
                 }
             }
             let mut of_a_map = false;
             for member in members.iter() { of_a_map = of_a_map || self.flow.open_map_parts.contains_key(&member.0); }
-            if held != "i32" && of_a_map { for member in members.iter() { for put in member.1.written.iter() { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, held.to_owned()); } } } }
+            if held != "i32" && of_a_map { for member in members.iter() { for put in member.1.written.iter() { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, held.to_string()); } } } }
             if decided.is_some() || typed {
-                let ty = held.to_owned();
+                let ty = held.to_string();
                 for member in members.iter() {
-                    let mut written: String = ty.to_owned();
+                    let mut written: String = ty.to_string();
                     if member.1.element { written = format!("Vec<{}>", ty); }
                     if !self.flow.open_map_parts.contains_key(&member.0) { self.facts.number_lets.insert(member.1.at.start as i64, written); }
                     for site in member.1.sites.iter() {
                         let site = nikaia_std::num::value(site);
-                        self.facts.arithmetic.insert(site, ty.to_owned());
+                        self.facts.arithmetic.insert(site, ty.to_string());
                     }
                     for put in member.1.written.iter() {
                         let mut suffixed = put.2;
                         for literal in put.1.iter() { if !integer_fits(&literal.1, "i32") { suffixed = true; } }
-                        if ty != "i64" && suffixed { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, ty.to_owned()); } }
+                        if ty != "i64" && suffixed { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, ty.to_string()); } }
                     }
                 }
             }

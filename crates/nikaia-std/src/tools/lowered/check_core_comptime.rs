@@ -54,7 +54,7 @@ pub(crate) fn check_core_comptime_struct_named(want: &Ty, evaluated: Option<&Bui
     let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut named: String = String::from("");
     match value {
-        BuildValue::Struct { name, .. } => { named = name.to_owned(); },
+        BuildValue::Struct { name, .. } => { named = name.to_string(); },
         _ => { },
     }
     if named == "" { return None; }
@@ -103,8 +103,8 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
             }
             return Some(tuple_spelled(&each));
         },
-        BuildValue::Struct { name, .. } => { return Some(name.to_owned()); },
-        BuildValue::Variant { ty, .. } => { return Some(ty.to_owned()); },
+        BuildValue::Struct { name, .. } => { return Some(name.to_string()); },
+        BuildValue::Variant { ty, .. } => { return Some(ty.to_string()); },
         BuildValue::Constant { constructor, .. } => { return constructed(constructor); },
     }
     None
@@ -169,7 +169,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         match read {
             Expr::Variable(read_name, _) => {
                 let read_name = *read_name;
-                state.facts.folded_comptimes.insert(world.words.resolve(read_name).to_owned());
+                state.facts.folded_comptimes.insert(world.words.resolve(read_name).to_string());
             },
             _ => { },
         }
@@ -180,7 +180,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         if nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).code == "NK1117" && nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).message.ends_with("` isn't declared anywhere.") { said_a_name = true; }
         at = at + 1;
     }
-    let bound = world.words.resolve(name).to_owned();
+    let bound = world.words.resolve(name).to_string();
     state.nameable(&bound, span, "a `comptime`");
     let mut want: Option<Ty> = None;
     if ty.is_some() {
@@ -255,8 +255,8 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
             let table = state.a_table_that_crosses(world, &bound, &wanted, &pairs, span, &|of, variant| { check_walked_payload_of(world, of, variant) }, &|number| { host.float_text(number) });
             if table.found {
                 crossed = true;
-                table_below = table.below.to_owned();
-                table_written = table.written.to_owned();
+                table_below = table.below.to_string();
+                table_written = table.written.to_string();
             } else { said_a_table = table.said; }
         }
     }
@@ -318,13 +318,13 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
-    let owner = world.words.resolve(target).to_owned();
+    let owner = world.words.resolve(target).to_string();
     let mut entry: String = String::from("");
     let mut any = false;
     let entries = match state.grammars.get(&owner) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     for one in entries.iter() {
         if !any {
-            entry = one.to_owned();
+            entry = one.to_string();
             any = true;
         }
     }

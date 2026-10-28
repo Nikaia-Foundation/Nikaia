@@ -29,7 +29,7 @@ pub fn module_of(relative: &str) -> Option<String> {
     let inside = slice(&c, 4, c.len() as i64 - 3);
     if inside == "lib" { return Some(String::from("")); }
     if inside == "main" || inside.starts_with("bin/") { return None; }
-    let mut path = inside.to_owned();
+    let mut path = inside.to_string();
     if inside == "mod" { path = String::from(""); } else if inside.ends_with("/mod") {
         let i: Vec<scalar> = nikaia_std::list::chars(inside.chars());
         path = slice(&i, 0, i.len() as i64 - 4);
@@ -40,8 +40,8 @@ pub fn module_of(relative: &str) -> Option<String> {
 }
 
 pub fn joined(at: &str, name: &str) -> String {
-    if at.is_empty() { return name.to_owned(); }
-    if name.is_empty() { return at.to_owned(); }
+    if at.is_empty() { return name.to_string(); }
+    if name.is_empty() { return at.to_string(); }
     format!("{}::{}", at, name)
 }
 
@@ -54,33 +54,33 @@ pub fn exported(at: &str, text: &str) -> Vec<Export> {
     if open >= 0 && whole.ends_with('}') {
         let prefix = slice(&c, 0, open);
         let inside = slice(&c, open + 3, c.len() as i64 - 1);
-        for one in split_top_level(&inside) { if !one.is_empty() { out.push(Export { at: at.to_owned(), prefix: prefix.to_owned(), name: Some(named(&one)) }); } }
+        for one in split_top_level(&inside) { if !one.is_empty() { out.push(Export { at: at.to_string(), prefix: prefix.to_string(), name: Some(named(&one)) }); } }
         return out;
     }
     if whole.ends_with("::*") {
-        out.push(Export { at: at.to_owned(), prefix: slice(&c, 0, c.len() as i64 - 3), name: None });
+        out.push(Export { at: at.to_string(), prefix: slice(&c, 0, c.len() as i64 - 3), name: None });
         return out;
     }
-    let mut path = whole.to_owned();
+    let mut path = whole.to_string();
     let mut alias: Option<String> = None;
     let space = find_text(&c, 0, " as ");
     if space >= 0 {
         let before = __keep_frame.put(slice(&c, 0, space));
         let after_it = __keep_frame.put(slice(&c, space + 4, c.len() as i64));
-        path = before.trim().to_owned();
-        alias = Some(after_it.trim().to_owned());
+        path = before.trim().to_string();
+        alias = Some(after_it.trim().to_string());
     }
     let p: Vec<scalar> = nikaia_std::list::chars(path.chars());
     let cut = find_last_text(&p, "::");
     let mut prefix: String = String::from("");
-    let mut name = path.to_owned();
+    let mut name = path.to_string();
     if cut >= 0 {
         prefix = slice(&p, 0, cut);
         let rest = __keep_frame.put(slice(&p, cut + 2, p.len() as i64));
-        name = rest.trim().to_owned();
+        name = rest.trim().to_string();
     }
-    let offered = nikaia_std::index::or(alias, || name.to_owned().into());
-    out.push(Export { at: at.to_owned(), prefix, name: Some(Named { name, alias: offered }) });
+    let offered = nikaia_std::index::or(alias, || name.to_string().into());
+    out.push(Export { at: at.to_string(), prefix, name: Some(Named { name, alias: offered }) });
     out
 }
 
@@ -88,10 +88,10 @@ pub fn named(written: &str) -> Named {
     let one = written.trim();
     let c: Vec<scalar> = nikaia_std::list::chars(one.chars());
     let space = find_text(&c, 0, " as ");
-    if space < 0 { return Named { name: one.to_owned(), alias: one.to_owned() }; }
+    if space < 0 { return Named { name: one.to_string(), alias: one.to_string() }; }
     let before = slice(&c, 0, space);
     let after_it = slice(&c, space + 4, c.len() as i64);
-    Named { name: before.trim().to_owned(), alias: after_it.trim().to_owned() }
+    Named { name: before.trim().to_string(), alias: after_it.trim().to_string() }
 }
 
 pub fn bases(export: &Export) -> Vec<String> {
@@ -117,7 +117,7 @@ pub fn bases(export: &Export) -> Vec<String> {
         return out;
     }
     let here = joined(&export.at, prefix);
-    let root = prefix.to_owned();
+    let root = prefix.to_string();
     if here != root { out.push(here); }
     out.push(root);
     out
@@ -129,14 +129,14 @@ pub fn split_top_level(text: &str) -> Vec<String> {
     let mut current: String = String::from("");
     for c in text.chars() {
         if c == '<' || c == '(' || c == '[' { depth += 1; } else if c == '>' || c == ')' || c == ']' { depth -= 1; } else if c == ',' && depth == 0 {
-            out.push(current.trim().to_owned());
+            out.push(current.trim().to_string());
             current = String::from("");
             continue;
         }
         current.push(c);
     }
     let last = current.trim();
-    if !last.is_empty() { out.push(last.to_owned()); }
+    if !last.is_empty() { out.push(last.to_string()); }
     out
 }
 

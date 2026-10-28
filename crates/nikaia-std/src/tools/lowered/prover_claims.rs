@@ -72,7 +72,7 @@ pub struct Foreign {
 
 pub(crate) fn claim_text_of(text: Option<&str>) -> Option<String> {
     let t = match text { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(t.to_owned())
+    Some(t.to_string())
 }
 
 pub(crate) fn carried_site_of(site: Option<&CarriedFrom>) -> Option<CarriedFrom> {
@@ -95,12 +95,12 @@ pub fn foreign_shape(contract: &FnContract) -> ForeignShape {
         match ty {
             Ty::Named { name, args, view } => {
                 let view = *view;
-                if args.is_empty() && !view && is_whole_number(name) { shape.names.insert(param.to_owned()); }
+                if args.is_empty() && !view && is_whole_number(name) { shape.names.insert(param.to_string()); }
                 if has_a_length(name) { shape.names.insert(length_of(param)); }
             },
             _ => { },
         }
-        shape.params.push(param.to_owned());
+        shape.params.push(param.to_string());
     }
     shape.whole_result = whole_result_of((signature.result).as_ref());
     shape
@@ -122,7 +122,7 @@ pub fn foreign_from(contract: &FnContract, shape: ForeignShape, requires: &[i64]
         let written = assert_of(contract, at);
         let text = nikaia_std::index::get(&contract.requires, nikaia_std::index::at(at));
         let mut computed: Option<String> = None;
-        if written != *text { computed = Some(text.to_owned()); }
+        if written != *text { computed = Some(text.to_string()); }
         foreign.requires.push(PreClaim { term, written, computed, message: None, origin: None, site: None });
     }
     for at in 0..ensures.len() as i64 {

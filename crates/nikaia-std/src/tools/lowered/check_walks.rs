@@ -26,10 +26,10 @@ pub(crate) fn check_walks_clash(earlier: &Accounted, later: &Accounted) -> Optio
 
 pub(crate) fn check_walks_shared(changed_by: &[collections::BTreeSet<String>], mentioned: &[collections::BTreeSet<String>], i: i64, j: i64) -> Option<(String, bool)> {
     for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(i))).iter() {
-        if (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).contains(name) { return Some((name.to_owned(), true)); }
-        if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(j))).contains(name) { return Some((name.to_owned(), false)); }
+        if (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).contains(name) { return Some((name.to_string(), true)); }
+        if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(j))).contains(name) { return Some((name.to_string(), false)); }
     }
-    for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).iter() { if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(i))).contains(name) { return Some((name.to_owned(), false)); } }
+    for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).iter() { if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(i))).contains(name) { return Some((name.to_string(), false)); } }
     None
 }
 
@@ -43,7 +43,7 @@ impl CheckState {
                     let mut bound: Vec<String> = vec![];
                     for name in names.iter() {
                         let name = *name;
-                        bound.push(world.words.resolve(name).to_owned());
+                        bound.push(world.words.resolve(name).to_string());
                     }
                     let name = bound.join("`, `");
                     self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: String::from("NK2104"), message: format!("A branch of an `overlap` can't declare `{}`.", name), notes: vec![String::from("Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.")], help: Some(format!("Take the value from the block instead: `let ({}, …) = overlap {{ … }}`.", name)), labels: vec![] });
@@ -99,7 +99,7 @@ impl CheckState {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if (a_copy_by_value(&ty) || ty.is_a_view()) && !check_core_flow_a_slice(&ty) { copied.insert(name.to_owned()); }
+            if (a_copy_by_value(&ty) || ty.is_a_view()) && !check_core_flow_a_slice(&ty) { copied.insert(name.to_string()); }
         }
         self.facts.guards_inside_boxes.insert(id_of(body) as i64, copied);
     }
@@ -133,13 +133,13 @@ impl CheckState {
         match func {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                name = world.words.resolve(symbol).to_owned();
+                name = world.words.resolve(symbol).to_string();
             },
             Expr::Path(segments, _) => {
                 let mut parts: Vec<String> = vec![];
                 for segment in segments.iter() {
                     let segment = *segment;
-                    parts.push(world.words.resolve(segment).to_owned());
+                    parts.push(world.words.resolve(segment).to_string());
                 }
                 let joined = parts.join("::");
                 name = world.here.unaliased(&joined);
@@ -154,8 +154,8 @@ impl CheckState {
             let at = nikaia_std::search::find(&name, &"::", 0);
             if at.is_some() {
                 let cut = nikaia_std::index::or(at, || 0);
-                let ty = nikaia_std::index::get(&name, nikaia_std::index::at(0..cut)).to_owned();
-                let variant = nikaia_std::index::get(&name, nikaia_std::index::at(cut + "::".len() as i64..)).to_owned();
+                let ty = nikaia_std::index::get(&name, nikaia_std::index::at(0..cut)).to_string();
+                let variant = nikaia_std::index::get(&name, nikaia_std::index::at(cut + "::".len() as i64..)).to_string();
                 constructs = self.is_variant(&ty, &variant);
             }
         }
@@ -200,8 +200,8 @@ pub(crate) fn check_walks_reads<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_,
     match expr {
         Expr::Variable(symbol, _) => {
             let symbol = *symbol;
-            let name = world.words.resolve(symbol).to_owned();
-            for bound in inside.iter() { if *bound == name { read.insert(name.to_owned()); } }
+            let name = world.words.resolve(symbol).to_string();
+            for bound in inside.iter() { if *bound == name { read.insert(name.to_string()); } }
         },
         _ => { },
     }

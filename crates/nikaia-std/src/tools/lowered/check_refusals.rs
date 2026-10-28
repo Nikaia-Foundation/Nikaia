@@ -120,7 +120,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn nothing_declares_it(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let name = match expr {
-            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_owned() },
+            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
             _ => return,
         };
         let declared = self.lookup(&name).is_some() || resolve_call(world, &name).is_some() || self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name) || self.modules.contains(&name) || self.grammars.contains_key(&name);
@@ -138,7 +138,7 @@ impl CheckState {
                 Item::Fn { name, receiver, args, config, spread, ret_type, .. } => {
                     let name = *name; let spread = *spread;
                     let mut written: String = String::from("");
-                    if name.is_some() { written = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_owned(); }
+                    if name.is_some() { written = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_string(); }
                     let mut message: String = format!("`{}` doesn't belong in `impl Cleanup for {}`.", written, target);
                     let mut help: String = format!("Move it to `impl {}`, with the type's other methods.", target);
                     if written == "cleanup" {
@@ -155,12 +155,12 @@ impl CheckState {
                         message = format!("`drop` doesn't belong in `impl Cleanup for {}`.", target);
                         help = format!("Put it in its own `impl Drop for {} {{ fn drop(ref mut self) {{ … }} }}`, which runs after `cleanup`, or alone where `cleanup` can't run.", target);
                     }
-                    self.findings.push(check_refusal("NK2601", &method.span, message, vec![note.to_owned()], Some(help)));
+                    self.findings.push(check_refusal("NK2601", &method.span, message, vec![note.to_string()], Some(help)));
                 },
                 _ => { },
             }
         }
-        if !wrote_cleanup { self.findings.push(check_refusal("NK2601", span, format!("`impl Cleanup for {}` is missing its `cleanup` method.", target), vec![note.to_owned()], Some(String::from("Add `fn cleanup(ref mut self) { … }`.")))); }
+        if !wrote_cleanup { self.findings.push(check_refusal("NK2601", span, format!("`impl Cleanup for {}` is missing its `cleanup` method.", target), vec![note.to_string()], Some(String::from("Add `fn cleanup(ref mut self) { … }`.")))); }
     }
 }
 

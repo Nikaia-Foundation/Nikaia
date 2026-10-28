@@ -11,14 +11,14 @@ pub struct SyncReach {
 
 pub fn sync_holds(graph: &collections::BTreeMap<String, SyncReach>) -> collections::BTreeMap<String, bool> {
     let mut holds: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
-    for (name, reach) in graph.iter() { holds.insert(name.to_owned(), !reach.blocked && reach.through_code.is_empty()); }
+    for (name, reach) in graph.iter() { holds.insert(name.to_string(), !reach.blocked && reach.through_code.is_empty()); }
     let mut changed = true;
     while changed {
         changed = false;
         for (name, reach) in graph.iter() {
             if !held(&holds, name) { continue; }
             if reaches_one_that_pauses(&reach.calls, &holds) {
-                holds.insert(name.to_owned(), false);
+                holds.insert(name.to_string(), false);
                 changed = true;
             }
         }
@@ -32,28 +32,28 @@ pub fn paused_only_by_code(graph: &collections::BTreeMap<String, SyncReach>, hol
         if held(holds, name) || reach.blocked || reach.through_code.is_empty() { continue; }
         if reaches_one_that_pauses(&reach.calls, holds) { continue; }
         let mut parameters: Vec<String> = vec![];
-        for parameter in reach.through_code.iter() { parameters.push(parameter.to_owned()); }
-        out.insert(name.to_owned(), parameters);
+        for parameter in reach.through_code.iter() { parameters.push(parameter.to_string()); }
+        out.insert(name.to_string(), parameters);
     }
     out
 }
 
 pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &collections::BTreeMap<String, bool>, start: &str) -> Vec<String> {
-    let mut queue: Vec<String> = vec![start.to_owned()];
+    let mut queue: Vec<String> = vec![start.to_string()];
     let mut came_from: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    seen.insert(start.to_owned());
+    seen.insert(start.to_string());
     let mut next: i64 = 0;
     while ((next) as usize) < queue.len() {
-        let at = (*nikaia_std::index::get(&queue, (next) as usize)).to_owned();
+        let at = (*nikaia_std::index::get(&queue, (next) as usize)).to_string();
         next += 1;
         let reach = match *nikaia_std::index::get(&graph, &at) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if reach.pauses_here || reach.blocked { return chain_back_to(&came_from, &at); }
         for callee in reach.calls.iter() {
             if graph.contains_key(callee) && !held(holds, callee) && !seen.contains(callee) {
-                seen.insert(callee.to_owned());
-                came_from.insert(callee.to_owned(), at.to_owned());
-                queue.push(callee.to_owned());
+                seen.insert(callee.to_string());
+                came_from.insert(callee.to_string(), at.to_string());
+                queue.push(callee.to_string());
             }
         }
     }
@@ -61,20 +61,20 @@ pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &col
 }
 
 pub(crate) fn chain_back_to(came_from: &collections::BTreeMap<String, String>, at: &str) -> Vec<String> {
-    let mut backwards: Vec<String> = vec![at.to_owned()];
-    let mut back = at.to_owned();
+    let mut backwards: Vec<String> = vec![at.to_string()];
+    let mut back = at.to_string();
     while came_from.contains_key(&back) {
         back = nikaia_std::index::or(match *nikaia_std::index::get(&came_from, &back) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
-        backwards.push(back.to_owned());
+        backwards.push(back.to_string());
     }
     let mut chain: Vec<String> = vec![];
     let mut i = backwards.len() as i64;
     while i > 0 {
         i -= 1;
-        chain.push((*nikaia_std::index::get(&backwards, nikaia_std::index::at(i))).to_owned());
+        chain.push((*nikaia_std::index::get(&backwards, nikaia_std::index::at(i))).to_string());
     }
     chain
 }
@@ -118,7 +118,7 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
             },
             Item::Impl { trait_name, target, methods, .. } => {
                 let trait_name = *trait_name;
-                let owner = names.resolve(target.name).to_owned();
+                let owner = names.resolve(target.name).to_string();
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, args, body, .. } => {
@@ -135,14 +135,14 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
             },
             Item::Trait { name, methods, .. } => {
                 let name = *name;
-                let declaring = names.resolve(name).to_owned();
+                let declaring = names.resolve(name).to_string();
                 for method in methods.iter() {
                     let key = format!("{}::{}", declaring, names.resolve(method.node.name));
                     graph.nodes.insert(key, leaf(!method.node.is_sync));
                 }
             },
             Item::Grammar(def) => {
-                let named = names.resolve(def.name).to_owned();
+                let named = names.resolve(def.name).to_string();
                 for rule in def.rules.iter() { if rule.is_entry { graph.nodes.insert(format!("{}::{}", named, names.resolve(rule.name)), leaf(false)); } }
             },
             _ => { },
@@ -168,7 +168,7 @@ pub(crate) fn code_of(args: &[FnArg], names: &winnow_grammar::InternerContext) -
     let mut code: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     for arg in args.iter() {
         let declared = match (*arg.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        code.insert(names.resolve(arg.name).to_owned(), !declared.is_sync);
+        code.insert(names.resolve(arg.name).to_string(), !declared.is_sync);
     }
     code
 }
@@ -181,7 +181,7 @@ pub(crate) fn sync_node(seen: &[Seen], program: &Program, code: &collections::BT
                 node.reach.blocked = true;
                 first_site(span, &format!("an `{}` block", construct), &mut node);
             },
-            Seen::Call { name, span, .. } => { sync_call((callee_named(names, name.to_owned(), own, library, &program.items)).as_ref(), span, code, &mut node); },
+            Seen::Call { name, span, .. } => { sync_call((callee_named(names, name.to_string(), own, library, &program.items)).as_ref(), span, code, &mut node); },
             Seen::Spawn { span } => { sync_call(Some(&Callee::Opaque(None)), span, code, &mut node); },
             Seen::Opaque { span } => { sync_call(Some(&Callee::Opaque(None)), span, code, &mut node); },
             _ => { },
@@ -194,7 +194,7 @@ pub(crate) fn sync_node(seen: &[Seen], program: &Program, code: &collections::BT
 pub(crate) fn sync_call(callee: Option<&Callee>, span: &Span, code: &collections::BTreeMap<String, bool>, node: &mut SyncNode) {
     let known = match callee { Some(__nikaia_value) => __nikaia_value, None => return };
     match known {
-        Callee::Own(name) => { node.reach.calls.insert(name.to_owned()); },
+        Callee::Own(name) => { node.reach.calls.insert(name.to_string()); },
         Callee::Library { key, never_pauses } => {
             let never_pauses = *never_pauses;
             if !never_pauses {
@@ -218,7 +218,7 @@ pub(crate) fn opaque_call(name: Option<&str>, span: &Span, code: &collections::B
     if code.contains_key(called) {
         if nikaia_std::index::or(*nikaia_std::index::get(&code, called), || false) {
             first_site(span, &format!("`{}`", called), node);
-            node.reach.through_code.insert(called.to_owned());
+            node.reach.through_code.insert(called.to_string());
         }
         return;
     }
@@ -226,12 +226,12 @@ pub(crate) fn opaque_call(name: Option<&str>, span: &Span, code: &collections::B
     first_site(span, &format!("`{}`", called), node);
 }
 
-pub(crate) fn first_site(span: &Span, what: &str, node: &mut SyncNode) { if node.site.is_none() { node.site = Some(Site { span: span.clone(), what: what.to_owned() }); } }
+pub(crate) fn first_site(span: &Span, what: &str, node: &mut SyncNode) { if node.site.is_none() { node.site = Some(Site { span: span.clone(), what: what.to_string() }); } }
 
 pub(crate) fn sync_methods(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, node: &mut SyncNode) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
     if known.unseen { node.reach.blocked = true; }
-    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { node.reach.calls.insert(callee.to_owned()); } else if !never_pauses_in(library, callee) { node.reach.blocked = true; } }
+    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { node.reach.calls.insert(callee.to_string()); } else if !never_pauses_in(library, callee) { node.reach.blocked = true; } }
 }
 
 pub(crate) fn never_pauses_in(library: &Ledger, callee: &str) -> bool {
@@ -267,7 +267,7 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
                 violations_in(&seen_in(body, names, unaliased, holes_of, &no_root, false), &promise, program, names, own, library, &mut found);
             },
             Item::Impl { target, methods, .. } => {
-                let owner = names.resolve(target.name).to_owned();
+                let owner = names.resolve(target.name).to_string();
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
@@ -290,13 +290,13 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], is_sync: bool, sync_by: &
     let mut allowed: collections::BTreeSet<String> = collections::BTreeSet::new();
     for arg in args.iter() {
         let declared = match (*arg.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if declared.is_sync { allowed.insert(names.resolve(arg.name).to_owned()); }
+        if declared.is_sync { allowed.insert(names.resolve(arg.name).to_string()); }
     }
     let mut named: Vec<String> = vec![];
     for one in sync_by.iter() {
         let one = *one;
-        let parameter = names.resolve(one).to_owned();
-        allowed.insert(parameter.to_owned());
+        let parameter = names.resolve(one).to_string();
+        allowed.insert(parameter.to_string());
         named.push(parameter);
     }
     let mut promise: String = String::from("sync");
@@ -304,7 +304,7 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], is_sync: bool, sync_by: &
         let joined = named.join(", ");
         promise = format!("sync({})", joined);
     }
-    Some(Promise { caller: caller.to_owned(), promise, allowed })
+    Some(Promise { caller: caller.to_string(), promise, allowed })
 }
 
 pub(crate) fn violations_in(seen: &[Seen], promise: &Promise, program: &Program, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, found: &mut Vec<Violation>) {
@@ -313,7 +313,7 @@ pub(crate) fn violations_in(seen: &[Seen], promise: &Promise, program: &Program,
             Seen::Joins { construct, span } => { found.push(violation(promise, span, construct, false, false, true)); },
             Seen::Call { name, span, .. } => {
                 if !name.contains("::") && promise.allowed.contains(name) { continue; }
-                pausing_call((callee_named(names, name.to_owned(), own, library, &program.items)).as_ref(), span, promise, own, found);
+                pausing_call((callee_named(names, name.to_string(), own, library, &program.items)).as_ref(), span, promise, own, found);
             },
             Seen::Spawn { span } => { pausing_call(Some(&Callee::Opaque(None)), span, promise, own, found); },
             Seen::Opaque { span } => { pausing_call(Some(&Callee::Opaque(None)), span, promise, own, found); },
@@ -352,5 +352,5 @@ pub(crate) fn a_stop(name: Option<&str>) -> bool {
 
 pub(crate) fn unpromised(claim: &Sync) -> bool { claim.is_unpromised() }
 
-pub(crate) fn violation(promise: &Promise, span: &Span, callee: &str, from_library: bool, unpromised: bool, construct: bool) -> Violation { Violation { span: span.clone(), caller: promise.caller.to_owned(), promise: promise.promise.to_owned(), callee: callee.to_owned(), from_library, unpromised, construct } }
+pub(crate) fn violation(promise: &Promise, span: &Span, callee: &str, from_library: bool, unpromised: bool, construct: bool) -> Violation { Violation { span: span.clone(), caller: promise.caller.to_string(), promise: promise.promise.to_string(), callee: callee.to_string(), from_library, unpromised, construct } }
 

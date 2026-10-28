@@ -5,13 +5,13 @@ pub fn call_written_name(words: &winnow_grammar::InternerContext, func: &Expr) -
     match func {
         Expr::Variable(name, _) => {
             let name = *name;
-            return Some(words.resolve(name).to_owned());
+            return Some(words.resolve(name).to_string());
         },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = vec![];
             for segment in segments.iter() {
                 let segment = *segment;
-                parts.push(words.resolve(segment).to_owned());
+                parts.push(words.resolve(segment).to_string());
             }
             return Some(parts.join("::"));
         },
@@ -32,7 +32,7 @@ pub fn call_pausing_key(words: &winnow_grammar::InternerContext, aliases: &colle
 pub(crate) fn call_pausing_when(ledger: &Ledger, key: &str) -> Option<String> {
     let contract = match ledger.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if contract.sync_claim.is_sync() { return None; }
-    Some(key.to_owned())
+    Some(key.to_string())
 }
 
 pub fn call_library_pauses(library: &Ledger, key: &str) -> Option<String> { call_pausing_when(library, key) }
@@ -91,10 +91,10 @@ pub fn call_joined_throws(words: &winnow_grammar::InternerContext, aliases: &col
             continue;
         }
         let errors = nikaia_std::index::or(found, || vec![].into());
-        for error in errors.iter() { set.insert(error.to_owned()); }
+        for error in errors.iter() { set.insert(error.to_string()); }
     }
     let mut out: Vec<String> = vec![];
-    for error in set.iter() { out.push(error.to_owned()); }
+    for error in set.iter() { out.push(error.to_string()); }
     out
 }
 
@@ -105,13 +105,13 @@ pub(crate) fn call_throws_of(ledger: &Ledger, name: &str) -> Option<Vec<String>>
 
 pub fn call_returns_either(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], function: &str) -> bool {
     let parts: Vec<&str> = function.split("::").collect::<Vec<_>>();
-    let own = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned();
+    let own = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string();
     let mut wanted: String = String::from("");
     let mut qualified = false;
     if parts.len() > 1 {
         qualified = true;
         let mut before: Vec<String> = vec![];
-        for at in 0..parts.len() as i64 - 1 { before.push((*nikaia_std::index::get(&parts, (at) as usize)).to_owned()); }
+        for at in 0..parts.len() as i64 - 1 { before.push((*nikaia_std::index::get(&parts, (at) as usize)).to_string()); }
         wanted = before.join("::");
     }
     for item in items.iter() {

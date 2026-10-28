@@ -15,7 +15,7 @@ impl TermArena {
     pub fn at(&self, id: i64) -> SolverTerm { (*nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id))).clone() }
     pub fn boolean(&mut self, value: bool) -> i64 { self.push(SolverTerm::Bool(value)) }
     pub fn int(&mut self, value: i64) -> i64 { self.push(SolverTerm::Int(value)) }
-    pub fn var(&mut self, name: &str) -> i64 { self.push(SolverTerm::Var(name.to_owned())) }
+    pub fn var(&mut self, name: &str) -> i64 { self.push(SolverTerm::Var(name.to_string())) }
     pub fn add(&mut self, a: i64, b: i64) -> i64 { self.push(SolverTerm::Add(a, b)) }
     pub fn sub(&mut self, a: i64, b: i64) -> i64 { self.push(SolverTerm::Sub(a, b)) }
     pub fn neg(&mut self, a: i64) -> i64 { self.push(SolverTerm::Neg(a)) }
@@ -59,7 +59,7 @@ impl TermArena {
     }
     pub fn variables(&self, id: i64, names: &mut collections::BTreeSet<String>) {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
-            SolverTerm::Var(name) => { names.insert(name.to_owned()); },
+            SolverTerm::Var(name) => { names.insert(name.to_string()); },
             SolverTerm::Neg(a) => { let a = *a; self.variables(a, names); },
             SolverTerm::Not(a) => { let a = *a; self.variables(a, names); },
             SolverTerm::Add(a, b) => { let a = *a; let b = *b; self.both_variables(a, b, names); },

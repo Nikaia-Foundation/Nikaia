@@ -68,7 +68,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         if name == "f32" || name == "f64" { return how == CompareStrength::Compares; }
         if nikaia_std::list::contains(&COMPARE_PLAIN, &name) { return true; }
         if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, how, seen); }
-        let mut key = name.to_owned();
+        let mut key = name.to_string();
         if !args.is_empty() {
             let mut written: Vec<String> = vec![];
             for arg in args.iter() { written.push(arg.text()); }
@@ -89,7 +89,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
                 let names = match params { Some(__nikaia_value) => __nikaia_value, None => return true };
                 let mut at: i64 = 0;
                 for param in names.iter() {
-                    if at < args.len() as i64 { bound.insert(param.to_owned(), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
+                    if at < args.len() as i64 { bound.insert(param.to_string(), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
                     at = at + 1;
                 }
             }
@@ -168,8 +168,8 @@ pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, he
         let mut totally = true;
         for part in parts.iter() { if !asking.of(part) { compares = false; } else if !asking.totally(part) { totally = false; } }
         if !compares { continue; }
-        found.compares.push(name.to_owned());
-        if totally { found.totally.push(name.to_owned()); }
+        found.compares.push(name.to_string());
+        if totally { found.totally.push(name.to_string()); }
     }
     found
 }
@@ -182,7 +182,7 @@ impl CheckState {
         };
         if !hull { return; }
         let bound = match target {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
             _ => return,
         };
         let note: String = String::from("Changing shared state goes through a method that takes the lock.");
@@ -215,7 +215,7 @@ impl CheckState {
                 at = at + 1;
             }
             if taken || check_gives_back(body, name, world.words) { continue; }
-            lent.insert(name.to_owned());
+            lent.insert(name.to_string());
         }
         lent
     }
@@ -223,8 +223,8 @@ impl CheckState {
 
 pub(crate) fn compare_base(name: &str) -> String {
     let parts = name.split("::");
-    let mut last: String = name.to_owned();
-    for part in parts { last = part.to_owned(); }
+    let mut last: String = name.to_string();
+    for part in parts { last = part.to_string(); }
     last
 }
 
@@ -277,7 +277,7 @@ pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '
 
 pub(crate) fn compare_parameter_bounds(ty: &Ty, parameters: &collections::BTreeMap<String, Vec<String>>) -> Vec<String> {
     let name = match ty {
-        Ty::Named { name, args, .. } => if args.is_empty() { name.to_owned() } else { String::from("") },
+        Ty::Named { name, args, .. } => if args.is_empty() { name.to_string() } else { String::from("") },
         _ => String::from(""),
     };
     let bounds = match parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec![String::from("?")] };
@@ -306,7 +306,7 @@ pub(crate) fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_,
     let name = here.text(target.name);
     let declared = asking.structs.contains_key(&name) || asking.enums.contains_key(&name) || asking.beside.contains_key(&name);
     if !declared { return Some(check_refusal("NK1249", span, format!("You can't write `impl {} for {}`: your program doesn't declare it.", trait_text, name), vec![format!("`{}` for a type another package declares is that package's to say, and its ledger does.", trait_text)], Some(format!("Write it for a type you declare, or hold `{}` in a `struct` of your own.", name)))); }
-    let named = Ty::Named { name: name.to_owned(), args: vec![], view: false };
+    let named = Ty::Named { name: name.to_string(), args: vec![], view: false };
     if trait_text == "Ord" && !asking.totally(&named) {
         let note: String = String::from("An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`.");
         return Some(check_refusal("NK1249", span, format!("`impl Ord for {}` needs `{}` to be `Eq`.", name, name), vec![note], Some(format!("Write `impl Eq for {}`, or take out the part that has no equality.", name))));

@@ -20,7 +20,7 @@ impl CheckState {
                 let mut written: Vec<String> = vec![];
                 for symbol in path.iter() {
                     let symbol = *symbol;
-                    written.push(world.words.resolve(symbol).to_owned());
+                    written.push(world.words.resolve(symbol).to_string());
                 }
                 for index in 0..parts.len() as i64 {
                     let part = nikaia_std::index::get(&parts, nikaia_std::index::at(index));
@@ -55,7 +55,7 @@ impl CheckState {
                 for at in 0..parts.len() as i64 {
                     let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
                     match part {
-                        MatchPattern::Path(one) => { if one.len() == 1 && self.boxed_part(world, path, at) { out.push(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_owned()); } },
+                        MatchPattern::Path(one) => { if one.len() == 1 && self.boxed_part(world, path, at) { out.push(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string()); } },
                         MatchPattern::Tuple { .. } => { if !self.boxed_part(world, path, at) { for name in self.boxed_names(world, &part) { out.push(name); } } },
                         _ => { },
                     }
@@ -75,14 +75,14 @@ impl CheckState {
                     if self.boxed_part(world, path, at) && !binds_a_part(&part) {
                         let mut owner: String = String::from("");
                         match part {
-                            MatchPattern::Tuple { path, .. } => { if path.len() >= 2 { owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_owned(); } },
-                            MatchPattern::Named { path, .. } => { if path.len() >= 2 { owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_owned(); } },
+                            MatchPattern::Tuple { path, .. } => { if path.len() >= 2 { owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string(); } },
+                            MatchPattern::Named { path, .. } => { if path.len() >= 2 { owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string(); } },
                             _ => { },
                         }
                         if !owner.is_empty() {
                             let on = Ty::Named { name: owner, args: vec![], view: false };
                             let typed = self.pattern_parts(world, &part, &on);
-                            for (name, ty) in typed.iter() { out.insert(name.to_owned(), ty.clone()); }
+                            for (name, ty) in typed.iter() { out.insert(name.to_string(), ty.clone()); }
                         }
                     } else { self.typed_inside_boxes(world, &part, out); }
                 }
@@ -109,8 +109,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn boxed_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
-        let owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_owned();
-        let variant = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned();
+        let owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string();
+        let variant = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string();
         if !self.facts.boxed_members.contains_key(&owner) { return false; }
         let members = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.boxed_members, &owner) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -170,7 +170,7 @@ impl CheckState {
                     self.a_closed_set_that_misses_a_case(world, args, arms, span);
                     return;
                 }
-                name = written.to_owned();
+                name = written.to_string();
             },
             _ => { return; },
         }
@@ -227,7 +227,7 @@ impl CheckState {
             MatchPattern::Path(path) => {
                 for symbol in path.iter() {
                     let symbol = *symbol;
-                    parts.push(world.words.resolve(symbol).to_owned());
+                    parts.push(world.words.resolve(symbol).to_string());
                 }
             },
             _ => { return None; },
@@ -245,12 +245,12 @@ impl CheckState {
         let mut missing: Vec<String> = vec![];
         for member in members.iter() {
             let name: String = match member {
-                Ty::Named { name, .. } => name.to_owned(),
+                Ty::Named { name, .. } => name.to_string(),
                 _ => continue,
             };
             if named.contains(&name) { continue; }
             if !self.enums.contains_key(&name) {
-                missing.push(name.to_owned());
+                missing.push(name.to_string());
                 continue;
             }
             let variants = nikaia_std::index::or(match *nikaia_std::index::get(&self.enums, &name) {
@@ -282,12 +282,12 @@ pub(crate) fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 // this was written - see `contracts::sync`.
 pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
     let n = path.len() as i64;
-    if n == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned()); } else if n >= 2 {
+    if n == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string()); } else if n >= 2 {
         out.insert(format!("{}::{}", world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 2))), world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 1)))));
         let mut whole: Vec<String> = vec![];
         for symbol in path.iter() {
             let symbol = *symbol;
-            whole.push(world.words.resolve(symbol).to_owned());
+            whole.push(world.words.resolve(symbol).to_string());
         }
         out.insert(whole.join("::"));
     }

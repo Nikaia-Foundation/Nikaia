@@ -143,15 +143,15 @@ impl EmitState {
         }
         let inside = EmitFlow { in_lambda: !pauses, statement: flow.statement, ..EmitFlow::plain() };
         if fails {
-            let channel = scope.tasks_channel.to_owned();
+            let channel = scope.tasks_channel.to_string();
             out.push(&format!("-> Result<(), {}> {{ ", channel));
             let failing = EmitFlow { can_throw: true, ..inside };
-            let failing_scope = EmitScope { origin: scope.origin.to_owned(), function: scope.tasks_function.to_owned(), channel: channel.to_owned(), changed: changed, tasks_channel: channel.to_owned(), tasks_function: scope.tasks_function.to_owned(), ..EmitScope::plain() };
+            let failing_scope = EmitScope { origin: scope.origin.to_string(), function: scope.tasks_function.to_string(), channel: channel.to_string(), changed: changed, tasks_channel: channel.to_string(), tasks_function: scope.tasks_function.to_string(), ..EmitScope::plain() };
             self.emit_core_block(world, walk, out, host, body, depth, failing, &failing_scope, EmitTail::Value)?;
             out.push("; Ok(()) }");
             return Ok(());
         }
-        let inside_scope = EmitScope { changed: changed, tasks_channel: scope.tasks_channel.to_owned(), tasks_function: scope.tasks_function.to_owned(), ..EmitScope::plain() };
+        let inside_scope = EmitScope { changed: changed, tasks_channel: scope.tasks_channel.to_string(), tasks_function: scope.tasks_function.to_string(), ..EmitScope::plain() };
         if copied && pauses { out.push(&format!("{{ let mut {} = *__nikaia_slot; async ", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!("{{ let mut {} = *__nikaia_slot; (|| ", *nikaia_std::index::get(&names, 0))); }
         self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?;
         if copied && pauses { out.push(&format!(".await; *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!(")(); *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); }
@@ -180,7 +180,7 @@ impl EmitState {
         let mut k: i64 = 0;
         for p in params.iter() {
             let p = *p;
-            let name = (*nikaia_std::index::get(&names, (k) as usize)).to_owned();
+            let name = (*nikaia_std::index::get(&names, (k) as usize)).to_string();
             k += 1;
             if mutable.contains(&p) { bound.push(format!("mut {}", name)); } else { bound.push(name); }
         }
@@ -272,7 +272,7 @@ impl EmitState {
             return Ok(());
         }
         if walk.believing && !wide.widen && !wide.inferred && (op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul) && self.believed_arithmetic.contains_key(&site) {
-            let ty = nikaia_std::index::or(self.believed_arithmetic.get(&site), || "").to_owned();
+            let ty = nikaia_std::index::or(self.believed_arithmetic.get(&site), || "").to_string();
             if emit_flow_is_whole(&ty) {
                 let name = match op {
                     BinaryOp::Add => "unchecked_add",
@@ -288,7 +288,7 @@ impl EmitState {
             }
         }
         if self.proven_arithmetic.contains_key(&site) && !wide.widen && !wide.inferred {
-            let ty = nikaia_std::index::or(self.proven_arithmetic.get(&site), || "").to_owned();
+            let ty = nikaia_std::index::or(self.proven_arithmetic.get(&site), || "").to_string();
             if op == BinaryOp::Shl || op == BinaryOp::Shr {
                 let shift = if op == BinaryOp::Shl { "nikaia_std::proven::shl" } else { "nikaia_std::proven::shr" };
                 out.push(&format!("unsafe {{ {}::<{}>(", shift, ty));
@@ -381,7 +381,7 @@ impl EmitState {
     }
     pub(crate) fn emit_flow_opened(&self, node: &Expr) -> String {
         let found = match self.facts.lent_coalesces.get(&node_key(node)) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-        found.to_owned()
+        found.to_string()
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -633,7 +633,7 @@ impl EmitState {
                 out.push(&format!("{}Err(error) => return Err(error.into()),\n", pad));
                 out.push(&format!("{}#[allow(unreachable_patterns)]\n", pad));
             } else {
-                let held_sum = nikaia_std::index::or(caught_in.as_deref(), || "").to_owned();
+                let held_sum = nikaia_std::index::or(caught_in.as_deref(), || "").to_string();
                 for member in passing.iter() {
                     let mut unless: String = String::from("");
                     if member == "supervisor::Handed" {
@@ -670,7 +670,7 @@ impl EmitState {
         let named = fatal_named(handler, world.words);
         for error in arriving.iter() {
             if named.contains(error) { continue; }
-            if emit_is_fatal(&self.own_contracts, error) || emit_is_fatal(world.library, error) { out.push(error.to_owned()); }
+            if emit_is_fatal(&self.own_contracts, error) || emit_is_fatal(world.library, error) { out.push(error.to_string()); }
         }
         out
     }
@@ -725,8 +725,8 @@ impl EmitState {
             let mut held: String = String::from("error");
             if flow.caught_named { held = String::from("__nikaia_site.refill(error)"); }
             if scope.caught_sum.is_some() && scope.caught_member.is_some() {
-                let sum = nikaia_std::index::or(scope.caught_sum.as_deref(), || "").to_owned();
-                let member = nikaia_std::index::or(scope.caught_member.as_deref(), || "").to_owned();
+                let sum = nikaia_std::index::or(scope.caught_sum.as_deref(), || "").to_string();
+                let member = nikaia_std::index::or(scope.caught_member.as_deref(), || "").to_string();
                 if sum == "" { held = format!("{}.into()", held); } else { held = format!("crate::{}::{}({})", sum, sum_variant(&member), held); }
             }
             out.push(&format!("return Err({})", held));
@@ -775,7 +775,7 @@ impl EmitState {
         let mut inner = EmitOut::empty();
         if flow.can_throw {
             let inside = EmitFlow { statement: flow.statement, can_throw: true, ..EmitFlow::plain() };
-            let inside_scope = EmitScope { origin: scope.origin.to_owned(), function: scope.function.to_owned(), channel: scope.channel.to_owned(), ..EmitScope::plain() };
+            let inside_scope = EmitScope { origin: scope.origin.to_string(), function: scope.function.to_string(), channel: scope.channel.to_string(), ..EmitScope::plain() };
             self.emit_core_block(world, walk, &mut inner, host, body, depth, inside, &inside_scope, EmitTail::Value)?;
             failing = inner.buf.contains('?') || inner.buf.contains("return");
         }
@@ -809,7 +809,7 @@ pub(crate) fn emit_is_fatal(ledger: &Ledger, error: &str) -> bool {
 pub(crate) fn emit_join_receiver(world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> String {
     match guarded {
         Expr::MethodCall { receiver, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); match receiver {
-            Expr::Variable(name, _) if config.is_empty() => { let name = *name; emit_text(world, name).to_owned() },
+            Expr::Variable(name, _) if config.is_empty() => { let name = *name; emit_text(world, name).to_string() },
             _ => String::from(""),
         } },
         _ => String::from(""),

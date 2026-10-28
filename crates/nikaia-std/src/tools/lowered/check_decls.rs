@@ -8,7 +8,7 @@ impl CheckState {
         let bounds = match *nikaia_std::index::get(&self.type_parameters, parameter) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for bound in bounds.iter() {
             let methods = match *nikaia_std::index::get(&world.own.traits, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if methods.contains(member) { return Some(Ty::Named { name: bound.to_owned(), args: vec![], view: false }); }
+            if methods.contains(member) { return Some(Ty::Named { name: bound.to_string(), args: vec![], view: false }); }
         }
         None
     }
@@ -83,7 +83,7 @@ impl CheckState {
             return false;
         }
         if seen.contains(name) { return true; }
-        seen.insert(name.to_owned());
+        seen.insert(name.to_string());
         if self.structs.contains_key(name) {
             let fields = match *nikaia_std::index::get(&self.structs, name) { Some(__nikaia_value) => __nikaia_value, None => return false };
             for field in fields.iter() { if self.takes_space(&field.ty, seen) { return true; } }
@@ -140,7 +140,7 @@ impl CheckState {
         if parts.len() != 2 { return None; }
         let rules = match *nikaia_std::index::get(&self.grammars, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !rules.contains(*nikaia_std::index::get(&parts, 1)) { return None; }
-        Some(name.to_owned())
+        Some(name.to_string())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -214,7 +214,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn function_as_a_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<Ty> {
-        let mut key = name.to_owned();
+        let mut key = name.to_string();
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { key = format!("{}::new", name); }
         let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -238,7 +238,7 @@ pub(crate) fn a_nonempty(fields: &[FieldContract]) -> Option<Vec<FieldContract>>
 // this was written - see `contracts::sync`.
 pub fn a_type_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned()
+    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string()
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

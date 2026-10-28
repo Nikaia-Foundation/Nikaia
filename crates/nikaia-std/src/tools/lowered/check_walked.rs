@@ -122,7 +122,7 @@ pub fn check_walked_written(value: &Expr, words: &winnow_grammar::InternerContex
         Expr::LitInt { value: n, negative, .. } => { let n = *n; let negative = *negative; if negative && n != 0u64 { format!("-{}", n) } else { format!("{}", n) } },
         Expr::LitBool(yes, _) => { let yes = *yes; format!("{}", yes) },
         Expr::LitStr { text: s, .. } => s.quoted(),
-        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_owned() },
+        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
         Expr::Unary { op: UnaryOp::Neg, expr, .. } => { let expr = nikaia_std::boxed::open(expr); format!("-{}", check_walked_written(expr, words)) },
         _ => String::from("…"),
     }
@@ -149,12 +149,12 @@ pub fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, 
     let mut prefixes: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (key, _) in world.library.functions.iter() { check_walked_prefix_into(key, &mut prefixes); }
     for (key, _) in world.library.types.iter() { check_walked_prefix_into(key, &mut prefixes); }
-    for prefix in prefixes.iter() { if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(&format!("{}::new", prefix)) { state.std_modules.insert(prefix.to_owned()); } }
+    for prefix in prefixes.iter() { if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(&format!("{}::new", prefix)) { state.std_modules.insert(prefix.to_string()); } }
 }
 
 pub(crate) fn check_walked_prefix_into(key: &str, prefixes: &mut collections::BTreeSet<String>) {
     let cut = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-    prefixes.insert(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_owned());
+    prefixes.insert(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_string());
 }
 
 pub fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
@@ -169,7 +169,7 @@ pub fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, t
 
 pub fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &str, here: i64) -> CheckPlace {
     let none = CheckPlace { at: -1, function: None };
-    let rest = match place.strip_prefix('@') { Some(__nikaia_value) => __nikaia_value, None => return none }.to_owned();
+    let rest = match place.strip_prefix('@') { Some(__nikaia_value) => __nikaia_value, None => return none }.to_string();
     let colon = match nikaia_std::search::find(&rest, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return none };
     let unit = match text::parse_i64(nikaia_std::index::get(&rest, nikaia_std::index::at(0..colon))) { Some(__nikaia_value) => __nikaia_value, None => return none };
     let byte = match text::parse_i64(nikaia_std::index::get(&rest, nikaia_std::index::at(colon + 1..))) { Some(__nikaia_value) => __nikaia_value, None => return none };

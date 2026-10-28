@@ -71,11 +71,11 @@ impl EmitState {
         let mut bare: String = String::from("");
         let mut stripped = false;
         if written.buf.ends_with(" as i64") {
-            bare = nikaia_std::index::or(written.buf.strip_suffix(" as i64"), || "").to_owned();
+            bare = nikaia_std::index::or(written.buf.strip_suffix(" as i64"), || "").to_string();
             stripped = true;
         } else if written.buf.starts_with('(') && written.buf.ends_with(" as i64)") {
-            let inner = nikaia_std::index::or(written.buf.strip_prefix('('), || "").to_owned();
-            bare = nikaia_std::index::or(inner.strip_suffix(" as i64)"), || "").to_owned();
+            let inner = nikaia_std::index::or(written.buf.strip_prefix('('), || "").to_string();
+            bare = nikaia_std::index::or(inner.strip_suffix(" as i64)"), || "").to_string();
             stripped = true;
         }
         if !stripped { return Ok(false); }
@@ -83,7 +83,7 @@ impl EmitState {
             Expr::LitInt { value, negative, .. } => {
                 let negative = *negative; let value = *value;
                 if !negative && bare.ends_with(".len()") {
-                    let receiver = nikaia_std::index::or(bare.strip_suffix(".len()"), || "").to_owned();
+                    let receiver = nikaia_std::index::or(bare.strip_suffix(".len()"), || "").to_string();
                     let empty = emit_read_emptiness(emit_read_turned(op, counter_first), value);
                     if empty.is_some() {
                         let mut not: &'static str = "!";
@@ -378,7 +378,7 @@ impl EmitState {
     }
     pub(crate) fn emit_read_ordinal(&self, at: i64) -> String {
         let all: Vec<&'static str> = vec!["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
-        (*nikaia_std::index::get(&all, nikaia_std::index::at(at))).to_owned()
+        (*nikaia_std::index::get(&all, nikaia_std::index::at(at))).to_string()
     }
     pub(crate) fn emit_read_joined_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, branches: &[&Expr]) -> String {
         let joined = call_joined_throws(world.words, world.aliases, &self.own_contracts, world.library, branches);
@@ -404,7 +404,7 @@ impl EmitState {
         for k in 0..count { if *nikaia_std::index::get(&pauses, nikaia_std::index::at(k)) { order.push(k); } }
         for k in 0..count { if !*nikaia_std::index::get(&pauses, nikaia_std::index::at(k)) { order.push(k); } }
         let fallible = (flow.can_throw || flow.handled_here) && any_fails;
-        let mut channel = scope.channel.to_owned();
+        let mut channel = scope.channel.to_string();
         if flow.handled_here {
             let branches = emit_branch_values(block);
             channel = self.emit_read_joined_channel(world, &branches);
@@ -471,7 +471,7 @@ impl EmitState {
         out.push(body);
         out.push("async { ");
         let inside = EmitFlow { can_throw: fallible, statement: stmt.span.start as i64, ..EmitFlow::plain() };
-        let inside_scope = EmitScope { origin: scope.origin.to_owned(), channel: scope.channel.to_owned(), ..EmitScope::plain() };
+        let inside_scope = EmitScope { origin: scope.origin.to_string(), channel: scope.channel.to_string(), ..EmitScope::plain() };
         match &stmt.node {
             Stmt::Expr(value) => {
                 if queued { out.push(&format!("{}(async {{ ", wrapper)); }
@@ -498,7 +498,7 @@ impl EmitState {
         let values = emit_arm_values(arms);
         for arm in arms.iter() { if self.branch_can_fail(world, arm.at as i64, &arm.value) { any_fails = true; } }
         let fallible = (flow.can_throw || flow.handled_here) && any_fails;
-        let mut channel = scope.channel.to_owned();
+        let mut channel = scope.channel.to_string();
         if flow.handled_here { channel = self.emit_read_joined_channel(world, &values); }
         let pad = "    ".repeat(nikaia_std::count::of(depth));
         let inner = "    ".repeat(nikaia_std::count::of(depth + 1));
@@ -507,7 +507,7 @@ impl EmitState {
             out.push(&inner);
             out.push("async { ");
             let inside = EmitFlow { can_throw: fallible, statement: arm.at as i64, ..EmitFlow::plain() };
-            let inside_scope = EmitScope { origin: scope.origin.to_owned(), channel: channel.to_owned(), ..EmitScope::plain() };
+            let inside_scope = EmitScope { origin: scope.origin.to_string(), channel: channel.to_string(), ..EmitScope::plain() };
             if fallible { out.push(&format!("Ok::<_, {}>(", channel)); }
             self.emit_expr(world, walk, out, host, &arm.value, depth + 1, inside, &inside_scope)?;
             if fallible { out.push(")"); }
@@ -518,7 +518,7 @@ impl EmitState {
         for arm in arms.iter() {
             let mut named: String = String::from("_");
             if arm.binding.is_some() { named = emit_text(world, match arm.binding { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }); }
-            let mut bound = named.to_owned();
+            let mut bound = named.to_string();
             if fallible { bound = String::from("__nikaia_won"); }
             out.push(&format!("{}nikaia_std::task::Race{}::{}({}) => ", inner, count, self.emit_read_ordinal(at), bound));
             at += 1;

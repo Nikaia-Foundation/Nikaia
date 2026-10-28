@@ -27,7 +27,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_module_used_before_it_is_introduced(&mut self, name: &str, span: &Span) {
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let module = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_owned();
+        let module = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string();
         if !self.std_modules.contains(&module) || self.std_in_scope.contains(&module) { return; }
         if is_a_hull(&module) { return; }
         if self.modules.contains(&module) { return; }
@@ -37,8 +37,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_prelude_name_with_a_module_in_front(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let module = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_owned();
-        let last = nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_owned();
+        let module = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string();
+        let last = nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string();
         if !self.std_modules.contains(&module) || self.modules.contains(&module) { return; }
         if world.library.functions.contains_key(name) || !world.library.functions.contains_key(&last) { return; }
         self.findings.push(check_refusal("NK1163", span, format!("`{}` isn't in `{}`: it's always available on its own.", last, module), vec![format!("`{}` needs no `use` and no module in front of it.", last), String::from("Every other `std` name is reached through its module.")], Some(format!("Write `{}(…)` without the `{}::`.", last, module))));
@@ -80,7 +80,7 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub fn integer_named(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if args.is_empty() && !view && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64") { Some(name.to_owned()) } else { None } },
+        Ty::Named { name, args, view } => { let view = *view; if args.is_empty() && !view && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64") { Some(name.to_string()) } else { None } },
         _ => None,
     }
 }

@@ -18,11 +18,11 @@ pub fn an_integer_literal(expr: &Expr) -> bool {
     }
 }
 
-pub fn type_last_segment(name: &str) -> String { nikaia_std::index::or(name.rsplit("::").next(), || std::convert::AsRef::<str>::as_ref(name)).to_owned() }
+pub fn type_last_segment(name: &str) -> String { nikaia_std::index::or(name.rsplit("::").next(), || std::convert::AsRef::<str>::as_ref(name)).to_string() }
 
 pub fn view_of_type(inner: &Ty) -> Ty {
     match inner {
-        Ty::Named { name, args, view } => { let view = *view; if view { inner.clone() } else if args.is_empty() && name == "String" { Ty::Named { name: String::from("str"), args: vec![], view: true } } else { Ty::Named { name: name.to_owned(), args: args.to_owned(), view: true } } },
+        Ty::Named { name, args, view } => { let view = *view; if view { inner.clone() } else if args.is_empty() && name == "String" { Ty::Named { name: String::from("str"), args: vec![], view: true } } else { Ty::Named { name: name.to_string(), args: args.to_owned(), view: true } } },
         Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); Ty::Nullable(Box::new(view_of_type(held))) },
         _ => Ty::Unknown,
     }
@@ -30,14 +30,14 @@ pub fn view_of_type(inner: &Ty) -> Ty {
 
 pub fn viewed_from_type(view: &Ty) -> Vec<Ty> {
     match view {
-        Ty::Named { name, args, view } => { let view = *view; if !view { vec![] } else if args.is_empty() && name == "str" { vec![Ty::Named { name: String::from("String"), args: vec![], view: false }] } else { vec![Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false }] } },
+        Ty::Named { name, args, view } => { let view = *view; if !view { vec![] } else if args.is_empty() && name == "str" { vec![Ty::Named { name: String::from("String"), args: vec![], view: false }] } else { vec![Ty::Named { name: name.to_string(), args: args.to_owned(), view: false }] } },
         _ => vec![],
     }
 }
 
 pub fn unviewed_type(ty: &Ty) -> Ty {
     match ty {
-        Ty::Named { name, args, .. } => Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false },
+        Ty::Named { name, args, .. } => Ty::Named { name: name.to_string(), args: args.to_owned(), view: false },
         _ => ty.clone(),
     }
 }
@@ -169,7 +169,7 @@ pub fn becomes_shared(found: &Ty, want: &Ty) -> bool {
 pub fn way_out_of_a_mismatch(found: &Ty, want: &Ty) -> String {
     if becomes_shared(found, want) {
         let hull = match want {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => String::from(""),
         };
         return format!("Wrap it: `{}(…)`.", hull);

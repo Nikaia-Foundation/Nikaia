@@ -32,7 +32,7 @@ pub(crate) fn check_simd_lane_of(ty: &Ty) -> String {
     match ty {
         Ty::Named { args, .. } => if !args.is_empty() {
             match nikaia_std::index::get(&args, 0) {
-                Ty::Named { name, .. } => name.to_owned(),
+                Ty::Named { name, .. } => name.to_string(),
                 _ => String::from(""),
             }
         } else { String::from("") },
@@ -67,7 +67,7 @@ pub fn check_simd_bytes(ty: &Ty) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_simd_fixed(lane: &str, count: i64) -> Ty { Ty::Named { name: String::from("simd::Fixed"), args: vec![Ty::Named { name: lane.to_owned(), args: vec![], view: false }, Ty::Count(count)], view: false } }
+pub(crate) fn check_simd_fixed(lane: &str, count: i64) -> Ty { Ty::Named { name: String::from("simd::Fixed"), args: vec![Ty::Named { name: lane.to_string(), args: vec![], view: false }, Ty::Count(count)], view: false } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -143,7 +143,7 @@ pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_,
     let mut written: Vec<String> = vec![];
     for part in parts.iter() {
         let part = *part;
-        written.push(world.words.resolve(part).to_owned());
+        written.push(world.words.resolve(part).to_string());
     }
     let path = written.join("::");
     if path != "simd::Fixed::from" || args.len() != 1 { return None; }
@@ -222,7 +222,7 @@ impl CheckState {
             let count = check_simd_literal(rhs);
             if count < 0 || width > 0 && count >= width {
                 let written = if op == BinaryOp::Shl { "<<" } else { ">>" };
-                self.findings.push(check_refusal("NK1299", at, format!("A lane shift `{}` takes a constant count below the lane's {} bits.", written, width), vec![format!("Every lane of a `{}` is shifted by the same count, and a vector shifts by an immediate (ADR-377 D3).", shown).to_owned()], Some(format!("Write the count as a literal from 0 to {}, or choose between shifted values with `simd::select`.", width - 1).to_owned())));
+                self.findings.push(check_refusal("NK1299", at, format!("A lane shift `{}` takes a constant count below the lane's {} bits.", written, width), vec![format!("Every lane of a `{}` is shifted by the same count, and a vector shifts by an immediate (ADR-377 D3).", shown).to_string()], Some(format!("Write the count as a literal from 0 to {}, or choose between shifted values with `simd::select`.", width - 1).to_string())));
             }
             return Some(left.clone());
         }
@@ -240,7 +240,7 @@ impl CheckState {
         }
         for index in nikaia_std::index::or(indices, || vec![].into()) {
             if count > 0 && index >= count {
-                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.text()), vec![format!("Each index names a lane, from 0 to {}.", count - 1).to_owned()], Some(format!("Write an index below {}.", count).to_owned())));
+                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.text()), vec![format!("Each index names a lane, from 0 to {}.", count - 1).to_string()], Some(format!("Write an index below {}.", count).to_string())));
                 return;
             }
         }
@@ -254,7 +254,7 @@ pub fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Ty
         out.push(refusal("NK1297", span.clone(), format!("`{}` needs its lane type.", name), vec![String::from("A vector holds lanes of one integer type (ADR-377 D1, D2).")], help));
         return;
     }
-    let lane = names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_owned();
+    let lane = names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_string();
     if nikaia_std::index::get(&ty.generics, 0).count.is_some() || check_simd_bits_of(&lane) == 0 {
         out.push(refusal("NK1297", span.clone(), format!("`{}` can't hold lanes of `{}`.", name, lane), vec![String::from("A lane is an integer of 8, 16, 32 or 64 bits (ADR-377 D1).")], help));
         return;
@@ -274,7 +274,7 @@ pub fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Ty
             k = k / 2;
         }
         if !power {
-            let written = if n < 0 { names.resolve(nikaia_std::index::get(&ty.generics, 1).name).to_owned() } else { format!("{}", n) };
+            let written = if n < 0 { names.resolve(nikaia_std::index::get(&ty.generics, 1).name).to_string() } else { format!("{}", n) };
             out.push(refusal("NK1297", span.clone(), format!("`{}` can't hold {} lanes.", name, written), vec![String::from("A fixed vector's count is a literal power of two from 2 to 64, which a target narrower than it runs in several registers (ADR-377 D2).")], help));
         }
     }

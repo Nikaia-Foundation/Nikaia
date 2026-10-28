@@ -42,13 +42,13 @@ impl ProverState {
     pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, readers: collections::BTreeSet::new(), pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, loops_recorded: collections::BTreeMap::new(), loops_used: collections::BTreeMap::new(), loops_searched: 0, loops_read: 0, loops_unfound: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
     pub fn reaches(&self, from: &str, to: &str) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        let mut next: Vec<String> = vec![from.to_owned()];
+        let mut next: Vec<String> = vec![from.to_string()];
         while !next.is_empty() {
             let f = match next.pop() { Some(__nikaia_value) => __nikaia_value, None => return false };
             if f == to { return true; }
             if seen.contains(&f) { continue; }
-            seen.insert(f.to_owned());
-            for (caller, callee) in self.edges.iter() { if *caller == f { next.push(callee.to_owned()); } }
+            seen.insert(f.to_string());
+            for (caller, callee) in self.edges.iter() { if *caller == f { next.push(callee.to_string()); } }
         }
         false
     }
@@ -60,7 +60,7 @@ impl ProverState {
         let returned = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, scope, name) }, &mut arena.nodes);
         let mut unshadowed = true;
         for p in params.iter() {
-            let key = if scope.entry.contains_key(p) { p.to_owned() } else { length_of(p) };
+            let key = if scope.entry.contains_key(p) { p.to_string() } else { length_of(p) };
             let at_entry = nikaia_std::index::or(*nikaia_std::index::get(&scope.entry, &key), || -1);
             if at_entry < 0 || !arena.is_the_variable(at_entry, &key) {
                 unshadowed = false;
@@ -75,7 +75,7 @@ impl ProverState {
                 let goal = arena.substitute(nikaia_std::index::get(&posts, (index) as usize).term, &given);
                 shown = matches!(ask(&arena, &scope.facts, goal), SolverAnswer::Proved);
             }
-            if !shown { self.broken.insert((owner.to_owned(), index)); }
+            if !shown { self.broken.insert((owner.to_string(), index)); }
         }
     }
     pub(crate) fn through_loops(&mut self, arena: &mut TermArena, scope: &ProverScope, claim: i64, base: Vec<i64>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer) -> Option<String> {
@@ -86,7 +86,7 @@ impl ProverState {
             if self.loops_failed.contains(&key) { continue; }
             if !self.loops_found.contains_key(&key) {
                 let mut asked: Vec<i64> = vec![];
-                let recorded: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_recorded, &record.start), || "").to_owned();
+                let recorded: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_recorded, &record.start), || "").to_string();
                 let mut found: Option<LoopFound> = None;
                 let mut kept: String = String::from("");
                 if !recorded.is_empty() {
@@ -94,7 +94,7 @@ impl ProverState {
                         found = loop_recorded(arena, record, alternative, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
                         if found.is_some() {
                             self.loops_read += 1;
-                            kept = alternative.to_owned();
+                            kept = alternative.to_string();
                             break;
                         }
                     }
@@ -109,17 +109,17 @@ impl ProverState {
                 }
                 let held = nikaia_std::index::or(found, || LoopFound { parts: vec![] });
                 if held.parts.is_empty() {
-                    self.loops_failed.insert(key.to_owned());
+                    self.loops_failed.insert(key.to_string());
                     continue;
                 }
                 if kept.is_empty() { kept = loop_parts_text(&arena, &held); }
-                let used: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_used, &record.start), || "").to_owned();
+                let used: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_used, &record.start), || "").to_string();
                 if used.is_empty() { self.loops_used.insert(record.start, kept); } else {
                     let mut known = false;
-                    for alternative in used.split('|') { if alternative == kept { known = true; } }
+                    for alternative in used.split('|') { if AsRef::<str>::as_ref(&(alternative)) == AsRef::<str>::as_ref(&(kept)) { known = true; } }
                     if !known { self.loops_used.insert(record.start, format!("{}|{}", used, kept)); }
                 }
-                self.loops_found.insert(key.to_owned(), held);
+                self.loops_found.insert(key.to_string(), held);
             }
             let held = match *nikaia_std::index::get(&self.loops_found, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             facts.extend(loop_facts(arena, record, held));
@@ -155,7 +155,7 @@ impl ProverState {
                     let mut posts = nikaia_std::index::or(self.candidates.remove(&owner), || vec![].into());
                     let mut again = false;
                     for post in posts.iter() { if post.written == written { again = true; } }
-                    if !again { posts.push(PostClaim { term: nikaia_std::index::or(term, || 0), written: written.to_owned() }); }
+                    if !again { posts.push(PostClaim { term: nikaia_std::index::or(term, || 0), written: written.to_string() }); }
                     self.candidates.insert(owner, posts);
                 }
             }
@@ -189,7 +189,7 @@ impl ProverState {
         let mut only_params = !names.is_empty();
         for n in names.iter() { if !at.params.contains(n) { only_params = false; } }
         let mut tainted_name: Option<String> = None;
-        for n in names.iter() { if tainted_name.is_none() && scope.tainted.contains(n) { tainted_name = Some(n.to_owned()); } }
+        for n in names.iter() { if tainted_name.is_none() && scope.tainted.contains(n) { tainted_name = Some(n.to_string()); } }
         let tainted_claim = tainted_name.is_some();
         let mut refuted: Option<collections::BTreeMap<String, i64>> = None;
         if claim.is_some() && !tainted_claim {
@@ -242,10 +242,10 @@ impl ProverState {
                     let as_written = only_params && at.top;
                     let mut computed: Option<String> = None;
                     if !as_written { computed = Some(arena.text(nikaia_std::index::or(term, || 0))); }
-                    let pre = PreClaim { term: nikaia_std::index::or(term, || 0), written: written.to_owned(), computed, message, origin: None, site: None };
+                    let pre = PreClaim { term: nikaia_std::index::or(term, || 0), written: written.to_string(), computed, message, origin: None, site: None };
                     let mut found = nikaia_std::index::or(self.preconditions.remove(&function), || Precondition::none());
                     found.claims.push(pre);
-                    self.preconditions.insert(function.to_owned(), found);
+                    self.preconditions.insert(function.to_string(), found);
                 }
                 scope.facts.push(nikaia_std::index::or(claim, || 0));
                 outcome.held = ClaimHeld::Precondition(function, 0);
@@ -294,7 +294,7 @@ impl ProverState {
                 if ((k) as usize) >= params.len() { break; }
                 let param = nikaia_std::index::get(&params, (k) as usize);
                 let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, scope, name) }, &mut arena.nodes);
-                if term.is_some() { given_by.insert(param.to_owned(), nikaia_std::index::or(term, || 0)); }
+                if term.is_some() { given_by.insert(param.to_string(), nikaia_std::index::or(term, || 0)); }
                 match arg {
                     Expr::Variable(name, _) => {
                         let name = *name;
@@ -314,7 +314,7 @@ impl ProverState {
             let mut goal: Option<i64> = None;
             if every_given(&read, &given_by) { goal = Some(arena.substitute(pre.term, &given_by)); }
             if goal.is_some() && is_proved(ask(&arena, &scope.facts, nikaia_std::index::or(goal, || 0))) { continue; }
-            let site = CarriedFrom { at: span.start as i64, callee: callee.to_owned(), place: index };
+            let site = CarriedFrom { at: span.start as i64, callee: callee.to_string(), place: index };
             if self.collecting {
                 let mut carrying: Option<String> = None;
                 if at.no_precondition.is_none() { carrying = carrying_function((at.function).as_deref()); }
@@ -329,7 +329,7 @@ impl ProverState {
                 let values = nikaia_std::index::or(always, || collections::BTreeMap::new().into());
                 let given = values_given(&arena, &given_by, &read, &values);
                 let computed = claim_text_of((pre.computed).as_deref());
-                let mut written = pre.written.to_owned();
+                let mut written = pre.written.to_string();
                 let mut notes: Vec<String> = vec![format!("Here {}.", shown(&given))];
                 if computed.is_some() {
                     written = nikaia_std::index::or(computed, || "".into());
@@ -345,10 +345,10 @@ impl ProverState {
                     let given = values_given(&arena, &given_by, &read, &values);
                     let computed = claim_text_of((pre.computed).as_deref());
                     let has_computed = computed.is_some();
-                    let written = nikaia_std::index::or(computed, || pre.written.to_owned().into());
+                    let written = nikaia_std::index::or(computed, || pre.written.to_string().into());
                     let mut notes: Vec<String> = vec![format!("Then {}.", shown(&given))];
                     if has_computed {
-                        let origin = nikaia_std::index::or(claim_text_of((pre.origin).as_deref()), || callee.to_owned().into());
+                        let origin = nikaia_std::index::or(claim_text_of((pre.origin).as_deref()), || callee.to_string().into());
                         notes.push(format!("The precondition is `assert({})` in `{}`.", pre.written, origin));
                     }
                     outcome.findings.push(Finding { code: String::from("NK1207"), span, message: format!("This call breaks `{}`'s precondition `{}` when {}.", callee, written, shown(&values)), notes, help: Some(format!("Pass `{}` arguments for which `{}` holds, or check them with a guard before the call.", callee, written)), warning: false, labels: vec![] });
@@ -359,7 +359,7 @@ impl ProverState {
                 let mut operands: Vec<(String, String)> = vec![];
                 for name in read.iter() {
                     let value = match *nikaia_std::index::get(&given_by, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
-                    operands.push((name.to_owned(), rust_text(&arena, value, &escape)));
+                    operands.push((name.to_string(), rust_text(&arena, value, &escape)));
                 }
                 let check = PreconditionCheck { rust: rust_text(&arena, nikaia_std::index::or(goal, || 0), &escape), written: pre.failure(callee), message: claim_text_of((pre.message).as_deref()), operands };
                 this_reach = CallReach::Checked(vec![check]);
@@ -375,7 +375,7 @@ impl ProverState {
         if self.in_test || self.reaches(callee, &owner) { return; }
         if refuting_values(arena, &scope.facts, claim, &ask, &model).is_some() { return; }
         let term = match scope.precondition_at(arena, claim, params) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let carried = PreClaim { term, written: pre.written.to_owned(), computed: Some(arena.text(term)), message: claim_text_of((pre.message).as_deref()), origin: Some(nikaia_std::index::or(claim_text_of((pre.origin).as_deref()), || callee.to_owned().into())), site: Some(site) };
+        let carried = PreClaim { term, written: pre.written.to_string(), computed: Some(arena.text(term)), message: claim_text_of((pre.message).as_deref()), origin: Some(nikaia_std::index::or(claim_text_of((pre.origin).as_deref()), || callee.to_string().into())), site: Some(site) };
         let mut found = nikaia_std::index::or(self.preconditions.remove(&owner), || Precondition::none());
         found.claims.push(carried);
         self.preconditions.insert(owner, found);
@@ -383,7 +383,7 @@ impl ProverState {
 }
 
 pub(crate) fn unread_name(names: &collections::BTreeSet<String>, scope: &ProverScope) -> Option<String> {
-    for n in names.iter() { if scope.locals.contains(n) && !scope.ints.contains(n) && !scope.ints.contains(&length_of(n)) { return Some(n.to_owned()); } }
+    for n in names.iter() { if scope.locals.contains(n) && !scope.ints.contains(n) && !scope.ints.contains(&length_of(n)) { return Some(n.to_string()); } }
     None
 }
 
@@ -395,7 +395,7 @@ pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[
         if ((k) as usize) >= params.len() { break; }
         let param = nikaia_std::index::get(&params, (k) as usize);
         let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(pinned, scope, name) }, &mut arena.nodes);
-        if term.is_some() { args_given.insert(param.to_owned(), nikaia_std::index::or(term, || 0)); }
+        if term.is_some() { args_given.insert(param.to_string(), nikaia_std::index::or(term, || 0)); }
         match arg {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -438,7 +438,7 @@ pub fn summed_read(arena: &TermArena, scope: &ProverScope, claim: i64) -> Vec<St
             let fact = nikaia_std::num::value(fact);
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             arena.variables(fact, &mut read);
-            if summed_ties(&read, &names) { for n in read.iter() { names.insert(n.to_owned()); } }
+            if summed_ties(&read, &names) { for n in read.iter() { names.insert(n.to_string()); } }
         }
         for (bound, alts) in scope.summed.iter() {
             if !names.contains(bound) { continue; }
@@ -450,7 +450,7 @@ pub fn summed_read(arena: &TermArena, scope: &ProverScope, claim: i64) -> Vec<St
         grown = (names.len() as i64) != before;
     }
     let mut out: Vec<String> = vec![];
-    for (bound, _) in scope.summed.iter() { if names.contains(bound) { out.push(bound.to_owned()); } }
+    for (bound, _) in scope.summed.iter() { if names.contains(bound) { out.push(bound.to_string()); } }
     out
 }
 
@@ -463,7 +463,7 @@ pub fn leaned_notes(arena: &TermArena, scope: &ProverScope, names: &collections:
             let fact = nikaia_std::num::value(fact);
             let mut fact_names: collections::BTreeSet<String> = collections::BTreeSet::new();
             arena.variables(fact, &mut fact_names);
-            if summed_ties(&fact_names, &read) { for n in fact_names.iter() { read.insert(n.to_owned()); } }
+            if summed_ties(&fact_names, &read) { for n in fact_names.iter() { read.insert(n.to_string()); } }
         }
         grown = (read.len() as i64) != before;
     }
@@ -499,8 +499,8 @@ pub(crate) fn summed_notes(arena: &mut TermArena, scope: &ProverScope, read: &[S
         let alts = match *nikaia_std::index::get(&scope.summed, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if alts.is_empty() { continue; }
         let mut whys: Vec<String> = vec![];
-        for alt in alts.iter() { whys.push(alt.why.to_owned()); }
-        let call = nikaia_std::index::get(&alts, 0).call.to_owned();
+        for alt in alts.iter() { whys.push(alt.why.to_string()); }
+        let call = nikaia_std::index::get(&alts, 0).call.to_string();
         let how = whys.join("; ");
         let mut said = format!("`{}`: {}.", call, how);
         let value = *nikaia_std::index::get(&values, bound);
@@ -530,9 +530,9 @@ pub(crate) fn given_paths(arena: &mut TermArena, words: &winnow_grammar::Interne
         if given_by.contains_key(v) { continue; }
         for k in 0..params.len() as i64 {
             if ((k) as usize) < args.len() && v.starts_with(&format!("{}.", *nikaia_std::index::get(&params, (k) as usize))) {
-                let rest = nikaia_std::index::or(v.strip_prefix(&format!("{}.", *nikaia_std::index::get(&params, (k) as usize))), || "").to_owned();
+                let rest = nikaia_std::index::or(v.strip_prefix(&format!("{}.", *nikaia_std::index::get(&params, (k) as usize))), || "").to_string();
                 let term = given_path(arena, words, nikaia_std::index::get(&args, (k) as usize), &rest, scope, pinned);
-                if term.is_some() { given_by.insert(v.to_owned(), nikaia_std::index::or(term, || 0)); }
+                if term.is_some() { given_by.insert(v.to_string(), nikaia_std::index::or(term, || 0)); }
             }
         }
     }
@@ -547,7 +547,7 @@ pub(crate) fn given_path(arena: &mut TermArena, words: &winnow_grammar::Interner
     }
     match arg {
         Expr::StructLit { fields, .. } => {
-            let field_name = nikaia_std::index::or(rest.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(rest)).to_owned();
+            let field_name = nikaia_std::index::or(rest.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(rest)).to_string();
             let counted = rest.ends_with(".len()");
             for field in fields.iter() {
                 if words.resolve(field.name) == field_name {
@@ -579,7 +579,7 @@ pub(crate) fn standing_posts(postconditions: &collections::BTreeMap<String, Vec<
 
 pub(crate) fn carrying_function(function: Option<&str>) -> Option<String> {
     let f = match function { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(f.to_owned())
+    Some(f.to_string())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -617,7 +617,7 @@ pub(crate) fn values_given(arena: &TermArena, given_by: &collections::BTreeMap<S
         let term = nikaia_std::num::value(term);
         if !read.contains(name) { continue; }
         let value = match arena.int_value(term, values) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        out.insert(name.to_owned(), value);
+        out.insert(name.to_string(), value);
     }
     out
 }
@@ -632,7 +632,7 @@ pub struct AssertOutcome {
 
 pub(crate) fn returned_before(before_return: &collections::BTreeMap<i64, String>, at: i64) -> Option<String> {
     let name = match *nikaia_std::index::get(&before_return, &at) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(name.to_owned())
+    Some(name.to_string())
 }
 
 pub(crate) fn without_full_stops(text: &str) -> String {

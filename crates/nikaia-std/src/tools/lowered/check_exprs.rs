@@ -3,7 +3,7 @@
 
 pub(crate) fn check_exprs_part_name(index: i64) -> String {
     let letters = vec!["a", "b", "c", "d", "e", "f", "g", "h"];
-    if index < 8 { return (*nikaia_std::index::get(&letters, nikaia_std::index::at(index))).to_owned(); }
+    if index < 8 { return (*nikaia_std::index::get(&letters, nikaia_std::index::at(index))).to_string(); }
     format!("p{}", index)
 }
 
@@ -39,7 +39,7 @@ pub(crate) fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op
 }
 
 pub(crate) fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, into: &str) -> Vec<String> {
-    let name = world.words.resolve(method).to_owned();
+    let name = world.words.resolve(method).to_string();
     if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") && !name.starts_with("bits_as_") && !name.starts_with("rotate_") { return vec![]; }
     vec![format!("`{}`", name), format!("({} as {}).{}(…)", written_expression(world.words, receiver), into, name)]
 }
@@ -50,8 +50,8 @@ impl CheckState {
     pub fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
         let found = width_dependent(world, value, into);
         if found.is_empty() { return false; }
-        let what = (*nikaia_std::index::get(&found, 0)).to_owned();
-        let before = (*nikaia_std::index::get(&found, 1)).to_owned();
+        let what = (*nikaia_std::index::get(&found, 0)).to_string();
+        let before = (*nikaia_std::index::get(&found, 1)).to_string();
         let whole = written_expression(world.words, value);
         let message = format!("This {} is computed in a narrower type than the `{}` it is put into.", what, into);
         let note = format!("The result of {} depends on the width, so widening before it and after it give different numbers.", what);
@@ -71,7 +71,7 @@ impl CheckState {
         if right_bare { right = format!("({})", right); }
         let compared = binary_op_text(op);
         let note = "Nikaia binds `&`, `|`, `^` and the shifts tighter than a comparison, and C binds them looser, so without parentheses the line can be read two ways.";
-        self.findings.push(check_refusal("NK1197", at, String::from("Put parentheses around a bit operation next to a comparison."), vec![note.to_owned()], Some(format!("Write `{} {} {}`.", left, compared, right))));
+        self.findings.push(check_refusal("NK1197", at, String::from("Put parentheses around a bit operation next to a comparison."), vec![note.to_string()], Some(format!("Write `{} {} {}`.", left, compared, right))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -96,8 +96,8 @@ impl CheckState {
         if is_a_list_type(held) {
             what = String::from("a list");
             let shown = match hole {
-                Expr::Variable(_, _) => written.to_owned(),
-                Expr::Field { .. } => written.to_owned(),
+                Expr::Variable(_, _) => written.to_string(),
+                Expr::Field { .. } => written.to_string(),
                 _ => format!("({})", written),
             };
             help = format!("Join its elements into text first: `let text = {}.iter().join(\", \")`, then write `{{text}}`.", shown);
@@ -116,8 +116,8 @@ impl CheckState {
     pub(crate) fn a_value_with_no_text_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
         let written = written_expression(world.words, hole);
         let shown = match hole {
-            Expr::Variable(_, _) => written.to_owned(),
-            Expr::Field { .. } => written.to_owned(),
+            Expr::Variable(_, _) => written.to_string(),
+            Expr::Field { .. } => written.to_string(),
             _ => format!("({})", written),
         };
         let ty = held.unseen();
@@ -180,10 +180,10 @@ impl CheckState {
                 let mut an_enum = is_enum;
                 if is_struct {
                     let own_fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
-                    for field in own_fields.iter() { fields.push(field.name.to_owned()); }
+                    for field in own_fields.iter() { fields.push(field.name.to_string()); }
                 } else if !is_enum {
                     let contract = match world.own.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
-                    for field in contract.fields.iter() { fields.push(field.name.to_owned()); }
+                    for field in contract.fields.iter() { fields.push(field.name.to_string()); }
                     an_enum = !contract.variants.is_empty();
                 }
                 if an_enum {
@@ -209,7 +209,7 @@ impl CheckState {
             _ => { return; },
         }
         let mut called: String = format!("`{}`", held.text());
-        if what == "a range" || what == "a tuple" { called = what.to_owned(); }
+        if what == "a range" || what == "a tuple" { called = what.to_string(); }
         if printed {
             let note = format!("A print call writes its value's text, and {} no text form. `{}` is {}.", kinds, written, called);
             self.findings.push(check_refusal("NK1201", span, format!("You can't print {}.", what), vec![note], Some(help)));
@@ -235,7 +235,7 @@ impl CheckState {
     pub fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
         if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) { return; }
         let name = match held {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return,
         };
         if !moves(held) || self.copies_in_the_package.contains(&name) { return; }
@@ -249,7 +249,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn mixed_text_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty) -> bool {
         let name = match target {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
             _ => return false,
         };
         if !self.flow.mixed_text.contains(&name) { return false; }
@@ -274,7 +274,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
         let name = match target {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
             _ => return false,
         };
         let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -283,7 +283,7 @@ impl CheckState {
         let message = format!("You're giving `{}` text of its own, but it started as a literal, so it can only hold a view of text.", name);
         let note = "A literal is text built into the program. A name bound to one is a view of that text, so everything it's given later has to be a view too.";
         let help = format!("Declare it as text of its own: `let mut {}: String = \"{}\"`.", name, literal);
-        self.findings.push(check_refusal("NK1105", span, message, vec![note.to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK1105", span, message, vec![note.to_string()], Some(help)));
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -292,7 +292,7 @@ impl CheckState {
         let wanted = Ty::Named { name: String::from("bool"), args: vec![], view: false };
         if found.fits(&wanted) { return; }
         let help: String = String::from("Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`.");
-        self.findings.push(check_refusal("NK1108", span, format!("A condition has to be `true` or `false`, but this is `{}`.", found.text()), vec![why.to_owned()], Some(help)));
+        self.findings.push(check_refusal("NK1108", span, format!("A condition has to be `true` or `false`, but this is `{}`.", found.text()), vec![why.to_string()], Some(help)));
     }
 }
 
@@ -316,13 +316,13 @@ impl CheckState {
         if !a_plain_str_view(found) || !a_plain_string(want) { return None; }
         let cost = "Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.";
         let said = capitalised(keeper);
-        if named.is_none() { return Some(CheckKept { notes: vec![String::from("This is a view: it points into text that something else owns."), format!("{}, so it needs text of its own.", said), cost.to_owned()], help: String::from("Write `.clone()` to copy it here.") }); }
-        let name = nikaia_std::index::or(named, || "").to_owned();
+        if named.is_none() { return Some(CheckKept { notes: vec![String::from("This is a view: it points into text that something else owns."), format!("{}, so it needs text of its own.", said), cost.to_string()], help: String::from("Write `.clone()` to copy it here.") }); }
+        let name = nikaia_std::index::or(named, || "").to_string();
         let local = self.binding(&name);
         if local.is_some() {
             let held = match local { Some(__nikaia_value) => __nikaia_value, None => return None };
             if held.literal.is_some() {
-                let literal = nikaia_std::index::or(held.literal.as_deref(), || "").to_owned();
+                let literal = nikaia_std::index::or(held.literal.as_deref(), || "").to_string();
                 let first = format!("`{}` was bound to the literal \"{}\", so it's a view of that text.", name, literal);
                 let second = format!("{}, so it needs text of its own. Written directly here, the literal would become text of its own; through the name it can't, because that would change how `{}` was declared above.", said, name);
                 let way = format!("Write \"{}\" here directly, or declare `let {}: String = \"{}\"`.", literal, name, literal);
@@ -331,10 +331,10 @@ impl CheckState {
             if a_parameter_binding(&held) {
                 let first = format!("`{}` is declared `ref String`, so the text belongs to the caller, who still has it.", name);
                 let way = format!("Declare `{}: String` so the caller hands its text over, or write `{}.clone()` to copy it here.", name, name);
-                return Some(CheckKept { notes: vec![first, format!("{}, so it needs text of its own.", said), cost.to_owned()], help: way });
+                return Some(CheckKept { notes: vec![first, format!("{}, so it needs text of its own.", said), cost.to_string()], help: way });
             }
         }
-        Some(CheckKept { notes: vec![String::from("This is a view: it points into text that something else owns."), format!("{}, so it needs text of its own.", said), cost.to_owned()], help: String::from("Write `.clone()` to copy it here.") })
+        Some(CheckKept { notes: vec![String::from("This is a view: it points into text that something else owns."), format!("{}, so it needs text of its own.", said), cost.to_string()], help: String::from("Write `.clone()` to copy it here.") })
     }
 }
 

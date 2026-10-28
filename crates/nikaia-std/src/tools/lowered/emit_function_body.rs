@@ -40,16 +40,16 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_function_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, throws_: bool, returns_value: bool, awaited: &[winnow_grammar::Symbol], key: &str, channel: &str, counts_steps: bool, skip_free_at_exit: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        walk.keep_function = key.to_owned();
+        walk.keep_function = key.to_string();
         let mut locals: collections::BTreeSet<String> = collections::BTreeSet::new();
         let known = host.known_nonnegative(body);
         match known {
             None => { for symbol in nonnegative_locals(body) { locals.insert(emit_text(world, symbol)); } },
-            Some(ref names) => { for name in names.iter() { locals.insert(name.to_owned()); } },
+            Some(ref names) => { for name in names.iter() { locals.insert(name.to_string()); } },
         }
-        walk.nonnegative.insert(key.to_owned(), locals);
+        walk.nonnegative.insert(key.to_string(), locals);
         let flow = EmitFlow { can_throw: throws_, ..EmitFlow::plain() };
-        let scope = EmitScope { origin: nikaia_std::index::or(key.rsplit("::").next(), || "").to_owned(), function: key.to_owned(), channel: channel.to_owned(), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: awaited.to_owned(), tasks_channel: String::from(""), tasks_function: String::from("") };
+        let scope = EmitScope { origin: nikaia_std::index::or(key.rsplit("::").next(), || "").to_string(), function: key.to_string(), channel: channel.to_string(), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: awaited.to_owned(), tasks_channel: String::from(""), tasks_function: String::from("") };
         let tail = if returns_value { EmitTail::Return } else { EmitTail::Statement };
         let mut first: Vec<String> = walk.either_prelude.to_owned();
         walk.either_prelude = vec![];

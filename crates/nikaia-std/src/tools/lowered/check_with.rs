@@ -53,7 +53,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn no_such_field(&mut self, ty: &str, field: &str, declared: &[FieldContract], span: &Span) {
         let mut names: Vec<String> = vec![];
-        for one in declared.iter() { names.push(one.name.to_owned()); }
+        for one in declared.iter() { names.push(one.name.to_string()); }
         let near = nearest_name(field, &names);
         let mut help: String = format!("Add `{}` to `{}`, or use one of the fields it has.", field, ty);
         if near.is_some() { help = format!("Did you mean `{}`?", nikaia_std::index::or(near.as_deref(), || "")); }

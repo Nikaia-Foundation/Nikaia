@@ -88,7 +88,7 @@ pub(crate) fn emit_order_assignment(stmt: &Stmt, at: i64, proofs: &EmitOrderProo
                     BinaryOp::BitXor => { },
                     _ => { return false; },
                 }
-                touch.reads.push(place.to_owned());
+                touch.reads.push(place.to_string());
             }
             touch.writes.push(place);
             return true;
@@ -127,7 +127,7 @@ pub(crate) fn emit_order_proved(sites: &collections::BTreeSet<i64>, proved: &col
 
 pub(crate) fn emit_order_place(expr: &Expr, proofs: &EmitOrderProofs, words: &winnow_grammar::InternerContext, touch: &mut EmitOrderTouch) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             let inner = match emit_order_place(base, proofs, words, touch) { Some(__nikaia_value) => __nikaia_value, None => return None };

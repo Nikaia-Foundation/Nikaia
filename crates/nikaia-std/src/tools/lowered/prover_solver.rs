@@ -33,7 +33,7 @@ pub(crate) fn values_of(names: &collections::BTreeSet<String>, values: &collecti
     let mut shown: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for name in names.iter() {
         let value = match *nikaia_std::index::get(&values, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
-        shown.insert(name.to_owned(), value);
+        shown.insert(name.to_string(), value);
     }
     shown
 }

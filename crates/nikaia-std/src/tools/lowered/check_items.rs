@@ -3,7 +3,7 @@
 
 pub(crate) fn item_last_segment(written: &str) -> String {
     let mut last: String = String::from("");
-    for part in written.split("::") { last = part.to_owned(); }
+    for part in written.split("::") { last = part.to_string(); }
     last
 }
 
@@ -56,9 +56,9 @@ pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, na
 
 pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
-    let own = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned();
+    let own = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string();
     let mut target: String = String::from("");
-    if parts.len() > 1 { target = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_owned(); }
+    if parts.len() > 1 { target = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_string(); }
     for item in view.items.iter() {
         if target == "" { if item_takes_either(view, &item.node, &own, at) { return true; } } else {
             let found = match &item.node {
@@ -269,7 +269,7 @@ pub(crate) fn item_all_default(tys: &[Ty]) -> bool {
 
 pub(crate) fn item_plain_name(subject: &Ty) -> Option<String> {
     match subject {
-        Ty::Named { name, args, view } => { let view = *view; if view || !args.is_empty() { None } else { Some(name.to_owned()) } },
+        Ty::Named { name, args, view } => { let view = *view; if view || !args.is_empty() { None } else { Some(name.to_string()) } },
         _ => None,
     }
 }
@@ -306,7 +306,7 @@ pub(crate) fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>
         let vname = view.text(variant.name);
         let written = format!("{}::{}", name, vname);
         let mut size: i64 = 0;
-        let mut text: String = written.to_owned();
+        let mut text: String = written.to_string();
         let mut usable = true;
         match &variant.fields {
             VariantFields::Unit => { },
@@ -385,7 +385,7 @@ impl CheckState {
         let mut holes: Vec<String> = vec![];
         for f in fields.iter() {
             if !item_has_a_default(&f.ty) { return None; }
-            let fname = f.name.to_owned();
+            let fname = f.name.to_string();
             holes.push(format!("{}: Default::default()", fname));
         }
         let joined = holes.join(", ");
@@ -405,18 +405,18 @@ impl CheckState {
         }
         if (variants.len() as i64) != known.len() as i64 {
             variants = vec![];
-            for k in known.iter() { variants.push(k.to_owned()); }
+            for k in known.iter() { variants.push(k.to_string()); }
         }
         let mut out: Vec<FieldContract> = vec![];
-        for variant in variants.iter() { out.push(FieldContract { name: variant.to_owned(), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
+        for variant in variants.iter() { out.push(FieldContract { name: variant.to_string(), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
         Some(out)
     }
     pub fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let declared = self.lookup(name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || name == "assume" || imports_a_package(view, name);
         if declared { return; }
         let mut known: Vec<String> = vec![];
-        for key in world.own.functions.keys() { if !key.contains("::") { known.push(key.to_owned()); } }
-        for key in world.library.functions.keys() { if !key.contains("::") { known.push(key.to_owned()); } }
+        for key in world.own.functions.keys() { if !key.contains("::") { known.push(key.to_string()); } }
+        for key in world.library.functions.keys() { if !key.contains("::") { known.push(key.to_string()); } }
         known.push(String::from("panic"));
         let near = nearest_name(name, &known);
         let mut help: String = format!("Declare it with `fn {}(…)`, or call it through the package that has it.", name);
@@ -429,7 +429,7 @@ impl CheckState {
     pub fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
         let at = nikaia_std::search::find(&written, &"::", 0);
         if at.is_some() {
-            let head = nikaia_std::index::get(&written, nikaia_std::index::at(0..match at { Some(__nikaia_value) => __nikaia_value, None => return })).to_owned();
+            let head = nikaia_std::index::get(&written, nikaia_std::index::at(0..match at { Some(__nikaia_value) => __nikaia_value, None => return })).to_string();
             self.a_head_nothing_declares(view, world, &head, written, span);
             return;
         }
@@ -456,12 +456,12 @@ impl CheckState {
         declared = declared || item_ledger_has(world.own, &prefix) || item_ledger_has(world.library, &prefix) || imports_a_package(view, &head);
         if declared { return; }
         let mut heads: Vec<String> = vec![];
-        for m in self.std_modules.iter() { heads.push(m.to_owned()); }
-        for m in self.modules.iter() { heads.push(m.to_owned()); }
-        for (k, _) in self.structs.iter() { heads.push(k.to_owned()); }
-        for (k, _) in self.enums.iter() { heads.push(k.to_owned()); }
+        for m in self.std_modules.iter() { heads.push(m.to_string()); }
+        for m in self.modules.iter() { heads.push(m.to_string()); }
+        for (k, _) in self.structs.iter() { heads.push(k.to_string()); }
+        for (k, _) in self.enums.iter() { heads.push(k.to_string()); }
         let mut near: Option<String> = None;
-        for known in heads.iter() { if near.is_none() && distance(&head, known) == 1 { near = Some(known.to_owned()); } }
+        for known in heads.iter() { if near.is_none() && distance(&head, known) == 1 { near = Some(known.to_string()); } }
         if near.is_none() { near = nearest_name(&head, &heads); }
         let mut help: String = format!("If `{}` is a package or a `std` module, write `use {}` at the top of the file - for a package, also add it to `[dependencies]` in `nikaia.toml`; for a Rust crate, run `nikaia describe {}`. If it is a type, declare it in this package.", head, head, head);
         if near.is_some() {
@@ -475,13 +475,13 @@ impl CheckState {
 }
 
 pub(crate) fn item_has_trait(ledger: &Ledger, written: &str, suffix: &str) -> bool {
-    for key in ledger.traits.keys() { if key == written || key.ends_with(suffix) { return true; } }
+    for key in ledger.traits.keys() { if AsRef::<str>::as_ref(&(key)) == AsRef::<str>::as_ref(&(written)) || key.ends_with(suffix) { return true; } }
     false
 }
 
 pub(crate) fn item_contract_variants(contract: &TypeContract) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for v in contract.variants.iter() { out.push(v.name.to_owned()); }
+    for v in contract.variants.iter() { out.push(v.name.to_string()); }
     out
 }
 
@@ -516,12 +516,12 @@ pub(crate) fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: 
         return;
     }
     if ty.generics.is_empty() {
-        out.insert(name.to_owned());
+        out.insert(name.to_string());
         return;
     }
     let generic = match generics.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
     if (generic.params.len() as i64) != ty.generics.len() as i64 { return; }
-    out.insert(name.to_owned());
+    out.insert(name.to_string());
     for member in generic.members.iter() { item_held_through(&generic, member, parsed, &ty.generics, generics, out); }
 }
 
@@ -547,15 +547,15 @@ pub(crate) fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &P
 
 pub(crate) fn item_reaches(from: &str, to: &str, holds: &collections::BTreeMap<String, collections::BTreeSet<String>>) -> bool {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut stack: Vec<String> = vec![from.to_owned()];
+    let mut stack: Vec<String> = vec![from.to_string()];
     while !stack.is_empty() {
         let at = match stack.pop() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let next_of = match holds.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
         for next in next_of.iter() {
             if next == to { return true; }
             if !seen.contains(next) {
-                seen.insert(next.to_owned());
-                stack.push(next.to_owned());
+                seen.insert(next.to_string());
+                stack.push(next.to_string());
             }
         }
     }
@@ -619,16 +619,16 @@ impl CheckState {
                 for held in item_members_of(file, &item.node) {
                     let mut inline: collections::BTreeSet<String> = collections::BTreeSet::new();
                     item_held_inline(file, &held.ty, &generics, &mut inline);
-                    entry.push(ItemInline { member: held.member.to_owned(), inline });
+                    entry.push(ItemInline { member: held.member.to_string(), inline });
                 }
-                members.insert(name.to_owned(), entry);
+                members.insert(name.to_string(), entry);
             }
         }
         let mut holds: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
         for (name, fields) in members.iter() {
             let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for f in fields.iter() { for h in f.inline.iter() { all.insert(h.to_owned()); } }
-            holds.insert(name.to_owned(), all);
+            for f in fields.iter() { for h in f.inline.iter() { all.insert(h.to_string()); } }
+            holds.insert(name.to_string(), all);
         }
         for (name, fields) in members.iter() {
             for f in fields.iter() {
@@ -636,8 +636,8 @@ impl CheckState {
                 for held in f.inline.iter() { if held == name || item_reaches(held, name, &holds) { back = true; } }
                 if back {
                     let mut set = item_boxed_set(&self.facts.boxed_members, name);
-                    set.insert(f.member.to_owned());
-                    self.facts.boxed_members.insert(name.to_owned(), set);
+                    set.insert(f.member.to_string());
+                    self.facts.boxed_members.insert(name.to_string(), set);
                 }
             }
         }

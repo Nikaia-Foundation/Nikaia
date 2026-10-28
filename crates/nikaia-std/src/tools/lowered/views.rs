@@ -45,7 +45,7 @@ pub(crate) fn method_table(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], u
     for item in items.iter() {
         match &item.node {
             Item::Impl { target, methods, .. } => {
-                let owner = asked.names.resolve(target.name).to_owned();
+                let owner = asked.names.resolve(target.name).to_string();
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, receiver, args, .. } => {
@@ -54,7 +54,7 @@ pub(crate) fn method_table(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], u
                             let mut params: Vec<String> = vec![];
                             let mut takes_mut = false;
                             for arg in args.iter() {
-                                params.push(asked.names.resolve(arg.name).to_owned());
+                                params.push(asked.names.resolve(arg.name).to_string());
                                 if arg.mutable { takes_mut = true; }
                             }
                             let reading = takes_a_view_of_itself((receiver).as_ref());
@@ -146,9 +146,9 @@ pub(crate) fn in_source_order(found: &[Stored]) -> Vec<Stored> {
 }
 
 pub(crate) fn finding(stored: &Stored) -> Finding {
-    let param = stored.param.to_owned();
-    let written = stored.ty.to_owned();
-    let function = stored.function.to_owned();
+    let param = stored.param.to_string();
+    let written = stored.ty.to_string();
+    let function = stored.function.to_string();
     let where_it_goes = match &stored.into {
         Destination::Field { owner, field, .. } => format!("`{}.{}`", owner, field),
         Destination::ParamField { owner, field, .. } => format!("`{}.{}`", owner, field),
@@ -179,7 +179,7 @@ pub(crate) fn of_what(subject: Option<&str>, function: &str) -> String {
 
 pub(crate) fn package_borrowing_types(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
     let mut borrowing = borrowing_types(asked.names, items);
-    for (name, described) in asked.own.types.iter() { if !described.tethered.is_empty() { borrowing.insert(name.to_owned()); } }
+    for (name, described) in asked.own.types.iter() { if !described.tethered.is_empty() { borrowing.insert(name.to_string()); } }
     borrowing
 }
 
@@ -198,13 +198,13 @@ pub(crate) fn borrowing_types(names: &winnow_grammar::InternerContext, items: &[
                         VariantFields::Named(declared) => { for field in declared.iter() { types.push(field.ty.clone()); } },
                     }
                 }
-                a_shape(names.resolve(name).to_owned(), types, &mut borrowing, &mut types_of);
+                a_shape(names.resolve(name).to_string(), types, &mut borrowing, &mut types_of);
             },
             Item::Struct { name, fields, .. } => {
                 let name = *name;
                 let mut types: Vec<Type> = vec![];
                 for field in fields.iter() { types.push(field.ty.clone()); }
-                a_shape(names.resolve(name).to_owned(), types, &mut borrowing, &mut types_of);
+                a_shape(names.resolve(name).to_string(), types, &mut borrowing, &mut types_of);
             },
             _ => { },
         }
@@ -214,7 +214,7 @@ pub(crate) fn borrowing_types(names: &winnow_grammar::InternerContext, items: &[
         changed = false;
         for (name, types) in types_of.iter() {
             if !borrowing.contains(name) && any_names_borrowing(names, types, &borrowing) {
-                borrowing.insert(name.to_owned());
+                borrowing.insert(name.to_string());
                 changed = true;
             }
         }
@@ -223,7 +223,7 @@ pub(crate) fn borrowing_types(names: &winnow_grammar::InternerContext, items: &[
 }
 
 pub(crate) fn a_shape(name: String, types: Vec<Type>, borrowing: &mut collections::BTreeSet<String>, types_of: &mut Vec<(String, Vec<Type>)>) {
-    for ty in types.iter() { if holds_view(ty) { borrowing.insert(name.to_owned()); } }
+    for ty in types.iter() { if holds_view(ty) { borrowing.insert(name.to_string()); } }
     types_of.push((name, types));
 }
 
@@ -276,8 +276,8 @@ pub(crate) fn view_fields(names: &winnow_grammar::InternerContext, items: &[Span
             Item::Struct { name, fields, .. } => {
                 let name = *name;
                 let mut declared: Vec<(String, Type)> = vec![];
-                for field in fields.iter() { declared.push((names.resolve(field.name).to_owned(), field.ty.clone())); }
-                out.insert(names.resolve(name).to_owned(), declared);
+                for field in fields.iter() { declared.push((names.resolve(field.name).to_string(), field.ty.clone())); }
+                out.insert(names.resolve(name).to_string(), declared);
             },
             Item::Enum { name, variants, .. } => {
                 let name = *name;
@@ -286,10 +286,10 @@ pub(crate) fn view_fields(names: &winnow_grammar::InternerContext, items: &[Span
                     match &variant.fields {
                         VariantFields::Unit => { },
                         VariantFields::Tuple(written) => { for i in 0..written.len() as i64 { carried.push((format!("{}", i), (*nikaia_std::index::get(&written, (i) as usize)).clone())); } },
-                        VariantFields::Named(declared) => { for field in declared.iter() { carried.push((names.resolve(field.name).to_owned(), field.ty.clone())); } },
+                        VariantFields::Named(declared) => { for field in declared.iter() { carried.push((names.resolve(field.name).to_string(), field.ty.clone())); } },
                     }
                 }
-                out.insert(names.resolve(name).to_owned(), carried);
+                out.insert(names.resolve(name).to_string(), carried);
             },
             _ => { },
         }
@@ -334,15 +334,15 @@ pub(crate) fn scan(unit: &Unit, asked: &Asked<'_, '_, '_>, target: Option<&Type>
             for (param, ty) in declared.iter() {
                 let param = *param;
                 if !ty.is_view { continue; }
-                let param_name = asked.names.resolve(param).to_owned();
+                let param_name = asked.names.resolve(param).to_string();
                 let mut carriers: collections::BTreeSet<String> = collections::BTreeSet::new();
-                carriers.insert(param_name.to_owned());
+                carriers.insert(param_name.to_string());
                 let mut here = Here { subject: match target {
                     Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                     None => None,
                 }, subject_fields: subject_fields.to_owned(), declared: declared.to_owned(), ours: if result_holds_view { text_of(asked, (ret_type).as_ref()) } else { None }, carriers, locals: collections::BTreeSet::new(), found: vec![] };
                 walk_block(unit, asked, body, true, own_buffer, &mut here);
-                one_answer(asked, &here, param, Scanned { param: param_name, ty: written_type(asked.names, ty), function: function.to_owned(), subject: match subject_name.as_ref() {
+                one_answer(asked, &here, param, Scanned { param: param_name, ty: written_type(asked.names, ty), function: function.to_string(), subject: match subject_name.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, method, names_a_buffer: subject_names_a_buffer }, out);
@@ -369,7 +369,7 @@ pub(crate) fn one_answer(asked: &Asked<'_, '_, '_>, here: &Here, symbol: winnow_
         match into {
             Destination::ParamField { param, .. } => {
                 let param = *param;
-                if carriers.insert(asked.names.resolve(param).to_owned()) && carrier.is_none() { carrier = Some(param); }
+                if carriers.insert(asked.names.resolve(param).to_string()) && carrier.is_none() { carrier = Some(param); }
             },
             _ => { },
         }
@@ -415,10 +415,10 @@ pub(crate) fn buffered(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: Option<&Type>
 
 pub(crate) fn rsrc_unknown_named(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Type) -> bool {
     if (*ty.code).is_some() { return false; }
-    let written = asked.names.resolve(ty.name).to_owned();
-    let mut name = written.to_owned();
+    let written = asked.names.resolve(ty.name).to_string();
+    let mut name = written.to_string();
     let segments: Vec<&str> = written.split("::").collect::<Vec<_>>();
-    if segments.len() > 1 { name = (*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_owned(); }
+    if segments.len() > 1 { name = (*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string(); }
     let first: Vec<scalar> = nikaia_std::list::chars(name.chars());
     let a_word = !first.is_empty() && (*nikaia_std::index::get(&first, 0)).is_alphabetic();
     if a_word && !rsrc_plain_name(&name) && name != "Self" && !unit.fields.contains_key(&name) {
@@ -447,12 +447,12 @@ pub(crate) fn named_in(asked: &Asked<'_, '_, '_>, ty: Option<&Type>, borrowing: 
 
 pub(crate) fn text_of(asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> Option<String> {
     let named = match ty { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(asked.names.resolve(named.name).to_owned())
+    Some(asked.names.resolve(named.name).to_string())
 }
 
 pub(crate) fn function_name(names: &winnow_grammar::InternerContext, name: Option<winnow_grammar::Symbol>) -> String {
     let named = match name { Some(__nikaia_value) => __nikaia_value, None => return String::from("new") };
-    names.resolve(named).to_owned()
+    names.resolve(named).to_string()
 }
 
 pub(crate) fn fields_of_type(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> Vec<(String, Type)> {
@@ -473,19 +473,19 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                 if mentions(unit, asked, &here, value) && !own_buffer(value) {
                     for name in names.iter() {
                         let name = *name;
-                        here.carriers.insert(asked.names.resolve(name).to_owned());
+                        here.carriers.insert(asked.names.resolve(name).to_string());
                     }
                 }
                 if a_local_vec_that_stays(asked, block, i, names, value) {
-                    let kept = asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
-                    here.locals.insert(kept.to_owned());
+                    let kept = asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_string();
+                    here.locals.insert(kept.to_string());
                     here.carriers.insert(kept);
                 }
                 if views_a_local_struct(unit, asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, own_buffer, here); } else { stores(unit, asked, value, &span, own_buffer, here); }
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
-                if mentions(unit, asked, &here, value) { here.carriers.insert(asked.names.resolve(name).to_owned()); }
+                if mentions(unit, asked, &here, value) { here.carriers.insert(asked.names.resolve(name).to_string()); }
                 stores(unit, asked, value, &span, own_buffer, here);
             },
             Stmt::Assign { target, value, .. } => {
@@ -493,7 +493,7 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                     match target {
                         Expr::Variable(name, _) => {
                             let name = *name;
-                            here.carriers.insert(asked.names.resolve(name).to_owned());
+                            here.carriers.insert(asked.names.resolve(name).to_string());
                         },
                         _ => { assigned(unit, asked, target, &span, here); },
                     }
@@ -507,7 +507,7 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                 if mentions(unit, asked, &here, iter) {
                     for binding in bindings.iter() {
                         let binding = *binding;
-                        here.carriers.insert(asked.names.resolve(binding).to_owned());
+                        here.carriers.insert(asked.names.resolve(binding).to_string());
                     }
                 }
                 stores(unit, asked, iter, &span, own_buffer, here);
@@ -562,7 +562,7 @@ pub(crate) fn a_reading_method(method: &str) -> bool { method == "push" || metho
 
 pub(crate) fn views_a_local_struct(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr, ours: Option<&str>) -> bool {
     let literal = match value {
-        Expr::StructLit { name, .. } => { let name = *name; asked.names.resolve(name).to_owned() },
+        Expr::StructLit { name, .. } => { let name = *name; asked.names.resolve(name).to_string() },
         _ => return false,
     };
     if names.len() != 1 { return false; }
@@ -672,7 +672,7 @@ pub(crate) fn a_struct_parameter(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &
         let declared = *declared;
         if asked.names.resolve(declared) == wanted {
             let owner = asked.names.resolve(ty.name);
-            if !ty.is_view && unit.borrowing.contains(owner) { return Some(owner.to_owned()); }
+            if !ty.is_view && unit.borrowing.contains(owner) { return Some(owner.to_string()); }
             return None;
         }
     }
@@ -687,7 +687,7 @@ pub(crate) fn field_of_param(unit: &Unit, asked: &Asked<'_, '_, '_>, param: winn
     }, || vec![].into());
     for (name, ty) in declared.iter() {
         if name == field {
-            if brings_buffer(unit, asked, ty) { here.found.push((span.clone(), Destination::ParamField { param, owner, field: field.to_owned(), ty: written_type(asked.names, ty) })); }
+            if brings_buffer(unit, asked, ty) { here.found.push((span.clone(), Destination::ParamField { param, owner, field: field.to_string(), ty: written_type(asked.names, ty) })); }
             return;
         }
     }
@@ -697,7 +697,7 @@ pub(crate) fn joined_path(asked: &Asked<'_, '_, '_>, parts: &[winnow_grammar::Sy
     let mut written: Vec<String> = vec![];
     for part in parts.iter() {
         let part = *part;
-        written.push(asked.names.resolve(part).to_owned());
+        written.push(asked.names.resolve(part).to_string());
     }
     written.join("::")
 }
@@ -764,7 +764,7 @@ pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: 
         },
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
-            let owner = asked.names.resolve(name).to_owned();
+            let owner = asked.names.resolve(name).to_string();
             if unit.borrowing.contains(&owner) {
                 let declared = nikaia_std::index::or(match *nikaia_std::index::get(&unit.fields, &owner) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -855,12 +855,12 @@ pub(crate) fn kept_by_callee(unit: &Unit, asked: &Asked<'_, '_, '_>, callee: &st
 }
 
 pub(crate) fn a_field_built(unit: &Unit, asked: &Asked<'_, '_, '_>, owner: &str, declared: &[(String, Type)], init: &FieldInit, span: &Span, here: &mut Here) {
-    let field = asked.names.resolve(init.name).to_owned();
+    let field = asked.names.resolve(init.name).to_string();
     let mentioned = value_mentions(unit, asked, &here, (init.value).as_ref(), &field);
     if !mentioned { return; }
     for (name, ty) in declared.iter() {
         if *name == field {
-            if brings_buffer(unit, asked, ty) { here.found.push((span.clone(), Destination::Field { owner: owner.to_owned(), field, ty: written_type(asked.names, ty) })); }
+            if brings_buffer(unit, asked, ty) { here.found.push((span.clone(), Destination::Field { owner: owner.to_string(), field, ty: written_type(asked.names, ty) })); }
             return;
         }
     }
@@ -896,15 +896,15 @@ pub(crate) fn field_of_subject(unit: &Unit, asked: &Asked<'_, '_, '_>, field: &s
     }
     let ty = match written { Some(__nikaia_value) => __nikaia_value, None => return };
     let owner = match text_of(asked, (here.subject).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return };
-    here.found.push((span.clone(), Destination::Field { owner, field: field.to_owned(), ty }));
+    here.found.push((span.clone(), Destination::Field { owner, field: field.to_string(), ty }));
 }
 
 pub(crate) fn root(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, expr: &Expr) -> Root {
     match expr {
         Expr::Variable(name, _) => { let name = *name; a_variable_root(unit, asked, here, name) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; match root(unit, asked, here, base) {
-            Root::Subject => Root::SubjectField(asked.names.resolve(name).to_owned()),
-            Root::Param(param) => Root::ParamField(param, asked.names.resolve(name).to_owned()),
+            Root::Subject => Root::SubjectField(asked.names.resolve(name).to_string()),
+            Root::Param(param) => Root::ParamField(param, asked.names.resolve(name).to_string()),
             Root::SubjectField(field) => Root::SubjectField(field),
             Root::ParamField(param, field) => Root::ParamField(param, field),
             Root::Elsewhere => Root::Elsewhere,
@@ -1141,7 +1141,7 @@ pub fn fields_held(words: &winnow_grammar::InternerContext, items: &[Spanned<Ite
             Item::Struct { name, fields, .. } => {
                 let name = *name;
                 let mut held: Vec<(String, Type)> = vec![];
-                for f in fields.iter() { held.push((words.resolve(f.name).to_owned(), f.ty.clone())); }
+                for f in fields.iter() { held.push((words.resolve(f.name).to_string(), f.ty.clone())); }
                 out.push(FieldsHeld { name, fields: held });
             },
             Item::Enum { name, variants, .. } => {
@@ -1151,7 +1151,7 @@ pub fn fields_held(words: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                     match &variant.fields {
                         VariantFields::Unit => { },
                         VariantFields::Tuple(types) => { for k in 0..types.len() as i64 { held.push((format!("{}", k), (*nikaia_std::index::get(&types, (k) as usize)).clone())); } },
-                        VariantFields::Named(fields) => { for f in fields.iter() { held.push((words.resolve(f.name).to_owned(), f.ty.clone())); } },
+                        VariantFields::Named(fields) => { for f in fields.iter() { held.push((words.resolve(f.name).to_string(), f.ty.clone())); } },
                     }
                 }
                 out.push(FieldsHeld { name, fields: held });
@@ -1207,22 +1207,22 @@ pub(crate) fn rsrc_none() -> collections::BTreeSet<String> {
     empty
 }
 
-pub(crate) fn rsrc_join(into: &mut collections::BTreeSet<String>, more: &collections::BTreeSet<String>) { for name in more.iter() { into.insert(name.to_owned()); } }
+pub(crate) fn rsrc_join(into: &mut collections::BTreeSet<String>, more: &collections::BTreeSet<String>) { for name in more.iter() { into.insert(name.to_string()); } }
 
 pub(crate) fn rsrc_param_of(entry: &str) -> String {
     let parts = entry.split(':').collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned()
+    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string()
 }
 
 pub(crate) fn rsrc_path_of(entry: &str) -> String {
     let parts = entry.split(':').collect::<Vec<_>>();
     if parts.len() < 2 { return String::from(""); }
-    (*nikaia_std::index::get(&parts, 0)).to_owned()
+    (*nikaia_std::index::get(&parts, 0)).to_string()
 }
 
 pub(crate) fn rsrc_under(path: &str, entries: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
-    for entry in entries.iter() { if path.is_empty() { out.insert(entry.to_owned()); } else { out.insert(format!("{}:{}", path, rsrc_param_of(entry))); } }
+    for entry in entries.iter() { if path.is_empty() { out.insert(entry.to_string()); } else { out.insert(format!("{}:{}", path, rsrc_param_of(entry))); } }
     out
 }
 
@@ -1230,8 +1230,8 @@ pub(crate) fn rsrc_out_of(name: &str, entries: &collections::BTreeSet<String>) -
     let mut out = rsrc_none();
     for entry in entries.iter() {
         let path = rsrc_path_of(entry);
-        if path.is_empty() { out.insert(entry.to_owned()); } else if path == name { out.insert(rsrc_param_of(entry)); } else if !path.starts_with(&format!("{}.", name)) { out.insert(rsrc_loosened(&rsrc_param_of(entry))); } else if path.starts_with(&format!("{}.", name)) {
-            let rest = nikaia_std::index::or(path.strip_prefix(&format!("{}.", name)), || "").to_owned();
+        if path.is_empty() { out.insert(entry.to_string()); } else if path == name { out.insert(rsrc_param_of(entry)); } else if !path.starts_with(&format!("{}.", name)) { out.insert(rsrc_loosened(&rsrc_param_of(entry))); } else if path.starts_with(&format!("{}.", name)) {
+            let rest = nikaia_std::index::or(path.strip_prefix(&format!("{}.", name)), || "").to_string();
             out.insert(format!("{}:{}", rest, rsrc_param_of(entry)));
         }
     }
@@ -1245,12 +1245,12 @@ pub(crate) fn rsrc_plain(entries: &collections::BTreeSet<String>) -> collections
 }
 
 pub(crate) fn rsrc_bare(param: &str) -> String {
-    if param.starts_with('~') { return nikaia_std::index::or(param.strip_prefix('~'), || "").to_owned(); }
-    param.to_owned()
+    if param.starts_with('~') { return nikaia_std::index::or(param.strip_prefix('~'), || "").to_string(); }
+    param.to_string()
 }
 
 pub(crate) fn rsrc_loosened(param: &str) -> String {
-    if param.starts_with('~') { return param.to_owned(); }
+    if param.starts_with('~') { return param.to_string(); }
     format!("~{}", param)
 }
 
@@ -1269,14 +1269,14 @@ pub(crate) fn rsrc_flow(at: &Span) -> ResultSrcFlow {
     ResultSrcFlow { env, ways: vec![], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap::new(), places: rsrc_none(), stores: collections::BTreeMap::new() }
 }
 
-pub(crate) fn rsrc_shadow(asked: &Asked<'_, '_, '_>, here: &Here, name: &str, flow: &mut ResultSrcFlow) { if variable_type(asked, here, name).is_some() { flow.shadow.insert(name.to_owned()); } }
+pub(crate) fn rsrc_shadow(asked: &Asked<'_, '_, '_>, here: &Here, name: &str, flow: &mut ResultSrcFlow) { if variable_type(asked, here, name).is_some() { flow.shadow.insert(name.to_string()); } }
 
 pub(crate) fn rsrc_root_name(asked: &Asked<'_, '_, '_>, place: &Expr) -> Option<String> {
     match place {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_root_name(asked, base) },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_root_name(asked, base) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_root_name(asked, base) },
-        Expr::Variable(name, _) => { let name = *name; Some(asked.names.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(asked.names.resolve(name).to_string()) },
         _ => None,
     }
 }
@@ -1301,7 +1301,7 @@ pub(crate) fn rsrc_bind(flow: &mut ResultSrcFlow, name: &str, reach: &collection
     if reach.is_empty() { return; }
     let mut now = rsrc_of_name(&flow, name);
     rsrc_join(&mut now, reach);
-    flow.env.insert(name.to_owned(), now);
+    flow.env.insert(name.to_string(), now);
 }
 
 pub(crate) fn rsrc_bind_symbol(asked: &Asked<'_, '_, '_>, binding: Option<winnow_grammar::Symbol>, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
@@ -1316,7 +1316,7 @@ pub(crate) fn rsrc_bind_root(asked: &Asked<'_, '_, '_>, here: &Here, target: &Ex
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_bind_root(asked, here, base, reach, flow); },
         Expr::Variable(name, _) => {
             let name = *name;
-            let written = asked.names.resolve(name).to_owned();
+            let written = asked.names.resolve(name).to_string();
             if variable_type(asked, here, &written).is_none() || flow.shadow.contains(&written) { rsrc_bind(flow, &written, reach); }
         },
         _ => { },
@@ -1390,7 +1390,7 @@ pub(crate) fn rsrc_passes_whole(node: &Expr) -> bool { matches!(node, Expr::Vari
 
 pub(crate) fn rsrc_derived(reach: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
-    for entry in reach.iter() { if entry.starts_with('=') { out.insert(format!("!{}", nikaia_std::index::or(entry.strip_prefix('='), || ""))); } else { out.insert(entry.to_owned()); } }
+    for entry in reach.iter() { if entry.starts_with('=') { out.insert(format!("!{}", nikaia_std::index::or(entry.strip_prefix('='), || ""))); } else { out.insert(entry.to_string()); } }
     out
 }
 
@@ -1540,7 +1540,7 @@ pub(crate) fn rsrc_return(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, k
 
 pub(crate) fn rsrc_record(reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
     if flow.depth > 0 {
-        for name in reach.iter() { flow.inner.insert(name.to_owned()); }
+        for name in reach.iter() { flow.inner.insert(name.to_string()); }
         return;
     }
     flow.ways.push(ResultSrcWay { span: Span { start: flow.at.start, end: flow.at.end }, reach: reach.to_owned() });
@@ -1558,10 +1558,10 @@ pub(crate) fn rsrc_if(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known
 
 pub(crate) fn rsrc_pattern_names(asked: &Asked<'_, '_, '_>, pattern: &MatchPattern, out: &mut Vec<String>) {
     match pattern {
-        MatchPattern::Path(parts) => { if parts.len() == 1 { out.push(asked.names.resolve(*nikaia_std::index::get(&parts, 0)).to_owned()); } },
+        MatchPattern::Path(parts) => { if parts.len() == 1 { out.push(asked.names.resolve(*nikaia_std::index::get(&parts, 0)).to_string()); } },
         MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { rsrc_pattern_names(asked, part, out); } },
         MatchPattern::List(parts) => { for part in parts.iter() { rsrc_pattern_names(asked, part, out); } },
-        MatchPattern::RestNamed(name) => { let name = *name; out.push(asked.names.resolve(name).to_owned()); },
+        MatchPattern::RestNamed(name) => { let name = *name; out.push(asked.names.resolve(name).to_string()); },
         MatchPattern::Named { fields, .. } => { for field in fields.iter() { rsrc_pattern_names(asked, &field.pat, out); } },
         MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { rsrc_pattern_names(asked, alternative, out); } },
         _ => { },
@@ -1592,7 +1592,7 @@ pub(crate) fn rsrc_closure(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, 
     flow.depth += 1;
     let mut out = rsrc_block(unit, asked, here, known, own_buffer, body, flow);
     flow.depth -= 1;
-    for name in flow.inner.iter() { out.insert(name.to_owned()); }
+    for name in flow.inner.iter() { out.insert(name.to_string()); }
     flow.inner = saved;
     out
 }
@@ -1632,7 +1632,7 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
                 }
                 if names.len() == 1 && ty.is_some() {
                     let annotation = match ty { Some(__nikaia_value) => __nikaia_value, None => return tail };
-                    flow.annotated.insert(asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned(), annotation.clone());
+                    flow.annotated.insert(asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), annotation.clone());
                 }
                 if !own_buffer(value) {
                     for name in names.iter() {
@@ -1706,7 +1706,7 @@ pub(crate) fn rsrc_root_local(asked: &Asked<'_, '_, '_>, here: &Here, flow: &Res
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_root_local(asked, here, flow, base) },
         Expr::Variable(name, _) => {
             let name = *name;
-            let written = asked.names.resolve(name).to_owned();
+            let written = asked.names.resolve(name).to_string();
             if variable_type(asked, here, &written).is_none() || flow.shadow.contains(&written) { return Some(written); }
             return None;
         },
@@ -1755,7 +1755,7 @@ pub(crate) fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, k
                 changes = contract.mutates;
             }
         }
-        let local = nikaia_std::index::or(root.as_deref(), || "").to_owned();
+        let local = nikaia_std::index::or(root.as_deref(), || "").to_string();
         if changes && rsrc_may_hold(unit, asked, &flow, &local) { rsrc_bind(flow, &local, &stored); }
     }
     let known_type = match ty { Some(__nikaia_value) => __nikaia_value, None => return everything };
@@ -1773,7 +1773,7 @@ pub(crate) fn rsrc_store(asked: &Asked<'_, '_, '_>, place: &Expr, reach: &collec
         None => None,
     }, || rsrc_none().into());
     rsrc_join(&mut now, reach);
-    flow.stores.insert(root.to_owned(), now);
+    flow.stores.insert(root.to_string(), now);
 }
 
 pub(crate) fn rsrc_changes_described(asked: &Asked<'_, '_, '_>, ty: Option<&Type>, name: &str) -> bool {
@@ -1798,7 +1798,7 @@ pub(crate) fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kno
     match func {
         Expr::Variable(name, _) => {
             let name = *name;
-            let written = asked.names.resolve(name).to_owned();
+            let written = asked.names.resolve(name).to_string();
             let carried = rsrc_of_name(&flow, &written);
             if carried.is_empty() && (variable_type(asked, here, &written).is_none() || flow.shadow.contains(&written)) {
                 key = written;
@@ -1843,7 +1843,7 @@ pub(crate) fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kno
             if ((i) as usize) < signature.params.len() && signature.mutable.contains(&nikaia_std::index::get(&signature.params, (i) as usize).0) {
                 let root = rsrc_root_local(asked, here, &flow, nikaia_std::index::get(&args, (i) as usize));
                 let kept_views = rsrc_ty_holds_view(asked, &nikaia_std::index::get(&signature.params, (i) as usize).1);
-                if root.is_some() && kept_views && rsrc_may_hold(unit, asked, &flow, &nikaia_std::index::or(root.as_deref(), || "").to_owned()) { rsrc_bind(flow, &nikaia_std::index::or(root.as_deref(), || "").to_owned(), &everything); }
+                if root.is_some() && kept_views && rsrc_may_hold(unit, asked, &flow, &nikaia_std::index::or(root.as_deref(), || "").to_string()) { rsrc_bind(flow, &nikaia_std::index::or(root.as_deref(), || "").to_string(), &everything); }
             }
         }
         for entry in contract.stores.iter() {
@@ -1920,18 +1920,18 @@ pub(crate) fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeM
 pub(crate) fn rsrc_written_paths(contract: &FnContract) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = vec![];
     if contract.returns.is_empty() {
-        for borrowed in contract.borrows.iter() { out.push((String::from(""), borrowed.to_owned())); }
+        for borrowed in contract.borrows.iter() { out.push((String::from(""), borrowed.to_string())); }
         return out;
     }
     for part in contract.returns.split("),") {
         let pieces: Vec<&str> = part.split(':').collect::<Vec<_>>();
         if pieces.len() != 2 { continue; }
-        let path = (*nikaia_std::index::get(&pieces, 0)).trim().to_owned();
+        let path = (*nikaia_std::index::get(&pieces, 0)).trim().to_string();
         let inside = (*nikaia_std::index::get(&pieces, 1)).trim();
-        let names = nikaia_std::index::or(inside.strip_prefix("ref("), || std::convert::AsRef::<str>::as_ref(inside)).to_owned();
+        let names = nikaia_std::index::or(inside.strip_prefix("ref("), || std::convert::AsRef::<str>::as_ref(inside)).to_string();
         for name in names.split('|') {
-            let bare = nikaia_std::index::or(name.trim().strip_suffix(')'), || name.trim().into()).to_owned();
-            if !bare.is_empty() { out.push((path.to_owned(), bare)); }
+            let bare = nikaia_std::index::or(name.trim().strip_suffix(')'), || name.trim().into()).to_string();
+            if !bare.is_empty() { out.push((path.to_string(), bare)); }
         }
     }
     out
@@ -1966,10 +1966,10 @@ pub(crate) fn rsrc_result_is_receivers(asked: &Asked<'_, '_, '_>, signature: &Si
 pub(crate) fn rsrc_ty_names(ty: &Ty, out: &mut Vec<String>) {
     match ty {
         Ty::Named { name, args, .. } => {
-            out.push(name.to_owned());
+            out.push(name.to_string());
             for arg in args.iter() { rsrc_ty_names(arg, out); }
         },
-        Ty::Var { name, .. } => { out.push(name.to_owned()); },
+        Ty::Var { name, .. } => { out.push(name.to_string()); },
         Ty::Tuple(parts) => { for part in parts.iter() { rsrc_ty_names(part, out); } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); rsrc_ty_names(inner, out); },
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); rsrc_ty_names(item, out); },
@@ -1992,7 +1992,7 @@ pub(crate) fn rsrc_size(flow: &ResultSrcFlow) -> i64 {
 }
 
 pub(crate) fn rsrc_key(owner: Option<&str>, function: &str) -> String {
-    let named = match owner { Some(__nikaia_value) => __nikaia_value, None => return function.to_owned() };
+    let named = match owner { Some(__nikaia_value) => __nikaia_value, None => return function.to_string() };
     format!("{}::{}", named, function)
 }
 
@@ -2002,8 +2002,8 @@ pub(crate) fn rsrc_params(asked: &Asked<'_, '_, '_>, receiver: Option<&Receiver>
         let self_name: String = String::from("self");
         params.push(self_name);
     }
-    for arg in args.iter() { params.push(asked.names.resolve(arg.name).to_owned()); }
-    for option in config.iter() { params.push(asked.names.resolve(option.name).to_owned()); }
+    for arg in args.iter() { params.push(asked.names.resolve(arg.name).to_string()); }
+    for option in config.iter() { params.push(asked.names.resolve(option.name).to_string()); }
     params
 }
 
@@ -2040,23 +2040,23 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             let mut position: i64 = 0;
             if receiver.is_some() {
                 position = 1;
-                if takes_a_view_of_itself((receiver).as_ref()) { sources.push(self_name.to_owned()); } else if subject.is_some() {
+                if takes_a_view_of_itself((receiver).as_ref()) { sources.push(self_name.to_string()); } else if subject.is_some() {
                     let held = match subject { Some(__nikaia_value) => __nikaia_value, None => return false };
-                    if names_borrowing(asked.names, held, &unit.borrowing) { sources.push(self_name.to_owned()); }
+                    if names_borrowing(asked.names, held, &unit.borrowing) { sources.push(self_name.to_string()); }
                 }
             }
             let mut declared: Vec<(winnow_grammar::Symbol, Type)> = vec![];
             for arg in args.iter() {
                 declared.push((arg.name, arg.ty.clone()));
-                if rsrc_a_source(unit, asked, arg, (own_contract).as_ref(), position) { sources.push(asked.names.resolve(arg.name).to_owned()); }
+                if rsrc_a_source(unit, asked, arg, (own_contract).as_ref(), position) { sources.push(asked.names.resolve(arg.name).to_string()); }
                 position += 1;
             }
             for option in config.iter() {
                 declared.push((option.name, option.ty.clone()));
-                if (*option.ty.code).is_none() && brings_buffer(unit, asked, &option.ty) { sources.push(asked.names.resolve(option.name).to_owned()); }
+                if (*option.ty.code).is_none() && brings_buffer(unit, asked, &option.ty) { sources.push(asked.names.resolve(option.name).to_string()); }
             }
             let mut declared_views: Vec<String> = vec![];
-            for arg in args.iter() { if (*arg.ty.code).is_none() && brings_buffer(unit, asked, &arg.ty) { declared_views.push(asked.names.resolve(arg.name).to_owned()); } }
+            for arg in args.iter() { if (*arg.ty.code).is_none() && brings_buffer(unit, asked, &arg.ty) { declared_views.push(asked.names.resolve(arg.name).to_string()); } }
             let walked_here = Here { subject: match subject {
                 Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                 None => None,
@@ -2064,11 +2064,11 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             let mut flow = rsrc_flow(at);
             for source in sources.iter() {
                 let mut own = rsrc_none();
-                own.insert(source.to_owned());
-                flow.env.insert(source.to_owned(), own);
+                own.insert(source.to_string());
+                flow.env.insert(source.to_string(), own);
             }
             for arg in args.iter() {
-                let owned = asked.names.resolve(arg.name).to_owned();
+                let owned = asked.names.resolve(arg.name).to_string();
                 if (*arg.ty.code).is_none() && !arg.mutable && !nikaia_std::list::contains(&sources, &owned) && !rsrc_scalar(asked, &arg.ty) {
                     let mut marked = rsrc_none();
                     if rsrc_either_text(asked, (ret_type).as_ref()) && rsrc_plain_text(asked, &arg.ty) { marked.insert(format!("={}", owned)); } else { marked.insert(format!("!{}", owned)); }
@@ -2093,13 +2093,13 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             }
             let mut reach = rsrc_none();
             for way in flow.ways.iter() { rsrc_join(&mut reach, &way.reach); }
-            if !settled { for source in sources.iter() { reach.insert(source.to_owned()); } }
+            if !settled { for source in sources.iter() { reach.insert(source.to_string()); } }
             let before = nikaia_std::index::or(match *nikaia_std::index::get(&known, &key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || ResultSrcKnown { declared: false, params: vec![], reach: rsrc_none() });
             let changed = (before.reach.len() as i64) != reach.len() as i64;
-            known.insert(key.to_owned(), ResultSrcKnown { declared: true, params, reach: reach.to_owned() });
+            known.insert(key.to_string(), ResultSrcKnown { declared: true, params, reach: reach.to_owned() });
             if report {
                 let of = of_what((owner).as_deref(), &function);
                 let mut plain_ways: Vec<ResultSrcWay> = vec![];
@@ -2147,10 +2147,10 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
         }
     }
     let mut named: Vec<String> = vec![];
-    for source in sources.iter() { if reach.contains(source) { named.push(source.to_owned()); } }
+    for source in sources.iter() { if reach.contains(source) { named.push(source.to_string()); } }
     if trait_name.is_none() { return; }
     let mut allowed: String = String::from("");
-    if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = (*nikaia_std::index::get(&declared_views, 0)).to_owned(); } else if declared_views.len() > 1 { return; }
+    if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = (*nikaia_std::index::get(&declared_views, 0)).to_string(); } else if declared_views.len() > 1 { return; }
     for source in named.iter() {
         if *source != allowed {
             let message = format!("{} implements a trait method that hands back views of `{}` only, but this hands back a view of `{}`'s data.", of, allowed, source);
@@ -2205,8 +2205,8 @@ pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_bu
         if !found.declared { continue; }
         let plain = rsrc_plain(&found.reach);
         let mut borrows: Vec<String> = vec![];
-        for param in found.params.iter() { if plain.contains(param) { borrows.push(param.to_owned()); } }
-        out.push(ResultSource { key: key.to_owned(), borrows, returns: rsrc_returns_text(&found.params, &found.reach) });
+        for param in found.params.iter() { if plain.contains(param) { borrows.push(param.to_string()); } }
+        out.push(ResultSource { key: key.to_string(), borrows, returns: rsrc_returns_text(&found.params, &found.reach) });
     }
     out
 }
@@ -2254,8 +2254,8 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             let mut position: i64 = 0;
             if receiver.is_some() { position = 1; }
             for arg in args.iter() {
-                let named = asked.names.resolve(arg.name).to_owned();
-                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(named.to_owned()); } else if !arg.mutable && rsrc_plain_text(asked, &arg.ty) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(named.to_owned()); }
+                let named = asked.names.resolve(arg.name).to_string();
+                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(named.to_string()); } else if !arg.mutable && rsrc_plain_text(asked, &arg.ty) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(named.to_string()); }
                 position += 1;
             }
             if places.is_empty() || sources.is_empty() { return; }
@@ -2270,8 +2270,8 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             flow.places = places;
             for source in sources.iter() {
                 let mut own = rsrc_none();
-                own.insert(source.to_owned());
-                flow.env.insert(source.to_owned(), own);
+                own.insert(source.to_string());
+                flow.env.insert(source.to_string(), own);
             }
             let mut size: i64 = -1;
             let mut rounds = 0;
@@ -2307,12 +2307,12 @@ pub(crate) fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet
     for entry in reach.iter() {
         let path = rsrc_path_of(entry);
         if rsrc_param_of(entry).starts_with('~') { continue; }
-        if path.is_empty() { whole.insert(entry.to_owned()); } else { paths.insert(path); }
+        if path.is_empty() { whole.insert(entry.to_string()); } else { paths.insert(path); }
     }
     let mut parts: Vec<String> = vec![];
     for path in paths.iter() {
         let mut named: Vec<String> = vec![];
-        for param in params.iter() { if whole.contains(param) || reach.contains(&format!("{}:{}", path, param)) { named.push(param.to_owned()); } }
+        for param in params.iter() { if whole.contains(param) || reach.contains(&format!("{}:{}", path, param)) { named.push(param.to_string()); } }
         if !named.is_empty() {
             let list = named.join(" | ");
             parts.push(format!("{}: ref({})", path, list));

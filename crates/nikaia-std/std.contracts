@@ -2438,6 +2438,20 @@ sync = true
 touches = []
 signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[ref K] sync sized"
 
+# The values, one at a time, in the order of their keys.
+[fn."collections::BTreeMap::values"]
+pub = true
+sync = true
+touches = []
+signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[ref V] sync sized"
+
+# The pairs, one at a time, lent, in the order of their keys.
+[fn."collections::BTreeMap::iter"]
+pub = true
+sync = true
+touches = []
+signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[(ref K, ref V)] sync sized"
+
 # How many pairs the map holds.
 [fn."collections::BTreeMap::len"]
 pub = true
@@ -2531,6 +2545,14 @@ pub = true
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[ref V] sync sized"
+
+# The pairs, one at a time, lent: the order is the map's, which is none, as
+# `keys`'s.
+[fn."collections::HashMap::iter"]
+pub = true
+sync = true
+touches = []
+signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[(ref K, ref V)] sync sized"
 
 # Runs the lambda it is given, so what it does is what the lambda does - which
 # is what `sync(f)` says (ADR-288). Sound because the lambda runs *during* the
@@ -2673,6 +2695,14 @@ pub = true
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T]) -> T?"
+
+# The element at a position, or nothing past the end (ADR-293 D20: a negative
+# position is a count that cannot be one, and stops the program as `nth`'s).
+[fn."Vec::get"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref Vec[T], at: i64) -> T?"
 
 # Whether the list holds nothing.
 [fn."Vec::is_empty"]
@@ -3091,6 +3121,28 @@ sync = true
 touches = []
 # `ends` on the receiver is the demand: `io::lines().rev()` is `NK2703`.
 signature = "[T](self: Seq[T] ends) -> Seq[T] ends sized"
+
+# Each item with its position, counted from 0, as an `i64`.
+[fn."Seq::enumerate"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: Seq[T]) -> Seq[(i64, T)] sync ends sized"
+
+# The items, then the other walk's.
+[fn."Seq::chain"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: Seq[T], other: Seq[T]) -> Seq[T] sync sized"
+
+# One value made of all the items: the lambda is handed what was made so far
+# and the next item, and hands back what is made then.
+[fn."Seq::fold"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T, A](self: Seq[T], init: A, f: fn(A, T) -> A) -> A"
 
 # Pairs, one element of each, until the shorter of the two ends.
 [fn."Seq::zip"]

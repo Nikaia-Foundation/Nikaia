@@ -127,10 +127,10 @@ pub(crate) fn walk_template_holes(segments: &[Segment], bound: &mut Vec<(String,
     for segment in segments.iter() {
         match segment {
             Segment::Text(_) => { },
-            Segment::Hole { expr, .. } => { out.push((expr.to_owned(), bound.to_owned())); },
+            Segment::Hole { expr, .. } => { out.push((expr.to_string(), bound.to_owned())); },
             Segment::For { binding, collection, body } => {
-                out.push((collection.to_owned(), bound.to_owned()));
-                bound.push((binding.to_owned(), collection.to_owned()));
+                out.push((collection.to_string(), bound.to_owned()));
+                bound.push((binding.to_string(), collection.to_string()));
                 walk_template_holes(body, bound, out);
                 bound.pop();
             },

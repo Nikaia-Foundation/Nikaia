@@ -33,7 +33,7 @@ pub fn unit_throws(program: &Program, names: &winnow_grammar::InternerContext, h
                 }
             },
             Item::Impl { target, methods, .. } => {
-                let owner = names.resolve(target.name).to_owned();
+                let owner = names.resolve(target.name).to_string();
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, body, can_throw, .. } => {
@@ -61,55 +61,55 @@ pub(crate) fn with_methods(key: &str, thrown: &Thrown, own: &Ledger, library: &L
     }, || collections::BTreeSet::new().into());
     for callee in thrown.calls.iter() {
         if !callee.starts_with('@') {
-            called.insert(callee.to_owned());
+            called.insert(callee.to_string());
             continue;
         }
-        let local: String = nikaia_std::index::or(callee.strip_prefix('@'), || "").to_owned();
+        let local: String = nikaia_std::index::or(callee.strip_prefix('@'), || "").to_string();
         let place = format!("{}::{}", key, local);
-        if !fields.contains(&place) { named.insert(UNNAMED.to_owned()); }
+        if !fields.contains(&place) { named.insert(UNNAMED.to_string()); }
     }
     let mut fatal_calls = thrown.fatal_calls.to_owned();
     methods_into(*nikaia_std::index::get(&graph.methods, key), own, library, &graph.fatal, &mut named, &mut called, &mut fatal_calls);
-    graph.direct.insert(key.to_owned(), named);
-    graph.calls.insert(key.to_owned(), called);
-    graph.fatal_calls.insert(key.to_owned(), fatal_calls);
+    graph.direct.insert(key.to_string(), named);
+    graph.calls.insert(key.to_string(), called);
+    graph.fatal_calls.insert(key.to_string(), fatal_calls);
 }
 
 pub(crate) fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, fatal: &collections::BTreeSet<String>, named: &mut collections::BTreeSet<String>, called: &mut collections::BTreeSet<String>, fatal_calls: &mut collections::BTreeMap<String, collections::BTreeSet<String>>) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
-    for field in known.fields.iter() { called.insert(field.to_owned()); }
-    if known.unseen { named.insert(UNNAMED.to_owned()); }
+    for field in known.fields.iter() { called.insert(field.to_string()); }
+    if known.unseen { named.insert(UNNAMED.to_string()); }
     for callee in known.resolved.iter() {
         if known.swallowed.contains_key(callee) {
             let taken: collections::BTreeSet<String> = nikaia_std::index::or(match *nikaia_std::index::get(&known.swallowed, callee) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || collections::BTreeSet::new().into());
-            if own.functions.contains_key(callee) { if !fatal_calls.contains_key(callee) { fatal_calls.insert(callee.to_owned(), taken); } } else { for error in fails_with_of(library, callee) { if fatal.contains(&error) && !taken.contains(&error) { named.insert(error); } } }
+            if own.functions.contains_key(callee) { if !fatal_calls.contains_key(callee) { fatal_calls.insert(callee.to_string(), taken); } } else { for error in fails_with_of(library, callee) { if fatal.contains(&error) && !taken.contains(&error) { named.insert(error); } } }
             continue;
         }
-        if own.functions.contains_key(callee) { called.insert(callee.to_owned()); } else { for error in fails_with_of(library, callee) { named.insert(error); } }
+        if own.functions.contains_key(callee) { called.insert(callee.to_string()); } else { for error in fails_with_of(library, callee) { named.insert(error); } }
     }
 }
 
 pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
     let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
-    if unresolved { named.insert(UNNAMED.to_owned()); }
-    for callee in free.iter() { if callee.starts_with('@') { called.insert(nikaia_std::index::or(callee.strip_prefix('@'), || "").to_owned()); } else if own.functions.contains_key(callee) { called.insert(callee.to_owned()); } else if library.functions.contains_key(callee) { for error in fails_with_of(library, callee) { named.insert(error); } } }
+    if unresolved { named.insert(UNNAMED.to_string()); }
+    for callee in free.iter() { if callee.starts_with('@') { called.insert(nikaia_std::index::or(callee.strip_prefix('@'), || "").to_string()); } else if own.functions.contains_key(callee) { called.insert(callee.to_string()); } else if library.functions.contains_key(callee) { for error in fails_with_of(library, callee) { named.insert(error); } } }
     let known: Option<MethodsCalled> = Some(MethodsCalled { resolved: resolved.to_owned(), unseen: false, fields: collections::BTreeSet::new(), swallowed: collections::BTreeMap::new() });
     let mut fatal_calls: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     methods_into((known).as_ref(), own, library, &graph.fatal, &mut named, &mut called, &mut fatal_calls);
-    graph.direct.insert(field.to_owned(), named);
-    graph.calls.insert(field.to_owned(), called);
+    graph.direct.insert(field.to_string(), named);
+    graph.calls.insert(field.to_string(), called);
 }
 
 pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String, CheckStoredCode>) -> collections::BTreeSet<String> {
     let mut open: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
     let named: CheckStoredCode = nikaia_std::index::or(stored.remove(AS_VALUE), || CheckStoredCode::empty());
-    for free in named.free.iter() { kept.insert(free.to_owned()); }
-    for (_, code) in stored.iter() { for free in code.free.iter() { kept.insert(free.to_owned()); } }
+    for free in named.free.iter() { kept.insert(free.to_string()); }
+    for (_, code) in stored.iter() { for free in code.free.iter() { kept.insert(free.to_string()); } }
     for (owner, contract) in own.types.iter() {
         if !contract.public { continue; }
         for field in contract.fields.iter() {
@@ -127,7 +127,7 @@ pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String,
             if !check_core_stmt_holds_code(ty) { continue; }
             let key = format!("{}::{}", name, param);
             let entry: CheckStoredCode = nikaia_std::index::or(stored.remove(&key), || CheckStoredCode::empty());
-            if contract.public || kept.contains(name) { open.insert(key.to_owned()); }
+            if contract.public || kept.contains(name) { open.insert(key.to_string()); }
             stored.insert(key, entry);
         }
     }
@@ -140,13 +140,13 @@ pub fn throws_published(name: &str, errors: &[String]) -> Vec<String> {
     let prefix = format!("from({}::", name);
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for error in errors.iter() {
-        if !throws_given(error) { out.insert(error.to_owned()); } else if error.starts_with(&prefix) {
-            let rest: String = nikaia_std::index::or(error.strip_prefix(&prefix), || "").to_owned();
+        if !throws_given(error) { out.insert(error.to_string()); } else if error.starts_with(&prefix) {
+            let rest: String = nikaia_std::index::or(error.strip_prefix(&prefix), || "").to_string();
             out.insert(format!("from({}", rest));
-        } else { out.insert(UNNAMED.to_owned()); }
+        } else { out.insert(UNNAMED.to_string()); }
     }
     let mut list: Vec<String> = vec![];
-    for error in out.iter() { list.push(error.to_owned()); }
+    for error in out.iter() { list.push(error.to_string()); }
     list
 }
 
@@ -162,13 +162,13 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
     for (name, set) in sets.iter() {
         if !set.is_empty() || places.contains(name) { continue; }
         let contract = match *nikaia_std::index::get(&own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !contract.fails_with.is_empty() { unnamed.push(name.to_owned()); }
+        if !contract.fails_with.is_empty() { unnamed.push(name.to_string()); }
     }
     if !unnamed.is_empty() {
         for name in unnamed.iter() {
             let mut only: collections::BTreeSet<String> = collections::BTreeSet::new();
-            only.insert(UNNAMED.to_owned());
-            sets.insert(name.to_owned(), only);
+            only.insert(UNNAMED.to_string());
+            sets.insert(name.to_string(), only);
         }
         throws_grow(&mut sets, calls, fatal_calls, fatal, own);
     }
@@ -176,8 +176,8 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
     for (name, set) in sets.iter() {
         if places.contains(name) {
             let mut union: Vec<String> = vec![];
-            for error in set.iter() { union.push(error.to_owned()); }
-            settled.insert(name.to_owned(), union);
+            for error in set.iter() { union.push(error.to_string()); }
+            settled.insert(name.to_string(), union);
             continue;
         }
         let contract = match *nikaia_std::index::get(&own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -186,10 +186,10 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
         let mut mapped: collections::BTreeSet<String> = collections::BTreeSet::new();
         for error in set.iter() {
             if !throws_given(error) || error.starts_with(&own_prefix) {
-                mapped.insert(error.to_owned());
+                mapped.insert(error.to_string());
                 continue;
             }
-            let mut through: String = error.to_owned();
+            let mut through: String = error.to_string();
             for callee in nikaia_std::index::or(match *nikaia_std::index::get(&calls, name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -205,9 +205,9 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
             mapped.insert(through);
         }
         let mut errors: Vec<String> = vec![];
-        for error in mapped.iter() { errors.push(error.to_owned()); }
+        for error in mapped.iter() { errors.push(error.to_string()); }
         if errors.is_empty() { errors.push(String::from("?")); }
-        settled.insert(name.to_owned(), errors);
+        settled.insert(name.to_string(), errors);
     }
     settled
 }
@@ -229,7 +229,7 @@ pub(crate) fn throws_grow(sets: &mut collections::BTreeMap<String, collections::
             }, || collections::BTreeMap::new().into());
             for (callee, named) in caught.iter() { for error in theirs(&sets, own, callee) { if fatal.contains(&error) && !named.contains(&error) { grown.insert(error); } } }
             if (grown.len() as i64) != before.len() as i64 {
-                sets.insert(name.to_owned(), grown);
+                sets.insert(name.to_string(), grown);
                 changed = true;
             }
         }
@@ -241,11 +241,11 @@ pub(crate) fn theirs(sets: &collections::BTreeMap<String, collections::BTreeSet<
     let prefix = format!("from({}::", callee);
     if sets.contains_key(callee) {
         let set = match *nikaia_std::index::get(&sets, callee) { Some(__nikaia_value) => __nikaia_value, None => return errors };
-        for error in set.iter() { if !error.starts_with(&prefix) { errors.push(error.to_owned()); } }
+        for error in set.iter() { if !error.starts_with(&prefix) { errors.push(error.to_string()); } }
         return errors;
     }
     let contract = match *nikaia_std::index::get(&own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return errors };
-    for error in contract.fails_with.iter() { errors.push(error.to_owned()); }
+    for error in contract.fails_with.iter() { errors.push(error.to_string()); }
     errors
 }
 
@@ -270,8 +270,8 @@ pub(crate) fn all_but_the_last(names: &winnow_grammar::InternerContext, segments
 
 pub(crate) fn struct_type(written: &str) -> String {
     let mut parts: Vec<String> = vec![];
-    for part in written.split("::") { parts.push(part.to_owned()); }
-    if parts.len() < 2 { return written.to_owned(); }
+    for part in written.split("::") { parts.push(part.to_string()); }
+    if parts.len() < 2 { return written.to_string(); }
     let mut ty: String = String::from("");
     for k in 0..parts.len() as i64 - 1 {
         if k > 0 { ty = format!("{}::", ty); }
@@ -470,7 +470,7 @@ pub(crate) fn a_contribution(expr: &Expr, names: &winnow_grammar::InternerContex
             Expr::Throw(_, _) => { },
             _ => {
                 let given = contribution_of(expr);
-                for error in given.fatal.iter() { if !out.named.contains(error) { out.direct.insert(error.to_owned()); } }
+                for error in given.fatal.iter() { if !out.named.contains(error) { out.direct.insert(error.to_string()); } }
                 let call = nikaia_std::index::or(given.call, || "".into());
                 if !call.is_empty() && !out.fatal_calls.contains_key(&call) { out.fatal_calls.insert(call, out.named.to_owned()); }
             },
@@ -490,8 +490,8 @@ pub(crate) fn a_contribution(expr: &Expr, names: &winnow_grammar::InternerContex
             let given = contribution_of(expr);
             let call = nikaia_std::index::or(given.call, || "".into());
             if !call.is_empty() { out.calls.insert(call); }
-            for handed in given.given.iter() { out.calls.insert(handed.to_owned()); }
-            for error in given.errors.iter() { out.direct.insert(error.to_owned()); }
+            for handed in given.given.iter() { out.calls.insert(handed.to_string()); }
+            for error in given.errors.iter() { out.direct.insert(error.to_string()); }
         },
     }
 }
@@ -542,7 +542,7 @@ pub(crate) fn named_in_match(expr: &Expr, names: &winnow_grammar::InternerContex
                 let path = match pattern_path(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if path.len() < 2 { continue; }
                 let mut parts: Vec<String> = vec![];
-                for at in 0..path.len() as i64 - 1 { parts.push(names.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_owned()); }
+                for at in 0..path.len() as i64 - 1 { parts.push(names.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_string()); }
                 out.insert(parts.join("::"));
             }
         },

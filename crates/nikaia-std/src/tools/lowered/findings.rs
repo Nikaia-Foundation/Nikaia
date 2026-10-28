@@ -12,5 +12,5 @@ pub struct Finding {
     pub labels: Vec<CheckLabel>,
 }
 
-pub fn refusal(code: &str, span: Span, message: String, notes: Vec<String>, help: String) -> Finding { Finding { code: code.to_owned(), span, message, notes, help: Some(help), warning: false, labels: vec![] } }
+pub fn refusal(code: &str, span: Span, message: String, notes: Vec<String>, help: String) -> Finding { Finding { code: code.to_string(), span, message, notes, help: Some(help), warning: false, labels: vec![] } }
 

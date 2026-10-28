@@ -14,16 +14,16 @@ pub fn pb_read(text: &str, long: &impl Fn(&str) -> Option<String>) -> Vec<PbLine
         if line.starts_with('#') || line.trim().is_empty() { continue; }
         let words: Vec<&str> = line.split(' ').collect::<Vec<_>>();
         if words.len() == 4 && *nikaia_std::index::get(&words, 1) == "invariant" {
-            out.push(PbLine { key: (*nikaia_std::index::get(&words, 0)).to_owned(), kind: (*nikaia_std::index::get(&words, 1)).to_owned(), body: format!("{} {}", *nikaia_std::index::get(&words, 2), *nikaia_std::index::get(&words, 3)) });
+            out.push(PbLine { key: (*nikaia_std::index::get(&words, 0)).to_string(), kind: (*nikaia_std::index::get(&words, 1)).to_string(), body: format!("{} {}", *nikaia_std::index::get(&words, 2), *nikaia_std::index::get(&words, 3)) });
             continue;
         }
         if words.len() != 3 { continue; }
-        let key = (*nikaia_std::index::get(&words, 0)).to_owned();
-        let kind = (*nikaia_std::index::get(&words, 1)).to_owned();
-        let body = (*nikaia_std::index::get(&words, 2)).to_owned();
+        let key = (*nikaia_std::index::get(&words, 0)).to_string();
+        let kind = (*nikaia_std::index::get(&words, 1)).to_string();
+        let body = (*nikaia_std::index::get(&words, 2)).to_string();
         if kind == "proved" && body == "@" {
             let held = match long(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            out.push(PbLine { key, kind, body: held.trim().to_owned() });
+            out.push(PbLine { key, kind, body: held.trim().to_string() });
         } else if kind == "proved" || kind == "refuted" || kind == "unknown" { out.push(PbLine { key, kind, body }); }
     }
     out
@@ -40,7 +40,7 @@ pub fn pb_render(entries: &[PbLine], limit: i64) -> PbRendered {
     let mut long: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for entry in entries.iter() {
         if entry.kind == "proved" && (entry.body.len() as i64) > limit {
-            long.insert(entry.key.to_owned(), entry.body.to_owned());
+            long.insert(entry.key.to_string(), entry.body.to_string());
             out.push_str(&format!("{} proved @\n", entry.key));
         } else { out.push_str(&format!("{} {} {}\n", entry.key, entry.kind, entry.body)); }
     }

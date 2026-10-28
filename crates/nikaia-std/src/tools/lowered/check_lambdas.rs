@@ -9,7 +9,7 @@ pub(crate) fn lambda_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body:
         match e {
             Expr::Variable(name, _) => {
                 let name = *name;
-                named.insert(world.words.resolve(name).to_owned());
+                named.insert(world.words.resolve(name).to_string());
             },
             _ => { },
         }
@@ -23,7 +23,7 @@ pub(crate) fn lambda_own(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params:
     let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
     for p in params.iter() {
         let p = *p;
-        own.insert(world.words.resolve(p).to_owned());
+        own.insert(world.words.resolve(p).to_string());
     }
     own
 }
@@ -67,7 +67,7 @@ impl CheckState {
         let mut hulls: Vec<String> = vec![];
         for name in named.iter() {
             if own.contains(name) { continue; }
-            if self.a_name_of_a_hull(name) { hulls.push(name.to_owned()); }
+            if self.a_name_of_a_hull(name) { hulls.push(name.to_string()); }
         }
         if !hulls.is_empty() { self.facts.kept_hulls.insert(id_of(value) as i64, hulls); }
     }
@@ -91,8 +91,8 @@ impl CheckState {
             if found.is_some() {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
                 if is_a_handle(&local.ty) || !self.takes_away(world, &local.ty) { continue; }
-                owned.push(name.to_owned());
-                self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, String::from("a function kept for later")));
+                owned.push(name.to_string());
+                self.moved_into_a_task.push((name.to_string(), local.ty.clone(), span.end as i64, String::from("a function kept for later")));
             }
         }
         if pauses && !owned.is_empty() { self.facts.kept_owned.insert(id_of(value) as i64, owned); }
@@ -106,9 +106,9 @@ impl CheckState {
             let found = self.binding(name);
             if found.is_some() {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-                if is_a_handle(&local.ty) { self.facts.task_handles.insert((task, name.to_owned())); }
+                if is_a_handle(&local.ty) { self.facts.task_handles.insert((task, name.to_string())); }
                 if !self.takes_away(world, &local.ty) { continue; }
-                self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, String::from("a background task")));
+                self.moved_into_a_task.push((name.to_string(), local.ty.clone(), span.end as i64, String::from("a background task")));
             }
         }
     }

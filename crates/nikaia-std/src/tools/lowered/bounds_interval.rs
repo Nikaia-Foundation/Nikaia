@@ -95,7 +95,7 @@ pub(crate) fn linear_form(term: i64, term_of: &impl Fn(i64) -> SolverTerm) -> Op
         SolverTerm::Int(n) => Some(Form { vars: collections::BTreeMap::new(), k: n }),
         SolverTerm::Var(ref name) => {
             let mut vars: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-            vars.insert(name.to_owned(), 1);
+            vars.insert(name.to_string(), 1);
             Some(Form { vars, k: 0 })
         },
         SolverTerm::Add(a, b) => {
@@ -130,7 +130,7 @@ pub(crate) fn sum(left: &Form, right: &Form, sign: i64) -> Option<Form> {
         let before = nikaia_std::index::or(vars.get(name), || 0);
         let by = match c.checked_mul(sign) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let after = match before.checked_add(by) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        vars.insert(name.to_owned(), after);
+        vars.insert(name.to_string(), after);
     }
     let by = match right.k.checked_mul(sign) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let k = match left.k.checked_add(by) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -142,7 +142,7 @@ pub(crate) fn scaled(form: &Form, by: i64) -> Option<Form> {
     for (name, c) in form.vars.iter() {
         let c = nikaia_std::num::value(c);
         let times = match c.checked_mul(by) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        vars.insert(name.to_owned(), times);
+        vars.insert(name.to_string(), times);
     }
     let k = match form.k.checked_mul(by) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(Form { vars, k })
@@ -229,7 +229,7 @@ pub(crate) fn propagate(facts: &[i64], term_of: &impl Fn(i64) -> SolverTerm) -> 
                         changed = true;
                     }
                 }
-                known.insert(x.to_owned(), entry);
+                known.insert(x.to_string(), entry);
             }
         }
         if !changed { break; }

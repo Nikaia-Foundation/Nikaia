@@ -18,7 +18,7 @@ impl EmitNeeds {
         let mut fails = false;
         for item in world.items.iter() {
             match &item.node {
-                Item::Grammar(def) => { grammars.insert(world.words.resolve(def.name).to_owned(), def.clone()); },
+                Item::Grammar(def) => { grammars.insert(world.words.resolve(def.name).to_string(), def.clone()); },
                 Item::Import { .. } => { uses_std = true; },
                 Item::Fn { can_throw, .. } => {
                     let can_throw = *can_throw;
@@ -31,7 +31,7 @@ impl EmitNeeds {
     }
     pub fn join(&self, other: &EmitNeeds) -> EmitNeeds {
         let mut traits = self.foreign_traits.to_owned();
-        for path in other.foreign_traits.iter() { traits.insert(path.to_owned()); }
+        for path in other.foreign_traits.iter() { traits.insert(path.to_string()); }
         EmitNeeds { uses_grammar: self.uses_grammar || other.uses_grammar, driver: self.driver || other.driver, uses_std: self.uses_std || other.uses_std, fails: self.fails || other.fails, foreign_traits: traits }
     }
     pub fn preamble(&self) -> String {

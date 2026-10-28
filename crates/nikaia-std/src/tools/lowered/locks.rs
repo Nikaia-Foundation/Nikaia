@@ -24,13 +24,13 @@ pub fn stored_reaches(field: &str, resolved: &collections::BTreeSet<String>, unr
     let mut reaches = Reaches { itself: Lock::No, callees: collections::BTreeSet::new() };
     if unresolved { reaches.itself = reaches.itself.or(Lock::Undecided); }
     if any_in(resolved, &DOORS) || any_in(free, &MULTI) { reaches.itself = reaches.itself.or(Lock::Holds); }
-    for to in resolved.iter() { reaches.callees.insert(to.to_owned()); }
+    for to in resolved.iter() { reaches.callees.insert(to.to_string()); }
     for to in free.iter() {
         if to.starts_with('@') {
             reaches.itself = reaches.itself.or(Lock::Undecided);
             continue;
         }
-        reaches.callees.insert(to.to_owned());
+        reaches.callees.insert(to.to_string());
     }
     graph.insert(format!("{}{}", FIELD, field), reaches);
 }
@@ -41,16 +41,16 @@ pub fn unit_reaches(program: &Program, names: &winnow_grammar::InternerContext, 
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
-                graph.insert(key.to_owned(), body_reaches(body, *nikaia_std::index::get(&calls, &key), names, unaliased, holes_of));
+                graph.insert(key.to_string(), body_reaches(body, *nikaia_std::index::get(&calls, &key), names, unaliased, holes_of));
             },
             Item::Impl { target, methods, .. } => {
-                let owner = names.resolve(target.name).to_owned();
+                let owner = names.resolve(target.name).to_string();
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, body, .. } => {
                             let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
-                            graph.insert(key.to_owned(), body_reaches(body, *nikaia_std::index::get(&calls, &key), names, unaliased, holes_of));
+                            graph.insert(key.to_string(), body_reaches(body, *nikaia_std::index::get(&calls, &key), names, unaliased, holes_of));
                         },
                         _ => { },
                     }
@@ -73,11 +73,11 @@ pub fn declared_types(program: &Program, names: &winnow_grammar::InternerContext
         match &item.node {
             Item::Enum { name, .. } => {
                 let name = *name;
-                declared.insert(names.resolve(name).to_owned());
+                declared.insert(names.resolve(name).to_string());
             },
             Item::Struct { name, .. } => {
                 let name = *name;
-                declared.insert(names.resolve(name).to_owned());
+                declared.insert(names.resolve(name).to_string());
             },
             _ => { },
         }
@@ -88,8 +88,8 @@ pub fn locking_of(graph: &collections::BTreeMap<String, Reaches>, declared: &col
     let mut itself: collections::BTreeMap<String, Lock> = collections::BTreeMap::new();
     let mut callees: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for (name, reaches) in graph.iter() {
-        itself.insert(name.to_owned(), reaches.itself.clone());
-        callees.insert(name.to_owned(), reaches.callees.to_owned());
+        itself.insert(name.to_string(), reaches.itself.clone());
+        callees.insert(name.to_string(), reaches.callees.to_owned());
     }
     locking(&itself, &callees, declared, library, own)
 }
@@ -100,7 +100,7 @@ pub(crate) fn key_of_function(name: Option<&winnow_grammar::Symbol>, owner: &str
 }
 
 pub(crate) fn with_owner(owner: &str, own: &str) -> String {
-    if owner.is_empty() { return own.to_owned(); }
+    if owner.is_empty() { return own.to_string(); }
     format!("{}::{}", owner, own)
 }
 
@@ -115,12 +115,12 @@ pub(crate) fn resolved_into(calls: Option<&BodyCalls>, with_fields: bool, reache
     let known = match calls { Some(__nikaia_value) => __nikaia_value, None => return };
     if known.unresolved { reaches.itself = reaches.itself.or(Lock::Undecided); }
     if any_in(&known.resolved, &DOORS) { reaches.itself = reaches.itself.or(Lock::Holds); }
-    for to in known.resolved.iter() { reaches.callees.insert(to.to_owned()); }
+    for to in known.resolved.iter() { reaches.callees.insert(to.to_string()); }
     if with_fields { for field in known.fields_called.iter() { reaches.callees.insert(format!("{}{}", FIELD, field)); } }
 }
 
 pub(crate) fn rules_reaches(def: &GrammarDef, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, calls: &collections::BTreeMap<String, BodyCalls>, graph: &mut collections::BTreeMap<String, Reaches>) {
-    let named = names.resolve(def.name).to_owned();
+    let named = names.resolve(def.name).to_string();
     let mut whole = Reaches { itself: Lock::No, callees: collections::BTreeSet::new() };
     for rule in def.rules.iter() {
         for alt in rule.alts.iter() {
@@ -188,7 +188,7 @@ pub fn locking(itself: &collections::BTreeMap<String, Lock>, callees: &collectio
             for callee in called.iter() { reached = reached.or(theirs_of(&touches, library, declared, callee)); }
             let grown = before.or(reached);
             if grown != before {
-                touches.insert(name.to_owned(), grown);
+                touches.insert(name.to_string(), grown);
                 changed = true;
             }
         }
@@ -201,14 +201,14 @@ pub fn locking(itself: &collections::BTreeMap<String, Lock>, callees: &collectio
             let field = slice(&c, 6, c.len() as i64);
             let settled = if published(own, &field) { holds.clone().or(Lock::Undecided) } else { holds.clone() };
             answer.fields.insert(field, settled);
-        } else if own.functions.contains_key(name) { answer.functions.insert(name.to_owned(), holds.clone()); }
+        } else if own.functions.contains_key(name) { answer.functions.insert(name.to_string(), holds.clone()); }
     }
     answer
 }
 
 pub(crate) fn theirs_of(touches: &collections::BTreeMap<String, Lock>, library: &Ledger, declared: &collections::BTreeSet<String>, callee: &str) -> Lock {
     let constructed = format!("{}::new", callee);
-    for key in [callee.to_owned(), constructed] {
+    for key in [callee.to_string(), constructed] {
         let found = match match *nikaia_std::index::get(&touches, &key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -225,7 +225,7 @@ pub(crate) fn described(library: &Ledger, key: &str) -> Option<Lock> {
 
 pub(crate) fn is_a_variant(declared: &collections::BTreeSet<String>, callee: &str) -> bool {
     let mut parts: Vec<String> = vec![];
-    for part in callee.split("::") { parts.push(part.to_owned()); }
+    for part in callee.split("::") { parts.push(part.to_string()); }
     if parts.len() < 2 || *nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1)) == "new" { return false; }
     declared.contains(&struct_type(callee))
 }

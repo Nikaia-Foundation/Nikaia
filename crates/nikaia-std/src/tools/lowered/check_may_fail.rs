@@ -10,7 +10,7 @@ impl CheckState {
     pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
         let named = fatal_named(handler, world.words);
         let mut passing: Vec<String> = vec![];
-        for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(error.to_owned()); } }
+        for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(error.to_string()); } }
         if passing.is_empty() { return; }
         if self.flow.guarded.is_some() {
             let held: Option<CheckGuarded> = match self.flow.guarded.as_ref() {
@@ -19,7 +19,7 @@ impl CheckState {
             };
             let mut outer = nikaia_std::index::or(held, || CheckGuarded::nothing());
             outer.fallible = true;
-            for error in passing.iter() { outer.thrown.insert(error.to_owned()); }
+            for error in passing.iter() { outer.thrown.insert(error.to_string()); }
             self.flow.guarded = Some(outer);
         }
         if self.flow.throwing || self.flow.caught { return; }
@@ -46,7 +46,7 @@ impl CheckState {
                 };
                 let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
                 guarded.fallible = true;
-                for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_owned()); }
+                for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_string()); }
                 self.flow.guarded = Some(guarded);
             }
             if world.newly_throws.contains_key(key) {

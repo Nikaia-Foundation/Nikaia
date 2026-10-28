@@ -3,25 +3,25 @@
 
 pub fn changed_lines(ledger: &str, committed: &str) -> Vec<String> {
     let mut kept: Vec<String> = vec![];
-    for line in committed.lines() { kept.push(line.to_owned()); }
+    for line in committed.lines() { kept.push(line.to_string()); }
     let mut out: Vec<String> = vec![];
     let mut entry: String = String::from("");
     let mut named: String = String::from("");
     for line in ledger.lines() {
         if line.starts_with('[') {
-            entry = line.to_owned();
+            entry = line.to_string();
             named = String::from("");
         }
         if line.is_empty() || line.starts_with('#') || nikaia_std::list::contains(&kept, &line) { continue; }
-        if !entry.is_empty() && entry != line {
+        if !entry.is_empty() && AsRef::<str>::as_ref(&(entry)) != AsRef::<str>::as_ref(&(line)) {
             if named != entry {
                 out.push(format!("  {}", entry));
-                named = entry.to_owned();
+                named = entry.to_string();
             }
             out.push(format!("      {}", line));
         } else {
             out.push(format!("  {}", line));
-            named = entry.to_owned();
+            named = entry.to_string();
         }
     }
     out
@@ -29,9 +29,9 @@ pub fn changed_lines(ledger: &str, committed: &str) -> Vec<String> {
 
 pub fn differing_lines(expected: &str, produced: &str) -> String {
     let mut a: Vec<String> = vec![];
-    for line in expected.lines() { a.push(line.to_owned()); }
+    for line in expected.lines() { a.push(line.to_string()); }
     let mut b: Vec<String> = vec![];
-    for line in produced.lines() { b.push(line.to_owned()); }
+    for line in produced.lines() { b.push(line.to_string()); }
     if same_lines(&a, &b) { return String::from("  the same lines; they differ in the line break at the end\n"); }
     if (a.len() as i64 + 1) * (b.len() as i64 + 1) > 4000000 { return format!("  expected:\n{}\n  produced:\n{}\n", expected, produced); }
     let mut common: Vec<Vec<i64>> = vec![];
@@ -56,16 +56,16 @@ pub fn differing_lines(expected: &str, produced: &str) -> String {
     while ((x) as usize) < a.len() || ((y) as usize) < b.len() {
         if ((x) as usize) < a.len() && ((y) as usize) < b.len() && *nikaia_std::index::get(&a, (x) as usize) == *nikaia_std::index::get(&b, (y) as usize) {
             marks.push(' ');
-            lines.push((*nikaia_std::index::get(&a, (x) as usize)).to_owned());
+            lines.push((*nikaia_std::index::get(&a, (x) as usize)).to_string());
             x += 1;
             y += 1;
         } else if ((y) as usize) < b.len() && (((x) as usize) == a.len() || *nikaia_std::index::get(nikaia_std::index::get(&common, (x) as usize), (y + 1) as usize) >= *nikaia_std::index::get(nikaia_std::index::get(&common, (x + 1) as usize), (y) as usize)) {
             marks.push('+');
-            lines.push((*nikaia_std::index::get(&b, (y) as usize)).to_owned());
+            lines.push((*nikaia_std::index::get(&b, (y) as usize)).to_string());
             y += 1;
         } else {
             marks.push('-');
-            lines.push((*nikaia_std::index::get(&a, (x) as usize)).to_owned());
+            lines.push((*nikaia_std::index::get(&a, (x) as usize)).to_string());
             x += 1;
         }
     }

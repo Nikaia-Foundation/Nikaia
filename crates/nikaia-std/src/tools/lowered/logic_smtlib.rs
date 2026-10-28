@@ -29,14 +29,14 @@ pub fn lg_symbol(name: &str) -> String {
         let one = format!("{}", c);
         if !letter && !"~!@$%^&*_-+=<>.?/".contains(&one) { simple = false; }
     }
-    if simple { return name.to_owned(); }
+    if simple { return name.to_string(); }
     format!("|{}|", name)
 }
 
 pub(crate) fn lg_smt_binary(op: &str, arena: &TermArena, a: i64, b: i64) -> String { format!("({} {} {})", op, lg_term(arena, a), lg_term(arena, b)) }
 
 pub(crate) fn lg_smt_list(op: &str, arena: &TermArena, parts: &[i64], empty: &str) -> String {
-    if parts.is_empty() { return empty.to_owned(); }
+    if parts.is_empty() { return empty.to_string(); }
     if parts.len() == 1 { return lg_term(arena, *nikaia_std::index::get(&parts, 0)); }
     let mut written: Vec<String> = vec![];
     for part in parts.iter() {
@@ -106,7 +106,7 @@ pub(crate) enum LgSexp {
 
 pub(crate) fn lg_show(sexp: &LgSexp) -> String {
     match sexp {
-        LgSexp::Atom(a) => a.to_owned(),
+        LgSexp::Atom(a) => a.to_string(),
         LgSexp::List(items) => {
             let mut shown: Vec<String> = vec![];
             for item in items.iter() { shown.push(lg_show(item)); }
@@ -117,10 +117,10 @@ pub(crate) fn lg_show(sexp: &LgSexp) -> String {
 
 pub(crate) fn lg_unquoted(name: &str) -> String {
     if name.len() >= 2 && name.starts_with('|') && name.ends_with('|') {
-        let opened: String = nikaia_std::index::or(name.strip_prefix('|'), || "").to_owned();
-        return nikaia_std::index::or(opened.strip_suffix('|'), || "").to_owned();
+        let opened: String = nikaia_std::index::or(name.strip_prefix('|'), || "").to_string();
+        return nikaia_std::index::or(opened.strip_suffix('|'), || "").to_string();
     }
-    name.to_owned()
+    name.to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

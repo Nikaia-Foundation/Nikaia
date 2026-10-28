@@ -52,7 +52,7 @@ impl CheckState {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_owned();
+                let name = world.words.resolve(symbol).to_string();
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 found.changing
             },
@@ -65,7 +65,7 @@ impl CheckState {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_owned();
+                let name = world.words.resolve(symbol).to_string();
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 found.lent
             },
@@ -90,7 +90,7 @@ impl CheckState {
                 position = at + 1;
             }
             if position < signature.params.len() as i64 {
-                let name = nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0.to_owned();
+                let name = nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0.to_string();
                 changes = nikaia_std::list::contains(&signature.mutable, &name);
             }
         }

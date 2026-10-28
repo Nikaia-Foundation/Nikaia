@@ -36,13 +36,13 @@ pub(crate) fn emit_callee_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -
     match func {
         Expr::Variable(name, _) => {
             let name = *name;
-            return Some(world.words.resolve(name).to_owned());
+            return Some(world.words.resolve(name).to_string());
         },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = vec![];
             for segment in segments.iter() {
                 let segment = *segment;
-                parts.push(world.words.resolve(segment).to_owned());
+                parts.push(world.words.resolve(segment).to_string());
             }
             return Some(parts.join("::"));
         },

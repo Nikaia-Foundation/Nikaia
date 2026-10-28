@@ -7,7 +7,7 @@ impl EmitState {
     pub fn sum_of(&self, key: &str) -> Option<String> {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let found = match self.sums.get(&contract.fails_with) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(found.to_owned())
+        Some(found.to_string())
     }
     pub fn sum_members(&self, sum: &str) -> Option<Vec<String>> {
         for members in self.sums.keys() {
@@ -35,11 +35,11 @@ impl EmitState {
         !contract.tethered.is_empty()
     }
     pub fn lifetime_args(&self, name: &str, lifetime: &str) -> String {
-        let slots = match self.view_slots.get(name) { Some(__nikaia_value) => __nikaia_value, None => return lifetime.to_owned() };
+        let slots = match self.view_slots.get(name) { Some(__nikaia_value) => __nikaia_value, None => return lifetime.to_string() };
         let mut parts: Vec<String> = vec![];
         let mut at: i64 = 0;
         while ((at) as usize) < slots.len() {
-            parts.push(lifetime.to_owned());
+            parts.push(lifetime.to_string());
             at += 1;
         }
         parts.join(", ")
@@ -162,7 +162,7 @@ impl EmitState {
         }
         let kind = self.named_error_of(world, thrown);
         if kind == 0 { return String::from("Box<dyn std::error::Error>"); }
-        let name = (*nikaia_std::index::get(&thrown, 0)).to_owned();
+        let name = (*nikaia_std::index::get(&thrown, 0)).to_string();
         if kind == 2 { return format!("nikaia_std::error::Thrown<{}>", library_error_path(&name, self.is_std)); }
         let mut shown: String = String::from("");
         if self.borrows_named(world, &name) { shown = self.channel_params(elided, params, static_params, borrows); }

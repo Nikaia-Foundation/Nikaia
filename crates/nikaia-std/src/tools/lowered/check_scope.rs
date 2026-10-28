@@ -48,7 +48,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn assigned_followed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, op: Option<&BinaryOp>, value: &Expr) {
         let name: String = match target {
-            Expr::Variable(written, _) => { let written = *written; world.words.resolve(written).to_owned() },
+            Expr::Variable(written, _) => { let written = *written; world.words.resolve(written).to_string() },
             _ => return,
         };
         let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -87,20 +87,20 @@ impl CheckState {
 pub fn resolve_call<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, name: &str) -> Option<CheckResolved<'r>> {
     if world.own.functions.contains_key(name) {
         let contract = match check_scope_found(&world.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(CheckResolved { key: name.to_owned(), contract });
+        return Some(CheckResolved { key: name.to_string(), contract });
     }
     let constructed = format!("{}::new", name);
     if world.own.functions.contains_key(&constructed) {
         let contract = match check_scope_found(&world.own.functions, &constructed) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(CheckResolved { key: constructed.to_owned(), contract });
+        return Some(CheckResolved { key: constructed.to_string(), contract });
     }
     if world.library.functions.contains_key(name) {
         let contract = match check_scope_found(&world.library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(CheckResolved { key: name.to_owned(), contract });
+        return Some(CheckResolved { key: name.to_string(), contract });
     }
     if world.library.functions.contains_key(&constructed) {
         let contract = match check_scope_found(&world.library.functions, &constructed) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(CheckResolved { key: constructed.to_owned(), contract });
+        return Some(CheckResolved { key: constructed.to_string(), contract });
     }
     None
 }
@@ -110,33 +110,33 @@ pub fn resolve_call<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, name: &s
 pub fn resolve_method<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: &str) -> Option<CheckResolved<'r>> {
     if world.own.functions.contains_key(key) {
         let contract = match check_scope_found(&world.own.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(CheckResolved { key: key.to_owned(), contract });
+        return Some(CheckResolved { key: key.to_string(), contract });
     }
     let mut best: String = String::from("");
     let mut have = false;
     if world.library.functions.contains_key(key) {
-        best = key.to_owned();
+        best = key.to_string();
         have = true;
     }
     let ends = method_keys(world.library_methods, key);
     if !ends.is_empty() && (!have || AsRef::<str>::as_ref(&(*nikaia_std::index::get(&ends, 0))) < AsRef::<str>::as_ref(&(best))) {
-        best = (*nikaia_std::index::get(&ends, 0)).to_owned();
+        best = (*nikaia_std::index::get(&ends, 0)).to_string();
         have = true;
     }
     if have {
         let contract = match check_scope_found(&world.library.functions, &best) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(CheckResolved { key: best.to_owned(), contract });
+        return Some(CheckResolved { key: best.to_string(), contract });
     }
     let at = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let without_the_module = nikaia_std::index::get(&key, nikaia_std::index::at(at + 2..)).to_owned();
+    let without_the_module = nikaia_std::index::get(&key, nikaia_std::index::at(at + 2..)).to_string();
     if !without_the_module.contains("::") { return None; }
     if world.own.functions.contains_key(&without_the_module) {
         let contract = match check_scope_found(&world.own.functions, &without_the_module) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(CheckResolved { key: without_the_module.to_owned(), contract });
+        return Some(CheckResolved { key: without_the_module.to_string(), contract });
     }
     if world.library.functions.contains_key(&without_the_module) {
         let contract = match check_scope_found(&world.library.functions, &without_the_module) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(CheckResolved { key: without_the_module.to_owned(), contract });
+        return Some(CheckResolved { key: without_the_module.to_string(), contract });
     }
     None
 }

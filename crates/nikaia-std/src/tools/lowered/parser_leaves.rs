@@ -30,7 +30,7 @@ impl PrTrivia {
     }
     pub fn comment(&mut self, start: i64, end: i64, body: String) {
         self.noted(start, end);
-        let rest = nikaia_std::index::or(body.strip_prefix('/'), || "").to_owned();
+        let rest = nikaia_std::index::or(body.strip_prefix('/'), || "").to_string();
         if !body.starts_with('/') || rest.starts_with('/') {
             self.ran(start, end, false);
             return;
@@ -41,7 +41,7 @@ impl PrTrivia {
         }
         if !self.doc_live || self.doc_reaches != start { self.doc = String::from(""); }
         if !self.doc.is_empty() { self.doc.push_str("\n"); }
-        let line = if rest.starts_with(' ') { nikaia_std::index::or(rest.strip_prefix(' '), || "").to_owned() } else { rest.to_owned() };
+        let line = if rest.starts_with(' ') { nikaia_std::index::or(rest.strip_prefix(' '), || "").to_string() } else { rest.to_string() };
         self.doc.push_str(&line);
         self.doc_end = end;
         self.doc_reaches = end;
@@ -49,7 +49,7 @@ impl PrTrivia {
         self.ran(start, end, false);
     }
     pub fn doc_at(&self, at: i64) -> Option<String> {
-        if self.doc_live && !self.doc.is_empty() && self.doc_reaches == at { return Some(self.doc.to_owned()); }
+        if self.doc_live && !self.doc.is_empty() && self.doc_reaches == at { return Some(self.doc.to_string()); }
         None
     }
     pub(crate) fn before(&self, at: i64) -> i64 {

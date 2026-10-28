@@ -356,7 +356,7 @@ pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
     for k in 0..toks.len() as i64 {
         let t = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k))).clone();
         let bar = t.kind == FmtKind::Punct && t.text == "|";
-        let top = nikaia_std::index::or(stack.last().map(|__nikaia_found| __nikaia_found.to_string()), || "".into()).to_owned();
+        let top = nikaia_std::index::or(stack.last().map(|__nikaia_found| __nikaia_found.to_string()), || "".into()).to_string();
         if t.kind == FmtKind::Close {
             while !stack.is_empty() && nikaia_std::index::or(stack.last().map(|__nikaia_found| __nikaia_found.to_string()), || "".into()) == "|" {
                 stack.pop();
@@ -373,7 +373,7 @@ pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
         } else {
             depth.push(stack.len() as i64 - under);
             if t.kind == FmtKind::Open {
-                stack.push(t.text.to_owned());
+                stack.push(t.text.to_string());
                 barred.push(bars > 0);
             } else if bar && fmt_bar_opens(toks, k) {
                 stack.push(String::from("|"));
@@ -550,8 +550,8 @@ impl FmtPrinter {
             }
         }
         let glob = end.text == "*" && last > 0 && nikaia_std::index::get(&line.toks, nikaia_std::index::at(last - 1)).text == "::";
-        self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(&end.text.to_owned()) && !glob;
-        self.tail = end.text.to_owned();
+        self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(&end.text.to_string()) && !glob;
+        self.tail = end.text.to_string();
         self.tail_kind = end.kind;
         self.write(&FmtLine { toks, blank: line.blank }, indent);
     }
@@ -575,13 +575,13 @@ impl FmtPrinter {
         let mut kinds: Vec<String> = vec![];
         for f in self.frames.iter() {
             opens.push(-1);
-            kinds.push(f.open.to_owned());
+            kinds.push(f.open.to_string());
         }
         for k in 0..n {
             let t = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k))).clone();
             if t.kind == FmtKind::Open {
                 opens.push(k);
-                kinds.push(t.text.to_owned());
+                kinds.push(t.text.to_string());
             } else if t.kind == FmtKind::Close {
                 if !opens.is_empty() {
                     opens.pop();

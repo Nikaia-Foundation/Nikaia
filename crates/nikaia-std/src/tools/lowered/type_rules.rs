@@ -108,8 +108,8 @@ pub fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base: &Expr,
         Expr::Path(segments, _) => Some(Expr::Path(segments.to_owned(), node_id::NodeId::fresh())),
         Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; Some(Expr::LitInt { value, negative, id: node_id::NodeId::fresh() }) },
         Expr::LitBool(b, _) => { let b = *b; Some(Expr::LitBool(b, node_id::NodeId::fresh())) },
-        Expr::LitChar(c, _) => Some(Expr::LitChar(c.to_owned(), node_id::NodeId::fresh())),
-        Expr::LitFloat(f, _) => Some(Expr::LitFloat(f.to_owned(), node_id::NodeId::fresh())),
+        Expr::LitChar(c, _) => Some(Expr::LitChar(c.to_string(), node_id::NodeId::fresh())),
+        Expr::LitFloat(f, _) => Some(Expr::LitFloat(f.to_string(), node_id::NodeId::fresh())),
         Expr::LitNull(_) => Some(Expr::LitNull(node_id::NodeId::fresh())),
         Expr::Binary { op, lhs, rhs, span, grouped, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); let grouped = *grouped;
@@ -149,7 +149,7 @@ pub fn tr_asserts_as(words: &winnow_grammar::InternerContext, intern: &impl Fn(&
     for rule in ruled.rules.iter() {
         let condition = match tr_on(words, &rule.claim, base, &ruled.fields, renew) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut config: Vec<ConfigArg> = vec![];
-        if given { config.push(ConfigArg { name: intern(&tr_given()), value: Expr::LitStr { text: type_name.to_owned(), id: node_id::NodeId::fresh() } }); }
+        if given { config.push(ConfigArg { name: intern(&tr_given()), value: Expr::LitStr { text: type_name.to_string(), id: node_id::NodeId::fresh() } }); }
         if said {
             let mut shown = Expr::LitStr { text: format!("the rule of `{}`", type_name), id: node_id::NodeId::fresh() };
             match &rule.message {
@@ -193,9 +193,9 @@ pub fn tr_collect(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str
             Item::Struct { name, fields, rules, generics, .. } => {
                 let name = *name;
                 if rules.is_empty() { continue; }
-                let type_name = words.resolve(name).to_owned();
+                let type_name = words.resolve(name).to_string();
                 let mut field_names: collections::BTreeSet<String> = collections::BTreeSet::new();
-                for f in fields.iter() { field_names.insert(words.resolve(f.name).to_owned()); }
+                for f in fields.iter() { field_names.insert(words.resolve(f.name).to_string()); }
                 let mut read: Vec<TrRule> = vec![];
                 for rule in rules.iter() {
                     let found = tr_a_rule(words, &rule.node, tr_span(&rule.span));
@@ -208,7 +208,7 @@ pub fn tr_collect(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str
                     read.push(one);
                 }
                 let binding = intern(&tr_binding_of(&type_name, &field_names));
-                ruled.insert(type_name.to_owned(), TrRuled { fields: field_names, rules: read, binding });
+                ruled.insert(type_name.to_string(), TrRuled { fields: field_names, rules: read, binding });
             },
             _ => { },
         }
@@ -221,7 +221,7 @@ pub fn tr_methods_of(words: &winnow_grammar::InternerContext, items: &[Spanned<I
     for item in items.iter() {
         match &item.node {
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_owned();
+                let owner = words.resolve(target.name).to_string();
                 let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
                 let mut changing: collections::BTreeSet<String> = collections::BTreeSet::new();
                 for method in methods.iter() {
@@ -230,8 +230,8 @@ pub fn tr_methods_of(words: &winnow_grammar::InternerContext, items: &[Spanned<I
                             let name = *name;
                             let how = match receiver { Some(__nikaia_value) => __nikaia_value, None => continue };
                             let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            let text = words.resolve(called).to_owned();
-                            if how.is_mut { changing.insert(text.to_owned()); }
+                            let text = words.resolve(called).to_string();
+                            if how.is_mut { changing.insert(text.to_string()); }
                             all.insert(text);
                         },
                         _ => { },
@@ -240,8 +240,8 @@ pub fn tr_methods_of(words: &winnow_grammar::InternerContext, items: &[Spanned<I
                 let seen = own.get(&owner);
                 if seen.is_some() {
                     let prev = match seen { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    for each in prev.all.iter() { all.insert(each.to_owned()); }
-                    for each in prev.changing.iter() { changing.insert(each.to_owned()); }
+                    for each in prev.all.iter() { all.insert(each.to_string()); }
+                    for each in prev.changing.iter() { changing.insert(each.to_string()); }
                 }
                 own.insert(owner, TrMethods { all, changing });
             },
@@ -256,7 +256,7 @@ pub fn tr_fails_changed(words: &winnow_grammar::InternerContext, ruled: &collect
     for item in items.iter() {
         match &item.node {
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_owned();
+                let owner = words.resolve(target.name).to_string();
                 if !ruled.contains_key(&owner) { continue; }
                 let mut fails = false;
                 for m in methods.iter() {
@@ -431,7 +431,7 @@ pub(crate) fn tr_reader(name: &str) -> bool { matches!(name, "len" | "is_empty" 
 
 pub(crate) fn tr_mark(words: &winnow_grammar::InternerContext, ruled: &collections::BTreeMap<String, collections::BTreeSet<String>>, field: winnow_grammar::Symbol, changed: &mut collections::BTreeSet<String>) {
     let text = words.resolve(field);
-    for (name, fields) in ruled.iter() { if fields.contains(text) { changed.insert(name.to_owned()); } }
+    for (name, fields) in ruled.iter() { if fields.contains(text) { changed.insert(name.to_string()); } }
 }
 
 pub(crate) fn tr_mark_arg(words: &winnow_grammar::InternerContext, ruled: &collections::BTreeMap<String, collections::BTreeSet<String>>, in_impl: bool, arg: &Expr, changed: &mut collections::BTreeSet<String>) {
@@ -490,7 +490,7 @@ pub fn tr_built_elsewhere(words: &winnow_grammar::InternerContext, ruled: &colle
     for item in items.iter() {
         match &item.node {
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_owned();
+                let owner = words.resolve(target.name).to_string();
                 let mut changes_self = false;
                 for m in methods.iter() {
                     match &m.node {
@@ -510,7 +510,7 @@ pub fn tr_built_elsewhere(words: &winnow_grammar::InternerContext, ruled: &colle
                 match expr {
                     Expr::StructLit { name, .. } => {
                         let name = *name;
-                        let type_name = words.resolve(name).to_owned();
+                        let type_name = words.resolve(name).to_string();
                         if ruled.contains_key(&type_name) && !checked.contains_key(&type_name) { found.insert(type_name); }
                     },
                     _ => { },
@@ -552,7 +552,7 @@ pub(crate) fn tr_rule_reads(words: &winnow_grammar::InternerContext, claim: &Exp
                 Expr::Variable(name, _) => {
                     let name = *name;
                     if fields.contains(words.resolve(name)) && words.resolve(method) == "len" && args.is_empty() {
-                        names.insert(words.resolve(name).to_owned());
+                        names.insert(words.resolve(name).to_string());
                         return;
                     }
                 },
@@ -564,8 +564,8 @@ pub(crate) fn tr_rule_reads(words: &winnow_grammar::InternerContext, claim: &Exp
         Expr::Variable(name, _) => {
             let name = *name;
             if fields.contains(words.resolve(name)) {
-                names.insert(words.resolve(name).to_owned());
-                full.insert(words.resolve(name).to_owned());
+                names.insert(words.resolve(name).to_string());
+                full.insert(words.resolve(name).to_string());
             }
         },
         Expr::Binary { lhs, rhs, .. } => {
@@ -584,7 +584,7 @@ pub(crate) fn tr_field_of_self(e: &Expr, words: &winnow_grammar::InternerContext
     match e {
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
-            if tr_is_self(base, words) { return Some(words.resolve(name).to_owned()); }
+            if tr_is_self(base, words) { return Some(words.resolve(name).to_string()); }
             return None;
         },
         _ => None,
@@ -637,8 +637,8 @@ pub fn tr_declared_rules(words: &winnow_grammar::InternerContext, items: &[Spann
                 let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
                 let mut buildable = is_public;
                 for f in fields.iter() {
-                    all.insert(words.resolve(f.name).to_owned());
-                    if f.is_public { public.insert(words.resolve(f.name).to_owned()); } else if f.default.is_none() { buildable = false; }
+                    all.insert(words.resolve(f.name).to_string());
+                    if f.is_public { public.insert(words.resolve(f.name).to_string()); } else if f.default.is_none() { buildable = false; }
                 }
                 let mut reads_public = false;
                 let mut written: Vec<String> = vec![];
@@ -650,7 +650,7 @@ pub fn tr_declared_rules(words: &winnow_grammar::InternerContext, items: &[Spann
                     }
                     written.push(written_at(&rule.span));
                 }
-                out.insert(words.resolve(name).to_owned(), TrDeclared { fields: all, rules: written, open: buildable || reads_public });
+                out.insert(words.resolve(name).to_string(), TrDeclared { fields: all, rules: written, open: buildable || reads_public });
             },
             _ => { },
         }

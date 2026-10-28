@@ -46,7 +46,7 @@ impl EmitState {
                     let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if receiver.is_some() || world.words.resolve(called) != "main" { continue; }
                     if args.is_empty() && config.is_empty() { return (String::from(""), String::from("")); }
-                    let about = nikaia_std::index::or(item.doc.as_deref(), || "").to_owned();
+                    let about = nikaia_std::index::or(item.doc.as_deref(), || "").to_string();
                     return self.main_words_of(world, args, config, &about, types, passing);
                 },
                 _ => { },
@@ -71,11 +71,11 @@ impl EmitState {
         let mut passed: Vec<String> = vec![];
         for index in 0..args.len() as i64 {
             let arg = nikaia_std::index::get(&args, (index) as usize);
-            let param = world.words.resolve(arg.name).to_owned();
+            let param = world.words.resolve(arg.name).to_string();
             let local = escaped_name(&param);
             let ty = main_written_type(&arg.ty, world.words);
             let mut rust: String = String::from("_");
-            if ((index) as usize) < types.len() { rust = (*nikaia_std::index::get(&types, (index) as usize)).to_owned(); }
+            if ((index) as usize) < types.len() { rust = (*nikaia_std::index::get(&types, (index) as usize)).to_string(); }
             let mut kind: &'static str = "Subject";
             let mut read: &'static str = "subject";
             if words_vec(&arg.ty, world.words) {
@@ -89,31 +89,31 @@ impl EmitState {
             if arg.mutable {
                 binding = "mut ";
                 passed.push(format!("&mut {}", local));
-            } else if ((index) as usize) < passing.len() { passed.push((*nikaia_std::index::get(&passing, (index) as usize)).replace("{}", &local)); } else { passed.push(local.to_owned()); }
+            } else if ((index) as usize) < passing.len() { passed.push((*nikaia_std::index::get(&passing, (index) as usize)).replace("{}", &local)); } else { passed.push(local.to_string()); }
             reads = format!("{}    let {}{}: {} = __nikaia_words.{}({});\n", reads, binding, local, rust, read, index);
             params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: \"\", pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, main_claims_of(&checks, &param)));
         }
         for k in 0..config.len() as i64 {
             let option = nikaia_std::index::get(&config, (k) as usize);
             let at = args.len() as i64 + k;
-            let param = world.words.resolve(option.name).to_owned();
+            let param = world.words.resolve(option.name).to_string();
             let local = escaped_name(&param);
             let ty = main_written_type(&option.ty, world.words);
             let mut rust: String = String::from("_");
-            if at < types.len() as i64 { rust = (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).to_owned(); }
+            if at < types.len() as i64 { rust = (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).to_string(); }
             let mut default: String = String::from("");
             let mut shown: String = String::from("");
             for declared in options.iter() {
                 if declared.name == param {
                     default = held_literal(&declared.default, &declared.ty);
-                    shown = declared.default.to_owned();
+                    shown = declared.default.to_string();
                     if shown == "None" { shown = String::from("null"); }
                 }
             }
             let mut kind: &'static str = "Option";
             if ty == "bool" { kind = "Flag"; }
             reads = format!("{}    let {}: {} = match __nikaia_words.option({}) {{ Some(__nikaia_word) => __nikaia_word, None => {} }};\n", reads, local, rust, at, default);
-            if at < passing.len() as i64 { passed.push((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local)); } else { passed.push(local.to_owned()); }
+            if at < passing.len() as i64 { passed.push((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local)); } else { passed.push(local.to_string()); }
             params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: {}, pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, rust_string(&shown), main_claims_of(&checks, &param)));
         }
         let mut text: String = format!("    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {}, params: &[{}] }};\n", rust_string(about), params.join(", "));
@@ -153,11 +153,11 @@ impl EmitState {
             match &item.node {
                 Item::Struct { name, generics, .. } => {
                     let name = *name;
-                    if generics.is_empty() { bare = world.words.resolve(name).to_owned(); }
+                    if generics.is_empty() { bare = world.words.resolve(name).to_string(); }
                 },
                 Item::Enum { name, .. } => {
                     let name = *name;
-                    bare = world.words.resolve(name).to_owned();
+                    bare = world.words.resolve(name).to_string();
                 },
                 _ => { },
             }
@@ -209,7 +209,7 @@ pub(crate) fn main_exits(own: &Ledger) -> bool {
 }
 
 pub(crate) fn main_written_type(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
-    let mut text = words.resolve(ty.name).to_owned();
+    let mut text = words.resolve(ty.name).to_string();
     if !ty.generics.is_empty() {
         let mut inner: Vec<String> = vec![];
         for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
@@ -221,7 +221,7 @@ pub(crate) fn main_written_type(ty: &Type, words: &winnow_grammar::InternerConte
 
 pub(crate) fn words_vec(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { words.resolve(ty.name) == "Vec" && !ty.is_nullable }
 
-pub(crate) fn main_claim(written: &str) -> String { nikaia_std::index::or(written.strip_prefix("precondition of `main`: "), || std::convert::AsRef::<str>::as_ref(written)).to_owned() }
+pub(crate) fn main_claim(written: &str) -> String { nikaia_std::index::or(written.strip_prefix("precondition of `main`: "), || std::convert::AsRef::<str>::as_ref(written)).to_string() }
 
 pub(crate) fn main_claims_of(checks: &[PreconditionCheck], param: &str) -> String {
     let mut claims: Vec<String> = vec![];

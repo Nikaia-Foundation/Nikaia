@@ -37,7 +37,7 @@ impl EmitState {
     pub fn emit_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = node_key(node);
         if walk.held.contains_key(&at) {
-            out.push(&nikaia_std::index::or(walk.held.get(&at), || "").to_owned());
+            out.push(&nikaia_std::index::or(walk.held.get(&at), || "").to_string());
             return Ok(());
         }
         let how = nikaia_std::index::or(self.facts.narrowed_reads.get(&at), || -1);
@@ -96,19 +96,19 @@ impl EmitState {
         let lent = if copied || other { "Option::as_ref(&" } else { "Option::as_deref(&" };
         if !operand {
             if out.buf.ends_with("Some(&") {
-                out.buf = nikaia_std::index::or(out.buf.strip_suffix("Some(&"), || "").to_owned();
+                out.buf = nikaia_std::index::or(out.buf.strip_suffix("Some(&"), || "").to_string();
                 out.push(lent);
                 out.append(name);
                 return;
             }
             if out.buf.ends_with("Some(") {
-                out.buf = nikaia_std::index::or(out.buf.strip_suffix("Some("), || "").to_owned();
+                out.buf = nikaia_std::index::or(out.buf.strip_suffix("Some("), || "").to_string();
                 out.push("std::convert::identity(");
                 out.append(name);
                 return;
             }
         }
-        if other && !given_up && out.buf.ends_with('&') && !out.buf.ends_with("&&") { out.buf = nikaia_std::index::or(out.buf.strip_suffix('&'), || "").to_owned(); }
+        if other && !given_up && out.buf.ends_with('&') && !out.buf.ends_with("&&") { out.buf = nikaia_std::index::or(out.buf.strip_suffix('&'), || "").to_string(); }
         out.append(name);
         if given_up && path && !copied { out.push(".clone().unwrap()"); } else if copied || given_up { out.push(".unwrap()"); } else if path && !other { out.push(".as_deref().unwrap()"); } else { out.push(".as_ref().unwrap()"); }
     }
@@ -183,7 +183,7 @@ impl EmitState {
             Expr::LitInt { value, negative, .. } => {
                 let negative = *negative; let value = *value;
                 if self.facts.unsigned_literals.contains_key(&at) {
-                    let ty = nikaia_std::index::or(self.facts.unsigned_literals.get(&at), || "").to_owned();
+                    let ty = nikaia_std::index::or(self.facts.unsigned_literals.get(&at), || "").to_string();
                     out.push(&format!("{}{}", emit_expr_int_text(value, negative), ty));
                 } else { out.push(&emit_expr_integer_literal(value, negative, flow.widen)); }
             },
@@ -222,7 +222,7 @@ impl EmitState {
                     out.push(&format!("{{ const __NIKAIA_DSL: {} = {}; __NIKAIA_DSL }}", below, written));
                     return Ok(());
                 }
-                let name = if package.is_some() { format!("{}::{}", emit_text(world, nikaia_std::index::or(package, || target.into())), target_text) } else { target_text.to_owned() };
+                let name = if package.is_some() { format!("{}::{}", emit_text(world, nikaia_std::index::or(package, || target.into())), target_text) } else { target_text.to_string() };
                 self.emit_core_template(world, walk, out, host, &name, context, content, at, depth, flow, scope)?;
             },
             Expr::Block(block, _) => { self.emit_core_block(world, walk, out, host, block, depth, flow, scope, EmitTail::Value)?; },
@@ -295,12 +295,12 @@ impl EmitState {
             return Ok(());
         }
         if self.constructs_by_name(world, &text) {
-            out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![text.to_owned(), String::from("new")]));
+            out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![text.to_string(), String::from("new")]));
             return Ok(());
         }
         if self.emit_expr_kept_function(world, walk, out, host, node, depth, flow, scope)? { return Ok(()); }
         if self.facts.comptime_uses.contains_key(&at) {
-            out.push(&nikaia_std::index::or(self.facts.comptime_uses.get(&at), || "").to_owned());
+            out.push(&nikaia_std::index::or(self.facts.comptime_uses.get(&at), || "").to_string());
             return Ok(());
         }
         if !flow.in_a_place && self.copied_in_place(&scope.function, &text) {
@@ -327,7 +327,7 @@ impl EmitState {
         if walk.in_a_kept_call || !self.facts.kept_functions.contains_key(&at) { return Ok(false); }
         let (pauses, fails, arity) = nikaia_std::index::or(self.facts.kept_functions.get(&at), || (false.into(), false.into(), 0));
         let key = emit_expr_kept_text(world, node);
-        let kept = match self.kept_calls.get(&(key.to_owned(), arity)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(EmitRefused { message: format!("no kept call was built for `{}`", key), at: Some(flow.statement) }, &"emit_expr_kept_function")) };
+        let kept = match self.kept_calls.get(&(key.to_string(), arity)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(EmitRefused { message: format!("no kept call was built for `{}`", key), at: Some(flow.statement) }, &"emit_expr_kept_function")) };
         let mut names: Vec<String> = vec![];
         for n in kept.names.iter() {
             let n = *n;
@@ -378,7 +378,7 @@ impl EmitState {
             }
         }
         if negation && self.proven_negations.contains_key(&node_key(node)) {
-            let ty = nikaia_std::index::or(self.proven_negations.get(&node_key(node)), || "").to_owned();
+            let ty = nikaia_std::index::or(self.proven_negations.get(&node_key(node)), || "").to_string();
             out.push(&format!("unsafe {{ nikaia_std::proven::neg::<{}>(", ty));
             self.emit_expr(world, walk, out, host, operand, depth, flow, scope)?;
             out.push(") }");

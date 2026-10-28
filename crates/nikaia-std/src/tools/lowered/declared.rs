@@ -38,8 +38,8 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
     let written_name = unaliased_in(aliases, names.resolve(ty.name));
     let named = if written_name == "char" { String::from("scalar") } else { written_name };
     let name = if named == "int" { String::from("i64") } else { named };
-    if ty.either { return Ty::Named { name: TEXT.to_owned(), args: vec![], view: false }; }
-    if ty.is_view && name == TEXT { return Ty::Named { name: TEXT_VIEW.to_owned(), args: written_all(names, aliases, &ty.generics), view: true }; }
+    if ty.either { return Ty::Named { name: TEXT.to_string(), args: vec![], view: false }; }
+    if ty.is_view && name == TEXT { return Ty::Named { name: TEXT_VIEW.to_string(), args: written_all(names, aliases, &ty.generics), view: true }; }
     Ty::Named { name, args: written_all(names, aliases, &ty.generics), view: ty.is_view }
 }
 
@@ -60,13 +60,13 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
         _ => return None,
     };
     let mut parameters = outer.to_owned();
-    for generic in generics.iter() { parameters.insert(names.resolve(generic.name).to_owned()); }
+    for generic in generics.iter() { parameters.insert(names.resolve(generic.name).to_string()); }
     let mut own: String = String::from("new");
     if name.is_some() {
         let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return None };
-        own = names.resolve(symbol).to_owned();
+        own = names.resolve(symbol).to_string();
     }
-    let mut key = own.to_owned();
+    let mut key = own.to_string();
     if target.is_some() {
         let owner = nikaia_std::index::or(match target.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -84,7 +84,7 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
             let subject = match receiver { Some(__nikaia_value) => __nikaia_value, None => return None };
             if subject.is_ref { borrows.push(String::from("self")); }
         }
-        for arg in args.iter() { if holds_view(&arg.ty) { borrows.push(names.resolve(arg.name).to_owned()); } }
+        for arg in args.iter() { if holds_view(&arg.ty) { borrows.push(names.resolve(arg.name).to_string()); } }
     }
     let mut params: Vec<(String, Ty)> = vec![];
     let mut mutates = false;
@@ -100,8 +100,8 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
     }
     let mut mutable: Vec<String> = vec![];
     for arg in args.iter() {
-        let arg_name = names.resolve(arg.name).to_owned();
-        params.push((arg_name.to_owned(), written_ty(names, aliases, &arg.ty).parameterise(&parameters)));
+        let arg_name = names.resolve(arg.name).to_string();
+        params.push((arg_name.to_string(), written_ty(names, aliases, &arg.ty).parameterise(&parameters)));
         if arg.mutable { mutable.push(arg_name); }
     }
     let mut bounds: Vec<(String, Vec<String>)> = vec![];
@@ -110,14 +110,14 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
         let mut written: Vec<String> = vec![];
         for bound in generic.bounds.iter() {
             let bound = *bound;
-            written.push(names.resolve(bound).to_owned());
+            written.push(names.resolve(bound).to_string());
         }
-        bounds.push((names.resolve(generic.name).to_owned(), written));
+        bounds.push((names.resolve(generic.name).to_string(), written));
     }
     let mut options: Vec<ConfigContract> = vec![];
     for option in config.iter() {
         let ty = written_ty(names, aliases, &option.ty).parameterise(&parameters);
-        options.push(ConfigContract { name: names.resolve(option.name).to_owned(), ty, default: default_text(&option.default) });
+        options.push(ConfigContract { name: names.resolve(option.name).to_string(), ty, default: default_text(&option.default) });
     }
     let mut result: Option<Ty> = None;
     if ret_type.is_some() {
@@ -129,7 +129,7 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
         let mut lambdas: Vec<String> = vec![];
         for lambda in sync_by.iter() {
             let lambda = *lambda;
-            lambdas.push(names.resolve(lambda).to_owned());
+            lambdas.push(names.resolve(lambda).to_string());
         }
         sync_claim = Sync::From(lambdas.join(", "));
     }
@@ -156,7 +156,7 @@ pub fn default_text(expr: &Expr) -> String {
         Expr::LitBool(value, _) => { let value = *value; if value { String::from("true") } else { String::from("false") } },
         Expr::LitNull(_) => String::from("None"),
         Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if negative { format!("-{}", value) } else { format!("{}", value) } },
-        Expr::LitFloat(written, _) => written.to_owned(),
+        Expr::LitFloat(written, _) => written.to_string(),
         Expr::LitChar(written, _) => format!("'{}'", written),
         Expr::LitStr { text, .. } => format!("\"{}\"", text),
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); format!("-{}", default_text(expr)) },
@@ -171,18 +171,18 @@ pub fn declared_trait_method(names: &winnow_grammar::InternerContext, aliases: &
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || Receiver { is_ref: false, is_mut: false });
-        let owner = trait_name.to_owned();
+        let owner = trait_name.to_string();
         let self_name: String = String::from("self");
         params.push((self_name, Ty::Named { name: owner, args: vec![], view: subject.is_ref }));
     }
     let mut mutable: Vec<String> = vec![];
     for arg in method.args.iter() {
-        let arg_name = names.resolve(arg.name).to_owned();
-        params.push((arg_name.to_owned(), written_ty(names, aliases, &arg.ty)));
+        let arg_name = names.resolve(arg.name).to_string();
+        params.push((arg_name.to_string(), written_ty(names, aliases, &arg.ty)));
         if arg.mutable { mutable.push(arg_name); }
     }
     let mut options: Vec<ConfigContract> = vec![];
-    for option in method.config.iter() { options.push(ConfigContract { name: names.resolve(option.name).to_owned(), ty: written_ty(names, aliases, &option.ty), default: default_text(&option.default) }); }
+    for option in method.config.iter() { options.push(ConfigContract { name: names.resolve(option.name).to_string(), ty: written_ty(names, aliases, &option.ty), default: default_text(&option.default) }); }
     let result = optional_ty(names, aliases, (method.ret_type).as_ref());
     let mut contract = FnContract::empty();
     contract.public = public;
@@ -217,13 +217,13 @@ pub fn declared_enum(names: &winnow_grammar::InternerContext, aliases: &collecti
             },
             VariantFields::Named(fields) => {
                 for field in fields.iter() {
-                    holds.push(FieldContract { name: names.resolve(field.name).to_owned(), ty: written_ty(names, aliases, &field.ty), public: true, default: String::from(""), attributes: vec![] });
+                    holds.push(FieldContract { name: names.resolve(field.name).to_string(), ty: written_ty(names, aliases, &field.ty), public: true, default: String::from(""), attributes: vec![] });
                     if holds_view(&field.ty) || names_borrowing(names, &field.ty, borrowing) { views = true; }
                 }
             },
         }
-        let name = names.resolve(variant.name).to_owned();
-        if views { tethered.push(name.to_owned()); }
+        let name = names.resolve(variant.name).to_string();
+        if views { tethered.push(name.to_string()); }
         cases.push(VariantContract { name, holds, positional, attributes: vec![] });
     }
     let mut contract = TypeContract::empty();
@@ -235,15 +235,15 @@ pub fn declared_enum(names: &winnow_grammar::InternerContext, aliases: &collecti
 
 pub fn declared_fields(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, generics: &[GenericParam], fields: &[FieldDef], is_extern: bool) -> Vec<FieldContract> {
     let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for generic in generics.iter() { parameters.insert(names.resolve(generic.name).to_owned()); }
+    for generic in generics.iter() { parameters.insert(names.resolve(generic.name).to_string()); }
     let mut out: Vec<FieldContract> = vec![];
-    for field in fields.iter() { out.push(FieldContract { name: names.resolve(field.name).to_owned(), ty: written_ty(names, aliases, &field.ty).parameterise(&parameters), public: field.is_public || is_extern, default: String::from(""), attributes: vec![] }); }
+    for field in fields.iter() { out.push(FieldContract { name: names.resolve(field.name).to_string(), ty: written_ty(names, aliases, &field.ty).parameterise(&parameters), public: field.is_public || is_extern, default: String::from(""), attributes: vec![] }); }
     out
 }
 
 pub fn tethered_fields(names: &winnow_grammar::InternerContext, fields: &[FieldDef], borrowing: &collections::BTreeSet<String>) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for field in fields.iter() { if holds_view(&field.ty) || names_borrowing(names, &field.ty, borrowing) { out.push(names.resolve(field.name).to_owned()); } }
+    for field in fields.iter() { if holds_view(&field.ty) || names_borrowing(names, &field.ty, borrowing) { out.push(names.resolve(field.name).to_string()); } }
     out
 }
 

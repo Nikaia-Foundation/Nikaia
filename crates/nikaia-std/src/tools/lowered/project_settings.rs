@@ -9,7 +9,7 @@ pub enum ProjectSettingsRefusal {
 impl ProjectSettingsRefusal {
     pub(crate) fn message(&self) -> String {
         match self {
-            ProjectSettingsRefusal::Refused(why) => why.to_owned(),
+            ProjectSettingsRefusal::Refused(why) => why.to_string(),
         }
     }
 }
@@ -124,12 +124,12 @@ pub fn encoded_with_cpu(encoded: &Option<String>, plain: &Option<String>, cpu: &
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } {
-        Some(ref e) => e.split("\x1f").filter(|&f| { !f.is_empty() }).map(|f| { f.to_owned() }).collect::<Vec<_>>(),
+        Some(ref e) => e.split("\x1f").filter(|&f| { !f.is_empty() }).map(|f| { f.to_string() }).collect::<Vec<_>>(),
         None => match match plain.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } {
-            Some(ref p) => p.split_whitespace().map(|f| { f.to_owned() }).collect::<Vec<_>>(),
+            Some(ref p) => p.split_whitespace().map(|f| { f.to_string() }).collect::<Vec<_>>(),
             None => return None,
         },
     };

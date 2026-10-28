@@ -28,14 +28,14 @@ impl Reached {
 
 pub(crate) fn family(kind: &str) -> String {
     if kind == "stderr" { return String::from("stdout"); }
-    kind.to_owned()
+    kind.to_string()
 }
 
 pub fn touches_of(unknown: &collections::BTreeMap<String, bool>, outside: &collections::BTreeMap<String, Vec<Touch>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>) -> collections::BTreeMap<String, Vec<Touch>> {
     let mut known: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     for (name, lost) in unknown.iter() {
         let lost = nikaia_std::num::value(lost);
-        known.insert(name.to_owned(), !lost);
+        known.insert(name.to_string(), !lost);
     }
     let mut changed = true;
     while changed {
@@ -49,7 +49,7 @@ pub fn touches_of(unknown: &collections::BTreeMap<String, bool>, outside: &colle
                 if !theirs { reaches_unknown = true; }
             }
             if reaches_unknown {
-                known.insert(name.to_owned(), false);
+                known.insert(name.to_string(), false);
                 changed = true;
             }
         }
@@ -60,11 +60,11 @@ pub fn touches_of(unknown: &collections::BTreeMap<String, bool>, outside: &colle
         if !holds { continue; }
         let mut found: Vec<Touch> = vec![];
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        let mut todo: Vec<String> = vec![name.to_owned()];
+        let mut todo: Vec<String> = vec![name.to_string()];
         while !todo.is_empty() {
             let here = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
             if seen.contains(&here) { continue; }
-            seen.insert(here.to_owned());
+            seen.insert(here.to_string());
             for touch in nikaia_std::index::or(match *nikaia_std::index::get(&outside, &here) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -74,7 +74,7 @@ pub fn touches_of(unknown: &collections::BTreeMap<String, bool>, outside: &colle
                 None => None,
             }, || collections::BTreeSet::new().into()) { todo.push(callee); }
         }
-        settled.insert(name.to_owned(), found);
+        settled.insert(name.to_string(), found);
     }
     settled
 }
@@ -104,7 +104,7 @@ pub fn unit_touches(program: &Program, names: &winnow_grammar::InternerContext, 
                 graph.reaches.insert(key, reach);
             },
             Item::Impl { target, methods, .. } => {
-                let owner = names.resolve(target.name).to_owned();
+                let owner = names.resolve(target.name).to_string();
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, body, .. } => {
@@ -139,15 +139,15 @@ pub fn touches_of_graph(graph: &TouchGraph) -> collections::BTreeMap<String, Vec
     let mut outside: collections::BTreeMap<String, Vec<Touch>> = collections::BTreeMap::new();
     let mut calls: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for (name, reach) in graph.reaches.iter() {
-        unknown.insert(name.to_owned(), reach.unknown);
-        outside.insert(name.to_owned(), reach.outside.to_owned());
-        calls.insert(name.to_owned(), reach.calls.to_owned());
+        unknown.insert(name.to_string(), reach.unknown);
+        outside.insert(name.to_string(), reach.outside.to_owned());
+        calls.insert(name.to_string(), reach.calls.to_owned());
     }
     touches_of(&unknown, &outside, &calls)
 }
 
 pub(crate) fn rules_into(def: &GrammarDef, names: &winnow_grammar::InternerContext, whole: &Reach, own: &Ledger, library: &Ledger, graph: &mut TouchGraph) {
-    let named = names.resolve(def.name).to_owned();
+    let named = names.resolve(def.name).to_string();
     for rule in def.rules.iter() {
         if !rule.is_entry { continue; }
         let key = format!("{}::{}", named, names.resolve(rule.name));
@@ -160,7 +160,7 @@ pub(crate) fn rules_into(def: &GrammarDef, names: &winnow_grammar::InternerConte
 pub(crate) fn reached_by(seen: &[Seen], program: &Program, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, reach: &mut Reach) {
     for one in seen.iter() {
         match one {
-            Seen::Call { name, .. } => { reached_call((callee_named(names, name.to_owned(), own, library, &program.items)).as_ref(), library, reach); },
+            Seen::Call { name, .. } => { reached_call((callee_named(names, name.to_string(), own, library, &program.items)).as_ref(), library, reach); },
             Seen::Spawn { .. } => { reach.unknown = true; },
             Seen::Opaque { .. } => { reach.unknown = true; },
             _ => { },
@@ -171,7 +171,7 @@ pub(crate) fn reached_by(seen: &[Seen], program: &Program, names: &winnow_gramma
 pub(crate) fn reached_call(callee: Option<&Callee>, library: &Ledger, reach: &mut Reach) {
     let known = match callee { Some(__nikaia_value) => __nikaia_value, None => return };
     match known {
-        Callee::Own(name) => { reach.calls.insert(name.to_owned()); },
+        Callee::Own(name) => { reach.calls.insert(name.to_string()); },
         Callee::Library { key, .. } => { absorb(*nikaia_std::index::get(&library.functions, key), reach); },
         Callee::Opaque(_) => { reach.unknown = true; },
         _ => { },
@@ -181,7 +181,7 @@ pub(crate) fn reached_call(callee: Option<&Callee>, library: &Ledger, reach: &mu
 pub(crate) fn methods_reach(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, reach: &mut Reach) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
     if known.unseen { reach.unknown = true; }
-    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { reach.calls.insert(callee.to_owned()); } else { absorb(*nikaia_std::index::get(&library.functions, callee), reach); } }
+    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { reach.calls.insert(callee.to_string()); } else { absorb(*nikaia_std::index::get(&library.functions, callee), reach); } }
 }
 
 pub(crate) fn absorb(contract: Option<&FnContract>, reach: &mut Reach) {

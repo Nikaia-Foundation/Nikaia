@@ -981,6 +981,15 @@ impl EmitState {
             // or a `&[T]` is the reference, and a read-only `String` parameter
             // *is* a `&str` (ADR-282 D5).
             written = "to_owned"
+            // **A copy of text is `to_string`**, as a reached one is: an element
+            // lent out of a list of static text (ADR-282 D29) is `&&'static
+            // str`, and `to_owned` of it is the view again.
+            match receiver {
+                null => {},
+                on => if self.facts.text_copies.contains(node_key(on)) {
+                    written = "to_string"
+                },
+            }
         } else if name == "set" && witness.len() > 0 {
             written = "set_after"
         } else if limit.len() > 0 {
@@ -1187,6 +1196,12 @@ impl EmitState {
             let on = receiver ?? return
             if self.facts.counted.contains(node_key(on)) {
                 out.push(".map(|at| at as i64)")
+            }
+        }
+        if name == "enumerate" && receiver != null {
+            let on = receiver ?? return
+            if self.facts.counted.contains(node_key(on)) {
+                out.push(".map(|(at, item)| (at as i64, item))")
             }
         }
         // **Before the `.await`**, because it is the future that is boxed and not

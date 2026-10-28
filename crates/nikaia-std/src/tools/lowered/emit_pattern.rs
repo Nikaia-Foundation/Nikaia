@@ -110,7 +110,7 @@ impl EmitState {
         let over_bytes = walk.grammar_bytes && (called == "until" || called == "text");
         if generics.is_empty() && !args.is_empty() && (called == "bytes" || over_bytes) {
             let wrap = called == "until";
-            let written = if called == "bytes" && !walk.grammar_bytes { String::from("text") } else { called.to_owned() };
+            let written = if called == "bytes" && !walk.grammar_bytes { String::from("text") } else { called.to_string() };
             if wrap { out.push("text(until("); } else {
                 out.push(&written);
                 out.push("(");
@@ -126,7 +126,7 @@ impl EmitState {
             return Ok(());
         }
         let raw_any = walk.grammar_raw && called == "any" && args.is_empty();
-        out.push(&if raw_any { String::from("byte") } else { called.to_owned() });
+        out.push(&if raw_any { String::from("byte") } else { called.to_string() });
         if !generics.is_empty() {
             let mut params: Vec<String> = vec![];
             for g in generics.iter() { params.push(host.ty_named(walk, g)?); }

@@ -164,7 +164,7 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
     let mut listed: String = String::from("");
     let mut index: i64 = 0;
     while index < shown.len() as i64 {
-        let one = (*nikaia_std::index::get(&shown, nikaia_std::index::at(index))).to_owned();
+        let one = (*nikaia_std::index::get(&shown, nikaia_std::index::at(index))).to_string();
         if index + 1 == shown.len() as i64 { listed = format!("{} and `{}`", listed, one); } else if index == 0 { listed = format!("`{}`", one); } else { listed = format!("{}, `{}`", listed, one); }
         index = index + 1;
     }

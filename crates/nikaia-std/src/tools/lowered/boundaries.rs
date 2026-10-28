@@ -26,8 +26,8 @@ pub fn restated(reported: &Reported, on_the_line: Option<&str>, source: &str, bo
     let at = the_boundary(on_the_line, source, boundaries);
     if at < 0 { return None; }
     let boundary = (*nikaia_std::index::get(&boundaries, nikaia_std::index::at(at))).clone();
-    let word = boundary.word.to_owned();
-    let below = if !label.is_empty() { format!("{} - {}", reported.message, label) } else { reported.message.to_owned() };
+    let word = boundary.word.to_string();
+    let below = if !label.is_empty() { format!("{} - {}", reported.message, label) } else { reported.message.to_string() };
     let mut notes: Vec<String> = vec![format!("The Rust compiler said: {}", below)];
     if !boundary.moved.is_empty() {
         let moved = boundary.moved.join(", ");
@@ -35,8 +35,8 @@ pub fn restated(reported: &Reported, on_the_line: Option<&str>, source: &str, bo
     }
     let message = if boundary.described { format!("The description of `{}` doesn't match the crate.", word) } else { format!("The ledger of `{}` doesn't match its sources.", word) };
     if boundary.described { notes.push(format!("help: Run `nikaia describe {}` again, and review what changed in `contracts/{}.contracts`.", word, word)); } else { notes.push(format!("help: Build `{}` again: `nikaia build` without `--locked` rebuilds its ledger from its sources.", word)); }
-    for note in reported.notes.iter() { notes.push(note.to_owned()); }
-    Some(Reported { level: reported.level.to_owned(), message, label: match reported.label.as_ref() {
+    for note in reported.notes.iter() { notes.push(note.to_string()); }
+    Some(Reported { level: reported.level.to_string(), message, label: match reported.label.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, notes })
@@ -44,7 +44,7 @@ pub fn restated(reported: &Reported, on_the_line: Option<&str>, source: &str, bo
 
 pub(crate) fn written_or_nothing(text: Option<&str>) -> String {
     let written = match text { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-    written.to_owned()
+    written.to_string()
 }
 
 pub(crate) fn the_boundary(on_the_line: Option<&str>, source: &str, boundaries: &[Boundary]) -> i64 {

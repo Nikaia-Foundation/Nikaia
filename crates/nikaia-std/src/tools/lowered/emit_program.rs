@@ -12,10 +12,10 @@ impl EmitState {
             let shape = nikaia_std::index::or(self.walks_a_shape(world, &item.node), || "".into());
             if shape != "" {
                 let mut copies: Vec<String> = vec![];
-                for ((written, on), _) in self.facts.unrolled.iter() { if *written == shape { copies.push(on.to_owned()); } }
+                for ((written, on), _) in self.facts.unrolled.iter() { if *written == shape { copies.push(on.to_string()); } }
                 for on in copies.iter() {
-                    let walked = self.walked_parameter(world, &item.node).to_owned();
-                    walk.specialising = Some(EmitPair { first: walked, second: on.to_owned() });
+                    let walked = self.walked_parameter(world, &item.node).to_string();
+                    walk.specialising = Some(EmitPair { first: walked, second: on.to_string() });
                     let st = out.mark();
                     host.refuse_unwritten_item(item)?;
                     self.emit_item(world, walk, out, host, item)?;
@@ -91,11 +91,11 @@ impl EmitState {
                 types.push(format!("Vec<{}>", element));
                 passing.push(String::from("&{}"));
             } else if ty.starts_with('&') && !ty.starts_with("&mut ") {
-                types.push(nikaia_std::index::or(ty.strip_prefix('&'), || "").to_owned());
+                types.push(nikaia_std::index::or(ty.strip_prefix('&'), || "").to_string());
                 passing.push(String::from("&{}"));
             } else {
-                let mut owned = ty.to_owned();
-                while owned.starts_with("&mut ") { owned = nikaia_std::index::or(owned.strip_prefix("&mut "), || "").to_owned(); }
+                let mut owned = ty.to_string();
+                while owned.starts_with("&mut ") { owned = nikaia_std::index::or(owned.strip_prefix("&mut "), || "").to_string(); }
                 types.push(owned);
                 passing.push(String::from("{}"));
             }
@@ -110,7 +110,7 @@ impl EmitState {
 pub(crate) fn emit_program_param_type(param: &str) -> String {
     let parts: Vec<&str> = param.split(": ").collect::<Vec<_>>();
     if parts.len() < 2 { return String::from("_"); }
-    let mut ty = (*nikaia_std::index::get(&parts, 1)).to_owned();
+    let mut ty = (*nikaia_std::index::get(&parts, 1)).to_string();
     for i in 2..parts.len() as i64 { ty = format!("{}: {}", ty, *nikaia_std::index::get(&parts, (i) as usize)); }
     ty
 }

@@ -80,7 +80,7 @@ impl CheckState {
         copies_dropped_in(&world.here, &mut dropped);
         for unit in world.beside.iter() { copies_dropped_in(unit, &mut dropped); }
         let mut copies: collections::BTreeSet<String> = collections::BTreeSet::new();
-        for (name, contract) in world.library.types.iter() { if contract.copies { copies.insert(name.to_owned()); } }
+        for (name, contract) in world.library.types.iter() { if contract.copies { copies.insert(name.to_string()); } }
         loop {
             let mut joining: Vec<String> = vec![];
             for name in package.iter() {
@@ -98,20 +98,20 @@ impl CheckState {
                     let held = match world.parts_beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     parts = held.to_owned();
                 }
-                let named = Ty::Named { name: name.to_owned(), args: vec![], view: false };
+                let named = Ty::Named { name: name.to_string(), args: vec![], view: false };
                 if self.cleanup_of(world, &named).is_some() { continue; }
                 let mut all = true;
                 for ty in parts.iter() { if !a_copied_part(ty, &copies) { all = false; } }
-                if all { joining.push(name.to_owned()); }
+                if all { joining.push(name.to_string()); }
             }
             if joining.is_empty() { break; }
-            for name in joining.iter() { copies.insert(name.to_owned()); }
+            for name in joining.iter() { copies.insert(name.to_string()); }
         }
         let mut in_package: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
         for name in copies.iter() {
-            if nikaia_std::list::contains(&package, &name) { in_package.insert(name.to_owned()); }
-            if nikaia_std::list::contains(&declared, &name) { own.insert(name.to_owned()); }
+            if nikaia_std::list::contains(&package, &name) { in_package.insert(name.to_string()); }
+            if nikaia_std::list::contains(&declared, &name) { own.insert(name.to_string()); }
         }
         self.copies_in_the_package = in_package;
         self.facts.copies = own;

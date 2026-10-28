@@ -90,7 +90,7 @@ pub fn rendered_in(shown: &Shown, path: &str, lines: &[&str]) -> String {
             shown_line = one.line;
         }
         let mark = if one.label.main { "^" } else { "-" };
-        let mut marked = bar.to_owned();
+        let mut marked = bar.to_string();
         marked.push(' ');
         marked.push_str(&spaces(one.column - 1));
         marked.push_str(&mark.repeat(nikaia_std::count::of(one.width)));
@@ -129,7 +129,7 @@ pub(crate) fn in_order(placed: &[Placed]) -> Vec<Placed> {
 
 pub(crate) fn line_of(lines: &[&str], line: i64) -> String {
     if line < 1 || line > lines.len() as i64 { return String::from(""); }
-    (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).to_owned()
+    (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).to_string()
 }
 
 pub(crate) fn line_at(lines: &[&str], offset: i64) -> (i64, i64) {
@@ -199,14 +199,14 @@ pub struct Pause {
 }
 
 pub fn paused(pause: &Pause) -> Shown {
-    let caller = pause.caller.to_owned();
-    let promise = pause.promise.to_owned();
-    let callee = pause.callee.to_owned();
+    let caller = pause.caller.to_string();
+    let promise = pause.promise.to_string();
+    let callee = pause.callee.to_string();
     if pause.unpromised {
         let split = package_and_function(&callee);
         let package = &split.0;
         let function = &split.1;
-        return Shown { warning: false, code: String::from("NK2202"), message: format!("`{}` is `{}`, but it calls `{}`, which doesn't promise that it never pauses.", caller, promise, callee), notes: vec![format!("`{}` is `{}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on.", callee, package)], help: Some(format!("Write `sync` after the result of `{}` in `{}`, or remove `{}` from `{}`.", function, package, promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: callee.to_owned(), text: String::from("doesn't promise `sync`"), main: true }] };
+        return Shown { warning: false, code: String::from("NK2202"), message: format!("`{}` is `{}`, but it calls `{}`, which doesn't promise that it never pauses.", caller, promise, callee), notes: vec![format!("`{}` is `{}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on.", callee, package)], help: Some(format!("Write `sync` after the result of `{}` in `{}`, or remove `{}` from `{}`.", function, package, promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: callee.to_string(), text: String::from("doesn't promise `sync`"), main: true }] };
     }
     let ledger = if pause.from_library { "`std`" } else { "this program" };
     let article = an_or_a(&callee);
@@ -216,13 +216,13 @@ pub fn paused(pause: &Pause) -> Shown {
         notes.push(format!("{} `{}` block waits for its branches to finish, which is a pause.", capital, callee));
     } else { notes.push(format!("`{}` isn't declared `sync` in {}.", callee, ledger)); }
     let message = if pause.construct { format!("`{}` is `{}`, but it contains {} `{}` block, which can pause.", caller, promise, article, callee) } else { format!("`{}` is `{}`, but it calls `{}`, which can pause.", caller, promise, callee) };
-    Shown { warning: false, code: String::from("NK2202"), message, notes, help: Some(format!("Remove `{}` from `{}`, or move the call out of it.", promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: callee.to_owned(), text: String::from("this can pause"), main: true }] }
+    Shown { warning: false, code: String::from("NK2202"), message, notes, help: Some(format!("Remove `{}` from `{}`, or move the call out of it.", promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: callee.to_string(), text: String::from("this can pause"), main: true }] }
 }
 
 pub(crate) fn package_and_function(callee: &str) -> (String, String) {
     let parts: Vec<&str> = callee.splitn(2, "::").collect::<Vec<_>>();
-    if parts.len() < 2 { return (String::from("its package"), callee.to_owned()); }
-    ((*nikaia_std::index::get(&parts, 0)).to_owned(), (*nikaia_std::index::get(&parts, 1)).to_owned())
+    if parts.len() < 2 { return (String::from("its package"), callee.to_string()); }
+    ((*nikaia_std::index::get(&parts, 0)).to_string(), (*nikaia_std::index::get(&parts, 1)).to_string())
 }
 
 pub fn an_or_a(word: &str) -> String {
@@ -232,7 +232,7 @@ pub fn an_or_a(word: &str) -> String {
 }
 
 pub(crate) fn after_help(note: &str) -> String {
-    let rest = match note.strip_prefix("help: ") { Some(__nikaia_value) => __nikaia_value, None => return note.to_owned() };
+    let rest = match note.strip_prefix("help: ") { Some(__nikaia_value) => __nikaia_value, None => return note.to_string() };
     after_help(rest)
 }
 
@@ -249,7 +249,7 @@ pub struct Relayed {
 }
 
 pub fn relayed(message: &Relayed, path: &str, source: &str, generated_path: &str) -> String {
-    let mut at = generated_path.to_owned();
+    let mut at = generated_path.to_string();
     if message.generated_line > 0 { at = format!("{}:{}", generated_path, message.generated_line); }
     if message.internal.is_some() {
         let original = match message.internal.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -264,8 +264,8 @@ pub fn relayed(message: &Relayed, path: &str, source: &str, generated_path: &str
     if message.located {
         let mut notes: Vec<String> = vec![];
         let mut help: Option<String> = None;
-        for note in message.notes.iter() { if note.starts_with("help: ") { help = Some(after_help(note)); } else { notes.push(note.to_owned()); } }
-        let shown = Shown { warning: message.level == "warning", code: String::from(""), message: message.message.to_owned(), notes, help, span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: message.word.to_owned(), text: String::from(""), main: true }] };
+        for note in message.notes.iter() { if note.starts_with("help: ") { help = Some(after_help(note)); } else { notes.push(note.to_string()); } }
+        let shown = Shown { warning: message.level == "warning", code: String::from(""), message: message.message.to_string(), notes, help, span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: message.word.to_string(), text: String::from(""), main: true }] };
         return rendered(&shown, path, source);
     }
     let mut out = format!("{}: {}: {} (no Nikaia source maps to this)\n", message.level, at, message.message);

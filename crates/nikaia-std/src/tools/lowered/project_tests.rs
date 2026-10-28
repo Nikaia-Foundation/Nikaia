@@ -77,7 +77,7 @@ pub(crate) fn project_tests_stems(dir: &std::path::Path, ending: &str, want_dir:
     };
     for name in entries.iter() {
         let text = nikaia_std::fs::path::text_of(&(name));
-        let stem: String = nikaia_std::index::or(text.strip_suffix(ending), || "").to_owned();
+        let stem: String = nikaia_std::index::or(text.strip_suffix(ending), || "").to_string();
         if stem.is_empty() { continue; }
         let path = nikaia_std::fs::path::join(&(dir), name);
         let right = match want_dir {
@@ -110,10 +110,10 @@ pub async fn output_tests(root: &std::path::Path) -> Result<Vec<OutputTest>, nik
         let listed = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.args", name))))).await?;
         if listed.is_some() {
             let bytes = nikaia_std::index::or(listed, || Bytes(vec![]).into());
-            args = bytes.text()?.lines().map(|line| { line.to_owned() }).collect::<Vec<_>>();
+            args = bytes.text()?.lines().map(|line| { line.to_string() }).collect::<Vec<_>>();
         }
         let stderr = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stderr", name))))).await?;
-        tests.push(OutputTest { name: name.to_owned(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, files, inputs, stdin, args });
+        tests.push(OutputTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, files, inputs, stdin, args });
     }
     Ok(tests)
 }
@@ -136,7 +136,7 @@ pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, n
     for name in project_tests_stems(&dir, ".nika", false) {
         let stdout = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdout", name))))).await?;
         let stderr = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stderr", name))))).await?;
-        tests.push(ProgramTest { name: name.to_owned(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr });
+        tests.push(ProgramTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr });
     }
     Ok(tests)
 }
@@ -218,7 +218,7 @@ pub(crate) async fn project_tests_written(path: &std::path::Path) -> Option<Byte
 }
 
 pub async fn project_tests_output_outcome(output: &OutputTest, own: &std::path::Path, ended_well: bool, stdout: Bytes, stderr: String) -> ProjectTestsOutcome {
-    let files: Vec<(String, Option<Bytes>)> = nikaia_std::seq::then(output.files.iter(), async |file| { (file.0.to_owned(), project_tests_written(&nikaia_std::fs::path::join(&(own), std::path::Path::new(&(file.0)))).await) }).collect().await;
+    let files: Vec<(String, Option<Bytes>)> = nikaia_std::seq::then(output.files.iter(), async |file| { (file.0.to_string(), project_tests_written(&nikaia_std::fs::path::join(&(own), std::path::Path::new(&(file.0)))).await) }).collect().await;
     let printed_right = match &output.stdout {
         None => true,
         Some(want) => *want == stdout,
@@ -235,7 +235,7 @@ pub fn project_tests_refused_outcome(program: &ProgramTest, stderr: &str) -> Pro
     let broken = !is_refusal(stderr);
     let shown = match broken {
         true => format!("the program does not compile (rustc failed, not a refusal):\n{}", stderr),
-        false => stderr.to_owned(),
+        false => stderr.to_string(),
     };
     let passed = !broken && match &program.stderr {
         None => false,

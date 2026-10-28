@@ -209,8 +209,8 @@ pub fn number_at(text: &str, signed: bool) -> Number {
             if past(&digits, widest) { wrong = too_big(); } else {
                 let product = without_leading_zeros(&times(&digits, scale_by));
                 if !past(&product, limit) { magnitude = magnitude_of(&product); } else if scale.is_some() {
-                    let mut said = product.to_owned();
-                    if past(&product, widest) { said = widest.to_owned(); }
+                    let mut said = product.to_string();
+                    if past(&product, widest) { said = widest.to_string(); }
                     let mut sign = "";
                     if signed { sign = "-"; }
                     wrong = format!("`{}{}{}` is {}{}, which is too big: the largest integer types are `u64` and `i64`", sign, value, slice(&c, at, at + scale_len), sign, said);

@@ -18,7 +18,7 @@ pub fn nearest_name(name: &str, among: &[String]) -> Option<String> {
         let d = distance(name, candidate);
         if d * 3 > longest { continue; }
         if best_distance < 0 || d < best_distance {
-            best = Some(candidate.to_owned());
+            best = Some(candidate.to_string());
             best_distance = d;
         }
     }
@@ -111,19 +111,19 @@ pub fn brace_groups(text: &str) -> Vec<String> {
 pub fn not_promised_note(callee: &str) -> String {
     let parts: Vec<&str> = callee.splitn(2, "::").collect::<Vec<_>>();
     let mut package: String = String::from("its package");
-    let mut function = callee.to_owned();
+    let mut function = callee.to_string();
     if parts.len() == 2 {
-        package = (*nikaia_std::index::get(&parts, 0)).to_owned();
-        function = (*nikaia_std::index::get(&parts, 1)).to_owned();
+        package = (*nikaia_std::index::get(&parts, 0)).to_string();
+        function = (*nikaia_std::index::get(&parts, 1)).to_string();
     }
     format!("`{}` is `{}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on: write `sync` after the result of `{}` in `{}` to make it.", callee, package, function, package)
 }
 
 pub fn is_a_lookup(key: &str) -> bool {
-    let mut bare = key.to_owned();
+    let mut bare = key.to_string();
     if key.starts_with("collections::") {
         let parts: Vec<&str> = key.splitn(2, "::").collect::<Vec<_>>();
-        bare = (*nikaia_std::index::get(&parts, 1)).to_owned();
+        bare = (*nikaia_std::index::get(&parts, 1)).to_string();
     }
     bare == "HashMap::get" || bare == "HashMap::contains_key" || bare == "HashSet::contains" || bare == "HashSet::remove" || bare == "HashMap::remove" || bare == "BTreeMap::remove" || bare == "BTreeSet::remove" || bare == "BTreeMap::get" || bare == "BTreeMap::contains_key" || bare == "BTreeSet::contains" || bare == "Vec::contains" || bare == "Array::contains"
 }
@@ -131,7 +131,7 @@ pub fn is_a_lookup(key: &str) -> bool {
 pub fn boxed_member(owner: &str, at: i64, field: &str) -> String {
     if at >= 0 { return format!("{}#{}", owner, at); }
     if !field.is_empty() { return format!("{}.{}", owner, field); }
-    owner.to_owned()
+    owner.to_string()
 }
 
 pub fn articles(text: &str) -> String {

@@ -27,7 +27,7 @@ pub(crate) fn emit_call_owner(function: &str) -> Option<String> {
     let mut n: i64 = 0;
     for part in parts.iter() {
         let part = *part;
-        if n < parts.len() as i64 - 1 { owner.push(part.to_owned()); }
+        if n < parts.len() as i64 - 1 { owner.push(part.to_string()); }
         n += 1;
     }
     Some(owner.join("::"))
@@ -117,11 +117,11 @@ pub(crate) fn emit_call_named(world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr
 impl EmitWalk {
     pub(crate) fn specialised_to(&self) -> Option<String> {
         let pair = match self.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(pair.second.to_owned())
+        Some(pair.second.to_string())
     }
     pub(crate) fn specialised_on(&self) -> Option<String> {
         let pair = match self.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(pair.first.to_owned())
+        Some(pair.first.to_string())
     }
 }
 
@@ -273,7 +273,7 @@ impl EmitState {
     pub(crate) fn emit_call_required(&self, qualified: String) -> Option<String> {
         let contract = match self.own_contracts.functions.get(&qualified) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if contract.requires.is_empty() { return None; }
-        Some(qualified.to_owned())
+        Some(qualified.to_string())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -578,7 +578,7 @@ impl EmitState {
         }
         if self.facts.path_methods.contains_key(&on_node) {
             let known_text = match self.facts.path_methods.get(&on_node) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return Ok(()) };
-            let mut written = name.to_owned();
+            let mut written = name.to_string();
             if name == "to_text" && known_text { written = String::from("text_of"); }
             out.push(&format!("nikaia_std::fs::path::{}(&(", written));
             if receiver.is_none() { out.push("__nikaia_it"); } else {
@@ -662,8 +662,14 @@ impl EmitState {
             copies = self.facts.owned_copies.contains(&node_key(on));
             byte_copy = self.facts.byte_copies.contains(&node_key(on));
         }
-        let mut written = name.to_owned();
-        if name == "drain" && args.is_empty() { written = String::from("into_iter"); } else if name == "clone" && args.is_empty() && byte_copy { written = String::from("copy_of"); } else if name == "clone" && args.is_empty() && copies { written = String::from("to_owned"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); }
+        let mut written = name.to_string();
+        if name == "drain" && args.is_empty() { written = String::from("into_iter"); } else if name == "clone" && args.is_empty() && byte_copy { written = String::from("copy_of"); } else if name == "clone" && args.is_empty() && copies {
+            written = String::from("to_owned");
+            match receiver {
+                None => { },
+                Some(on) => { if self.facts.text_copies.contains(&node_key(on)) { written = String::from("to_string"); }; },
+            }
+        } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); }
         if name == "fold" && receiver.is_some() {
             let folded = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.par_folds.contains(&node_key(folded)) { written = String::from("fold_merged"); }
@@ -784,6 +790,10 @@ impl EmitState {
         if name == "position" && receiver.is_some() {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.counted.contains(&node_key(on)) { out.push(".map(|at| at as i64)"); }
+        }
+        if name == "enumerate" && receiver.is_some() {
+            let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            if self.facts.counted.contains(&node_key(on)) { out.push(".map(|(at, item)| (at as i64, item))"); }
         }
         if boxed { out.push(")"); }
         if self.facts.pausing_walks.contains(&on_node) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }

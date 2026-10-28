@@ -4,7 +4,7 @@
 pub(crate) fn check_core_field_of_self(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
     match value {
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; match base {
-            Expr::Variable(subject, _) => { let subject = *subject; if world.words.resolve(subject) == "self" { Some(world.words.resolve(name).to_owned()) } else { None } },
+            Expr::Variable(subject, _) => { let subject = *subject; if world.words.resolve(subject) == "self" { Some(world.words.resolve(name).to_string()) } else { None } },
             _ => None,
         } },
         _ => None,
@@ -53,9 +53,9 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             let base = nikaia_std::boxed::open(base); let name = *name;
             let whole: Option<String> = state.place_path(world, value);
             if whole.is_some() {
-                path = match whole { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
+                path = match whole { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
                 let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-                root = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_owned();
+                root = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_string();
             } else {
                 if handed_back { return; }
                 match base {
@@ -136,14 +136,14 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                 },
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    let named = world.words.resolve(name).to_owned();
+                    let named = world.words.resolve(name).to_string();
                     if state.lookup(&named).is_none() && world.own.functions.contains_key(&named) { check_core_a_kept_function(state, world, host, params, is_sync, can_throw, false, value, span); }
                 },
                 Expr::Path(segments, _) => {
                     let mut names: Vec<String> = vec![];
                     for segment in segments.iter() {
                         let segment = *segment;
-                        names.push(world.words.resolve(segment).to_owned());
+                        names.push(world.words.resolve(segment).to_string());
                     }
                     let joined = names.join("::");
                     if world.own.functions.contains_key(&joined) {
@@ -171,7 +171,7 @@ pub(crate) fn check_core_a_kept_function<H: CheckHost>(state: &mut CheckState, w
         let n = *n;
         if ((at) as usize) < params.len() {
             let id = state.a_new_binding();
-            frame.push(CheckLocal::free(world.words.resolve(n).to_owned(), (*nikaia_std::index::get(&params, (at) as usize)).clone(), id));
+            frame.push(CheckLocal::free(world.words.resolve(n).to_string(), (*nikaia_std::index::get(&params, (at) as usize)).clone(), id));
         }
         at += 1;
     }
@@ -245,21 +245,21 @@ pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
         let mut frame: Vec<CheckLocal> = vec![];
         for (name, collection) in bound.iter() {
             let trimmed = collection.trim();
-            let key: String = trimmed.to_owned();
+            let key: String = trimmed.to_string();
             let held: Option<Ty> = match *nikaia_std::index::get(&seen, &key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
             let element = check_core_element_of((held).as_ref());
             let id = state.a_new_binding();
-            frame.push(CheckLocal::free(name.to_owned(), element, id));
+            frame.push(CheckLocal::free(name.to_string(), element, id));
         }
         state.scope.push(frame);
         let held = check_core_expr(state, world, host, hole, span);
         match hole {
             Expr::Variable(name, _) => {
                 let name = *name;
-                seen.insert(world.words.resolve(name).to_owned(), held.clone());
+                seen.insert(world.words.resolve(name).to_string(), held.clone());
             },
             _ => { },
         }
@@ -513,7 +513,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
     let mut message: i64 = -1;
     let mut index: i64 = 0;
     for option in config.iter() {
-        let name = world.words.resolve(option.name).to_owned();
+        let name = world.words.resolve(option.name).to_string();
         let given = check_core_expr(state, world, host, &option.value, span);
         if name == "rule of the type" {
             index += 1;

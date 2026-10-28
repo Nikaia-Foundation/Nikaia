@@ -72,8 +72,8 @@ pub fn filled_once(body: &Block, pinned: &collections::BTreeSet<String>, words: 
         let count = nikaia_std::num::value(count);
         if count != 1 || pinned.contains(list) { continue; }
         let mut changes = tally();
-        tally_block(body, &Ask::Changes(list.to_owned(), collections::BTreeSet::new()), false, words, &mut changes);
-        if changes.count == 1 && !rebinds(body, list, words) { once.push(list.to_owned()); }
+        tally_block(body, &Ask::Changes(list.to_string(), collections::BTreeSet::new()), false, words, &mut changes);
+        if changes.count == 1 && !rebinds(body, list, words) { once.push(list.to_string()); }
     }
     once
 }
@@ -95,7 +95,7 @@ pub(crate) fn pushed_onto(stmt: &Stmt, words: &winnow_grammar::InternerContext) 
 
 pub(crate) fn variable_text(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
         _ => None,
     }
 }
@@ -104,7 +104,7 @@ pub(crate) fn assigned_root(target: &Expr, words: &winnow_grammar::InternerConte
     match target {
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); assigned_root(base, words) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); assigned_root(base, words) },
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
         _ => None,
     }
 }
@@ -407,13 +407,13 @@ pub(crate) fn tally_expr(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
 
 pub fn changes_length_in_statement(stmt: &Stmt, list: &str, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
     let mut changes = tally();
-    tally_statement(stmt, &Ask::Changes(list.to_owned(), readers.to_owned()), false, words, &mut changes);
+    tally_statement(stmt, &Ask::Changes(list.to_string(), readers.to_owned()), false, words, &mut changes);
     changes.count > 0
 }
 
 pub fn changes_length_in(body: &Block, list: &str, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
     let mut changes = tally();
-    tally_block(body, &Ask::Changes(list.to_owned(), readers.to_owned()), false, words, &mut changes);
+    tally_block(body, &Ask::Changes(list.to_string(), readers.to_owned()), false, words, &mut changes);
     changes.count > 0
 }
 

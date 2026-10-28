@@ -137,7 +137,7 @@ pub fn emit_held_in(expr: &Expr, lazy: bool, called: bool) -> (Vec<&Expr>, EmitH
     (found, EmitHeldFound { safe: flags, called: ran })
 }
 
-pub(crate) fn emit_text(world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String { world.words.resolve(name).to_owned() }
+pub(crate) fn emit_text(world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String { world.words.resolve(name).to_string() }
 
 pub(crate) fn emit_declared_empty(world: &EmitWorld<'_, '_, '_, '_>, declared: &Stmt) -> Option<String> {
     match declared {
@@ -249,7 +249,7 @@ impl EmitWalk {
     pub fn reflected(&self, world: &EmitWorld<'_, '_, '_, '_>, base: &Expr, member: winnow_grammar::Symbol, wanted: &str) -> Option<String> {
         let pair = match self.at_field.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         match base {
-            Expr::Variable(name, _) => { let name = *name; if emit_text(world, name) == pair.first && emit_text(world, member) == wanted { Some(pair.second.to_owned()) } else { None } },
+            Expr::Variable(name, _) => { let name = *name; if emit_text(world, name) == pair.first && emit_text(world, member) == wanted { Some(pair.second.to_string()) } else { None } },
             _ => None,
         }
     }
@@ -293,12 +293,12 @@ impl EmitState {
         let joined = self.emit_joined_set(world, expr);
         if joined.is_some() {
             let sum = match self.sums.get(&match joined { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(sum.to_owned());
+            return Some(sum.to_string());
         }
         let name = match call_callee_name(world.words, world.aliases, expr) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let contract = match self.own_contracts.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let sum = match self.sums.get(&contract.fails_with) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(sum.to_owned())
+        Some(sum.to_string())
     }
     pub fn branch_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt, at: i64) -> bool {
         match stmt {

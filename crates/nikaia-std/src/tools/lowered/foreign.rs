@@ -102,7 +102,7 @@ pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar:
         Expr::Path(segments, _) => { if !segments.is_empty() { found.seen.push(named_at(path_name(segments, names, unaliased), span)); } },
         Expr::Variable(name, _) => {
             let name = *name;
-            if found.with_names { found.seen.push(Seen::Name(names.resolve(name).to_owned())); }
+            if found.with_names { found.seen.push(Seen::Name(names.resolve(name).to_string())); }
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -301,7 +301,7 @@ pub(crate) fn named_at(name: String, span: &Span) -> Seen { Seen::Path { name, s
 
 pub(crate) fn a_named_call(func: &Expr, args: &[Expr], span: &Span, names: &winnow_grammar::InternerContext, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
     let name = match func {
-        Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_owned() },
+        Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_string() },
         Expr::Path(segments, _) => written_path(names, segments),
         _ => String::from(""),
     };

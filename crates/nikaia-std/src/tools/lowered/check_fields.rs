@@ -18,7 +18,7 @@ pub(crate) fn viewed_of(ty: &Ty) -> FactViewed {
 // this was written - see `contracts::sync`.
 pub(crate) fn named_or_empty(ty: &Ty) -> String {
     match ty {
-        Ty::Named { name, .. } => name.to_owned(),
+        Ty::Named { name, .. } => name.to_string(),
         _ => String::from(""),
     }
 }
@@ -99,7 +99,7 @@ impl CheckState {
         if pieces.len() == 2 {
             let message = format!("`{}` always has a value, so `?.` guards nothing.", written_expression(world.words, receiver));
             let note = "A list read never comes back empty: an index that does not fit stops the program, and `?.` only passes over a `null`.";
-            self.findings.push(check_refusal("NK1121", span, message, vec![note.to_owned()], Some(format!("Check the length first: `if {} < {}.len()`, then write `{}`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0), plain))));
+            self.findings.push(check_refusal("NK1121", span, message, vec![note.to_string()], Some(format!("Check the length first: `if {} < {}.len()`, then write `{}`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0), plain))));
             return;
         }
         self.facts.plain_reaches.insert(fact_key(reach));
@@ -126,7 +126,7 @@ impl CheckState {
         let message = format!("`{}` always has a value, so `??` has nothing to replace.", shown);
         if index {
             let note = "A list read never comes back empty: an index that does not fit stops the program, and `??` only replaces a `null`.";
-            self.findings.push(check_refusal("NK1211", span, message, vec![note.to_owned()], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0)))));
+            self.findings.push(check_refusal("NK1211", span, message, vec![note.to_string()], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0)))));
             return false;
         }
         let note = format!("`??` replaces a `null`, and a value of type `{}` is never `null`: only a type written with `?` can be.", seen.text());
@@ -141,7 +141,7 @@ impl CheckState {
         match written {
             Expr::MethodCall { receiver, method, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                let word = world.words.resolve(method).to_owned();
+                let word = world.words.resolve(method).to_string();
                 if word == "clone" || word == "to_owned" { names_a_copy = true; } else if word == "to_string" { names_a_copy = !self.facts.text_as_is.contains(&fact_key(receiver)); }
             },
             _ => { },
@@ -173,7 +173,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let name = match given {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
             _ => return false,
         };
         let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -198,7 +198,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn an_owned_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let name = match given {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
             _ => return false,
         };
         let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -233,7 +233,7 @@ impl CheckState {
                 let mut written = format!("{}{}", digits, ty);
                 if value.negative { written = format!("({}{})", digits, ty); }
                 self.facts.comptime_uses.insert(fact_key(expr), written);
-                self.facts.folded_comptimes.insert(world.words.resolve(name).to_owned());
+                self.facts.folded_comptimes.insert(world.words.resolve(name).to_string());
             },
             Expr::Binary { op, lhs, rhs, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
@@ -287,7 +287,7 @@ pub fn check_fields_map_first_written(state: &mut CheckState, world: &CheckWorld
             match base {
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    let base_name: String = world.words.resolve(name).to_owned();
+                    let base_name: String = world.words.resolve(name).to_string();
                     let local = match state.binding(&base_name) { Some(__nikaia_value) => __nikaia_value, None => return };
                     let open = match local.ty {
                         Ty::Named { ref name, ref args, .. } => a_map_name(name) && (args.is_empty() || args.len() == 2 && ((*nikaia_std::index::get(&args, 0)).is_unknown() || (*nikaia_std::index::get(&args, 1)).is_unknown())),

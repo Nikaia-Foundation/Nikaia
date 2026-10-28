@@ -17,13 +17,13 @@ pub(crate) fn counted_block(block: &Block, over: &mut Vec<CountedLoop>, words: &
 
 pub(crate) fn without(over: &[CountedLoop], name: &str) -> Vec<CountedLoop> {
     let mut kept: Vec<CountedLoop> = vec![];
-    for o in over.iter() { if o.binding != name && path_root(&o.list) != name { kept.push(CountedLoop { binding: o.binding.to_owned(), list: o.list.to_owned() }); } }
+    for o in over.iter() { if o.binding != name && path_root(&o.list) != name { kept.push(CountedLoop { binding: o.binding.to_string(), list: o.list.to_string() }); } }
     kept
 }
 
 pub(crate) fn copied(over: &[CountedLoop]) -> Vec<CountedLoop> {
     let mut kept: Vec<CountedLoop> = vec![];
-    for o in over.iter() { kept.push(CountedLoop { binding: o.binding.to_owned(), list: o.list.to_owned() }); }
+    for o in over.iter() { kept.push(CountedLoop { binding: o.binding.to_string(), list: o.list.to_string() }); }
     kept
 }
 
@@ -90,7 +90,7 @@ pub(crate) fn loop_over_length(binding: winnow_grammar::Symbol, iter: &Expr, bod
         },
         _ => return None,
     };
-    let counter = words.resolve(binding).to_owned();
+    let counter = words.resolve(binding).to_string();
     if !starts_not_negative(start, over, words) || !length_stays(body, &list, words) || rebinds(body, &counter, words) { return None; }
     Some(CountedLoop { binding: counter, list })
 }
@@ -266,13 +266,13 @@ pub(crate) enum Seek {
     Mentioned(String),
 }
 
-pub fn length_stays(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::LengthChanged(list.to_owned()), words) }
+pub fn length_stays(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::LengthChanged(list.to_string()), words) }
 
-pub fn rebinds(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::Rebound(name.to_owned()), words) }
+pub fn rebinds(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::Rebound(name.to_string()), words) }
 
 pub fn path_of(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             let inner = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -284,7 +284,7 @@ pub fn path_of(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<S
 
 pub fn path_root(path: &str) -> String {
     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, 0)).to_owned()
+    (*nikaia_std::index::get(&parts, 0)).to_string()
 }
 
 pub fn path_within(path: &str, within: &str) -> bool {

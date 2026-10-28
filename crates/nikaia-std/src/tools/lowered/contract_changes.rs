@@ -19,14 +19,14 @@ pub(crate) fn condition_names(contract: &FnContract) -> collections::BTreeSet<St
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return names };
     for (name, ty) in signature.params.iter() {
         if has_a_length(&type_name_of(ty)) { names.insert(format!("{}.len()", name)); }
-        names.insert(name.to_owned());
+        names.insert(name.to_string());
     }
     names
 }
 
 pub(crate) fn type_name_of(ty: &Ty) -> String {
     match ty {
-        Ty::Named { name, .. } => name.to_owned(),
+        Ty::Named { name, .. } => name.to_string(),
         _ => String::from(""),
     }
 }

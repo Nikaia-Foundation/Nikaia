@@ -145,12 +145,12 @@ pub(crate) fn tm_join(a: &KeyDeps, b: &KeyDeps) -> KeyDeps {
 }
 
 pub(crate) fn mc_find(classes: &MapClasses, node: &str) -> String {
-    let mut at: String = node.to_owned();
+    let mut at: String = node.to_string();
     let mut moving = true;
     while moving {
         let up = classes.parent.get(&at);
         if up.is_none() { moving = false; } else {
-            let next = nikaia_std::index::or(up, || "").to_owned();
+            let next = nikaia_std::index::or(up, || "").to_string();
             if next == at { moving = false; } else { at = next; }
         }
     }
@@ -163,7 +163,7 @@ pub(crate) fn mc_union(classes: &mut MapClasses, a: &str, b: &str) {
     if ra != rb { classes.parent.insert(ra, rb); }
 }
 
-pub(crate) fn mc_poison(classes: &mut MapClasses, node: &str) { classes.poisoned.insert(node.to_owned()); }
+pub(crate) fn mc_poison(classes: &mut MapClasses, node: &str) { classes.poisoned.insert(node.to_string()); }
 
 pub(crate) fn mc_poison_function(classes: &mut MapClasses, name: &str, arity: i64) {
     let ret = format!("r:{}", name);
@@ -182,7 +182,7 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
         let provenance = match contract.provenance { Some(__nikaia_value) => __nikaia_value, None => continue };
         if provenance == Provenance::Untrusted {
             let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
-            env.sources.insert((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned());
+            env.sources.insert((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
         }
     }
     for item in program.items.iter() {
@@ -217,7 +217,7 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
                 if !is_public && !is_extern && generics.is_empty() {
                     let symbol = name;
                     if symbol.is_some() {
-                        fname = words.resolve(match symbol { Some(__nikaia_value) => __nikaia_value, None => continue }).to_owned();
+                        fname = words.resolve(match symbol { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string();
                         alone = true;
                     }
                 }
@@ -262,28 +262,28 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
         let node = format!("l:{}", at);
         if !bad.contains(&mc_find(&classes, &node)) { plan.lets.insert(at); }
     }
-    for slot in classes.slots.iter() { if !bad.contains(&mc_find(&classes, slot)) { plan.slots.insert(slot.to_owned()); } }
+    for slot in classes.slots.iter() { if !bad.contains(&mc_find(&classes, slot)) { plan.slots.insert(slot.to_string()); } }
     plan
 }
 
 pub(crate) fn tm_remember(name: Option<winnow_grammar::Symbol>, words: &winnow_grammar::InternerContext, own: &mut collections::BTreeSet<String>) {
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return };
-    own.insert(words.resolve(symbol).to_owned());
+    own.insert(words.resolve(symbol).to_string());
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn tm_walk_function(fname: &str, alone: bool, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses) {
     let ret = format!("r:{}", fname);
     let mut first: collections::BTreeMap<winnow_grammar::Symbol, i64> = collections::BTreeMap::new();
-    let mut walk = MapWalk { nodes: vec![], ret: ret.to_owned(), scopes: vec![], given: vec![], made: vec![], kept: vec![], escapes: collections::BTreeSet::new(), bound: collections::BTreeMap::new(), unread: false };
-    if alone { classes.slots.push(ret.to_owned()); } else { mc_poison(classes, &ret); }
+    let mut walk = MapWalk { nodes: vec![], ret: ret.to_string(), scopes: vec![], given: vec![], made: vec![], kept: vec![], escapes: collections::BTreeSet::new(), bound: collections::BTreeMap::new(), unread: false };
+    if alone { classes.slots.push(ret.to_string()); } else { mc_poison(classes, &ret); }
     let mut at = 0;
     for arg in args.iter() {
         let node = format!("p:{}:{}", fname, at);
-        if alone { classes.slots.push(node.to_owned()); } else { mc_poison(classes, &node); }
+        if alone { classes.slots.push(node.to_string()); } else { mc_poison(classes, &node); }
         let id = walk.given.len() as i64;
         walk.given.push(vec![tm_never()]);
-        walk.nodes.push(node.to_owned());
+        walk.nodes.push(node.to_string());
         let name = arg.name.to_owned();
         walk.made.push(MapMade { at: -1, name: name.to_owned(), id });
         tm_count_binding(name, &mut walk);
@@ -362,7 +362,7 @@ pub(crate) fn tm_trusted_bindings(given: &[Vec<KeyDeps>]) -> collections::BTreeS
 
 pub(crate) fn tm_bind(name: winnow_grammar::Symbol, given: &KeyDeps, node: &str, walk: &mut MapWalk) -> i64 {
     let id = walk.given.len() as i64;
-    walk.nodes.push(node.to_owned());
+    walk.nodes.push(node.to_string());
     walk.given.push(vec![KeyDeps { known: given.known, ids: given.ids.to_owned() }]);
     tm_count_binding(name, walk);
     let last = walk.scopes.len() as i64 - 1;
@@ -450,7 +450,7 @@ pub(crate) fn tm_walk_block(block: &Block, words: &winnow_grammar::InternerConte
             Stmt::Expr(value) => { tm_walk_expr(value, words, library, env, classes, walk); },
             Stmt::Return(value) => {
                 if value.is_some() {
-                    let ret = walk.ret.to_owned();
+                    let ret = walk.ret.to_string();
                     tm_flow(&ret, match value { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, classes, walk);
                 }
             },
@@ -494,7 +494,7 @@ pub(crate) fn tm_flow(sink: &str, value: &Expr, words: &winnow_grammar::Interner
             let name = *name;
             let id = tm_resolve(name.to_owned(), &walk);
             if id >= 0 {
-                let node = (*nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(id))).to_owned();
+                let node = (*nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(id))).to_string();
                 mc_union(classes, sink, &node);
             } else {
                 mc_poison(classes, sink);
@@ -610,7 +610,7 @@ pub(crate) fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext,
         Expr::Return(value, _) => {
             let value = nikaia_std::boxed::open(value);
             if value.is_some() {
-                let ret = walk.ret.to_owned();
+                let ret = walk.ret.to_string();
                 tm_flow(&ret, match value { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, classes, walk);
             }
         },
@@ -707,7 +707,7 @@ pub(crate) fn tm_call_deps(func: &Expr, args: &[Expr], config: &[ConfigArg], wor
             }
             joined
         },
-        Expr::Variable(one, _) => { let one = *one; words.resolve(one).to_owned() },
+        Expr::Variable(one, _) => { let one = *one; words.resolve(one).to_string() },
         _ => return tm_never(),
     };
     if env.own.contains(&name) { return tm_never(); }

@@ -78,7 +78,7 @@ impl GrCursor {
 pub fn gr_decode(source: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> GrDecoded {
     let mut at = GrCursor { chars: nikaia_std::list::chars(source.chars()), at: 0, detail: String::from(""), failed: false };
     let value = gr_read(&mut at, char_of);
-    if at.failed || value.is_none() { return GrDecoded::Unreadable(at.detail.to_owned()); }
+    if at.failed || value.is_none() { return GrDecoded::Unreadable(at.detail.to_string()); }
     GrDecoded::Value(nikaia_std::index::or(value, || BuildValue::Bool(false)))
 }
 
@@ -112,10 +112,10 @@ pub(crate) fn gr_shaped(tag: &str, at: &mut GrCursor, char_of: &impl Fn(i64) -> 
     if tag == "i" {
         let digits = at.word();
         let mut negative = false;
-        let mut body = digits.to_owned();
+        let mut body = digits.to_string();
         if digits.starts_with('-') {
             negative = true;
-            body = nikaia_std::index::or(digits.strip_prefix('-'), || "").to_owned();
+            body = nikaia_std::index::or(digits.strip_prefix('-'), || "").to_string();
         }
         let magnitude = text::parse_u64(&body);
         if magnitude.is_none() {

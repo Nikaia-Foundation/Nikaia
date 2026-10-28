@@ -393,8 +393,20 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, rece
             state.facts.text_in_lists.insert(id_of(receiver) as i64)
         }
     }
-    // **A sequence's count is an `i64`** (Part I 2.2), and `position`'s.
-    let counts = key == f"{SEQ}::count" || key == f"{SEQ}::position" || key == f"{PAR}::count" || key == f"{PAR}::position"
+    // **Text `fold` starts from is text of its own** below: the lambda hands
+    // back what it is handed first, one type, and what it makes of text is
+    // text of its own.
+    if key == f"{SEQ}::fold" && args.len() == 2 {
+        match args[0] {
+            Expr::LitStr { .. } => {
+                state.facts.owned_texts.insert(id_of(args[0]) as i64)
+            },
+            else => {}
+        }
+    }
+    // **A sequence's count is an `i64`** (Part I 2.2), and `position`'s and
+    // `enumerate`'s.
+    let counts = key == f"{SEQ}::count" || key == f"{SEQ}::position" || key == f"{SEQ}::enumerate" || key == f"{PAR}::count" || key == f"{PAR}::position"
     if counts && !world.own.functions.contains_key(key) {
         state.facts.counted.insert(id_of(receiver) as i64)
     }
@@ -547,6 +559,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     state.flow.walk_lent = false
     state.flow.receiver_from_text = false
+    let resolved: String? = state.flow.last_resolved?.clone()
     check_core_method_resolved(state, world, receiver, args)
     state.flow.receiver_name = outer_named
     state.flow.at_a_write_door = outer_door
@@ -570,6 +583,21 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
             }
         },
         else => {}
+    }
+    // **A list's element read by `get`, `first` or `last` is a view below**
+    // (`Option<&T>`): a value that copies is copied out of it, as a walk's is.
+    let key: String = resolved ?? ""
+    if key == "Vec::get" || key == "Vec::first" || key == "Vec::last" {
+        match value {
+            Ty::Nullable(inner) => {
+                if a_copy_by_value(inner) {
+                    let added = state.facts.copied_walks.insert(id_of(expr) as i64)
+                } else if check_core_method_a_tuple(inner) {
+                    let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64)
+                }
+            },
+            else => {}
+        }
     }
     // **`filter` is handed a reference to the item** (ADR-231 D2), and so
     // are its kin's (`binds_hands_a_view`).
@@ -971,4 +999,12 @@ fn check_core_method_char_literal(c: scalar) -> String {
         return ""
     }
     return f"'{c}'"
+}
+
+/// A tuple: taken apart, its parts are read out of the view it is below.
+fn check_core_method_a_tuple(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Tuple(_) => true,
+        else => false,
+    }
 }

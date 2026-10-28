@@ -70,8 +70,8 @@ pub fn bounds_send(text: &str) -> bool {
 
 pub fn a_list(names: &[String], one: &str, many: &str) -> String {
     if names.is_empty() { return String::from(""); }
-    let mut word = many.to_owned();
-    if names.len() == 1 { word = one.to_owned(); }
+    let mut word = many.to_string();
+    if names.len() == 1 { word = one.to_string(); }
     let mut out = format!("{} ", word);
     for at in 0..names.len() as i64 {
         if at > 0 && at == names.len() as i64 - 1 { out.push_str(" and "); } else if at > 0 { out.push_str(", "); }
@@ -84,12 +84,12 @@ pub fn a_list(names: &[String], one: &str, many: &str) -> String {
 
 pub fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<String>>) -> Option<Vec<String>> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut queue: Vec<String> = vec![from.to_owned()];
+    let mut queue: Vec<String> = vec![from.to_string()];
     let mut ways: Vec<Vec<String>> = vec![vec![]];
-    seen.insert(from.to_owned());
+    seen.insert(from.to_string());
     let mut next: i64 = 0;
     while ((next) as usize) < queue.len() {
-        let at = (*nikaia_std::index::get(&queue, (next) as usize)).to_owned();
+        let at = (*nikaia_std::index::get(&queue, (next) as usize)).to_string();
         let how = (*nikaia_std::index::get(&ways, (next) as usize)).to_owned();
         next += 1;
         for call in nikaia_std::index::or(match *nikaia_std::index::get(&calls, &at) {
@@ -98,16 +98,16 @@ pub fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<St
         }, || vec![].into()) {
             if is_a_sink(&call) {
                 let mut path = how.to_owned();
-                path.push(call.to_owned());
+                path.push(call.to_string());
                 return Some(path);
             }
             let inside = the_crates_own(&call, calls);
             if inside.is_none() { continue; }
             let own = nikaia_std::index::or(inside, || "".into());
             if seen.contains(&own) { continue; }
-            seen.insert(own.to_owned());
+            seen.insert(own.to_string());
             let mut way = how.to_owned();
-            way.push(own.to_owned());
+            way.push(own.to_string());
             queue.push(own);
             ways.push(way);
         }
@@ -116,13 +116,13 @@ pub fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<St
 }
 
 pub fn the_crates_own(call: &str, calls: &collections::BTreeMap<String, Vec<String>>) -> Option<String> {
-    if calls.contains_key(call) { return Some(call.to_owned()); }
+    if calls.contains_key(call) { return Some(call.to_string()); }
     let ending = format!("::{}", call);
     let mut found: Option<String> = None;
     for (path, _) in calls.iter() {
         if path.ends_with(&ending) {
             if found.is_some() { return None; }
-            found = Some(path.to_owned());
+            found = Some(path.to_string());
         }
     }
     found

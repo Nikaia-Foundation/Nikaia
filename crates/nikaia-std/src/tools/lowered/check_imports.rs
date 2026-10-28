@@ -31,10 +31,10 @@ impl CheckState {
         let mut segments: Vec<String> = vec![];
         for part in path.iter() {
             let part = *part;
-            segments.push(world.words.resolve(part).to_owned());
+            segments.push(world.words.resolve(part).to_string());
         }
         if segments.len() < 2 || *nikaia_std::index::get(&segments, 0) != "std" { return; }
-        let last = (*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_owned();
+        let last = (*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string();
         let mut a_type = false;
         for (entry_name, _) in world.library.types.iter() { if a_type_base(entry_name) == last { a_type = true; } }
         if !a_type {
@@ -64,7 +64,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_std_module_nobody_declared(&mut self, module: &str, segments: &[String], span: &Span) {
         let mut offered: Vec<String> = vec![];
-        for name in self.std_modules.iter() { if !starts_with_a_capital(name) && !not_a_module(name) { offered.push(name.to_owned()); } }
+        for name in self.std_modules.iter() { if !starts_with_a_capital(name) && !not_a_module(name) { offered.push(name.to_string()); } }
         offered.sort();
         if nikaia_std::list::contains(&offered, &module) || is_promised(module) { return; }
         let written = segments.join("::");
@@ -81,7 +81,7 @@ impl CheckState {
         match &pattern.node {
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
-                let written = world.words.resolve(name).to_owned();
+                let written = world.words.resolve(name).to_string();
                 if written == "tag" { self.findings.push(check_refusal("NK1187", &pattern.span, format!("`{}` is not something a grammar can use.", written), vec![capitalised("a literal is written as itself")], Some(String::from("Write `\"x\"` instead.")))); }
                 if written == "digit1" { self.findings.push(check_refusal("NK1187", &pattern.span, format!("`{}` is not something a grammar can use.", written), vec![capitalised("one or more characters of a class are written as the class and a `+`, which gives the text it matched")], Some(String::from("Write `digit+` instead.")))); }
                 for arg in args.iter() { self.a_name_the_page_does_not_have(world, arg); }

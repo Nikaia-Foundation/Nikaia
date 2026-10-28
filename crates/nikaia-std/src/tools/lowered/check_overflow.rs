@@ -38,10 +38,10 @@ impl CheckState {
             }
             return;
         }
-        let mut pinned: String = nikaia_std::index::or(left.pinned.as_deref(), || "").to_owned();
-        if pinned.is_empty() { pinned = match right.pinned { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned(); }
-        let mut ty = pinned.to_owned();
-        let into: String = nikaia_std::index::or(reach, || "").to_owned();
+        let mut pinned: String = nikaia_std::index::or(left.pinned.as_deref(), || "").to_string();
+        if pinned.is_empty() { pinned = match right.pinned { Some(__nikaia_value) => __nikaia_value, None => return }.to_string(); }
+        let mut ty = pinned.to_string();
+        let into: String = nikaia_std::index::or(reach, || "").to_string();
         if !into.is_empty() {
             let common = nikaia_std::index::or(common_integer(&pinned, &into), || "".into());
             if common == into { ty = into; }
@@ -66,7 +66,7 @@ impl CheckState {
             }
             return;
         }
-        let ty: String = match operand.pinned { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
+        let ty: String = match operand.pinned { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
         if ty != "i32" && ty != "i64" { return; }
         let before = self.findings.len() as i64;
         self.a_number_not_fitting(&value, false, &ty, span, None);
@@ -117,7 +117,7 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> {
     let into = nikaia_std::index::or(widened_into(found, want), || "".into());
-    if !into.is_empty() { return Some(FactWrap::Widen(into.to_owned())); }
+    if !into.is_empty() { return Some(FactWrap::Widen(into.to_string())); }
     if mapped_as_bytes(found, want) { return Some(FactWrap::MappedBytes); }
     let path = text_as_a_path(found, want);
     if path == 1 { return Some(FactWrap::PathView); }
@@ -129,7 +129,7 @@ pub fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> 
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); nikaia_std::index::or(widened_into(found, inner), || "".into()) },
         _ => String::from(""),
     };
-    if !inner_into.is_empty() { return Some(FactWrap::WidenSome(inner_into.to_owned())); }
+    if !inner_into.is_empty() { return Some(FactWrap::WidenSome(inner_into.to_string())); }
     if !found.is_unknown() || literal { return Some(FactWrap::Constructor); }
     Some(FactWrap::Conversion)
 }
@@ -144,7 +144,7 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         let into = nikaia_std::index::or(unsigned_from_signed(found, want), || "".into());
         if !literal && !into.is_empty() {
             let key = span.start as i64;
-            let slot = CheckUnsignedSlot { node: id_of(given) as i64, found: found.clone(), want: want.clone(), into: into.to_owned(), written: check_walked_written(given, world.words), span: span.clone(), refusal: None };
+            let slot = CheckUnsignedSlot { node: id_of(given) as i64, found: found.clone(), want: want.clone(), into: into.to_string(), written: check_walked_written(given, world.words), span: span.clone(), refusal: None };
             let mut slots: Vec<CheckUnsignedSlot> = vec![];
             if state.flow.unsigned_slots.contains_key(&key) {
                 let held = match state.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -152,7 +152,7 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
             }
             slots.push(slot);
             state.flow.unsigned_slots.insert(key, slots);
-            return Some(FactWrap::Unsigned(into.to_owned()));
+            return Some(FactWrap::Unsigned(into.to_string()));
         }
     }
     if value.is_some() {
@@ -161,7 +161,7 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     }
     let how = match check_wrap_for(found, want, literal) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let widen: String = match how {
-        FactWrap::Widen(ref into) => into.to_owned(),
+        FactWrap::Widen(ref into) => into.to_string(),
         _ => String::from(""),
     };
     if !widen.is_empty() && value.is_some() {
@@ -254,8 +254,8 @@ pub fn check_overflow_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)
 pub fn check_unsigned_slot_refused(slot: &CheckUnsignedSlot) -> CheckFinding {
     let found = slot.found.text();
     let want = slot.want.text();
-    let value = slot.written.to_owned();
-    let into = slot.into.to_owned();
+    let value = slot.written.to_string();
+    let into = slot.into.to_string();
     let mut finding = nikaia_std::index::or(match slot.refusal.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

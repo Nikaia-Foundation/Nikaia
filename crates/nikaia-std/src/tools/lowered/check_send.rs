@@ -56,7 +56,7 @@ impl CheckState {
             self.reaches_a_lock(callee, &what, (path).as_deref(), &verdict, span);
             return;
         }
-        let notes: Vec<String> = vec![why.to_owned(), nikaia_std::index::or(verdict.note(), || "".into()), same_at_both()];
+        let notes: Vec<String> = vec![why.to_string(), nikaia_std::index::or(verdict.note(), || "".into()), same_at_both()];
         self.findings.push(check_refusal("NK2502", span, format!("{} can't move to another thread, and `{}` might move it.", capitalised(&what), callee), notes, verdict.way_out()));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -78,7 +78,7 @@ impl CheckState {
 
 pub(crate) fn reached_path(path: Option<&str>, at: Option<String>) -> Option<String> {
     let held = match path { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let field = match at { Some(__nikaia_value) => __nikaia_value, None => return Some(held.to_owned()) };
+    let field = match at { Some(__nikaia_value) => __nikaia_value, None => return Some(held.to_string()) };
     Some(format!("{}.{}", held, field))
 }
 

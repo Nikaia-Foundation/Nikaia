@@ -15,7 +15,7 @@ impl CheckState {
     pub fn a_call_that_may_pause(&mut self, callee: &str, pauses: bool, unpromised: bool, span: &Span) {
         if !pauses { return; }
         let mut because: Option<String> = None;
-        if unpromised { because = Some(callee.to_owned()); }
+        if unpromised { because = Some(callee.to_string()); }
         let pause = CheckPause { what: format!("`{}`", callee), unpromised: because, before_walk: format!("Call `{}` before the walk and pass the values in, or walk with `iter()`, whose lambda may pause.", callee), before_door: format!("Call `{}` before taking the lock and pass its value in, or after it with what the block returned.", callee) };
         self.a_pause(&pause, span);
     }
@@ -36,13 +36,13 @@ impl CheckState {
         self.note_a_pause();
         if self.in_parallel.is_some() && !self.scoped_task {
             let mut parallel: Vec<String> = vec![String::from("A `par_iter()` lambda runs on every core at once, and a core that waits holds up its share of the work, so the lambda must never pause.")];
-            if pause.unpromised.is_some() { parallel.push(why.to_owned()); }
-            self.findings.push(check_refusal("NK2209", span, format!("{} {}, but this runs on several cores at once.", capitalised(&pause.what), pauses), parallel, Some(pause.before_walk.to_owned())));
+            if pause.unpromised.is_some() { parallel.push(why.to_string()); }
+            self.findings.push(check_refusal("NK2209", span, format!("{} {}, but this runs on several cores at once.", capitalised(&pause.what), pauses), parallel, Some(pause.before_walk.to_string())));
         }
         if !self.inside_a_door { return; }
         notes.push(String::from("While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too."));
         if pause.unpromised.is_some() { notes.push(why); }
-        self.findings.push(check_refusal("NK2202", span, format!("{} {}, but you're holding a lock here.", capitalised(&pause.what), pauses), notes, Some(pause.before_door.to_owned())));
+        self.findings.push(check_refusal("NK2202", span, format!("{} {}, but you're holding a lock here.", capitalised(&pause.what), pauses), notes, Some(pause.before_door.to_string())));
     }
     pub(crate) fn note_a_pause(&mut self) {
         if self.handed_over.is_some() {

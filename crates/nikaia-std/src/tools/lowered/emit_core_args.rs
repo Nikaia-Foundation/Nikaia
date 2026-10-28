@@ -198,7 +198,7 @@ impl EmitState {
         if i < part_counts.len() as i64 { walk.hull_count = Some(*nikaia_std::index::get(&part_counts, nikaia_std::index::at(i))); } else { walk.hull_count = None; }
         let scalar = nikaia_std::index::or(self.facts.char_patterns.get(&node_key(arg)), || "");
         if scalar != "" {
-            out.push(&scalar.to_owned());
+            out.push(&scalar.to_string());
             return Ok(());
         }
         if self.facts.owned_entry_keys.contains(&node_key(arg)) {
@@ -372,7 +372,7 @@ impl EmitState {
             let mut names: Vec<String> = vec![];
             for n in 0..never_fails { names.push(format!("__nikaia_a{}", n)); }
             let joined = names.join(", ");
-            let key: String = nikaia_std::index::or(emit_arg_function_key(world, arg), || "".into()).to_owned();
+            let key: String = nikaia_std::index::or(emit_arg_function_key(world, arg), || "".into()).to_string();
             let pauses = key != "" && call_pauses(&self.own_contracts, &key);
             if arity >= 0 || pauses { out.push("async "); }
             out.push(&format!("|{}| Ok(", joined));
@@ -478,7 +478,7 @@ pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
     let mut passed: Vec<String> = vec![];
     let mut at: i64 = 0;
     for name in names.iter() {
-        if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) { passed.push(format!("&{}", name)); } else { passed.push(name.to_owned()); }
+        if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) { passed.push(format!("&{}", name)); } else { passed.push(name.to_string()); }
         at += 1;
     }
     passed.join(", ")
@@ -488,13 +488,13 @@ pub(crate) fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || 
 
 pub(crate) fn emit_call_tasks_channel(flow: &EmitFlow, scope: &EmitScope) -> String {
     if flow.handled_here { return String::from("Box<dyn std::error::Error>"); }
-    if flow.can_throw { return scope.channel.to_owned(); }
+    if flow.can_throw { return scope.channel.to_string(); }
     String::from("nikaia_std::task::Crashed")
 }
 
 pub(crate) fn emit_call_scope_channel(channel: &str) -> String {
     if channel == "Box<dyn std::error::Error>" { return String::from("nikaia_std::task::Boxed"); }
-    channel.to_owned()
+    channel.to_string()
 }
 
 pub(crate) fn emit_call_not_computed_yet() -> &'static str { "a default not computed yet" }
@@ -528,8 +528,8 @@ impl EmitState {
                     let mut channel = emit_call_tasks_channel(&flow, scope);
                     if channel != "nikaia_std::task::Crashed" {
                         let mut owner: String = String::from("");
-                        if channel == scope.channel { owner = scope.function.to_owned(); }
-                        let tried = EmitScope { tasks_channel: channel.to_owned(), tasks_function: owner, ..scope.clone() };
+                        if channel == scope.channel { owner = scope.function.to_string(); }
+                        let tried = EmitScope { tasks_channel: channel.to_string(), tasks_function: owner, ..scope.clone() };
                         let mut probe = EmitOut::empty();
                         self.emit_core_args(world, walk, &mut probe, host, &self.emit_call_callee(world, func), args, &self.takes_a_handle_at(world, func), depth, flow, &tried)?;
                         if !probe.buf.contains('?') { channel = String::from("nikaia_std::task::Crashed"); }
@@ -544,22 +544,22 @@ impl EmitState {
         let callee_name = nikaia_std::index::or(emit_callee_text(world, func), || "".into());
         let callee_parts: Vec<&str> = callee_name.split("::").collect::<Vec<_>>();
         let mut callee_last: String = String::from("");
-        if !callee_parts.is_empty() { callee_last = (*nikaia_std::index::get(&callee_parts, nikaia_std::index::at(callee_parts.len() as i64 - 1))).to_owned(); }
+        if !callee_parts.is_empty() { callee_last = (*nikaia_std::index::get(&callee_parts, nikaia_std::index::at(callee_parts.len() as i64 - 1))).to_string(); }
         if self.seeded_calls.contains_key(&callee_last) {
             let hidden = match self.seeded_calls.get(&callee_last) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let mut fill: &'static str = "nikaia_std::hash::Keyed";
             if self.trusted_input { fill = "nikaia_std::hash::Fast"; }
             let mut fills: Vec<String> = vec![];
-            for at in 0..hidden.0 { if at < hidden.1 { fills.push(String::from("_")); } else { fills.push(fill.to_owned()); } }
+            for at in 0..hidden.0 { if at < hidden.1 { fills.push(String::from("_")); } else { fills.push(fill.to_string()); } }
             out.push(&format!("::<{}>", fills.join(", ")));
         }
         out.push("(");
         let takes = self.takes_a_handle_at(world, func);
         let callee = self.emit_call_callee(world, func);
         if tasks.is_some() {
-            let channel = nikaia_std::index::or(tasks.as_deref(), || "").to_owned();
+            let channel = nikaia_std::index::or(tasks.as_deref(), || "").to_string();
             let mut owner: String = String::from("");
-            if channel == scope.channel { owner = scope.function.to_owned(); }
+            if channel == scope.channel { owner = scope.function.to_string(); }
             let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
             let mut written = false;
             if channel != "nikaia_std::task::Crashed" && args.len() == 1 {
@@ -662,7 +662,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_call_scope_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, channel: &str, owner: &str, paused: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let failing = EmitFlow { in_lambda: !paused, can_throw: true, ..EmitFlow::plain().at(flow.statement) };
-        let inner = EmitScope { origin: scope.origin.to_owned(), function: owner.to_owned(), channel: channel.to_owned(), changed: scope.changed.to_owned(), tasks_channel: channel.to_owned(), tasks_function: owner.to_owned(), ..EmitScope::plain() };
+        let inner = EmitScope { origin: scope.origin.to_string(), function: owner.to_string(), channel: channel.to_string(), changed: scope.changed.to_owned(), tasks_channel: channel.to_string(), tasks_function: owner.to_string(), ..EmitScope::plain() };
         self.emit_core_block(world, walk, out, host, body, depth, failing, &inner, EmitTail::Value)?;
         Ok(())
     }
@@ -683,10 +683,10 @@ impl EmitState {
                 let named = emit_local_name(&self.facts.comptime_names, &emit_text(world, *nikaia_std::index::get(&params, 0)));
                 let mut channel = emit_call_tasks_channel(&flow, scope);
                 let mut owner: String = String::from("");
-                if channel == scope.channel { owner = scope.function.to_owned(); }
+                if channel == scope.channel { owner = scope.function.to_string(); }
                 if channel != "nikaia_std::task::Crashed" {
                     let mut probe = EmitOut::empty();
-                    let tried = EmitScope { changed: scope.changed.to_owned(), tasks_channel: channel.to_owned(), tasks_function: owner.to_owned(), ..EmitScope::plain() };
+                    let tried = EmitScope { changed: scope.changed.to_owned(), tasks_channel: channel.to_string(), tasks_function: owner.to_string(), ..EmitScope::plain() };
                     self.emit_core_block(world, walk, &mut probe, host, body, depth, EmitFlow::plain().at(flow.statement), &tried, EmitTail::Return)?;
                     if !probe.buf.contains('?') { channel = String::from("nikaia_std::task::Crashed"); }
                 }
@@ -821,7 +821,7 @@ impl EmitState {
             return Ok(true);
         }
         if world.library.functions.contains_key(&format!("{}::new", text)) {
-            out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![text.to_owned(), String::from("new")]));
+            out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![text.to_string(), String::from("new")]));
             out.push("(");
             let takes = self.takes_a_handle(world, &format!("{}::new", text));
             self.emit_core_args(world, walk, out, host, text, args, &takes, depth, flow, scope)?;
@@ -877,7 +877,7 @@ impl EmitState {
             let name = emit_text(world, *nikaia_std::index::get(&segments, 1));
             let key = format!("{}::{}::new", module, name);
             if world.library.functions.contains_key(&key) {
-                out.push(&format!("{}::{}", module, self.path(world, walk.trusting, walk.unpinned, &vec![name.to_owned(), String::from("new")])));
+                out.push(&format!("{}::{}", module, self.path(world, walk.trusting, walk.unpinned, &vec![name.to_string(), String::from("new")])));
                 out.push("(");
                 let takes = self.takes_a_handle(world, &key);
                 self.emit_core_args(world, walk, out, host, &key, args, &takes, depth, flow, scope)?;

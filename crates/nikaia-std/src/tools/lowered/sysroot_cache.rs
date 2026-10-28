@@ -75,7 +75,7 @@ pub fn sysroot_cpu_levels<H: SysrootHost>(triple: &str, host: &H) -> Result<Vec<
         false => {
             let cpus = host.rustc_cpus(triple, &vec![])?;
             let line = nikaia_std::index::or(cpus.lines().find(|&line| { line.contains("default target CPU") }), || "");
-            vec![nikaia_std::index::or(line.split_whitespace().next(), || "generic").to_owned()]
+            vec![nikaia_std::index::or(line.split_whitespace().next(), || "generic").to_string()]
         },
     };
     levels.push(String::from("native"));
@@ -86,9 +86,9 @@ pub fn sysroot_cpu_levels<H: SysrootHost>(triple: &str, host: &H) -> Result<Vec<
 // this was written - see `contracts::sync`.
 pub fn sysroot_native_cpu(said: &str) -> String {
     let line = nikaia_std::index::or(said.lines().find(|&line| { line.trim_start().starts_with("native ") }), || "");
-    let mut cpu: String = nikaia_std::index::or(line.split("currently ").nth(1), || "").to_owned();
+    let mut cpu: String = nikaia_std::index::or(line.split("currently ").nth(1), || "").to_string();
     while cpu.ends_with(')') || cpu.ends_with('.') {
-        let cut: String = cpu.trim_end_matches(')').trim_end_matches('.').to_owned();
+        let cut: String = cpu.trim_end_matches(')').trim_end_matches('.').to_string();
         cpu = cut;
     }
     let features: Vec<&str> = said.lines().filter(|&line| { line.starts_with("target_feature=") }).collect::<Vec<_>>();
@@ -140,7 +140,7 @@ pub fn sysroot_file_key<H: SysrootHost>(interface: &str, name: &str, text: &str,
 }
 
 pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
-    let mut names: Vec<String> = vec![SYSROOT_TOOLS_PACKAGE.to_owned()];
+    let mut names: Vec<String> = vec![SYSROOT_TOOLS_PACKAGE.to_string()];
     names.extend(sysroot_stale(dir, &vec![]));
     let mut files: Vec<(String, String)> = vec![];
     for name in names.iter() {
@@ -148,7 +148,7 @@ pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
             Ok(value) => value,
             Err(_error) => { String::from("") },
         };
-        files.push((name.to_owned(), text));
+        files.push((name.to_string(), text));
     }
     files
 }
@@ -157,7 +157,7 @@ pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
 // this was written - see `contracts::sync`.
 pub fn sysroot_inlined(files: &[(String, String)]) -> String {
     if files.is_empty() { return String::from(""); }
-    let mut text: String = nikaia_std::index::get(&files, 0).1.to_owned();
+    let mut text: String = nikaia_std::index::get(&files, 0).1.to_string();
     for at in 1..files.len() as i64 {
         let replaced = text.replace(&format!("include!(\"{}\");", nikaia_std::index::get(&files, (at) as usize).0), &nikaia_std::index::get(&files, (at) as usize).1);
         text = replaced;
@@ -179,8 +179,8 @@ pub(crate) async fn sysroot_holds(path: &std::path::Path, text: &str) -> bool {
 
 pub async fn sysroot_drift(files: &[(String, String)], dir: &std::path::Path) -> Vec<String> {
     let mut drifted: Vec<String> = vec![];
-    for file in files.iter() { if !sysroot_holds(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(file.0))), &file.1).await { drifted.push(file.0.to_owned()); } }
-    let kept: Vec<String> = files.iter().map(|file| { file.0.to_owned() }).collect::<Vec<_>>();
+    for file in files.iter() { if !sysroot_holds(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(file.0))), &file.1).await { drifted.push(file.0.to_string()); } }
+    let kept: Vec<String> = files.iter().map(|file| { file.0.to_string() }).collect::<Vec<_>>();
     drifted.extend(sysroot_stale(dir, &kept));
     drifted
 }
@@ -209,10 +209,10 @@ pub fn sysroot_unpack(packed: &str) -> Option<Vec<(String, String)>> {
     for at in 0..pieces.len() as i64 {
         let line: String = match ((at + 1) as usize) < pieces.len() {
             true => format!("{}\n", *nikaia_std::index::get(&pieces, (at) as usize)),
-            false => (*nikaia_std::index::get(&pieces, (at) as usize)).to_owned(),
+            false => (*nikaia_std::index::get(&pieces, (at) as usize)).to_string(),
         };
         if line.is_empty() { continue; }
-        if line.starts_with(SYSROOT_PACKED) { files.push((nikaia_std::index::or(line.strip_prefix(SYSROOT_PACKED), || "").trim_end().to_owned(), String::from(""))); } else {
+        if line.starts_with(SYSROOT_PACKED) { files.push((nikaia_std::index::or(line.strip_prefix(SYSROOT_PACKED), || "").trim_end().to_string(), String::from(""))); } else {
             if files.is_empty() { return None; }
             let last = files.len() as i64 - 1;
             files[nikaia_std::index::at(last)].1.push_str(&line);

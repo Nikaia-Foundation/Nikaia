@@ -143,7 +143,7 @@ pub fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world
         CheckComputing::Option => ("An option's default is computed once, where the function is declared, as a `comptime` is.", format!("Give `{}` a default the build can compute, or make it a `T?` and decide in the body.", name)),
         CheckComputing::Attribute => ("An attribute's argument is computed once, where it is written, as a `comptime` is.", format!("Give `{}` a value the build can compute, or write the value itself.", name)),
     };
-    state.findings.push(check_refusal("NK1127", span, message, vec![note.to_owned()], Some(help)));
+    state.findings.push(check_refusal("NK1127", span, message, vec![note.to_string()], Some(help)));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -151,7 +151,7 @@ pub fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world
 pub fn check_defaults_item_constants<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     state.scope.push(vec![]);
     for (beside, declared) in host.constants_beside() {
-        state.facts.comptime_names.insert(beside.to_owned());
+        state.facts.comptime_names.insert(beside.to_string());
         state.bind_with(beside, declared, None);
     }
     for item in world.here.items.iter() {
@@ -164,7 +164,7 @@ pub fn check_defaults_item_constants<H: CheckHost>(state: &mut CheckState, world
                     declared = host.declared(state, written, &item.span);
                 }
                 let spelled = world.here.text(name);
-                state.facts.comptime_names.insert(spelled.to_owned());
+                state.facts.comptime_names.insert(spelled.to_string());
                 state.bind_with(spelled, declared, None);
             },
             _ => { },

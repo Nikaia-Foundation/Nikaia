@@ -36,7 +36,7 @@ impl CheckState {
                         VariantFields::Named(fields) => {
                             let mut held: Vec<FieldContract> = vec![];
                             for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty), public: true, default: String::from(""), attributes: vec![] }); }
-                            self.variant_owner.insert(key.to_owned(), owner.to_owned());
+                            self.variant_owner.insert(key.to_string(), owner.to_string());
                             self.structs.insert(key, held);
                         },
                         VariantFields::Tuple(types) => {
@@ -60,7 +60,7 @@ impl CheckState {
                 let mut held: Vec<FieldContract> = vec![];
                 for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty).parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] }); }
                 let named = other.text(name);
-                self.struct_parameters.insert(named.to_owned(), order);
+                self.struct_parameters.insert(named.to_string(), order);
                 self.structs.insert(named, held);
             },
             _ => { },
@@ -83,7 +83,7 @@ impl CheckState {
         }
         let own = world.here.text(name);
         self.nameable(&own, span, "a struct");
-        if !order.is_empty() { self.struct_parameters.insert(own.to_owned(), order); }
+        if !order.is_empty() { self.struct_parameters.insert(own.to_string(), order); }
         self.structs.insert(own, held);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -101,7 +101,7 @@ impl CheckState {
                         held.push(FieldContract { name: world.here.text(field.name), ty, public: true, default: String::from(""), attributes: vec![] });
                     }
                     let key = format!("{}::{}", own, world.here.text(variant.name));
-                    self.variant_owner.insert(key.to_owned(), own.to_owned());
+                    self.variant_owner.insert(key.to_string(), own.to_string());
                     self.structs.insert(key, held);
                 },
                 _ => { },
@@ -124,7 +124,7 @@ impl CheckState {
                 VariantFields::Named(fields) => { for field in fields.iter() { payloads.push(written_ty(world.here.words, world.here.aliases, &field.ty)); } },
             }
         }
-        self.enum_payloads.insert(own.to_owned(), payloads);
+        self.enum_payloads.insert(own.to_string(), payloads);
         self.enums.insert(own, names);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

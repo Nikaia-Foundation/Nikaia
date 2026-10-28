@@ -103,7 +103,7 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
         if c == '\n' { starts.push(byte); }
     }
     let mut placed: collections::BTreeMap<i64, CrRow> = collections::BTreeMap::new();
-    let moved = cr_lines(&main) - cr_lines(&nikaia_std::index::get(&rust, nikaia_std::index::at(start..end)).to_owned());
+    let moved = cr_lines(&main) - cr_lines(&nikaia_std::index::get(&rust, nikaia_std::index::at(start..end)).to_string());
     for (generated, at, unit) in rows.iter() {
         let generated = nikaia_std::num::value(generated);let at = nikaia_std::num::value(at);let unit = nikaia_std::num::value(unit);
         if generated >= start && generated < end || at == 0 { continue; }
@@ -123,13 +123,13 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
         table.push_str(&format!("    ({}, \"{}{}\", {}),\n", line, stopped_at, row.unit, row.byte));
     }
     table.push_str("];\n");
-    let rest = nikaia_std::index::get(&rust, nikaia_std::index::at(end..)).to_owned();
+    let rest = nikaia_std::index::get(&rust, nikaia_std::index::at(end..)).to_string();
     let empty = match nikaia_std::search::find(&rest, &"const __NIKAIA_SITES", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let shut = match nikaia_std::search::find(&rest, &"];\n", empty) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let after = shut + "];\n".len() as i64;
-    let front = nikaia_std::index::get(&rust, nikaia_std::index::at(0..start)).to_owned();
-    let middle = nikaia_std::index::get(&rest, nikaia_std::index::at(0..empty)).to_owned();
-    let back = nikaia_std::index::get(&rest, nikaia_std::index::at(after..)).to_owned();
+    let front = nikaia_std::index::get(&rust, nikaia_std::index::at(0..start)).to_string();
+    let middle = nikaia_std::index::get(&rest, nikaia_std::index::at(0..empty)).to_string();
+    let back = nikaia_std::index::get(&rest, nikaia_std::index::at(after..)).to_string();
     Some(format!("{}{}{}{}{}{}\nextern crate nikaia_bundle;\n", front, main, middle, table, back, helpers))
 }
 

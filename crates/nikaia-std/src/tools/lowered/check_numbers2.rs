@@ -9,7 +9,7 @@ pub(crate) fn number_key(expr: &Expr) -> i64 { id_of(expr) as i64 }
 // this was written - see `contracts::sync`.
 pub(crate) fn held_name(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { Some(name.to_owned()) } else { None } },
+        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { Some(name.to_string()) } else { None } },
         _ => None,
     }
 }
@@ -18,7 +18,7 @@ pub(crate) fn held_name(ty: &Ty) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn bare_name(ty: &Ty) -> String {
     match ty {
-        Ty::Named { name, args, .. } => if args.is_empty() { name.to_owned() } else { String::from("") },
+        Ty::Named { name, args, .. } => if args.is_empty() { name.to_string() } else { String::from("") },
         _ => String::from(""),
     }
 }
@@ -51,14 +51,14 @@ impl CheckState {
         let held_left = held_name(left);
         let held_right = held_name(right);
         if held_left.is_some() && held_right.is_some() && !is_a_literal(lhs) && !is_a_literal(rhs) {
-            let l = nikaia_std::index::or(held_left.as_deref(), || "").to_owned();
-            let r = nikaia_std::index::or(held_right.as_deref(), || "").to_owned();
+            let l = nikaia_std::index::or(held_left.as_deref(), || "").to_string();
+            let r = nikaia_std::index::or(held_right.as_deref(), || "").to_string();
             if l != r {
                 let common = common_integer(&l, &r);
                 if common.is_some() {
-                    let joined = nikaia_std::index::or(common.as_deref(), || "").to_owned();
-                    if l != joined { self.facts.wrapped.insert(number_key(lhs), FactWrap::Widen(joined.to_owned())); }
-                    if r != joined { self.facts.wrapped.insert(number_key(rhs), FactWrap::Widen(joined.to_owned())); }
+                    let joined = nikaia_std::index::or(common.as_deref(), || "").to_string();
+                    if l != joined { self.facts.wrapped.insert(number_key(lhs), FactWrap::Widen(joined.to_string())); }
+                    if r != joined { self.facts.wrapped.insert(number_key(rhs), FactWrap::Widen(joined.to_string())); }
                     return Some(joined);
                 }
             }
@@ -102,9 +102,9 @@ impl CheckState {
         let mut into: String = String::from("i64");
         let mut mixed = false;
         let common = common_integer(&l, &r);
-        if common.is_some() { into = nikaia_std::index::or(common.as_deref(), || "").to_owned(); } else { mixed = true; }
-        if l != into && l != "u64" { self.facts.wrapped.insert(number_key(lhs), FactWrap::Widen(into.to_owned())); }
-        if r != into && r != "u64" { self.facts.wrapped.insert(number_key(rhs), FactWrap::Widen(into.to_owned())); }
+        if common.is_some() { into = nikaia_std::index::or(common.as_deref(), || "").to_string(); } else { mixed = true; }
+        if l != into && l != "u64" { self.facts.wrapped.insert(number_key(lhs), FactWrap::Widen(into.to_string())); }
+        if r != into && r != "u64" { self.facts.wrapped.insert(number_key(rhs), FactWrap::Widen(into.to_string())); }
         if mixed { self.facts.mixed_comparisons.insert(at.start as i64, l == "u64"); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -119,9 +119,9 @@ impl CheckState {
             self.two_number_types(op, target, into, value, found, span);
             return;
         }
-        let joined = nikaia_std::index::or(common.as_deref(), || "").to_owned();
+        let joined = nikaia_std::index::or(common.as_deref(), || "").to_string();
         if joined == x {
-            if !self.narrow_by_width(world, value, &joined, span) && !self.widen_operands(world, value, &joined, span) { self.facts.wrapped.insert(number_key(value), FactWrap::Widen(joined.to_owned())); }
+            if !self.narrow_by_width(world, value, &joined, span) && !self.widen_operands(world, value, &joined, span) { self.facts.wrapped.insert(number_key(value), FactWrap::Widen(joined.to_string())); }
             return;
         }
         let shown = written_expression(world.words, target);
@@ -138,7 +138,7 @@ impl CheckState {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
                 if *op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul || *op == BinaryOp::Div || *op == BinaryOp::Rem {
                     let key = span.start as i64;
-                    if self.facts.arithmetic.contains_key(&key) { self.facts.arithmetic.insert(key, into.to_owned()); }
+                    if self.facts.arithmetic.contains_key(&key) { self.facts.arithmetic.insert(key, into.to_string()); }
                     self.widen_operand(world, lhs, into, within);
                     self.widen_operand(world, rhs, into, within);
                     return true;
@@ -162,21 +162,21 @@ impl CheckState {
         if self.narrow_by_width(world, side, into, span) || self.widen_operands(world, side, into, span) { return; }
         let literal_int = matches!(side, Expr::LitInt { .. });
         if literal_int {
-            self.facts.unsigned_literals.insert(number_key(side), into.to_owned());
+            self.facts.unsigned_literals.insert(number_key(side), into.to_string());
             return;
         }
         if is_a_literal(side) { return; }
-        self.facts.wrapped.insert(number_key(side), FactWrap::Widen(into.to_owned()));
+        self.facts.wrapped.insert(number_key(side), FactWrap::Widen(into.to_string()));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn widened_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         let from = match found {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return None,
         };
         let into = match want {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return None,
         };
         let from_args = named_arguments_of(found);
@@ -189,7 +189,7 @@ impl CheckState {
         for item in items.iter() {
             let item = *item;
             if is_a_literal(item) { continue; }
-            if !self.narrow_by_width(world, item, &widened, span) && !self.widen_operands(world, item, &widened, span) { self.facts.wrapped.insert(number_key(item), FactWrap::Widen(widened.to_owned())); }
+            if !self.narrow_by_width(world, item, &widened, span) && !self.widen_operands(world, item, &widened, span) { self.facts.wrapped.insert(number_key(item), FactWrap::Widen(widened.to_string())); }
         }
         Some(want.clone())
     }
@@ -198,7 +198,7 @@ impl CheckState {
     pub fn array_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         if !is_a_list_literal(value) { return None; }
         let name = match want {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return None,
         };
         let wanted = named_arguments_of(want);
@@ -254,12 +254,12 @@ impl CheckState {
         if receiver.len() != 1 || !a_collect_call(world, value) { return None; }
         let made = named_arguments_of(found);
         let found_name = match found {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return None,
         };
         if made.len() != 1 || type_last_segment(&found_name) != "Vec" { return None; }
         let wanted_name = match want {
-            Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { name.to_owned() } },
+            Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { name.to_string() } },
             _ => return None,
         };
         let parts = named_arguments_of(want);

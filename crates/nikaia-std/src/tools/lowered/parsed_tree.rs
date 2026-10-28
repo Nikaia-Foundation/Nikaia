@@ -10,7 +10,7 @@ pub fn aliases_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerConte
                 if path.len() == 1 && alias.is_some() {
                     let package = *nikaia_std::index::get(&path, 0);
                     let name = nikaia_std::index::or(alias, || package.into());
-                    out.insert(words.resolve(name).to_owned(), words.resolve(package).to_owned());
+                    out.insert(words.resolve(name).to_string(), words.resolve(package).to_string());
                 }
             },
             _ => { },

@@ -22,7 +22,7 @@ pub fn drafted(surface: &Surface, crate_word: &str, wanted: &collections::BTreeS
         let function = match *nikaia_std::index::get(&surface.functions, at) { Some(__nikaia_value) => __nikaia_value, None => continue };
         functions.insert(format!("{}::{}", crate_word, name), contract_of(function, crate_word, &surface.types, &mut named_types));
     }
-    for name in wanted.iter() { if surface.types.contains(name) { named_types.insert(name.to_owned()); } }
+    for name in wanted.iter() { if surface.types.contains(name) { named_types.insert(name.to_string()); } }
     let mut types: collections::BTreeMap<String, TypeContract> = collections::BTreeMap::new();
     let no_fields: Vec<String> = vec![];
     let no_derives: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -38,7 +38,7 @@ pub(crate) fn notes_on(surface: &Surface, crate_word: &str, wanted: &collections
     let mut notes = Notes::empty();
     notes.about_the_crate = promise_lines(&surface.promises);
     let mut calls: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    for (path, function) in surface.functions.iter() { calls.insert(path.to_owned(), function.calls.to_owned()); }
+    for (path, function) in surface.functions.iter() { calls.insert(path.to_string(), function.calls.to_owned()); }
     for name in wanted.iter() {
         let at = match *nikaia_std::index::get(&surface.reachable, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let function = match *nikaia_std::index::get(&surface.functions, at) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -57,8 +57,8 @@ pub(crate) fn bound_parameters(function: &Function) -> Vec<String> {
     let mut names: Vec<String> = vec![];
     let mut types: Vec<String> = vec![];
     for arg in function.args.iter() {
-        names.push(arg.name.to_owned());
-        types.push(arg.ty.to_owned());
+        names.push(arg.name.to_string());
+        types.push(arg.ty.to_string());
     }
     sent_across(&names, &types, &function.bounds)
 }
@@ -67,10 +67,10 @@ pub(crate) fn contract_of(function: &Function, crate_word: &str, types: &collect
     let mut names: Vec<String> = vec![];
     let mut written_types: Vec<String> = vec![];
     for arg in function.args.iter() {
-        names.push(arg.name.to_owned());
-        written_types.push(arg.ty.to_owned());
+        names.push(arg.name.to_string());
+        written_types.push(arg.ty.to_string());
     }
-    let written = WrittenFn { names, types: written_types, result: function.result.to_owned(), pauses: function.pauses, parameters: function.parameters.to_owned() };
+    let written = WrittenFn { names, types: written_types, result: function.result.to_string(), pauses: function.pauses, parameters: function.parameters.to_owned() };
     contract(&written, crate_word, types, mentioned)
 }
 

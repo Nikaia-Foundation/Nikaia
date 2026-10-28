@@ -1,0 +1,71 @@
+// Vec::get, a map's iter and values, and Seq's enumerate, chain and fold:
+// the entries rs2nika's drafts called and std did not have. A list's
+// element read past a jump is the value where it copies, and a tuple taken
+// apart from it reads its parts out of the view.
+use std::collections
+
+fn last_above(xs: ref Vec[i64], floor: i64) -> bool {
+    let it = xs.last() ?? return false
+    return it > floor
+}
+
+fn named(params: ref Vec[(String, i64)], index: i64) -> bool {
+    let it = params.get(index) ?? return false
+    let (name, n) = it
+    return n > 0 && name.len() > 1
+}
+
+fn named_in_a_match(params: ref Vec[(String, i64)], index: i64) -> bool {
+    return (match params.get(index) { it => { let (name, n) = it; n > 0 && name.len() > 1 }, null => false })
+}
+
+fn named_in_an_arm(params: ref Vec[(String, i64)], index: i64) -> bool {
+    return (match params.get(index) { (name, n) => n > 0 && name.len() > 1, null => false })
+}
+
+fn main() {
+    let xs: Vec[i64] = [10, 20, 30]
+    println(f"{xs.get(1) ?? -1} {xs.get(5) ?? -1}")
+    let names: Vec[String] = ["a", "b", "c"]
+    match names.get(3) {
+        null => println("past the end"),
+        name => println(name),
+    }
+    let copies: Vec[String] = names.iter().map(fn(n) { n.clone() }).collect()
+    println(copies.join(","))
+
+    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    m.insert("b", 2)
+    m.insert("a", 1)
+    for (k, v) in m.iter() {
+        println(f"{k}={v}")
+    }
+    let total: i64 = m.values().map(fn(v) { v * 10 }).sum()
+    let big: Vec[String] = m.iter().filter(fn((_, v)) { v > 1 }).map(fn((k, _)) { k.clone() }).collect()
+    println(f"{total} {big.join(",")}")
+    let mut h: collections::HashMap[String, i64] = collections::HashMap()
+    h.insert("x", 5)
+    println(f"{h.iter().count()}")
+
+    for (i, n) in names.iter().enumerate() {
+        if n != "b" {
+            println(f"{i}:{n}")
+        }
+    }
+    let at: Vec[i64] = names.iter().enumerate().filter(fn((_, n)) { n != "b" }).map(fn((i, _)) { i * 10 }).collect()
+    println(f"{at.len()} {at[1]}")
+
+    let ys: Vec[i64] = [4, 5]
+    let both: i64 = xs.iter().chain(ys.iter()).sum()
+    let first = xs.iter().chain(ys.iter()).find(fn(x) { x < 10 }) ?? 0
+    println(f"{both} {first}")
+
+    println(f"{xs.iter().fold(100, fn(acc, x) { acc + x })}")
+    println(names.iter().fold("", fn(acc, n) { f"{acc}{n}" }))
+
+    println(f"{last_above(xs, 25)} {last_above(xs, 30)} {last_above([], 0)}")
+    let params: Vec[(String, i64)] = [("ab", 2), ("c", 1)]
+    println(f"{named(params, 0)} {named(params, 1)} {named(params, 5)}")
+    println(f"{named_in_a_match(params, 0)} {named_in_a_match(params, 1)} {named_in_a_match(params, 5)}")
+    println(f"{named_in_an_arm(params, 0)} {named_in_an_arm(params, 1)} {named_in_an_arm(params, 5)}")
+}

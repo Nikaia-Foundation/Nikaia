@@ -7,10 +7,10 @@ impl CheckState {
     pub fn a_lock_inside_a_lock(&mut self, called: &str, holds: &Lock, span: &Span) {
         if !self.inside_a_door || !holds.holds() { return; }
         let parts: Vec<&str> = called.split("::").collect::<Vec<_>>();
-        let method = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned();
+        let method = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string();
         let letters: Vec<scalar> = nikaia_std::list::chars(called.chars());
-        let mut written = called.to_owned();
-        if !letters.is_empty() && (*nikaia_std::index::get(&letters, 0)).to_ascii_lowercase() != *nikaia_std::index::get(&letters, 0) { written = method.to_owned(); }
+        let mut written = called.to_string();
+        if !letters.is_empty() && (*nikaia_std::index::get(&letters, 0)).to_ascii_lowercase() != *nikaia_std::index::get(&letters, 0) { written = method.to_string(); }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2203"), message: format!("`{}` takes a lock, but you're already holding one here.", written), notes: vec![String::from("This block runs while a lock is held, so taking a second lock inside it can deadlock.")], help: Some(String::from("Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.")), labels: vec![CheckLabel { span: span.clone(), word: method, text: String::from("takes a second lock"), main: true }] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -18,7 +18,7 @@ impl CheckState {
     pub fn io_inside_a_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, what: &str, span: &Span) {
         if !self.inside_a_door { return; }
         let name = match on {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return,
         };
         let base = a_type_base(&name);
@@ -90,7 +90,7 @@ impl CheckState {
     pub fn a_door_that_is_not_written(&mut self, on: &Ty, written: &str, span: &Span) {
         if written != "set_after" { return; }
         let held = match on {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return,
         };
         if !is_a_hull(&held) { return; }
@@ -105,7 +105,7 @@ impl CheckState {
     pub fn a_set_that_reads_what_it_writes(&mut self, on: &Ty, written: &str, found: &[Ty], span: &Span) {
         if written != "set" { return; }
         let held = match on {
-            Ty::Named { name, .. } => name.to_owned(),
+            Ty::Named { name, .. } => name.to_string(),
             _ => return,
         };
         if !is_a_hull(&held) { return; }

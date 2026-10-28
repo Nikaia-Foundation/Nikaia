@@ -26,7 +26,7 @@ impl CheckState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn an_entry_point_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], args: &[FnArg], ret_type: Option<&Type>, is_public: bool, span: &Span, of_a_trait: bool) {
         let mut written: String = String::from("new");
-        if name.is_some() { written = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_owned(); }
+        if name.is_some() { written = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_string(); }
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![String::from("`extern` before a function with a body exports it to C, and what a package exports is part of its surface.")], Some(format!("Write `pub extern fn {}`, or leave out `extern` for a function only this program calls.", written)))); }
         self.findings.push(check_refusal("NK1238", span, format!("`{}` is an entry point, and this build makes no library.", written), vec![String::from("Only a build with `artifact = \"c-library\"` in `[build]` exports its `extern` functions, as a shared and a static library and a header.")], Some(format!("Set `artifact = \"c-library\"` in `[build]`, or leave out `extern`: `{}` is an ordinary function without it.", written))));
         if !generics.is_empty() || of_a_trait {
@@ -41,7 +41,7 @@ impl CheckState {
         for arg in args.iter() {
             let way = self.crosses_to_c(world, &arg.ty, false);
             if way.is_some() {
-                let param = world.words.resolve(arg.name).to_owned();
+                let param = world.words.resolve(arg.name).to_string();
                 self.findings.push(check_refusal("NK1240", span, format!("`{}` of `{}` cannot cross to C.", param, written), vec![String::from("An entry point takes numbers, `bool` and `scalar` by value, text and bytes as a view, a list of numbers, a struct or an enum of the package, an optional of those, and a callback that does not pause (Part III 15.1).")], std::convert::identity(way)));
             }
         }
@@ -68,13 +68,13 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn an_extern_struct_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], is_public: bool, span: &Span) {
-        let written = world.words.resolve(name).to_owned();
+        let written = world.words.resolve(name).to_string();
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![ext_a_struct_note()], Some(format!("Write `pub extern struct {}`, or leave out `extern` for a struct only this program uses.", written)))); }
         if !generics.is_empty() { self.findings.push(check_refusal("NK1145", span, format!("`{}` is an `extern` struct with type parameters, and C's layout has none.", written), vec![ext_a_struct_note()], Some(format!("Declare one `extern` struct for each type `{}` is used with.", written)))); }
         for field in fields.iter() {
             if !a_c_value(&world.here, &field.ty) {
-                let field_name = world.words.resolve(field.name).to_owned();
-                let ty = world.words.resolve(field.ty.name).to_owned();
+                let field_name = world.words.resolve(field.name).to_string();
+                let ty = world.words.resolve(field.ty.name).to_string();
                 self.findings.push(check_refusal("NK1145", &field.span, format!("`{}.{}` is a `{}`, which is not a C value.", written, field_name, ty), vec![ext_a_struct_note()], Some(format!("Leave out `extern`: a `pub struct` crosses to C as a handle, with a getter for `{}`.", field_name))));
             }
         }
@@ -93,10 +93,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn an_extern_enum_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, variants: &[EnumVariant], is_public: bool, span: &Span) {
-        let written = world.words.resolve(name).to_owned();
+        let written = world.words.resolve(name).to_string();
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![ext_an_enum_note()], Some(format!("Write `pub extern enum {}`, or leave out `extern` for an enum only this program uses.", written)))); }
         for variant in variants.iter() {
-            let variant_name = world.words.resolve(variant.name).to_owned();
+            let variant_name = world.words.resolve(variant.name).to_string();
             match &variant.fields {
                 VariantFields::Unit => { },
                 VariantFields::Tuple(types) => {
@@ -106,7 +106,7 @@ impl CheckState {
                         at += 1;
                     }
                 },
-                VariantFields::Named(named) => { for field in named.iter() { self.a_variant_field(world, &written, &variant_name, world.words.resolve(field.name).to_owned(), &field.ty, &variant.span); } },
+                VariantFields::Named(named) => { for field in named.iter() { self.a_variant_field(world, &written, &variant_name, world.words.resolve(field.name).to_string(), &field.ty, &variant.span); } },
             }
         }
     }
@@ -114,17 +114,17 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_variant_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, variant_name: &str, field: String, ty: &Type, at: &Span) {
         if a_c_value(&world.here, ty) { return; }
-        let shown = world.words.resolve(ty.name).to_owned();
+        let shown = world.words.resolve(ty.name).to_string();
         self.findings.push(check_refusal("NK1145", at, format!("`{}::{}.{}` is a `{}`, which is not a C value.", written, variant_name, field, shown), vec![ext_an_enum_note()], Some(String::from("Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn crosses_to_c(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
-        let name = world.words.resolve(ty.name).to_owned();
+        let name = world.words.resolve(ty.name).to_string();
         if (*ty.code).is_some() { return self.a_callback_crosses(world, ty, out); }
         if ty.is_tuple { return Some(String::from("Hand a tuple's parts over one by one, or as a `pub extern struct`.")); }
         let mut args: Vec<String> = vec![];
-        for generic in ty.generics.iter() { args.push(world.words.resolve(generic.name).to_owned()); }
+        for generic in ty.generics.iter() { args.push(world.words.resolve(generic.name).to_string()); }
         let declared = self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name);
         self.ext_table(world, &name, &a_type_base(&name), &args, ty.is_view, out, declared)
     }

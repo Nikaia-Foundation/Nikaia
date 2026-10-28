@@ -16,11 +16,11 @@ pub fn free_function(program: &Program, words: &winnow_grammar::InternerContext,
                 let can_throw = *can_throw; let name = *name;
                 if receiver.is_none() && named_as((name).as_ref(), words, wanted) {
                     let mut params: Vec<String> = vec![];
-                    for arg in args.iter() { params.push(words.resolve(arg.name).to_owned()); }
+                    for arg in args.iter() { params.push(words.resolve(arg.name).to_string()); }
                     let mut options: Vec<(String, Expr)> = vec![];
                     for option in config.iter() {
-                        params.push(words.resolve(option.name).to_owned());
-                        options.push((words.resolve(option.name).to_owned(), option.default.clone()));
+                        params.push(words.resolve(option.name).to_string());
+                        options.push((words.resolve(option.name).to_string(), option.default.clone()));
                     }
                     return Some(FreeFunction { params, options, can_throw, whole_result: whole_type((ret_type).as_ref(), words) });
                 }
@@ -43,11 +43,11 @@ pub fn own_method(program: &Program, words: &winnow_grammar::InternerContext, ow
                                 let can_throw = *can_throw; let name = *name;
                                 if receiver.is_some() && named_as((name).as_ref(), words, wanted) {
                                     let mut params: Vec<String> = vec![];
-                                    for arg in args.iter() { params.push(words.resolve(arg.name).to_owned()); }
+                                    for arg in args.iter() { params.push(words.resolve(arg.name).to_string()); }
                                     let mut options: Vec<(String, Expr)> = vec![];
                                     for option in config.iter() {
-                                        params.push(words.resolve(option.name).to_owned());
-                                        options.push((words.resolve(option.name).to_owned(), option.default.clone()));
+                                        params.push(words.resolve(option.name).to_string());
+                                        options.push((words.resolve(option.name).to_string(), option.default.clone()));
                                     }
                                     return Some(FreeFunction { params, options, can_throw, whole_result: whole_type((ret_type).as_ref(), words) });
                                 }
@@ -102,7 +102,7 @@ pub fn may_throw(call: &Expr, in_throwing: bool, program: &Program, words: &winn
 pub(crate) fn thrower_named(call: &Expr, words: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> Option<String> {
     match call {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
-            Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_owned()) },
+            Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
             Expr::Path(segments, _) => {
                 let mut joined: String = String::from("");
                 for segment in segments.iter() {
@@ -193,7 +193,7 @@ pub(crate) fn config_from_outside(config: &[ConfigArg], tainted: &collections::B
 
 pub(crate) fn outside_source_named(func: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match func {
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
         Expr::Path(segments, _) => {
             let mut joined: String = String::from("");
             for segment in segments.iter() {

@@ -70,8 +70,8 @@ pub(crate) fn host_known(local: &CheckLocal) -> Option<BuildValue> {
 }
 
 pub(crate) fn host_stopped_line(said: &str) -> String {
-    for line in said.lines() { if line.contains("the program stopped") { return line.to_owned(); } }
-    said.to_owned()
+    for line in said.lines() { if line.contains("the program stopped") { return line.to_string(); } }
+    said.to_string()
 }
 
 pub(crate) fn host_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, enums: &collections::BTreeSet<String>) -> bool {
@@ -287,7 +287,7 @@ pub(crate) fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptim
                 let mut out: Vec<String> = vec![];
                 for expr in visited_in_expr(value) { host_ring_edge(view, expr, comptimes, options, &mut out); }
                 graph.insert(format!("c:{}", named), out);
-                labels.insert(format!("c:{}", named), named.to_owned());
+                labels.insert(format!("c:{}", named), named.to_string());
             },
             Item::Fn { name, receiver, config, body, .. } => {
                 let name = *name;
@@ -296,13 +296,13 @@ pub(crate) fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptim
                     let mut out: Vec<String> = vec![];
                     for expr in visited_in_block(body) { host_ring_edge(view, expr, comptimes, options, &mut out); }
                     graph.insert(format!("f:{}", named), out);
-                    labels.insert(format!("f:{}", named), named.to_owned());
+                    labels.insert(format!("f:{}", named), named.to_string());
                     for option in config.iter() {
                         let mut read: Vec<String> = vec![];
                         for expr in visited_in_expr(&option.default) { host_ring_edge(view, expr, comptimes, options, &mut read); }
                         let key = format!("d:{}:{}", named, view.text(option.name));
-                        graph.insert(key.to_owned(), read);
-                        labels.insert(key, named.to_owned());
+                        graph.insert(key.to_string(), read);
+                        labels.insert(key, named.to_string());
                     }
                 }
             },
@@ -342,13 +342,13 @@ pub(crate) fn host_ring_reach(graph: &collections::BTreeMap<String, Vec<String>>
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || vec![].into());
-    path.push(at.to_owned());
+    path.push(at.to_string());
     for step in next.iter() {
         let ring = host_ring_reach(graph, labels, step, path, done);
         if !ring.is_empty() { return ring; }
     }
     path.pop();
-    done.insert(at.to_owned());
+    done.insert(at.to_string());
     vec![]
 }
 
@@ -405,7 +405,7 @@ impl CheckState {
         for frame in self.scope.iter() {
             for local in frame.iter() {
                 let one = host_known(local);
-                if one.is_none() { held.remove(&local.name); } else { held.insert(local.name.to_owned(), match one { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+                if one.is_none() { held.remove(&local.name); } else { held.insert(local.name.to_string(), match one { Some(__nikaia_value) => __nikaia_value, None => continue }); }
             }
         }
         match host.evaluate(value, &held) {
@@ -430,8 +430,8 @@ impl CheckState {
         let nothing = CheckCompiled { answered: false, value: None, said: false };
         let ring = host_ring(world, value);
         if !ring.is_empty() {
-            let mut subject = (*nikaia_std::index::get(&ring, 0)).to_owned();
-            if !self.computing_default { for name in ring.iter() { if name == bound { subject = bound.to_owned(); } } }
+            let mut subject = (*nikaia_std::index::get(&ring, 0)).to_string();
+            if !self.computing_default { for name in ring.iter() { if name == bound { subject = bound.to_string(); } } }
             self.a_constant_built_from_itself(&subject, &ring, span);
             return CheckCompiled { answered: true, value: None, said: true };
         }
@@ -464,7 +464,7 @@ impl CheckState {
                 self.a_file_this_build_may_not_read(&path, &match got.denied { Some(__nikaia_value) => __nikaia_value, None => continue }, span);
                 return CheckCompiled { answered: true, value: None, said: true };
             }
-            read.insert(path.to_owned(), nikaia_std::index::or(got.text, || "".into()));
+            read.insert(path.to_string(), nikaia_std::index::or(got.text, || "".into()));
         }
         let rewritten = host.assets_read_in(value, &read);
         let mut outermost: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
@@ -473,8 +473,8 @@ impl CheckState {
             for local in (*nikaia_std::index::get(&self.scope, 0)).iter() {
                 let one = host_known(local);
                 if one.is_some() {
-                    outermost.insert(local.name.to_owned(), match one { Some(__nikaia_value) => __nikaia_value, None => continue });
-                    typed.insert(local.name.to_owned(), local.ty.clone());
+                    outermost.insert(local.name.to_string(), match one { Some(__nikaia_value) => __nikaia_value, None => continue });
+                    typed.insert(local.name.to_string(), local.ty.clone());
                 }
             }
         }
@@ -513,12 +513,12 @@ impl CheckState {
         }
         let line = host_stopped_line(said);
         let mut place: String = String::from("");
-        let mut why: String = line.to_owned();
+        let mut why: String = line.to_string();
         let cut = nikaia_std::search::find(&line, &": the program stopped: ", 0);
         if cut.is_some() {
             let at = nikaia_std::index::or(cut, || 0);
-            place = nikaia_std::index::get(&line, nikaia_std::index::at(0..at)).to_owned();
-            why = nikaia_std::index::get(&line, nikaia_std::index::at(at + ": the program stopped: ".len() as i64..)).to_owned();
+            place = nikaia_std::index::get(&line, nikaia_std::index::at(0..at)).to_string();
+            why = nikaia_std::index::get(&line, nikaia_std::index::at(at + ": the program stopped: ".len() as i64..)).to_string();
         }
         let found = check_walked_place_of(world, &place, here);
         self.a_build_time_run_that_stopped_at(bound, &why, found.at, (found.function).as_deref(), span);

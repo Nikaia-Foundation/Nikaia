@@ -25,9 +25,9 @@ pub fn callee_named(names: &winnow_grammar::InternerContext, name: String, own: 
     if own.functions.contains_key(&name) { return Some(Callee::Own(name)); }
     let constructed = format!("{}::new", name);
     if own.functions.contains_key(&constructed) { return Some(Callee::Own(constructed)); }
-    for written in [name.to_owned(), constructed] {
+    for written in [name.to_string(), constructed] {
         let contract = match *nikaia_std::index::get(&library.functions, &written) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        return Some(Callee::Library { key: written.to_owned(), never_pauses: contract.sync_claim.is_sync() });
+        return Some(Callee::Library { key: written.to_string(), never_pauses: contract.sync_claim.is_sync() });
     }
     if names_a_variant(names, &name, own, library, items) { return None; }
     Some(Callee::Opaque(Some(name)))
@@ -35,7 +35,7 @@ pub fn callee_named(names: &winnow_grammar::InternerContext, name: String, own: 
 
 pub(crate) fn called_name(names: &winnow_grammar::InternerContext, func: &Expr) -> Option<String> {
     match func {
-        Expr::Variable(symbol, _) => { let symbol = *symbol; Some(names.resolve(symbol).to_owned()) },
+        Expr::Variable(symbol, _) => { let symbol = *symbol; Some(names.resolve(symbol).to_string()) },
         Expr::Path(segments, _) => Some(written_path(names, segments)),
         _ => None,
     }
@@ -53,7 +53,7 @@ pub(crate) fn written_path(names: &winnow_grammar::InternerContext, segments: &[
 
 pub(crate) fn names_a_variant(names: &winnow_grammar::InternerContext, name: &str, own: &Ledger, library: &Ledger, items: &[Spanned<Item>]) -> bool {
     let mut parts: Vec<String> = vec![];
-    for part in name.split("::") { parts.push(part.to_owned()); }
+    for part in name.split("::") { parts.push(part.to_string()); }
     if parts.len() < 2 || own.functions.contains_key(name) { return false; }
     let declared = struct_type(name);
     if library.types.contains_key(&declared) || own.types.contains_key(&declared) { return true; }

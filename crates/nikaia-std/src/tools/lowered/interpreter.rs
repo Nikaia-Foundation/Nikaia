@@ -30,7 +30,7 @@ pub(crate) fn statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, de
             let mut bound: Vec<String> = vec![];
             for n in names.iter() {
                 let n = *n;
-                bound.push(words.resolve(n).to_owned());
+                bound.push(words.resolve(n).to_string());
             }
             out.push(format!("[Nikaia Runtime] Bind: {} = <evaluated>", bound.join(", ")));
             expression(value, words, debug, format_of, out);

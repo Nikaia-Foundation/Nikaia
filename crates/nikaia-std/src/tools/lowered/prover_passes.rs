@@ -50,7 +50,7 @@ pub(crate) fn strike_broken(state: &mut ProverState) {
         let (function, index) = nikaia_std::index::get(&broken, nikaia_std::index::at(k)); let index = nikaia_std::num::value(index);
         let mut posts = match state.postconditions.remove(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
         posts.remove(nikaia_std::count::of(index));
-        state.postconditions.insert(function.to_owned(), posts);
+        state.postconditions.insert(function.to_string(), posts);
     }
     state.broken = collections::BTreeSet::new();
 }
@@ -62,7 +62,7 @@ pub(crate) fn precondition_texts(arena: &TermArena, m: &collections::BTreeMap<St
     for (function, pre) in m.iter() {
         let mut claims: Vec<String> = vec![];
         for claim in pre.claims.iter() { claims.push(arena.text(claim.term)); }
-        out.push((function.to_owned(), claims));
+        out.push((function.to_string(), claims));
     }
     out
 }
@@ -75,10 +75,10 @@ pub(crate) fn checked_entries(walk: &ProverWalk, escape: &impl Fn(&str) -> Strin
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             walk.arena.variables(claim.term, &mut read);
             let mut operands: Vec<(String, String)> = vec![];
-            for name in read.iter() { operands.push((name.to_owned(), rust_of_name(name, escape))); }
+            for name in read.iter() { operands.push((name.to_string(), rust_of_name(name, escape))); }
             checks.push(PreconditionCheck { rust: rust_text(&walk.arena, claim.term, escape), written: claim.failure(function), message: claim_text_of((claim.message).as_deref()), operands });
         }
-        entries.insert(function.to_owned(), checks);
+        entries.insert(function.to_string(), checks);
     }
     entries
 }
@@ -91,15 +91,15 @@ pub(crate) fn published_contracts(walk: &ProverWalk) -> collections::BTreeMap<St
             entry.requires.push(ledger_term_text(&walk.arena, claim.term));
             entry.from.push(format!("assert({})", claim.written));
         }
-        published.insert(function.to_owned(), entry);
+        published.insert(function.to_string(), entry);
     }
     for (function, posts) in walk.state.postconditions.iter() {
         if posts.is_empty() { continue; }
         let mut entry = nikaia_std::index::or(published.remove(function), || Published::nothing());
         for post in posts.iter() { entry.ensures.push(ledger_term_text(&walk.arena, post.term)); }
-        published.insert(function.to_owned(), entry);
+        published.insert(function.to_string(), entry);
     }
-    for (function, _) in walk.state.summaries.iter() { if !published.contains_key(function) { published.insert(function.to_owned(), Published::nothing()); } }
+    for (function, _) in walk.state.summaries.iter() { if !published.contains_key(function) { published.insert(function.to_string(), Published::nothing()); } }
     let mut out: collections::BTreeMap<String, Published> = collections::BTreeMap::new();
     for (function, entry) in published.iter() {
         let mut full = entry.clone();
@@ -110,7 +110,7 @@ pub(crate) fn published_contracts(walk: &ProverWalk) -> collections::BTreeMap<St
             None => None,
         }, || vec![].into());
         for exit in exits.iter() { full.inferred.push(ledger_term_text(&walk.arena, exit.term)); }
-        out.insert(function.to_owned(), full);
+        out.insert(function.to_string(), full);
     }
     out
 }
@@ -124,7 +124,7 @@ pub(crate) fn count_checked_calls(walk: &mut ProverWalk) {
             CallReach::Checked(_) => {
                 let (callee, _) = key;
                 let so_far = nikaia_std::index::or(*nikaia_std::index::get(&checked, callee), || 0);
-                checked.insert(callee.to_owned(), so_far + 1);
+                checked.insert(callee.to_string(), so_far + 1);
             },
             _ => { },
         }
@@ -132,7 +132,7 @@ pub(crate) fn count_checked_calls(walk: &mut ProverWalk) {
     let mut counted: collections::BTreeMap<(i64, i64), ClaimHeld> = collections::BTreeMap::new();
     for (key, held) in walk.held.iter() {
         let now = match held {
-            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.to_owned(), nikaia_std::index::or(*nikaia_std::index::get(&checked, function), || 0)),
+            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.to_string(), nikaia_std::index::or(*nikaia_std::index::get(&checked, function), || 0)),
             _ => held.clone(),
         };
         counted.insert(key.clone(), now);

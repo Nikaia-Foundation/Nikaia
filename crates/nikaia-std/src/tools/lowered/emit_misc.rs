@@ -5,7 +5,7 @@ pub fn is_reserved(name: &str) -> bool { matches!(name, "abstract" | "async" | "
 
 pub fn escaped_name(name: &str) -> String {
     if is_reserved(name) { return format!("r#{}", name); }
-    name.to_owned()
+    name.to_string()
 }
 
 pub fn emit_local_name(comptimes: &collections::BTreeSet<String>, name: &str) -> String {
@@ -84,7 +84,7 @@ impl EmitState {
         signature.params.len() == 1 && nikaia_std::index::get(&signature.params, 0).0 == "input"
     }
     pub fn enclosing_shape_walk(&self, on: &str) -> Option<String> {
-        for key in self.facts.unrolled.keys() { if key.1 == on { return Some(key.0.to_owned()); } }
+        for key in self.facts.unrolled.keys() { if key.1 == on { return Some(key.0.to_string()); } }
         None
     }
     pub fn unrolls_here(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
@@ -95,7 +95,7 @@ impl EmitState {
                 let member = world.words.resolve(*nikaia_std::index::get(&segments, 1));
                 if parameter != name || member != "fields" && member != "variants" { return None; }
                 let walk = match self.enclosing_shape_walk(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let found = match self.facts.unrolled.get(&(walk, on.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let found = match self.facts.unrolled.get(&(walk, on.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 return Some(found.to_owned());
             },
             _ => { },
@@ -116,8 +116,8 @@ impl EmitState {
                 let (owner, variant) = self.boxed_owner(world, path);
                 if owner.is_empty() { return out; }
                 for each in fields.iter() {
-                    let field = world.words.resolve(each.name).to_owned();
-                    let mut member = field.to_owned();
+                    let field = world.words.resolve(each.name).to_string();
+                    let mut member = field.to_string();
                     if !variant.is_empty() { member = boxed_member(&variant, -1, &field); }
                     if self.is_boxed(&owner, &member) && self.binds_one_name(&each.pat) { out.extend(self.single_binding(world, &each.pat)); } else { out.extend(self.boxed_bindings(world, &each.pat)); }
                 }
@@ -140,15 +140,15 @@ impl EmitState {
         }
     }
     pub(crate) fn binding_if_named(&self, world: &EmitWorld<'_, '_, '_, '_>, one: &[winnow_grammar::Symbol]) -> Vec<String> {
-        let name = world.words.resolve(*nikaia_std::index::get(&one, 0)).to_owned();
+        let name = world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string();
         if name == "_" { return vec![]; }
         vec![escaped_name(&name)]
     }
     pub(crate) fn boxed_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> (String, String) {
         if path.is_empty() { return (String::from(""), String::from("")); }
-        let last = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned();
+        let last = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string();
         if path.len() >= 2 {
-            let owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_owned();
+            let owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string();
             if self.facts.boxed_members.contains_key(&owner) { return (owner, last); }
         }
         (last, String::from(""))
@@ -174,22 +174,22 @@ impl EmitState {
     }
     pub fn attribute_in_rust(&self, world: &EmitWorld<'_, '_, '_, '_>, written: &str) -> String {
         let pieces: Vec<&str> = written.split(" { ").collect::<Vec<_>>();
-        let name = (*nikaia_std::index::get(&pieces, 0)).to_owned();
+        let name = (*nikaia_std::index::get(&pieces, 0)).to_string();
         let mut inside: String = String::from("");
         if pieces.len() > 1 {
             let mut rest: Vec<String> = vec![];
-            for at in 1..pieces.len() as i64 { rest.push((*nikaia_std::index::get(&pieces, (at) as usize)).to_owned()); }
+            for at in 1..pieces.len() as i64 { rest.push((*nikaia_std::index::get(&pieces, (at) as usize)).to_string()); }
             let joined = rest.join(" { ");
             let stripped = joined.strip_suffix(" }");
-            if stripped.is_some() { inside = nikaia_std::index::or(stripped, || "").to_owned(); } else { inside = joined.to_owned(); }
+            if stripped.is_some() { inside = nikaia_std::index::or(stripped, || "").to_string(); } else { inside = joined.to_string(); }
         }
         let mut fields: Vec<String> = vec![];
         for part in top_level_parts(&inside) {
             let halves: Vec<&str> = part.split(": ").collect::<Vec<_>>();
             if halves.len() < 2 { continue; }
-            let field = (*nikaia_std::index::get(&halves, 0)).to_owned();
+            let field = (*nikaia_std::index::get(&halves, 0)).to_string();
             let mut value_parts: Vec<String> = vec![];
-            for at in 1..halves.len() as i64 { value_parts.push((*nikaia_std::index::get(&halves, (at) as usize)).to_owned()); }
+            for at in 1..halves.len() as i64 { value_parts.push((*nikaia_std::index::get(&halves, (at) as usize)).to_string()); }
             let value = value_parts.join(": ");
             let ty = emit_field_type((self.field_contract(world, &name, &field)).as_ref());
             fields.push(format!("{}: {}", escaped_name(&field), held_literal(&value, &ty)));

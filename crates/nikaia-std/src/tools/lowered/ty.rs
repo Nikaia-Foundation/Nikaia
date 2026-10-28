@@ -26,9 +26,9 @@ impl Shape {
     pub fn meets(&self, wanted: &Shape) -> bool { self.missing(wanted).is_empty() }
     pub fn missing(&self, wanted: &Shape) -> Vec<String> {
         let mut words: Vec<String> = vec![];
-        if wanted.ends && !self.ends { words.push(ENDS.to_owned()); }
-        if wanted.sized && !self.sized { words.push(SIZED.to_owned()); }
-        if wanted.replays && !self.replays { words.push(REPLAYS.to_owned()); }
+        if wanted.ends && !self.ends { words.push(ENDS.to_string()); }
+        if wanted.sized && !self.sized { words.push(SIZED.to_string()); }
+        if wanted.replays && !self.replays { words.push(REPLAYS.to_string()); }
         words
     }
 }
@@ -166,11 +166,11 @@ pub fn split_args(written: &str) -> Vec<String> {
             if depth > 0 { depth -= 1; }
             current.push(c);
         } else if c == ',' && depth == 0 {
-            parts.push(current.trim().to_owned());
+            parts.push(current.trim().to_string());
             current = String::from("");
         } else { current.push(c); }
     }
-    if !current.trim().is_empty() { parts.push(current.trim().to_owned()); }
+    if !current.trim().is_empty() { parts.push(current.trim().to_string()); }
     parts
 }
 
@@ -180,16 +180,16 @@ pub fn a_view_of(written: &str) -> Option<String> {
         let close = closing(&c, 4, ')');
         if close >= 0 {
             let rest = between(&c, close + 1, c.len() as i64);
-            return Some(rest.trim_start().to_owned());
+            return Some(rest.trim_start().to_string());
         }
     }
     if written.starts_with("ref ") {
         let rest = cut(written, 4, 0);
-        return Some(rest.trim_start().to_owned());
+        return Some(rest.trim_start().to_string());
     }
     if written.starts_with('&') {
         let rest = cut(written, 1, 0);
-        return Some(rest.trim_start().to_owned());
+        return Some(rest.trim_start().to_string());
     }
     None
 }
@@ -232,24 +232,24 @@ pub(crate) fn word_off(tail: &str, word: &str) -> Option<String> {
     let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
     let shorter = between(&c, 0, c.len() as i64 - w.len() as i64);
     if shorter.is_empty() { return Some(shorter); }
-    if (*nikaia_std::index::get(&c, nikaia_std::index::at(c.len() as i64 - w.len() as i64 - 1))).is_whitespace() { return Some(shorter.trim_end().to_owned()); }
+    if (*nikaia_std::index::get(&c, nikaia_std::index::at(c.len() as i64 - w.len() as i64 - 1))).is_whitespace() { return Some(shorter.trim_end().to_string()); }
     None
 }
 
 pub(crate) fn pointed_at(viewed: &str) -> Option<Ty> {
     let __keep_frame = nikaia_std::tether::Keep::new();
-    let mut rest: String = viewed.to_owned();
+    let mut rest: String = viewed.to_string();
     let mut mutable = false;
     if rest.starts_with("mut ") {
         mutable = true;
         let shorter = __keep_frame.put(cut(&rest, 4, 0));
-        rest = shorter.trim_start().to_owned();
+        rest = shorter.trim_start().to_string();
     }
     let mut absent = false;
     if rest.ends_with('?') {
         absent = true;
         let shorter = __keep_frame.put(cut(&rest, 0, 1));
-        rest = shorter.trim_end().to_owned();
+        rest = shorter.trim_end().to_string();
     }
     let mut slice = false;
     let mut inner: String = String::from("");
@@ -265,7 +265,7 @@ pub(crate) fn pointed_at(viewed: &str) -> Option<Ty> {
         inner = cut(&rest, 1, 1);
     }
     if !mutable && !slice { return None; }
-    if !slice { inner = rest.to_owned(); }
+    if !slice { inner = rest.to_string(); }
     let item = parse(&inner);
     if absent { return Some(Ty::Pointed { item: Box::new(Ty::Nullable(Box::new(item))), slice, mutable }); }
     Some(Ty::Pointed { item: Box::new(item), slice, mutable })
@@ -276,7 +276,7 @@ pub(crate) fn a_function(written: &str) -> Option<Ty> {
     let close = closing(&c, 3, ')');
     if close < 0 { return None; }
     let after = between(&c, close + 1, c.len() as i64);
-    let mut tail: String = after.trim().to_owned();
+    let mut tail: String = after.trim().to_string();
     let mut is_sync = false;
     let mut can_throw = false;
     while !tail.is_empty() {
@@ -306,13 +306,13 @@ pub(crate) fn a_sequence(written: &str, word: &str, parallel: bool) -> Option<Ty
     if !written.starts_with(word) { return None; }
     let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
     let after_word = cut(written, w.len() as i64, 0);
-    let rest: String = after_word.trim_start().to_owned();
+    let rest: String = after_word.trim_start().to_string();
     if !rest.starts_with('[') { return None; }
     let c: Vec<scalar> = nikaia_std::list::chars(rest.chars());
     let close = closing(&c, 1, ']');
     if close < 0 { return None; }
     let after = between(&c, close + 1, c.len() as i64);
-    let mut tail: String = after.trim().to_owned();
+    let mut tail: String = after.trim().to_string();
     let mut is_sync = false;
     let mut pauses = false;
     let mut can_throw = false;
@@ -367,17 +367,17 @@ pub(crate) fn a_sequence(written: &str, word: &str, parallel: bool) -> Option<Ty
 
 pub(crate) fn a_name(rest: &str, view: bool) -> Ty {
     if rest.starts_with('$') && rest.len() > 1 { return Ty::Var { name: cut(rest, 1, 0), view }; }
-    if view && rest == TEXT { return Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true }; }
+    if view && rest == TEXT { return Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true }; }
     if rest == "char" { return Ty::Named { name: String::from("scalar"), args: vec![], view }; }
-    if !rest.ends_with(']') { return Ty::Named { name: rest.to_owned(), args: vec![], view }; }
+    if !rest.ends_with(']') { return Ty::Named { name: rest.to_string(), args: vec![], view }; }
     let c: Vec<scalar> = nikaia_std::list::chars(rest.chars());
     let mut open: i64 = -1;
     for at in 0..c.len() as i64 { if open < 0 && *nikaia_std::index::get(&c, (at) as usize) == '[' { open = at; } }
     if open >= 0 {
         let named_text = between(&c, 0, open);
-        return Ty::Named { name: named_text.trim().to_owned(), args: each(&split_args(&between(&c, open + 1, c.len() as i64 - 1))), view };
+        return Ty::Named { name: named_text.trim().to_string(), args: each(&split_args(&between(&c, open + 1, c.len() as i64 - 1))), view };
     }
-    Ty::Named { name: rest.to_owned(), args: vec![], view }
+    Ty::Named { name: rest.to_string(), args: vec![], view }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -579,7 +579,7 @@ pub struct VariantContract {
 
 impl VariantContract {
     pub fn text(&self) -> String {
-        if self.holds.is_empty() { return self.name.to_owned(); }
+        if self.holds.is_empty() { return self.name.to_string(); }
         let mut parts: String = String::from("");
         for field in self.holds.iter() {
             if !parts.is_empty() { parts.push_str(", "); }
@@ -771,7 +771,7 @@ impl Ty {
     }
     pub fn owned(&self) -> Ty {
         match self {
-            Ty::Named { name, args, view } => { let view = *view; if view && name == TEXT_VIEW && args.is_empty() { Ty::Named { name: TEXT.to_owned(), args: vec![], view: false } } else if view { Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false } } else { self.clone() } },
+            Ty::Named { name, args, view } => { let view = *view; if view && name == TEXT_VIEW && args.is_empty() { Ty::Named { name: TEXT.to_string(), args: vec![], view: false } } else if view { Ty::Named { name: name.to_string(), args: args.to_owned(), view: false } } else { self.clone() } },
             _ => self.clone(),
         }
     }
@@ -881,9 +881,9 @@ impl Ty {
 }
 
 pub(crate) fn viewed_name(name: &str, args: &[Ty], view: bool) -> Ty {
-    if view { return Ty::Named { name: name.to_owned(), args: args.to_owned(), view: true }; }
-    if args.is_empty() && (name == TEXT || name.ends_with("::String")) { return Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true }; }
-    Ty::Named { name: name.to_owned(), args: args.to_owned(), view: true }
+    if view { return Ty::Named { name: name.to_string(), args: args.to_owned(), view: true }; }
+    if args.is_empty() && (name == TEXT || name.ends_with("::String")) { return Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true }; }
+    Ty::Named { name: name.to_string(), args: args.to_owned(), view: true }
 }
 
 pub(crate) fn a_tuple(ty: &Ty) -> bool { matches!(ty, Ty::Tuple(_)) }
@@ -1001,7 +1001,7 @@ pub(crate) fn erased_each(parts: &[Ty], parameters: &collections::BTreeSet<Strin
 
 pub(crate) fn erased_name(name: &str, args: &[Ty], view: bool, parameters: &collections::BTreeSet<String>) -> Ty {
     if args.is_empty() && parameters.contains(name) { return Ty::Unknown; }
-    Ty::Named { name: name.to_owned(), args: erased_each(args, parameters), view }
+    Ty::Named { name: name.to_string(), args: erased_each(args, parameters), view }
 }
 
 pub(crate) fn parameterised_each(parts: &[Ty], parameters: &collections::BTreeSet<String>) -> Vec<Ty> {
@@ -1011,13 +1011,13 @@ pub(crate) fn parameterised_each(parts: &[Ty], parameters: &collections::BTreeSe
 }
 
 pub(crate) fn parameterised_name(name: &str, args: &[Ty], view: bool, parameters: &collections::BTreeSet<String>) -> Ty {
-    if args.is_empty() && parameters.contains(name) { return Ty::Var { name: name.to_owned(), view }; }
-    Ty::Named { name: name.to_owned(), args: parameterised_each(args, parameters), view }
+    if args.is_empty() && parameters.contains(name) { return Ty::Var { name: name.to_string(), view }; }
+    Ty::Named { name: name.to_string(), args: parameterised_each(args, parameters), view }
 }
 
 pub fn bind(pattern: &Ty, actual: &Ty, out: &mut collections::BTreeMap<String, Ty>) {
     match pattern {
-        Ty::Var { name, .. } => { if !out.contains_key(name) { out.insert(name.to_owned(), actual.clone()); } },
+        Ty::Var { name, .. } => { if !out.contains_key(name) { out.insert(name.to_string(), actual.clone()); } },
         Ty::Named { name, args, .. } => { bind_named(name, args, actual, out); },
         Ty::Seq { item, .. } => {
             let item = nikaia_std::boxed::open(item);
@@ -1078,7 +1078,7 @@ pub(crate) fn bind_code(pattern_params: &[Ty], pattern_result: Option<&Ty>, actu
 pub fn substitute(ty: &Ty, bound: &collections::BTreeMap<String, Ty>) -> Ty {
     match ty {
         Ty::Var { name, view } => { let view = *view; substituted(name, view, bound) },
-        Ty::Named { name, args, view } => { let view = *view; Ty::Named { name: name.to_owned(), args: substituted_each(args, bound), view } },
+        Ty::Named { name, args, view } => { let view = *view; Ty::Named { name: name.to_string(), args: substituted_each(args, bound), view } },
         Ty::Tuple(parts) => Ty::Tuple(substituted_each(parts, bound)),
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; Ty::Pointed { item: Box::new(substitute(item, bound)), slice, mutable } },
         Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; Ty::Fn { params: substituted_each(params, bound), result: Box::new(substituted_result((result).as_ref(), bound)), is_sync, can_throw } },
@@ -1096,7 +1096,7 @@ pub(crate) fn substituted(name: &str, view: bool, bound: &collections::BTreeMap<
     }, || Ty::Unknown);
     if view {
         match found {
-            Ty::Named { ref name, ref args, .. } => { return Ty::Named { name: name.to_owned(), args: args.to_owned(), view: true }; },
+            Ty::Named { ref name, ref args, .. } => { return Ty::Named { name: name.to_string(), args: args.to_owned(), view: true }; },
             _ => { },
         }
     }
@@ -1127,7 +1127,7 @@ pub fn qualify(ty: &Ty, module: &str, declared: &collections::BTreeSet<String>) 
 
 pub(crate) fn qualified_name(name: &str, module: &str, declared: &collections::BTreeSet<String>) -> String {
     if declared.contains(name) { return format!("{}::{}", module, name); }
-    name.to_owned()
+    name.to_string()
 }
 
 pub(crate) fn qualified_each(parts: &[Ty], module: &str, declared: &collections::BTreeSet<String>) -> Vec<Ty> {
@@ -1172,10 +1172,10 @@ pub(crate) fn renamed_path(name: &str, renames: &collections::BTreeMap<String, S
                 let rest = between(&c, at, c.len() as i64);
                 return format!("{}{}", ours, rest);
             }
-            return name.to_owned();
+            return name.to_string();
         }
     }
-    name.to_owned()
+    name.to_string()
 }
 
 pub(crate) fn renamed_each(parts: &[Ty], renames: &collections::BTreeMap<String, String>) -> Vec<Ty> {
@@ -1199,9 +1199,9 @@ pub struct MethodIndex {
 pub fn method_index(ledger: &Ledger) -> MethodIndex {
     let mut keys: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (key, _) in ledger.functions.iter() {
-        let last = nikaia_std::index::or(key.rsplit("::").next(), || "").to_owned();
+        let last = nikaia_std::index::or(key.rsplit("::").next(), || "").to_string();
         let mut held = nikaia_std::index::or(keys.remove(&last), || vec![].into());
-        held.push(key.to_owned());
+        held.push(key.to_string());
         keys.insert(last, held);
     }
     MethodIndex { keys }
@@ -1212,7 +1212,7 @@ pub fn method_keys(index: &MethodIndex, method: &str) -> Vec<String> {
     let bucket = match *nikaia_std::index::get(&index.keys, last) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let suffix = format!("::{}", method);
     let mut out: Vec<String> = vec![];
-    for key in bucket.iter() { if key.ends_with(&suffix) { out.push(key.to_owned()); } }
+    for key in bucket.iter() { if key.ends_with(&suffix) { out.push(key.to_string()); } }
     out
 }
 

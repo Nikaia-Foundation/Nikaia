@@ -48,7 +48,7 @@ pub fn lg_loop_primed(arena: &mut TermArena, problem: &LgLoop, term: i64) -> i64
     let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for name in problem.state.iter() {
         let primed = arena.var(&lg_primed(name));
-        given.insert(name.to_owned(), primed);
+        given.insert(name.to_string(), primed);
     }
     arena.substitute(term, &given)
 }
@@ -129,11 +129,11 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
         let goal = nikaia_std::num::value(goal);
         arena.variables(goal, &mut read);
     }
-    for name in problem.state.iter() { read.insert(name.to_owned()); }
+    for name in problem.state.iter() { read.insert(name.to_string()); }
     let mut primed_names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in problem.state.iter() { primed_names.insert(lg_primed(name)); }
     let mut head: Vec<String> = vec![];
-    for name in read.iter() { if !primed_names.contains(name) { head.push(name.to_owned()); } }
+    for name in read.iter() { if !primed_names.contains(name) { head.push(name.to_string()); } }
     let mut sorts: Vec<&'static str> = vec![];
     let mut bound: Vec<String> = vec![];
     let mut at_head: Vec<String> = vec![];
@@ -176,13 +176,13 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
 
 pub(crate) fn lg_horn_and(arena: &TermArena, parts: &[i64], first: &str) -> String {
     let mut written: Vec<String> = vec![];
-    if !first.is_empty() { written.push(first.to_owned()); }
+    if !first.is_empty() { written.push(first.to_string()); }
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(lg_term(arena, part));
     }
     if written.is_empty() { return String::from("true"); }
-    if written.len() == 1 { return (*nikaia_std::index::get(&written, 0)).to_owned(); }
+    if written.len() == 1 { return (*nikaia_std::index::get(&written, 0)).to_string(); }
     format!("(and {})", written.join(" "))
 }
 

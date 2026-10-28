@@ -65,7 +65,7 @@ impl<'a> FbWidths<'a> {
         let found = self.known.get(&name);
         if found.is_some() { return nikaia_std::index::or(found, || 0); }
         if self.open.contains(&name) { return 0u64; }
-        self.open.insert(name.to_owned());
+        self.open.insert(name.to_string());
         let held = self.rules.get(&name);
         if held.is_none() {
             self.open.remove(&name);
@@ -80,7 +80,7 @@ impl<'a> FbWidths<'a> {
             first = false;
         }
         self.open.remove(&name);
-        if self.open.is_empty() { self.known.insert(name.to_owned(), w); }
+        if self.open.is_empty() { self.known.insert(name.to_string(), w); }
         w
     }
     pub(crate) fn pattern(&mut self, words: &'a winnow_grammar::InternerContext, pattern: &Pattern, boundary: u64) -> u64 {
@@ -120,7 +120,7 @@ impl<'a> FbWidths<'a> {
             Pattern::Fold(_) => return 0u64,
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
-                let called = words.resolve(name).to_owned();
+                let called = words.resolve(name).to_string();
                 if self.rules.contains_key(&called) { return self.rule(words, called, boundary); }
                 if args.is_empty() {
                     if called == "digit" || called == "hex_digit" || called == "any" || called == "char" || called == "alpha1" || called == "multispace1" { return 1u64; }
@@ -145,13 +145,13 @@ pub fn fb_least_width(source: &FbSource<'_, '_>, named: &str, rule: &str) -> Opt
 
 pub fn fb_rule_width(source: &FbSource<'_, '_>, def: &GrammarDef, rule: &str) -> Option<u64> {
     let mut rules: collections::BTreeMap<String, &GrammarRule> = collections::BTreeMap::new();
-    for r in def.rules.iter() { rules.insert(source.words.resolve(r.name).to_owned(), r); }
+    for r in def.rules.iter() { rules.insert(source.words.resolve(r.name).to_string(), r); }
     let element = match rules.get(rule) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut boundary: u64 = 0u64;
     let written = element.frame.as_ref().and_then(|__nikaia_it| __nikaia_it.boundary.as_deref());
     if written.is_some() { boundary = fb_literal_bytes(match written { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     let mut widths = FbWidths { rules, known: collections::BTreeMap::new(), open: collections::BTreeSet::new() };
-    Some(widths.rule(source.words, rule.to_owned(), boundary))
+    Some(widths.rule(source.words, rule.to_string(), boundary))
 }
 
 pub fn fb_most_steps(width: u64) -> u64 {
@@ -248,10 +248,10 @@ pub struct FbTy {
 
 impl FbTy {
     pub(crate) fn of(words: &winnow_grammar::InternerContext, ty: &Type) -> FbTy {
-        let written = words.resolve(ty.name).to_owned();
+        let written = words.resolve(ty.name).to_string();
         let mut args: Vec<FbTy> = vec![];
         for g in ty.generics.iter() { args.push(FbTy::of(words, g)); }
-        FbTy { name: nikaia_std::index::or(written.rsplit("::").next(), || "").to_owned(), args }
+        FbTy { name: nikaia_std::index::or(written.rsplit("::").next(), || "").to_string(), args }
     }
     pub(crate) fn named(name: String) -> FbTy { FbTy { name, args: vec![] } }
     pub(crate) fn is_map(&self) -> bool { (self.name == "HashMap" || self.name == "BTreeMap") && self.args.len() == 2 }
@@ -306,8 +306,8 @@ pub(crate) fn fb_literal_amount(value: &Expr) -> Option<FbAmount> {
 
 pub(crate) fn fb_field_name(words: &winnow_grammar::InternerContext, target: &Expr) -> Option<String> {
     match target {
-        Expr::Field { name, .. } => { let name = *name; Some(words.resolve(name).to_owned()) },
-        Expr::SafeField { name, .. } => { let name = *name; Some(words.resolve(name).to_owned()) },
+        Expr::Field { name, .. } => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::SafeField { name, .. } => { let name = *name; Some(words.resolve(name).to_string()) },
         _ => None,
     }
 }
@@ -399,7 +399,7 @@ pub struct FbIndex<'a, 'a1, 'a2> {
 
 pub(crate) fn fb_text_opt(words: &winnow_grammar::InternerContext, sym: Option<winnow_grammar::Symbol>) -> String {
     let held = match sym { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-    words.resolve(held).to_owned()
+    words.resolve(held).to_string()
 }
 
 pub(crate) fn fb_kept_by(ix: &FbIndex<'_, '_, '_>, callees: &[i64], i: i64) -> bool {
@@ -421,9 +421,9 @@ pub(crate) fn fb_vec_of(m: &collections::BTreeMap<String, Vec<i64>>, key: &str) 
 }
 
 impl<'a> FbIndex<'a, 'a, 'a> {
-    pub(crate) fn text(&self, sym: winnow_grammar::Symbol) -> String { self.words.resolve(sym).to_owned() }
+    pub(crate) fn text(&self, sym: winnow_grammar::Symbol) -> String { self.words.resolve(sym).to_string() }
     pub(crate) fn reach(&mut self, name: String, at: i64) {
-        if !self.reached_by.contains_key(&name) { self.reached_by.insert(name.to_owned(), collections::BTreeSet::new()); }
+        if !self.reached_by.contains_key(&name) { self.reached_by.insert(name.to_string(), collections::BTreeSet::new()); }
         let set = match nikaia_std::index::get_mut(&mut self.reached_by, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
         set.insert(at);
     }
@@ -435,38 +435,38 @@ impl<'a> FbIndex<'a, 'a, 'a> {
                 Item::Struct { name, fields, .. } => {
                     let name = *name;
                     let mut list: Vec<FbField<'_>> = vec![];
-                    for f in fields.iter() { list.push(FbField { name: words.resolve(f.name).to_owned(), ty: FbTy::of(words, &f.ty), default: f.default.as_ref().map(|__nikaia_it| &__nikaia_it.value) }); }
-                    ix.structs.insert(words.resolve(name).to_owned(), list);
+                    for f in fields.iter() { list.push(FbField { name: words.resolve(f.name).to_string(), ty: FbTy::of(words, &f.ty), default: f.default.as_ref().map(|__nikaia_it| &__nikaia_it.value) }); }
+                    ix.structs.insert(words.resolve(name).to_string(), list);
                 },
                 Item::Fn { name, receiver, args, body, .. } => {
                     let name = *name;
                     let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                     let at = item.span.start as i64;
-                    let called = words.resolve(held).to_owned();
-                    ix.free.insert(called.to_owned(), at);
+                    let called = words.resolve(held).to_string();
+                    ix.free.insert(called.to_string(), at);
                     ix.reach(called, at);
                     ix.fns.insert(at, FbFn { args, body, has_receiver: receiver.is_some(), owner: None });
                 },
                 Item::Impl { trait_name, target, methods } => {
                     let trait_name = *trait_name;
                     let owner = FbTy::of(words, target);
-                    ix.impls.insert(owner.name.to_owned());
+                    ix.impls.insert(owner.name.to_string());
                     for method in methods.iter() {
                         match &method.node {
                             Item::Fn { name, receiver, args, body, .. } => {
                                 let name = *name;
                                 let at = method.span.start as i64;
                                 let called = fb_text_opt(words, name);
-                                let key = fb_key(&owner.name.to_owned(), &called.to_owned());
+                                let key = fb_key(&owner.name.to_string(), &called.to_string());
                                 let mut here = fb_vec_of(&ix.methods, &key);
                                 here.push(at);
                                 ix.methods.insert(key, here);
-                                let mut reached = owner.name.to_owned();
+                                let mut reached = owner.name.to_string();
                                 if !called.is_empty() {
                                     let mut named = fb_vec_of(&ix.by_name, &called);
                                     named.push(at);
-                                    ix.by_name.insert(called.to_owned(), named);
-                                    reached = called.to_owned();
+                                    ix.by_name.insert(called.to_string(), named);
+                                    reached = called.to_string();
                                 }
                                 ix.reach(reached, at);
                                 if trait_name.is_some() { ix.implicit.insert(at); }
@@ -486,7 +486,7 @@ impl<'a> FbIndex<'a, 'a, 'a> {
         let held = self.structs.get(&name);
         if held.is_none() { return out; }
         let fields = match held { Some(__nikaia_value) => __nikaia_value, None => return out };
-        for f in fields.iter() { if f.ty.args.is_empty() && fb_is_whole(&f.ty.name.to_owned()) { out.push(f); } }
+        for f in fields.iter() { if f.ty.args.is_empty() && fb_is_whole(&f.ty.name.to_string()) { out.push(f); } }
         out
     }
     pub(crate) fn field_type(&self, of: &'a FbTy, field: String) -> Option<FbTy> {
@@ -497,7 +497,7 @@ impl<'a> FbIndex<'a, 'a, 'a> {
     pub(crate) fn methods_of(&self, ty: Option<&FbTy>, method: String) -> Vec<i64> {
         if ty.is_none() { return fb_vec_of(&self.by_name, &method); }
         let t = match ty { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-        if self.impls.contains(&t.name) { return fb_vec_of(&self.methods, &fb_key(&t.name.to_owned(), &method)); }
+        if self.impls.contains(&t.name) { return fb_vec_of(&self.methods, &fb_key(&t.name.to_string(), &method)); }
         vec![]
     }
     pub(crate) fn callees(&self, func: &Expr) -> Vec<i64> {
@@ -505,7 +505,7 @@ impl<'a> FbIndex<'a, 'a, 'a> {
             Expr::Variable(name, _) => {
                 let name = *name;
                 let written = self.text(name);
-                if self.impls.contains(&written) || self.structs.contains_key(&written) { return fb_vec_of(&self.methods, &fb_key(&written.to_owned(), "")); }
+                if self.impls.contains(&written) || self.structs.contains_key(&written) { return fb_vec_of(&self.methods, &fb_key(&written.to_string(), "")); }
                 let at = self.free.get(&written);
                 if at.is_none() { return vec![]; }
                 return vec![nikaia_std::index::or(at, || 0)];
@@ -569,13 +569,13 @@ pub(crate) fn fb_unref(expr: &Expr) -> &Expr {
 
 pub(crate) fn fb_acc_name(words: &winnow_grammar::InternerContext, init: &Expr) -> Option<String> {
     match init {
-        Expr::Variable(name, _) => { let name = *name; return Some(words.resolve(name).to_owned()) },
-        Expr::StructLit { name, .. } => { let name = *name; return Some(words.resolve(name).to_owned()) },
+        Expr::Variable(name, _) => { let name = *name; return Some(words.resolve(name).to_string()) },
+        Expr::StructLit { name, .. } => { let name = *name; return Some(words.resolve(name).to_string()) },
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             if !args.is_empty() { return None; }
             match func {
-                Expr::Variable(name, _) => { let name = *name; return Some(words.resolve(name).to_owned()) },
+                Expr::Variable(name, _) => { let name = *name; return Some(words.resolve(name).to_string()) },
                 _ => return None,
             }
         },
@@ -586,13 +586,13 @@ pub(crate) fn fb_acc_name(words: &winnow_grammar::InternerContext, init: &Expr) 
 impl FbWalk {
     pub(crate) fn touched(&self) -> collections::BTreeSet<String> {
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-        for (name, _) in self.k.iter() { out.insert(name.to_owned()); }
-        for name in self.dead.iter() { out.insert(name.to_owned()); }
+        for (name, _) in self.k.iter() { out.insert(name.to_string()); }
+        for name in self.dead.iter() { out.insert(name.to_string()); }
         out
     }
     pub(crate) fn poison(&mut self, field: String) { self.dead.insert(field); }
     pub(crate) fn grow(&mut self, field: String, amount: u64, negative: bool) {
-        if negative && amount > 0u64 { self.lowered.insert(field.to_owned()); }
+        if negative && amount > 0u64 { self.lowered.insert(field.to_string()); }
         if self.dead.contains(&field) { return; }
         let before = nikaia_std::index::or(self.k.get(&field), || 0);
         let after = before.checked_add(amount);
@@ -744,7 +744,7 @@ impl FbWalk {
             let stated = match amount { Some(__nikaia_value) => __nikaia_value, None => return };
             {
                 let lowers = stated.negative != (kind == 2);
-                self.grow(field.to_owned(), stated.amount, lowers);
+                self.grow(field.to_string(), stated.amount, lowers);
                 match target {
                     Expr::Field { base, .. } => {
                         let base = nikaia_std::boxed::open(base);
@@ -752,7 +752,7 @@ impl FbWalk {
                             Expr::Variable(..) => {
                                 let mut here = fb_vec_of(&self.sites, &field);
                                 here.push(at);
-                                self.sites.insert(field.to_owned(), here);
+                                self.sites.insert(field.to_string(), here);
                             },
                             _ => { },
                         }
@@ -802,7 +802,7 @@ impl FbWalk {
                 if held.is_some() {
                     let lambda = match held { Some(__nikaia_value) => __nikaia_value, None => return };
                     once = lambda.once;
-                    for b in lambda.bound.iter() { inner.insert(b.name.to_owned(), b.ty.clone()); }
+                    for b in lambda.bound.iter() { inner.insert(b.name.to_string(), b.ty.clone()); }
                     self.lambdas.remove(&at);
                 }
                 self.block(host, ix, body, &inner, looped || !once);
@@ -813,7 +813,7 @@ impl FbWalk {
                 if ty == "Self" {
                     ty = String::from("");
                     let own = env.get("self");
-                    if own.is_some() { ty = match own { Some(__nikaia_value) => __nikaia_value, None => return }.name.to_owned(); }
+                    if own.is_some() { ty = match own { Some(__nikaia_value) => __nikaia_value, None => return }.name.to_string(); }
                 }
                 for field in ix.whole_fields(ty) {
                     let mut amount: Option<FbAmount> = None;
@@ -827,8 +827,8 @@ impl FbWalk {
                     if !written && field.default.is_some() { amount = fb_literal_amount(match field.default { Some(__nikaia_value) => __nikaia_value, None => return }); }
                     if amount.is_some() && !looped {
                         let stated = match amount { Some(__nikaia_value) => __nikaia_value, None => return };
-                        self.grow(field.name.to_owned(), stated.amount, stated.negative);
-                    } else { self.poison(field.name.to_owned()); }
+                        self.grow(field.name.to_string(), stated.amount, stated.negative);
+                    } else { self.poison(field.name.to_string()); }
                 }
             },
             Expr::With { fields, .. } => { for f in fields.iter() { self.poison(ix.text(f.name)); } },
@@ -925,21 +925,21 @@ impl FbMerge {
                 _ => { },
             }
             if rebinds { self.broken = true; }
-            let field = self.sum_of_both(ix, &stmt.node, other.to_owned());
+            let field = self.sum_of_both(ix, &stmt.node, other.to_string());
             if field.is_some() {
                 let name = match field { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if summed.contains(&name) { self.bad.insert(name.to_owned()); }
-                summed.insert(name.to_owned());
+                if summed.contains(&name) { self.bad.insert(name.to_string()); }
+                summed.insert(name.to_string());
                 let mut here = fb_vec_of(&self.sites, &name);
                 here.push(stmt.span.start as i64);
                 self.sites.insert(name, here);
                 continue;
             }
-            if self.entry_wise(host, ix, &stmt.node, &owner, other.to_owned()) { continue; }
+            if self.entry_wise(host, ix, &stmt.node, &owner, other.to_string()) { continue; }
             let mut walk = fb_new_walk();
             let mut env: collections::BTreeMap<String, FbTy> = collections::BTreeMap::new();
             env.insert(String::from("self"), owner.clone());
-            env.insert(other.to_owned(), FbTy::of(ix.words, &nikaia_std::index::get(&fun.args, 0).ty));
+            env.insert(other.to_string(), FbTy::of(ix.words, &nikaia_std::index::get(&fun.args, 0).ty));
             walk.stmt(host, ix, stmt, &env, false);
             for name in walk.touched() { self.bad.insert(name); }
             for r in walk.reached.iter() {
@@ -1023,7 +1023,7 @@ impl FbMerge {
                                     },
                                     _ => { return false; },
                                 }
-                            } else if name == "or_insert" && !inserted && args.len() == 1 && fb_named(ix.words, nikaia_std::index::get(&args, 0), &value.to_owned()) { inserted = true; } else if name == "entry" && args.len() == 1 && fb_named(ix.words, nikaia_std::index::get(&args, 0), &key.to_owned()) { target = Some(receiver); } else { return false; }
+                            } else if name == "or_insert" && !inserted && args.len() == 1 && fb_named(ix.words, nikaia_std::index::get(&args, 0), &value.to_string()) { inserted = true; } else if name == "entry" && args.len() == 1 && fb_named(ix.words, nikaia_std::index::get(&args, 0), &key.to_string()) { target = Some(receiver); } else { return false; }
                             cur = receiver;
                         },
                         _ => { return false; },
@@ -1089,7 +1089,7 @@ pub struct FbUses {
 
 impl FbUses {
     pub(crate) fn touch(&mut self, field: String, owner: i64) {
-        if !self.touches.contains_key(&field) { self.touches.insert(field.to_owned(), collections::BTreeSet::new()); }
+        if !self.touches.contains_key(&field) { self.touches.insert(field.to_string(), collections::BTreeSet::new()); }
         let set = match nikaia_std::index::get_mut(&mut self.touches, &field) { Some(__nikaia_value) => __nikaia_value, None => return };
         set.insert(owner);
     }
@@ -1179,8 +1179,8 @@ impl FbUses {
             Expr::StructLit { name, .. } => {
                 let name = *name;
                 let written = ix.text(name);
-                for f in ix.whole_fields(written.to_owned()) { self.touch(f.name.to_owned(), owner); }
-                if written == "Self" { for (_, fields) in ix.structs.iter() { for f in fields.iter() { if fb_is_whole(&f.ty.name.to_owned()) { self.touch(f.name.to_owned(), owner); } } } }
+                for f in ix.whole_fields(written.to_string()) { self.touch(f.name.to_string(), owner); }
+                if written == "Self" { for (_, fields) in ix.structs.iter() { for f in fields.iter() { if fb_is_whole(&f.ty.name.to_string()) { self.touch(f.name.to_string(), owner); } } } }
             },
             Expr::With { fields, .. } => { for f in fields.iter() { self.touch(ix.text(f.name), owner); } },
             Expr::Unary { op, expr: inner, .. } => {
@@ -1291,17 +1291,17 @@ pub(crate) fn fb_merge_callees(ix: &FbIndex<'_, '_, '_>, merging: &Expr, acc: &F
 pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &FbUses, source: &FbSource<'_, '_>, def: &GrammarDef, rule_at: i64, spec: &FoldSpec, known: bool, arithmetic: &collections::BTreeMap<i64, String>) -> Vec<i64> {
     let none: Vec<i64> = vec![];
     let words = ix.words;
-    let width = match fb_rule_width(source, def, &words.resolve(spec.rule).to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return none };
+    let width = match fb_rule_width(source, def, &words.resolve(spec.rule).to_string()) { Some(__nikaia_value) => __nikaia_value, None => return none };
     if !known { return none; }
     let steps = fb_most_steps(width);
     let acc_name = match fb_acc_name(words, &spec.init) { Some(__nikaia_value) => __nikaia_value, None => return none };
     if !ix.structs.contains_key(&acc_name) { return none; }
-    let acc = FbTy::named(acc_name.to_owned());
+    let acc = FbTy::named(acc_name.to_string());
     let mut init = fb_new_walk();
     match &spec.init {
         Expr::Variable(..) => {
             let mut starts: Vec<i64> = vec![];
-            for at in fb_vec_of(&ix.methods, &fb_key(&acc.name.to_owned(), "")) {
+            for at in fb_vec_of(&ix.methods, &fb_key(&acc.name.to_string(), "")) {
                 let fun = match ix.fns.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if fun.args.is_empty() { starts.push(at); }
             }
@@ -1370,13 +1370,13 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     for (owner, names) in uses.names.iter() {
         let owner = nikaia_std::num::value(owner);
         let inside = if owner >= 0 { region.contains(&owner) } else { owner == me };
-        if !inside { for n in names.iter() { queue.push(n.to_owned()); } }
+        if !inside { for n in names.iter() { queue.push(n.to_string()); } }
     }
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     while !queue.is_empty() {
         let name = match queue.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         if seen.contains(&name) { continue; }
-        seen.insert(name.to_owned());
+        seen.insert(name.to_string());
         let reached = nikaia_std::index::or(match ix.reached_by.get(&name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -1393,9 +1393,9 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
         }
     }
     let mut fields: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for (f, _) in step.sites.iter() { fields.insert(f.to_owned()); }
-    for (f, _) in merge.sites.iter() { fields.insert(f.to_owned()); }
-    for (f, _) in init.sites.iter() { fields.insert(f.to_owned()); }
+    for (f, _) in step.sites.iter() { fields.insert(f.to_string()); }
+    for (f, _) in merge.sites.iter() { fields.insert(f.to_string()); }
+    for (f, _) in init.sites.iter() { fields.insert(f.to_string()); }
     let mut out: Vec<i64> = vec![];
     for field in fields.iter() {
         if step.dead.contains(field) || init.dead.contains(field) { continue; }
@@ -1427,7 +1427,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
         for site in sites.iter() {
             let site = nikaia_std::num::value(site);
             let ty = match arithmetic.get(&site) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let room = match fb_range(&ty.to_owned()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let room = match fb_range(&ty.to_string()) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut fits = bound <= room.above;
             if room.below == 0u64 { fits = fits && !lowered; } else { fits = fits && bound <= room.below; }
             if fits { out.push(site); }

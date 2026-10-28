@@ -25,7 +25,7 @@ pub fn rust_of(id: i64, term_of: &impl Fn(i64) -> SolverTerm, escape: &impl Fn(&
 }
 
 pub(crate) fn rust_joined(op: &str, parts: &[i64], empty: &str, term_of: &impl Fn(i64) -> SolverTerm, escape: &impl Fn(&str) -> String) -> String {
-    if parts.is_empty() { return empty.to_owned(); }
+    if parts.is_empty() { return empty.to_string(); }
     let mut written: Vec<String> = vec![];
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
@@ -91,7 +91,7 @@ pub(crate) fn term_whole(id: i64, arrow: bool, term_of: &impl Fn(i64) -> SolverT
     match term {
         SolverTerm::Bool(b) => if b { String::from("true") } else { String::from("false") },
         SolverTerm::Int(n) => format!("{}", n),
-        SolverTerm::Var(ref name) => name.to_owned(),
+        SolverTerm::Var(ref name) => name.to_string(),
         SolverTerm::Neg(a) => format!("-{}", term_inner(a, r, arrow, term_of)),
         SolverTerm::Not(a) => format!("!{}", term_inner(a, r, arrow, term_of)),
         SolverTerm::Add(a, b) => term_binary("+", a, b, r, arrow, term_of),

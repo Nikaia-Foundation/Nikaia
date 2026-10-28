@@ -125,7 +125,7 @@ pub(crate) fn lg_refuted(arena: &TermArena, facts: &[i64], goal: i64, values: &c
     }
     arena.variables(goal, &mut names);
     let mut given = values.to_owned();
-    for name in names.iter() { if given.get(name).is_none() { given.insert(name.to_owned(), 0); } }
+    for name in names.iter() { if given.get(name).is_none() { given.insert(name.to_string(), 0); } }
     let model = LgModel { values: given };
     if lg_verify_model(arena, facts, goal, &model) { return Some(model); }
     None

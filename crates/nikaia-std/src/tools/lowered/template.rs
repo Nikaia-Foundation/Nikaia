@@ -77,7 +77,7 @@ pub fn illegal(segments: &[Segment]) -> Vec<(String, Position)> {
     let mut found: Vec<(String, Position)> = vec![];
     for segment in segments.iter() {
         match segment {
-            Segment::Hole { expr, at } => { if !at.escapable() { found.push((expr.to_owned(), at.clone())); } },
+            Segment::Hole { expr, at } => { if !at.escapable() { found.push((expr.to_string(), at.clone())); } },
             Segment::For { body, .. } => { for inner in illegal(body) { found.push(inner); } },
             _ => { },
         }
@@ -145,7 +145,7 @@ impl Splitter {
                     segments.push(Segment::Text(text));
                     text = String::from("");
                 }
-                segments.push(Segment::Hole { expr: expr.trim().to_owned(), at: position });
+                segments.push(Segment::Hole { expr: expr.trim().to_string(), at: position });
                 self.at = close + 1;
             } else {
                 self.scan.feed(c);
@@ -175,10 +175,10 @@ impl Splitter {
         for k in self.at + 4..close { header.push(*nikaia_std::index::get(&self.c, nikaia_std::index::at(k))); }
         self.at = close + 1;
         let mut words: Vec<String> = vec![];
-        for word in header.split_whitespace() { words.push(word.to_owned()); }
+        for word in header.split_whitespace() { words.push(word.to_string()); }
         if words.len() != 3 || *nikaia_std::index::get(&words, 1) != "in" { return Err(nikaia_std::error::throwing(Refused::Because(format!("a template loop is written `<for name in :collection>`, not `<for{}>`", header)), &"loop_header")); }
-        let binding = (*nikaia_std::index::get(&words, 0)).to_owned();
-        let written = (*nikaia_std::index::get(&words, 2)).to_owned();
+        let binding = (*nikaia_std::index::get(&words, 0)).to_string();
+        let written = (*nikaia_std::index::get(&words, 2)).to_string();
         if !written.starts_with(':') { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is captured from the enclosing scope, so it is written `:{}` - the colon is where the template's names end and the program's begin (ADR-296 D4)", written, written)), &"loop_header")); }
         let mut collection: String = String::from("");
         let mut first = true;

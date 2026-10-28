@@ -23,16 +23,16 @@ impl PackageTypes {
 }
 
 pub fn declare_unit(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], package: &mut PackageTypes) {
-    for name in borrowing_types(names, items) { package.borrowing.insert(name.to_owned()); }
+    for name in borrowing_types(names, items) { package.borrowing.insert(name.to_string()); }
     for item in items.iter() {
         match &item.node {
             Item::Struct { name, .. } => {
                 let name = *name;
-                package.named.insert(names.resolve(name).to_owned());
+                package.named.insert(names.resolve(name).to_string());
             },
             Item::Enum { name, .. } => {
                 let name = *name;
-                package.named.insert(names.resolve(name).to_owned());
+                package.named.insert(names.resolve(name).to_string());
             },
             _ => { },
         }
@@ -67,8 +67,8 @@ pub fn function_views(item: &Item, target: Option<&str>, names: &winnow_grammar:
     match item {
         Item::Fn { receiver, args, ret_type, .. } => {
             if receiver.is_some() && a_borrowing_target(target, borrowing) { held.push(Held { position: String::from("self"), state: State::Borrowed }); }
-            for arg in args.iter() { if carries_a_view(names, &arg.ty, borrowing) { held.push(Held { position: names.resolve(arg.name).to_owned(), state: State::Borrowed }); } }
-            if result_carries(names, (ret_type).as_ref(), borrowing) { held.push(Held { position: RESULT_POSITION.to_owned(), state: State::Borrowed }); }
+            for arg in args.iter() { if carries_a_view(names, &arg.ty, borrowing) { held.push(Held { position: names.resolve(arg.name).to_string(), state: State::Borrowed }); } }
+            if result_carries(names, (ret_type).as_ref(), borrowing) { held.push(Held { position: RESULT_POSITION.to_string(), state: State::Borrowed }); }
         },
         _ => { },
     }
@@ -126,7 +126,7 @@ pub(crate) fn a_method_buffer(method: &str, receiver: &Expr) -> Buffer {
 
 pub(crate) fn a_call_buffer(func: &Expr, asked: &Asked<'_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> Buffer {
     let name = match func {
-        Expr::Variable(name, _) => { let name = *name; asked.names.resolve(name).to_owned() },
+        Expr::Variable(name, _) => { let name = *name; asked.names.resolve(name).to_string() },
         Expr::Path(segments, _) => unaliased(&joined_segments(segments, asked.names)),
         _ => return Buffer::None,
     };
@@ -205,7 +205,7 @@ pub(crate) fn buffer_named(plan: &BufferPlan, wanted: i64) -> Option<String> {
 }
 
 pub(crate) fn padded(word: &str, width: i64) -> String {
-    let mut out = word.to_owned();
+    let mut out = word.to_string();
     let mut n = nikaia_std::list::chars(word.chars()).len() as i64;
     while n < width {
         out.push(' ');
@@ -255,7 +255,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
             let (_, callee) = id;
             if callee.contains('#') && goes_in_the_callers_keep(&keep) { names.push(an_argument(&callee)); }
         }
-        handed.insert(plan.key.to_owned(), names);
+        handed.insert(plan.key.to_string(), names);
     }
     for plan in plans.iter() {
         let mut said: Vec<String> = vec![];
@@ -275,7 +275,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
             let found = handed.get(callee);
             if found.is_some() {
                 let list = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-                for one in list.iter() { names.push(one.to_owned()); }
+                for one in list.iter() { names.push(one.to_string()); }
             }
             if lives_in_a_local_keep(&keep) && !names.is_empty() { said.push(format!("    {} lives in `{}`'s keep: handed back by `{}`\n", names.join(", "), plan.key, callee)); } else { said.push(format!("    what `{}` reads lives {}\n", callee, keep_words(&keep))); }
         }
@@ -289,7 +289,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
         }
         if said.is_empty() { continue; }
         lines.push(format!("{} (keeps):\n", plan.key));
-        for line in said.iter() { lines.push(line.to_owned()); }
+        for line in said.iter() { lines.push(line.to_string()); }
     }
     if lines.is_empty() { return String::from("no view in a signature here, so there is no state to solve.\n"); }
     lines.join("")

@@ -51,7 +51,7 @@ pub(crate) fn arith_env_parts_fault<H: CheckHost>(host: &H, name: &Expr, value: 
     if named.is_some() { return std::convert::identity(named); }
     let text = match arith_env_literal(host, value) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if !text.contains("\0") { return None; }
-    let label = nikaia_std::index::or(arith_env_literal(host, name), || "".into()).to_owned();
+    let label = nikaia_std::index::or(arith_env_literal(host, name), || "".into()).to_string();
     Some(format!("The value of the environment variable `{}` holds a NUL.", label))
 }
 
@@ -109,7 +109,7 @@ impl CheckState {
         let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge;
         for ty in [left.clone(), right.clone()] {
             let name: String = match ty {
-                Ty::Named { ref name, ref args, .. } => if args.is_empty() { name.to_owned() } else { String::from("") },
+                Ty::Named { ref name, ref args, .. } => if args.is_empty() { name.to_string() } else { String::from("") },
                 _ => String::from(""),
             };
             if name == "" { continue; }
@@ -159,7 +159,7 @@ pub(crate) fn arith_extend_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
 
 pub(crate) fn arith_numeric_fields(fields: &[FieldContract]) -> Vec<String> {
     let mut numeric: Vec<String> = vec![];
-    for field in fields.iter() { if arith_a_plain_number(&field.ty) { numeric.push(field.name.to_owned()); } }
+    for field in fields.iter() { if arith_a_plain_number(&field.ty) { numeric.push(field.name.to_string()); } }
     numeric
 }
 
@@ -172,7 +172,7 @@ pub(crate) fn arith_a_plain_number(ty: &Ty) -> bool {
 
 pub(crate) fn arith_a_variable(side: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
     match side {
-        Expr::Variable(bound, _) => { let bound = *bound; Some(world.words.resolve(bound).to_owned()) },
+        Expr::Variable(bound, _) => { let bound = *bound; Some(world.words.resolve(bound).to_string()) },
         _ => None,
     }
 }
@@ -207,7 +207,7 @@ pub(crate) fn arith_structural(expr: &Expr) -> bool { matches!(expr, Expr::Binar
 pub(crate) fn arith_a_name(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
 
 pub(crate) fn arith_shown(written: &str) -> String {
-    if (written.chars().count() as i64) <= 60 { return written.to_owned(); }
+    if (written.chars().count() as i64) <= 60 { return written.to_string(); }
     let mut shown: String = String::from("");
     let mut count = 0;
     for c in written.chars() {
@@ -307,7 +307,7 @@ impl CheckState {
         let kind = match declared_with_no_arithmetic(&world.here, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
         let seen = ty.unseen();
         let name = match seen {
-            Ty::Named { ref name, .. } => name.to_owned(),
+            Ty::Named { ref name, .. } => name.to_string(),
             _ => return,
         };
         let mut numeric: Vec<String> = vec![];
@@ -401,7 +401,7 @@ impl CheckState {
             _ => return,
         };
         let name: String = match base {
-            Expr::Variable(n, _) => { let n = *n; world.words.resolve(n).to_owned() },
+            Expr::Variable(n, _) => { let n = *n; world.words.resolve(n).to_string() },
             _ => return,
         };
         let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };

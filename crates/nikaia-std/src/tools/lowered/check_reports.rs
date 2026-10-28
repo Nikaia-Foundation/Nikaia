@@ -27,7 +27,7 @@ pub(crate) fn report_indented(text: &str) -> String {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_named_type(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Named { name, .. } => Some(name.to_owned()),
+        Ty::Named { name, .. } => Some(name.to_string()),
         _ => None,
     }
 }
@@ -80,7 +80,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_changed_binding_says_mut(&mut self, name: &str, how: &str, changed_at: Span) {
-        self.changed.push(name.to_owned());
+        self.changed.push(name.to_string());
         let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let immutable = match local.immutable { Some(__nikaia_value) => __nikaia_value, None => return };
         let declared = immutable.at.start as i64;
@@ -103,8 +103,8 @@ impl CheckState {
             help = format!("Write `mut {}` in the parameter list. If the caller's value should stay as it was, change a copy instead: `let mut {}_own = {}`.", name, name, name);
         }
         self.said_mut.insert(declared);
-        let there = CheckLabel { span: immutable.at.clone(), word: name.to_owned(), text: declared_text, main: false };
-        let here = CheckLabel { span: changed_at.clone(), word: name.to_owned(), text: how.to_owned(), main: true };
+        let there = CheckLabel { span: immutable.at.clone(), word: name.to_string(), text: declared_text, main: false };
+        let here = CheckLabel { span: changed_at.clone(), word: name.to_string(), text: how.to_string(), main: true };
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -175,7 +175,7 @@ impl CheckState {
             self.findings.push(check_refusal("NK1123", span, format!("This is already a `{}`, so wrapping it in `{}` adds nothing.", inner, handle), vec![String::from("A shared handle is copied by passing it on, never by wrapping it again.")], Some(format!("Pass the `{}` on as it is.", inner))));
             return held;
         }
-        Ty::Named { name: handle.to_owned(), args: vec![held], view: false }
+        Ty::Named { name: handle.to_string(), args: vec![held], view: false }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -185,12 +185,12 @@ impl CheckState {
         if known { return; }
         let suffix = format!("::{}", name);
         let mut keys: Vec<String> = vec![];
-        for (key, _) in world.library.functions.iter() { if key.ends_with(&suffix) { keys.push(key.to_owned()); } }
+        for (key, _) in world.library.functions.iter() { if key.ends_with(&suffix) { keys.push(key.to_string()); } }
         if keys.len() != 1 { return; }
-        let key = (*nikaia_std::index::get(&keys, 0)).to_owned();
+        let key = (*nikaia_std::index::get(&keys, 0)).to_string();
         let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
         if parts.len() < 2 { return; }
-        let module = (*nikaia_std::index::get(&parts, 0)).to_owned();
+        let module = (*nikaia_std::index::get(&parts, 0)).to_string();
         if !self.std_modules.contains(&module) { return; }
         self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't available without its module.", name), vec![format!("`std` has `{}`, and it's reached through its module.", key), String::from("Only a few names are always available; the rest live in a module.")], Some(format!("Write `use std::{}` at the top of the file, and `{}(…)` here.", module, key))));
     }
@@ -201,7 +201,7 @@ impl CheckState {
         if at >= 0 {
             let place = Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
             labels.push(CheckLabel { span: place, word: String::from(""), text: String::from("it stopped here"), main: true });
-            labels.push(CheckLabel { span: span.clone(), word: bound.to_owned(), text: String::from("computed while the program is built"), main: false });
+            labels.push(CheckLabel { span: span.clone(), word: bound.to_string(), text: String::from("computed while the program is built"), main: false });
         }
         let mut notes: Vec<String> = vec![];
         if function.is_some() { notes.push(format!("It stopped in `{}`, in another file of the program.", nikaia_std::index::or(function, || ""))); }

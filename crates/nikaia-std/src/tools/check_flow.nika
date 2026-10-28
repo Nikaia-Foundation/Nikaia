@@ -192,6 +192,9 @@ pub struct CheckFlow {
     pub map_read_sites: collections::BTreeSet[i64],
     /// The bindings a `let` made of a map read (#297), by binding.
     pub map_views: collections::BTreeSet[i64],
+    /// A list's `get`, `first` or `last` of a tuple, by the call's id: a view
+    /// of the element below (`Option<&T>`).
+    pub lent_list_reads: collections::BTreeSet[i64],
     /// The ledger key the last method call resolved to (ADR-293 D24).
     pub last_resolved: String?,
     /// The name of the receiver of the method call being walked, where it is a
@@ -350,6 +353,7 @@ impl CheckFlow {
             lending_let: false,
             map_read_sites: collections::BTreeSet(),
             map_views: collections::BTreeSet(),
+            lent_list_reads: collections::BTreeSet(),
             last_resolved: null,
             receiver_name: null,
             receiver_from_text: false,

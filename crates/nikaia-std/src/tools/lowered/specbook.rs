@@ -11,7 +11,7 @@ pub struct SpecBlock {
 
 pub fn blocks_in(text: &str) -> Vec<SpecBlock> {
     let mut lines: Vec<String> = vec![];
-    for line in text.split("\n") { lines.push(line.to_owned()); }
+    for line in text.split("\n") { lines.push(line.to_string()); }
     let mut found: Vec<SpecBlock> = vec![];
     let mut at: i64 = 0;
     while at < lines.len() as i64 {
@@ -61,15 +61,15 @@ pub struct Reading {
 }
 
 pub fn readings(code: &str) -> Vec<Reading> {
-    let mut all: Vec<Reading> = vec![Reading { name: String::from("as written"), source: code.to_owned() }];
+    let mut all: Vec<Reading> = vec![Reading { name: String::from("as written"), source: code.to_string() }];
     if code.contains("fn main") { return all; }
-    let mut with_a_main = code.trim_end().to_owned();
+    let mut with_a_main = code.trim_end().to_string();
     with_a_main.push_str("\n\nfn main() {\n}\n");
     all.push(Reading { name: String::from("items and a main"), source: with_a_main });
     all.push(Reading { name: String::from("a body"), source: wrapped(code) });
     let parts = split_at_the_first_statement(code);
     if parts.len() == 2 {
-        let mut both = (*nikaia_std::index::get(&parts, 0)).to_owned();
+        let mut both = (*nikaia_std::index::get(&parts, 0)).to_string();
         both.push_str("\n\n");
         both.push_str(&wrapped(nikaia_std::index::get(&parts, 1)));
         all.push(Reading { name: String::from("items, then a body"), source: both });
@@ -94,7 +94,7 @@ pub(crate) fn wrapped(body: &str) -> String {
 
 pub(crate) fn split_at_the_first_statement(code: &str) -> Vec<String> {
     let mut lines: Vec<String> = vec![];
-    for line in code.trim_end().split("\n") { lines.push(line.to_owned()); }
+    for line in code.trim_end().split("\n") { lines.push(line.to_string()); }
     let mut head: i64 = 0;
     let mut depth: i64 = 0;
     for at in 0..lines.len() as i64 {
@@ -136,7 +136,7 @@ pub fn opening(code: &str) -> String {
         let trimmed = line.trim();
         if trimmed.is_empty() { continue; }
         let c: Vec<scalar> = nikaia_std::list::chars(trimmed.chars());
-        if c.len() <= 56 { return trimmed.to_owned(); }
+        if c.len() <= 56 { return trimmed.to_string(); }
         let mut cut: String = String::from("");
         for k in 0..55 { cut.push(*nikaia_std::index::get(&c, (k) as usize)); }
         cut.push('…');

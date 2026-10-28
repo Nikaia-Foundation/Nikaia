@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1263] — 2026-10-28
+
+**A list, a map and a walk have what converted code calls (#125)**
+- `std` gains the entries rs2nika's drafts called and did not find: `Vec::get(at) -> T?`, `HashMap::iter`, `BTreeMap::values` and `BTreeMap::iter` (pairs of views, `(ref K, ref V)`), and `Seq::enumerate` (`(i64, T)`, the position an `i64` as a count is), `Seq::chain` and `Seq::fold`.
+- A list's `get`, `first` or `last` of a value that copies is the value (`.copied()` below), so `let x = xs.last() ?? return` compares as a number; of a tuple it is a view of the element, so `let (name, n) = it` and an arm `(name, n) =>` over it read `n` out of the view.
+- A tuple's part that is a view of a number (a map's pair) is read out of it, and one that is a view of text compares as text; a copy of text that is a view of a literal is `to_string` below; text a `fold` starts from is text of its own.
+- Not yet: `Seq::peekable`, which needs a type of its own.
+
 ## [0.0.1262] — 2026-10-28
 
 **A lambda's parameter takes a tuple apart (ADR-358 D1, D2, D5; #623, the lambda half)**

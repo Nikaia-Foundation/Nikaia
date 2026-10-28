@@ -164,7 +164,7 @@ pub(crate) fn what_a_loop_does(words: &winnow_grammar::InternerContext, block: &
                 match target {
                     Expr::Variable(name, _) => {
                         let name = *name;
-                        found.revived.insert(words.resolve(name).to_owned());
+                        found.revived.insert(words.resolve(name).to_string());
                     },
                     _ => { },
                 }
@@ -228,7 +228,7 @@ pub struct CheckFinding {
     pub labels: Vec<CheckLabel>,
 }
 
-pub fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: code.to_owned(), message, notes, help, labels: vec![] } }
+pub fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: code.to_string(), message, notes, help, labels: vec![] } }
 
 #[derive(Debug, Clone)]
 pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {

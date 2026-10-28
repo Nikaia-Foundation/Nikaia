@@ -93,7 +93,7 @@ pub(crate) fn combined(op: &BinaryOp, lhs: &Expr, rhs: &Expr, name_is: &impl Fn(
         other => return other,
     };
     if !a.pinned.is_empty() && !b.pinned.is_empty() && a.pinned != b.pinned { return Folded::Nothing; }
-    let pinned = if a.pinned.is_empty() { b.pinned.to_owned() } else { a.pinned.to_owned() };
+    let pinned = if a.pinned.is_empty() { b.pinned.to_string() } else { a.pinned.to_string() };
     if !pinned.is_empty() && (shifts_literals(lhs) || shifts_literals(rhs)) { return Folded::Nothing; }
     let x = a.value;
     let y = b.value;

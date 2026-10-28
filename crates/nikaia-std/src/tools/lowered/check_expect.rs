@@ -189,15 +189,15 @@ impl CheckState {
             match given {
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    named = Some(world.words.resolve(name).to_owned());
+                    named = Some(world.words.resolve(name).to_string());
                 },
                 _ => { },
             }
         }
         let kept = match self.a_view_kept(found, want, (named).as_deref(), keeper) { Some(__nikaia_value) => __nikaia_value, None => return };
         let last = self.findings.len() as i64 - 1;
-        for note in kept.notes.iter() { self.findings[nikaia_std::index::at(last)].notes.push(note.to_owned()); }
-        self.findings[nikaia_std::index::at(last)].help = Some(kept.help.to_owned());
+        for note in kept.notes.iter() { self.findings[nikaia_std::index::at(last)].notes.push(note.to_string()); }
+        self.findings[nikaia_std::index::at(last)].help = Some(kept.help.to_string());
     }
 }
 
