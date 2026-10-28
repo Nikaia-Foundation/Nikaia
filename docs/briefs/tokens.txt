@@ -103,3 +103,4 @@
 /home/user/Nikaia/docs/briefs/p2-project-check-summary.md 1462293 33
 /home/user/Nikaia/docs/briefs/p2-large-files-plan.md 4327282 52
 /home/user/Nikaia/docs/briefs/architect-task.md 650917 15
+/home/user/Nikaia/docs/briefs/m1-modules-program.md 2385723 40
