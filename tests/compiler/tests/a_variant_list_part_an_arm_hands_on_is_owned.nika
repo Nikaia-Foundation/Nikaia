@@ -1,0 +1,18 @@
+// #905: a `Vec[String]` part an arm hands to an owning parameter is taken.
+enum E { A(Vec[String]), N }
+
+fn count(xs: Vec[String]) -> i64 {
+    return xs.len()
+}
+
+fn g(e: E) -> i64 {
+    match e {
+        E::A(xs) => { return count(xs) },
+        else => { return 0 },
+    }
+}
+
+fn main() {
+    println(g(E::A(["a", "b"])))
+    println(g(E::N))
+}

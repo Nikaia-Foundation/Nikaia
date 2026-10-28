@@ -1097,38 +1097,78 @@ fn bind_whole_name(pattern: ref MatchPattern, subject: ref Expr, null_arm: bool,
 
 /// **A payload of static text bound in a match arm** is a view of static
 /// text read out of the payload (ADR-282 D29): where the arm hands it on
-/// beside text of its own, the payload keeps text of its own too.
+/// beside text of its own, the payload keeps text of its own too. So is a
+/// struct's field a struct pattern binds (#905).
+///
+/// **A list of text a part binds is that part's list** (#905), as `let xs =
+/// s.xs` is (ADR-282 D16): what the arm does with it - hands it back, hands
+/// it on, drains it - is asked of the part's position, which a variant built
+/// from literals only had kept as static text.
 fn bind_static_payloads(pattern: ref MatchPattern, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     let mut bound = false
     match pattern {
         MatchPattern::Tuple { path, parts } => {
+            if path.is_empty() {
+                return false
+            }
             let written = unaliased_in(ask.aliases, joined_segments(path, ask.names))
             let declared = walk.declared.variants[written]?.clone() ?? return false
             let (of, variant) = variant_named(written)
             let mut at = 0
             for part in parts {
-                if at >= declared.len() {
+                if at >= declared.len() || pattern_is_rest(part) {
                     return bound
                 }
-                let owner = TextOwner::Variant(of.clone(), variant.clone(), at)
-                let lasting = plain_string(ask.names, declared[at]) && lasting_tier(tier_at(position_word(owner, no_path()), walk))
-                match part {
-                    MatchPattern::Path(named) => {
-                        if lasting && named.len() == 1 && !names_a_type(ask.names.resolve(named[0])) {
-                            let mut local = plain_local(still_kinds())
-                            local.from = seen(owner, no_path(), walk)
-                            bind_tier_local(ask.names.resolve(named[0]).clone(), local, walk)
-                            bound = true
-                        }
-                    }
-                    else => {}
+                if bind_a_payload(part, TextOwner::Variant(of.clone(), variant.clone(), at), declared[at], ask, walk) {
+                    bound = true
                 }
                 at += 1
+            }
+        }
+        MatchPattern::Named { path, fields, .. } => {
+            let owner = unaliased_in(ask.aliases, joined_segments(path, ask.names))
+            for field in fields {
+                let name = ask.names.resolve(field.name).clone()
+                let key = (owner.clone(), name.clone())
+                let found: FieldDecl = walk.declared.fields[key]?.clone() ?? continue
+                if bind_a_payload(field.pat, TextOwner::Field(owner.clone(), name), found.ty, ask, walk) {
+                    bound = true
+                }
             }
         }
         else => {}
     }
     return bound
+}
+
+/// One part a pattern binds by name, out of the position `owner` declares
+/// as `ty`: whether it was bound as static text.
+fn bind_a_payload(part: ref MatchPattern, owner: TextOwner, ty: ref Type, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    let name = match part {
+        MatchPattern::Path(named) => {
+            if named.len() != 1 || names_a_type(ask.names.resolve(named[0])) {
+                return false
+            }
+            ask.names.resolve(named[0]).clone()
+        }
+        else => return false,
+    }
+    if plain_string(ask.names, ty) {
+        if !lasting_tier(tier_at(position_word(owner, no_path()), walk)) {
+            return false
+        }
+        let mut local = plain_local(still_kinds())
+        local.from = seen(owner, no_path(), walk)
+        bind_tier_local(name, local, walk)
+        return true
+    }
+    if a_container(ask.names, ty) && holds_text(ask.names, ty) {
+        let declared = Declaring { owner: owner, ty: ty.clone() }
+        let mut local = plain_local(kinds_of_declared(declared, ask, walk))
+        local.declared = declared
+        bind_tier_local(name, local, walk)
+    }
+    return false
 }
 
 /// **A name `Some(a)` binds over a place** a `ref` parameter lends (a field

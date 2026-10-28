@@ -76,17 +76,37 @@ pub(crate) fn numbers_item(item: Item, st: &mut NodeNumbersState) -> Item {
             let body2 = numbers_block(body, st);
             return Item::Fn { name, generics, receiver, args: args2, config: config2, spread, ret_type, body: body2, is_sync, sync_by, is_public, can_throw, is_extern };
         },
-        Item::Enum { name, variants, is_public, is_extern } => { return Item::Enum { name, variants: numbers_variants(variants, st), is_public, is_extern }; },
+        Item::Enum { name, variants, is_public, is_extern } => {
+            let mut variants2: Vec<EnumVariant> = vec![];
+            for v in variants.into_iter() {
+                let attributes = numbers_attributes(v.attributes, st);
+                let fields = match v.fields {
+                    VariantFields::Named(defs) => VariantFields::Named(numbers_field_defs(defs, st)),
+                    other => other,
+                };
+                variants2.push(EnumVariant { name: v.name, fields, attributes, span: v.span });
+            }
+            return Item::Enum { name, variants: variants2, is_public, is_extern };
+        },
         Item::Struct { name, generics, fields, is_public, is_extern, rules } => {
             let fields2 = numbers_field_defs(fields, st);
-            let rules2 = numbers_rules(rules, st);
+            let mut rules2: Vec<Spanned<Expr>> = vec![];
+            for rule in rules.into_iter() {
+                let attributes = numbers_attributes(rule.attributes, st);
+                let node = numbers_expr(rule.node, st);
+                rules2.push(Spanned { node, span: rule.span, doc: rule.doc, attributes });
+            }
             return Item::Struct { name, generics, fields: fields2, is_public, is_extern, rules: rules2 };
         },
         Item::Impl { trait_name, target, methods } => { return Item::Impl { trait_name, target, methods: numbers_items(methods, st) }; },
         Item::Trait { name, methods, is_public } => { return Item::Trait { name, methods: numbers_trait_methods(methods, st), is_public }; },
         Item::Extern { abi, library, declarations, opaque } => {
             let declarations2 = numbers_trait_methods(declarations, st);
-            let opaque2 = numbers_opaque(opaque, st);
+            let mut opaque2: Vec<Spanned<OpaqueType>> = vec![];
+            for o in opaque.into_iter() {
+                let attributes = numbers_attributes(o.attributes, st);
+                opaque2.push(Spanned { node: o.node, span: o.span, doc: o.doc, attributes });
+            }
             return Item::Extern { abi, library, declarations: declarations2, opaque: opaque2 };
         },
         Item::Test { name, body } => { return Item::Test { name, body: numbers_block(body, st) }; },
@@ -111,25 +131,6 @@ pub(crate) fn numbers_item(item: Item, st: &mut NodeNumbersState) -> Item {
         },
         Item::Import { path, alias } => { return Item::Import { path, alias }; },
     }
-}
-
-pub(crate) fn numbers_rules(rules: Vec<Spanned<Expr>>, st: &mut NodeNumbersState) -> Vec<Spanned<Expr>> {
-    let mut out: Vec<Spanned<Expr>> = vec![];
-    for rule in rules.into_iter() {
-        let attributes = numbers_attributes(rule.attributes, st);
-        let node = numbers_expr(rule.node, st);
-        out.push(Spanned { node, span: rule.span, doc: rule.doc, attributes });
-    }
-    out
-}
-
-pub(crate) fn numbers_opaque(opaque: Vec<Spanned<OpaqueType>>, st: &mut NodeNumbersState) -> Vec<Spanned<OpaqueType>> {
-    let mut out: Vec<Spanned<OpaqueType>> = vec![];
-    for o in opaque.into_iter() {
-        let attributes = numbers_attributes(o.attributes, st);
-        out.push(Spanned { node: o.node, span: o.span, doc: o.doc, attributes });
-    }
-    out
 }
 
 pub(crate) fn numbers_trait_methods(methods: Vec<Spanned<TraitMethod>>, st: &mut NodeNumbersState) -> Vec<Spanned<TraitMethod>> {
@@ -162,19 +163,6 @@ pub(crate) fn numbers_config_params(params: Vec<ConfigParam>, st: &mut NodeNumbe
     for p in params.into_iter() {
         let default = numbers_expr(p.default, st);
         out.push(ConfigParam { name: p.name, ty: p.ty, default, default_span: p.default_span });
-    }
-    out
-}
-
-pub(crate) fn numbers_variants(variants: Vec<EnumVariant>, st: &mut NodeNumbersState) -> Vec<EnumVariant> {
-    let mut out: Vec<EnumVariant> = vec![];
-    for v in variants.into_iter() {
-        let attributes = numbers_attributes(v.attributes, st);
-        let fields = match v.fields {
-            VariantFields::Named(defs) => VariantFields::Named(numbers_field_defs(defs, st)),
-            other => other,
-        };
-        out.push(EnumVariant { name: v.name, fields, attributes, span: v.span });
     }
     out
 }
@@ -305,7 +293,11 @@ pub(crate) fn numbers_match_pattern(pattern: MatchPattern, st: &mut NodeNumbersS
         MatchPattern::List(parts) => { return MatchPattern::List(numbers_match_patterns(parts, st)); },
         MatchPattern::Literal(value) => { return MatchPattern::Literal(numbers_expr(value, st)); },
         MatchPattern::Tuple { path, parts } => { return MatchPattern::Tuple { path, parts: numbers_match_patterns(parts, st) }; },
-        MatchPattern::Named { path, fields, rest } => { return MatchPattern::Named { path, fields: numbers_pattern_fields(fields, st), rest }; },
+        MatchPattern::Named { path, fields, rest } => {
+            let mut fields2: Vec<PatternField> = vec![];
+            for f in fields.into_iter() { fields2.push(PatternField { name: f.name, pat: numbers_match_pattern(f.pat, st) }); }
+            return MatchPattern::Named { path, fields: fields2, rest };
+        },
         MatchPattern::Or(parts) => { return MatchPattern::Or(numbers_match_patterns(parts, st)); },
         MatchPattern::Range { start, end } => {
             let start2 = numbers_expr(start, st);
@@ -314,44 +306,6 @@ pub(crate) fn numbers_match_pattern(pattern: MatchPattern, st: &mut NodeNumbersS
         },
         other => { return other; },
     }
-}
-
-pub(crate) fn numbers_pattern_fields(fields: Vec<PatternField>, st: &mut NodeNumbersState) -> Vec<PatternField> {
-    let mut out: Vec<PatternField> = vec![];
-    for f in fields.into_iter() { out.push(PatternField { name: f.name, pat: numbers_match_pattern(f.pat, st) }); }
-    out
-}
-
-pub(crate) fn numbers_match_arms(arms: Vec<MatchArm>, st: &mut NodeNumbersState) -> Vec<MatchArm> {
-    let mut out: Vec<MatchArm> = vec![];
-    for arm in arms.into_iter() {
-        let pattern = numbers_match_pattern(arm.pattern, st);
-        let guard = numbers_maybe_expr(arm.guard, st);
-        let body = numbers_expr(arm.body, st);
-        out.push(MatchArm { pattern, guard, body });
-    }
-    out
-}
-
-pub(crate) fn numbers_select_arms(arms: Vec<SelectArm>, st: &mut NodeNumbersState) -> Vec<SelectArm> {
-    let mut out: Vec<SelectArm> = vec![];
-    for arm in arms.into_iter() {
-        let value = numbers_expr(arm.value, st);
-        let body = numbers_block(arm.body, st);
-        out.push(SelectArm { binding: arm.binding, value, body, at: arm.at });
-    }
-    out
-}
-
-pub(crate) fn numbers_fparts(parts: Vec<FPart>, st: &mut NodeNumbersState) -> Vec<FPart> {
-    let mut out: Vec<FPart> = vec![];
-    for part in parts.into_iter() {
-        out.push(match part {
-            FPart::Hole { expr, spec, at } => FPart::Hole { expr: numbers_expr(expr, st), spec, at },
-            other => other,
-        });
-    }
-    out
 }
 
 pub(crate) fn numbers_match_patterns(patterns: Vec<MatchPattern>, st: &mut NodeNumbersState) -> Vec<MatchPattern> {
@@ -367,7 +321,14 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let value = nikaia_std::boxed::open(value);
             let id2 = numbers_id(id, st);
             let value2 = numbers_expr(value, st);
-            return Expr::Match { value: Box::new(value2), arms: numbers_match_arms(arms, st), id: id2 };
+            let mut arms2: Vec<MatchArm> = vec![];
+            for arm in arms.into_iter() {
+                let pattern = numbers_match_pattern(arm.pattern, st);
+                let guard = numbers_maybe_expr(arm.guard, st);
+                let body = numbers_expr(arm.body, st);
+                arms2.push(MatchArm { pattern, guard, body });
+            }
+            return Expr::Match { value: Box::new(value2), arms: arms2, id: id2 };
         },
         Expr::Range { start, end, inclusive, id } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
@@ -394,7 +355,14 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
         Expr::LitStr { text, id } => { return Expr::LitStr { text, id: numbers_id(id, st) }; },
         Expr::LitInterpolated { parts, id } => {
             let id2 = numbers_id(id, st);
-            return Expr::LitInterpolated { parts: numbers_fparts(parts, st), id: id2 };
+            let mut parts2: Vec<FPart> = vec![];
+            for part in parts.into_iter() {
+                parts2.push(match part {
+                    FPart::Hole { expr, spec, at } => FPart::Hole { expr: numbers_expr(expr, st), spec, at },
+                    other => other,
+                });
+            }
+            return Expr::LitInterpolated { parts: parts2, id: id2 };
         },
         Expr::LitChar(text, id) => { return Expr::LitChar(text, numbers_id(id, st)); },
         Expr::LitBool(value, id) => { return Expr::LitBool(value, numbers_id(id, st)); },
@@ -410,7 +378,13 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
         },
         Expr::Select(arms, id) => {
             let id2 = numbers_id(id, st);
-            return Expr::Select(numbers_select_arms(arms, st), id2);
+            let mut arms2: Vec<SelectArm> = vec![];
+            for arm in arms.into_iter() {
+                let value = numbers_expr(arm.value, st);
+                let body = numbers_block(arm.body, st);
+                arms2.push(SelectArm { binding: arm.binding, value, body, at: arm.at });
+            }
+            return Expr::Select(arms2, id2);
         },
         Expr::If { cond, then_branch, else_branch, id } => {
             let cond = nikaia_std::boxed::open(cond);

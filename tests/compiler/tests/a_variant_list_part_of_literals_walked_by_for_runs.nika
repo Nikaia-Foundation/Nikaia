@@ -1,0 +1,21 @@
+// #905: a `for` over a part of static text an arm binds hands out views of
+// that text, which a list of it keeps, as over a struct's field.
+enum E { A(Vec[String]), N }
+
+fn g(e: E) -> Vec[String] {
+    let mut out: Vec[String] = []
+    match e {
+        E::A(xs) => {
+            for x in xs {
+                out.push(x)
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+fn main() {
+    println(g(E::A(["a", "b"])).len())
+    println(g(E::N).len())
+}

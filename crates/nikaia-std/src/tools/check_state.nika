@@ -806,6 +806,10 @@ pub struct CheckState {
     pub task_bindings: Vec[Vec[(String, Ty, i64)]],
     /// The names a body changed, in order.
     pub changed: Vec[String],
+    /// The changes among them that are a `drain` taking the whole binding
+    /// away, by their index in `changed` (#905): lowered to `into_iter()`,
+    /// such a change asks no `mut` of the binding.
+    pub drained: collections::BTreeSet[i64],
     /// The bindings (by where they are declared) already said to need `mut`.
     pub said_mut: collections::BTreeSet[i64],
     /// What the emitter reads (`check_facts.nika`).

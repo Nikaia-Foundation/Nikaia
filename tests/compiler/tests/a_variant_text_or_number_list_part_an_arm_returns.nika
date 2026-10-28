@@ -1,0 +1,26 @@
+// #905: beside the list of text, a `String` part and a `Vec[i64]` part an
+// arm returns, which ran before.
+enum T { A(String), N }
+
+enum L { A(Vec[i64]), N }
+
+fn text(t: T) -> String {
+    match t {
+        T::A(s) => { return s },
+        else => { return "" },
+    }
+}
+
+fn numbers(l: L) -> Vec[i64] {
+    match l {
+        L::A(xs) => { return xs },
+        else => { return [] },
+    }
+}
+
+fn main() {
+    println(text(T::A("a")))
+    println(text(T::N).len())
+    println(numbers(L::A([1, 2])).len())
+    println(numbers(L::N).len())
+}

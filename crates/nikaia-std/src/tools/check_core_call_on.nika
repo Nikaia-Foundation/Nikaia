@@ -780,6 +780,12 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
             if callers {
                 state.facts.kept_drains.insert(id_of(receiver) as i64)
             } else {
+                // A whole name drained is taken, not changed: the lowering
+                // writes `into_iter()`, which asks no `mut` (#905).
+                let last = state.changed.len() as i64 - 1
+                if root == drained && last >= 0 && state.changed[last] == drained {
+                    state.drained.insert(last)
+                }
                 state.hands_over_path(world, drained, on, state.read_seq, "taken away by `drain`", span)
             }
         }

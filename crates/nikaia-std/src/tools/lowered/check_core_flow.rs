@@ -892,7 +892,7 @@ pub(crate) fn check_core_flow_changed_copies(state: &mut CheckState, body: &Expr
         let mut changed = false;
         let mut seen = changed_from;
         while seen < state.changed.len() as i64 {
-            if *nikaia_std::index::get(&state.changed, nikaia_std::index::at(seen)) == local.name { changed = true; }
+            if *nikaia_std::index::get(&state.changed, nikaia_std::index::at(seen)) == local.name && !state.drained.contains(&seen) { changed = true; }
             seen += 1;
         }
         for (_, binding) in state.facts.mut_arg_bindings.iter() {

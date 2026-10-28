@@ -1,0 +1,16 @@
+// #905: a `Vec[String]` part that is a `match`'s value is taken whole; it
+// passed the checker and failed in rustc (`Vec<&str>` against `Vec<String>`).
+enum E { A(Vec[String]), N }
+
+fn g(e: E) -> Vec[String] {
+    let r = match e {
+        E::A(xs) => xs,
+        else => [],
+    }
+    return r
+}
+
+fn main() {
+    println(g(E::A(["a", "b"])).len())
+    println(g(E::N).len())
+}

@@ -1,0 +1,24 @@
+// #905: a `Vec[String]` part an arm returns is taken whole, `Vec[String]`,
+// even where only literals built the variant (ADR-282 D29).
+enum E { A(Vec[String]), N }
+
+fn beside_else(e: E) -> Vec[String] {
+    match e {
+        E::A(xs) => { return xs },
+        else => { return [] },
+    }
+}
+
+fn beside_a_variant(e: E) -> Vec[String] {
+    match e {
+        E::A(xs) => { return xs },
+        E::N => { return [] },
+    }
+}
+
+fn main() {
+    println(beside_else(E::A(["a", "b"])).len())
+    println(beside_else(E::N).len())
+    println(beside_a_variant(E::A(["c"]))[0])
+    println(beside_a_variant(E::N).len())
+}

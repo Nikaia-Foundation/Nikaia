@@ -1114,7 +1114,7 @@ fn check_core_flow_changed_copies(mut state: CheckState, body: ref Expr, changed
         let mut changed = false
         let mut seen = changed_from
         while seen < state.changed.len() as i64 {
-            if state.changed[seen] == local.name {
+            if state.changed[seen] == local.name && !state.drained.contains(seen) {
                 changed = true
             }
             seen += 1

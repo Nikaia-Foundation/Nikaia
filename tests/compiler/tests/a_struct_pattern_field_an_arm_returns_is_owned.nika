@@ -1,0 +1,22 @@
+// #905: a field a struct pattern binds is the field's text, a list of text
+// as well, even where only literals built the struct (ADR-282 D29).
+struct Named { name: String }
+
+struct Listed { xs: Vec[String] }
+
+fn name_of(s: Named) -> String {
+    match s {
+        Named { name } => { return name },
+    }
+}
+
+fn list_of(s: Listed) -> Vec[String] {
+    match s {
+        Listed { xs } => { return xs },
+    }
+}
+
+fn main() {
+    println(name_of(Named { name: "a" }))
+    println(list_of(Listed { xs: ["b", "c"] }).len())
+}

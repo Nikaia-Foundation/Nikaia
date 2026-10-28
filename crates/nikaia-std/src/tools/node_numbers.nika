@@ -101,11 +101,25 @@ fn numbers_item(item: Item, mut st: NodeNumbersState) -> Item {
             return Item::Fn { name: name, generics: generics, receiver: receiver, args: args2, config: config2, spread: spread, ret_type: ret_type, body: body2, is_sync: is_sync, sync_by: sync_by, is_public: is_public, can_throw: can_throw, is_extern: is_extern }
         },
         Item::Enum { name, variants, is_public, is_extern } => {
-            return Item::Enum { name: name, variants: numbers_variants(variants, st), is_public: is_public, is_extern: is_extern }
+            let mut variants2: Vec[EnumVariant] = []
+            for v in variants.drain() {
+                let attributes = numbers_attributes(v.attributes, st)
+                let fields = match v.fields {
+                    VariantFields::Named(defs) => VariantFields::Named(numbers_field_defs(defs, st)),
+                    other => other,
+                }
+                variants2.push(EnumVariant { name: v.name, fields: fields, attributes: attributes, span: v.span })
+            }
+            return Item::Enum { name: name, variants: variants2, is_public: is_public, is_extern: is_extern }
         },
         Item::Struct { name, generics, fields, is_public, is_extern, rules } => {
             let fields2 = numbers_field_defs(fields, st)
-            let rules2 = numbers_rules(rules, st)
+            let mut rules2: Vec[Spanned[Expr]] = []
+            for rule in rules.drain() {
+                let attributes = numbers_attributes(rule.attributes, st)
+                let node = numbers_expr(rule.node, st)
+                rules2.push(Spanned { node: node, span: rule.span, doc: rule.doc, attributes: attributes })
+            }
             return Item::Struct { name: name, generics: generics, fields: fields2, is_public: is_public, is_extern: is_extern, rules: rules2 }
         },
         Item::Impl { trait_name, target, methods } => {
@@ -116,7 +130,11 @@ fn numbers_item(item: Item, mut st: NodeNumbersState) -> Item {
         },
         Item::Extern { abi, library, declarations, opaque } => {
             let declarations2 = numbers_trait_methods(declarations, st)
-            let opaque2 = numbers_opaque(opaque, st)
+            let mut opaque2: Vec[Spanned[OpaqueType]] = []
+            for o in opaque.drain() {
+                let attributes = numbers_attributes(o.attributes, st)
+                opaque2.push(Spanned { node: o.node, span: o.span, doc: o.doc, attributes: attributes })
+            }
             return Item::Extern { abi: abi, library: library, declarations: declarations2, opaque: opaque2 }
         },
         Item::Test { name, body } => {
@@ -149,25 +167,6 @@ fn numbers_item(item: Item, mut st: NodeNumbersState) -> Item {
     }
 }
 
-fn numbers_rules(rules: Vec[Spanned[Expr]], mut st: NodeNumbersState) -> Vec[Spanned[Expr]] {
-    let mut out: Vec[Spanned[Expr]] = []
-    for rule in rules.drain() {
-        let attributes = numbers_attributes(rule.attributes, st)
-        let node = numbers_expr(rule.node, st)
-        out.push(Spanned { node: node, span: rule.span, doc: rule.doc, attributes: attributes })
-    }
-    return out
-}
-
-fn numbers_opaque(opaque: Vec[Spanned[OpaqueType]], mut st: NodeNumbersState) -> Vec[Spanned[OpaqueType]] {
-    let mut out: Vec[Spanned[OpaqueType]] = []
-    for o in opaque.drain() {
-        let attributes = numbers_attributes(o.attributes, st)
-        out.push(Spanned { node: o.node, span: o.span, doc: o.doc, attributes: attributes })
-    }
-    return out
-}
-
 fn numbers_trait_methods(methods: Vec[Spanned[TraitMethod]], mut st: NodeNumbersState) -> Vec[Spanned[TraitMethod]] {
     let mut out: Vec[Spanned[TraitMethod]] = []
     for m in methods.drain() {
@@ -198,19 +197,6 @@ fn numbers_config_params(params: Vec[ConfigParam], mut st: NodeNumbersState) -> 
     for p in params.drain() {
         let default = numbers_expr(p.default, st)
         out.push(ConfigParam { name: p.name, ty: p.ty, default: default, default_span: p.default_span })
-    }
-    return out
-}
-
-fn numbers_variants(variants: Vec[EnumVariant], mut st: NodeNumbersState) -> Vec[EnumVariant] {
-    let mut out: Vec[EnumVariant] = []
-    for v in variants.drain() {
-        let attributes = numbers_attributes(v.attributes, st)
-        let fields = match v.fields {
-            VariantFields::Named(defs) => VariantFields::Named(numbers_field_defs(defs, st)),
-            other => other,
-        }
-        out.push(EnumVariant { name: v.name, fields: fields, attributes: attributes, span: v.span })
     }
     return out
 }
@@ -373,7 +359,11 @@ fn numbers_match_pattern(pattern: MatchPattern, mut st: NodeNumbersState) -> Mat
             return MatchPattern::Tuple { path: path, parts: numbers_match_patterns(parts, st) }
         },
         MatchPattern::Named { path, fields, rest } => {
-            return MatchPattern::Named { path: path, fields: numbers_pattern_fields(fields, st), rest: rest }
+            let mut fields2: Vec[PatternField] = []
+            for f in fields.drain() {
+                fields2.push(PatternField { name: f.name, pat: numbers_match_pattern(f.pat, st) })
+            }
+            return MatchPattern::Named { path: path, fields: fields2, rest: rest }
         },
         MatchPattern::Or(parts) => {
             return MatchPattern::Or(numbers_match_patterns(parts, st))
@@ -387,46 +377,6 @@ fn numbers_match_pattern(pattern: MatchPattern, mut st: NodeNumbersState) -> Mat
             return other
         },
     }
-}
-
-fn numbers_pattern_fields(fields: Vec[PatternField], mut st: NodeNumbersState) -> Vec[PatternField] {
-    let mut out: Vec[PatternField] = []
-    for f in fields.drain() {
-        out.push(PatternField { name: f.name, pat: numbers_match_pattern(f.pat, st) })
-    }
-    return out
-}
-
-fn numbers_match_arms(arms: Vec[MatchArm], mut st: NodeNumbersState) -> Vec[MatchArm] {
-    let mut out: Vec[MatchArm] = []
-    for arm in arms.drain() {
-        let pattern = numbers_match_pattern(arm.pattern, st)
-        let guard = numbers_maybe_expr(arm.guard, st)
-        let body = numbers_expr(arm.body, st)
-        out.push(MatchArm { pattern: pattern, guard: guard, body: body })
-    }
-    return out
-}
-
-fn numbers_select_arms(arms: Vec[SelectArm], mut st: NodeNumbersState) -> Vec[SelectArm] {
-    let mut out: Vec[SelectArm] = []
-    for arm in arms.drain() {
-        let value = numbers_expr(arm.value, st)
-        let body = numbers_block(arm.body, st)
-        out.push(SelectArm { binding: arm.binding, value: value, body: body, at: arm.at })
-    }
-    return out
-}
-
-fn numbers_fparts(parts: Vec[FPart], mut st: NodeNumbersState) -> Vec[FPart] {
-    let mut out: Vec[FPart] = []
-    for part in parts.drain() {
-        out.push(match part {
-            FPart::Hole { expr, spec, at } => FPart::Hole { expr: numbers_expr(expr, st), spec: spec, at: at },
-            other => other,
-        })
-    }
-    return out
 }
 
 fn numbers_match_patterns(patterns: Vec[MatchPattern], mut st: NodeNumbersState) -> Vec[MatchPattern] {
@@ -447,7 +397,14 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
         Expr::Match { value, arms, id } => {
             let id2 = numbers_id(id, st)
             let value2 = numbers_expr(value, st)
-            return Expr::Match { value: value2, arms: numbers_match_arms(arms, st), id: id2 }
+            let mut arms2: Vec[MatchArm] = []
+            for arm in arms.drain() {
+                let pattern = numbers_match_pattern(arm.pattern, st)
+                let guard = numbers_maybe_expr(arm.guard, st)
+                let body = numbers_expr(arm.body, st)
+                arms2.push(MatchArm { pattern: pattern, guard: guard, body: body })
+            }
+            return Expr::Match { value: value2, arms: arms2, id: id2 }
         },
         Expr::Range { start, end, inclusive, id } => {
             let id2 = numbers_id(id, st)
@@ -474,7 +431,14 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
         },
         Expr::LitInterpolated { parts, id } => {
             let id2 = numbers_id(id, st)
-            return Expr::LitInterpolated { parts: numbers_fparts(parts, st), id: id2 }
+            let mut parts2: Vec[FPart] = []
+            for part in parts.drain() {
+                parts2.push(match part {
+                    FPart::Hole { expr, spec, at } => FPart::Hole { expr: numbers_expr(expr, st), spec: spec, at: at },
+                    other => other,
+                })
+            }
+            return Expr::LitInterpolated { parts: parts2, id: id2 }
         },
         Expr::LitChar(text, id) => {
             return Expr::LitChar(text, numbers_id(id, st))
@@ -498,7 +462,13 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
         },
         Expr::Select(arms, id) => {
             let id2 = numbers_id(id, st)
-            return Expr::Select(numbers_select_arms(arms, st), id2)
+            let mut arms2: Vec[SelectArm] = []
+            for arm in arms.drain() {
+                let value = numbers_expr(arm.value, st)
+                let body = numbers_block(arm.body, st)
+                arms2.push(SelectArm { binding: arm.binding, value: value, body: body, at: arm.at })
+            }
+            return Expr::Select(arms2, id2)
         },
         Expr::If { cond, then_branch, else_branch, id } => {
             let id2 = numbers_id(id, st)

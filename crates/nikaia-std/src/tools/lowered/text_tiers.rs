@@ -749,6 +749,7 @@ pub(crate) fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_,
     let mut bound = false;
     match pattern {
         MatchPattern::Tuple { path, parts } => {
+            if path.is_empty() { return false; }
             let written = unaliased_in(ask.aliases, &joined_segments(path, ask.names));
             let declared = match match *nikaia_std::index::get(&walk.declared.variants, &written) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -757,26 +758,50 @@ pub(crate) fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_,
             let (of, variant) = variant_named(&written);
             let mut at: i64 = 0;
             for part in parts.iter() {
-                if at >= declared.len() as i64 { return bound; }
-                let owner = TextOwner::Variant(of.to_owned(), variant.to_owned(), at);
-                let lasting = plain_string(ask.names, nikaia_std::index::get(&declared, nikaia_std::index::at(at))) && lasting_tier(tier_at(&position_word(&owner, &no_path()), walk));
-                match part {
-                    MatchPattern::Path(named) => {
-                        if lasting && named.len() == 1 && !names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) {
-                            let mut local = plain_local(still_kinds());
-                            local.from = Some(seen(&owner, &no_path(), walk));
-                            bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned(), local, walk);
-                            bound = true;
-                        }
-                    },
-                    _ => { },
-                }
+                if at >= declared.len() as i64 || pattern_is_rest(part) { return bound; }
+                if bind_a_payload(part, TextOwner::Variant(of.to_owned(), variant.to_owned(), at), nikaia_std::index::get(&declared, nikaia_std::index::at(at)), ask, walk) { bound = true; }
                 at += 1;
+            }
+        },
+        MatchPattern::Named { path, fields, .. } => {
+            let owner = unaliased_in(ask.aliases, &joined_segments(path, ask.names));
+            for field in fields.iter() {
+                let name = ask.names.resolve(field.name).to_owned();
+                let key = (owner.to_owned(), name.to_owned());
+                let found: FieldDecl = match match *nikaia_std::index::get(&walk.declared.fields, &key) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                } { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if bind_a_payload(&field.pat, TextOwner::Field(owner.to_owned(), name), &found.ty, ask, walk) { bound = true; }
             }
         },
         _ => { },
     }
     bound
+}
+
+pub(crate) fn bind_a_payload(part: &MatchPattern, owner: TextOwner, ty: &Type, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    let name = match part {
+        MatchPattern::Path(named) => {
+            if named.len() != 1 || names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) { return false; }
+            ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_owned()
+        },
+        _ => return false,
+    };
+    if plain_string(ask.names, ty) {
+        if !lasting_tier(tier_at(&position_word(&owner, &no_path()), walk)) { return false; }
+        let mut local = plain_local(still_kinds());
+        local.from = Some(seen(&owner, &no_path(), walk));
+        bind_tier_local(name, local, walk);
+        return true;
+    }
+    if a_container(ask.names, ty) && holds_text(ask.names, ty) {
+        let declared = Declaring { owner, ty: ty.clone() };
+        let mut local = plain_local(kinds_of_declared(&declared, ask, walk));
+        local.declared = Some(declared);
+        bind_tier_local(name, local, walk);
+    }
+    false
 }
 
 pub(crate) fn bind_some_payload(pattern: &MatchPattern, scrutinee: &Expr, null_arm: bool, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {

@@ -613,7 +613,11 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         if !drained.is_empty() {
             let root = a_root_segment(&drained);
             let callers = root == "self" && state.borrowing_self || nikaia_std::index::or(state.binding(&root).as_ref().map(|__nikaia_it| __nikaia_it.changing), || false);
-            if callers { state.facts.kept_drains.insert(id_of(receiver) as i64); } else { state.hands_over_path(world, drained, on, state.read_seq, "taken away by `drain`", span); }
+            if callers { state.facts.kept_drains.insert(id_of(receiver) as i64); } else {
+                let last = state.changed.len() as i64 - 1;
+                if root == drained && last >= 0 && *nikaia_std::index::get(&state.changed, nikaia_std::index::at(last)) == drained { state.drained.insert(last); }
+                state.hands_over_path(world, drained, on, state.read_seq, "taken away by `drain`", span);
+            }
         }
     }
     if key == "Par::fold" { state.facts.par_folds.insert(node); }

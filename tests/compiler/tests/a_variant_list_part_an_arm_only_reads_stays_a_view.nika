@@ -1,0 +1,20 @@
+// #905: an arm that only reads a `Vec[String]` part lends it; the subject is
+// there to match again after the `match`.
+enum E { A(Vec[String]), N }
+
+fn g(e: E) -> i64 {
+    let n = match e {
+        E::A(xs) => xs.len(),
+        else => 0,
+    }
+    match e {
+        E::A(xs) => println(xs[0]),
+        else => println("none"),
+    }
+    return n
+}
+
+fn main() {
+    println(g(E::A(["a", "b"])))
+    println(g(E::N))
+}

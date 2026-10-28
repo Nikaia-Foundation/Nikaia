@@ -1,0 +1,20 @@
+// #905: a `Vec[String]` part an arm drains hands out text of its own.
+enum E { A(Vec[String]), N }
+
+fn g(e: E) -> Vec[String] {
+    let mut out: Vec[String] = []
+    match e {
+        E::A(xs) => {
+            for x in xs.drain() {
+                out.push(x)
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+fn main() {
+    println(g(E::A(["a", "b"])).join(","))
+    println(g(E::N).len())
+}
