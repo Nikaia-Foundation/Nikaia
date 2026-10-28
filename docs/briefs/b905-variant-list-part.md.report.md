@@ -10,6 +10,6 @@ Deviation: the brief's row for x in xs { out.push(x) } runs only where the part 
 Found: none
 Needs: none
 Changelog: A variant's Vec[String] part taken in a match arm is owned - returned, handed on, drained or made the match's value, it is Vec[String] even where only literals built the variant (also a struct pattern's fields); a drained part no longer lowers to an unused let mut (#905).
-Owner: Part I 3.x (for) says "A for over a list lends it ... Taking the elements away is written for x in xs.drain()": so for x in xs { out.push(x) } over an arm's part of owned text is refused (NK1102) as over any local; keep it so?
+Owner: none (settled by ADR-094 D4: a `for` lends, `for x in xs.drain()` takes; the supervisor, 2026-10-28)
 Disk freed: 0 (no clone; project-test cache 3.8G, 17G free, no new entry over 100 MB)
 Rs2nika: none
