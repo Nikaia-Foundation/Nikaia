@@ -178,3 +178,169 @@ pub fn project_tests_verdict(label: &str, outcomes: &[(String, ProjectTestsOutco
     passed
 }
 
+pub fn project_tests_running(total: i64) {
+    let plural = match total == 1 {
+        true => "",
+        false => "s",
+    };
+    println!("running {} test{}", total, plural);
+}
+
+pub fn project_tests_result(total: i64, failed: i64) -> i32 {
+    let passed = total - failed;
+    let said = match failed == 0 {
+        true => "ok",
+        false => "FAILED",
+    };
+    println!("\ntest result: {}. {} passed; {} failed", said, passed, failed);
+    match failed == 0 {
+        true => 0,
+        false => 1,
+    }
+}
+
+pub fn project_tests_output_label(output: &OutputTest) -> String { format!("output \"{}\" (tests/{})", output.name, named_by(output)) }
+
+pub fn project_tests_program_label(program: &ProgramTest) -> String { format!("program \"{}\" (tests/{}.nika)", program.name, program.name) }
+
+pub(crate) fn project_tests_wrote(got: &[(String, Option<Bytes>)], want: &[(String, Bytes)], at: i64) -> bool {
+    match &nikaia_std::index::get(&got, nikaia_std::index::at(at)).1 {
+        None => false,
+        Some(written) => *written == nikaia_std::index::get(&want, nikaia_std::index::at(at)).1,
+    }
+}
+
+pub(crate) async fn project_tests_written(path: &std::path::Path) -> Option<Bytes> {
+    match fs::read(path, &fs::Root::Anywhere).await {
+        Ok(value) => Some(value),
+        Err(_error) => { None },
+    }
+}
+
+pub async fn project_tests_output_outcome(output: &OutputTest, own: &std::path::Path, ended_well: bool, stdout: Bytes, stderr: String) -> ProjectTestsOutcome {
+    let files: Vec<(String, Option<Bytes>)> = nikaia_std::seq::then(output.files.iter(), async |file| { (file.0.to_owned(), project_tests_written(&nikaia_std::fs::path::join(&(own), std::path::Path::new(&(file.0)))).await) }).collect().await;
+    let printed_right = match &output.stdout {
+        None => true,
+        Some(want) => *want == stdout,
+    };
+    let said_right = match &output.stderr {
+        None => true,
+        Some(want) => *want == stderr.as_bytes(),
+    };
+    let wrote_right = (nikaia_std::range::span(0, output.files.len() as i64)).all(|at| { project_tests_wrote(&files, &output.files, at) });
+    ProjectTestsOutcome { ended_well, passed: ended_well && printed_right && said_right && wrote_right, stdout, stderr, files }
+}
+
+pub fn project_tests_refused_outcome(program: &ProgramTest, stderr: &str) -> ProjectTestsOutcome {
+    let broken = !is_refusal(stderr);
+    let shown = match broken {
+        true => format!("the program does not compile (rustc failed, not a refusal):\n{}", stderr),
+        false => stderr.to_owned(),
+    };
+    let passed = !broken && match &program.stderr {
+        None => false,
+        Some(want) => *want == shown.as_bytes(),
+    };
+    ProjectTestsOutcome { ended_well: false, passed, stdout: Bytes(vec![]), stderr: shown, files: vec![] }
+}
+
+pub fn project_tests_ran_outcome(program: &ProgramTest, ended_well: bool, stdout: Bytes, said: String) -> ProjectTestsOutcome {
+    let printed_right = match &program.stdout {
+        None => true,
+        Some(want) => *want == stdout,
+    };
+    let said_right = match &program.stderr {
+        None => true,
+        Some(want) => !is_refusal(match want.text() {
+            Ok(value) => value,
+            Err(_error) => { "" },
+        }) && *want == said.as_bytes(),
+    };
+    ProjectTestsOutcome { ended_well, passed: ended_well && printed_right && said_right, stdout, stderr: said, files: vec![] }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectTestsBlessed {
+    Unchanged,
+    Written,
+    Refused(String),
+}
+
+pub fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBlessed) -> bool {
+    match blessed {
+        ProjectTestsBlessed::Unchanged => { println!("{} ... ok", label); },
+        ProjectTestsBlessed::Written => { println!("{} ... blessed", label); },
+        ProjectTestsBlessed::Refused(why) => {
+            println!("{} ... FAILED ({}, so it is not blessed)", label, why);
+            return false;
+        },
+    }
+    true
+}
+
+pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
+    if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
+    let first = &nikaia_std::index::get(&outcomes, 0).1;
+    let refused = !first.ended_well && is_refusal(&first.stderr);
+    if !first.ended_well && !refused && first.stderr.starts_with("the program does not compile") { return Ok(ProjectTestsBlessed::Refused(String::from("the program does not compile"))); }
+    if !first.ended_well && !refused { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not end successfully"))); }
+    if first.passed { return Ok(ProjectTestsBlessed::Unchanged); }
+    if !refused && (program.stdout.is_some() || !first.stdout.is_empty()) { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stdout", program.name)))), &fs::Root::Anywhere, first.stdout.copy_of(), false, true).await?; }
+    if refused || program.stderr.is_some() { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stderr", program.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
+    Ok(ProjectTestsBlessed::Written)
+}
+
+pub fn project_tests_explain_output(output: &OutputTest, outcome: &ProjectTestsOutcome) {
+    if !outcome.ended_well { println!("the program did not end successfully"); }
+    match &output.stdout {
+        None => { },
+        Some(want) => {
+            if *want != outcome.stdout {
+                println!("standard output (- expected, + printed):");
+                print!("{}", project_tests_difference(want, &outcome.stdout));
+            }
+        },
+    }
+    match &output.stderr {
+        None => { },
+        Some(want) => {
+            if *want != outcome.stderr.as_bytes() {
+                println!("standard error (- expected, + written):");
+                print!("{}", project_tests_difference(want, &outcome.stderr.as_bytes()));
+            }
+        },
+    }
+    for at in 0..(output.files.len() as i64).min(outcome.files.len() as i64) {
+        let relative = &nikaia_std::index::get(&output.files, (at) as usize).0;
+        let want = &nikaia_std::index::get(&output.files, (at) as usize).1;
+        match &nikaia_std::index::get(&outcome.files, (at) as usize).1 {
+            None => { println!("{}: not written", relative); },
+            Some(got) => {
+                if got != want {
+                    println!("{} (- expected, + written):", relative);
+                    print!("{}", project_tests_difference(&want, got));
+                }
+            },
+        }
+    }
+}
+
+pub async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
+    if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
+    let first = &nikaia_std::index::get(&outcomes, 0).1;
+    if !first.ended_well { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not end successfully"))); }
+    if first.files.iter().any(|file| { file.1.is_none() }) { return Ok(ProjectTestsBlessed::Refused(String::from("a file its .out/ names was not written"))); }
+    if first.passed { return Ok(ProjectTestsBlessed::Unchanged); }
+    if output.stdout.is_some() { fs::write(&nikaia_std::fs::path::join(&(output.dir), std::path::Path::new(&(format!("{}.stdout", output.name)))), &fs::Root::Anywhere, first.stdout.copy_of(), false, true).await?; }
+    if output.stderr.is_some() { fs::write(&nikaia_std::fs::path::join(&(output.dir), std::path::Path::new(&(format!("{}.stderr", output.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
+    for (relative, got) in first.files.iter() {
+        fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(output.dir), std::path::Path::new(&(format!("{}.out", output.name))))), std::path::Path::new(&(relative))), &fs::Root::Anywhere, match got {
+            None => Bytes(vec![]),
+            Some(written) => written.copy_of(),
+        }, false, true).await?;
+    }
+    Ok(ProjectTestsBlessed::Written)
+}
+

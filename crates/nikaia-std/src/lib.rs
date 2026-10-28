@@ -263,6 +263,7 @@ pub mod runtime {
     clippy::precedence,
     clippy::manual_unwrap_or_default,
     clippy::needless_borrows_for_generic_args,
+    clippy::manual_ok_err,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):

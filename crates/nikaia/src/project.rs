@@ -25,7 +25,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use nikaia_std::bytes::Bytes;
 use nikaia_std::rt::exec::block_on;
 use nikaia_std::tools::project_check;
 use nikaia_std::tools::project_tests::{self, ProjectTestsOutcome as Outcome};
@@ -3499,8 +3498,7 @@ pub struct Suite<'a> {
 /// others.
 pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
     let total = suite.tests.len() + suite.outputs.len() + suite.programs_of_their_own.len();
-    let plural = if total == 1 { "" } else { "s" };
-    println!("running {total} test{plural}");
+    project_tests::project_tests_running(total as i64);
     let mut failed: Vec<Failed<'_>> = Vec::new();
     for (k, test) in suite.tests.iter().enumerate() {
         let mut outcomes = Vec::new();
@@ -3540,52 +3538,23 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 block_on(project_tests::copy_into(inputs, &own.0)).map_err(|e| anyhow!("{e}"))?;
             }
             let out = outcome_of(binary, &output.args, &output.stdin, &own.0, &own.0)?;
-            let files: Vec<(String, Option<Bytes>)> = output
-                .files
-                .iter()
-                .map(|(relative, _)| {
-                    let got = std::fs::read(own.0.join(relative)).ok();
-                    (relative.clone(), got.map(Bytes::from))
-                })
-                .collect();
-            let ended_well = out.status.success();
-            let printed_right = output
-                .stdout
-                .as_ref()
-                .is_none_or(|want| *want == *out.stdout);
-            let said_right = output
-                .stderr
-                .as_ref()
-                .is_none_or(|want| *want == *out.stderr);
-            let wrote_right = output
-                .files
-                .iter()
-                .zip(&files)
-                .all(|((_, want), (_, got))| got.as_ref() == Some(want));
             outcomes.push((
                 setting.clone(),
-                Outcome {
-                    ended_well,
-                    passed: ended_well && printed_right && said_right && wrote_right,
-                    stdout: out.stdout.into(),
-                    stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-                    files,
-                },
+                block_on(project_tests::project_tests_output_outcome(
+                    output,
+                    &own.0,
+                    out.status.success(),
+                    out.stdout.into(),
+                    String::from_utf8_lossy(&out.stderr).into_owned(),
+                )),
             ));
         }
-        let label = format!(
-            "output \"{}\" (tests/{})",
-            output.name,
-            project_tests::named_by(output)
-        );
+        let label = project_tests::project_tests_output_label(output);
         if suite.bless {
-            match bless(output, &outcomes)? {
-                Blessed::Unchanged => println!("{label} ... ok"),
-                Blessed::Written => println!("{label} ... blessed"),
-                Blessed::Refused(why) => {
-                    println!("{label} ... FAILED ({why}, so it is not blessed)");
-                    failed.push((label, outcomes, Some(output)));
-                }
+            let blessed = block_on(project_tests::project_tests_bless(output, &outcomes))
+                .map_err(|e| anyhow!("{e}"))?;
+            if !project_tests::project_tests_blessed_line(&label, &blessed) {
+                failed.push((label, outcomes, Some(output)));
             }
             continue;
         }
@@ -3601,15 +3570,14 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 run_program_test(program, suite.root, setting)?,
             ));
         }
-        let label = format!("program \"{}\" (tests/{}.nika)", program.name, program.name);
+        let label = project_tests::project_tests_program_label(program);
         if suite.bless {
-            match bless_program(program, &outcomes)? {
-                Blessed::Unchanged => println!("{label} ... ok"),
-                Blessed::Written => println!("{label} ... blessed"),
-                Blessed::Refused(why) => {
-                    println!("{label} ... FAILED ({why}, so it is not blessed)");
-                    failed.push((label, outcomes, None));
-                }
+            let blessed = block_on(project_tests::project_tests_bless_program(
+                program, &outcomes,
+            ))
+            .map_err(|e| anyhow!("{e}"))?;
+            if !project_tests::project_tests_blessed_line(&label, &blessed) {
+                failed.push((label, outcomes, None));
             }
             continue;
         }
@@ -3621,7 +3589,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
         println!("\nfailures:");
         for (label, outcomes, output) in &failed {
             println!("\n--- {label}");
-            let agree = outcomes.windows(2).all(|pair| pair[0].1 == pair[1].1);
+            let agree = project_tests::project_tests_agree(outcomes);
             let shown = match agree {
                 true => &outcomes[..1],
                 false => &outcomes[..],
@@ -3631,20 +3599,17 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                     println!("at user-parallelism = {setting}:");
                 }
                 match output {
-                    Some(output) => explain_output(output, outcome),
+                    Some(output) => project_tests::project_tests_explain_output(output, outcome),
                     None => print!("{}", String::from_utf8_lossy(&outcome.stdout)),
                 }
                 eprint!("{}", outcome.stderr);
             }
         }
     }
-    let passed = total - failed.len();
-    println!(
-        "\ntest result: {}. {passed} passed; {} failed",
-        if failed.is_empty() { "ok" } else { "FAILED" },
-        failed.len()
-    );
-    Ok(if failed.is_empty() { 0 } else { 1 })
+    Ok(project_tests::project_tests_result(
+        total as i64,
+        failed.len() as i64,
+    ))
 }
 
 /// The package's test programs, by name (`tools/project_tests.nika`).
@@ -3695,157 +3660,18 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
     };
     let built = run("build", &own.0)?;
     if !built.status.success() {
-        let mut shown = relocate(&built.stderr);
-        let broken = !project_tests::is_refusal(&shown);
-        if broken {
-            shown = format!("the program does not compile (rustc failed, not a refusal):\n{shown}");
-        }
-        return Ok(Outcome {
-            ended_well: false,
-            passed: !broken
-                && test
-                    .stderr
-                    .as_deref()
-                    .is_some_and(|want| want == shown.as_bytes()),
-            stdout: Bytes::default(),
-            stderr: shown,
-            files: Vec::new(),
-        });
+        return Ok(project_tests::project_tests_refused_outcome(
+            test,
+            &relocate(&built.stderr),
+        ));
     }
     let out = run("run", &own.0)?;
-    let ended_well = out.status.success();
-    let printed_right = test.stdout.as_ref().is_none_or(|want| *want == *out.stdout);
-    let said = relocate(&out.stderr);
-    let said_right = test.stderr.as_ref().is_none_or(|want| {
-        !project_tests::is_refusal(&String::from_utf8_lossy(want)) && *want == *said.as_bytes()
-    });
-    Ok(Outcome {
-        ended_well,
-        passed: ended_well && printed_right && said_right,
-        stdout: out.stdout.into(),
-        stderr: said,
-        files: Vec::new(),
-    })
-}
-
-/// `--bless` for a test program: `NAME.stdout` and `NAME.stderr` are written
-/// from what happened, a refusal into `NAME.stderr` only. A program that
-/// built and ended unsuccessfully, or whose settings disagree, is not blessed.
-fn bless_program(test: &ProgramTest, outcomes: &[(String, Outcome)]) -> Result<Blessed> {
-    let agree = outcomes.windows(2).all(|pair| pair[0].1 == pair[1].1);
-    let Some((_, first)) = outcomes.first() else {
-        return Ok(Blessed::Unchanged);
-    };
-    if !agree {
-        return Ok(Blessed::Refused("the settings disagree"));
-    }
-    let refused = !first.ended_well && project_tests::is_refusal(&first.stderr);
-    if !first.ended_well && !refused && first.stderr.starts_with("the program does not compile") {
-        return Ok(Blessed::Refused("the program does not compile"));
-    }
-    if !first.ended_well && !refused {
-        return Ok(Blessed::Refused("the program did not end successfully"));
-    }
-    if first.passed {
-        return Ok(Blessed::Unchanged);
-    }
-    let write = |extension: &str, bytes: &[u8]| -> Result<()> {
-        let path = test.dir.join(format!("{}.{extension}", test.name));
-        std::fs::write(&path, bytes).with_context(|| format!("blessing {}", path.display()))
-    };
-    if !refused && (test.stdout.is_some() || !first.stdout.is_empty()) {
-        write("stdout", &first.stdout)?;
-    }
-    if refused || test.stderr.is_some() {
-        write("stderr", first.stderr.as_bytes())?;
-    }
-    Ok(Blessed::Written)
-}
-
-/// **What an output test got wrong, as differences**
-/// ([ADR-247](../../docs/specification/adr/adr-247.md) D4).
-fn explain_output(output: &OutputTest, outcome: &Outcome) {
-    if !outcome.ended_well {
-        println!("the program did not end successfully");
-    }
-    if let Some(want) = &output.stdout
-        && *want != outcome.stdout
-    {
-        println!("standard output (- expected, + printed):");
-        print!(
-            "{}",
-            project_tests::project_tests_difference(want, &outcome.stdout)
-        );
-    }
-    if let Some(want) = &output.stderr
-        && *want != outcome.stderr.as_bytes()
-    {
-        println!("standard error (- expected, + written):");
-        print!(
-            "{}",
-            project_tests::project_tests_difference(want, outcome.stderr.as_bytes())
-        );
-    }
-    for ((relative, want), (_, got)) in output.files.iter().zip(&outcome.files) {
-        match got {
-            None => println!("{relative}: not written"),
-            Some(got) if got != want => {
-                println!("{relative} (- expected, + written):");
-                print!("{}", project_tests::project_tests_difference(want, got));
-            }
-            Some(_) => {}
-        }
-    }
-}
-
-/// What `--bless` did with one output test.
-enum Blessed {
-    Unchanged,
-    Written,
-    Refused(&'static str),
-}
-
-/// **`--bless`** ([ADR-247](../../docs/specification/adr/adr-247.md) D3):
-/// what the program printed becomes `NAME.stdout`, where the test has one,
-/// and each file it wrote becomes the `NAME.out/` entry of that name. Only a
-/// run that ended successfully, and at two settings only one whose runs
-/// agree: a difference between the settings is a fault, never an expectation.
-fn bless(output: &OutputTest, outcomes: &[(String, Outcome)]) -> Result<Blessed> {
-    let agree = outcomes.windows(2).all(|pair| pair[0].1 == pair[1].1);
-    let Some((_, first)) = outcomes.first() else {
-        return Ok(Blessed::Unchanged);
-    };
-    if !agree {
-        return Ok(Blessed::Refused("the settings disagree"));
-    }
-    if !first.ended_well {
-        return Ok(Blessed::Refused("the program did not end successfully"));
-    }
-    if first.files.iter().any(|(_, got)| got.is_none()) {
-        return Ok(Blessed::Refused("a file its .out/ names was not written"));
-    }
-    if first.passed {
-        return Ok(Blessed::Unchanged);
-    }
-    if output.stdout.is_some() {
-        let path = output.dir.join(format!("{}.stdout", output.name));
-        std::fs::write(&path, &first.stdout)
-            .with_context(|| format!("blessing {}", path.display()))?;
-    }
-    if output.stderr.is_some() {
-        let path = output.dir.join(format!("{}.stderr", output.name));
-        std::fs::write(&path, first.stderr.as_bytes())
-            .with_context(|| format!("blessing {}", path.display()))?;
-    }
-    for (relative, got) in &first.files {
-        let path = output
-            .dir
-            .join(format!("{}.out", output.name))
-            .join(relative);
-        std::fs::write(&path, got.as_deref().unwrap_or_default())
-            .with_context(|| format!("blessing {}", path.display()))?;
-    }
-    Ok(Blessed::Written)
+    Ok(project_tests::project_tests_ran_outcome(
+        test,
+        out.status.success(),
+        out.stdout.into(),
+        relocate(&out.stderr),
+    ))
 }
 
 /// A test that failed: what it is called, what each setting did, and the
