@@ -38,15 +38,19 @@ impl CheckState {
     #[allow(clippy::too_many_arguments)]
     pub fn tuple_let(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
         if written { self.findings.push(check_refusal("NK1136", span, String::from("A `let` that binds several names can't have a type."), vec![String::from("The names are taken apart by position, and one type can't say which name it belongs to.")], Some(String::from("Remove the type, or bind one name and read the parts from it.")))); }
+        let what = match value {
+            Expr::Variable(name, _) => { let name = *name; if world.words.resolve(name).starts_with("__nikaia_tuple") { "A lambda's parameter" } else { "A `let`" } },
+            _ => "A `let`",
+        };
         let mut parts = binds_tuple_parts(found, names.len() as i64);
-        if shape.is_empty() { let refused = self.a_tuple_pattern_that_does_not_fit(found, names.len() as i64, "A `let`", span); }
+        if shape.is_empty() { let refused = self.a_tuple_pattern_that_does_not_fit(found, names.len() as i64, what, span); }
         if !shape.is_empty() {
             let mut width: i64 = 1;
             if *nikaia_std::index::get(&shape, 0) > 0 {
                 width = *nikaia_std::index::get(&shape, 0);
-                let refused = self.a_tuple_pattern_that_does_not_fit(found, width, "A `let`", span);
+                let refused = self.a_tuple_pattern_that_does_not_fit(found, width, what, span);
             }
-            parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len() as i64, "A `let`", span);
+            parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len() as i64, what, span);
         }
         let at = span.start as i64;
         let lent = self.facts.lent_lets.contains(&at) || self.a_tuple_over_a_lent_name(world, value);

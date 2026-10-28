@@ -12,7 +12,7 @@ pub use nikaia_std::tools::parse_errors::RESERVED_WORDS;
 /// What the grammar's actions build the tree with - the postfix steps and the folds of
 /// a head and its tails - is `tools/tree_build.nika`'s (ADR-294, #125).
 pub use nikaia_std::tools::tree_build::{
-    Postfix, fold_binary, fold_postfix, grouped, guarded, params_of, split_mut,
+    Postfix, fold_binary, fold_postfix, grouped, guarded, params_of, split_mut, unpacked,
 };
 
 /// One name or a flat tuple keeps no shape (ADR-356): only a nested pattern
@@ -23,6 +23,32 @@ fn flat_shape((names, shape): (Vec<Symbol>, Vec<i64>)) -> (Vec<Symbol>, Vec<i64>
         (names, Vec::new())
     } else {
         (names, shape)
+    }
+}
+
+/// A lambda's parameter: written `mut`, its name, and - for a tuple pattern -
+/// the names and shape the pattern binds and where it stands (ADR-358).
+type LambdaParam = (bool, Symbol, Option<((Vec<Symbol>, Vec<i64>), ast::Span)>);
+
+/// A lambda from its parameters as written: a tuple pattern among them is a
+/// parameter under its hidden name, taken apart by a `let` first in the body
+/// (ADR-358 D5, `tools/tree_build.nika`'s `unpacked`).
+fn lambda(params: Vec<LambdaParam>, mut body: ast::Block) -> ast::Expr {
+    let mut plain = Vec::new();
+    let mut unpacks = Vec::new();
+    for (mutable, name, pattern) in params {
+        plain.push((mutable, name));
+        if let Some(((names, shape), span)) = pattern {
+            unpacks.push((name, names, shape, span));
+        }
+    }
+    unpacked(&mut body, &unpacks);
+    let (params, mutable) = split_mut(&plain);
+    ast::Expr::Closure {
+        params,
+        mutable,
+        body,
+        id: ast::NodeId::parsed(),
     }
 }
 
@@ -2630,10 +2656,7 @@ grammar! {
         // Kap 5.2/5.3: a lambda, with its arguments named or implicit.
         rule closure_expr -> Expr =
             KW_FN "(" params:closure_params? ")" body:block
-            -> {
-                let (params, mutable) = split_mut(&params.unwrap_or_default());
-                Expr::Closure { params, mutable, body, id: NodeId::parsed() }
-            }
+            -> { lambda(params.unwrap_or_default(), body) }
           // `fn { … }` takes **no arguments**, and used to take however many of
           // `a`, `b`, `c` its body mentioned (ADR-277 withdrew that). A body that
           // reaches for one of the three is now a body naming something nothing
@@ -2649,7 +2672,7 @@ grammar! {
         // caller whose value changes is the lock. It is
         // [ADR-094](../../../../docs/specification/adr/adr-094.md) D3's word
         // with its meaning unchanged, one position over.
-        rule closure_params -> Vec<(bool, Symbol)> =
+        rule closure_params -> Vec<LambdaParam> =
             head:closure_param tail:closure_param_tail* -> {
                 let mut params = vec![head];
                 params.extend(tail);
@@ -2662,11 +2685,22 @@ grammar! {
         // can ignore one without inventing a name.
         //
         // No `mut` in front of it: there is nothing bound to change.
-        rule closure_param -> (bool, Symbol) =
-            mutable:kw_mut? name:NAME -> { (mutable.is_some(), name) }
-          | UNDERSCORE -> { (false, _state.intern("_")) }
+        //
+        // **A tuple pattern is a lambda's argument too**
+        // ([ADR-358](../../../../docs/specification/adr/adr-358.md)):
+        // `pairs.filter(fn((k, v)) { v > 0 })`. The parameter is named
+        // `__nikaia_tuple` and the byte it starts at - a name no `NAME` gives
+        // anybody, the prefix the kept calls' arguments use - and `lambda`
+        // takes it apart first in the body.
+        rule closure_param -> LambdaParam @=
+            mutable:kw_mut? name:NAME -> { (mutable.is_some(), name, None) }
+          | UNDERSCORE -> { (false, _state.intern("_"), None) }
+          | pattern:tuple_pattern -> {
+                let hidden = _state.intern(&format!("__nikaia_tuple{}", _span.start));
+                (false, hidden, Some((flat_shape(pattern), Span::from(_span))))
+            }
 
-        rule closure_param_tail -> (bool, Symbol) = "," p:closure_param -> { p }
+        rule closure_param_tail -> LambdaParam = "," p:closure_param -> { p }
 
         // Kap 3.3. It binds looser than every operator below it, so `0..<n - 1`
         // is a range ending at `n - 2` rather than a range subtracted from -
@@ -2995,8 +3029,7 @@ grammar! {
         // still wins at a `fn:`, because neither arm above it can match a colon.
         rule trailing_lambda -> Expr =
             KW_FN "(" params:closure_params? ")" body:block -> {
-                let (params, mutable) = split_mut(&params.unwrap_or_default());
-                Expr::Closure { params, mutable, body, id: NodeId::parsed() }
+                lambda(params.unwrap_or_default(), body)
             }
           | KW_FN body:block -> {
                 Expr::Closure { params: Vec::new(), mutable: Vec::new(), body, id: NodeId::parsed() }

@@ -52,17 +52,23 @@ impl CheckState {
         if written {
             self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.", ["The names are taken apart by position, and one type can't say which name it belongs to."], "Remove the type, or bind one name and read the parts from it."))
         }
+        // A lambda's parameter that is a tuple pattern is this `let` over the
+        // name the parser gave it (ADR-358 D5), and is named as what was written.
+        let what = match value {
+            Expr::Variable(name, _) => if world.words.resolve(name).starts_with("__nikaia_tuple") { "A lambda's parameter" } else { "A `let`" },
+            else => "A `let`",
+        }
         let mut parts = binds_tuple_parts(found, names.len())
         if shape.len() == 0 {
-            let refused = self.a_tuple_pattern_that_does_not_fit(found, names.len(), "A `let`", span)
+            let refused = self.a_tuple_pattern_that_does_not_fit(found, names.len(), what, span)
         }
         if shape.len() > 0 {
             let mut width = 1
             if shape[0] > 0 {
                 width = shape[0]
-                let refused = self.a_tuple_pattern_that_does_not_fit(found, width, "A `let`", span)
+                let refused = self.a_tuple_pattern_that_does_not_fit(found, width, what, span)
             }
-            parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len(), "A `let`", span)
+            parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len(), what, span)
         }
         let at = span.start as i64
         let lent = self.facts.lent_lets.contains(at) || self.a_tuple_over_a_lent_name(world, value)

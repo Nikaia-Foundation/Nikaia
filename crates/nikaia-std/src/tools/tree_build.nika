@@ -42,6 +42,22 @@ pub fn split_mut(params: ref Vec[(bool, winnow_grammar::Symbol)]) -> (Vec[winnow
     return (names, mutable)
 }
 
+/// **A lambda's parameter that takes a tuple apart**
+/// ([ADR-358](../../../docs/specification/adr/adr-358.md) D5): `fn((k, v)) { … }`
+/// is a parameter under a name nobody can write and, put first in `body`,
+/// `let (k, v) = ` that name. Each unpack is the hidden name, the names and shape of
+/// the pattern (as a `let` holds them), and where the pattern was written. The
+/// lets come in the parameters' order, so the checker reads them as the
+/// `let`s they are and a wrong width is that `let`'s finding.
+pub fn unpacked(mut body: Block, unpacks: Vec[(winnow_grammar::Symbol, Vec[winnow_grammar::Symbol], Vec[i64], Span)]) {
+    let mut at = 0
+    for u in unpacks {
+        let open = Stmt::Let { names: u.1.clone(), shape: u.2.clone(), mutable: false, ty: null, value: Expr::Variable(u.0, node_id::NodeId::parsed()) }
+        body.stmts.insert(at, Spanned { node: open, span: u.3, doc: null, attributes: [] })
+        at += 1
+    }
+}
+
 /// A declaration's parameters, with the config zone split into its two shapes.
 pub fn params_of(receiver: Receiver?, args: Vec[FnArg], zone: ConfigZone?) -> FnParams {
     if zone == null {

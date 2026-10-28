@@ -1,0 +1,13 @@
+// ADR-358: a lambda's parameter may be a tuple pattern, `fn((name, n)) { … }`,
+// over pairs handed by `filter` and `map`, nested, and beside a plain name.
+fn main() {
+    let pairs: Vec[(String, i64)] = [("a", 1), ("b", -2), ("c", 3)]
+    let kept: Vec[String] = pairs.iter().filter(fn((_, n)) { return n > 0 }).map(fn((name, n)) { return f"{name}={n}" }).collect()
+    println(kept.join(", "))
+    let nested: Vec[((i64, i64), String)] = [((1, 2), "x"), ((3, 4), "y")]
+    for s in nested.iter().map(fn(((a, b), t)) { return f"{t}:{a + b}" }) {
+        println(s)
+    }
+    let total: i64 = pairs.iter().map(fn((_, n)) { return n * 10 }).sum()
+    println(f"{total}")
+}

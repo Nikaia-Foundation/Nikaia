@@ -991,11 +991,13 @@ fn check_core_ops_a_pair_split(mut state: CheckState, world: ref CheckWorld, dec
     }
     let mut names: Vec[String] = []
     for p in params {
-        names.push(world.words.resolve(p).clone())
+        let name = world.words.resolve(p)
+        // a tuple pattern of its own (ADR-358), whose name nobody wrote
+        names.push(if name.starts_with("__nikaia_tuple") { "(…)" } else { name.clone() })
     }
     let joined = names.join(", ")
     let notes: Vec[String] = [f"The place hands it one value, a `{handed[0].text()}`, and a lambda takes what it is handed.".clone()]
-    let help: String = f"Take the tuple and name its parts in the body: `fn(pair) {{ let ({joined}) = pair … }}`."
+    let help: String = f"Take the tuple apart in the parameter, with brackets around the names: `fn(({joined})) {{ … }}`."
     state.findings.push(check_refusal("NK1101", span, f"This lambda takes {names.len()} arguments, but it is handed one tuple.", notes, help))
 }
 

@@ -1,0 +1,5 @@
+fn main() {
+    let pairs: Vec[(String, i64)] = [("a", 1)]
+    let n = pairs.iter().filter(fn((a, b, c)) { return true }).count()
+    println(f"{n}")
+}

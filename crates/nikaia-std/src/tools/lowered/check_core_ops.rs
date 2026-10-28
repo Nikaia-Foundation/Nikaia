@@ -661,11 +661,12 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
     let mut names: Vec<String> = vec![];
     for p in params.iter() {
         let p = *p;
-        names.push(world.words.resolve(p).to_owned());
+        let name = world.words.resolve(p);
+        names.push(if name.starts_with("__nikaia_tuple") { String::from("(…)") } else { name.to_owned() });
     }
     let joined = names.join(", ");
     let notes: Vec<String> = vec![format!("The place hands it one value, a `{}`, and a lambda takes what it is handed.", (*nikaia_std::index::get(&handed, 0)).text()).to_owned()];
-    let help: String = format!("Take the tuple and name its parts in the body: `fn(pair) {{ let ({}) = pair … }}`.", joined);
+    let help: String = format!("Take the tuple apart in the parameter, with brackets around the names: `fn(({})) {{ … }}`.", joined);
     state.findings.push(check_refusal("NK1101", span, format!("This lambda takes {} arguments, but it is handed one tuple.", names.len() as i64), notes, Some(help)));
 }
 

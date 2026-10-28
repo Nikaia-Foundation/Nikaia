@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1262] — 2026-10-28
+
+**A lambda's parameter takes a tuple apart (ADR-358 D1, D2, D5; #623, the lambda half)**
+- `pairs.iter().filter(fn((name, n)) { n > 0 })`: a lambda's parameter may be a tuple pattern, nested as a `let`'s is (`fn(((a, b), t))`), beside plain names. It is one parameter, under a name of the compiler's (`__nikaia_tuple` and the byte it starts at), taken apart by a `let` first in the body (`unpacked`, tree_build.nika), so its parts are typed, lent and read out of their views as that `let`'s are. A pattern of the wrong width is `NK1283`, named as a lambda's parameter.
+- `NK1101`'s help for `fn(a, b)` handed one tuple writes the pattern: `fn((a, b)) { … }`.
+- Open in #623: the pattern in a function's parameter, its ledger keys, and `ref` / `mut` before it (D3, D4).
+
 ## [0.0.1261] — 2026-10-28
 
 **A `mut` parameter is a source of the result's views; text given to a `ref String` field is lent (#929, ADR-283 D25, ADR-282 D2)**

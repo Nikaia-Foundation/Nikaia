@@ -1,0 +1,9 @@
+error[NK1283]: A lambda's parameter takes 3 parts apart, but the value is a tuple of 2.
+  --> tests/a_lambda_parameter_takes_apart_as_many_parts_as_the_tuple_has.nika:3:36
+   |
+ 3 |     let n = pairs.iter().filter(fn((a, b, c)) { return true }).count()
+   |                                    ^^^^^^^^^
+   |
+   = note: A tuple pattern names one part of a tuple each, so the value has to be a tuple of exactly that many.
+   = help: Bind one name and read the value from it, or write as many names as the tuple has parts.
+1 type error

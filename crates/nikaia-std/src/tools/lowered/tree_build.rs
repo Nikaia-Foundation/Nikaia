@@ -22,6 +22,15 @@ pub fn split_mut(params: &[(bool, winnow_grammar::Symbol)]) -> (Vec<winnow_gramm
     (names, mutable)
 }
 
+pub fn unpacked(body: &mut Block, unpacks: &[(winnow_grammar::Symbol, Vec<winnow_grammar::Symbol>, Vec<i64>, Span)]) {
+    let mut at: i64 = 0;
+    for u in unpacks.iter() {
+        let open = Stmt::Let { names: u.1.to_owned(), shape: u.2.to_owned(), mutable: false, ty: None, value: Expr::Variable(u.0, node_id::NodeId::parsed()) };
+        body.stmts.insert(nikaia_std::count::of(at), Spanned { node: open, span: u.3, doc: None, attributes: vec![] });
+        at += 1;
+    }
+}
+
 pub fn params_of(receiver: Option<Receiver>, args: Vec<FnArg>, zone: Option<ConfigZone>) -> FnParams {
     if zone.is_none() { return FnParams { receiver, args, config: vec![], spread: None }; }
     match nikaia_std::index::or(zone, || ConfigZone::Options(vec![])) {
