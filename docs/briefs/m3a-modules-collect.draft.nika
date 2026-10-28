@@ -1,0 +1,318 @@
+use std::collections
+use std::fs
+
+pub struct Unit {
+    /// The package this file belongs to, as a **consumer** would write it -
+    /// and `None` for every file of the program being built, whose names are
+    /// the program's own.
+    ///
+    /// It is not the file stem any more. A file is not a unit of naming
+    /// (ADR-286 D1), so nothing about a name says which file it came from; the
+    /// field stays because a package that arrives by path will fill it in
+    /// (ADR-286 D15), and that is the same qualification one level up.
+    pub package: String?,
+    /// The package names **inside this file** that are another word for a
+    /// package this build already has a word for - see
+    /// [`ProjectMembersDependency::renames`]. Empty for every file of the program itself,
+    /// whose words are this build's by definition.
+    pub renames: collections::BTreeMap[String, String],
+    pub path: fs::Path,
+    pub source: String,
+    pub parsed: Parsed,
+}
+
+/// How a consumer writes a name from this file: `http::serve` for another
+/// package, and plain `serve` inside the program's own.
+pub fn modules_qualify(package: String?, name: String) -> String {
+    return match &package {
+        package => f"{package}::{name}",
+        null => name,
+    }
+}
+
+/// A package this program depends on: the name a `use` writes, and where it is
+/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15). PackageTypes in
+/// `tools/project_members.nika`, which finds them (P4a).
+/// Every file of the package the entry belongs to, entry first.
+///
+/// **The directory decides, not the `use` lines** (ADR-286 D1). Every `.nika`
+/// beside the entry takes part, whether or not anything names it - which is what
+/// makes moving a declaration from one file to another housekeeping rather than a
+/// change to the package's surface.
+///
+/// Entry first because the entry is where `fn main` may be written, and the rest
+/// sorted by file name: the order files are emitted in has to be a function of
+/// the source tree alone (Part III 13.5's determinism), and a directory listing
+/// is not sorted anywhere.
+pub fn collect(entry: ref fs::Path) -> Vec[Unit] throws {
+    return collect_with(entry, [])
+}
+
+/// The same, with the packages this program depends on
+/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15).
+///
+/// A dependency's files come **after** the program's own, in the order the
+/// manifest sorted its names, so the emitted file stays a function of the source
+/// tree (Part III 13.5). Each is read from the package's `src/`, because a
+/// dependency is a project and that is where a project keeps its files
+/// (Part III, 13.1).
+pub fn collect_with(entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency]) -> Vec[Unit] throws {
+    let mut names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
+    // **A Rust crate is a package a `use` may name** (Part III 15.2's `use
+    // image`), under the name a call writes it by (ADR-290 D1).
+    for x in foreign_beside(entry).iter() {
+        names.insert(x.clone())
+    }
+    let mut units = package_at(entry, null, names, collections::BTreeMap())
+
+    // **Read, and not emitted** ([ADR-286](../../../docs/specification/adr/adr-286.md)
+    // D1). A dependency is its own crate now, so its files are Cargo's to
+    // compile - but its *surface* is this program's to check against, and a
+    // package's surface is what its files declare. So they arrive here tagged
+    // with the name this program reaches them by, the ledger and the checks see
+    // them, and `Program::emit` writes none of them.
+    //
+    // **And its own `use` lines are checked against its own manifest keys**,
+    // not against nothing: a package that depends on a package is a package
+    // (D3), and the level below it is its business rather than a rule it broke.
+    for dependency in dependencies {
+        let src = dependency.root.join(SRC)
+        if !project_tests_is_dir(src) {
+            throw refuse(f"`{dependency.name}` is a dependency by path, but {src.display()} doesn't exist.\nA package is a directory with_ a `{SRC}/` folder in it.")
+        }
+        units.extend(package_at(src.join(ENTRY), (dependency.name), dependency.reachable, dependency.renames))
+    }
+    return units
+}
+
+/// One package: the directory an entry sits in, checked as a namespace of its
+/// own.
+fn package_at(entry: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String]) -> Vec[Unit] throws {
+    let base = (match entry.parent().filter(fn(p) { !p.as_os_str().is_empty() }) { x => x.to_path_buf(), null => null }) ?? PathBuf::from(".")
+
+    // The entry by its name: `x.nika` and the `./x.nika` the directory
+    // lists are one file (#774).
+    let mut beside: Vec[fs::Path] = fs::read_dir(base, fs::Root::Anywhere).iter().map(fn(entry) { base.join(entry) }).filter(fn(path) { match path.extension() { e => e == "nika", null => false } }).filter(fn(path) { path.file_name() != entry.file_name() }).collect()
+
+    // A library needs no `main.nika`: what a package offers is its public
+    // surface, and an entry point is what a *program* has.
+    let mut units = match project_tests_is_file(entry) {
+        true => [read_unit(entry, package, reachable, renames, Standing::InProject)],
+        false => [],
+    }
+    for path in beside {
+        units.push(read_unit(path, package, reachable, renames, Standing::InProject))
+    }
+    one_namespace(units)
+    return units
+}
+
+/// Where a project keeps its sources and what its entry point is called
+/// (Part III, 13.1).
+comptime SRC: ref String = "src"
+
+comptime ENTRY: ref String = "main.nika"
+
+/// The entry and nothing beside it - a `.nika` file compiled on its own.
+///
+/// `nikaia lower` outside a project is not a package: a directory of loose examples is
+/// a directory of programs, and compiling one of them must not pull in the other
+/// ten. A package is a directory **of a project**, which is what a `nikaia.toml`
+/// declares.
+pub fn collect_one(entry: ref fs::Path) -> Vec[Unit] throws {
+    return [read_unit(entry, null, collections::BTreeSet(), collections::BTreeMap(), Standing::Alone)]
+}
+
+/// **Whether a file has a project to declare its dependencies in**
+/// ([ADR-260](../../../docs/specification/adr/adr-260.md) D2): what a `use` of
+/// a package nobody declares is told depends on it. A file of a project is
+/// missing a line in its `nikaia.toml`; a file outside one has no `nikaia.toml`
+/// for the line to be missing from.
+pub enum Standing {
+    InProject,
+    Alone,
+}
+
+fn read_unit(path: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], standing: Standing) -> Unit throws {
+    let source = fs::read_to_string(path, fs::Root::Anywhere)
+    // `with_context` and not `anyhow!("{e}")`: formatting the error into a string
+    // loses its type, and the type is what says this is a refusal of the program
+    // rather than a failure of this compiler (`diagnostics::Refused`).
+    // A parse error is a finding, rendered here where the path is known; any
+    // other failure keeps the path as its context.
+    let parsed = parser::parse_to_ast(source) catch { throw match refused_finding(error) { finding => refuse(rendered(finding, path.display(), source).trim_end().clone()), null => error.context(path.display()) } }
+    check_imports(parsed, path, reachable, standing)
+    let mut parsed = parsed
+    parsed.package = package.map(fn(x) { x.clone() })
+    return Unit { package: package.map(fn(x) { x.clone() }), renames: renames.clone(), path: path.clone(), source: source, parsed: parsed }
+}
+
+/// **Two files of one package may not declare the same name** (ADR-286 D1).
+///
+/// One namespace, so two `Row`s in it is an error rather than a rule about which
+/// of them a line means. NotAnEscape here and not left to `rustc`: it would report a
+/// duplicate definition against the generated file, which is exactly what
+/// Part III C.1 forbids - and it would name a line the user never wrote.
+///
+/// **Two files and not one**
+/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D6). A name declared
+/// twice in *one* file is `NK1148` in the checker, which every build runs -
+/// where this runs only for a build that has a manifest. This kept the one-file
+/// case for as long as it was the only rule there was, and served it badly:
+/// a sentence about two files, naming one of them twice.
+fn one_namespace(units: ref Vec[Unit]) throws {
+    // ADAPTER: bleibt in Rust (`Parsed`)
+    let files: Vec[(ref fs::Path, ref CheckWorld)] = units.iter().map(fn(unit) { (unit.path.clone(), unit.parsed) }).collect()
+    declared_once(files)
+}
+
+/// The same rule for any set of files that is one package: a project's, and
+/// `std`'s toolchain package (`sysroot::lower_tools`), whose files were lowered
+/// into one namespace without it - two private `a_call`s in two files were
+/// read as one, and a call of the one met the other's parameters (found
+/// moving `trust`'s walk into Nikaia, #125).
+pub fn declared_once(files: ref Vec[(ref fs::Path, ref CheckWorld)]) throws {
+    // In Nikaia (`tools/modules.nika`, ADR-294, #125).
+    let paths: Vec[String] = files.iter().map(fn(file) { file.0.display() }).collect()
+    let declared: Vec[Vec[String]] = files.iter().map(fn(file) { declared_names(file.1.interner, file.1.program.items) }).collect()
+    match declared_once(paths, declared) {
+        message => throw refuse(message),
+        null => {
+        },
+    }
+}
+
+// rs2nika: `declared_names` only forwards to tools/modules.nika `declared_names`: its callers call `declared_names` (R256)
+/// **Every `use` in a file, against the packages it may name**
+/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D11, D13, D14).
+///
+/// `use` makes a package reachable and brings **no name** in, so there are four
+/// things to say no to and one thing to accept. Each message names the way out,
+/// because a rule a reader cannot act on is an obstacle (Part III, C.2):
+///
+/// * a **path** other than `std`'s — `use net::http` — which is either a nested
+///   package (there is no such thing) or an attempt to import a name;
+/// * a name that is a **file beside this one**, the shape that worked before
+///   ADR-286 D1 made a package a directory;
+/// * a name **no dependency declares**, which is D4 read from the other side: a
+///   prefix must be introduced, and this is the introduction that names nothing;
+/// * the **same name twice**, which is D5 — two packages under one name is an
+///   error rather than a rule about which of them wins.
+///
+/// The braced and glob forms (`use pool::{Conn}`, `use pool::*`) are parse errors
+/// at the brace and the star, so D2's sentence about them is not reachable from
+/// here; that is [ADR-286](../../../docs/specification/adr/adr-286.md)'s
+/// remaining piece and it belongs in the grammar.
+fn check_imports(parsed: ref CheckWorld, at: ref fs::Path, reachable: ref collections::BTreeSet[String], standing: Standing) throws {
+    let refused = a_use_refused(parsed.interner, parsed.program.items, at.display(), reachable, (match standing { Standing::Alone => true, else => false }), fn(package) { match at.parent()?.join(f"{package}.nika") { path => project_tests_is_file(path), null => false } })
+    if refused != null {
+        let message = refused
+        throw refuse(message)
+    } else {
+    }
+}
+
+/// The units of one package, by file name and the SHA-256 of their bytes
+/// ([ADR-100](../../../docs/specification/adr/adr-100.md) D3).
+///
+/// **The same digest the cache key uses** ([ADR-021](../../../docs/specification/adr/adr-021.md)),
+/// because the record says so and because a build that hashed the same file
+/// twice with two digests would be paying twice to disagree with itself.
+fn sources_of[H: ModulesHost](units: impl IntoIterator<Item = &Unit>, host: ref H) -> collections::BTreeMap[String, String] {
+            // A unit always comes from a file; a path that ends in nothing
+            // is not one this compiler read, and naming it by its whole
+            // spelling is better than dropping it out of the table.
+    return units.into_iter().map(fn(unit) { let name = (unit.path.file_name() ?? unit.path).to_string_lossy().to_string(); (name, host.sha256_hex(unit.source.bytes)) }).collect()
+}
+
+/// The runs of units that belong to one package, in the order they were read.
+///
+/// The units arrive grouped (`collect_with`), so this is a walk and not a sort.
+pub fn groups(units: ref Vec[Unit]) -> Vec[std::ops::Range[i64]] {
+    // In Nikaia (`tools/modules.nika`).
+    return groups(packages_of(units)).into_iter().map(fn(from, to) { from..<to }).collect()
+}
+
+/// Each unit's package, `None` for the program's own: what the Nikaia half
+/// of the assembly reads of a unit.
+fn packages_of(packages: ref Vec[String?]) -> Vec[String?] {
+    return packages.iter().map(fn(p) { p.clone() }).collect()
+}
+
+/// One package's contracts: the ledger it ships where that may be believed, and
+/// the inference over its own units where it may not
+/// ([ADR-100](../../../docs/specification/adr/adr-100.md) D1 and D3).
+///
+/// **Believed is the fast path and the *correct* one**, not merely the quick
+/// one. A package's own build had its own dependencies in view and this one does
+/// not (ADR-286 D21), so an answer derived here can only be the same or worse -
+/// and two builds that derive the same function differently is the divergence
+/// D1 exists to make impossible.
+///
+/// **And it is never believed against its own sources.** The hashes in the
+/// header say which files the entries are an answer about; where one does not
+/// match, that package is derived again here. A ledger with no `[sources]` at
+/// all is treated as not matching, which is the fail-closed direction
+/// ([ADR-010](../../../docs/specification/adr/adr-010.md) D1): *nothing was
+/// recorded* must not read as *nothing changed*.
+fn package_ledger[H: ModulesHost](units: ref Vec[Unit], dependency: ref ProjectMembersDependency?, library: ref Ledger, host: ref H) -> Ledger {
+    return package_ledger_noted(units, dependency, library, host).0
+}
+
+/// [`package_ledger`], and what the `sync` inference learned for the build to
+/// say (ADR-288 D29, D32) - nothing for a shipped ledger, which was inferred by
+/// the package's own build and is read rather than derived.
+fn package_ledger_noted[H: ModulesHost](units: ref Vec[Unit], dependency: ref ProjectMembersDependency?, library: ref Ledger, host: ref H) -> (Ledger, Noted) {
+    let (own, _, noted) = package_ledger_checked(units, dependency, library, host)
+    return (own, noted)
+}
+
+/// [`package_ledger_noted`], with the ledger pass's checked units where it ran
+/// one (`None` for a shipped ledger).
+fn package_ledger_checked[H: ModulesHost](units: ref Vec[Unit], dependency: ref ProjectMembersDependency?, library: ref Ledger, host: ref H) -> (Ledger, Vec[Checked]?, Noted) {
+    let sources = sources_of(units, host)
+
+    if dependency != null {
+        let shipped = shipped_ledger(dependency.root)
+        if shipped != null && shipped.stale_against(sources).is_empty() {
+            return (shipped.published(dependency.reachable), null, Default::empty())
+        }
+    }
+
+    // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
+    let parsed: Vec[ref CheckWorld] = units.iter().map(fn(u) { u.parsed }).collect()
+    let (mut own, checked, noted) = Ledger::infer_package_noted(parsed, library)
+    // **What these entries are an answer about** (D3), recorded here because
+    // this is the only place that has both the answer and the files it came
+    // from - and recorded for every package, so that the ledger a dependency's
+    // own build writes says what it was derived from.
+    own.sources = sources
+    return (own, checked, noted)
+}
+
+/// A package's committed `nikaia.contracts`, where it has one this compiler can
+/// read.
+///
+/// **A ledger that does not parse is not an error here.** It is a generated file
+/// a person may have edited or an older compiler may have written, and the
+/// answer to both is the same as to a stale one: derive this package again. A
+/// build that failed because a *cache* was unreadable would be a worse build
+/// than one that is slower.
+fn shipped_ledger(root: ref fs::Path) -> Ledger? {
+    return Ledger::read_beside(root.join("nikaia.contracts"))
+}
+
+/// The descriptions of the crates the project around `entry` declares
+/// (`contracts/<crate>.contracts`), or none outside a project.
+/// The Rust crates the manifest of the project an entry belongs to declares,
+/// under the name a program writes them by; none outside a project.
+fn foreign_beside(entry: ref fs::Path) -> collections::BTreeSet[String] {
+    // TODO(rs2nika): iterator adapter with no `Seq` method: a `for` loop
+    return (match entry.ancestors().skip(1).find(fn(dir) { project_tests_is_file(dir.join("nikaia.toml")) }) { root => (Manifest::read(root.join("nikaia.toml")) catch { null }), null => null })?.foreign_crates().unwrap_or_default()
+}
+
+pub fn described_beside(entry: ref fs::Path) -> Ledger {
+    // TODO(rs2nika): iterator adapter with no `Seq` method: a `for` loop
+    return (match entry.ancestors().skip(1).find(fn(dir) { project_tests_is_file(dir.join("nikaia.toml")) }) { root => foreign_of(root).descriptions, null => null }) ?? Ledger::blank
+}
+

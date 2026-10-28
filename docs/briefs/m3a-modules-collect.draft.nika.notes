@@ -1,0 +1,3 @@
+// rs2nika: `declared_once` may be in Nikaia already: tools/modules.nika `fn declared_once` (the same name)
+// rs2nika: `groups` may be in Nikaia already: tools/modules.nika `fn groups` (the same name)
+// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): foreign_of, refuse, refused_finding
