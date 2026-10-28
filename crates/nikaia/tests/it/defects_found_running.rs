@@ -777,7 +777,7 @@ fn a_lambda_split_over_a_tuple_is_refused() {
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1101");
     assert!(
-        format!("{found:?}").contains("let (name, v) = pair"),
+        format!("{found:?}").contains("fn((name, v))"),
         "{found:#?}"
     );
 }
