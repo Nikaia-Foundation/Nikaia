@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1255 (Draft)
+**Version:** 0.0.1256 (Draft)
 **Date:** 2026-10-28
 
 ---
@@ -3149,6 +3149,13 @@ A `match` over `error` is **complete when it names every type that can arrive**:
 a file hands its failure on as an `io::IoError`. No `throw` in the program
 raised it, so it has no site, and `error.full()` says so; the failures that
 joined it travel with it through every caller that hands it on.
+
+**A `catch` block that begins with an arm is that `match`** ([ADR-catch-1](adr/adr-catch-1.md)):
+`f() catch { regex::Error => { … } else => throw error }` means `f() catch {
+match error { regex::Error => { … } else => throw error } }`, under the same
+rules - patterns, a type by its name, completeness (`NK1151`), a fatal error
+taken only by name - and its value is the arm's. A block holds statements or
+arms, never both; a block of statements is a handler as above.
 
 **Fatal errors.** An error type is fatal where `impl Fatal for T` says so,
 beside its `impl Error for T`. `Fatal` has no methods.

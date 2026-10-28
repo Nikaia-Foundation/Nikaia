@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1256] — 2026-10-28
+
+**a catch block that begins with an arm is a match over error (ADR-catch-1)**
+- A catch block whose first item is an arm is a match over error under the same rules (patterns, a type by its name, completeness, fatal errors only by name); a block holds statements or arms, never both, so every catch written today keeps its meaning (ADR-catch-1, Part I 7). Decided and written down; not yet built, low priority (after self-hosting).
+
 ## [0.0.1255] — 2026-10-28
 
 **A file's canonical name and a path's prefix in `std::fs`**
