@@ -6,7 +6,7 @@ pub fn program_tests(dir: ref Path, mut names: collections::BTreeSet[String]) ->
             continue
         }
         let size = measure(name)
-        tests.push(Test { name, size })
+        tests.push(Test { name: name, size: size })
     }
     return tests
 }

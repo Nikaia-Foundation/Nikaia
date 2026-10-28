@@ -1,4 +1,4 @@
-enum Token {
+pub enum Token {
     Word(String),
     Count(i64),
     List(Vec[i64]),

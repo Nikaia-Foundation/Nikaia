@@ -23,14 +23,26 @@ pub fn arms(binary: String, at: i64?, shape: Shape?) -> i64 sync {
 }
 
 pub fn paths(table: ref Table, n: i64, name: String?, kept: String?) -> i64 sync {
-    let path = (match table.get("path") { x => x.as_str(), null => null })
+    let path = match table.get("path") {
+        null => null,
+        x => x.as_str(),
+    }
     let c = (match u32::try_from(n) catch { null } { x => char::from_u32(x), null => null })
     let size = (match name { n => n.len() + 1, null => null }) ?? 0
     let kept_len = (match kept { k => k.len() * 2, null => null }) ?? 0
-    let first = (match first_word("a b") { w => w.len() + 2, null => null })
+    let first = match first_word("a b") {
+        null => null,
+        w => w.len() + 2,
+    }
     let found = table.get("x")
-    let x = (match found { f => f.len() + 3, null => 0 })
-    let y = (match found { x => x.len(), null => 0 })
+    let x = match found {
+        null => 0,
+        f => f.len() + 3,
+    }
+    let y = match found {
+        null => 0,
+        x => x.len(),
+    }
     return size + kept_len + x
 }
 

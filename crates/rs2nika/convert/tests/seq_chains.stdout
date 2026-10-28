@@ -61,7 +61,7 @@ pub fn join(answers: Vec[Crossing]) -> Crossing sync {
 pub fn casts(head: Expr, casts: Vec[Ty]) -> Expr sync {
     let mut expr = head
     for ty in casts {
-        expr = Expr::Cast { expr: (expr), ty }
+        expr = Expr::Cast { expr: (expr), ty: ty }
     }
     return expr
 }

@@ -18,5 +18,5 @@ fn sum_count(findings: ref Vec[ref Finding], family: String) -> i64 {
 }
 
 fn sum_plural(n: i64) -> String {
-    if n == 1 { "" } else { "s" }
+    return if n == 1 { "" } else { "s" }
 }

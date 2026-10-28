@@ -1,0 +1,17 @@
+
+pub enum ProjectTestsBlessed {
+    Unchanged,
+    Refused(String),
+}
+
+fn p3b_test_bless(n: i64) -> ProjectTestsBlessed {
+    if n == 0 {
+        return ProjectTestsBlessed::Refused("none")
+    }
+    return ProjectTestsBlessed::Unchanged
+}
+
+pub fn run(n: i64) -> bool {
+    return (match p3b_test_bless(n) { ProjectTestsBlessed::Unchanged => true, else => false })
+}
+

@@ -1,0 +1,3 @@
+bless p3b_test_bless # a moved name the table renames, also where it is defined (R288)
+[types]
+Blessed = ProjectTestsBlessed # the enum's Nikaia name, everywhere (R287)

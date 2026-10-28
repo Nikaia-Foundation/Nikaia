@@ -1,5 +1,5 @@
 pub fn an_or_a(ty: String) -> String sync {
-    if (ty.starts_with('i') || ty.starts_with('a')) { "an" } else { "a" }
+    return if (ty.starts_with('i') || ty.starts_with('a')) { "an" } else { "a" }
 }
 
 pub fn wide(o: String?) -> bool sync {

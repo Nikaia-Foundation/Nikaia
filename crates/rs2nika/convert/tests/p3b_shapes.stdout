@@ -1,0 +1,56 @@
+pub fn agree(program: ref ProgramTest, outcomes: ref Vec[(String, Outcome)]) -> bool {
+    if outcomes.is_empty() {
+        return false
+    }
+    let first = outcomes[0].1
+    let same = (1..<outcomes.len()).all(fn(at) { outcomes[at - 1].1 == outcomes[at].1 })
+    if first.passed {
+        return true
+    }
+    if !same {
+        return false
+    }
+    return (match program.stdout { want => want == first.stdout, null => true })
+}
+
+pub fn explain(output: ref OutputTest, outcome: ref Outcome) {
+    for at in 0..<output.files.len().min(outcome.files.len()) {
+        let relative = output.files[at].0
+        let want = output.files[at].1
+        let got = outcome.files[at].1
+        match got {
+            null => println(f"{relative}: not written"),
+            got => println(f"{relative}: {got.len()}"),
+        }
+    }
+}
+
+pub fn write_all(program: ref ProgramTest, first: ref Outcome) throws {
+    fs::write(program.dir.join(f"{program.name}.stdout"), fs::Root::Anywhere, first.stdout.clone())
+    fs::write(program.dir.join("out"), fs::Root::Anywhere, Bytes([]))
+    let said = first.stdout.text() catch { "" }
+    println(f"{said}")
+    return
+}
+
+pub fn sorted(xs: ref Vec[i64], name: String, size: i64) -> Item {
+    let up = (1..<xs.len()).all(fn(at) { xs[at - 1] < xs[at] })
+    let n = match xs.first() {
+        null => null,
+        x => x + 1,
+    }
+    let k = match size {
+        0 => n ?? 1,
+        else => size,
+    }
+    return Item { name: name, size: size + k }
+}
+
+pub fn plural(n: i64) -> String {
+    return if n == 1 { "" } else { "s" }
+}
+
+pub fn named(test_: String) -> i64 {
+    return test_.len()
+}
+

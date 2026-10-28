@@ -14,6 +14,9 @@ crate::contracts::sync::Pause ModulesPause # modules.rs's pause, `ModulesPause` 
 sync::Pause ModulesPause # the same, by its short path (M1)
 verdict project_tests_verdict # `verdict` is a test runner's word other tools may want: prefixed (project_tests.nika, P3a)
 difference project_tests_difference # the same: diffs.nika has `differing_lines` beside it (P3a)
+bless project_tests_bless # every name P3b moved into project_tests.nika is prefixed: the file prefixes most of its names since (R245)
+bless_program project_tests_bless_program # the same (P3b)
+explain_output project_tests_explain_output # the same (P3b)
 is_a_test_function prover_a_test_function # modules.rs had it without a caller; prover_walk.nika answers the same question (M2 deleted the Rust one)
 
 # [view]: what `--view` (R177) renames, in this order. The parsed files are
@@ -41,6 +44,7 @@ PathBuf = fs::Path # std's file name, `std::path::PathBuf` lowered; its methods 
 (Span,String) = Site # a pause's site, `Site { span, what }` (sync.nika, M1)
 Outcome = ProjectTestsOutcome # project.rs's `Outcome` is project_tests.nika's, re-exported under its old name (P3a)
 Option<Vec<u8>> = Bytes? # a file read where there is one: what a test expects is `Bytes`, compared as bytes (P3a)
+Blessed = ProjectTestsBlessed # project.rs's `Blessed` is project_tests.nika's, prefixed as every P3b name (P3b)
 # P3a: `OutputTest` and `ProgramTest` are Nikaia structs holding `Bytes` and
 # `fs::Path` (R255 writes a `Vec<u8>` field as `Bytes`); a plain `Vec<u8>` or
 # `&[u8]` stays `Vec[u8]`, a buffer being built (S2's packed `body`, `sha256_hex`)
@@ -62,3 +66,4 @@ Package.files = files: Vec[(String, String)] # sysroot.rs's packed package, one 
 {x}.absorb_renaming( = absorb_into({x}, # `Ledger::absorb_renaming` is ledger_ops.nika's free `absorb_into` (M1)
 {x}.span.at() = ({x}.span.start as i64) # `Span::at` is a Rust helper of the lowered `Span`; Nikaia reads the field (modules.nika, M2)
 {x}.span.stop() = ({x}.span.end as i64) # the same, its end (M2)
+{x}.windows(2).all(fn(pair) { pair[0].1 == pair[1].1 }) = project_tests_agree({x}) # whether all settings agree is P3a's `project_tests_agree` (project_tests.nika, P3b)

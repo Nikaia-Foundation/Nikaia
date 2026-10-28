@@ -7,7 +7,7 @@ fn is_call(e: ref Expr) -> bool sync {
     }
 }
 
-enum Shape {
+pub enum Shape {
     Pair(Expr, Expr, Span),
     Index(Expr, Expr),
 }

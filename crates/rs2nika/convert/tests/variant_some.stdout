@@ -1,4 +1,4 @@
-enum Reached {
+pub enum Reached {
     Opaque(String?),
     Pair(String?, i64),
     Method,
