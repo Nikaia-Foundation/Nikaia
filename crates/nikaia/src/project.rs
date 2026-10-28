@@ -25,6 +25,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use nikaia_std::tools::project_check;
+
 use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
 use orchestrator::project::{
@@ -1854,7 +1856,7 @@ fn description_at(root: &Path, name: &str) -> Option<Ledger> {
 /// The verdict of every rule is a property of the program, so no switch may
 /// change it (ADR-005 §1 Group B); what the switch does change is whether a
 /// refusal is about *this* build, and that is a question about severity. See
-/// [`lint_where_nothing_crosses`].
+/// `project_check_lint_where_nothing_crosses` (`tools/project_check.nika`).
 /// **What a build knows that one unit does not**, handed to the check together.
 ///
 /// Two facts, and both are about the *build* rather than about the file being
@@ -1937,9 +1939,9 @@ pub fn check(
         &foreign.moved,
     ));
     all.sort_by_key(|finding| finding.span.at());
-    lint_where_nothing_crosses(&mut all, user_parallelism);
-    let_refuted_claims_through(&mut all, refuted_claims);
-    let_unproved_claims_through(&mut all, unproved_claims);
+    project_check::project_check_lint_where_nothing_crosses(&mut all, user_parallelism);
+    project_check::project_check_let_refuted_claims_through(&mut all, refuted_claims);
+    project_check::project_check_let_unproved_claims_through(&mut all, unproved_claims);
     let violations = sync::check(parsed, own, &library);
     if all.is_empty() && violations.is_empty() {
         return Ok(String::new());
@@ -1972,11 +1974,7 @@ pub fn check(
         }
         eprint!("{rendered}");
     }
-    let findings: Vec<&check::Finding> = all
-        .iter()
-        .filter(|f| f.severity == check::Severity::Error)
-        .collect();
-    if findings.is_empty() && violations.is_empty() {
+    if !all.iter().any(|f| f.severity == check::Severity::Error) && violations.is_empty() {
         return Ok(warnings);
     }
     for violation in &violations {
@@ -1986,323 +1984,12 @@ pub fn check(
         );
     }
 
-    let mut refused = Vec::new();
-    // One line per family, because a family is what a reader can act on in one
-    // go. The `NK1xxx` codes are types; `NK23xx` is a view kept past its call;
-    // `NK25xx` is a value on the wrong thread; `NK2605` and `NK2701` are one
-    // rule counted together, because they *are* one rule (ADR-025 D1) - a call
-    // that can fail, written or not, in a function that does not declare
-    // `throws`.
-    let count = |family: &str| {
-        findings
-            .iter()
-            .filter(|f| f.code.starts_with(family))
-            .count()
-    };
-    let plural = |n: usize| if n == 1 { "" } else { "s" };
-
-    // **`NK1207` is counted apart from the types** (ADR-269 D8): it is a
-    // claim the compiler showed false with values, and the way out is the
-    // program or the claim, never a type.
-    let refuted = count("NK1207");
-    if refuted > 0 {
-        refused.push(format!("{refuted} claim{} shown false", plural(refuted)));
-    }
-    let types = count("NK1") - refuted;
-    if types > 0 {
-        refused.push(format!("{types} type error{}", plural(types)));
-    }
-    // **`NK2503` is counted apart from the other `NK25xx` codes**
-    // ([ADR-281](../../docs/specification/adr/adr-281.md) D32), for the reason
-    // every split in this tally has: it must say what it counted. The others
-    // are a *value* on the wrong thread; this one is a *call* that can reach a
-    // lock, and the way out is keeping the lock out of its reach rather than
-    // anything about the value.
-    let reaching = count("NK2503");
-    if reaching > 0 {
-        refused.push(format!(
-            "{reaching} call{} that can reach a lock",
-            plural(reaching)
-        ));
-    }
-    // **And `NK2504` is not a crossing at all**, which the tally said it was:
-    // it is a crate nobody described, and *a value that may not cross a thread*
-    // is a sentence about no part of it. Same rule as the split above — the
-    // tally has to say what it counted — measured on a project whose only
-    // refusal was an undescribed crate.
-    let undescribed = count("NK2504");
-    if undescribed > 0 {
-        refused.push(format!(
-            "{undescribed} Rust crate{} nothing describes",
-            plural(undescribed)
-        ));
-    }
-    // **And `NK2505` is a third thing again**: a crate that *is* described, by
-    // a file about a version of it that is no longer there
-    // ([ADR-290](../../docs/specification/adr/adr-290.md) D5). What a reader
-    // does about it is neither of the two above.
-    let stale = count("NK2505");
-    if stale > 0 {
-        refused.push(format!(
-            "{stale} description{} of a crate that has moved",
-            plural(stale)
-        ));
-    }
-    let crossings = count("NK25") - reaching - undescribed - stale;
-    if crossings > 0 {
-        refused.push(format!(
-            "{crossings} value{} that may not cross a thread",
-            plural(crossings)
-        ));
-    }
-    // `NK23xx` is aliasing: who else points at the thing this one is about.
-    // Counted on its own because the way out is a different one - a shape to
-    // change rather than a declaration to add.
-    let aliases = count("NK2302");
-    if aliases > 0 {
-        refused.push(format!(
-            "{aliases} view{} kept past the call that was given it",
-            plural(aliases)
-        ));
-    }
-    // **The tether's own line** ([ADR-283](../../docs/specification/adr/adr-283.md)
-    // D4). Counted apart from `NK2302` although both are `NK23xx`, because the
-    // tally has to say what it counted and these are two different shapes: one
-    // is a view given to a call and kept, the other a view of a buffer the body
-    // made and handed back.
-    // **Data changed under a view** (ADR-353 D4): the way out is an order of
-    // statements, or a copy.
-    let changed_under = count("NK2305");
-    if changed_under > 0 {
-        refused.push(format!(
-            "{changed_under} change{} to data a view still to be used may point into",
-            plural(changed_under)
-        ));
-    }
-    let tethered = count("NK2303");
-    if tethered > 0 {
-        refused.push(format!(
-            "{tethered} view{} that would keep a buffer alive without a declaration saying so",
-            plural(tethered)
-        ));
-    }
-    // **What a tether cannot be lowered to** (ADR-283), a line of its own for
-    // the same reason: the way out is a shape to change, not a word to add.
-    let untethered = count("NK2304");
-    if untethered > 0 {
-        refused.push(format!(
-            "{untethered} buffer{} whose views have no one place to live",
-            plural(untethered)
-        ));
-    }
-    // `NK21xx` is running things at once, and its two rules want two lines: what
-    // a `spawn` took with it is a value to clone, and an `overlap` whose
-    // branches meet is a block to take apart. Counted apart from the line below
-    // for the reason they are counted at all - the tally has to say what it
-    // counted, and "a place that can fail without saying so" is neither of them.
-    let moved = count("NK2101");
-    if moved > 0 {
-        refused.push(format!(
-            "{moved} value{} a task took with it",
-            plural(moved)
-        ));
-    }
-    let together = count("NK2104");
-    if together > 0 {
-        refused.push(format!(
-            "{together} branch{} that cannot run beside the others",
-            if together == 1 { "" } else { "es" }
-        ));
-    }
-    // **A name a parallel lambda changes** (ADR-235 D2): the way out is a
-    // `map` and a `collect`, or a lock, which is neither line above.
-    let raced = count("NK2107");
-    if raced > 0 {
-        refused.push(format!(
-            "{raced} name{} changed from a lambda that runs on several cores",
-            plural(raced)
-        ));
-    }
-    let tasks = count("NK21");
-    // **A sequence walked twice is not a place that can fail**
-    // ([ADR-105](../../docs/specification/adr/adr-105.md) D2), so it does not
-    // land in the line below: the way out is a `collect()` and not a `throws`,
-    // which is the same reason the two `NK21xx` rules have lines of their own.
-    let walked = count("NK2702");
-    if walked > 0 {
-        refused.push(format!(
-            "{walked} sequence{} walked a second time",
-            plural(walked)
-        ));
-    }
-    // **`NK2202` is counted with the other `sync` violations and not below**,
-    // wherever it came from. The free call is `contracts::sync`'s and the
-    // method call is the type checker's
-    // ([ADR-149](../../docs/specification/adr/adr-149.md) D2), because only one
-    // of the two knows what `tx.send(1)` goes to — but they are one rule, and a
-    // tally that has to say what it counted must not call one of them *a place
-    // that can fail without saying so*.
-    let pausing = count("NK2202");
-    // **A pause inside a door is the same code and another sentence**
-    // ([ADR-233](../../docs/specification/adr/adr-233.md) D3): it is no `sync`
-    // function's, and the way out is moving the call out of the block.
-    let paused_in_a_door = findings
-        .iter()
-        .filter(|f| f.code == "NK2202" && f.message.contains("holding a lock"))
-        .count();
-    if paused_in_a_door > 0 {
-        refused.push(format!(
-            "{paused_in_a_door} pause{} with a lock held",
-            plural(paused_in_a_door)
-        ));
-    }
-    let pausing = pausing - paused_in_a_door;
-    // **A pause where nothing may pause** - a grammar's action, a fold, a
-    // parallel lambda (ADR-296 D35, ADR-235 D2) - is not a place that can fail.
-    let pauses_forbidden = count("NK2209");
-    if pauses_forbidden > 0 {
-        refused.push(format!(
-            "{pauses_forbidden} call{} that can pause where nothing may",
-            plural(pauses_forbidden)
-        ));
-    }
-    // **A file read with a lock held is not a place that can fail either**
-    // ([ADR-281](../../docs/specification/adr/adr-281.md) D35), and lands on the
-    // same reasoning as the two above: the tally has to say what it counted,
-    // and the way out here is moving the read rather than declaring anything.
-    let under_a_lock = count("NK2201");
-    if under_a_lock > 0 {
-        refused.push(format!(
-            "{under_a_lock} read{} of a file with a lock held",
-            plural(under_a_lock)
-        ));
-    }
-    // **A place that can fail without saying so is `NK2605` and `NK2701`**, and
-    // nothing else: this line used to be the remainder, which named every rule
-    // the tally had no line for - a lock taken twice, a direct write to shared
-    // state - as a failure nobody declared.
-    let rules = count("NK2605") + count("NK2701");
-    if rules > 0 {
-        refused.push(format!(
-            "{rules} place{} that can fail without saying so",
-            plural(rules)
-        ));
-    }
-    // **The rules about locks** that are not a pause: a lock inside a lock,
-    // shared state written past its door, a value read from a lock and stored
-    // back, a door written by hand.
-    let locks = ["NK2203", "NK2204", "NK2205", "NK2207", "NK2208"]
-        .iter()
-        .map(|code| count(code))
-        .sum::<usize>();
-    if locks > 0 {
-        refused.push(format!("{locks} mistake{} with a lock", plural(locks)));
-    }
-    let others = findings.len()
-        - locks
-        - rules
-        - refuted
-        - types
-        - crossings
-        - reaching
-        - undescribed
-        - stale
-        - aliases
-        - changed_under
-        - tethered
-        - untethered
-        - tasks
-        - walked
-        - pausing
-        - paused_in_a_door
-        - pauses_forbidden
-        - under_a_lock;
-    if others > 0 {
-        refused.push(format!("{others} other error{}", plural(others)));
-    }
-    let may_not = violations.len() + pausing;
-    if may_not > 0 {
-        refused.push(format!(
-            "{may_not} call{} a `sync` function may not make",
-            if may_not == 1 { "" } else { "s" }
-        ));
-    }
     // A refusal and not a failure of this compiler, so it leaves without a
     // backtrace: the diagnostics above have already said everything, and this is
     // the tally (`diagnostics::Refused`).
-    Err(diagnostics::refuse(refused.join(", ")))
-}
-
-/// The `NK25xx` codes whose crossing this build does not perform, reported as a
-/// lint rather than as an error.
-///
-/// Part III C.3 says the `Send` rules are "reported at `user_parallelism = no`
-/// as a lint, so a library built there stays usable at `yes`", and the reason is
-/// exact: at `no` nothing the program wrote runs concurrently (ADR-037 D2), so
-/// the emitter writes no `task::both` and no task - the crossing `NK2501` is
-/// about does not happen in *this* build. Refusing it would be refusing a
-/// program that compiles, which is the one thing the compiler may never do; and
-/// saying nothing would be ADR-005 §1 Group B's failure exactly, a library built
-/// at `no` that turns out un-compilable at `yes`. A lint is the third answer, and
-/// it is the one that record asked for.
-///
-/// **`NK2502` is not downgraded, and that is the decision.** A Rust dependency
-/// may bring its own runtime (ADR-303 D7), and its threads are not the
-/// program's: `user_parallelism` bounds what *you* wrote, which is ADR-037 D2's
-/// load-bearing "user". So that crossing is real at both settings and so is the
-/// refusal.
-///
-/// This is the only place a build switch meets a `NK25xx`, and it meets the
-/// **severity** rather than the verdict. The verdict is a property of the
-/// program and the analyses never see a switch.
-/// **`refuted-claims = "warn"`: a claim shown false with values builds**
-/// ([ADR-269](../../docs/specification/adr/adr-269.md) D8), as a warning, and
-/// is checked where it is reached. The bypass for the day a better prover
-/// refutes what an older one let through; without it the build stops.
-fn let_refuted_claims_through(findings: &mut [check::Finding], refuted_claims: &str) {
-    if refuted_claims != "warn" {
-        return;
-    }
-    for finding in findings.iter_mut().filter(|f| f.code == "NK1207") {
-        finding.severity = check::Severity::Warning;
-        finding.notes.push(
-            "`refuted-claims = \"warn\"` lets this build through: the claim is checked when \
-             the program runs, and stops it there"
-                .to_string(),
-        );
-    }
-}
-
-/// **`unproved-claims = "warn"`: a claim the compiler did not prove builds**
-/// ([ADR-380](../../docs/specification/adr/adr-380.md) D2), as a warning, and
-/// is checked where it is reached, as every claim was before the switch.
-fn let_unproved_claims_through(findings: &mut [check::Finding], unproved_claims: &str) {
-    if unproved_claims != "warn" {
-        return;
-    }
-    for finding in findings.iter_mut().filter(|f| f.code == "NK1300") {
-        finding.severity = check::Severity::Warning;
-        finding.notes.push(
-            "`unproved-claims = \"warn\"` lets this build through: the claim is checked when \
-             the program runs, and a false one stops it there"
-                .to_string(),
-        );
-    }
-}
-
-fn lint_where_nothing_crosses(findings: &mut [check::Finding], user_parallelism: &str) {
-    if user_parallelism != "no" {
-        return;
-    }
-    for finding in findings.iter_mut().filter(|f| f.code == "NK2501") {
-        finding.severity = check::Severity::Warning;
-        finding.notes.push(
-            "`user_parallelism = no` runs nothing you wrote concurrently, so this build does \
-             not perform the crossing - it is reported so that the same source still builds at \
-             `yes`"
-                .to_string(),
-        );
-    }
+    Err(diagnostics::refuse(
+        nikaia_std::tools::project_check::project_check_summary(&all, violations.len() as i64),
+    ))
 }
 
 /// **What each function has newly gained in its `throws` set** since the
@@ -2412,13 +2099,12 @@ pub fn write_proofs(root: &Path, book: Option<&crate::proofs::Book>, locked: boo
             1 => "1 question was searched".to_string(),
             n => format!("{n} questions were searched"),
         };
-        return Err(anyhow!(
-            "--locked: {} does not hold the prover's answers for these sources \
-             ({why}).{places}\n\
-             Run `nikaia build` and commit `{}`.",
-            root.join(crate::proofs::FILE).display(),
+        return Err(anyhow!(project_check::project_check_locked_proofs(
+            &root.join(crate::proofs::FILE).display().to_string(),
+            &why,
+            &places,
             crate::proofs::FILE
-        ));
+        )));
     }
     Ok(())
 }
@@ -2436,20 +2122,16 @@ pub fn write_ledger(path: &Path, ledger: &str, locked: bool) -> Result<()> {
     }
 
     let committed = std::fs::read_to_string(path).with_context(|| {
-        format!(
-            "--locked, but {} is not there; run without --locked to write it",
-            path.display()
-        )
+        project_check::project_check_locked_ledger_missing(&path.display().to_string())
     })?;
 
     if committed != *ledger {
-        refuse!(
-            "--locked: the contracts changed and {} does not say so.\n\
-             What the build inferred and the ledger does not have:\n{}\n\
-             Run without --locked to record it, and read the diff.",
-            path.display(),
-            changed_lines(ledger, &committed).join("\n")
-        );
+        return Err(diagnostics::refuse(
+            project_check::project_check_locked_ledger_changed(
+                &path.display().to_string(),
+                &changed_lines(ledger, &committed).join("\n"),
+            ),
+        ));
     }
 
     Ok(())

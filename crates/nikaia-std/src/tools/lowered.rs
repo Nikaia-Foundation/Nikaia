@@ -1607,6 +1607,14 @@ mod paths_lowered {
 #[allow(unused_imports)]
 pub use paths_lowered::*;
 
+mod project_check_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/project_check.rs");
+}
+#[allow(unused_imports)]
+pub use project_check_lowered::*;
+
 mod proofs_book_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2621,6 +2629,10 @@ pub mod parser_leaves {
 pub mod paths {
     #[allow(unused_imports)]
     pub use super::{Export, Named, after, module_of, joined, exported, named, bases, split_top_level};
+}
+pub mod project_check {
+    #[allow(unused_imports)]
+    pub use super::{project_check_summary, project_check_let_refuted_claims_through, project_check_let_unproved_claims_through, project_check_lint_where_nothing_crosses, project_check_locked_proofs, project_check_locked_ledger_missing, project_check_locked_ledger_changed};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]
