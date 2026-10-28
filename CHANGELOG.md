@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1255] — 2026-10-28
+
+**A file's canonical name and a path's prefix in `std::fs`**
+- `std::fs` gains `fs::canonical(path, root)`, the absolute name with links, `.` and `..` resolved (`NotFound` for a missing name, `Outside` where the result leaves a `Dir` store), and `fs::Path` gains `strip_prefix` (on whole parts, no file system read) and `clone` (Part III 17.1, ADR-319 D3).
+
 ## [0.0.1254] — 2026-10-28
 
 **std::regex typed by its engine; a function specialised per build-time value: comptime?, @unroll, decided branches (ADR-regex-1, ADR-specialization-1, #673, #906)**
