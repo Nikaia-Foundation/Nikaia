@@ -20455,6 +20455,9 @@ fn main() throws {
     let mut paths: Vec[String] = []
     let mut out_dir: String = ""
     let mut lints: Vec[String] = []
+    // the syntax-tree converter (tree.nika, tr_*.nika) and its tree print
+    let mut engine: String = "lines"
+    let mut dump_tree = false
     let mut args: Vec[String] = []
     for a in cli::args() {
         args.push(a)
@@ -20480,6 +20483,11 @@ fn main() throws {
             score = true
         } else if arg == "--view" {
             view = true
+        } else if arg == "--tree" {
+            dump_tree = true
+        } else if arg == "--engine" {
+            at = at + 1
+            engine = args[at].clone()
         } else if arg == "--corpus" {
             at = at + 1
             corpus = args[at].clone()
@@ -20586,6 +20594,15 @@ fn main() throws {
             eprintln(f"no function `{only}` in {path}")
             process::exit(1)
         }
+    }
+    if dump_tree {
+        println(rt_dump(rt_parse(text)))
+        return
+    }
+    if engine == "tree" {
+        let draft = tr_convert(rt_parse(text), profile, prefix)
+        print(draft)
+        return
     }
     let out = rs2nika_convert(text, profile, prefix, repo, rs2nika_read_facts(facts_path, path), names)
     if whole {

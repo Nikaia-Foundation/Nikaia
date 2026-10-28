@@ -1,0 +1,542 @@
+// crates/rs2nika/convert/src/tr_items.nika
+//
+// **Items** of the syntax-tree converter: the file, its functions, structs,
+// enums, `impl`s, traits and constants, with the comments and blank lines
+// between them. A nested item (a `fn` inside a `fn`) goes to the top level,
+// after the item that held it.
+
+impl TrEm {
+    /// The whole file.
+    pub fn file(ref mut self, root: i64) -> String {
+        let lines = self.items_of(root, "")
+        return lines.join("\n")
+    }
+
+    /// The items among `n`'s children, with the comments between them.
+    fn items_of(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let mut out: Vec[String] = []
+        let mut gap = false
+        for k in self.t.nodes[n].kids.clone() {
+            let kind = self.t.kind(k)
+            if kind == "WHITESPACE" {
+                gap = self.t.text(k).contains("\n\n")
+                continue
+            }
+            if kind == "COMMENT" {
+                if gap && out.len() > 0 {
+                    out.push("")
+                }
+                out.push(f"{ind}{self.t.text(k)}")
+                gap = false
+                continue
+            }
+            if self.t.nodes[k].tok {
+                continue
+            }
+            let lines = self.item(k, ind.clone())
+            if lines.len() == 0 {
+                continue
+            }
+            if gap && out.len() > 0 {
+                out.push("")
+            }
+            gap = false
+            for l in lines {
+                out.push(l.clone())
+            }
+            if ind == "" && self.hoisted.len() > 0 {
+                out.push("")
+                let h = self.hoisted.clone()
+                self.hoisted = []
+                for l in h {
+                    out.push(l.clone())
+                }
+                while out.len() > 0 && out[out.len() - 1] == "" {
+                    out.pop()
+                }
+            }
+        }
+        return out
+    }
+
+    /// The item's attributes' texts: `#[derive(..)]`, `#[test]`.
+    fn attrs(ref self, n: i64) -> Vec[String] {
+        let mut out: Vec[String] = []
+        for a in self.t.kids_of(n, "ATTR") {
+            out.push(self.src(a).clone())
+        }
+        return out
+    }
+
+    /// The doc comments the item holds (rust-analyzer hangs them inside it).
+    fn docs(ref self, n: i64, ind: String) -> Vec[String] {
+        let mut out: Vec[String] = []
+        for k in self.t.nodes[n].kids {
+            if self.t.kind(k) == "COMMENT" {
+                out.push(f"{ind}{self.t.text(k)}")
+            }
+        }
+        return out
+    }
+
+    fn vis(ref self, n: i64) -> String {
+        if self.t.kid(n, "VISIBILITY") >= 0 {
+            return "pub "
+        }
+        return ""
+    }
+
+    /// `<T: Bound, U>` -> `[T: Bound, U]`; lifetimes go.
+    fn generics(ref mut self, n: i64) -> String {
+        let gl = self.t.kid(n, "GENERIC_PARAM_LIST")
+        if gl < 0 {
+            return ""
+        }
+        let mut out: Vec[String] = []
+        for p in self.nodes(gl) {
+            if self.t.is(p, "TYPE_PARAM") {
+                let name = self.t.name_of(p)
+                let bounds = self.t.kid(p, "TYPE_BOUND_LIST")
+                if bounds >= 0 {
+                    let mut bs: Vec[String] = []
+                    for b in self.t.kids_of(bounds, "TYPE_BOUND") {
+                        let s = self.src(b)
+                        if !s.starts_with("'") && s != "Clone" && s != "Copy" && s != "Debug" && s != "Sized" && s != "?Sized" && s != "PartialEq" && s != "Eq" && s != "Hash" && s != "Ord" && s != "PartialOrd" && s != "Default" && s != "Send" && s != "Sync" {
+                            bs.push(self.bound_ty(b))
+                        }
+                    }
+                    if bs.len() > 0 {
+                        out.push(f"{name}: {bs.join(" + ")}")
+                        continue
+                    }
+                }
+                out.push(name.clone())
+            } else if self.t.is(p, "CONST_PARAM") {
+                out.push(f"comptime {self.t.name_of(p)}: {self.ty(self.t.nth(p, 1))}")
+            }
+        }
+        if out.len() == 0 {
+            return ""
+        }
+        return f"[{out.join(", ")}]"
+    }
+
+    /// The lines of a whole item kept as a comment, with its TODO.
+    fn todo_item(ref mut self, what: String, n: i64, ind: String) -> Vec[String] {
+        self.todos += 1
+        let mut out: Vec[String] = [f"{ind}// TODO(rs2nika): {what}"]
+        for l in self.t.text(n).trim().lines() {
+            out.push(f"{ind}// {l}")
+        }
+        return out
+    }
+
+    pub fn item(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let kind = self.t.kind(n)
+        let attrs = self.attrs(n)
+        for a in attrs {
+            if a.contains("cfg(test)") || a == "#[test]" || a.starts_with("#[bench") {
+                return []
+            }
+        }
+        if kind == "USE" || kind == "EXTERN_CRATE" {
+            return []
+        }
+        let mut out = self.docs(n, ind.clone())
+        let mut body: Vec[String] = []
+        if kind == "FN" {
+            body = self.fn_item(n, ind.clone(), false)
+        } else if kind == "STRUCT" {
+            body = self.struct_item(n, ind.clone())
+        } else if kind == "ENUM" {
+            body = self.enum_item(n, ind.clone())
+        } else if kind == "IMPL" {
+            body = self.impl_item(n, ind.clone())
+        } else if kind == "TRAIT" {
+            body = self.trait_item(n, ind.clone())
+        } else if kind == "CONST" {
+            body = self.const_item(n, ind.clone())
+        } else if kind == "STATIC" {
+            body = self.todo_item("a `static` (a `comptime` if it is constant; Nikaia has no global state)", n, ind.clone())
+        } else if kind == "MACRO_RULES" {
+            body = self.todo_item("`macro_rules!` (Nikaia has no macros: a function, or `comptime`)", n, ind.clone())
+        } else if kind == "TYPE_ALIAS" {
+            body = self.todo_item("a type alias (write the type out)", n, ind.clone())
+        } else if kind == "MODULE" {
+            let list = self.t.kid(n, "ITEM_LIST")
+            if list < 0 {
+                // `mod x;`: the file of its own is converted by itself
+                return [f"{ind}// rs2nika: `mod {self.t.name_of(n)};` is a file of its own"]
+            }
+            body = [f"{ind}// rs2nika: the items of `mod {self.t.name_of(n)}`"]
+            for l in self.items_of(list, ind.clone()) {
+                body.push(l)
+            }
+        } else if kind == "MACRO_CALL" || kind == "MACRO_ITEMS" {
+            body = self.todo_item("a macro at the top level", n, ind.clone())
+        } else {
+            body = self.todo_item(f"an item ({kind})", n, ind.clone())
+        }
+        for l in body {
+            out.push(l.clone())
+        }
+        return out
+    }
+
+    // ---- functions ----
+
+    /// The signature's parts: the parameters, the result and its mode.
+    fn fn_item(ref mut self, n: i64, ind: String, in_impl: bool) -> Vec[String] {
+        let name = self.t.name_of(n)
+        let params_n = self.t.kid(n, "PARAM_LIST")
+        let mut ps: Vec[String] = []
+        let saved_optional = self.optional.clone()
+        let mut has_self = false
+        for p in self.nodes(params_n) {
+            if self.t.is(p, "SELF_PARAM") {
+                has_self = true
+                let amp = self.t.has_tok(p, "AMP")
+                let m = self.t.has_tok(p, "MUT_KW")
+                if amp && m {
+                    ps.push("ref mut self")
+                } else if amp {
+                    ps.push("ref self")
+                } else if m {
+                    ps.push("mut self")
+                } else {
+                    ps.push("self")
+                }
+                continue
+            }
+            if !self.t.is(p, "PARAM") {
+                continue
+            }
+            let pat_n = self.t.nth(p, 0)
+            let ty_n = self.param_type_node(p)
+            let mut pname = self.pat(pat_n)
+            let (ty, is_mut) = self.param_ty(ty_n)
+            if ty.ends_with("?") {
+                self.optional.insert(pname.clone())
+            }
+            if is_mut || self.t.is(pat_n, "IDENT_PAT") && self.t.has_tok(pat_n, "MUT_KW") {
+                pname = f"mut {pname}"
+            }
+            ps.push(f"{pname}: {ty}")
+        }
+        // the result
+        let ret_n = self.t.nth(self.t.kid(n, "RET_TYPE"), 0)
+        let saved_throws = self.fails
+        let saved_opt = self.opt
+        let saved_unit = self.unit
+        self.fails = false
+        self.opt = false
+        self.unit = true
+        let mut ret: String = ""
+        if ret_n >= 0 {
+            let last = self.last_seg(ret_n)
+            let args = self.gen_args(ret_n)
+            if self.t.is(ret_n, "PATH_TYPE") && (last == "Result" || last == "Fallible") {
+                self.fails = true
+                let mut ok: String = ""
+                if args.len() > 0 {
+                    let t = self.t.nth(args[0], 0)
+                    if !(self.t.is(t, "TUPLE_TYPE") && self.nodes(t).len() == 0) {
+                        ok = self.ty(t)
+                    }
+                } else if self.segs(ret_n).len() > 1 {
+                    // `io::Result<T>` / `fmt::Result`
+                    ok = ""
+                }
+                if ok != "" {
+                    self.unit = false
+                    ret = f" -> {ok} throws"
+                } else {
+                    ret = " throws"
+                }
+            } else if self.t.is(ret_n, "TUPLE_TYPE") && self.nodes(ret_n).len() == 0 {
+                ret = ""
+            } else {
+                let t = self.ty(ret_n)
+                self.unit = false
+                if t.ends_with("?") {
+                    self.opt = true
+                }
+                ret = f" -> {t}"
+            }
+        }
+        let gen = self.generics(n)
+        let mut head: String = ""
+        if in_impl && name == "new" && !has_self && self.ctors.contains(self.self_ty.clone()) {
+            head = f"{ind}pub fn{gen}({ps.join(", ")}){ret}"
+        } else {
+            head = f"{ind}{self.vis(n)}fn {tr_ident(name)}{gen}({ps.join(", ")}){ret}"
+        }
+        let body_n = self.t.kid(n, "BLOCK_EXPR")
+        let mut out: Vec[String] = []
+        if body_n < 0 {
+            // a trait's signature
+            out.push(head)
+        } else {
+            let mut mode: String = "return"
+            if self.unit {
+                mode = "stmt"
+            }
+            let body = self.block(body_n, f"{ind}    ", mode)
+            if body.len() == 0 {
+                out.push(f"{head} {{}}")
+            } else {
+                out.push(f"{head} {{")
+                for l in body {
+                    out.push(l.clone())
+                }
+                out.push(f"{ind}}}")
+            }
+        }
+        self.fails = saved_throws
+        self.opt = saved_opt
+        self.unit = saved_unit
+        self.optional = saved_optional
+        return out
+    }
+
+    // ---- data ----
+
+    fn fields(ref mut self, list: i64, ind: String, public: bool) -> Vec[String] {
+        let mut out: Vec[String] = []
+        for k in self.t.nodes[list].kids.clone() {
+            let kind = self.t.kind(k)
+            if kind == "COMMENT" {
+                out.push(f"{ind}{self.t.text(k)}")
+                continue
+            }
+            if kind != "RECORD_FIELD" {
+                continue
+            }
+            for d in self.docs(k, ind.clone()) {
+                out.push(d)
+            }
+            let name = self.t.name_of(k)
+            let ty = self.ty(self.t.nth(k, self.nodes(k).len() - 1))
+            if ty.ends_with("?") {
+                self.optional.insert(name.clone())
+            }
+            let mut v: String = ""
+            if public && self.t.kid(k, "VISIBILITY") >= 0 {
+                v = "pub "
+            }
+            out.push(f"{ind}{v}{tr_ident(name)}: {ty},")
+        }
+        return out
+    }
+
+    fn struct_item(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let name = self.t.name_of(n)
+        let gen = self.generics(n)
+        let list = self.t.kid(n, "RECORD_FIELD_LIST")
+        if self.t.kid(n, "TUPLE_FIELD_LIST") >= 0 {
+            return self.todo_item("a tuple struct (name its fields: `struct X { v: T }`)", n, ind)
+        }
+        if list < 0 {
+            return [f"{ind}{self.vis(n)}struct {name}{gen} {{}}"]
+        }
+        let mut out: Vec[String] = [f"{ind}{self.vis(n)}struct {name}{gen} {{"]
+        for l in self.fields(list, f"{ind}    ", true) {
+            out.push(l)
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    fn enum_item(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let name = self.t.name_of(n)
+        let gen = self.generics(n)
+        let mut out: Vec[String] = [f"{ind}{self.vis(n)}enum {name}{gen} {{"]
+        let inner = f"{ind}    "
+        let list = self.t.kid(n, "VARIANT_LIST")
+        for k in self.t.nodes[list].kids.clone() {
+            let kind = self.t.kind(k)
+            if kind == "COMMENT" {
+                out.push(f"{inner}{self.t.text(k)}")
+                continue
+            }
+            if kind != "VARIANT" {
+                continue
+            }
+            for d in self.docs(k, inner.clone()) {
+                out.push(d)
+            }
+            let v = self.t.name_of(k)
+            let tuple = self.t.kid(k, "TUPLE_FIELD_LIST")
+            let record = self.t.kid(k, "RECORD_FIELD_LIST")
+            if tuple >= 0 {
+                let mut ts: Vec[String] = []
+                for f in self.t.kids_of(tuple, "TUPLE_FIELD") {
+                    ts.push(self.ty(self.t.nth(f, self.nodes(f).len() - 1)))
+                }
+                out.push(f"{inner}{v}({ts.join(", ")}),")
+            } else if record >= 0 {
+                let fs = self.fields(record, "", false)
+                let mut parts: Vec[String] = []
+                for f in fs {
+                    if !f.starts_with("//") {
+                        parts.push(tr_drop_suffix(f.clone(), ","))
+                    }
+                }
+                out.push(f"{inner}{v} {{ {parts.join(", ")} }},")
+            } else if self.t.has_tok(k, "EQ") {
+                let e = self.nodes(k)
+                out.push(f"{inner}{v} = {self.expr(e[e.len() - 1])},")
+            } else {
+                out.push(f"{inner}{v},")
+            }
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    // ---- impl, trait, const ----
+
+    fn impl_item(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let types = self.nodes(n)
+        let mut tys: Vec[i64] = []
+        for k in types {
+            if self.t.kind(k).ends_with("_TYPE") {
+                tys.push(k)
+            }
+        }
+        if tys.len() == 0 {
+            return self.todo_item("an `impl` of no type", n, ind)
+        }
+        let self_n = tys[tys.len() - 1]
+        let saved = self.self_ty.clone()
+        self.self_ty = self.last_seg(self_n).clone()
+        let gen = self.generics(n)
+        let mut head: String = f"{ind}impl{gen} {self.ty(self_n)} {{"
+        if self.t.has_tok(n, "FOR_KW") && tys.len() == 2 {
+            let tr = self.last_seg(tys[0])
+            if tr == "Display" || tr == "Debug" || tr == "Drop" || tr == "From" || tr == "Into" || tr == "Iterator" || tr == "FromStr" || tr == "Error" || tr == "Deref" || tr == "Index" || tr == "Add" || tr == "Sub" || tr == "Mul" || tr == "Neg" || tr == "PartialEq" || tr == "Eq" || tr == "Hash" || tr == "Ord" || tr == "PartialOrd" || tr == "Clone" || tr == "Copy" {
+                self.self_ty = saved
+                return self.todo_item(f"`impl {tr}` (Nikaia's own protocol: write it as methods)", n, ind)
+            }
+            if tr == "Default" {
+                head = f"{ind}impl{gen} {self.ty(self_n)} {{"
+            } else {
+                head = f"{ind}impl{gen} {self.ty(tys[0])} for {self.ty(self_n)} {{"
+            }
+        }
+        let mut out: Vec[String] = [head]
+        let inner = f"{ind}    "
+        let list = self.t.kid(n, "ASSOC_ITEM_LIST")
+        let mut gap = false
+        let mut first = true
+        let mut consts: Vec[String] = []
+        for k in self.t.nodes[list].kids.clone() {
+            let kind = self.t.kind(k)
+            if kind == "WHITESPACE" {
+                gap = self.t.text(k).contains("\n\n")
+                continue
+            }
+            if kind == "COMMENT" {
+                if gap && !first {
+                    out.push("")
+                }
+                out.push(f"{inner}{self.t.text(k)}")
+                gap = false
+                first = false
+                continue
+            }
+            if self.t.nodes[k].tok {
+                continue
+            }
+            if gap && !first {
+                out.push("")
+            }
+            gap = false
+            first = false
+            if kind == "CONST" {
+                // no associated constants: above the `impl` (R105)
+                for l in self.const_item(k, ind.clone()) {
+                    consts.push(l)
+                }
+                continue
+            }
+            for d in self.docs(k, inner.clone()) {
+                out.push(d)
+            }
+            if kind == "FN" {
+                let mut skip = false
+                for a in self.attrs(k) {
+                    if a == "#[test]" {
+                        skip = true
+                    }
+                }
+                if !skip {
+                    for l in self.fn_item(k, inner.clone(), true) {
+                        out.push(l)
+                    }
+                }
+            } else {
+                for l in self.todo_item(f"an associated item ({kind})", k, inner.clone()) {
+                    out.push(l)
+                }
+            }
+        }
+        out.push(f"{ind}}}")
+        self.self_ty = saved
+        if consts.len() > 0 {
+            consts.push("")
+            for l in out {
+                consts.push(l.clone())
+            }
+            return consts
+        }
+        return out
+    }
+
+    fn trait_item(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let name = self.t.name_of(n)
+        let saved = self.self_ty.clone()
+        self.self_ty = name.clone()
+        let mut out: Vec[String] = [f"{ind}{self.vis(n)}trait {name}{self.generics(n)} {{"]
+        let inner = f"{ind}    "
+        for k in self.nodes(self.t.kid(n, "ASSOC_ITEM_LIST")) {
+            for d in self.docs(k, inner.clone()) {
+                out.push(d)
+            }
+            if self.t.is(k, "FN") {
+                for l in self.fn_item(k, inner.clone(), false) {
+                    out.push(l)
+                }
+            } else {
+                for l in self.todo_item("an associated type or constant of a trait", k, inner.clone()) {
+                    out.push(l)
+                }
+            }
+        }
+        out.push(f"{ind}}}")
+        self.self_ty = saved
+        return out
+    }
+
+    /// `const X: T = v;` -> `comptime X: T = v` (R103).
+    fn const_item(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let name = self.t.name_of(n)
+        let mut ty: String = ""
+        let mut value: String = ""
+        for k in self.nodes(n) {
+            let kind = self.t.kind(k)
+            if kind == "NAME" || kind == "VISIBILITY" || kind == "ATTR" {
+                continue
+            }
+            if kind.ends_with("_TYPE") && ty == "" {
+                ty = self.ty(k)
+            } else if value == "" {
+                value = self.expr(k)
+            }
+        }
+        if ty == "String" {
+            ty = "ref String"
+        }
+        return [f"{ind}{self.vis(n)}comptime {name}: {ty} = {value}"]
+    }
+}

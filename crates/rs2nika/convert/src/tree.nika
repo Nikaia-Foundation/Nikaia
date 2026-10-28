@@ -1,0 +1,301 @@
+// crates/rs2nika/convert/src/tree.nika
+//
+// **Rust's syntax tree, as rust-analyzer reads it.** `rust-analyzer parse`
+// prints the lossless tree of a file: one line a node or token, indented two
+// spaces a level, `KIND@start..end` and, for a token, its text as Rust's
+// `{:?}` writes it. This file reads that print into `RtTree`: every node and
+// token in source order, each with its parent and its children, so the
+// converter walks the program's structure instead of its lines. The tokens
+// hold the whole text, whitespace and comments included: their texts in order
+// are the file.
+
+use std::fs
+use std::process
+
+pub struct RtNode {
+    pub kind: String,
+    /// a token's text, decoded; "" for a node
+    pub text: String,
+    pub tok: bool,
+    pub kids: Vec[i64],
+    pub parent: i64,
+    pub start: i64,
+    pub end: i64,
+}
+
+pub struct RtTree {
+    pub nodes: Vec[RtNode],
+}
+
+/// A token's text as `{:?}` wrote it, without its quotes, decoded.
+fn rt_unquote(q: String) -> String {
+    let mut out: String = ""
+    let mut esc = false
+    for c in q.scalars {
+        if esc {
+            esc = false
+            if c == 'n' {
+                out.push('\n')
+            } else if c == 't' {
+                out.push('\t')
+            } else if c == 'r' {
+                out.push('\r')
+            } else if c == '0' {
+                out.push('\0')
+            } else if c == 'u' {
+                // `\u{..}`: a control character; kept as its escape
+                out.push('\\')
+                out.push('u')
+            } else {
+                out.push(c)
+            }
+        } else if c == '\\' {
+            esc = true
+        } else {
+            out.push(c)
+        }
+    }
+    return out
+}
+
+/// The number at the front of `t` and what follows it.
+fn rt_number(t: String) -> (i64, String) {
+    let mut n = 0
+    let mut used = 0
+    for b in t.bytes.iter() {
+        if b < 48 || b > 57 {
+            break
+        }
+        n = n * 10 + (b as i64 - 48)
+        used += 1
+    }
+    let rest: String = t.bytes[used..<t.len()].text() catch { "" }
+    return (n, rest.clone())
+}
+
+/// The tree of one print of `rust-analyzer parse`.
+pub fn rt_from_dump(dump: String) -> RtTree {
+    let mut tree = RtTree { nodes: [] }
+    // the open node at each depth
+    let mut open: Vec[i64] = []
+    for line in dump.lines() {
+        let mut depth = 0
+        for b in line.bytes.iter() {
+            if b != 32 {
+                break
+            }
+            depth += 1
+        }
+        depth = depth / 2
+        let body: String = line.bytes[depth * 2..<line.len()].text() catch { "" }
+        let at = body.find("@") ?? continue
+        let kind: String = body.bytes[0..<at].text() catch { "" }
+        let after: String = body.bytes[at + 1..<body.len()].text() catch { "" }
+        let (start, rest) = rt_number(after)
+        let tail: String = rest.bytes[2..<rest.len()].text() catch { "" }
+        let (end, rest2) = rt_number(tail)
+        let mut text: String = ""
+        let tok = rest2.starts_with(" \"")
+        if tok {
+            let inner: String = rest2.bytes[2..<rest2.len() - 1].text() catch { "" }
+            text = rt_unquote(inner)
+        }
+        while open.len() > depth {
+            open.pop()
+        }
+        let mut parent = -1
+        if open.len() > 0 {
+            parent = open[open.len() - 1]
+        }
+        let id = tree.nodes.len()
+        tree.nodes.push(RtNode { kind: kind, text: text, tok: tok, kids: [], parent: parent, start: start, end: end })
+        if parent >= 0 {
+            tree.nodes[parent].kids.push(id)
+        }
+        open.push(id)
+    }
+    return tree
+}
+
+/// The tree of Rust source: `rust-analyzer parse` over it. The parser reads
+/// stdin and `process::run` gives none, so the text goes through a file.
+pub fn rt_parse(src: String) -> RtTree throws {
+    let tmp = process::run("mktemp", ["--suffix=.rs"]).stdout.trim().clone()
+    fs::write(tmp.clone(), fs::Root::Anywhere, src)
+    let res = process::run("sh", ["-c", "rust-analyzer parse < \"$0\"", tmp.clone()])
+    fs::remove(tmp.clone(), fs::Root::Anywhere) catch {}
+    if !res.ok {
+        eprintln(f"rust-analyzer parse failed: {res.stderr}")
+        return RtTree { nodes: [] }
+    }
+    return rt_from_dump(res.stdout)
+}
+
+/// The tree as `rust-analyzer parse` printed it, for `--tree`.
+pub fn rt_dump(t: ref RtTree) -> String {
+    let mut out: Vec[String] = []
+    for n in 0..<t.nodes.len() {
+        let mut depth = 0
+        let mut at = t.nodes[n].parent
+        while at >= 0 {
+            depth += 1
+            at = t.nodes[at].parent
+        }
+        let mut pad: String = ""
+        for _ in 0..<depth {
+            pad.push_str("  ")
+        }
+        let k = t.nodes[n].kind.clone()
+        if t.nodes[n].tok {
+            let tx = t.nodes[n].text.replace("\\", "\\\\").replace("\n", "\\n").replace("\"", "\\\"")
+            out.push(f"{pad}{k} \"{tx}\"")
+        } else {
+            out.push(f"{pad}{k}")
+        }
+    }
+    return out.join("\n")
+}
+
+impl RtTree {
+    pub fn kind(ref self, n: i64) -> String {
+        if n < 0 {
+            return ""
+        }
+        return self.nodes[n].kind.clone()
+    }
+
+    pub fn is(ref self, n: i64, kind: ref String) -> bool {
+        return n >= 0 && self.nodes[n].kind == kind
+    }
+
+    /// The source text of `n`: its tokens in order.
+    pub fn text(ref self, n: i64) -> String {
+        if n < 0 {
+            return ""
+        }
+        if self.nodes[n].tok {
+            return self.nodes[n].text.clone()
+        }
+        let mut parts: Vec[String] = []
+        self.collect_text(n, parts)
+        return parts.join("")
+    }
+
+    fn collect_text(ref self, n: i64, mut parts: Vec[String]) {
+        if self.nodes[n].tok {
+            parts.push(self.nodes[n].text.clone())
+            return
+        }
+        for k in self.nodes[n].kids {
+            self.collect_text(k, parts)
+        }
+    }
+
+    /// The first child of `n` of this kind, or -1.
+    pub fn kid(ref self, n: i64, kind: ref String) -> i64 {
+        if n < 0 {
+            return -1
+        }
+        for k in self.nodes[n].kids {
+            if self.nodes[k].kind == kind {
+                return k
+            }
+        }
+        return -1
+    }
+
+    /// Every child of `n` of this kind.
+    pub fn kids_of(ref self, n: i64, kind: ref String) -> Vec[i64] {
+        let mut out: Vec[i64] = []
+        if n < 0 {
+            return out
+        }
+        for k in self.nodes[n].kids {
+            if self.nodes[k].kind == kind {
+                out.push(k)
+            }
+        }
+        return out
+    }
+
+    /// The children of `n` that are nodes (no token).
+    pub fn nodes_of(ref self, n: i64) -> Vec[i64] {
+        let mut out: Vec[i64] = []
+        if n < 0 {
+            return out
+        }
+        for k in self.nodes[n].kids {
+            if !self.nodes[k].tok {
+                out.push(k)
+            }
+        }
+        return out
+    }
+
+    /// The `i`-th child node of `n`, or -1.
+    pub fn nth(ref self, n: i64, i: i64) -> i64 {
+        let all = self.nodes_of(n)
+        if i < all.len() {
+            return all[i]
+        }
+        return -1
+    }
+
+    /// Whether `n` has a direct token of this kind.
+    pub fn has_tok(ref self, n: i64, kind: ref String) -> bool {
+        return self.kid(n, kind) >= 0
+    }
+
+    /// The kinds of `n`'s direct tokens that are not trivia, in order.
+    pub fn toks(ref self, n: i64) -> Vec[String] {
+        let mut out: Vec[String] = []
+        if n < 0 {
+            return out
+        }
+        for k in self.nodes[n].kids {
+            let kind = self.nodes[k].kind.clone()
+            if self.nodes[k].tok && kind != "WHITESPACE" && kind != "COMMENT" {
+                out.push(kind)
+            }
+        }
+        return out
+    }
+
+    /// The first descendant of `n` (itself included) of this kind, or -1.
+    pub fn find(ref self, n: i64, kind: ref String) -> i64 {
+        if n < 0 {
+            return -1
+        }
+        if self.nodes[n].kind == kind {
+            return n
+        }
+        for k in self.nodes[n].kids {
+            let f = self.find(k, kind)
+            if f >= 0 {
+                return f
+            }
+        }
+        return -1
+    }
+
+    /// The nearest ancestor of `n` of this kind, or -1.
+    pub fn up(ref self, n: i64, kind: ref String) -> i64 {
+        let mut at = n
+        while at >= 0 {
+            at = self.nodes[at].parent
+            if at >= 0 && self.nodes[at].kind == kind {
+                return at
+            }
+        }
+        return -1
+    }
+
+    /// The text of a `NAME` / `NAME_REF` child, or "".
+    pub fn name_of(ref self, n: i64) -> String {
+        let nm = self.kid(n, "NAME")
+        if nm >= 0 {
+            return self.text(nm).trim().clone()
+        }
+        return ""
+    }
+}

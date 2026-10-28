@@ -1,0 +1,317 @@
+// crates/rs2nika/convert/src/tr_core.nika
+//
+// **The syntax-tree converter's state** (`--engine tree`). `TrEm` walks the
+// tree `tree.nika` reads and writes Nikaia node by node: items (tr_items.nika),
+// statements and control flow (tr_stmt.nika), expressions (tr_expr.nika),
+// patterns and types (tr_types.nika). What it has no form for it writes as the
+// Rust text with a `TODO(rs2nika)` beside it, never silently.
+//
+// A macro's arguments are a token tree, not syntax: `tr_graft_macros` parses
+// the known macros' arguments once more, in one run of rust-analyzer, as the
+// expression list of a call (`format!`), an array (`vec!`) or a `match`
+// (`matches!`), and hangs that tree beside the call (`margs`).
+
+use std::collections
+
+pub struct TrEm {
+    pub t: RtTree,
+    pub profile: String,
+    pub prefix: String,
+    /// lines a statement needs before it (`let hole_N = ..`), indented
+    pub pre: Vec[String],
+    /// the indentation of the statement being written
+    pub ind: String,
+    /// `use std::x` lines the output needs
+    pub uses: collections::BTreeSet[String],
+    pub uniq: i64,
+    /// the function being written returns a `Result` / an `Option`
+    pub fails: bool,
+    pub opt: bool,
+    /// the function returns nothing
+    pub unit: bool,
+    /// the type of the `impl` being written
+    pub self_ty: String,
+    /// types whose `fn new` became the anonymous constructor
+    pub ctors: collections::BTreeSet[String],
+    /// a macro call -> the tree of its arguments
+    pub margs: collections::BTreeMap[i64, i64],
+    /// names the Rust declares `Option<..>` (locals, parameters, fields)
+    pub optional: collections::BTreeSet[String],
+    pub todos: i64,
+    /// the file's own top-level functions (a `prefix` renames them)
+    pub fns: collections::BTreeSet[String],
+    /// nested items, written after the top-level item that holds them
+    pub hoisted: Vec[String],
+}
+
+pub fn tr_convert(t: RtTree, profile: String, prefix: String) -> String {
+    let mut em = TrEm {
+        t: t,
+        profile: profile,
+        prefix: prefix,
+        pre: [],
+        ind: "",
+        uses: collections::BTreeSet(),
+        uniq: 0,
+        fails: false,
+        opt: false,
+        unit: true,
+        self_ty: "",
+        ctors: collections::BTreeSet(),
+        margs: collections::BTreeMap(),
+        optional: collections::BTreeSet(),
+        todos: 0,
+        fns: collections::BTreeSet(),
+        hoisted: [],
+    }
+    if em.t.nodes.len() == 0 {
+        return ""
+    }
+    em.graft_macros()
+    em.find_ctors()
+    let body = em.file(0)
+    let mut out: Vec[String] = []
+    for u in em.uses {
+        out.push(f"use std::{u}")
+    }
+    if out.len() > 0 {
+        out.push("")
+    }
+    out.push(body)
+    return out.join("\n")
+}
+
+/// The parts of a token tree's text between its delimiters, split at its
+/// top-level commas.
+fn tr_split_commas(t: ref RtTree, tt: i64) -> Vec[String] {
+    let mut parts: Vec[String] = []
+    let mut cur: String = ""
+    let ks = t.nodes[tt].kids.clone()
+    for i in 1..<ks.len() - 1 {
+        let k = ks[i]
+        if t.nodes[k].kind == "COMMA" {
+            parts.push(cur.clone())
+            cur = ""
+        } else {
+            cur.push_str(t.text(k))
+        }
+    }
+    if cur.trim() != "" {
+        parts.push(cur)
+    }
+    return parts
+}
+
+impl TrEm {
+    fn todo(ref mut self, what: String, n: i64) -> String {
+        self.todos += 1
+        let src = self.t.text(n).trim().replace("\n", " ")
+        return f"{src} /* TODO(rs2nika): {what} */"
+    }
+
+    fn fresh(ref mut self, base: String) -> String {
+        self.uniq += 1
+        return f"{base}_{self.uniq}"
+    }
+
+    /// The source text of `n`, trimmed.
+    fn src(ref self, n: i64) -> String {
+        return self.t.text(n).trim().clone()
+    }
+
+    /// The child nodes of `n` (no tokens).
+    fn nodes(ref self, n: i64) -> Vec[i64] {
+        return self.t.nodes_of(n)
+    }
+
+    /// The name a `PATH` / `PATH_EXPR` / `PATH_TYPE` ends in.
+    fn last_seg(ref self, n: i64) -> String {
+        let p = self.t.find(n, "PATH")
+        if p < 0 {
+            return ""
+        }
+        let segs = self.t.kids_of(p, "PATH_SEGMENT")
+        if segs.len() == 0 {
+            return ""
+        }
+        let nr = self.t.kid(segs[0], "NAME_REF")
+        if nr >= 0 {
+            return self.src(nr)
+        }
+        return self.src(segs[0])
+    }
+
+    /// The segments of a path, outermost first: `a::b::c` -> [a, b, c].
+    fn segs(ref self, n: i64) -> Vec[String] {
+        let mut out: Vec[String] = []
+        let mut p = n
+        if !self.t.is(p, "PATH") {
+            p = self.t.find(n, "PATH")
+        }
+        while p >= 0 {
+            let seg = self.t.kid(p, "PATH_SEGMENT")
+            let nr = self.t.kid(seg, "NAME_REF")
+            if nr >= 0 {
+                out.insert(0, self.src(nr))
+            } else {
+                // `Self`, `crate`, `super`, `<T as X>`
+                let mut s: String = ""
+                for k in self.t.nodes[seg].kids.clone() {
+                    if self.t.nodes[k].kind != "GENERIC_ARG_LIST" {
+                        s.push_str(self.t.text(k))
+                    }
+                }
+                out.insert(0, s.trim().clone())
+            }
+            p = self.t.kid(p, "PATH")
+        }
+        return out
+    }
+
+    /// The generic arguments of a path's last segment, as nodes.
+    fn gen_args(ref self, n: i64) -> Vec[i64] {
+        let mut p = n
+        if !self.t.is(p, "PATH") {
+            p = self.t.find(n, "PATH")
+        }
+        let seg = self.t.kid(p, "PATH_SEGMENT")
+        let gl = self.t.kid(seg, "GENERIC_ARG_LIST")
+        let mut out: Vec[i64] = []
+        for a in self.nodes(gl) {
+            out.push(a)
+        }
+        return out
+    }
+
+    /// `impl X { fn new(..) -> Self }` without `self`: `X(..)` calls the
+    /// anonymous constructor it becomes.
+    fn find_ctors(ref mut self) {
+        for f in self.t.kids_of(0, "FN") {
+            self.fns.insert(self.t.name_of(f).clone())
+        }
+        for i in 0..<self.t.nodes.len() {
+            if self.t.nodes[i].kind != "IMPL" || self.t.has_tok(i, "FOR_KW") {
+                continue
+            }
+            let ty = self.last_seg(self.t.kid(i, "PATH_TYPE"))
+            let list = self.t.kid(i, "ASSOC_ITEM_LIST")
+            for f in self.t.kids_of(list, "FN") {
+                let params = self.t.kid(f, "PARAM_LIST")
+                if self.t.name_of(f) == "new" && self.t.kid(params, "SELF_PARAM") < 0 {
+                    self.ctors.insert(ty.clone())
+                }
+            }
+        }
+    }
+
+    /// Parse the arguments of the macros the converter knows, in rounds: an
+    /// argument may hold a macro of its own.
+    fn graft_macros(ref mut self) {
+        let mut from = 0
+        for _ in 0..<6 {
+            let mut src: Vec[String] = []
+            let mut calls: Vec[i64] = []
+            let mut shapes: Vec[String] = []
+            let upto = self.t.nodes.len()
+            for i in from..<upto {
+                if self.t.nodes[i].kind != "MACRO_CALL" {
+                    continue
+                }
+                let tt = self.t.kid(i, "TOKEN_TREE")
+                if tt < 0 {
+                    continue
+                }
+                let name = self.last_seg(i)
+                let ks = self.t.nodes[tt].kids.clone()
+                if ks.len() < 2 {
+                    continue
+                }
+                let mut inner: String = ""
+                for j in 1..<ks.len() - 1 {
+                    inner.push_str(self.t.text(ks[j]))
+                }
+                let at = calls.len()
+                if name == "vec" {
+                    src.push(f"fn __rt{at}() {{ [{inner}]; }}")
+                    shapes.push("ARRAY_EXPR")
+                } else if name == "matches" || name == "assert_matches" {
+                    let parts = tr_split_commas(self.t, tt)
+                    if parts.len() < 2 {
+                        continue
+                    }
+                    let mut pat_text: String = ""
+                    for j in 1..<parts.len() {
+                        if j > 1 {
+                            pat_text.push_str(",")
+                        }
+                        pat_text.push_str(parts[j])
+                    }
+                    let e = parts[0].clone()
+                    src.push(f"fn __rt{at}() {{ match ({e}) {{ {pat_text} => {{}} }} }}")
+                    shapes.push("MATCH_EXPR")
+                } else if tr_format_like(name) || name == "assert" || name == "assert_eq" || name == "assert_ne" || name == "debug_assert" || name == "debug_assert_eq" || name == "debug_assert_ne" || name == "todo" || name == "unimplemented" || name == "dbg" {
+                    src.push(f"fn __rt{at}() {{ f({inner}); }}")
+                    shapes.push("ARG_LIST")
+                } else {
+                    continue
+                }
+                calls.push(i)
+            }
+            if calls.len() == 0 {
+                return
+            }
+            let more = rt_parse(src.join("\n")) catch { RtTree { nodes: [] } }
+            if more.nodes.len() == 0 {
+                return
+            }
+            let base = self.t.nodes.len()
+            for j in 0..<more.nodes.len() {
+                let node = more.nodes[j].clone()
+                let mut kids: Vec[i64] = []
+                for k in node.kids {
+                    kids.push(k + base)
+                }
+                let mut parent = -1
+                if node.parent >= 0 {
+                    parent = node.parent + base
+                }
+                self.t.nodes.push(RtNode { kind: node.kind, text: node.text, tok: node.tok, kids: kids, parent: parent, start: node.start, end: node.end })
+            }
+            let fns = self.t.kids_of(base, "FN")
+            for c in 0..<calls.len() {
+                if c >= fns.len() {
+                    break
+                }
+                let body = self.t.kid(fns[c], "BLOCK_EXPR")
+                let found = self.t.find(body, shapes[c])
+                if found >= 0 {
+                    self.margs.insert(calls[c], found)
+                }
+            }
+            from = base
+        }
+    }
+}
+
+/// The macros whose first argument is a format string.
+fn tr_format_like(name: String) -> bool {
+    return name == "format" || name == "print" || name == "println" || name == "eprint" || name == "eprintln" || name == "panic" || name == "write" || name == "writeln" || name == "unreachable" || name == "format_args"
+}
+
+/// `s` without `p` at its front, if it starts with it.
+fn tr_drop_prefix(s: String, p: ref String) -> String {
+    if s.starts_with(p) {
+        let rest: String = s.bytes[p.len()..<s.len()].text() catch { "" }
+        return rest.clone()
+    }
+    return s
+}
+
+/// `s` without `p` at its end, if it ends with it.
+fn tr_drop_suffix(s: String, p: ref String) -> String {
+    if s.ends_with(p) {
+        let rest: String = s.bytes[0..<s.len() - p.len()].text() catch { "" }
+        return rest.clone()
+    }
+    return s
+}

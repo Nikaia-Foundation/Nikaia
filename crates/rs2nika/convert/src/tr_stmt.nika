@@ -1,0 +1,755 @@
+// crates/rs2nika/convert/src/tr_stmt.nika
+//
+// **Statements and control flow** of the syntax-tree converter. Every function
+// here gives whole lines, indented absolutely: `ind` is the indentation of the
+// first. A block is written in one of three modes, which say what its last
+// expression is for: `stmt` (nothing, it only does), `return` (the
+// function's result: `return x`, pushed into the branches of an `if` or a
+// `match`) and `value` (the value of the block, an `if` or `match` read as an
+// expression).
+
+/// Whether a line already leaves the block, so no `return` goes before it.
+fn tr_leaves(line: String) -> bool {
+    let s = line.trim()
+    return s.starts_with("return") || s.starts_with("throw ") || s.starts_with("panic(") || s.starts_with("break") || s.starts_with("continue") || s.starts_with("process::exit(")
+}
+
+/// The text of the lines without the first one's indentation.
+fn tr_unindent(lines: Vec[String], ind: String) -> String {
+    let text = lines.join("\n")
+    return tr_drop_prefix(text, ind)
+}
+
+impl TrEm {
+    /// Whether `n` is an expression that is written over lines of its own.
+    fn is_flow(ref self, n: i64) -> bool {
+        let k = self.t.kind(n)
+        return k == "IF_EXPR" || k == "MATCH_EXPR" || k == "BLOCK_EXPR" || k == "LOOP_EXPR" || k == "WHILE_EXPR" || k == "FOR_EXPR"
+    }
+
+    /// The lines of a `BLOCK_EXPR`'s statements (not its braces), with the
+    /// comments and blank lines between them.
+    pub fn block(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String] {
+        let list = self.t.kid(n, "STMT_LIST")
+        let mut out: Vec[String] = []
+        if list < 0 {
+            return out
+        }
+        let ks = self.t.nodes[list].kids.clone()
+        let mut tail = -1
+        for k in ks {
+            if !self.t.nodes[k].tok {
+                tail = k
+            }
+        }
+        // a statement with a `;` is no tail
+        if tail >= 0 && self.t.kind(tail) != "EXPR_STMT" && self.t.kind(tail) != "LET_STMT" && !self.is_item(tail) {
+            // the tail expression
+        } else {
+            tail = -1
+        }
+        let mut gap = false
+        let mut same_line = false
+        for k in ks {
+            let kind = self.t.kind(k)
+            if kind == "WHITESPACE" {
+                let ws = self.t.text(k)
+                gap = ws.contains("\n\n") || ws.replace(" ", "").contains("\n\n")
+                same_line = !ws.contains("\n")
+                continue
+            }
+            if kind == "L_CURLY" || kind == "R_CURLY" {
+                same_line = false
+                continue
+            }
+            if kind == "COMMENT" {
+                let c = self.t.text(k)
+                if same_line && out.len() > 0 {
+                    let last = out.len() - 1
+                    out[last] = f"{out[last]} {c}"
+                } else {
+                    if gap && out.len() > 0 {
+                        out.push("")
+                    }
+                    out.push(f"{ind}{c}")
+                }
+                gap = false
+                same_line = false
+                continue
+            }
+            if self.t.nodes[k].tok {
+                continue
+            }
+            if gap && out.len() > 0 {
+                out.push("")
+            }
+            gap = false
+            let mut m: String = "stmt"
+            if k == tail {
+                m = mode.clone()
+            } else if mode == "return" && k == tail {
+                m = "return"
+            }
+            for l in self.stmt(k, ind.clone(), m, k == tail) {
+                out.push(l)
+            }
+            same_line = true
+        }
+        return out
+    }
+
+    fn is_item(ref self, n: i64) -> bool {
+        let k = self.t.kind(n)
+        return k == "FN" || k == "STRUCT" || k == "ENUM" || k == "IMPL" || k == "USE" || k == "CONST" || k == "STATIC" || k == "TRAIT" || k == "MACRO_RULES" || k == "TYPE_ALIAS" || k == "MODULE"
+    }
+
+    /// One statement of a block; `last` when it is the block's tail.
+    fn stmt(ref mut self, k: i64, ind: String, mode: ref String, last: bool) -> Vec[String] {
+        let kind = self.t.kind(k)
+        if kind == "LET_STMT" {
+            let saved = self.pre.clone()
+            let saved_ind = self.ind.clone()
+            self.pre = []
+            self.ind = ind.clone()
+            let lines = self.let_stmt(k, ind.clone())
+            let mut out = self.pre.clone()
+            for l in lines {
+                out.push(l.clone())
+            }
+            self.pre = saved
+            self.ind = saved_ind
+            return out
+        }
+        if kind == "EXPR_STMT" {
+            let e = self.t.nth(k, 0)
+            return self.tail(e, ind, "stmt")
+        }
+        if self.is_item(k) {
+            // a nested item goes to the top level, after the item it is in
+            let lines = self.item(k, "")
+            for l in lines {
+                self.hoisted.push(l.clone())
+            }
+            if lines.len() > 0 {
+                self.hoisted.push("")
+            }
+            return []
+        }
+        if kind == "MACRO_STMTS" || kind == "MACRO_CALL" {
+            return self.tail(k, ind, mode)
+        }
+        return self.tail(k, ind, mode)
+    }
+
+    /// An expression written as a statement or as a block's last one, with
+    /// the lines its holes need before it.
+    pub fn tail(ref mut self, e: i64, ind: String, mode: ref String) -> Vec[String] {
+        let saved = self.pre.clone()
+        let saved_ind = self.ind.clone()
+        self.pre = []
+        self.ind = ind.clone()
+        let mut lines: Vec[String] = []
+        if self.is_flow(e) {
+            lines = self.flow(e, ind.clone(), mode)
+        } else if self.t.is(e, "TUPLE_EXPR") && self.nodes(e).len() == 0 {
+            // `()`: nothing
+        } else {
+            let text = self.expr(e)
+            if mode == "return" && !self.unit && !tr_leaves(text) && text != "()" {
+                lines.push(f"{ind}return {text}")
+            } else if text != "()" && text != "" {
+                lines.push(f"{ind}{text}")
+            }
+        }
+        let mut out = self.pre.clone()
+        for l in lines {
+            out.push(l.clone())
+        }
+        self.pre = saved
+        self.ind = saved_ind
+        return out
+    }
+
+    /// A control-flow expression's lines.
+    pub fn flow(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String] {
+        let kind = self.t.kind(n)
+        if kind == "IF_EXPR" {
+            return self.if_expr(n, ind, mode)
+        } else if kind == "MATCH_EXPR" {
+            return self.match_expr(n, ind, mode)
+        } else if kind == "FOR_EXPR" {
+            return self.for_expr(n, ind)
+        } else if kind == "WHILE_EXPR" {
+            return self.while_expr(n, ind)
+        } else if kind == "LOOP_EXPR" {
+            let mut out: Vec[String] = [f"{ind}while true {{"]
+            self.label_note(n, ind.clone(), out)
+            for l in self.block(self.t.kid(n, "BLOCK_EXPR"), f"{ind}    ", "stmt") {
+                out.push(l)
+            }
+            out.push(f"{ind}}}")
+            return out
+        }
+        // a block
+        let body = self.block(n, f"{ind}    ", mode)
+        if body.len() == 0 {
+            return [f"{ind}{{}}"]
+        }
+        let mut out: Vec[String] = [f"{ind}{{"]
+        for l in body {
+            out.push(l.clone())
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    fn label_note(ref mut self, n: i64, ind: String, mut out: Vec[String]) {
+        if self.t.kid(n, "LABEL") >= 0 {
+            self.todos += 1
+            out.push(f"{ind}    // TODO(rs2nika): the label `{self.src(self.t.kid(n, "LABEL"))}` (Nikaia has none: a flag, or a function that returns)")
+        }
+    }
+
+    // ---- let ----
+
+    fn let_stmt(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let parts = self.nodes(n)
+        let p = parts[0]
+        let mut ty_n = -1
+        let mut init = -1
+        let mut els = -1
+        for k in parts {
+            if k == p {
+                continue
+            }
+            let kind = self.t.kind(k)
+            if kind == "LET_ELSE" {
+                els = k
+            } else if kind.ends_with("_TYPE") {
+                ty_n = k
+            } else {
+                init = k
+            }
+        }
+        let mut name = self.pat(p)
+        if self.t.is(p, "IDENT_PAT") && self.t.has_tok(p, "MUT_KW") {
+            name = f"mut {name}"
+        }
+        let mut ty: String = ""
+        if ty_n >= 0 {
+            ty = f": {self.ty(ty_n)}"
+            if ty.ends_with("?") {
+                self.optional.insert(self.t.name_of(p).clone())
+            }
+        }
+        if init < 0 {
+            return [f"{ind}let {name}{ty}"]
+        }
+        if init >= 0 && self.optional_expr(init) && self.t.is(p, "IDENT_PAT") {
+            self.optional.insert(self.t.name_of(p).clone())
+        }
+        if els >= 0 {
+            return self.let_else(p, init, els, ind)
+        }
+        let mut value: String = ""
+        if self.is_flow(init) {
+            value = tr_unindent(self.flow(init, ind.clone(), "value"), ind.clone())
+        } else {
+            value = self.expr(init)
+        }
+        return [f"{ind}let {name}{ty} = {value}"]
+    }
+
+    /// `let P = e else { .. };`: one jump over an option or a result is
+    /// `?? jump` / `catch { jump }`; else a `match` that binds the names.
+    fn let_else(ref mut self, p: i64, init: i64, els: i64, ind: String) -> Vec[String] {
+        let b = self.t.kid(els, "BLOCK_EXPR")
+        let body = self.block(b, f"{ind}        ", "stmt")
+        let e = self.expr(init)
+        let names = self.bound_names(p)
+        let mut lhs: String = ""
+        if names.len() == 1 {
+            lhs = names[0].clone()
+        } else {
+            lhs = f"({names.join(", ")})"
+        }
+        let path = self.last_seg(self.t.kid(p, "PATH"))
+        if body.len() == 1 && tr_leaves(body[0]) {
+            let jump = body[0].trim().clone()
+            let inner = self.t.nth(p, 1)
+            if self.is_some_pat(p) && !self.refutable(inner) {
+                return [f"{ind}let {self.pat(inner)} = {e} ?? {jump}"]
+            }
+            if path == "Ok" && self.t.is(p, "TUPLE_STRUCT_PAT") && !self.refutable(inner) {
+                return [f"{ind}let {self.pat(inner)} = {e} catch {{ {jump} }}"]
+            }
+        }
+        let mut out: Vec[String] = [f"{ind}let {lhs} = match {e} {{", f"{ind}    {self.pat(p)} => {lhs}", f"{ind}    else => {{"]
+        for l in body {
+            out.push(l.clone())
+        }
+        out.push(f"{ind}    }}")
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    // ---- if ----
+
+    /// The conditions of a `&&` chain, outermost first.
+    fn and_parts(ref self, n: i64, mut out: Vec[i64]) {
+        if self.t.is(n, "BIN_EXPR") && self.t.has_tok(n, "AMP2") {
+            let ps = self.nodes(n)
+            self.and_parts(ps[0], out)
+            self.and_parts(ps[1], out)
+            return
+        }
+        out.push(n)
+    }
+
+    fn if_expr(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String] {
+        let parts = self.nodes(n)
+        let cond = parts[0]
+        let then_b = parts[1]
+        let mut else_n = -1
+        if parts.len() > 2 {
+            else_n = parts[2]
+        }
+        let mut conds: Vec[i64] = []
+        self.and_parts(cond, conds)
+        let mut lets = 0
+        for c in conds {
+            if self.t.is(c, "LET_EXPR") {
+                lets += 1
+            }
+        }
+        let inner = f"{ind}    "
+        if lets == 0 {
+            let mut out: Vec[String] = [f"{ind}if {self.expr(cond)} {{"]
+            for l in self.block(then_b, inner.clone(), mode) {
+                out.push(l)
+            }
+            self.else_part(out, else_n, ind, mode)
+            return out
+        }
+        if lets == 1 && conds.len() == 1 {
+            return self.if_let(cond, then_b, else_n, ind, mode)
+        }
+        // a let-chain: nested, a flag for its `else`
+        let mut flag: String = ""
+        let mut out: Vec[String] = []
+        if else_n >= 0 {
+            if mode == "value" {
+                return [f"{ind}{self.todo("a let-chain with `else` read as a value", n)}"]
+            }
+            flag = self.fresh("taken")
+            out.push(f"{ind}let mut {flag} = false")
+        }
+        let body = self.chain(conds, 0, then_b, ind.clone(), mode, flag.clone())
+        for l in body {
+            out.push(l.clone())
+        }
+        if else_n >= 0 {
+            out.push(f"{ind}if !{flag} {{")
+            if self.t.is(else_n, "IF_EXPR") {
+                for l in self.if_expr(else_n, inner.clone(), mode) {
+                    out.push(l)
+                }
+            } else {
+                for l in self.block(else_n, inner.clone(), mode) {
+                    out.push(l)
+                }
+            }
+            out.push(f"{ind}}}")
+        }
+        return out
+    }
+
+    /// `} else { .. }` / `} else if ..` and the closing brace.
+    fn else_part(ref mut self, mut out: Vec[String], else_n: i64, ind: String, mode: ref String) {
+        if else_n < 0 {
+            out.push(f"{ind}}}")
+            return
+        }
+        if self.t.is(else_n, "IF_EXPR") {
+            let rest = self.if_expr(else_n, ind.clone(), mode)
+            if rest.len() > 0 && rest[0].starts_with(f"{ind}if ") {
+                let first = rest[0].clone()
+                out.push(f"{ind}}} else {tr_drop_prefix(first, ind)}")
+                for i in 1..<rest.len() {
+                    out.push(rest[i].clone())
+                }
+                return
+            }
+            out.push(f"{ind}}} else {{")
+            for l in self.if_expr(else_n, f"{ind}    ", mode) {
+                out.push(l)
+            }
+            out.push(f"{ind}}}")
+            return
+        }
+        out.push(f"{ind}}} else {{")
+        for l in self.block(else_n, f"{ind}    ", mode) {
+            out.push(l)
+        }
+        out.push(f"{ind}}}")
+    }
+
+    /// Whether `e` is a name or a field path, which narrows (ADR-382).
+    fn narrows(ref self, e: i64) -> bool {
+        if self.t.is(e, "PATH_EXPR") {
+            return self.segs(e).len() == 1
+        }
+        if self.t.is(e, "FIELD_EXPR") {
+            return self.narrows(self.t.nth(e, 0))
+        }
+        if self.t.is(e, "REF_EXPR") || self.t.is(e, "PAREN_EXPR") {
+            return self.narrows(self.t.nth(e, 0))
+        }
+        return false
+    }
+
+    /// `if let P = e { A } else { B }`.
+    fn if_let(ref mut self, le: i64, then_b: i64, else_n: i64, ind: String, mode: ref String) -> Vec[String] {
+        let ps = self.nodes(le)
+        let p = ps[0]
+        let e_n = ps[1]
+        let e = self.expr(e_n)
+        let inner = f"{ind}    "
+        if self.is_none_pat(p) {
+            let mut out: Vec[String] = [f"{ind}if {e} == null {{"]
+            for l in self.block(then_b, inner.clone(), mode) {
+                out.push(l)
+            }
+            self.else_part(out, else_n, ind, mode)
+            return out
+        }
+        let some_inner = self.t.nth(p, 1)
+        if self.is_some_pat(p) && !self.refutable(some_inner) && self.narrows(e_n) {
+            let mut out: Vec[String] = [f"{ind}if {e} != null {{"]
+            let bound = self.pat(some_inner)
+            if bound != e && bound != "_" {
+                out.push(f"{inner}let {bound} = {e}")
+            }
+            for l in self.block(then_b, inner.clone(), mode) {
+                out.push(l)
+            }
+            self.else_part(out, else_n, ind, mode)
+            return out
+        }
+        // a `match`: `x => {A} null => {B}`, or `P => {A} else => {B}`
+        let mut other: String = "else"
+        if self.is_some_pat(p) && !self.refutable(some_inner) {
+            other = "null"
+        }
+        let arm = f"{ind}        "
+        let mut out: Vec[String] = [f"{ind}match {e} {{", f"{inner}{self.pat(p)} => {{"]
+        for l in self.block(then_b, arm.clone(), mode) {
+            out.push(l)
+        }
+        out.push(f"{inner}}}")
+        if else_n < 0 {
+            out.push(f"{inner}{other} => {{}}")
+        } else {
+            out.push(f"{inner}{other} => {{")
+            if self.t.is(else_n, "IF_EXPR") {
+                for l in self.if_expr(else_n, arm.clone(), mode) {
+                    out.push(l)
+                }
+            } else {
+                for l in self.block(else_n, arm.clone(), mode) {
+                    out.push(l)
+                }
+            }
+            out.push(f"{inner}}}")
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    /// The conditions `conds[at..]` of a let-chain around the block `then_b`,
+    /// nested; `flag` is set where the block runs.
+    fn chain(ref mut self, conds: Vec[i64], at: i64, then_b: i64, ind: String, mode: ref String, flag: String) -> Vec[String] {
+        let inner = f"{ind}    "
+        if at >= conds.len() {
+            let mut out: Vec[String] = []
+            if flag != "" {
+                out.push(f"{ind}{flag} = true")
+            }
+            for l in self.block(then_b, ind, mode) {
+                out.push(l)
+            }
+            return out
+        }
+        let c = conds[at]
+        if !self.t.is(c, "LET_EXPR") {
+            // the plain conditions up to the next `let`, as one `if`
+            let mut plain: Vec[String] = []
+            let mut j = at
+            while j < conds.len() && !self.t.is(conds[j], "LET_EXPR") {
+                plain.push(self.expr(conds[j]))
+                j += 1
+            }
+            let mut out: Vec[String] = [f"{ind}if {plain.join(" && ")} {{"]
+            for l in self.chain(conds, j, then_b, inner.clone(), mode, flag) {
+                out.push(l)
+            }
+            out.push(f"{ind}}}")
+            return out
+        }
+        let ps = self.nodes(c)
+        let p = ps[0]
+        let e = self.expr(ps[1])
+        let some_inner = self.t.nth(p, 1)
+        if self.is_some_pat(p) && !self.refutable(some_inner) && self.narrows(ps[1]) {
+            let mut out: Vec[String] = [f"{ind}if {e} != null {{"]
+            let bound = self.pat(some_inner)
+            if bound != e && bound != "_" {
+                out.push(f"{inner}let {bound} = {e}")
+            }
+            for l in self.chain(conds, at + 1, then_b, inner.clone(), mode, flag) {
+                out.push(l)
+            }
+            out.push(f"{ind}}}")
+            return out
+        }
+        let mut other: String = "else"
+        if self.is_some_pat(p) && !self.refutable(some_inner) {
+            other = "null"
+        }
+        let mut out: Vec[String] = [f"{ind}match {e} {{", f"{inner}{self.pat(p)} => {{"]
+        for l in self.chain(conds, at + 1, then_b, f"{inner}    ", mode, flag) {
+            out.push(l)
+        }
+        out.push(f"{inner}}}")
+        out.push(f"{inner}{other} => {{}}")
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    // ---- match ----
+
+    fn match_expr(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String] {
+        let subject = self.expr(self.t.nth(n, 0))
+        let arms = self.t.kids_of(self.t.kid(n, "MATCH_ARM_LIST"), "MATCH_ARM")
+        let mut option = false
+        let mut has_none = false
+        let mut wild = -1
+        let mut refutable_some = false
+        for a in arms {
+            let p = self.t.nth(a, 0)
+            if self.is_some_pat(p) {
+                option = true
+                if self.refutable(self.t.nth(p, 1)) || self.t.kid(a, "MATCH_GUARD") >= 0 {
+                    refutable_some = true
+                }
+            } else if self.is_none_pat(p) {
+                option = true
+                has_none = true
+            } else if self.t.is(p, "WILDCARD_PAT") {
+                wild = a
+            }
+        }
+        // in `return` mode with only one-line arms: `return match ..`
+        let mut simple = mode == "return" && !self.unit
+        if simple {
+            for a in arms {
+                let ns = self.nodes(a)
+                let body = ns[ns.len() - 1]
+                if self.is_flow(body) || self.t.is(body, "RETURN_EXPR") || self.t.is(body, "MACRO_EXPR") || self.src(body).starts_with("Err(") {
+                    simple = false
+                }
+            }
+        }
+        let mut arm_mode = mode.clone()
+        let mut head = f"{ind}match {subject} {{"
+        if simple {
+            arm_mode = "value"
+            head = f"{ind}return match {subject} {{"
+        }
+        let inner = f"{ind}    "
+        let mut out: Vec[String] = [head]
+        for a in arms {
+            let ns = self.nodes(a)
+            let p = ns[0]
+            let body = ns[ns.len() - 1]
+            let mut pat_text = self.pat(p)
+            if self.t.is(p, "WILDCARD_PAT") {
+                pat_text = "else"
+            }
+            let guard = self.t.kid(a, "MATCH_GUARD")
+            if guard >= 0 {
+                pat_text = f"{pat_text} if {self.expr(self.t.nth(guard, 0))}"
+            }
+            let lines = self.arm(body, inner.clone(), arm_mode.clone())
+            if a == wild && option && !has_none {
+                for l in self.arm_lines("null", lines, inner.clone()) {
+                    out.push(l)
+                }
+                if refutable_some {
+                    for l in self.arm_lines("else", lines, inner.clone()) {
+                        out.push(l)
+                    }
+                }
+                continue
+            }
+            for l in self.arm_lines(pat_text, lines, inner.clone()) {
+                out.push(l)
+            }
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    /// An arm's body as lines at `ind + 4`; a single line of a value or a
+    /// call stays beside its pattern.
+    fn arm(ref mut self, body: i64, ind: String, mode: ref String) -> Vec[String] {
+        let deeper = f"{ind}    "
+        if self.t.is(body, "BLOCK_EXPR") && self.t.kid(body, "UNSAFE_KW") < 0 {
+            return self.block(body, deeper, mode)
+        }
+        return self.tail(body, deeper, mode)
+    }
+
+    fn arm_lines(ref self, pat_text: String, lines: ref Vec[String], ind: String) -> Vec[String] {
+        if lines.len() == 0 {
+            return [f"{ind}{pat_text} => {{}}"]
+        }
+        if lines.len() == 1 {
+            let one = lines[0].trim().clone()
+            // an assignment is no value: it keeps its braces
+            let assigns = one.contains(" = ") || one.contains(" += ") || one.contains(" -= ") || one.starts_with("let ")
+            if !assigns && !one.starts_with("//") {
+                return [f"{ind}{pat_text} => {one}"]
+            }
+        }
+        let mut out: Vec[String] = [f"{ind}{pat_text} => {{"]
+        for l in lines {
+            out.push(l.clone())
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    // ---- loops ----
+
+    /// What a `for` runs over, without `.iter()` / `&`.
+    fn iterable(ref self, n: i64) -> i64 {
+        let mut at = n
+        while true {
+            if self.t.is(at, "REF_EXPR") || self.t.is(at, "PAREN_EXPR") {
+                at = self.t.nth(at, 0)
+                continue
+            }
+            if self.t.is(at, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(at, "ARG_LIST")).len() == 0 {
+                let m = self.src(self.t.kid(at, "NAME_REF"))
+                if m == "iter" || m == "into_iter" {
+                    at = self.t.nth(at, 0)
+                    continue
+                }
+            }
+            break
+        }
+        return at
+    }
+
+    fn for_expr(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let parts = self.nodes(n)
+        let p = parts[0]
+        let it = self.iterable(parts[1])
+        let body_n = parts[2]
+        let inner = f"{ind}    "
+        let mut out: Vec[String] = []
+        let mut lead: Vec[String] = []
+        // `for (i, x) in xs.iter().enumerate()` -> an index (R93)
+        let mut head: String = ""
+        if self.t.is(it, "METHOD_CALL_EXPR") && self.src(self.t.kid(it, "NAME_REF")) == "enumerate" && self.t.is(p, "TUPLE_PAT") {
+            let src_n = self.iterable(self.t.nth(it, 0))
+            let pair = self.nodes(p)
+            if pair.len() == 2 && !self.t.is(src_n, "METHOD_CALL_EXPR") {
+                let xs = self.expr(src_n)
+                let i = self.pat(pair[0])
+                let x = self.pat(pair[1])
+                head = f"{ind}for {i} in 0..<{xs}.len() {{"
+                if x != "_" {
+                    lead.push(f"{inner}let {x} = {xs}[{i}]")
+                }
+            } else if pair.len() == 2 && self.t.is(src_n, "METHOD_CALL_EXPR") && self.src(self.t.kid(src_n, "NAME_REF")) == "chars" {
+                // `s.chars().enumerate()`: the scalars as a list first
+                let s = self.expr(self.t.nth(src_n, 0))
+                let cs = self.fresh("scalars")
+                let i = self.pat(pair[0])
+                let x = self.pat(pair[1])
+                out.push(f"{ind}let {cs}: Vec[scalar] = {s}.scalars.collect()")
+                head = f"{ind}for {i} in 0..<{cs}.len() {{"
+                lead.push(f"{inner}let {x} = {cs}[{i}]")
+            }
+        }
+        if head == "" {
+            if self.t.is(it, "METHOD_CALL_EXPR") && self.src(self.t.kid(it, "NAME_REF")) == "iter_mut" {
+                let xs = self.expr(self.t.nth(it, 0))
+                let i = self.fresh("at")
+                let x = self.pat(p)
+                self.todos += 1
+                head = f"{ind}for {i} in 0..<{xs}.len() {{"
+                lead.push(f"{inner}let {x} = {xs}[{i}] // TODO(rs2nika): `iter_mut`: write the change back, `{xs}[{i}] = ..`")
+            } else {
+                head = f"{ind}for {self.pat(p)} in {self.expr(it)} {{"
+            }
+        }
+        // the holes of the iterable, before the loop
+        for l in self.pre.clone() {
+            out.push(l)
+        }
+        self.pre = []
+        out.push(head)
+        self.label_note(n, ind.clone(), out)
+        for l in lead {
+            out.push(l.clone())
+        }
+        for l in self.block(body_n, inner, "stmt") {
+            out.push(l)
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    fn while_expr(ref mut self, n: i64, ind: String) -> Vec[String] {
+        let parts = self.nodes(n)
+        let cond = parts[0]
+        let body_n = parts[parts.len() - 1]
+        let inner = f"{ind}    "
+        let mut out: Vec[String] = []
+        if self.t.is(cond, "LET_EXPR") {
+            let ps = self.nodes(cond)
+            let p = ps[0]
+            let e = self.expr(ps[1])
+            let some_inner = self.t.nth(p, 1)
+            out.push(f"{ind}while true {{")
+            self.label_note(n, ind.clone(), out)
+            if self.is_some_pat(p) && !self.refutable(some_inner) {
+                out.push(f"{inner}let {self.pat(some_inner)} = {e} ?? break")
+                for l in self.block(body_n, inner.clone(), "stmt") {
+                    out.push(l)
+                }
+            } else {
+                out.push(f"{inner}match {e} {{")
+                out.push(f"{inner}    {self.pat(p)} => {{")
+                for l in self.block(body_n, f"{inner}        ", "stmt") {
+                    out.push(l)
+                }
+                out.push(f"{inner}    }}")
+                out.push(f"{inner}    else => break")
+                out.push(f"{inner}}}")
+            }
+            out.push(f"{ind}}}")
+            return out
+        }
+        out.push(f"{ind}while {self.expr(cond)} {{")
+        self.label_note(n, ind.clone(), out)
+        for l in self.block(body_n, inner, "stmt") {
+            out.push(l)
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+}

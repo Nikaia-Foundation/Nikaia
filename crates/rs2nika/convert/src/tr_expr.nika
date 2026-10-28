@@ -1,0 +1,927 @@
+// crates/rs2nika/convert/src/tr_expr.nika
+//
+// **Expressions** of the syntax-tree converter. An expression is written on
+// one line where it can; a closure with a block, an `if` or a `match` used as
+// a value spans lines, its inner lines indented from `self.ind`, the
+// statement's own. What a value needs written before it (a `format!` hole
+// holding a literal) goes to `self.pre` as a `let hole_N`.
+
+use std::collections
+use std::text
+
+/// The methods that make or extend an iterator: a chain through one of them
+/// is a `Seq`, not an option.
+fn tr_iter_method(m: String) -> bool {
+    return m == "iter" || m == "into_iter" || m == "chars" || m == "bytes" || m == "keys" || m == "values" || m == "lines" || m == "split" || m == "split_whitespace" || m == "map" || m == "filter" || m == "rev" || m == "zip" || m == "skip" || m == "take" || m == "chain" || m == "enumerate" || m == "windows" || m == "chunks" || m == "filter_map" || m == "flat_map" || m == "step_by" || m == "take_while" || m == "skip_while" || m == "char_indices" || m == "drain" || m == "peekable" || m == "cloned" || m == "copied" || m == "scalars" || m == "splitn" || m == "rsplit" || m == "split_terminator" || m == "inspect"
+}
+
+/// The methods whose answer is an option.
+fn tr_option_method(m: String) -> bool {
+    return m == "get" || m == "pop" || m == "first" || m == "last" || m == "next" || m == "find" || m == "position" || m == "max" || m == "min" || m == "max_by_key" || m == "min_by_key" || m == "max_by" || m == "min_by" || m == "strip_prefix" || m == "strip_suffix" || m == "checked_add" || m == "checked_sub" || m == "checked_mul" || m == "checked_div" || m == "rfind" || m == "find_map" || m == "nth" || m == "get_mut" || m == "remove_entry" || m == "split_once" || m == "rsplit_once" || m == "to_digit" || m == "last_mut" || m == "first_mut" || m == "pop_front" || m == "pop_back" || m == "front" || m == "back" || m == "peek" || m == "rposition" || m == "char_indices_next"
+}
+
+impl TrEm {
+    pub fn expr(ref mut self, n: i64) -> String {
+        let kind = self.t.kind(n)
+        if n < 0 {
+            return ""
+        }
+        if kind == "LITERAL" {
+            return self.lit(n)
+        } else if kind == "PATH_EXPR" {
+            return self.path_expr(n)
+        } else if kind == "PAREN_EXPR" {
+            return f"({self.expr(self.t.nth(n, 0))})"
+        } else if kind == "BIN_EXPR" {
+            return self.bin(n)
+        } else if kind == "PREFIX_EXPR" {
+            let inner = self.expr(self.t.nth(n, 0))
+            if self.t.has_tok(n, "STAR") {
+                return inner
+            } else if self.t.has_tok(n, "BANG") {
+                return f"!{inner}"
+            }
+            return f"-{inner}"
+        } else if kind == "REF_EXPR" {
+            return self.expr(self.t.nth(n, 0))
+        } else if kind == "CAST_EXPR" {
+            return self.cast(n)
+        } else if kind == "CALL_EXPR" {
+            return self.call(n)
+        } else if kind == "METHOD_CALL_EXPR" {
+            return self.method(n)
+        } else if kind == "FIELD_EXPR" {
+            let recv = self.expr(self.t.nth(n, 0))
+            let nr = self.t.kid(n, "NAME_REF")
+            return f"{recv}.{self.src(nr)}"
+        } else if kind == "INDEX_EXPR" {
+            let parts = self.nodes(n)
+            let base = self.expr(parts[0])
+            if self.t.is(parts[1], "RANGE_EXPR") && self.nodes(parts[1]).len() == 0 {
+                return base
+            }
+            return f"{base}[{self.expr(parts[1])}]"
+        } else if kind == "RANGE_EXPR" {
+            return self.range(n)
+        } else if kind == "TUPLE_EXPR" {
+            let mut parts: Vec[String] = []
+            for k in self.nodes(n) {
+                parts.push(self.expr(k))
+            }
+            if parts.len() == 1 {
+                return f"({parts[0]},)"
+            }
+            return f"({parts.join(", ")})"
+        } else if kind == "ARRAY_EXPR" {
+            let mut parts: Vec[String] = []
+            for k in self.nodes(n) {
+                parts.push(self.expr(k))
+            }
+            if self.t.has_tok(n, "SEMICOLON") && parts.len() == 2 {
+                return f"[{parts[0]}; {parts[1]}]"
+            }
+            return f"[{parts.join(", ")}]"
+        } else if kind == "RECORD_EXPR" {
+            return self.record(n)
+        } else if kind == "CLOSURE_EXPR" {
+            return self.closure(n)
+        } else if kind == "MACRO_EXPR" {
+            return self.mac(self.t.kid(n, "MACRO_CALL"))
+        } else if kind == "MACRO_CALL" {
+            return self.mac(n)
+        } else if kind == "RETURN_EXPR" {
+            return self.ret(n)
+        } else if kind == "BREAK_EXPR" {
+            if self.nodes(n).len() > 0 || self.t.has_tok(n, "LIFETIME") || self.t.kid(n, "LIFETIME") >= 0 {
+                return self.todo("`break` with a value or a label", n)
+            }
+            return "break"
+        } else if kind == "CONTINUE_EXPR" {
+            if self.t.kid(n, "LIFETIME") >= 0 {
+                return self.todo("`continue` with a label", n)
+            }
+            return "continue"
+        } else if kind == "TRY_EXPR" {
+            let inner = self.expr(self.t.nth(n, 0))
+            if self.fails {
+                return inner
+            } else if self.opt {
+                return f"({inner} ?? return null)"
+            }
+            return self.todo("`?` in a function that hands back neither `Result` nor `Option`", n)
+        } else if kind == "IF_EXPR" || kind == "MATCH_EXPR" || kind == "BLOCK_EXPR" || kind == "LOOP_EXPR" || kind == "WHILE_EXPR" || kind == "FOR_EXPR" {
+            return self.flow_value(n)
+        } else if kind == "UNDERSCORE_EXPR" {
+            return "_"
+        } else if kind == "AWAIT_EXPR" {
+            return self.expr(self.t.nth(n, 0))
+        }
+        return self.todo("an expression", n)
+    }
+
+    /// A control-flow expression read as a value: its lines from the
+    /// statement's indentation, the first one without it.
+    fn flow_value(ref mut self, n: i64) -> String {
+        let ind = self.ind.clone()
+        let lines = self.flow(n, ind.clone(), "value")
+        let text = lines.join("\n")
+        return tr_drop_prefix(text, ind)
+    }
+
+    fn path_expr(ref mut self, n: i64) -> String {
+        let segs = self.segs(n)
+        if segs.len() == 1 {
+            let name = segs[0].clone()
+            if name == "None" {
+                return "null"
+            }
+            if name == "self" {
+                return "self"
+            }
+            if self.prefix != "" && self.fns.contains(name) {
+                return f"{self.prefix}{name}"
+            }
+            return tr_ident(name)
+        }
+        if segs.len() == 2 && tr_wide_int(segs[0]) {
+            return f"i64::{segs[1]}"
+        }
+        return self.path_text(self.t.kid(n, "PATH"))
+    }
+
+    fn bin(ref mut self, n: i64) -> String {
+        let parts = self.nodes(n)
+        let mut op: String = ""
+        for k in self.t.nodes[n].kids.clone() {
+            let kind = self.t.kind(k)
+            if self.t.nodes[k].tok && kind != "WHITESPACE" && kind != "COMMENT" {
+                op = self.t.text(k)
+            }
+        }
+        if parts.len() < 2 {
+            return self.todo("an operator", n)
+        }
+        // `*m.entry(k).or_insert(d) += v` -> `m.insert(k, (m[k] ?? d) + v)`
+        if op.ends_with("=") && op != "==" && op != "!=" && op != "<=" && op != ">=" {
+            let lhs = parts[0]
+            let entry = self.entry_or_insert(lhs)
+            if entry.len() == 3 {
+                let rhs = self.expr(parts[1])
+                if op == "=" {
+                    return f"{entry[0]}.insert({entry[1]}, {rhs})"
+                }
+                let bare: String = op.bytes[0..<op.len() - 1].text() catch { "" }
+                return f"{entry[0]}.insert({entry[1]}, ({entry[0]}[{entry[1]}] ?? {entry[2]}) {bare} {rhs})"
+            }
+        }
+        let a = self.expr(parts[0])
+        let b = self.expr(parts[1])
+        return f"{a} {op} {b}"
+    }
+
+    /// `*m.entry(k).or_insert(d)` (also `or_default()`, `or_insert_with(..)`)
+    /// -> [m, k, d]; [] otherwise.
+    fn entry_or_insert(ref mut self, n: i64) -> Vec[String] {
+        let mut at = n
+        if self.t.is(at, "PREFIX_EXPR") && self.t.has_tok(at, "STAR") {
+            at = self.t.nth(at, 0)
+        }
+        if !self.t.is(at, "METHOD_CALL_EXPR") {
+            return []
+        }
+        let m = self.src(self.t.kid(at, "NAME_REF"))
+        let inner = self.t.nth(at, 0)
+        if !self.t.is(inner, "METHOD_CALL_EXPR") || self.src(self.t.kid(inner, "NAME_REF")) != "entry" {
+            return []
+        }
+        let map = self.expr(self.t.nth(inner, 0))
+        let key_args = self.nodes(self.t.kid(inner, "ARG_LIST"))
+        if key_args.len() != 1 {
+            return []
+        }
+        let key = self.expr(key_args[0])
+        let args = self.nodes(self.t.kid(at, "ARG_LIST"))
+        let mut d: String = "0"
+        if m == "or_insert" && args.len() == 1 {
+            d = self.expr(args[0])
+        } else if m == "or_insert_with" && args.len() == 1 {
+            d = self.default_of_ctor(args[0])
+        } else if m != "or_default" {
+            return []
+        }
+        return [map, key, d]
+    }
+
+    /// The value `or_insert_with(f)` makes: a closure's body, `Vec::new` -> `[]`.
+    fn default_of_ctor(ref mut self, n: i64) -> String {
+        if self.t.is(n, "CLOSURE_EXPR") {
+            let ns = self.nodes(n)
+            return self.expr(ns[ns.len() - 1])
+        }
+        let s = self.src(n)
+        if s.ends_with("Vec::new") || s.ends_with("Default::default") {
+            return "[]"
+        }
+        if s.ends_with("String::new") {
+            return "\"\""
+        }
+        if s.contains("Map::new") || s.contains("Set::new") {
+            let last = self.last_seg(n)
+            self.uses.insert("collections")
+            return f"collections::{self.segs(n)[0]}()"
+        }
+        return f"{self.expr(n)}()"
+    }
+
+    fn cast(ref mut self, n: i64) -> String {
+        let parts = self.nodes(n)
+        let e = self.expr(parts[0])
+        let mut ty = self.ty(parts[1])
+        if ty == "scalar" {
+            return f"{e} as scalar"
+        }
+        // `xs.len() as usize`: a length is an `i64` already (R40)
+        if ty == "i64" && self.t.is(parts[0], "METHOD_CALL_EXPR") {
+            let m = self.src(self.t.kid(parts[0], "NAME_REF"))
+            if m == "len" || m == "count" {
+                return e
+            }
+        }
+        return f"{e} as {ty}"
+    }
+
+    fn args(ref mut self, n: i64) -> Vec[String] {
+        let mut out: Vec[String] = []
+        for a in self.nodes(self.t.kid(n, "ARG_LIST")) {
+            out.push(self.expr(a))
+        }
+        return out
+    }
+
+    fn call(ref mut self, n: i64) -> String {
+        let callee = self.t.nth(n, 0)
+        let arg_nodes = self.nodes(self.t.kid(n, "ARG_LIST"))
+        if !self.t.is(callee, "PATH_EXPR") {
+            let f = self.expr(callee)
+            return f"{f}({self.args(n).join(", ")})"
+        }
+        let segs = self.segs(callee)
+        let last = segs[segs.len() - 1].clone()
+        let first = segs[0].clone()
+        let joined = segs.join("::")
+        if segs.len() == 1 {
+            if last == "Some" && arg_nodes.len() == 1 {
+                return self.expr(arg_nodes[0])
+            }
+            if last == "Ok" && arg_nodes.len() == 1 {
+                if self.src(arg_nodes[0]) == "()" {
+                    return "()"
+                }
+                return self.expr(arg_nodes[0])
+            }
+            if last == "Err" && arg_nodes.len() == 1 {
+                return f"throw {self.expr(arg_nodes[0])}"
+            }
+        }
+        if segs.len() >= 2 {
+            let owner = segs[segs.len() - 2].clone()
+            if (owner == "Box" || owner == "Rc" || owner == "Arc" || owner == "RefCell" || owner == "Cell") && last == "new" && arg_nodes.len() == 1 {
+                return self.expr(arg_nodes[0])
+            }
+            if owner == "String" && (last == "new" || last == "with_capacity") {
+                return "\"\""
+            }
+            if owner == "String" && last == "from" && arg_nodes.len() == 1 {
+                let a = self.expr(arg_nodes[0])
+                if a.starts_with("\"") {
+                    return a
+                }
+                return f"{a}.to_string()"
+            }
+            if owner == "Vec" && (last == "new" || last == "with_capacity") {
+                return "[]"
+            }
+            if owner == "Vec" && last == "from" && arg_nodes.len() == 1 {
+                return self.expr(arg_nodes[0])
+            }
+            if owner == "HashMap" || owner == "BTreeMap" || owner == "HashSet" || owner == "BTreeSet" || owner == "VecDeque" || owner == "BinaryHeap" {
+                if last == "new" || last == "with_capacity" || last == "default" {
+                    self.uses.insert("collections")
+                    return f"collections::{owner}()"
+                }
+            }
+            if (owner == "process" && last == "exit") || joined.ends_with("process::exit") {
+                self.uses.insert("process")
+                return f"process::exit({self.args(n).join(", ")})"
+            }
+            if owner == "env" && last == "args" {
+                self.uses.insert("cli")
+                return "cli::args()"
+            }
+            if (owner == "cmp" || owner == "std") && (last == "max" || last == "min") && arg_nodes.len() == 2 {
+                let a = self.expr(arg_nodes[0])
+                let b = self.expr(arg_nodes[1])
+                return f"{a}.{last}({b})"
+            }
+            if owner == "mem" && (last == "swap" || last == "replace" || last == "take") {
+                return self.todo("`std::mem` moves values in place", n)
+            }
+            if (owner == "i64" || owner == "u64" || owner == "i32" || owner == "u32" || owner == "u8" || owner == "f64" || owner == "f32" || tr_wide_int(owner)) && last == "from" && arg_nodes.len() == 1 {
+                let mut t = owner.clone()
+                if tr_wide_int(owner) {
+                    t = "i64"
+                }
+                return f"({self.expr(arg_nodes[0])} as {t})"
+            }
+            let mut ty = owner.clone()
+            if ty == "Self" {
+                ty = self.self_ty.clone()
+            }
+            if last == "new" && self.ctors.contains(ty) {
+                return f"{ty}({self.args(n).join(", ")})"
+            }
+            if last == "default" && segs.len() == 2 {
+                return self.todo("`Default` (write the value out)", n)
+            }
+        }
+        let mut path = self.path_text(self.t.kid(callee, "PATH"))
+        if segs.len() == 1 && self.prefix != "" && self.fns.contains(last) {
+            path = f"{self.prefix}{last}"
+        } else if segs.len() == 1 {
+            path = tr_ident(last)
+        }
+        return f"{path}({self.args(n).join(", ")})"
+    }
+
+    /// Whether the method chain ending in `n` runs through an iterator.
+    fn iter_chain(ref self, n: i64) -> bool {
+        let mut at = n
+        while self.t.is(at, "METHOD_CALL_EXPR") {
+            let m = self.src(self.t.kid(at, "NAME_REF"))
+            if tr_iter_method(m) {
+                return true
+            }
+            at = self.t.nth(at, 0)
+        }
+        return false
+    }
+
+    /// Whether `n` reads as an option: a name declared `Option`, a method that
+    /// hands one back, `Some(..)` / `None`.
+    fn optional_expr(ref self, n: i64) -> bool {
+        if self.t.is(n, "METHOD_CALL_EXPR") {
+            let m = self.src(self.t.kid(n, "NAME_REF"))
+            if m == "cloned" || m == "copied" || m == "as_ref" || m == "as_deref" || m == "as_mut" || m == "take" {
+                return self.optional_expr(self.t.nth(n, 0))
+            }
+            return tr_option_method(m) || m == "map" && !self.iter_chain(self.t.nth(n, 0)) && self.optional_expr(self.t.nth(n, 0))
+        }
+        if self.t.is(n, "PATH_EXPR") || self.t.is(n, "FIELD_EXPR") {
+            let s = self.src(n)
+            if s == "None" {
+                return true
+            }
+            let mut name = s.clone()
+            if self.t.is(n, "FIELD_EXPR") {
+                name = self.src(self.t.kid(n, "NAME_REF")).clone()
+            }
+            return self.optional.contains(name)
+        }
+        if self.t.is(n, "REF_EXPR") || self.t.is(n, "PAREN_EXPR") || self.t.is(n, "PREFIX_EXPR") {
+            return self.optional_expr(self.t.nth(n, 0))
+        }
+        return false
+    }
+
+    /// A closure argument's one parameter and body, for an option's
+    /// combinators: `|x| e` -> ("x", "e"); ("", "") when it is not one.
+    fn closure_parts(ref mut self, c: i64) -> (String, String) {
+        if !self.t.is(c, "CLOSURE_EXPR") {
+            return ("", "")
+        }
+        let params = self.t.kids_of(self.t.kid(c, "PARAM_LIST"), "PARAM")
+        let ns = self.nodes(c)
+        let body = ns[ns.len() - 1]
+        if params.len() > 1 || self.t.is(body, "BLOCK_EXPR") {
+            return ("", "")
+        }
+        let mut p: String = "_"
+        if params.len() == 1 {
+            p = self.pat(self.t.nth(params[0], 0))
+        }
+        return (p, self.expr(body))
+    }
+
+    fn method(ref mut self, n: i64) -> String {
+        let recv_n = self.t.nth(n, 0)
+        let m = self.src(self.t.kid(n, "NAME_REF"))
+        let arg_nodes = self.nodes(self.t.kid(n, "ARG_LIST"))
+        let turbofish = self.t.kid(n, "GENERIC_ARG_LIST")
+        let r = self.expr(recv_n)
+        let a = self.args(n)
+        let al = a.join(", ")
+        if m == "chars" && a.len() == 0 {
+            return f"{r}.scalars"
+        }
+        if (m == "bytes" || m == "as_bytes") && a.len() == 0 {
+            return f"{r}.bytes"
+        }
+        if (m == "as_str" || m == "as_ref" || m == "as_mut" || m == "borrow" || m == "borrow_mut" || m == "as_slice" || m == "as_deref" || m == "as_mut_slice" || m == "by_ref" || m == "into" || m == "as_path" || m == "into_owned") && a.len() == 0 {
+            return r
+        }
+        if (m == "to_owned" || m == "to_vec") && a.len() == 0 {
+            if r.starts_with("\"") {
+                return r
+            }
+            return f"{r}.clone()"
+        }
+        if m == "to_string" && r.starts_with("\"") && a.len() == 0 {
+            return r
+        }
+        if m == "into_iter" && a.len() == 0 {
+            return f"{r}.iter()"
+        }
+        if m == "iter_mut" {
+            return self.todo("`iter_mut` (index the list: `for i in 0..<xs.len()`)", n)
+        }
+        if m == "unwrap" && a.len() == 0 {
+            if self.t.is(recv_n, "METHOD_CALL_EXPR") && self.src(self.t.kid(recv_n, "NAME_REF")) == "parse" {
+                return f"({r} ?? panic(\"unwrap\"))"
+            }
+            return f"({r} ?? panic(\"unwrap\"))"
+        }
+        if m == "expect" && a.len() == 1 {
+            return f"({r} ?? panic({a[0]}))"
+        }
+        if m == "unwrap_or" && a.len() == 1 {
+            return f"({r} ?? {a[0]})"
+        }
+        if m == "unwrap_or_else" && a.len() == 1 {
+            let (p, body) = self.closure_parts(arg_nodes[0])
+            if p == "_" {
+                return f"({r} ?? {body})"
+            }
+            if p != "" {
+                return f"({r} catch {{ let {p} = error\n{self.ind}    {body} }})"
+            }
+            return f"({r} ?? {a[0]}())"
+        }
+        if m == "unwrap_or_default" && a.len() == 0 {
+            return self.todo("`unwrap_or_default` (write the default: `?? 0`, `?? \"\"`, `?? []`)", n)
+        }
+        if m == "is_some" && a.len() == 0 {
+            return f"({r} != null)"
+        }
+        if m == "is_none" && a.len() == 0 {
+            return f"({r} == null)"
+        }
+        if (m == "ok_or" || m == "ok_or_else") && a.len() == 1 {
+            let mut e = a[0].clone()
+            if m == "ok_or_else" {
+                let (p, body) = self.closure_parts(arg_nodes[0])
+                if p == "_" {
+                    e = body
+                }
+            }
+            return f"({r} ?? throw {e})"
+        }
+        if m == "parse" && a.len() == 0 {
+            self.uses.insert("text")
+            let mut which: String = "i64"
+            if turbofish >= 0 {
+                let t = self.ty(self.t.nth(self.t.nth(turbofish, 0), 0))
+                if t == "u64" || t == "u8" || t == "f64" {
+                    which = t
+                }
+            }
+            return f"text::parse_{which}({r})"
+        }
+        if (m == "collect" || m == "sum" || m == "product") && a.len() == 0 {
+            return f"{r}.{m}()"
+        }
+        if m == "cloned" || m == "copied" {
+            if self.iter_chain(recv_n) {
+                if m == "copied" {
+                    return r
+                }
+                return f"{r}.map(fn(x) {{ x.clone() }})"
+            }
+            return f"{r}?.clone()"
+        }
+        if self.optional_expr(recv_n) && !self.iter_chain(recv_n) {
+            // an option's combinators (R79, R96): a `match` on it (ADR-352)
+            if (m == "map" || m == "and_then" || m == "is_some_and" || m == "map_or" || m == "is_none_or" || m == "filter") && arg_nodes.len() >= 1 {
+                let (p, body) = self.closure_parts(arg_nodes[arg_nodes.len() - 1])
+                if p != "" && p != "_" {
+                    let mut none: String = "null"
+                    if m == "is_some_and" {
+                        none = "false"
+                    } else if m == "is_none_or" {
+                        none = "true"
+                    } else if m == "map_or" && a.len() == 2 {
+                        none = a[0].clone()
+                    }
+                    if m == "filter" {
+                        return f"(match {r} {{ {p} if {body} => {p}, else => null }})"
+                    }
+                    return f"(match {r} {{ {p} => {body}, null => {none} }})"
+                }
+            }
+        }
+        if (m == "find" || m == "rfind" || m == "replace" || m == "split" || m == "contains" || m == "starts_with" || m == "ends_with" || m == "trim_matches" || m == "trim_start_matches" || m == "trim_end_matches" || m == "strip_prefix" || m == "strip_suffix" || m == "split_once" || m == "rsplit" || m == "splitn" || m == "matches") && arg_nodes.len() >= 1 && !self.iter_chain(recv_n) {
+            // a `char` needle is a text (R107)
+            let mut fixed: Vec[String] = []
+            for i in 0..<a.len() {
+                let s = a[i].clone()
+                if s.starts_with("'") && s.ends_with("'") {
+                    let inner: String = s.bytes[1..<s.len() - 1].text() catch { "" }
+                    let q = inner.replace("\"", "\\\"").replace("\\'", "'")
+                    fixed.push(f"\"{q}\"")
+                } else {
+                    fixed.push(s)
+                }
+            }
+            return f"{r}.{m}({fixed.join(", ")})"
+        }
+        if m == "sort_unstable" {
+            return f"{r}.sort({al})"
+        }
+        if m == "sort_unstable_by" {
+            return f"{r}.sort_by({al})"
+        }
+        if m == "sort_unstable_by_key" {
+            return f"{r}.sort_by_key({al})"
+        }
+        if m == "enumerate" {
+            return self.todo("`enumerate` (`Seq` has none: index the list, `(0..<xs.len()).map(fn(i) { .. })`)", n)
+        }
+        return f"{r}.{m}({al})"
+    }
+
+    fn range(ref mut self, n: i64) -> String {
+        let mut lo: String = ""
+        let mut hi: String = ""
+        let mut op: String = ""
+        for k in self.t.nodes[n].kids.clone() {
+            let kind = self.t.kind(k)
+            if kind == "DOT2" || kind == "DOT2EQ" {
+                op = kind
+            } else if !self.t.nodes[k].tok {
+                if op == "" {
+                    lo = self.expr(k)
+                } else {
+                    hi = self.expr(k)
+                }
+            }
+        }
+        if hi == "" {
+            return f"{lo}.."
+        }
+        if op == "DOT2EQ" {
+            return f"{lo}..{hi}"
+        }
+        return f"{lo}..<{hi}"
+    }
+
+    fn record(ref mut self, n: i64) -> String {
+        let path = self.path_text(self.t.kid(n, "PATH"))
+        let list = self.t.kid(n, "RECORD_EXPR_FIELD_LIST")
+        let mut fields: Vec[String] = []
+        let mut base: String = ""
+        let mut after_dots = false
+        for k in self.t.nodes[list].kids.clone() {
+            let kind = self.t.kind(k)
+            if kind == "DOT2" {
+                after_dots = true
+            } else if kind == "RECORD_EXPR_FIELD" {
+                let nr = self.t.kid(k, "NAME_REF")
+                let vals = self.nodes(k)
+                let v = vals[vals.len() - 1]
+                if nr >= 0 && vals.len() > 1 {
+                    fields.push(f"{self.src(nr)}: {self.expr(v)}")
+                } else if nr >= 0 && self.t.has_tok(k, "COLON") {
+                    fields.push(f"{self.src(nr)}: {self.expr(v)}")
+                } else {
+                    fields.push(self.expr(v))
+                }
+            } else if !self.t.nodes[k].tok && after_dots {
+                base = self.expr(k)
+            }
+        }
+        if base != "" {
+            if fields.len() == 0 {
+                return f"{base}.clone()"
+            }
+            return f"{base} with {{ {fields.join(", ")} }}"
+        }
+        return f"{path} {{ {fields.join(", ")} }}"
+    }
+
+    fn closure(ref mut self, n: i64) -> String {
+        let mut ps: Vec[String] = []
+        for p in self.t.kids_of(self.t.kid(n, "PARAM_LIST"), "PARAM") {
+            ps.push(self.pat(self.t.nth(p, 0)))
+        }
+        let ns = self.nodes(n)
+        let body = ns[ns.len() - 1]
+        let head = f"fn({ps.join(", ")})"
+        if self.t.is(body, "BLOCK_EXPR") {
+            let ind = self.ind.clone()
+            let saved_throws = self.fails
+            let saved_opt = self.opt
+            let saved_unit = self.unit
+            let mut mode: String = "return"
+            if self.closure_unit(n, body) {
+                mode = "stmt"
+                self.unit = true
+            } else {
+                self.unit = false
+            }
+            let lines = self.block(body, f"{ind}    ", mode)
+            self.fails = saved_throws
+            self.opt = saved_opt
+            self.unit = saved_unit
+            if lines.len() == 0 {
+                return f"{head} {{}}"
+            }
+            return f"{head} {{\n{lines.join("\n")}\n{ind}}}"
+        }
+        let e = self.expr(body)
+        return f"{head} {{ {e} }}"
+    }
+
+    /// Whether a closure's block hands back nothing: no tail expression, or
+    /// one that only does (`println!`, an assignment, a `push`), or it is
+    /// handed to `for_each`.
+    fn closure_unit(ref self, c: i64, body: i64) -> bool {
+        let p = self.t.nodes[c].parent
+        if self.t.is(p, "ARG_LIST") {
+            let call = self.t.nodes[p].parent
+            if self.t.is(call, "METHOD_CALL_EXPR") {
+                let m = self.src(self.t.kid(call, "NAME_REF"))
+                if m == "for_each" || m == "retain" && false {
+                    return true
+                }
+            }
+        }
+        let list = self.t.kid(body, "STMT_LIST")
+        let ns = self.nodes(list)
+        if ns.len() == 0 {
+            return true
+        }
+        let tail = ns[ns.len() - 1]
+        let kind = self.t.kind(tail)
+        if kind == "LET_STMT" || kind == "EXPR_STMT" || kind == "FOR_EXPR" || kind == "WHILE_EXPR" || kind == "LOOP_EXPR" {
+            return true
+        }
+        if kind == "BIN_EXPR" {
+            let op = self.t.toks(tail)
+            if op.len() > 0 && op[0].ends_with("EQ") && op[0] != "EQ2" && op[0] != "NEQ" && op[0] != "LTEQ" && op[0] != "GTEQ" {
+                return true
+            }
+        }
+        if kind == "MACRO_EXPR" {
+            let name = self.last_seg(self.t.kid(tail, "MACRO_CALL"))
+            return name == "println" || name == "print" || name == "eprintln" || name == "eprint" || name == "write" || name == "writeln"
+        }
+        if kind == "METHOD_CALL_EXPR" {
+            let m = self.src(self.t.kid(tail, "NAME_REF"))
+            return m == "push" || m == "push_str" || m == "insert" || m == "extend" || m == "sort" || m == "clear"
+        }
+        return false
+    }
+
+    fn ret(ref mut self, n: i64) -> String {
+        let inner = self.t.nth(n, 0)
+        if inner < 0 {
+            return "return"
+        }
+        if self.t.is(inner, "CALL_EXPR") {
+            let segs = self.segs(self.t.nth(inner, 0))
+            let args = self.nodes(self.t.kid(inner, "ARG_LIST"))
+            if segs.len() == 1 && args.len() == 1 {
+                if segs[0] == "Ok" && self.src(args[0]) == "()" {
+                    return "return"
+                }
+                if segs[0] == "Err" {
+                    return f"throw {self.expr(args[0])}"
+                }
+            }
+        }
+        return f"return {self.expr(inner)}"
+    }
+
+    // ---- macros ----
+
+    fn mac(ref mut self, n: i64) -> String {
+        let name = self.last_seg(n)
+        let args_node = self.margs[n] ?? -1
+        if args_node < 0 {
+            return self.todo(f"the macro `{name}!`", n)
+        }
+        if name == "vec" {
+            return self.expr(args_node)
+        }
+        if name == "matches" || name == "assert_matches" {
+            let subject = self.expr(self.t.nth(args_node, 0))
+            let arm = self.t.kid(self.t.kid(args_node, "MATCH_ARM_LIST"), "MATCH_ARM")
+            let p = self.pat(self.t.nth(arm, 0))
+            let guard = self.t.kid(arm, "MATCH_GUARD")
+            let mut g: String = ""
+            if guard >= 0 {
+                g = f" if {self.expr(self.t.nth(guard, 0))}"
+            }
+            return f"(match {subject} {{ {p}{g} => true, else => false }})"
+        }
+        let args = self.nodes(args_node)
+        if name == "assert" || name == "debug_assert" {
+            if args.len() == 0 {
+                return self.todo("an empty `assert!`", n)
+            }
+            let c = self.expr(args[0])
+            if args.len() > 1 {
+                let mut rest: Vec[i64] = []
+                for i in 1..<args.len() {
+                    rest.push(args[i])
+                }
+                return f"assert({c}; message: {self.fstring(rest)})"
+            }
+            return f"assert({c})"
+        }
+        if name == "assert_eq" || name == "assert_ne" || name == "debug_assert_eq" || name == "debug_assert_ne" {
+            if args.len() < 2 {
+                return self.todo("an `assert_eq!` without two values", n)
+            }
+            let mut op: String = "=="
+            if name.ends_with("_ne") {
+                op = "!="
+            }
+            let a = self.expr(args[0])
+            let b = self.expr(args[1])
+            if args.len() > 2 {
+                let mut rest: Vec[i64] = []
+                for i in 2..<args.len() {
+                    rest.push(args[i])
+                }
+                return f"assert({a} {op} {b}; message: {self.fstring(rest)})"
+            }
+            return f"assert({a} {op} {b})"
+        }
+        if name == "todo" || name == "unimplemented" {
+            return "panic(\"not yet implemented\")"
+        }
+        if name == "unreachable" {
+            if args.len() == 0 {
+                return "panic(\"internal error: entered unreachable code\")"
+            }
+            return f"panic({self.fstring(args)})"
+        }
+        if name == "panic" {
+            if args.len() == 0 {
+                return "panic(\"explicit panic\")"
+            }
+            return f"panic({self.fstring(args)})"
+        }
+        if name == "format" || name == "format_args" {
+            return self.fstring(args)
+        }
+        if name == "print" || name == "println" || name == "eprint" || name == "eprintln" {
+            if args.len() == 0 {
+                return f"{name}(\"\")"
+            }
+            return f"{name}({self.fstring(args)})"
+        }
+        if name == "write" || name == "writeln" {
+            if args.len() == 0 {
+                return self.todo("a `write!` without a target", n)
+            }
+            let target = self.expr(args[0])
+            let mut rest: Vec[i64] = []
+            for i in 1..<args.len() {
+                rest.push(args[i])
+            }
+            let mut text: String = "\"\""
+            if rest.len() > 0 {
+                text = self.fstring(rest)
+            }
+            if name == "writeln" {
+                if text.ends_with("\"") {
+                    let body: String = text.bytes[0..<text.len() - 1].text() catch { "" }
+                    text = f"{body}\\n\""
+                }
+            }
+            return f"{target}.push_str({text})"
+        }
+        return self.todo(f"the macro `{name}!`", n)
+    }
+
+    /// A Rust format string and its arguments as a Nikaia text: `f"..{a}.."`
+    /// (R15), a hole holding a text or a char literal hoisted as `hole_N`
+    /// (R81); a format without holes is a plain literal.
+    fn fstring(ref mut self, args: Vec[i64]) -> String {
+        let fmt_n = args[0]
+        if !self.t.is(fmt_n, "LITERAL") {
+            return self.todo("a format string that is not a literal", fmt_n)
+        }
+        let mut lit_text = self.t.text(self.t.nodes[fmt_n].kids[0])
+        if lit_text.starts_with("r") {
+            lit_text = tr_raw_string(lit_text)
+        }
+        let body: String = lit_text.bytes[1..<lit_text.len() - 1].text() catch { "" }
+        let mut positional: Vec[i64] = []
+        let mut named = collections::BTreeMap()
+        for i in 1..<args.len() {
+            let a = args[i]
+            if self.t.is(a, "BIN_EXPR") && self.t.has_tok(a, "EQ") {
+                let lhs = self.t.nth(a, 0)
+                named.insert(self.src(lhs), self.t.nth(a, 1))
+            } else {
+                positional.push(a)
+            }
+        }
+        let mut out: String = ""
+        let mut holes = 0
+        let mut next = 0
+        let bs = body.bytes
+        let mut i = 0
+        while i < bs.len() {
+            let b = bs[i]
+            if b == 123 && i + 1 < bs.len() && bs[i + 1] == 123 {
+                out.push_str("{{")
+                i += 2
+                continue
+            }
+            if b == 125 && i + 1 < bs.len() && bs[i + 1] == 125 {
+                out.push_str("}}")
+                i += 2
+                continue
+            }
+            if b == 123 {
+                let mut j = i + 1
+                while j < bs.len() && bs[j] != 125 {
+                    j += 1
+                }
+                let inner: String = bs[i + 1..<j].text() catch { "" }
+                let mut name: String = inner.clone()
+                let mut spec: String = ""
+                let colon = inner.find(":")
+                if colon != null {
+                    name = inner.bytes[0..<colon].text() catch { "" }
+                    spec = inner.bytes[colon + 1..<inner.len()].text() catch { "" }
+                }
+                name = name.trim().clone()
+                let mut hole: String = ""
+                if name == "" {
+                    if next < positional.len() {
+                        hole = self.hole(positional[next])
+                    }
+                    next += 1
+                } else if text::parse_i64(name) != null {
+                    let at = text::parse_i64(name) ?? 0
+                    if at < positional.len() {
+                        hole = self.hole(positional[at])
+                    }
+                } else {
+                    let given = named[name] ?? -1
+                    if given >= 0 {
+                        hole = self.hole(given)
+                    } else {
+                        hole = tr_ident(name)
+                    }
+                }
+                if spec == "?" || spec == "#?" {
+                    spec = ":?"
+                } else if spec != "" {
+                    if spec.contains("$") {
+                        self.todos += 1
+                        spec = f":{spec} /* TODO(rs2nika): a width from an argument */"
+                    } else {
+                        spec = f":{spec}"
+                    }
+                }
+                out.push_str(f"{{{hole}{spec}}}")
+                holes += 1
+                i = j + 1
+                continue
+            }
+            out.push_str(bs[i..<i + 1].text() catch { "" })
+            i += 1
+        }
+        if holes == 0 {
+            return f"\"{out.replace("{{", "{").replace("}}", "}")}\""
+        }
+        return f"f\"{out}\""
+    }
+
+    /// One hole of an f-string: the expression, or a `hole_N` written before
+    /// the statement where it holds a literal text, a char or a line break.
+    fn hole(ref mut self, n: i64) -> String {
+        let e = self.expr(n)
+        if e.contains("\"") || e.contains("'") || e.contains("\n") || e.contains("{") {
+            let name = self.fresh("hole")
+            self.pre.push(f"{self.ind}let {name} = {e}")
+            return name
+        }
+        return e
+    }
+}
