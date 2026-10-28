@@ -117,6 +117,15 @@ impl CheckState {
             if called == "bytes" && args.len() >= 1 {
                 return pattern_named("Bytes", true)
             }
+            // **`span(p)` is the range `p` covered, `here` the position**
+            // (ADR-339 D1): over a `Bytes`, a `text::Span` of two `u32` and a
+            // `u32`. Over text they wait for #743 (`grammar_positions_over_text`).
+            if called == "span" && args.len() == 1 {
+                return pattern_named("text::Span", false)
+            }
+            if called == "here" && args.len() == 0 {
+                return pattern_named("u32", false)
+            }
             if called == "peek" && args.len() == 1 {
                 return self.pattern_type(world, args[0].node, rules)
             }
@@ -175,4 +184,89 @@ impl CheckState {
         }
         return out
     }
+}
+
+/// The first `span(p)` or `here` a pattern writes, where the grammar declares
+/// no rule of that name, or an empty text.
+fn grammar_position_written(world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> String sync {
+    return match pattern {
+        Pattern::Ref { name, generics, args } => {
+            let called = world.words.resolve(name).clone()
+            let built_in = !rules.contains(called) && generics.len() == 0
+            if built_in && ((called == "span" && args.len() == 1) || (called == "here" && args.len() == 0)) {
+                return called
+            }
+            grammar_position_in_any(world, args, rules)
+        },
+        Pattern::Seq(parts) => grammar_position_in_any(world, parts, rules),
+        Pattern::Choice(parts) => grammar_position_in_any(world, parts, rules),
+        Pattern::Bind { pat, .. } => grammar_position_written(world, pat.node, rules),
+        Pattern::Repeat { pat, .. } => grammar_position_written(world, pat.node, rules),
+        Pattern::Group(inner) => grammar_position_written(world, inner.node, rules),
+        else => "",
+    }
+}
+
+fn grammar_position_in_any(world: ref CheckWorld, parts: ref Vec[Spanned[Pattern]], rules: ref collections::BTreeSet[String]) -> String sync {
+    for part in parts {
+        let found = grammar_position_written(world, part.node, rules)
+        if found != "" {
+            return found
+        }
+    }
+    return ""
+}
+
+/// The first `span(p)` or `here` the grammar `named` writes in this file or
+/// beside it, or an empty text.
+fn grammar_position_of(world: ref CheckWorld, named: ref String) -> String sync {
+    let found = grammar_position_in_view(world, world.here, named)
+    if found != "" {
+        return found
+    }
+    for view in world.beside {
+        let beside = grammar_position_in_view(world, view, named)
+        if beside != "" {
+            return beside
+        }
+    }
+    return ""
+}
+
+fn grammar_position_in_view(world: ref CheckWorld, view: ref ParsedView, named: ref String) -> String sync {
+    for item in view.items {
+        match item.node {
+            Item::Grammar(def) => {
+                if view.text(def.name) == named {
+                    let mut rules: collections::BTreeSet[String] = collections::BTreeSet()
+                    for rule in def.rules {
+                        rules.insert(view.text(rule.name))
+                    }
+                    for rule in def.rules {
+                        for alt in rule.alts {
+                            let found = grammar_position_written(world, alt.pattern.node, rules)
+                            if found != "" {
+                                return found
+                            }
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return ""
+}
+
+/// **`span(p)` and `here` over text are not built yet** (`NK1187`, ADR-339
+/// D1, #557): over a `Bytes` they are a `text::Span` and a `u32`; over text
+/// they are a `text::Match` and a `text::Pos`, which wait for #743. Asked
+/// where an entry of the grammar `named` is handed text.
+pub fn grammar_positions_over_text(world: ref CheckWorld, key: ref String, named: ref String, span: ref Span) -> CheckFinding? {
+    let written = grammar_position_of(world, named)
+    if written == "" {
+        return null
+    }
+    let notes: Vec[String] = [f"Over a `Bytes` `{written}` is built (Part II 10.8); over text it is a `text::Match` or a `text::Pos`, which are not built yet (#743)."]
+    return check_refusal("NK1187", span, f"`{key}` is handed text, and its grammar uses `{written}`, which this engine has over a `Bytes` only.", notes, f"Hand `{key}` the input as a `Bytes`.")
 }

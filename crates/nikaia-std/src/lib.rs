@@ -107,6 +107,8 @@ pub mod text {
     include!("text.rs");
     include!("text_float.rs");
     include!("text_normal.rs");
+    /// The bytes a grammar's `span(p)` covered (ADR-339 D1).
+    pub use crate::grammar::Span;
     /// One match of a search, a view of the searched text (ADR-374, without
     /// its positions until that is built): what `std::regex` hands back.
     pub use crate::regex::Match;

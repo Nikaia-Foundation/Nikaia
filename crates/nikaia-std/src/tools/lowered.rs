@@ -2184,7 +2184,10 @@ pub mod check_function {
     #[allow(unused_imports)]
     pub use super::{check_function_grown_text, check_function_mixed_text, check_function_grammar, check_function_function};
 }
-pub mod check_grammar {}
+pub mod check_grammar {
+    #[allow(unused_imports)]
+    pub use super::{grammar_positions_over_text};
+}
 pub mod check_host {
     #[allow(unused_imports)]
     pub use super::{CheckBuilt, CheckComputed, CheckCompiled, CheckPlace, CheckHost};

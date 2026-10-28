@@ -6079,6 +6079,14 @@ compares = true
 [type."regex::Captures"]
 pub = true
 
+# The bytes a grammar's `span(p)` covered over a `Bytes`: two byte offsets
+# into the input (Part II 10.8, ADR-339 D1). `here` is a `u32` of the same kind.
+[type."text::Span"]
+pub = true
+copies = true
+compares = true
+fields = ["pub start: u32", "pub end: u32"]
+
 # One match of a search, a view of the searched text (ADR-374's `text::Match`,
 # without its positions until that is built).
 [type."text::Match"]

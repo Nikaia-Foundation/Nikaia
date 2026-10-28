@@ -44,6 +44,12 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
             state.facts.bytes_entries.insert(id_of(arg) as i64)
             state.facts.bytes_grammars.insert(key[0..<cut].clone())
         }
+        if over_text && cut > 0 {
+            match grammar_positions_over_text(world, key, key[0..<cut].clone(), span) {
+                refused => state.findings.push(refused),
+                null => {},
+            }
+        }
     }
     let contract = world.own.functions[key]?.clone() ?? return Ty::Unknown
     if contract.fails_with.len() > 0 && state.flow.guarded != null {

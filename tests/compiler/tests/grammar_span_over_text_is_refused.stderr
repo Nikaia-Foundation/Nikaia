@@ -1,0 +1,9 @@
+error[NK1187]: `G::top` is handed text, and its grammar uses `here`, which this engine has over a `Bytes` only.
+  --> tests/grammar_span_over_text_is_refused.nika:9:5
+   |
+ 9 |     let at = G::top("abc") catch { 0 }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Over a `Bytes` `here` is built (Part II 10.8); over text it is a `text::Match` or a `text::Pos`, which are not built yet (#743).
+   = help: Hand `G::top` the input as a `Bytes`.
+1 type error

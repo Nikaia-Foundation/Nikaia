@@ -35,6 +35,61 @@ fn emit_any_writes_a_list(world: ref EmitWorld, parts: ref Vec[Spanned[Pattern]]
     return false
 }
 
+/// The template rules `span(p)` and `here` lower to (Part II 10.8, ADR-339
+/// D1, #557).
+fn emit_span_rule() -> String {
+    return "__nikaia_span"
+}
+
+fn emit_here_rule() -> String {
+    return "__nikaia_here"
+}
+
+/// Whether a pattern writes the built-in `called` with `arity` arguments
+/// anywhere in it, where the grammar declares no rule of that name.
+fn emit_writes_a_built_in(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, called: String, arity: i64) -> bool {
+    return match pattern {
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_writes_a_built_in(world, walk, part.node, called, arity) }),
+        Pattern::Choice(parts) => parts.iter().any(fn(part) { emit_writes_a_built_in(world, walk, part.node, called, arity) }),
+        Pattern::Bind { pat, .. } => emit_writes_a_built_in(world, walk, pat.node, called, arity),
+        Pattern::Repeat { pat, .. } => emit_writes_a_built_in(world, walk, pat.node, called, arity),
+        Pattern::Group(pat) => emit_writes_a_built_in(world, walk, pat.node, called, arity),
+        Pattern::Ref { name, generics, args } => (emit_text(world, name) == called && generics.len() == 0 && args.len() == arity && !walk.grammar_rules.contains(called)) || args.iter().any(fn(arg) { emit_writes_a_built_in(world, walk, arg.node, called, arity) }),
+        else => false,
+    }
+}
+
+/// **The names bound to a `span(p)`** in a pattern: the backend hands each
+/// back as a range, which the action reads as a `text::Span` (#557).
+fn emit_span_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, mut found: Vec[String]) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            if emit_is_a_span(world, walk, pat.node) {
+                found.push(emit_text(world, name))
+            }
+            emit_span_bindings(world, walk, pat.node, found)
+        },
+        Pattern::Seq(parts) => {
+            for part in parts {
+                emit_span_bindings(world, walk, part.node, found)
+            }
+        },
+        Pattern::Choice(parts) => {
+            for part in parts {
+                emit_span_bindings(world, walk, part.node, found)
+            }
+        },
+        Pattern::Ref { args, .. } => {
+            for arg in args {
+                emit_span_bindings(world, walk, arg.node, found)
+            }
+        },
+        Pattern::Repeat { pat, .. } => emit_span_bindings(world, walk, pat.node, found),
+        Pattern::Group(pat) => emit_span_bindings(world, walk, pat.node, found),
+        else => {},
+    }
+}
+
 /// **The names bound to a `bytes(p)`** in a pattern, for a text grammar's
 /// action to see as bytes (ADR-366 D4).
 fn emit_bytes_bindings(world: ref EmitWorld, pattern: ref Pattern, mut found: Vec[String]) {
@@ -158,6 +213,11 @@ impl EmitState {
             }
         }
         walk.grammar_rule_types = types
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        for rule in def.rules {
+            names.insert(emit_text(world, rule.name))
+        }
+        walk.grammar_rules = names
         for rule in def.rules {
             out.push("\n")
             let st = out.mark()
@@ -178,6 +238,29 @@ impl EmitState {
                     lists = true
                 }
             }
+        }
+        // **`span(p)` and `here` are rules the backend is given** (ADR-339
+        // D1, #557), as `list` is: the range a pattern covered, and the
+        // position, read from the backend's `p @ at`. A `span(p)` a name binds
+        // directly is written in place (`emit_pattern`) and keeps what `p`
+        // binds; these are for the rest.
+        let mut spans = false
+        let mut heres = false
+        for rule in def.rules {
+            for alt in rule.alts {
+                spans = spans || emit_writes_a_built_in(world, walk, alt.pattern.node, "span", 1)
+                heres = heres || emit_writes_a_built_in(world, walk, alt.pattern.node, "here", 0)
+            }
+        }
+        if spans {
+            out.push(f"\n        rule {emit_span_rule()}<T>(p: Rule<T>) -> ::nikaia_std::text::Span =\n")
+            out.push("          p @ at\n")
+            out.push("            -> { ::nikaia_std::text::Span::of(at) }\n")
+        }
+        if heres {
+            out.push(f"\n        rule {emit_here_rule()} -> u32 =\n")
+            out.push("          empty @ at\n")
+            out.push("            -> { ::nikaia_std::text::Span::of(at).start }\n")
         }
         if lists {
             let list = emit_list_rule()
@@ -231,22 +314,31 @@ impl EmitState {
                     if !bytes {
                         emit_bytes_bindings(world, alt.pattern.node, as_bytes)
                     }
-                    if as_bytes.len() > 0 {
-                        out.push("{ ")
-                        for name in as_bytes {
-                            out.push(f"let {name} = {name}.as_bytes(); ")
-                        }
+                    let mut as_spans: Vec[String] = []
+                    emit_span_bindings(world, walk, alt.pattern.node, as_spans)
+                    let mut prelude = ""
+                    for name in as_bytes {
+                        prelude = f"{prelude}let {name} = {name}.as_bytes(); "
+                    }
+                    for name in as_spans {
+                        prelude = f"{prelude}let {name} = ::nikaia_std::text::Span::of({name}); "
                     }
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is
-                    // that value (ADR-296).
+                    // that value (ADR-296). The prelude opens the action's
+                    // own block, so no block is nested in another for it.
                     if self.emit_action_can_fail(world, action) {
+                        if prelude != "" {
+                            out.push(f"{{ {prelude}")
+                        }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(alt.pattern.node))
+                        if prelude != "" {
+                            out.push(" }")
+                        }
+                    } else if prelude != "" {
+                        self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return, prelude)
                     } else {
                         self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
-                    }
-                    if as_bytes.len() > 0 {
-                        out.push(" }")
                     }
                     out.push("\n")
                 },

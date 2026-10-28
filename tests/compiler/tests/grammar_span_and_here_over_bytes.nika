@@ -1,0 +1,30 @@
+// `span(p)` and `here` over a `Bytes` (Part II 10.8, ADR-339 D1, #557): a
+// span is the bytes its pattern covered and ends at the pattern's last token,
+// not after the whitespace skipped behind it; `here` is a position and
+// consumes nothing.
+grammar G {
+    entry rule top -> String = a:here b:here s:span(alpha1 "+" alpha1) c:here n:span(digit+) ";" {
+        f"{a} {b} {s.start}..{s.end} {c} {n.start}..{n.end}"
+    }
+    entry rule words -> String = xs:span(alpha1)* ";" {
+        f"{xs.len()} {xs[1].start}..{xs[1].end}"
+    }
+    entry rule tight -> String = s:span(WORD) {
+        f"{s.start}..{s.end}"
+    }
+    rule WORD -> u32 = alpha1 at:here { at }
+}
+
+fn bytes_of(text: String) -> Bytes {
+    let mut all: Vec[u8] = []
+    for b in text.bytes() {
+        all.push(b)
+    }
+    return Bytes(all)
+}
+
+fn main() {
+    println(G::top(bytes_of("ab + cd   42 ;")) catch { "refused" })
+    println(G::words(bytes_of("ab  cde f ;")) catch { "refused" })
+    println(G::tight(bytes_of("abc")) catch { "refused" })
+}

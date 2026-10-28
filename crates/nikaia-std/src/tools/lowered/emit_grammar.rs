@@ -20,6 +20,38 @@ pub(crate) fn emit_any_writes_a_list(world: &EmitWorld<'_, '_, '_, '_>, parts: &
     false
 }
 
+pub(crate) fn emit_span_rule() -> &'static str { "__nikaia_span" }
+
+pub(crate) fn emit_here_rule() -> &'static str { "__nikaia_here" }
+
+pub(crate) fn emit_writes_a_built_in(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, called: &str, arity: i64) -> bool {
+    match pattern {
+        Pattern::Seq(parts) => parts.iter().any(|part| { emit_writes_a_built_in(world, walk, &part.node, called, arity) }),
+        Pattern::Choice(parts) => parts.iter().any(|part| { emit_writes_a_built_in(world, walk, &part.node, called, arity) }),
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_writes_a_built_in(world, walk, &pat.node, called, arity) },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_writes_a_built_in(world, walk, &pat.node, called, arity) },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); emit_writes_a_built_in(world, walk, &pat.node, called, arity) },
+        Pattern::Ref { name, generics, args } => { let name = *name; emit_text(world, name) == called && generics.is_empty() && (args.len() as i64) == arity && !walk.grammar_rules.contains(called) || args.iter().any(|arg| { emit_writes_a_built_in(world, walk, &arg.node, called, arity) }) },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_span_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, found: &mut Vec<String>) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            let pat = nikaia_std::boxed::open(pat); let name = *name;
+            if emit_is_a_span(world, walk, &pat.node) { found.push(emit_text(world, name)); }
+            emit_span_bindings(world, walk, &pat.node, found);
+        },
+        Pattern::Seq(parts) => { for part in parts.iter() { emit_span_bindings(world, walk, &part.node, found); } },
+        Pattern::Choice(parts) => { for part in parts.iter() { emit_span_bindings(world, walk, &part.node, found); } },
+        Pattern::Ref { args, .. } => { for arg in args.iter() { emit_span_bindings(world, walk, &arg.node, found); } },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_span_bindings(world, walk, &pat.node, found); },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); emit_span_bindings(world, walk, &pat.node, found); },
+        _ => { },
+    }
+}
+
 pub(crate) fn emit_bytes_bindings(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Pattern, found: &mut Vec<String>) {
     match pattern {
         Pattern::Bind { name, pat } => {
@@ -121,6 +153,9 @@ impl EmitState {
             }
         }
         walk.grammar_rule_types = types;
+        let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for rule in def.rules.iter() { names.insert(emit_text(world, rule.name)); }
+        walk.grammar_rules = names;
         for rule in def.rules.iter() {
             out.push("\n");
             let st = out.mark();
@@ -129,6 +164,24 @@ impl EmitState {
         }
         let mut lists = false;
         for rule in def.rules.iter() { for alt in rule.alts.iter() { if emit_writes_a_list(world, &alt.pattern) { lists = true; } } }
+        let mut spans = false;
+        let mut heres = false;
+        for rule in def.rules.iter() {
+            for alt in rule.alts.iter() {
+                spans = spans || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "span", 1);
+                heres = heres || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "here", 0);
+            }
+        }
+        if spans {
+            out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> ::nikaia_std::text::Span =\n", emit_span_rule()));
+            out.push("          p @ at\n");
+            out.push("            -> { ::nikaia_std::text::Span::of(at) }\n");
+        }
+        if heres {
+            out.push(&format!("\n        rule {} -> u32 =\n", emit_here_rule()));
+            out.push("          empty @ at\n");
+            out.push("            -> { ::nikaia_std::text::Span::of(at).start }\n");
+        }
         if lists {
             let list = emit_list_rule();
             out.push(&format!("\n        rule {}<T>(item: Rule<T>, sep) -> Vec<T> =\n", list));
@@ -173,12 +226,16 @@ impl EmitState {
                     out.push("\n            -> ");
                     let mut as_bytes: Vec<String> = vec![];
                     if !bytes { emit_bytes_bindings(world, &alt.pattern.node, &mut as_bytes); }
-                    if !as_bytes.is_empty() {
-                        out.push("{ ");
-                        for name in as_bytes.iter() { out.push(&format!("let {} = {}.as_bytes(); ", name, name)); }
-                    }
-                    if self.emit_action_can_fail(world, action) { self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?; } else { self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return)?; }
-                    if !as_bytes.is_empty() { out.push(" }"); }
+                    let mut as_spans: Vec<String> = vec![];
+                    emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans);
+                    let mut prelude = String::from("");
+                    for name in as_bytes.iter() { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); }
+                    for name in as_spans.iter() { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, name); }
+                    if self.emit_action_can_fail(world, action) {
+                        if prelude != "" { out.push(&format!("{{ {}", prelude)); }
+                        self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;
+                        if prelude != "" { out.push(" }"); }
+                    } else if prelude != "" { self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return, Some(prelude))?; } else { self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return)?; }
                     out.push("\n");
                 },
                 None => {

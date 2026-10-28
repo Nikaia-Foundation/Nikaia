@@ -25,6 +25,12 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
             state.facts.bytes_entries.insert(id_of(arg) as i64);
             state.facts.bytes_grammars.insert(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_owned());
         }
+        if over_text && cut > 0 {
+            match grammar_positions_over_text(world, key, &nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_owned(), span) {
+                Some(refused) => { state.findings.push(refused); },
+                None => { },
+            }
+        }
     }
     let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),

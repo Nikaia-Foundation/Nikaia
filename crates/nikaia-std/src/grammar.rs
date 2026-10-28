@@ -206,3 +206,30 @@ pub fn parse_bytes_pieces<'a, O: Send>(
     in_pieces(options, parallel, |how| run(source, how))
         .map_err(|error| ParseError::of(error.render(source)))
 }
+
+/// **The bytes a grammar's `span(p)` covered** (Part II 10.8,
+/// [ADR-339](../../../docs/specification/adr/adr-339.md) D1): two byte
+/// offsets into the input, as `std::text` offers it. `here` is its `start`
+/// where nothing was covered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Span {
+    /// The first byte `p` covered.
+    pub start: u32,
+    /// The byte after the last one `p` covered.
+    pub end: u32,
+}
+
+impl Span {
+    /// The range the backend hands back (`p @ at`), as offsets of a `u32`: an
+    /// input past 4 GiB has a position no `u32` holds, and stops the program
+    /// as an overflow does.
+    #[doc(hidden)]
+    pub fn of(range: std::ops::Range<usize>) -> Span {
+        let offset =
+            |at: usize| u32::try_from(at).expect("a grammar's position fits a `u32` (ADR-339 D1)");
+        Span {
+            start: offset(range.start),
+            end: offset(range.end),
+        }
+    }
+}

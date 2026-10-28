@@ -96,6 +96,8 @@ impl CheckState {
             }
             if (called == "until" || called == "text") && !args.is_empty() { return pattern_text(); }
             if called == "bytes" && !args.is_empty() { return pattern_named("Bytes", true); }
+            if called == "span" && args.len() == 1 { return pattern_named("text::Span", false); }
+            if called == "here" && args.is_empty() { return pattern_named("u32", false); }
             if called == "peek" && args.len() == 1 { return self.pattern_type(world, &nikaia_std::index::get(&args, 0).node, rules); }
             if called == "list" && args.len() == 2 { return list_of_known(self.pattern_type(world, &nikaia_std::index::get(&args, 0).node, rules)); }
         }
@@ -128,5 +130,77 @@ impl CheckState {
         }
         out
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_position_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> String {
+    match pattern {
+        Pattern::Ref { name, generics, args } => {
+            let name = *name;
+            let called = world.words.resolve(name).to_owned();
+            let built_in = !rules.contains(&called) && generics.is_empty();
+            if built_in && (called == "span" && args.len() == 1 || called == "here" && args.is_empty()) { return called; }
+            grammar_position_in_any(world, args, rules)
+        },
+        Pattern::Seq(parts) => grammar_position_in_any(world, parts, rules),
+        Pattern::Choice(parts) => grammar_position_in_any(world, parts, rules),
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_position_written(world, &pat.node, rules) },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_position_written(world, &pat.node, rules) },
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); grammar_position_written(world, &inner.node, rules) },
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_position_in_any(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, parts: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> String {
+    for part in parts.iter() {
+        let found = grammar_position_written(world, &part.node, rules);
+        if found != "" { return found; }
+    }
+    String::from("")
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_position_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, named: &str) -> String {
+    let found = grammar_position_in_view(world, &world.here, named);
+    if found != "" { return found; }
+    for view in world.beside.iter() {
+        let beside = grammar_position_in_view(world, view, named);
+        if beside != "" { return beside; }
+    }
+    String::from("")
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, named: &str) -> String {
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Grammar(def) => {
+                if view.text(def.name) == named {
+                    let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    for rule in def.rules.iter() { rules.insert(view.text(rule.name)); }
+                    for rule in def.rules.iter() {
+                        for alt in rule.alts.iter() {
+                            let found = grammar_position_written(world, &alt.pattern.node, &rules);
+                            if found != "" { return found; }
+                        }
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    String::from("")
+}
+
+pub fn grammar_positions_over_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
+    let written = grammar_position_of(world, named);
+    if written == "" { return None; }
+    let notes: Vec<String> = vec![format!("Over a `Bytes` `{}` is built (Part II 10.8); over text it is a `text::Match` or a `text::Pos`, which are not built yet (#743).", written)];
+    Some(check_refusal("NK1187", span, format!("`{}` is handed text, and its grammar uses `{}`, which this engine has over a `Bytes` only.", key, written), notes, Some(format!("Hand `{}` the input as a `Bytes`.", key))))
 }
 

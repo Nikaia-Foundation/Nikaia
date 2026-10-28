@@ -27,6 +27,17 @@ impl EmitState {
             Pattern::Choice(parts) => { self.emit_patterns(world, walk, out, host, parts, String::from(" | "))?; },
             Pattern::Bind { name, pat } => {
                 let pat = nikaia_std::boxed::open(pat); let name = *name;
+                if emit_is_a_span(world, &walk, &pat.node) {
+                    match &pat.node {
+                        Pattern::Ref { args, .. } => {
+                            out.push("(");
+                            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
+                            out.push(&format!(") @ {}", emit_text(world, name)));
+                        },
+                        _ => { },
+                    }
+                    return Ok(());
+                }
                 out.push(&format!("{}:", emit_text(world, name)));
                 let literal = matches!(pat.node, Pattern::Literal(_));
                 if walk.grammar_bytes && literal {
@@ -86,6 +97,16 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
+        if called == "here" && generics.is_empty() && args.is_empty() && !walk.grammar_rules.contains(&called) {
+            out.push(emit_here_rule());
+            return Ok(());
+        }
+        if called == "span" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains(&called) {
+            out.push(&format!("{}(p = (", emit_span_rule()));
+            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
+            out.push("))");
+            return Ok(());
+        }
         let over_bytes = walk.grammar_bytes && (called == "until" || called == "text");
         if generics.is_empty() && !args.is_empty() && (called == "bytes" || over_bytes) {
             let wrap = called == "until";
@@ -117,6 +138,13 @@ impl EmitState {
             out.push(")");
         }
         Ok(())
+    }
+}
+
+pub(crate) fn emit_is_a_span(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Ref { name, generics, args } => { let name = *name; emit_text(world, name) == "span" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains("span") },
+        _ => false,
     }
 }
 

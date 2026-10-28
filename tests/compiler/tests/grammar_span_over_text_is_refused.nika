@@ -1,0 +1,11 @@
+// `span(p)` and `here` over text wait for `text::Match` and `text::Pos`
+// (#743): an entry of a grammar that uses one, handed a `String`, is refused
+// with `NK1187` (ADR-339 D1, #557).
+grammar G {
+    entry rule top -> u32 = alpha1 at:here { at }
+}
+
+fn main() {
+    let at = G::top("abc") catch { 0 }
+    println(f"{at}")
+}

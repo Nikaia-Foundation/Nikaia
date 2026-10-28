@@ -27,6 +27,20 @@ impl EmitState {
             Pattern::Seq(parts) => self.emit_patterns(world, walk, out, host, parts, " "),
             Pattern::Choice(parts) => self.emit_patterns(world, walk, out, host, parts, " | "),
             Pattern::Bind { name, pat } => {
+                // **`s:span(p)` is `p` with the range it covered** (ADR-339
+                // D1, #557): the backend's `(p) @ s`, which keeps a name `p`
+                // binds, and is read as a `text::Span` before the action.
+                if emit_is_a_span(world, walk, pat.node) {
+                    match pat.node {
+                        Pattern::Ref { args, .. } => {
+                            out.push("(")
+                            self.emit_pattern(world, walk, out, host, args[0])
+                            out.push(f") @ {emit_text(world, name)}")
+                        },
+                        else => {},
+                    }
+                    return
+                }
                 out.push(f"{emit_text(world, name)}:")
                 // A literal's capture is text in Nikaia; over bytes the backend
                 // hands back bytes, so it is checked (ADR-366 D2).
@@ -98,6 +112,18 @@ impl EmitState {
             out.push(")")
             return
         }
+        // `here`, and a `span(p)` no name binds directly, are the template
+        // rules the grammar is given beside its own (`emit_grammar_body`).
+        if called == "here" && generics.len() == 0 && args.len() == 0 && !walk.grammar_rules.contains(called) {
+            out.push(emit_here_rule())
+            return
+        }
+        if called == "span" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains(called) {
+            out.push(f"{emit_span_rule()}(p = (")
+            self.emit_pattern(world, walk, out, host, args[0])
+            out.push("))")
+            return
+        }
         let over_bytes = walk.grammar_bytes && (called == "until" || called == "text")
         if generics.len() == 0 && args.len() > 0 && (called == "bytes" || over_bytes) {
             // Over bytes `until(t)` is bytes to the backend and text to
@@ -141,5 +167,14 @@ impl EmitState {
             self.emit_patterns(world, walk, out, host, args, ", ")
             out.push(")")
         }
+    }
+}
+
+/// Whether a pattern is the built-in `span(p)`: the grammar declares no rule
+/// of that name.
+fn emit_is_a_span(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Ref { name, generics, args } => emit_text(world, name) == "span" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains("span"),
+        else => false,
     }
 }
