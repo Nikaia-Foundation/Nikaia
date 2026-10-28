@@ -1083,6 +1083,6 @@ fn described_beside(entry: &Path) -> crate::contracts::Ledger {
         .ancestors()
         .skip(1)
         .find(|dir| dir.join("nikaia.toml").is_file())
-        .map(|root| crate::project::Foreign::of(root).descriptions)
+        .map(|root| crate::project::foreign_of(root).descriptions)
         .unwrap_or_else(crate::contracts::Ledger::blank)
 }

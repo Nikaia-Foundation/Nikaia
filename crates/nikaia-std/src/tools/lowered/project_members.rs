@@ -168,3 +168,112 @@ pub(crate) fn project_members_crate_root_of(root: &std::path::Path) -> Result<fs
     Ok(beside.remove(0))
 }
 
+pub trait ProjectMembersForeignHost {
+    fn sha256_hex(&self, read: &[u8]) -> String;
+    fn read_beside(&self, path: &std::path::Path) -> Option<Ledger>;
+    fn absorb(&self, into: Ledger, other: Ledger) -> Ledger;
+    fn empty_ledger(&self) -> Ledger;
+    fn crate_root(&self, root: &std::path::Path, name: String) -> Option<fs::Path>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectMembersForeign {
+    pub declared: collections::BTreeSet<String>,
+    pub described: collections::BTreeSet<String>,
+    pub moved: collections::BTreeMap<String, Vec<String>>,
+    pub descriptions: Ledger,
+    pub beneath: collections::BTreeSet<String>,
+}
+
+pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new() } }
+
+pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::path::Path, seen: &mut collections::HashSet<fs::Path>, out: &mut collections::BTreeSet<String>, manifests: &M) {
+    let manifest = match manifests.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return };
+    for (_, path) in manifest.paths.iter() {
+        let at = project_members_canonical(&nikaia_std::fs::path::join(&(root), &path));
+        if seen.contains(&at) { continue; }
+        seen.insert(nikaia_std::fs::path::clone(&(at)));
+        let theirs = manifests.manifest_at(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml"))));
+        match theirs {
+            Some(ref theirs) => { for name in theirs.foreign.iter() { out.insert(name.to_owned()); } },
+            None => { },
+        }
+        project_members_crates_beneath(&at, seen, out, manifests);
+    }
+}
+
+pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembersForeignHost>(root: &std::path::Path, manifests: &M, host: &H) -> ProjectMembersForeign {
+    let manifest = manifests.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml"))));
+    let foreign: Vec<String> = nikaia_std::index::or(match manifest.as_ref().map(|__nikaia_it| &__nikaia_it.foreign) {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    }, || vec![].into());
+    let declared: collections::BTreeSet<String> = foreign.iter().map(|x| { x.to_owned() }).collect();
+    let mut described: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut descriptions = host.empty_ledger();
+    let mut moved: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    for name in declared.iter() {
+        let ledger = match project_members_description_at(root, name, host) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        described.insert(name.to_owned());
+        let differing = project_members_sources_that_moved(root, name, &ledger, host).await;
+        if !differing.is_empty() { moved.insert(name.to_owned(), differing); }
+        descriptions = host.absorb(descriptions, ledger);
+    }
+    let mut beneath: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut seen: collections::HashSet<fs::Path> = collections::HashSet::new();
+    project_members_crates_beneath(root, &mut seen, &mut beneath, manifests);
+    ProjectMembersForeign { declared, described, descriptions, moved, beneath }
+}
+
+impl ProjectMembersForeign {
+    pub fn packages(&self, modules: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+        let mut out = modules.to_owned();
+        for x in self.described.iter() { out.insert(x.to_owned()); }
+        for x in self.declared.iter() { out.insert(x.to_owned()); }
+        for x in self.beneath.iter() { out.insert(x.to_owned()); }
+        out
+    }
+}
+
+pub(crate) async fn project_members_sources_that_moved<H: ProjectMembersForeignHost>(root: &std::path::Path, name: &str, ledger: &Ledger, host: &H) -> Vec<String> {
+    if ledger.sources.is_empty() { return vec![]; }
+    let crate_root = match host.crate_root(root, name.to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let mut out: Vec<String> = vec![];
+    for (file, recorded) in ledger.sources.iter() {
+        let bytes = match fs::read(&nikaia_std::fs::path::join(&(crate_root), std::path::Path::new(&(file))), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        };
+        let mut read: Vec<u8> = vec![];
+        for b in bytes.iter().copied() { read.push(b); }
+        if host.sha256_hex(&read) != *recorded { out.push(file.to_owned()); }
+    }
+    out
+}
+
+pub async fn project_members_proofs_digest<H: ProjectMembersForeignHost>(root: &std::path::Path, host: &H) -> String {
+    let __keep_frame = nikaia_std::tether::Keep::new();
+    let book = match fs::read(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.proofs"))), &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return String::from(""); },
+    };
+    let mut all: Vec<u8> = vec![];
+    for b in book.iter().copied() { all.push(b); }
+    let dir = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.proofs.d")));
+    let names = match fs::read_dir(&dir, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { vec![] },
+    };
+    for name in names.iter() {
+        for b in nikaia_std::fs::path::text_of(&(name)).bytes() { all.push(b); }
+        let file = __keep_frame.put(match fs::read(&nikaia_std::fs::path::join(&(dir), name), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        });
+        for b in file.iter().copied() { all.push(b); }
+    }
+    host.sha256_hex(&all)
+}
+
+pub(crate) fn project_members_description_at<H: ProjectMembersForeignHost>(root: &std::path::Path, name: &str, host: &H) -> Option<Ledger> { host.read_beside(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("contracts")))), std::path::Path::new(&(format!("{}.contracts", name))))) }
+

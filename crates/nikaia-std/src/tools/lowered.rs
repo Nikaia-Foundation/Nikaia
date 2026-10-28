@@ -2667,7 +2667,7 @@ pub mod project_check {
 }
 pub mod project_members {
     #[allow(unused_imports)]
-    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_dependencies_first, project_members_members_of, project_members_canonical};
+    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_dependencies_first, project_members_members_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest};
 }
 pub mod project_tests {
     #[allow(unused_imports)]

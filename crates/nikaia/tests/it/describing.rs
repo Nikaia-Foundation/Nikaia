@@ -887,8 +887,9 @@ fn a_crate_a_description_and_a_refusal() {
     let source = std::fs::read_to_string(root.join("src/main.nika")).expect("the program");
     let parsed = nikaia::parser::parse_to_ast(&source).expect("the source parses");
     let own = nikaia::contracts::Ledger::infer(&parsed);
-    let foreign = nikaia::project::Foreign::of(&root);
-    let library = foreign.library().expect("std's ledger and the description");
+    let foreign = nikaia::project::foreign_of(&root);
+    let library =
+        nikaia::project::foreign_library(&foreign).expect("std's ledger and the description");
     let modules = foreign.packages(&std::collections::BTreeSet::new());
     let found = nikaia::check::check_program(&parsed, &own, &library, &modules).findings;
     let _ = std::fs::remove_dir_all(&root);

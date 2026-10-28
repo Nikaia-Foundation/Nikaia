@@ -15,7 +15,7 @@
 //!
 //! So these are the four questions asked of a described boundary, in a project
 //! on disk — a manifest, a `contracts/` beside it, and one `.nika` — because
-//! `Foreign::of` reads files and a ledger handed in by a test would prove
+//! `foreign_of` reads files and a ledger handed in by a test would prove
 //! nothing about the wiring.
 
 use std::collections::BTreeSet;
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps};
 use nikaia::parser::parse_to_ast;
-use nikaia::project::Foreign;
+use nikaia::project::{foreign_library, foreign_of};
 
 /// A project on disk: `nikaia.toml` declaring one Rust crate, and whatever
 /// description is given for it.
@@ -66,10 +66,8 @@ fn findings(root: &Path, source: &str) -> Vec<Finding> {
 fn findings_keeping(root: &Path, source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
-    let foreign = Foreign::of(root);
-    let library = foreign
-        .library()
-        .expect("std's ledger and the descriptions");
+    let foreign = foreign_of(root);
+    let library = foreign_library(&foreign).expect("std's ledger and the descriptions");
     let modules = foreign.packages(&BTreeSet::new());
     let mut found = check::check_program(&parsed, &own, &library, &modules).findings;
     found.extend(nikaia::foreign::check(
@@ -155,10 +153,8 @@ fn a_described_call_that_pauses_is_refused_inside_a_sync_function() {
     let parsed = parse_to_ast("fn im_lock() -> i64 sync { return fremd::pausiert() }")
         .expect("the source parses");
     let own = Ledger::infer(&parsed);
-    let foreign = Foreign::of(&root);
-    let library = foreign
-        .library()
-        .expect("std's ledger and the descriptions");
+    let foreign = foreign_of(&root);
+    let library = foreign_library(&foreign).expect("std's ledger and the descriptions");
     let found = nikaia::contracts::sync::check(&parsed, &own, &library);
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(found.len(), 1, "{found:#?}");
@@ -169,10 +165,8 @@ fn a_described_call_that_pauses_is_refused_inside_a_sync_function() {
     let parsed = parse_to_ast("fn im_lock() -> i64 sync { return fremd::zwei(1, 2) }")
         .expect("the source parses");
     let own = Ledger::infer(&parsed);
-    let foreign = Foreign::of(&root);
-    let library = foreign
-        .library()
-        .expect("std's ledger and the descriptions");
+    let foreign = foreign_of(&root);
+    let library = foreign_library(&foreign).expect("std's ledger and the descriptions");
     let found = nikaia::contracts::sync::check(&parsed, &own, &library);
     let _ = std::fs::remove_dir_all(&root);
     assert!(found.is_empty(), "{found:#?}");
@@ -248,7 +242,7 @@ fn a_description_is_believed_while_its_hashes_hold() {
 
     let calls = "fn main() {\n    let n = fremd::zwei(1, 2)\n    println(f\"{n}\")\n}";
     assert!(
-        Foreign::of(&root).moved.is_empty(),
+        foreign_of(&root).moved.is_empty(),
         "the hash holds, so nothing has moved"
     );
     assert!(
@@ -292,7 +286,7 @@ fn a_description_with_no_hash_to_compare_is_not_refused() {
     // The `DESCRIPTION` fixture carries no `[sources]` at all, and the crate it
     // names is not in the tree either — two absences, one answer.
     let root = project("no-hash", Some(DESCRIPTION));
-    assert!(Foreign::of(&root).moved.is_empty());
+    assert!(foreign_of(&root).moved.is_empty());
     let found = findings(
         &root,
         "fn main() {\n    let n = fremd::zwei(1, 2)\n    println(f\"{n}\")\n}",
@@ -305,10 +299,8 @@ fn a_description_with_no_hash_to_compare_is_not_refused() {
 #[test]
 fn the_library_a_build_reads_is_std_and_the_descriptions() {
     let root = project("ledger", Some(DESCRIPTION));
-    let foreign = Foreign::of(&root);
-    let library = foreign
-        .library()
-        .expect("std's ledger and the descriptions");
+    let foreign = foreign_of(&root);
+    let library = foreign_library(&foreign).expect("std's ledger and the descriptions");
     assert!(library.functions.contains_key("fremd::zwei"));
     assert!(library.functions.contains_key("io::lines"));
     assert_eq!(

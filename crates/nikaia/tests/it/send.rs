@@ -122,7 +122,7 @@ fn refused_at(source: &str, user_parallelism: &str) -> Option<String> {
         // ask about here, and nothing has gained an error since a committed
         // ledger, which is every build but the one after a change (ADR-308 D11).
         nikaia::project::Around {
-            foreign: &nikaia::project::Foreign::default(),
+            foreign: &nikaia_std::tools::project_members::project_members_no_foreign(),
             newly: &nikaia::check::Newly::new(),
             // …and one file is the whole program here, so a `comptime` has
             // nowhere else to call into.
