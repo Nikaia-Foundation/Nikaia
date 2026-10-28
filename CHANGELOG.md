@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1251] — 2026-10-28
+
+### A tuple variant's value narrows after its `null` arm (#902)
+
+In a `match`, `R::V(name)` after `R::V(null)` binds `name` as the `T`, as a tuple position and a struct field do (ADR-352 D1): the earlier arm is the same variant, unguarded, and at each other value takes all or says the same. A variant or a literal at such a value is matched against the `T`. A pattern with `..` among its values is not narrowed yet.
+
 ## [0.0.1250] — 2026-10-27
 
 ### A cut of `opt ?? ""` is text too (#901)
