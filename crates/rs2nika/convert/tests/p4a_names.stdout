@@ -1,0 +1,257 @@
+/// Stage 0: parse, check, lower, infer - or serve all four from the cache.
+///
+/// The build cache (ADR-021) covers the whole of it: on a hit nothing is
+/// checked, lowered or inferred, because only a build that passed every check
+/// was recorded and the key holds everything those checks depend on (D13).
+/// **The packages a project depends on by path**
+/// ([ADR-286](../../docs/specification/adr/adr-286.md) D15), resolved against
+/// the manifest's own directory.
+///
+/// A free function because two callers need the same answer: the project build,
+/// and the `rustc` wrapper, which is handed a `.nika` path by Cargo and has to
+/// find the manifest above it (`wrapper_main`). Two copies of a resolution rule
+/// is two chances to disagree about what a program is.
+///
+/// Three of D2's five rules are kept here, because they are about the set of
+/// dependencies rather than about any one of them:
+///
+/// * **rule 1**, the manifest key is the name: the map's key is what `use`
+///   writes and the path is only where it comes from, so nothing inside a
+///   package gets to name it;
+/// * **rule 3**, the same path is the same package: two keys resolving to one
+///   directory would be two `mod`s of one package and two types of one name,
+///   so it is refused rather than unified;
+/// * **rule 4**, a dependency's `[build]` is ignored, and the compiler says
+///   so — a package is built with the settings of the program that uses it,
+///   and anything else puts two answers to the parallelism question in one
+///   build.
+///
+/// **rule 2** — transitive dependencies are not visible — is no longer checked
+/// anywhere, because it is structural
+/// ([ADR-286](../../docs/specification/adr/adr-286.md) D21): a package is
+/// generated as its own crate naming only its own dependencies, so a name from
+/// two levels down does not resolve and no rule of ours has to say so.
+/// **rule 5** is the generated workspace's profile (D4): every Nikaia crate is
+/// named on the program's side of the overflow checks, beside the exception
+/// that turns them off for every foreign package.
+pub fn project_members_packages_of[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref Path, announce: bool, host: ref H) -> Vec[ProjectMembersDependency] throws {
+    let mut out: Vec[ProjectMembersDependency] = []
+    let mut seen: collections::HashMap[fs::Path, String] = collections::HashMap()
+
+    // **What this build calls each package**, before any of them is read, so
+    // that a package reached twice is renamed to one name rather than to
+    // whichever of the two was resolved first
+    // ([ADR-286](../../docs/specification/adr/adr-286.md) D20).
+    let mut here: collections::HashMap[fs::Path, String] = collections::HashMap()
+    for (name, path) in manifest.paths.iter() {
+        here.insert(project_members_canonical(root.join(path)), name.clone())
+    }
+
+    for (name, path) in manifest.paths.iter() {
+        let root = project_members_canonical(root.join(path))
+
+        match seen.get(root) {
+            first => throw ProjectMembersRefusal::Refused(f"`{name}` and `{first}` are the same package: both are {root.display()}.\nThe same path is the same package, so two names for it would be two copies of every type it declares - name it once."),
+            null => {},
+        }
+        seen.insert(root.clone(), name.clone())
+
+        // **A package's own packages are resolved, not refused**
+        // (ADR-286 D19): it is generated as its own crate, so they are its
+        // dependencies and not ours. Read here only to fail early where one is
+        // not there.
+        let dependency = host.manifest_at(root.join("nikaia.toml")) ?? throw ProjectMembersRefusal::Manifest
+        // `announce`, because this resolution runs more than once per build - the
+        // driver, and the `rustc` wrapper Cargo calls for the build and again for
+        // a run - and a note a reader meets three times reads as three problems.
+        // The driver is the one that reports (ADR-005 D7's shape: the work happens
+        // where it happens, the saying happens once).
+        if announce && dependency.has_build {
+            eprintln(f"note: `{name}`'s own `[build]` is ignored: a package is built with the settings of the program that uses it.")
+        }
+
+            // **Its own keys**, so its `use` lines are read the way its own
+            // build would read them (ADR-286 D21).
+            // A Rust crate among them under the name a call writes it by.
+        out.push(ProjectMembersDependency { name: name.clone(), renames: project_members_renames_in(dependency, root, here, host), root: root, reachable: dependency.keys.iter().map(fn(x) { x.clone() }).chain(dependency.foreign).collect() })
+    }
+    return out
+}
+
+/// How a dependency's **own** package names are read in this build
+/// ([ADR-286](../../docs/specification/adr/adr-286.md) D20: a package reached
+/// through two parents is one package).
+///
+/// A library writes its own manifest keys in its own signatures, and those keys
+/// are its author's choice rather than this program's. So a program that depends
+/// on `deep` directly, and on a library that depends on the same directory as
+/// `c`, was told its `deep::Id` was not the `c::Id` that library takes - one
+/// type, refused for having two spellings, which is the one thing D2 says it is
+/// not. The types are identical in the generated Rust; only the name this
+/// compiler gave them differed.
+///
+/// So the identity is the **package**, and this is the translation into the word
+/// this build uses for it: the program's own key where the program names it too,
+/// and otherwise the package's `[package] name`, which `members_of` has already
+/// refused to let two packages share. Either way it is a function of the
+/// directory and not of who asked.
+///
+/// One level deep, because one level is what is read: a dependency's own
+/// dependencies are its crate's business (D3), and nothing below it is in this
+/// program's ledger to be renamed.
+fn project_members_renames_in[H: ProjectMembersHost](dependency: ref ProjectMembersManifest, dependency_root: ref Path, here: ref collections::HashMap[fs::Path, String], host: ref H) -> collections::BTreeMap[String, String] throws {
+    let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for (key, path) in dependency.paths.iter() {
+        let at = project_members_canonical(dependency_root.join(path))
+        let canonical = match here.get(at) {
+            ours => ours.clone(),
+            null => (host.manifest_at(at.join("nikaia.toml")) ?? throw ProjectMembersRefusal::Manifest).name.map(fn(x) { x.clone() }) ?? key.clone(),
+        }
+        if canonical != key {
+            out.insert(key.clone(), canonical)
+        }
+    }
+    return out
+}
+
+/// One package of a build, and everything needed to generate a crate for it
+/// ([ADR-286](../../docs/specification/adr/adr-286.md) D19).
+pub struct ProjectMembersMember {
+    /// The Cargo package name - the `[package] name` of its own `nikaia.toml`.
+    /// Its **identity** is `root`; this is what the profile rows and the
+    /// renaming form below name it by.
+    pub name: String,
+    /// The canonical package directory. Two manifest keys resolving here are
+    /// one crate, which is [ADR-286](../../docs/specification/adr/adr-286.md)
+    /// D2 rule 3 holding because Cargo already works that way (D2).
+    pub root: PathBuf,
+    pub manifest: ProjectMembersManifest,
+    /// The `.nika` file Cargo is told is the crate root. `src/main.nika` where
+    /// there is one; a library needs none, so the first source beside it stands
+    /// in - the wrapper walks up from whatever it is handed, so any file of the
+    /// package finds the same manifest.
+    pub entry: PathBuf,
+    /// Its **own** packages, under its **own** manifest keys.
+    pub dependencies: Vec[ProjectMembersDependency],
+}
+
+/// The members in an order where every package comes after the packages it
+/// depends on ([ADR-100](../../docs/specification/adr/adr-100.md) D5).
+///
+/// **Why not simply reverse `members_of`.** That walk is breadth-first from the
+/// entry, and reversing it is a topological order only where nothing is reached
+/// two ways: with `a → b`, `a → c` and `c → b`, breadth-first gives `a, b, c`
+/// and the reverse puts `c` before `b`, which is exactly backwards. So this is
+/// Kahn's, over the edges the members already carry.
+///
+/// **A cycle keeps the order it had.** Two packages that depend on each other
+/// are refused below this — Cargo will not build the workspace — and a
+/// compiler that hung or panicked on the way to that message would be reporting
+/// the wrong thing. What comes out is every member exactly once either way,
+/// which is what the caller needs of it.
+pub fn project_members_dependencies_first(members: ref Vec[ProjectMembersMember]) -> Vec[i64] {
+    let at_of: collections::HashMap[fs::Path, i64] = (0..<members.len()).map(fn(at) { (members[at].root.clone(), at) }).collect()
+
+    // `needs[at]` is what `at` waits for; `feeds[at]` is who waits for it.
+    let needs: Vec[collections::BTreeSet[i64]] = members.iter().map(fn(m) {
+        let need: collections::BTreeSet[i64] = m.dependencies.iter().filter_map(fn(d) { at_of.get(project_members_canonical(d.root)) }).collect()
+        need
+    }).collect()
+
+    let mut left: Vec[i64] = needs.iter().map(fn(n) { n.len() }).collect()
+    // Ready in `members_of`'s order, so the result is a function of the source
+    // tree and not of a set's iteration (Part III 13.5).
+    let mut ready: Vec[i64] = (0..<members.len()).filter(fn(at) { left[at] == 0 }).collect()
+    let mut out: Vec[i64] = []
+
+    while !ready.is_empty() {
+        let at = ready.remove(0)
+        out.push(at)
+        for other in 0..<needs.len() {
+            if needs[other].contains(at) {
+                left[other] -= 1
+                if left[other] == 0 {
+                    ready.push(other)
+                }
+            }
+        }
+    }
+
+    // A cycle leaves members unplaced. They go on the end in the order they
+    // came, so every member is lowered exactly once and the refusal that is
+    // really about this arrives from where it belongs.
+    let unplaced: Vec[i64] = (0..<members.len()).filter(fn(at) { !out.contains(at) }).collect()
+    out.extend(unplaced)
+    return out
+}
+
+/// Every package of this build, the entry first
+/// ([ADR-286](../../docs/specification/adr/adr-286.md) D19).
+///
+/// Breadth-first from the entry, so a diamond is visited once and the order is
+/// the same on every machine. A package already seen is the same crate: the key
+/// under which it was reached is the *depending* crate's business (D2), and
+/// nothing here is named by it.
+pub fn project_members_members_of[H: ProjectMembersHost](entry_manifest: ref ProjectMembersManifest, entry_root: ref Path, host: ref H) -> Vec[ProjectMembersMember] throws {
+    let mut out: Vec[ProjectMembersMember] = []
+    let mut seen: collections::HashMap[fs::Path, i64] = collections::HashMap()
+    let mut queue: Vec[(ProjectMembersManifest, PathBuf)] = [(entry_manifest.clone(), project_members_canonical(entry_root))]
+
+    while !queue.is_empty() {
+        let (manifest, root) = queue.remove(0)
+        if seen.contains_key(root) {
+            continue
+        }
+
+        let name: String = manifest.name?.clone() ?? throw ProjectMembersRefusal::Refused(f"{root.display()}/nikaia.toml has no `[package] name`. Add one: every package needs a name.")
+
+        // A crate name is a package's identity in the generated workspace, and
+        // two of them would be two answers to which crate the profile rows and
+        // the renaming form below mean. The canonical path is the identity, so
+        // this is only ever two *different* packages wanting one name.
+        match out.iter().find(fn(m) { m.name == name }) {
+            first => throw ProjectMembersRefusal::Refused(f"Two packages are both called `{name}`: {first.root.display()} and {root.display()}.\nGive one of them another `[package] name`. The name a `use` line writes is set in `[dependencies]` and doesn't have to change."),
+            null => {},
+        }
+
+        // Announced only for the entry: this walk reads every manifest of the
+        // build, and a note about an ignored `[build]` is about the package
+        // that carries it, said once.
+        let dependencies = project_members_packages_of(manifest, root, out.is_empty(), host)
+        for dependency in dependencies {
+            let manifest = host.manifest_at(dependency.root.join("nikaia.toml")) ?? throw ProjectMembersRefusal::Manifest
+            queue.push((manifest, project_members_canonical(dependency.root)))
+        }
+
+        seen.insert(root.clone(), out.len())
+        out.push(ProjectMembersMember { name: name, entry: project_members_crate_root_of(root), root: root, manifest: manifest, dependencies: dependencies })
+    }
+    return out
+}
+fn project_members_canonical(path: ref Path) -> PathBuf {
+    return fs::canonical(path, fs::Root::Anywhere) catch { path.clone() }
+}
+
+/// The `.nika` file handed to Cargo as a package's crate root.
+///
+/// `src/main.nika` where there is one. A library has none - what a package
+/// offers is its public surface (`modules::package_at`) - and Cargo still needs
+/// a path that exists, so the first source beside it stands in. Which file it
+/// is changes nothing: the wrapper walks up from it to the same `nikaia.toml`,
+/// and `package_at` reads the whole directory either way.
+fn project_members_crate_root_of(root: ref Path) -> PathBuf throws {
+    let entry = root.join(ENTRY)
+    if project_members_is_file(entry) {
+        return entry
+    }
+
+    let src = root.join("src")
+    let mut beside: Vec[PathBuf] = fs::read_dir(src, fs::Root::Anywhere).iter().map(fn(entry) { src.join(entry) }).filter(fn(path) { match path.extension() { e => e == EXTENSION, null => false } }).collect()
+
+    if beside.is_empty() {
+        throw ProjectMembersRefusal::Refused(f"{src.display()} has no `.nika` files, so there's nothing to build.\nPut the package's source files in its `src/` folder.")
+    }
+    return beside.remove(0)
+}
+
+

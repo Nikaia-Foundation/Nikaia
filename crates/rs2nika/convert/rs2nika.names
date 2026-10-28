@@ -67,3 +67,27 @@ Package.files = files: Vec[(String, String)] # sysroot.rs's packed package, one 
 {x}.span.at() = ({x}.span.start as i64) # `Span::at` is a Rust helper of the lowered `Span`; Nikaia reads the field (modules.nika, M2)
 {x}.span.stop() = ({x}.span.end as i64) # the same, its end (M2)
 {x}.windows(2).all(fn(pair) { pair[0].1 == pair[1].1 }) = project_tests_agree({x}) # whether all settings agree is P3a's `project_tests_agree` (project_tests.nika, P3b)
+
+# [prefixed]: a prefix the move gave every name of its file (R294), so a
+# draft under it prefixes every name even before the file exists.
+[prefixed]
+project_members_ # P4a prefixed every name it moved into project_members.nika (3620d27)
+
+# [types X_] / [forms X_]: a move's decisions for the file `--prefix X_`
+# names only (R309), so they reach no other file's draft.
+[types project_members_]
+Manifest = ProjectMembersManifest # Manifest stays Rust: the walk reads its view, filled by project.rs (P4a)
+modules::Dependency = ProjectMembersDependency # modules.rs's Dependency is project_members.nika's now (P4a)
+Member = ProjectMembersMember # Member stays Rust (it holds the Manifest); the walk builds this one (P4a)
+BTreeMap<PathBuf,String> = collections::HashMap[fs::Path, String] # a map of paths only looked up, never walked in order (P4a)
+BTreeMap<PathBuf,usize> = collections::HashMap[fs::Path, i64] # the same (P4a's `seen`)
+BTreeMap<&Path,usize> = collections::HashMap[fs::Path, i64] # the same, its keys owned (P4a's `at_of`)
+
+[forms project_members_]
+{x}.package_name() = {x}.name # the manifest view's fields (ProjectMembersManifest, P4a)
+{x}.has_build_section() = {x}.has_build # the same
+{x}.foreign_crates() = {x}.foreign # the same
+{x}.dependencies().keys() = {x}.keys.iter() # the same: every dependency's key
+{x}.dependencies()|Dependency::Path = {x}.paths.iter() # the same: the path dependencies, a loop keeping `Dependency::Path` (R308)
+ProjectMembersManifest::read({a}) = host.manifest_at({a}) ?? throw ProjectMembersRefusal::Manifest # a manifest is read by project.rs, through ProjectMembersHost (R295); one that did not read is its error, kept there
+Refused::Because( = ProjectMembersRefusal::Refused( # the file's refusal, turned back into the same anyhow error in project.rs (P4a)

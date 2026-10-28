@@ -1,9 +1,7 @@
 pub fn emit_x_parse(name: String) -> Target throws {
     return match known(name) {
         k => k,
-        null => {
-            throw Refused::Because(f"There's no target called `{name}`. Use x86_64-linux, or a triple from `rustc --print target-list`.")
-        },
+        null => throw Refused::Because(f"There's no target called `{name}`. Use x86_64-linux, or a triple from `rustc --print target-list`."),
     }
 }
 
