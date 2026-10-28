@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1264] — 2026-10-28
+
+**winnow-grammar 9b15c55 and winnow 1.0 (#932)**
+- The grammar engine moves to the revision that carries values in a grammar (its ADR 26: rule arguments, bounds and guards) and to winnow 1.0, which it now builds on; the workspace's own `winnow` follows, so one version is in the tree. Nothing a Nikaia grammar can write changes yet: the Nikaia side of ADR 26 is #932.
+
 ## [0.0.1263] — 2026-10-28
 
 **A list, a map and a walk have what converted code calls (#125)**
