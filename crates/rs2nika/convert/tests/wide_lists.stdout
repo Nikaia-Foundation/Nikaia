@@ -1,0 +1,15 @@
+use std::collections
+comptime WIDE_XS: Vec[String] = [
+    "aarch64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]
+pub fn wide_f() -> Vec[i64] {
+    let v = [1, 2]
+    let b = Build {
+        target: parse_target(target_name_given_on_the_command_line),
+        overflow: overflow_checks_of(the_build_settings),
+    }
+    return v
+}

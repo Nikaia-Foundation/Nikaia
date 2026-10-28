@@ -353,6 +353,15 @@ fn tr_drop_prefix(s: String, p: ref String) -> String {
     return s
 }
 
+/// Whether a bracketed Rust text (`[..]`, `{..}`) breaks the line right
+/// after its opening bracket: the Nikaia keeps one item a line where one
+/// line would run past 100 columns (rustfmt breaks far sooner).
+fn tr_opens_line(s: String) -> bool {
+    let rest = s.bytes[1..<s.len()].text() catch { "" }
+    let first = rest.split("\n").next() ?? ""
+    return rest.contains("\n") && first.trim() == ""
+}
+
 /// `s` without `p` at its end, if it ends with it.
 fn tr_drop_suffix(s: String, p: ref String) -> String {
     if s.ends_with(p) {

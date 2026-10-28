@@ -8605,13 +8605,14 @@ fn rs2nika_visits(mut ctx: Rs2nikaCtx, lines: ref Vec[String]) -> Vec[String] {
 /// `[a,\n b,\n]` -> `[a, b]`); R105 a `const` of an `impl` moves above it as a
 /// top-level `comptime` (Nikaia has no associated constants), and
 /// `Self::NAME` / `Type::NAME` -> `NAME`. A name the file already declares
-/// keeps the `const` in place, with a TODO.
-fn rs2nika_lift_consts(mut ctx: Rs2nikaCtx, lines: ref Vec[String]) -> Vec[String] {
+/// keeps the `const` in place, with a TODO. Without `join` (the tree's
+/// passes) a `const` keeps its lines: the tree lays its list out as written.
+fn rs2nika_lift_consts(mut ctx: Rs2nikaCtx, lines: ref Vec[String], join: bool) -> Vec[String] {
     let mut joined: Vec[String] = []
     let mut i = 0
     while i < lines.len() {
         let l: String = lines[i].clone()
-        if rs2nika_const_rest(l) != "" && !l.trim_end().ends_with(";") {
+        if join && rs2nika_const_rest(l) != "" && !l.trim_end().ends_with(";") {
             let mut text: String = l.trim_end().clone()
             let mut j = i + 1
             let mut ok = true
@@ -16938,7 +16939,7 @@ fn rs2nika_rust_passes(mut ctx: Rs2nikaCtx, lines: ref Vec[String], facts: ref V
     let mut walked: Vec[String] = lines.clone()
     if !skip.contains("visits") { walked = rs2nika_visits(ctx, lines) }
     let mut consts0: Vec[String] = walked.clone()
-    if !skip.contains("lift_consts") { consts0 = rs2nika_lift_consts(ctx, walked) }
+    if !skip.contains("lift_consts") { consts0 = rs2nika_lift_consts(ctx, walked, !skip.contains("const_join")) }
     let mut consts: Vec[String] = consts0.clone()
     if !skip.contains("self_type") { consts = rs2nika_self_type(ctx, consts0) }
     let lifted = rs2nika_lift_closures(ctx, consts, facts)
@@ -20653,7 +20654,7 @@ fn rs2nika_unbail(src: String) -> String {
 }
 
 fn rs2nika_tree_skips() -> Vec[String] {
-    return ["join_chains", "join_split", "results", "option_matches", "some_matches", "field_tests", "fs_forms", "contexts"]
+    return ["join_chains", "join_split", "results", "option_matches", "some_matches", "field_tests", "fs_forms", "contexts", "const_join"]
 }
 
 /// `--cut PATH:A-B` (repeated): the whole items of PATH that lines A to B

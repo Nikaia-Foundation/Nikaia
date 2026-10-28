@@ -76,14 +76,22 @@ impl TrEm {
             }
             return f"({parts.join(", ")})"
         } else if kind == "ARRAY_EXPR" {
+            let ind = self.ind.clone()
+            let wide = tr_opens_line(self.src(n)) && !self.t.has_tok(n, "SEMICOLON")
+            if wide { self.ind = f"{ind}    " }
             let mut parts: Vec[String] = []
             for k in self.nodes(n) {
                 parts.push(self.expr(k))
             }
+            self.ind = ind.clone()
             if self.t.has_tok(n, "SEMICOLON") && parts.len() == 2 {
                 return f"[{parts[0]}; {parts[1]}]"
             }
-            return f"[{parts.join(", ")}]"
+            let one = f"[{parts.join(", ")}]"
+            if wide && parts.len() > 0 && ind.len() + one.len() > 100 {
+                return f"[\n{ind}    {parts.join(f",\n{ind}    ")},\n{ind}]"
+            }
+            return one
         } else if kind == "RECORD_EXPR" {
             return self.record(n)
         } else if kind == "CLOSURE_EXPR" {
@@ -615,6 +623,10 @@ impl TrEm {
         if m == "is_some" && a.len() == 0 {
             return f"{r} != null"
         }
+        // a parse hands back an option in Nikaia: `.is_ok()` asks for a value
+        if (m == "is_ok" || m == "is_err") && a.len() == 0 && r.starts_with("text::parse_") {
+            return if m == "is_ok" { f"{r} != null" } else { f"{r} == null" }
+        }
         if m == "is_none" && a.len() == 0 {
             return f"{r} == null"
         }
@@ -729,6 +741,9 @@ impl TrEm {
     fn record(ref mut self, n: i64) -> String {
         let path = self.path_text(self.t.kid(n, "PATH"))
         let list = self.t.kid(n, "RECORD_EXPR_FIELD_LIST")
+        let ind = self.ind.clone()
+        let wide = list >= 0 && tr_opens_line(self.src(list))
+        if wide { self.ind = f"{ind}    " }
         let mut fields: Vec[String] = []
         let mut base: String = ""
         let mut after_dots = false
@@ -759,13 +774,21 @@ impl TrEm {
                 base = self.expr(k)
             }
         }
+        self.ind = ind.clone()
         if base != "" {
             if fields.len() == 0 {
                 return f"{base}.clone()"
             }
+            if wide && ind.len() + base.len() + fields.join(", ").len() > 92 {
+                return f"{base} with {{\n{ind}    {fields.join(f",\n{ind}    ")},\n{ind}}}"
+            }
             return f"{base} with {{ {fields.join(", ")} }}"
         }
-        return f"{path} {{ {fields.join(", ")} }}"
+        let one = f"{path} {{ {fields.join(", ")} }}"
+        if wide && fields.len() > 0 && ind.len() + one.len() > 100 {
+            return f"{path} {{\n{ind}    {fields.join(f",\n{ind}    ")},\n{ind}}}"
+        }
+        return one
     }
 
     fn closure(ref mut self, n: i64) -> String {
