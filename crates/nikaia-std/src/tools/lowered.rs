@@ -2656,7 +2656,7 @@ pub mod project_check {
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, program_tests, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, program_tests, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]

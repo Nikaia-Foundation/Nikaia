@@ -30,6 +30,18 @@ pub struct ProgramTest {
     pub stderr: Option<Bytes>,
 }
 
+pub fn shown_path(path: &std::path::Path, root: &std::path::Path) -> String {
+    let path = match fs::canonical(path, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { nikaia_std::fs::path::clone(&(path)) },
+    };
+    let root = match fs::canonical(root, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { nikaia_std::fs::path::clone(&(root)) },
+    };
+    nikaia_std::fs::path::display(&(nikaia_std::index::or(nikaia_std::fs::path::strip_prefix(&(path), &root), || path.into())))
+}
+
 pub(crate) async fn files_under(dir: &std::path::Path) -> Result<Vec<(String, fs::Path)>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let mut found: Vec<(String, fs::Path)> = fs::walk(dir, &fs::Root::Anywhere).await?.iter().map(|name| { (nikaia_std::fs::path::text_of(&(name)), nikaia_std::fs::path::join(&(dir), name)) }).collect::<Vec<_>>();
     found.sort();

@@ -3525,7 +3525,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
         let label = format!(
             "test \"{}\" ({}:{})",
             test.title,
-            shown_path(&test.path, suite.root),
+            project_tests::shown_path(&test.path, suite.root),
             test.line
         );
         if !project_tests::project_tests_verdict(&label, &outcomes) {
@@ -3851,15 +3851,6 @@ fn bless(output: &OutputTest, outcomes: &[(String, Outcome)]) -> Result<Blessed>
 /// A test that failed: what it is called, what each setting did, and the
 /// output test it is, where it is one.
 type Failed<'a> = (String, Vec<(String, Outcome)>, Option<&'a OutputTest>);
-
-/// A test's file as the project names it.
-fn shown_path(path: &Path, root: &Path) -> String {
-    let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    path.strip_prefix(&root)
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| path.display().to_string())
-}
 
 /// Run it, with the program's own arguments and every stream its own.
 ///

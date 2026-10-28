@@ -57,6 +57,14 @@ pub struct ProgramTest {
 
 /// Every file under `dir`, by its name relative to it with `/` between the
 /// parts, sorted.
+/// A test's file as the project names it: under the root, the rest after it,
+/// both names canonical; else, or where either cannot be resolved, as given.
+pub fn shown_path(path: ref fs::Path, root: ref fs::Path) -> String {
+    let path = fs::canonical(path, fs::Root::Anywhere) catch { path.clone() }
+    let root = fs::canonical(root, fs::Root::Anywhere) catch { root.clone() }
+    return (path.strip_prefix(root) ?? path).display()
+}
+
 fn files_under(dir: ref fs::Path) -> Vec[(String, fs::Path)] throws {
     let mut found: Vec[(String, fs::Path)] = fs::walk(dir, fs::Root::Anywhere).iter().map(fn(name) { (name.text_of(), dir.join(name)) }).collect()
     found.sort()
