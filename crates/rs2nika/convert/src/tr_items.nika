@@ -188,8 +188,9 @@ impl TrEm {
     // ---- functions ----
 
     /// The signature's parts: the parameters, the result and its mode.
-    fn fn_item(ref mut self, n: i64, ind: String, in_impl: bool) -> Vec[String] {
+    fn fn_item(ref mut self, n: i64, ind: String, given_in_impl: bool) -> Vec[String] {
         let name = self.t.name_of(n)
+        let mut in_impl = given_in_impl
         let params_n = self.t.kid(n, "PARAM_LIST")
         let mut ps: Vec[String] = []
         let saved_optional = self.optional.clone()
@@ -271,7 +272,35 @@ impl TrEm {
                 ret = f" -> {t}"
             }
         }
-        let gen = self.generics(n)
+        let mut gen = self.generics(n)
+        if in_impl && self.state_impl {
+            // R33/R83/R85: a method of the state takes `state` and `world`
+            // (and `host` where it asks), and pauses
+            in_impl = false
+            if has_self {
+                let state_ty = self.world.replace("World", "State")
+                if ps[0] == "ref self" {
+                    ps[0] = f"state: ref {state_ty}"
+                } else {
+                    ps[0] = f"mut state: {state_ty}"
+                }
+                ps.insert(1, f"world: ref {self.world}")
+                if self.host_fns.contains(name) {
+                    ps.insert(2, "host: ref H")
+                    let host_ty = self.world.replace("World", "Host")
+                    if gen == "" {
+                        gen = f"[H: {host_ty}]"
+                    } else {
+                        gen = f"{(gen.strip_suffix("]") ?? "")}, H: {host_ty}]"
+                    }
+                }
+                if ret.ends_with(" throws") {
+                    ret = f"{(ret.strip_suffix(" throws") ?? "")} sync throws"
+                } else {
+                    ret = f"{ret} sync"
+                }
+            }
+        }
         let mut head: String = ""
         if in_impl && name == "new" && !has_self && self.ctors.contains(self.self_ty.clone()) {
             head = f"{ind}pub fn{gen}({ps.join(", ")}){ret}"
@@ -436,11 +465,20 @@ impl TrEm {
                 head = f"{ind}impl{gen} {self.ty(tys[0])} for {self.ty(self_n)} {{"
             }
         }
+        // a `-free` profile: the state's methods are free functions
+        let state = self.world != "" && !self.t.has_tok(n, "FOR_KW") && (self.self_ty == "Checker" || self.self_ty == "Emitter")
+        let saved_state = self.state_impl
+        self.state_impl = state
         let mut out: Vec[String] = [head]
-        let inner = f"{ind}    "
+        let mut inner: String = f"{ind}    "
+        if state {
+            out = []
+            inner = ind.clone()
+        }
         let list = self.t.kid(n, "ASSOC_ITEM_LIST")
         if list < 0 {
             self.self_ty = saved
+            self.state_impl = saved_state
             return self.todo_item("an `impl` without a body", n, ind)
         }
         let mut gap = false
@@ -497,7 +535,10 @@ impl TrEm {
                 }
             }
         }
-        out.push(f"{ind}}}")
+        if !state {
+            out.push(f"{ind}}}")
+        }
+        self.state_impl = saved_state
         self.self_ty = saved
         if consts.len() > 0 {
             consts.push("")

@@ -5449,6 +5449,69 @@ fn rs2nika_get_range(line: String) -> bool {
 }
 
 
+/// R31-R33, R77, R83, R212: inside a method of the state, its fields and
+/// methods are read through `state` and `world` (both engines).
+fn rs2nika_state_text(mut ctx: Rs2nikaCtx, given: String) -> String {
+    let mut s: String = given.clone()
+    let mut s2: String = s.clone()
+    for p in ["self.parsed.text(*", "self.parsed.text(", "self.parsed.name(*", "self.parsed.name(", "self.text(*", "self.text(", "self.name(*", "self.name(", "self.parsed.interner.resolve(*", "self.parsed.interner.resolve("] {
+        s2 = s2.replace(p, "world.words.resolve(")
+    }
+    s2 = rs2nika_replace_free(s2, "parsed.text(*", "parsed.words.resolve(")
+    s2 = rs2nika_replace_free(s2, "parsed.text(", "parsed.words.resolve(")
+    s2 = rs2nika_replace_free(s2, "parsed.name(*", "parsed.words.resolve(")
+    s2 = rs2nika_replace_free(s2, "parsed.name(", "parsed.words.resolve(")
+    if !ctx.view {
+        for n in ctx.parsed_names {
+            for m in [".text(*", ".text(", ".name(*", ".name("] {
+                s2 = rs2nika_replace_free(s2, f"{n}{m}", f"{n}.words.resolve(")
+            }
+        }
+    }
+    if !rs2nika_same(s2, s) {
+        rs2nika_hit(ctx, "R31")
+    }
+    s = s2.clone()
+    // R212: a `CheckWorld` holds the file as `here` (a `ParsedView`)
+    if ctx.profile.starts_with("check") {
+        s2 = s2.replace("self.parsed.program.items", "world.here.items").replace("self.parsed.", "world.here.")
+        s2 = rs2nika_replace_word(s2, "self.parsed", "world.here")
+    }
+    s2 = s2.replace("self.parsed.program.items", "world.items").replace("self.s.", "self.§")
+    s2 = rs2nika_replace_word(s2, "self.world", "world")
+    s2 = rs2nika_replace_word(s2, "self.s", "self")
+    s2 = s2.replace("self.parsed.", "world.")
+    if !rs2nika_same(s2, s) {
+        rs2nika_hit(ctx, "R32")
+    }
+    s = s2.clone()
+    for m in ctx.methods.clone() {
+        let n2 = rs2nika_renamed(ctx, m)
+        let mut s3: String = rs2nika_self_call(s, m, n2)
+        if ctx.free {
+            s3 = rs2nika_state_call(s, m, n2, rs2nika_has(ctx.host_fns, m))
+        }
+        if !rs2nika_same(s3, s) {
+            rs2nika_hit(ctx, "R33")
+        }
+        s = s3.clone()
+    }
+    // R77: `self.s.m(..)` calls a `CheckState` method that already moved:
+    // its name and arguments stay
+    if ctx.free {
+        s = s.replace("self.§", "state.")
+        // the text `"self"` (a name the program looks for) stays as written
+        let s4: String = rs2nika_replace_word(s.replace("\"self\"", "\u{3}"), "self", "state").replace("\u{3}", "\"self\"")
+        if s4 != s {
+            rs2nika_hit(ctx, "R83")
+        }
+        s = s4.clone()
+    } else {
+        s = s.replace("self.§", "self.")
+    }
+    return s
+}
+
 fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: String) -> String {
     let mut s: String = rs2nika_struct_update(ctx, line)
     s = rs2nika_bytes(ctx, s)
@@ -5464,62 +5527,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: String) -> String {
     s = rs2nika_ranges(ctx, s)
     s = rs2nika_rest(ctx, s)
     if ctx.profile != "none" && !ctx.impl_other {
-        let mut s2: String = s.clone()
-        for p in ["self.parsed.text(*", "self.parsed.text(", "self.parsed.name(*", "self.parsed.name(", "self.text(*", "self.text(", "self.name(*", "self.name(", "self.parsed.interner.resolve(*", "self.parsed.interner.resolve("] {
-            s2 = s2.replace(p, "world.words.resolve(")
-        }
-        s2 = rs2nika_replace_free(s2, "parsed.text(*", "parsed.words.resolve(")
-        s2 = rs2nika_replace_free(s2, "parsed.text(", "parsed.words.resolve(")
-        s2 = rs2nika_replace_free(s2, "parsed.name(*", "parsed.words.resolve(")
-        s2 = rs2nika_replace_free(s2, "parsed.name(", "parsed.words.resolve(")
-        if !ctx.view {
-            for n in ctx.parsed_names {
-                for m in [".text(*", ".text(", ".name(*", ".name("] {
-                    s2 = rs2nika_replace_free(s2, f"{n}{m}", f"{n}.words.resolve(")
-                }
-            }
-        }
-        if !rs2nika_same(s2, s) {
-            rs2nika_hit(ctx, "R31")
-        }
-        s = s2.clone()
-        // R212: a `CheckWorld` holds the file as `here` (a `ParsedView`)
-        if ctx.profile.starts_with("check") {
-            s2 = s2.replace("self.parsed.program.items", "world.here.items").replace("self.parsed.", "world.here.")
-            s2 = rs2nika_replace_word(s2, "self.parsed", "world.here")
-        }
-        s2 = s2.replace("self.parsed.program.items", "world.items").replace("self.s.", "self.§")
-        s2 = rs2nika_replace_word(s2, "self.world", "world")
-        s2 = rs2nika_replace_word(s2, "self.s", "self")
-        s2 = s2.replace("self.parsed.", "world.")
-        if !rs2nika_same(s2, s) {
-            rs2nika_hit(ctx, "R32")
-        }
-        s = s2.clone()
-        for m in ctx.methods.clone() {
-            let n2 = rs2nika_renamed(ctx, m)
-            let mut s3: String = rs2nika_self_call(s, m, n2)
-            if ctx.free {
-                s3 = rs2nika_state_call(s, m, n2, rs2nika_has(ctx.host_fns, m))
-            }
-            if !rs2nika_same(s3, s) {
-                rs2nika_hit(ctx, "R33")
-            }
-            s = s3.clone()
-        }
-        // R77: `self.s.m(..)` calls a `CheckState` method that already moved:
-        // its name and arguments stay
-        if ctx.free {
-            s = s.replace("self.§", "state.")
-            // the text `"self"` (a name the program looks for) stays as written
-            let s4: String = rs2nika_replace_word(s.replace("\"self\"", "\u{3}"), "self", "state").replace("\u{3}", "\"self\"")
-            if s4 != s {
-                rs2nika_hit(ctx, "R83")
-            }
-            s = s4.clone()
-        } else {
-            s = s.replace("self.§", "self.")
-        }
+        s = rs2nika_state_text(ctx, s)
     }
     let mut k = 0
     while k < ctx.renamed_from.len() {
@@ -20489,17 +20497,34 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
     // they wrote.
     let parsed = rs2nika_rust_passes(ctx, scanned, facts).join("\n")
     let t = rt_parse(parsed) catch { return "" }
-    let drafted = tr_convert(t, profile, prefix)
+    let mut world: String = ""
+    if ctx.free {
+        world = ctx.world.clone()
+    }
+    let drafted = tr_convert(t, profile, prefix, world, ctx.host_fns)
     // The line engine's later stages that help the tree's draft (measured on
     // the corpus: each of the others changes nothing or costs lines).
     let stages: Vec[String] = ["renames", "names", "tail", "rmatch", "m2", "consts", "texts", "p4apre", "forms", "p3b", "p4b", "p4a", "uses", "typed"]
     let mut lines: Vec[String] = []
+    // the state's methods (`tr_convert` wrote them as free functions of
+    // `state`) read its fields and methods through `state` and `world`
+    let mut in_state = false
     for l in drafted.split("\n") {
         let mut x: String = l.clone()
+        if x.starts_with("fn ") || x.starts_with("pub fn ") {
+            in_state = x.contains("(state: ref ") || x.contains("(mut state: ")
+        } else if in_state && ctx.free && !x.trim_start().starts_with("//") {
+            x = rs2nika_state_text(ctx, x)
+        }
+        if x == "}" {
+            in_state = false
+        }
         if stages.contains("renames") && !x.trim_start().starts_with("//") {
             let mut k = 0
             while k < ctx.renamed_from.len() {
                 x = rs2nika_replace_free(x, f"{ctx.renamed_from[k]}(", f"{ctx.renamed_to[k]}(")
+                // a generic definition: `fn name[H: CheckHost](`
+                x = x.replace(f"fn {ctx.renamed_from[k]}[", f"fn {ctx.renamed_to[k]}[")
                 k = k + 1
             }
         }

@@ -1,0 +1,10 @@
+fn check_x_count[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: String) -> i64 sync {
+    state.seen.push(name)
+    return state.seen.len()
+}
+
+fn check_x_twice[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: String) sync {
+    for item in world.here.items {
+        check_x_count(state, world, host, name)
+    }
+}

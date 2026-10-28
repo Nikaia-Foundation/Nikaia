@@ -48,9 +48,15 @@ pub struct TrEm {
     /// a name that stands for a place while a body is written: the variable
     /// of `for x in xs.iter_mut()` is `xs[i]`
     pub aliases: collections::BTreeMap[String, String],
+    /// a `-free` profile's world (`CheckWorld`): the state's methods become
+    /// free functions of `state`, `world` (and `host`)
+    pub world: String,
+    pub host_fns: collections::BTreeSet[String],
+    /// the methods being written are the state's (`impl Checker`)
+    pub state_impl: bool,
 }
 
-pub fn tr_convert(t: RtTree, profile: String, prefix: String) -> String {
+pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, host_fns: ref Vec[String]) -> String {
     let mut em = TrEm {
         t: t,
         profile: profile,
@@ -71,6 +77,9 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String) -> String {
         fns: collections::BTreeSet(),
         hoisted: [],
         aliases: collections::BTreeMap(),
+        world: world,
+        host_fns: host_fns.iter().map(fn(h) { h.clone() }).collect(),
+        state_impl: false,
     }
     if em.t.nodes.len() == 0 {
         return ""
