@@ -1,0 +1,115 @@
+// crates/rs2nika/convert/src/tr_check.nika
+//
+// **Does the draft compile** (`--check DRAFT --as NAME`): a draft without a
+// `TODO(rs2nika)` may still not compile, so counting TODOs measures nothing.
+// The draft goes into a copy of `std`'s source as `tools/NAME.nika` (in place
+// of the file of that name, when there is one), `nikaia lower-std` checks that
+// copy, and what it refused is printed grouped by its code. The checkout is
+// never touched.
+
+use std::collections
+use std::fs
+use std::process
+
+/// The findings of `nikaia lower-std` over a sysroot whose tools hold the
+/// draft, grouped by code; their number (0: the draft compiles).
+pub fn tr_check(draft: String, name: String, repo: String) -> i64 throws {
+    let nikaia = tr_check_compiler(repo)
+    let made = process::run("mktemp", ["-d"])
+    let tmp = made.stdout.trim().clone()
+    if !made.ok || tmp == "" {
+        eprintln("rs2nika --check: mktemp -d failed")
+        return 1
+    }
+    let copy = process::run("sh", ["-c", "mkdir -p \"$1/nikaia-std\" && cp -r \"$0/crates/nikaia-std/src\" \"$1/nikaia-std/\"", repo.clone(), tmp.clone()])
+    if !copy.ok {
+        eprintln(f"rs2nika --check: copying std failed: {copy.stderr}")
+        return 1
+    }
+    let text = fs::read_to_string(ref draft, fs::Root::Anywhere) catch {
+        eprintln(f"cannot read {draft}: {error}")
+        return 1
+    }
+    fs::write(f"{tmp}/nikaia-std/src/tools/{name}.nika", fs::Root::Anywhere, text) catch {
+        eprintln(f"rs2nika --check: writing the draft failed: {error}")
+        return 1
+    }
+    let res = process::run(nikaia, ["lower-std", "--sysroot", tmp.clone()])
+    process::run("rm", ["-rf", tmp.clone()])
+    if res.ok {
+        println(f"{draft}: compiles as tools/{name}.nika")
+        return 0
+    }
+    let found = tr_check_findings(res.stderr, tmp)
+    let mut counts: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for f in found {
+        let code = tr_check_code(f)
+        counts.insert(code.clone(), (counts.get(code) ?? 0) + 1)
+    }
+    let mut total = 0
+    for (code, n) in counts {
+        total += n
+        println(f"{code}: {n}")
+        for f in found {
+            if tr_check_code(f) == code {
+                println(f"  {f}")
+            }
+        }
+    }
+    if total == 0 {
+        // nothing it could read: say what it printed
+        println(res.stderr.trim())
+        total = 1
+    }
+    println(f"{draft}: {total} findings")
+    return total
+}
+
+/// The compiler beside the checkout, else the one on the path.
+fn tr_check_compiler(repo: String) -> String {
+    for profile in ["fast", "release", "debug"] {
+        let p = f"{repo}/target/{profile}/nikaia"
+        let there = fs::exists(p.clone(), fs::Root::Anywhere) catch { false }
+        if there {
+            return p
+        }
+    }
+    return "nikaia"
+}
+
+/// The findings of a `lower-std` run, one line each: the lines that name the
+/// file or an error, the stack trace and the copy's path left out.
+fn tr_check_findings(stderr: String, tmp: String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for line in stderr.lines() {
+        let l = line.trim()
+        if l == "" || l.starts_with("Stack backtrace") || l.starts_with("at ") || l.starts_with("lower-std:") {
+            continue
+        }
+        if l.bytes.len() > 0 && l.bytes[0] >= 48 && l.bytes[0] <= 57 {
+            // `  3: nikaia::...`, a frame of the trace
+            continue
+        }
+        if l.contains("error") || l.contains("Error") || l.contains("NK") || l.contains("Expected") {
+            out.push(l.replace(f"{tmp}/nikaia-std/src/", "").clone())
+        }
+    }
+    return out
+}
+
+/// The code a finding names (`NK2106`), or `parse` for a syntax error.
+fn tr_check_code(finding: String) -> String {
+    let b = finding.bytes
+    let mut i = 0
+    while i + 6 <= b.len() {
+        if b[i] == 78 && b[i + 1] == 75 && b[i + 2] >= 48 && b[i + 2] <= 57 {
+            let code: String = b[i..<i + 6].text() catch { "NK?" }
+            return code.clone()
+        }
+        i += 1
+    }
+    if finding.contains("Expected") || finding.contains("expected") {
+        return "parse"
+    }
+    return "other"
+}

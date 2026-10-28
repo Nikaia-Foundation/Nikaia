@@ -174,6 +174,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
         "R63  what R79 leaves of `o.is_some_and(..)`, `o` read once: `o.is_some_and(|x| p)` -> `(match o { x => p, null => false })`, `o.is_some_and(f)` -> `(match o { value => f(value), null => false })` (ADR-352)",
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
+        "--check DRAFT --as NAME checks the draft as tools/NAME.nika in a copy of std's source, its findings grouped by code",
         "R68  a positional rest `V(a, ..)` and a slice pattern pass through; `rest @ ..` -> `..rest` (ADR-355)",
         "R70  a `format!` hole hoisted out of a match arm (R81) -> the arm becomes a block holding it",
         "R71  a `None =>` / `None if guard =>` arm -> `null =>` / `null if guard =>` (ADR-352)",
@@ -20445,6 +20446,9 @@ fn main() throws {
     let mut whole = false
     let mut lint = false
     let mut score = false
+    // `--check DRAFT --as NAME` (tr_check.nika)
+    let mut check: String = ""
+    let mut check_as: String = ""
     let mut corpus: String = ""
     let mut repo: String = "?"
     let mut facts_path: String = ""
@@ -20481,6 +20485,12 @@ fn main() throws {
             lint = true
         } else if arg == "--score" {
             score = true
+        } else if arg == "--check" {
+            at = at + 1
+            check = args[at].clone()
+        } else if arg == "--as" {
+            at = at + 1
+            check_as = args[at].clone()
         } else if arg == "--view" {
             view = true
         } else if arg == "--tree" {
@@ -20519,6 +20529,19 @@ fn main() throws {
             path = arg
         }
         at = at + 1
+    }
+    if check != "" {
+        if check_as == "" {
+            eprintln("usage: rs2nika --check DRAFT --as NAME (the draft checked as tools/NAME.nika)")
+            process::exit(2)
+        }
+        if repo == "?" {
+            repo = rs2nika_find_repo()
+        }
+        if tr_check(check, check_as, repo) > 0 {
+            process::exit(1)
+        }
+        return
     }
     if corpus != "" {
         let bad = rs2nika_corpus(corpus)
