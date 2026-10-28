@@ -174,7 +174,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
         "R63  what R79 leaves of `o.is_some_and(..)`, `o` read once: `o.is_some_and(|x| p)` -> `(match o { x => p, null => false })`, `o.is_some_and(f)` -> `(match o { value => f(value), null => false })` (ADR-352)",
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
-        "--engine lines|tree picks the converter: `tree` parses the Rust after the line engine's passes on its text and writes Nikaia from the syntax tree, then runs the line engine's later stages that help it; `lines` (the default) is the line engine alone",
+        "--engine lines|tree picks the converter: `tree` parses the Rust after the line engine's passes on its text and writes Nikaia from the syntax tree, then runs the line engine's later stages that help it (the default); `lines` is the line engine alone (`--out` and `--file` use it)",
         "--check DRAFT --as NAME checks the draft as tools/NAME.nika in a copy of std's source, its findings grouped by code",
         "R68  a positional rest `V(a, ..)` and a slice pattern pass through; `rest @ ..` -> `..rest` (ADR-355)",
         "R70  a `format!` hole hoisted out of a match arm (R81) -> the arm becomes a block holding it",
@@ -20685,7 +20685,7 @@ fn main() throws {
     let mut lints: Vec[String] = []
     // the syntax-tree converter (tree.nika, tr_*.nika) and its tree print;
     // `--file` uses the line engine
-    let mut engine: String = "lines"
+    let mut engine: String = "tree"
     let mut dump_tree = false
     let mut args: Vec[String] = []
     for a in cli::args() {
