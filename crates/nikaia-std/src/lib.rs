@@ -290,6 +290,11 @@ pub mod tools {
     #[allow(unused_imports)]
     use crate::text::TextQuoted;
 
+    /// `seq.join(", ")`, a sequence's elements as one text: a program gets
+    /// `Join` from its prelude, a tool has none.
+    #[allow(unused_imports)]
+    use crate::seq::Join as _;
+
     // --- ast.nika ---
 
     /// The longest source the compiler reads: a `Span` holds a byte offset
