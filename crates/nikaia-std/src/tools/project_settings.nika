@@ -2,7 +2,11 @@
 // `--unproved-claims`, `--optimization`, `[build] artifact` and `--cpu` may
 // say, the cache's key of a build and what a panic does on its target. The
 // Rust adapter is `Settings` in `crates/nikaia/src/project.rs`: it keeps
-// `build: Build` and holds these words.
+// `build: Build` and holds these words. P5a moved what `Settings` and
+// `Project` do with the words and the project's paths: the structs stay
+// Rust, and these take and return words and paths.
+
+use std::fs
 
 /// A word a build setting does not take, in the words the compiler reports.
 pub enum ProjectSettingsRefusal {
@@ -213,4 +217,227 @@ pub fn encoded_with_cpu(encoded: String?, plain: String?, cpu: String) -> String
     flags.push("-C")
     flags.push(f"target-cpu={cpu}")
     return flags.join("\x1f")
+}
+
+/// The variables that carry the resolved words to the `rustc` wrapper: Cargo
+/// owns the wrapper's arguments, so the environment is the one channel.
+comptime PROJECT_SETTINGS_TARGET_VAR: ref String = "NIKAIA_BUILD_TARGET"
+comptime PROJECT_SETTINGS_PARALLELISM_VAR: ref String = "NIKAIA_USER_PARALLELISM"
+/// The third switch's word, down the same channel
+/// ([ADR-281](../../../docs/specification/adr/adr-281.md) D36).
+comptime PROJECT_SETTINGS_REENTRANCY_VAR: ref String = "NIKAIA_REENTRANCY_CHECK"
+/// `--optimization`'s words, resolved
+/// ([ADR-306](../../../docs/specification/adr/adr-306.md) D1).
+comptime PROJECT_SETTINGS_OPTIMIZATION_VAR: ref String = "NIKAIA_OPTIMIZATION"
+/// `--refuted-claims`, resolved ([ADR-269](../../../docs/specification/adr/adr-269.md) D8).
+comptime PROJECT_SETTINGS_REFUTED_VAR: ref String = "NIKAIA_REFUTED_CLAIMS"
+/// `--unproved-claims`, resolved ([ADR-380](../../../docs/specification/adr/adr-380.md) D2).
+comptime PROJECT_SETTINGS_UNPROVED_VAR: ref String = "NIKAIA_UNPROVED_CLAIMS"
+/// `[build] artifact` and `symbol-prefix` (ADR-284 D4, D13).
+comptime PROJECT_SETTINGS_ARTIFACT_VAR: ref String = "NIKAIA_BUILD_ARTIFACT"
+comptime PROJECT_SETTINGS_PREFIX_VAR: ref String = "NIKAIA_SYMBOL_PREFIX"
+/// Set where the build is `nikaia test`'s
+/// ([ADR-269](../../../docs/specification/adr/adr-269.md) D1).
+comptime PROJECT_SETTINGS_TESTS_VAR: ref String = "NIKAIA_TESTS"
+/// The CPU level `--cpu` named, so that the wrapper's lowering answers
+/// `target::has` in a `comptime` for it (ADR-371 D6).
+comptime PROJECT_SETTINGS_CPU_VAR: ref String = "NIKAIA_CPU"
+
+/// What the settings ask of the compiler (P5a): `std` reads no environment
+/// variable yet (#922), and `native` is what `rustc` says
+/// (`crate::sysroot::native_cpu`).
+pub trait ProjectSettingsHost {
+    /// The variable `name`, where it is set and is text.
+    fn env_var(ref self, name: ref String) -> String? sync
+    /// The CPU `rustc` finds on this machine for `triple`.
+    fn native_cpu(ref self, triple: ref String) -> String sync throws
+}
+
+/// **Every switch's word, checked**, before anything is read, so a mistyped
+/// one fails on its own account rather than after a compile (ADR-037 D5): the
+/// refuted and unproved claims' words and the artifact. The symbol prefix, the
+/// target's words and the optimizations are parsed by the Rust adapter, after
+/// these, in this order.
+fn project_settings_checked(target: String, user_parallelism: String, reentrancy_check: String, optimization: String, refuted: String, unproved: String, made: String, symbol_prefix: String, tests: bool, cpu: String?) -> ProjectWords throws {
+    let refuted_claims = refuted_claims(refuted)
+    let unproved_claims = unproved_claims(unproved)
+    let artifact = artifact(made)
+    return ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, artifact: artifact, symbol_prefix: symbol_prefix, tests: tests, bind: null, cpu: cpu }
+}
+
+/// **The words, flag over manifest over built-in default.** `manifest` is
+/// the manifest's `[build]` word for a key, or the default it is given;
+/// `package` the package's name, which names the symbol prefix where
+/// `[build]` does not.
+pub fn project_settings_resolve(manifest: fn(ref String, ref String) -> String sync, package: String?, target: String?, user_parallelism: String?, default_target: String) -> ProjectWords throws {
+    let target = target?.clone() ?? manifest("target", default_target)
+    let user_parallelism = user_parallelism?.clone() ?? manifest("user-parallelism", "no")
+    // **No flag of its own** ([ADR-281](../../../docs/specification/adr/adr-281.md)
+    // D8): it *lives in the manifest*, because otherwise a shipped build is
+    // not reproducible, and Part I 1.2 names the two that a single build may
+    // override. The environment is not a second front door - it is how the
+    // resolved word reaches the wrapper, which Cargo owns the arguments of.
+    let reentrancy_check = manifest("reentrancy-check", "yes")
+    let optimization = manifest("optimization", "")
+    let refuted = manifest("refuted-claims", "error")
+    let unproved = manifest("unproved-claims", "error")
+    let made = manifest("artifact", "program")
+    let named = (package ?? "program").replace("-", "_")
+    let symbol_prefix = manifest("symbol-prefix", named)
+    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, false, null)
+}
+
+/// **What the driver put in the environment.** Absent means the wrapper was
+/// run by hand, and the built-in defaults are the honest answer.
+pub fn project_settings_from_env[H: ProjectSettingsHost](default_target: String, host: ref H) -> ProjectWords throws {
+    let target = host.env_var(PROJECT_SETTINGS_TARGET_VAR) ?? default_target
+    let user_parallelism = host.env_var(PROJECT_SETTINGS_PARALLELISM_VAR) ?? "no"
+    let reentrancy_check = host.env_var(PROJECT_SETTINGS_REENTRANCY_VAR) ?? "yes"
+    let optimization = host.env_var(PROJECT_SETTINGS_OPTIMIZATION_VAR) ?? ""
+    let refuted = host.env_var(PROJECT_SETTINGS_REFUTED_VAR) ?? "error"
+    let unproved = host.env_var(PROJECT_SETTINGS_UNPROVED_VAR) ?? "error"
+    let made = host.env_var(PROJECT_SETTINGS_ARTIFACT_VAR) ?? "program"
+    let symbol_prefix = host.env_var(PROJECT_SETTINGS_PREFIX_VAR) ?? "program"
+    let tests = host.env_var(PROJECT_SETTINGS_TESTS_VAR) != null
+    let level = host.env_var(PROJECT_SETTINGS_CPU_VAR) ?? ""
+    let cpu: String? = if level.is_empty() { null } else { level }
+    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, tests, cpu)
+}
+
+/// **The command line's `--refuted-claims` and `--unproved-claims` over the
+/// manifest's** ([ADR-269](../../../docs/specification/adr/adr-269.md) D8,
+/// [ADR-380](../../../docs/specification/adr/adr-380.md) D2): a single build
+/// may let through a claim a newer prover refutes, as it may name another
+/// target. The two words the build then has, refuted first.
+pub fn project_settings_refutations(words: ref ProjectWords, refuted: String?, unproved: String?) -> (String, String) throws {
+    let refuted_word = match refuted?.clone() {
+        word => refuted_claims(word),
+        null => words.refuted_claims.clone(),
+    }
+    let unproved_word = match unproved?.clone() {
+        word => unproved_claims(word),
+        null => words.unproved_claims.clone(),
+    }
+    return (refuted_word, unproved_word)
+}
+
+/// **`--cpu=LEVEL`** ([ADR-002](../../../docs/specification/adr/adr-002.md)
+/// D6): one of the target's `levels`, the baseline first, or the build fails
+/// naming them. The baseline is the same build as no level at all: `null`.
+pub fn project_settings_chosen_cpu(level: String, levels: ref Vec[String], target_name: String) -> String? throws {
+    if !levels.iter().any(fn(known) { known == level }) {
+        let named = levels.iter().map(fn(known) { f"`{known}`" }).collect().join(", ")
+        throw ProjectSettingsRefusal::Refused(f"`--cpu={level}` is not a CPU level of `{target_name}`. Its levels are: {named}.")
+    }
+    return if level != levels[0] { level } else { null }
+}
+
+/// The CPU level as a dimension of the compiled `std` (ADR-002 D6): empty
+/// for the baseline, the level's name, and for `native` the CPU `rustc`
+/// finds on this machine for `triple`, never the word.
+pub fn project_settings_cpu_key[H: ProjectSettingsHost](words: ref ProjectWords, triple: String, host: ref H) -> String throws {
+    let level = words.cpu?.clone() ?? return ""
+    return match level {
+        "native" => host.native_cpu(triple),
+        else => level,
+    }
+}
+
+/// **`--cpu` against the user's `RUSTFLAGS`** (#753, ADR-002 D6, Part III
+/// 13.3). Cargo ignores the `rustflags` of [`cpu_config`] when `RUSTFLAGS` or
+/// `CARGO_ENCODED_RUSTFLAGS` is set, so then the child gets
+/// `CARGO_ENCODED_RUSTFLAGS`: the user's flags, then `-C target-cpu=L` last
+/// (the level wins, the flags still apply). `null` where nothing is needed.
+pub fn project_settings_cpu_rustflags[H: ProjectSettingsHost](words: ref ProjectWords, triple: String, host: ref H) -> String? throws {
+    if words.cpu == null {
+        return null
+    }
+    let encoded = host.env_var("CARGO_ENCODED_RUSTFLAGS")
+    let plain = host.env_var("RUSTFLAGS")
+    return encoded_with_cpu(encoded, plain, project_settings_cpu_key(words, triple, host))
+}
+
+/// **The words, for the wrapper.** Cargo owns the wrapper's arguments, so the
+/// environment is the only channel the switches can travel down - and they
+/// travel already resolved, because a second resolution is a second chance
+/// to disagree.
+pub fn project_settings_as_env(words: ref ProjectWords) -> Vec[(String, String)] {
+    let mut env: Vec[(String, String)] = [
+        (PROJECT_SETTINGS_TARGET_VAR.clone(), words.target.clone()),
+        (PROJECT_SETTINGS_PARALLELISM_VAR.clone(), words.user_parallelism.clone()),
+        (PROJECT_SETTINGS_REENTRANCY_VAR.clone(), words.reentrancy_check.clone()),
+        (PROJECT_SETTINGS_OPTIMIZATION_VAR.clone(), words.optimization.clone()),
+        (PROJECT_SETTINGS_REFUTED_VAR.clone(), words.refuted_claims.clone()),
+        (PROJECT_SETTINGS_UNPROVED_VAR.clone(), words.unproved_claims.clone()),
+        (PROJECT_SETTINGS_ARTIFACT_VAR.clone(), words.artifact.clone()),
+        (PROJECT_SETTINGS_PREFIX_VAR.clone(), words.symbol_prefix.clone()),
+    ]
+    if words.tests {
+        env.push((PROJECT_SETTINGS_TESTS_VAR.clone(), "1"))
+    }
+    match words.cpu?.clone() {
+        level => env.push((PROJECT_SETTINGS_CPU_VAR.clone(), level)),
+        null => {},
+    }
+    return env
+}
+
+/// No project around `start`: what the build says.
+pub fn project_settings_no_project(start: ref fs::Path) -> String {
+    let main = start.join("main.nika")
+    return f"There's no `nikaia.toml` in {start.display()} or any folder above it.\n`nikaia build` needs a project. To lower a single file to Rust, run `nikaia lower {main.display()}`."
+}
+
+/// A target this toolchain cannot build for yet, and why (`missing`).
+pub fn project_settings_unbuildable(triple: String, missing: String) -> String {
+    return f"Building for `{triple}` isn't possible yet: {missing}"
+}
+
+/// `target/nikaia/`, or a directory under it of the `variant`'s: which of
+/// `nikaia test`'s builds this is (ADR-269 D12), `null` for a plain build.
+pub fn project_settings_own_dir(root: ref fs::Path, variant: String?) -> fs::Path {
+    let dir = root.join("target").join("nikaia")
+    return match variant?.clone() {
+        named => dir.join("variants").join(named),
+        null => dir,
+    }
+}
+
+/// Where the generated `Cargo.toml` goes. Under `target/`, because it is
+/// build output: it is regenerated from `nikaia.toml` on every build and
+/// editing it would be editing something the next build overwrites.
+pub fn project_settings_build_dir(root: ref fs::Path, variant: String?) -> fs::Path {
+    return project_settings_own_dir(root, variant).join("build")
+}
+
+/// Where the emitted Rust goes - **outside** [`project_settings_build_dir`],
+/// and that is not tidiness. Cargo lists the files of a path package to
+/// decide whether it is fresh, so a generated source inside the package would
+/// make the package dirty the moment it was written, and every build would
+/// recompile.
+pub fn project_settings_gen_dir(root: ref fs::Path, variant: String?) -> fs::Path {
+    return project_settings_own_dir(root, variant).join("gen")
+}
+
+/// **The switches, as a file Cargo can see** (ADR-021 D5): the driver writes
+/// the resolved switches here before `cargo` runs, and the wrapper puts it
+/// into the dependency file beside the `.nika` sources, so a switch that
+/// changed is an input that changed. In [`project_settings_gen_dir`], for its
+/// reason. Why a file at all: `Project::switches_path`.
+pub fn project_settings_switches_path(root: ref fs::Path, variant: String?) -> fs::Path {
+    return project_settings_gen_dir(root, variant).join("switches")
+}
+
+/// The ledger, in the project root (Part III 13.5).
+pub fn project_settings_ledger_path(root: ref fs::Path) -> fs::Path {
+    return root.join("nikaia.contracts")
+}
+
+/// **The switches file the driver wrote**, where there is one in `gen_dir`.
+/// Absent means the wrapper was run by hand rather than by a project build,
+/// and then there is no switch anybody could flip between two runs.
+pub fn project_settings_switches_beside(gen_dir: ref fs::Path) -> fs::Path? {
+    let path = gen_dir.join("switches")
+    let found = fs::metadata(path, fs::Root::Anywhere) catch { return null }
+    return if found.is_file() { path } else { null }
 }

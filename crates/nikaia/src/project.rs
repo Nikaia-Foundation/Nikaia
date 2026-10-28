@@ -61,27 +61,8 @@ pub const ENTRY: &str = "src/main.nika";
 /// from an ordinary run: Cargo owns the wrapper's argument list, so there is no
 /// flag or subcommand available to say which mode this is.
 pub const WRAPPER_MARKER: &str = "NIKAIA_RUSTC_WRAPPER";
-const TARGET_VAR: &str = "NIKAIA_BUILD_TARGET";
-const PARALLELISM_VAR: &str = "NIKAIA_USER_PARALLELISM";
-/// The third switch's word, down the same channel
-/// ([ADR-281](../../docs/specification/adr/adr-281.md) D36).
-const REENTRANCY_VAR: &str = "NIKAIA_REENTRANCY_CHECK";
-/// `--optimization`'s words, resolved
-/// ([ADR-306](../../docs/specification/adr/adr-306.md) D1).
-const OPTIMIZATION_VAR: &str = "NIKAIA_OPTIMIZATION";
-/// `--refuted-claims`, resolved, for the wrapper ([ADR-269](../../docs/specification/adr/adr-269.md) D8).
-const REFUTED_VAR: &str = "NIKAIA_REFUTED_CLAIMS";
-/// `--unproved-claims`, resolved, for the wrapper ([ADR-380](../../docs/specification/adr/adr-380.md) D2).
-const UNPROVED_VAR: &str = "NIKAIA_UNPROVED_CLAIMS";
-/// `[build] artifact` and `symbol-prefix` (ADR-284 D4, D13), for the wrapper.
-const ARTIFACT_VAR: &str = "NIKAIA_BUILD_ARTIFACT";
-const PREFIX_VAR: &str = "NIKAIA_SYMBOL_PREFIX";
-/// Set where the build is `nikaia test`'s
-/// ([ADR-269](../../docs/specification/adr/adr-269.md) D1).
-const TESTS_VAR: &str = "NIKAIA_TESTS";
-/// The CPU level `--cpu` named, down the same channel, so that the wrapper's
-/// lowering answers `target::has` in a `comptime` for it (ADR-371 D6).
-const CPU_VAR: &str = "NIKAIA_CPU";
+// The switches' variables (`TARGET_VAR` .. `CPU_VAR`) are
+// `project_settings.nika`'s, which writes and reads them.
 const GEN_DIR_VAR: &str = "NIKAIA_GEN_DIR";
 /// What the program's crate name carries beyond its package's in the shared
 /// target directory (#495), for the wrapper to take off again.
@@ -139,16 +120,25 @@ fn refusal(thrown: nikaia_std::error::Thrown<ProjectSettingsRefusal>) -> anyhow:
     anyhow!(why)
 }
 
-fn refuted_claims(word: &str) -> Result<String> {
-    project_settings::refuted_claims(word.to_string()).map_err(refusal)
+/// A build setting's word refused as a statement about the build
+/// (`refuse!`, as `--cpu` was before the move).
+fn refused(thrown: nikaia_std::error::Thrown<ProjectSettingsRefusal>) -> anyhow::Error {
+    let ProjectSettingsRefusal::Refused(why) = thrown.split().0;
+    crate::diagnostics::refuse(why)
 }
 
-fn unproved_claims(word: &str) -> Result<String> {
-    project_settings::unproved_claims(word.to_string()).map_err(refusal)
-}
+/// What `project_settings.nika` asks of the compiler: the environment, and
+/// what `native` is on this machine.
+struct SettingsHost;
 
-fn artifact(word: &str) -> Result<String> {
-    project_settings::artifact(word.to_string()).map_err(refusal)
+impl project_settings::ProjectSettingsHost for SettingsHost {
+    fn env_var(&self, name: &str) -> Option<String> {
+        std::env::var(name).ok()
+    }
+
+    fn native_cpu(&self, triple: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
+        crate::sysroot::native_cpu(triple).map_err(|e| format!("{e:#}").into())
+    }
 }
 
 /// `--optimization`'s words to what they decide
@@ -195,55 +185,33 @@ impl Settings {
         target: Option<&str>,
         user_parallelism: Option<&str>,
     ) -> Result<Settings> {
-        let target = manifest
-            .setting("target", target, crate::emit::default_target().name())
-            .to_string();
-        let user_parallelism = manifest
-            .setting("user-parallelism", user_parallelism, "no")
-            .to_string();
-        // **No flag of its own** ([ADR-281](../../docs/specification/adr/adr-281.md)
-        // D8): it *lives in the manifest*, because otherwise a shipped build is
-        // not reproducible, and Part I 1.2 names the two that a single build may
-        // override. The environment is not a second front door — it is how the
-        // resolved word reaches the wrapper, which Cargo owns the arguments of.
-        let reentrancy_check = manifest
-            .setting("reentrancy-check", None, "yes")
-            .to_string();
-        let optimization = manifest.setting("optimization", None, "").to_string();
-        let refuted_claims = refuted_claims(manifest.setting("refuted-claims", None, "error"))?;
-        let unproved_claims = unproved_claims(manifest.setting("unproved-claims", None, "error"))?;
-        let artifact = artifact(manifest.setting("artifact", None, "program"))?;
-        let symbol_prefix = symbol_prefix(
-            manifest.setting(
-                "symbol-prefix",
-                None,
-                &manifest
-                    .package_name()
-                    .unwrap_or("program")
-                    .replace('-', "_"),
-            ),
+        Settings::of(
+            project_settings::project_settings_resolve(
+                &|key, default| manifest.setting(key, None, default).to_string(),
+                manifest.package_name().map(str::to_string),
+                target.map(str::to_string),
+                user_parallelism.map(str::to_string),
+                crate::emit::default_target().name().to_string(),
+            )
+            .map_err(|e| anyhow!("{e}"))?,
+        )
+    }
+
+    /// The parsed values beside the checked `words`: the symbol prefix, the
+    /// target's words and the optimizations, in that order, after the words
+    /// `project_settings` checked.
+    fn of(words: ProjectWords) -> Result<Settings> {
+        symbol_prefix(&words.symbol_prefix)?;
+        let mut build = Build::parse(
+            &words.target,
+            &words.user_parallelism,
+            &words.reentrancy_check,
         )?;
-        let mut build = Build::parse(&target, &user_parallelism, &reentrancy_check)?;
-        (build.bounds, build.overflow) = optimizations(&optimization)?;
-        build.skip_free_at_exit = skip_free_at_exit(&optimization);
-        build.prove_through_loops = prove_through_loops(&optimization);
-        build.called_from_c = artifact == "c-library";
-        Ok(Settings {
-            build,
-            words: ProjectWords {
-                target,
-                user_parallelism,
-                reentrancy_check,
-                optimization,
-                refuted_claims,
-                unproved_claims,
-                artifact,
-                symbol_prefix,
-                tests: false,
-                bind: None,
-                cpu: None,
-            },
-        })
+        (build.bounds, build.overflow) = optimizations(&words.optimization)?;
+        build.skip_free_at_exit = skip_free_at_exit(&words.optimization);
+        build.prove_through_loops = prove_through_loops(&words.optimization);
+        build.called_from_c = words.artifact == "c-library";
+        Ok(Settings { build, words })
     }
 
     /// **The command line's `--optimization` over the manifest's**
@@ -257,12 +225,13 @@ impl Settings {
     /// **The command line's `--unproved-claims` over the manifest's**
     /// ([ADR-380](../../docs/specification/adr/adr-380.md) D2), the same way.
     pub fn refutations(&mut self, refuted: Option<&str>, unproved: Option<&str>) -> Result<()> {
-        if let Some(word) = refuted {
-            self.words.refuted_claims = refuted_claims(word)?;
-        }
-        if let Some(word) = unproved {
-            self.words.unproved_claims = unproved_claims(word)?;
-        }
+        (self.words.refuted_claims, self.words.unproved_claims) =
+            project_settings::project_settings_refutations(
+                &self.words,
+                &refuted.map(str::to_string),
+                &unproved.map(str::to_string),
+            )
+            .map_err(refusal)?;
         Ok(())
     }
 
@@ -275,18 +244,12 @@ impl Settings {
         };
         let target = self.build.target;
         let levels = crate::sysroot::cpu_levels(target.triple())?;
-        if !levels.iter().any(|known| known == level) {
-            let named = levels
-                .iter()
-                .map(|known| format!("`{known}`"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            refuse!(
-                "`--cpu={level}` is not a CPU level of `{}`. Its levels are: {named}.",
-                target.name()
-            );
-        }
-        self.words.cpu = (level != levels[0]).then(|| level.to_string());
+        self.words.cpu = project_settings::project_settings_chosen_cpu(
+            level.to_string(),
+            &levels,
+            target.name(),
+        )
+        .map_err(refused)?;
         Ok(())
     }
 
@@ -294,11 +257,12 @@ impl Settings {
     /// for the baseline, the level's name, and for `native` the CPU `rustc`
     /// finds on this machine, never the word.
     pub fn cpu_key(&self) -> Result<String> {
-        match self.words.cpu.as_deref() {
-            None => Ok(String::new()),
-            Some("native") => crate::sysroot::native_cpu(self.build.target.triple()),
-            Some(level) => Ok(level.to_string()),
-        }
+        project_settings::project_settings_cpu_key(
+            &self.words,
+            self.build.target.triple(),
+            &SettingsHost,
+        )
+        .map_err(|e| anyhow!("{e}"))
     }
 
     /// What Cargo is told for the CPU level (ADR-002 D6, ADR-325).
@@ -312,16 +276,12 @@ impl Settings {
     /// `CARGO_ENCODED_RUSTFLAGS`: the user's flags, then `-C target-cpu=L` last
     /// (the level wins, the flags still apply). `None` where nothing is needed.
     pub fn cpu_rustflags(&self) -> Result<Option<String>> {
-        if self.words.cpu.is_none() {
-            return Ok(None);
-        }
-        let encoded = std::env::var("CARGO_ENCODED_RUSTFLAGS").ok();
-        let plain = std::env::var("RUSTFLAGS").ok();
-        Ok(project_settings::encoded_with_cpu(
-            &encoded,
-            &plain,
-            &self.cpu_key()?,
-        ))
+        project_settings::project_settings_cpu_rustflags(
+            &self.words,
+            self.build.target.triple(),
+            &SettingsHost,
+        )
+        .map_err(|e| anyhow!("{e}"))
     }
 
     pub fn optimize(&mut self, flags: &[String]) -> Result<()> {
@@ -341,88 +301,22 @@ impl Settings {
     /// travel already resolved, because a second resolution is a second chance
     /// to disagree.
     fn as_env(&self) -> Vec<(String, OsString)> {
-        vec![
-            (TARGET_VAR.to_string(), OsString::from(&self.words.target)),
-            (
-                PARALLELISM_VAR.to_string(),
-                OsString::from(&self.words.user_parallelism),
-            ),
-            (
-                REENTRANCY_VAR.to_string(),
-                OsString::from(&self.words.reentrancy_check),
-            ),
-            (
-                OPTIMIZATION_VAR.to_string(),
-                OsString::from(&self.words.optimization),
-            ),
-            (
-                REFUTED_VAR.to_string(),
-                OsString::from(&self.words.refuted_claims),
-            ),
-            (
-                UNPROVED_VAR.to_string(),
-                OsString::from(&self.words.unproved_claims),
-            ),
-            (
-                ARTIFACT_VAR.to_string(),
-                OsString::from(&self.words.artifact),
-            ),
-            (
-                PREFIX_VAR.to_string(),
-                OsString::from(&self.words.symbol_prefix),
-            ),
-        ]
-        .into_iter()
-        .chain(
-            self.words
-                .tests
-                .then(|| (TESTS_VAR.to_string(), OsString::from("1"))),
-        )
-        .chain(
-            self.words
-                .cpu
-                .as_ref()
-                .map(|level| (CPU_VAR.to_string(), OsString::from(level))),
-        )
-        .collect()
+        project_settings::project_settings_as_env(&self.words)
+            .into_iter()
+            .map(|(name, word)| (name, OsString::from(word)))
+            .collect()
     }
 
     /// What the driver put in the environment. Absent means the wrapper was run
     /// by hand, and the built-in defaults are the honest answer.
     fn from_env() -> Result<Settings> {
-        let word =
-            |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.to_string());
-        let target = word(TARGET_VAR, crate::emit::default_target().name());
-        let user_parallelism = word(PARALLELISM_VAR, "no");
-        let reentrancy_check = word(REENTRANCY_VAR, "yes");
-        let optimization = word(OPTIMIZATION_VAR, "");
-        let refuted_claims = refuted_claims(&word(REFUTED_VAR, "error"))?;
-        let unproved_claims = unproved_claims(&word(UNPROVED_VAR, "error"))?;
-        let artifact = artifact(&word(ARTIFACT_VAR, "program"))?;
-        let symbol_prefix = symbol_prefix(&word(PREFIX_VAR, "program"))?;
-        let mut build = Build::parse(&target, &user_parallelism, &reentrancy_check)?;
-        (build.bounds, build.overflow) = optimizations(&optimization)?;
-        build.skip_free_at_exit = skip_free_at_exit(&optimization);
-        build.prove_through_loops = prove_through_loops(&optimization);
-        build.called_from_c = artifact == "c-library";
-        Ok(Settings {
-            build,
-            words: ProjectWords {
-                target,
-                user_parallelism,
-                reentrancy_check,
-                optimization,
-                refuted_claims,
-                unproved_claims,
-                artifact,
-                symbol_prefix,
-                tests: std::env::var_os(TESTS_VAR).is_some(),
-                bind: None,
-                cpu: std::env::var(CPU_VAR)
-                    .ok()
-                    .filter(|level| !level.is_empty()),
-            },
-        })
+        Settings::of(
+            project_settings::project_settings_from_env(
+                crate::emit::default_target().name(),
+                &SettingsHost,
+            )
+            .map_err(refusal)?,
+        )
     }
 
     /// The cache's view of this build (ADR-021 D5): the key is
@@ -1826,13 +1720,7 @@ impl Project {
         // itself, which is what "build the project I am standing in" means.
         let layout = Layout::resolve(&start.join("nikaia.toml"));
         if !layout.in_project {
-            refuse!(
-                "There's no `nikaia.toml` in {} or any folder above it.\n\
-                 `nikaia build` needs a project. To lower a single file to Rust, \
-                 run `nikaia lower {}`.",
-                start.display(),
-                start.join("main.nika").display()
-            );
+            refuse!("{}", project_settings::project_settings_no_project(start));
         }
 
         let manifest = Manifest::read(&layout.root.join("nikaia.toml"))?;
@@ -1846,8 +1734,11 @@ impl Project {
         let settings = Settings::resolve(&manifest, target, user_parallelism)?;
         if let Some(missing) = settings.build.target.unbuildable() {
             refuse!(
-                "Building for `{}` isn't possible yet: {missing}",
-                settings.build.target.triple()
+                "{}",
+                project_settings::project_settings_unbuildable(
+                    settings.build.target.triple(),
+                    &missing
+                )
             );
         }
 
@@ -1870,16 +1761,12 @@ impl Project {
     /// build output: it is regenerated from `nikaia.toml` on every build and
     /// editing it would be editing something the next build overwrites.
     pub fn build_dir(&self) -> PathBuf {
-        self.own_dir().join("build")
+        project_settings::project_settings_build_dir(&self.root, &self.variant)
     }
 
     /// `target/nikaia/`, or a directory under it of the [`Self::variant`]'s.
     fn own_dir(&self) -> PathBuf {
-        let dir = self.root.join("target").join("nikaia");
-        match &self.variant {
-            Some(variant) => dir.join("variants").join(variant),
-            None => dir,
-        }
+        project_settings::project_settings_own_dir(&self.root, &self.variant)
     }
 
     /// Where the emitted Rust goes - **outside** [`Self::build_dir`], and that
@@ -1888,7 +1775,7 @@ impl Project {
     /// the package dirty the moment it was written, and every build would
     /// recompile.
     pub fn gen_dir(&self) -> PathBuf {
-        self.own_dir().join("gen")
+        project_settings::project_settings_gen_dir(&self.root, &self.variant)
     }
 
     /// **The switches, as a file Cargo can see** (ADR-021 D5).
@@ -1910,12 +1797,12 @@ impl Project {
     /// reason: a file *inside* the path package would make it dirty on every
     /// build rather than on a changed one.
     pub fn switches_path(&self) -> PathBuf {
-        self.gen_dir().join("switches")
+        project_settings::project_settings_switches_path(&self.root, &self.variant)
     }
 
     /// The ledger, in the project root (Part III 13.5).
     pub fn ledger_path(&self) -> PathBuf {
-        self.root.join("nikaia.contracts")
+        project_settings::project_settings_ledger_path(&self.root)
     }
 
     /// The packages this project depends on by path - see [`packages_of`].
@@ -3359,8 +3246,7 @@ pub fn wrapper_main() -> Result<i32> {
 /// wrapper was run by hand rather than by a project build, and then there is no
 /// switch anybody could flip between two runs.
 fn switches_beside(gen_dir: &Path) -> Option<PathBuf> {
-    let path = gen_dir.join("switches");
-    path.is_file().then_some(path)
+    project_settings::project_settings_switches_beside(gen_dir)
 }
 
 /// Record one invocation, if anybody asked. A trace that cannot be written is

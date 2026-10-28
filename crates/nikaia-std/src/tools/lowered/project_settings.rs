@@ -138,3 +138,162 @@ pub fn encoded_with_cpu(encoded: &Option<String>, plain: &Option<String>, cpu: &
     Some(flags.join("\x1f"))
 }
 
+pub(crate) const PROJECT_SETTINGS_TARGET_VAR: &str = "NIKAIA_BUILD_TARGET";
+
+pub(crate) const PROJECT_SETTINGS_PARALLELISM_VAR: &str = "NIKAIA_USER_PARALLELISM";
+
+pub(crate) const PROJECT_SETTINGS_REENTRANCY_VAR: &str = "NIKAIA_REENTRANCY_CHECK";
+
+pub(crate) const PROJECT_SETTINGS_OPTIMIZATION_VAR: &str = "NIKAIA_OPTIMIZATION";
+
+pub(crate) const PROJECT_SETTINGS_REFUTED_VAR: &str = "NIKAIA_REFUTED_CLAIMS";
+
+pub(crate) const PROJECT_SETTINGS_UNPROVED_VAR: &str = "NIKAIA_UNPROVED_CLAIMS";
+
+pub(crate) const PROJECT_SETTINGS_ARTIFACT_VAR: &str = "NIKAIA_BUILD_ARTIFACT";
+
+pub(crate) const PROJECT_SETTINGS_PREFIX_VAR: &str = "NIKAIA_SYMBOL_PREFIX";
+
+pub(crate) const PROJECT_SETTINGS_TESTS_VAR: &str = "NIKAIA_TESTS";
+
+pub(crate) const PROJECT_SETTINGS_CPU_VAR: &str = "NIKAIA_CPU";
+
+pub trait ProjectSettingsHost {
+    fn env_var(&self, name: &str) -> Option<String>;
+    fn native_cpu(&self, triple: &str) -> Result<String, Box<dyn std::error::Error>>;
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn project_settings_checked(target: String, user_parallelism: String, reentrancy_check: String, optimization: String, refuted: String, unproved: String, made: String, symbol_prefix: String, tests: bool, cpu: Option<String>) -> Result<ProjectWords, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    let refuted_claims = refuted_claims(refuted)?;
+    let unproved_claims = unproved_claims(unproved)?;
+    let artifact = artifact(made)?;
+    Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, cpu })
+}
+
+pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<String>, target: Option<String>, user_parallelism: Option<String>, default_target: String) -> Result<ProjectWords, Box<dyn std::error::Error>> {
+    let target = nikaia_std::index::or(match target.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || manifest("target", &default_target).into());
+    let user_parallelism = nikaia_std::index::or(match user_parallelism.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || manifest("user-parallelism", "no").into());
+    let reentrancy_check = manifest("reentrancy-check", "yes");
+    let optimization = manifest("optimization", "");
+    let refuted = manifest("refuted-claims", "error");
+    let unproved = manifest("unproved-claims", "error");
+    let made = manifest("artifact", "program");
+    let named = nikaia_std::index::or(package.as_deref(), || "program").replace('-', "_");
+    let symbol_prefix = manifest("symbol-prefix", &named);
+    Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, false, None)?)
+}
+
+pub fn project_settings_from_env<H: ProjectSettingsHost>(default_target: &str, host: &H) -> Result<ProjectWords, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    let target = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_TARGET_VAR).map(String::from), || String::from(default_target));
+    let user_parallelism = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_PARALLELISM_VAR), || "no".into());
+    let reentrancy_check = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_REENTRANCY_VAR), || "yes".into());
+    let optimization = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_OPTIMIZATION_VAR), || "".into());
+    let refuted = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_REFUTED_VAR), || "error".into());
+    let unproved = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_UNPROVED_VAR), || "error".into());
+    let made = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_ARTIFACT_VAR), || "program".into());
+    let symbol_prefix = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_PREFIX_VAR), || "program".into());
+    let tests = host.env_var(PROJECT_SETTINGS_TESTS_VAR).is_some();
+    let level = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_CPU_VAR), || "".into());
+    let cpu: Option<String> = if level.is_empty() { None } else { Some(level) };
+    Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, tests, cpu)?)
+}
+
+pub fn project_settings_refutations(words: &ProjectWords, refuted: &Option<String>, unproved: &Option<String>) -> Result<(String, String), nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    let refuted_word = match match refuted.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } {
+        Some(word) => refuted_claims(word)?,
+        None => words.refuted_claims.to_string(),
+    };
+    let unproved_word = match match unproved.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } {
+        Some(word) => unproved_claims(word)?,
+        None => words.unproved_claims.to_string(),
+    };
+    Ok((refuted_word, unproved_word))
+}
+
+pub fn project_settings_chosen_cpu(level: String, levels: &[String], target_name: &str) -> Result<Option<String>, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    if !levels.iter().any(|known| { AsRef::<str>::as_ref(&(known)) == AsRef::<str>::as_ref(&(level)) }) {
+        let named = levels.iter().map(|known| { format!("`{}`", known) }).collect::<Vec<_>>().join(", ");
+        return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`--cpu={}` is not a CPU level of `{}`. Its levels are: {}.", level, target_name, named)), &"project_settings_chosen_cpu"));
+    }
+    Ok(if level != *nikaia_std::index::get(&levels, 0) { Some(level) } else { None })
+}
+
+pub fn project_settings_cpu_key<H: ProjectSettingsHost>(words: &ProjectWords, triple: &str, host: &H) -> Result<String, Box<dyn std::error::Error>> {
+    let level = match match words.cpu.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return Ok(String::from("")) };
+    Ok(match &*level {
+        "native" => host.native_cpu(triple)?,
+        _ => level,
+    })
+}
+
+pub fn project_settings_cpu_rustflags<H: ProjectSettingsHost>(words: &ProjectWords, triple: &str, host: &H) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    if words.cpu.is_none() { return Ok(None); }
+    let encoded = host.env_var("CARGO_ENCODED_RUSTFLAGS");
+    let plain = host.env_var("RUSTFLAGS");
+    Ok(encoded_with_cpu(&encoded, &plain, &project_settings_cpu_key(words, triple, host)?))
+}
+
+pub fn project_settings_as_env(words: &ProjectWords) -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = vec![(PROJECT_SETTINGS_TARGET_VAR.to_string(), words.target.to_string()), (PROJECT_SETTINGS_PARALLELISM_VAR.to_string(), words.user_parallelism.to_string()), (PROJECT_SETTINGS_REENTRANCY_VAR.to_string(), words.reentrancy_check.to_string()), (PROJECT_SETTINGS_OPTIMIZATION_VAR.to_string(), words.optimization.to_string()), (PROJECT_SETTINGS_REFUTED_VAR.to_string(), words.refuted_claims.to_string()), (PROJECT_SETTINGS_UNPROVED_VAR.to_string(), words.unproved_claims.to_string()), (PROJECT_SETTINGS_ARTIFACT_VAR.to_string(), words.artifact.to_string()), (PROJECT_SETTINGS_PREFIX_VAR.to_string(), words.symbol_prefix.to_string())];
+    if words.tests { env.push((PROJECT_SETTINGS_TESTS_VAR.to_string(), String::from("1"))); }
+    match match words.cpu.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } {
+        Some(level) => { env.push((PROJECT_SETTINGS_CPU_VAR.to_string(), level)); },
+        None => { },
+    }
+    env
+}
+
+pub fn project_settings_no_project(start: &std::path::Path) -> String {
+    let main = nikaia_std::fs::path::join(&(start), std::path::Path::new(&("main.nika")));
+    format!("There's no `nikaia.toml` in {} or any folder above it.\n`nikaia build` needs a project. To lower a single file to Rust, run `nikaia lower {}`.", nikaia_std::fs::path::display(&(start)), nikaia_std::fs::path::display(&(main)))
+}
+
+pub fn project_settings_unbuildable(triple: &str, missing: &str) -> String { format!("Building for `{}` isn't possible yet: {}", triple, missing) }
+
+pub fn project_settings_own_dir(root: &std::path::Path, variant: &Option<String>) -> fs::Path {
+    let dir = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("target")))), std::path::Path::new(&("nikaia")));
+    match match variant.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } {
+        Some(ref named) => nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("variants")))), std::path::Path::new(&(named))),
+        None => dir,
+    }
+}
+
+pub fn project_settings_build_dir(root: &std::path::Path, variant: &Option<String>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_own_dir(root, &variant)), std::path::Path::new(&("build"))) }
+
+pub fn project_settings_gen_dir(root: &std::path::Path, variant: &Option<String>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_own_dir(root, &variant)), std::path::Path::new(&("gen"))) }
+
+pub fn project_settings_switches_path(root: &std::path::Path, variant: &Option<String>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_gen_dir(root, &variant)), std::path::Path::new(&("switches"))) }
+
+pub fn project_settings_ledger_path(root: &std::path::Path) -> fs::Path { nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.contracts"))) }
+
+pub fn project_settings_switches_beside(gen_dir: &std::path::Path) -> Option<fs::Path> {
+    let path = nikaia_std::fs::path::join(&(gen_dir), std::path::Path::new(&("switches")));
+    let found = match fs::metadata(&path, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    };
+    if found.is_file() { Some(path) } else { None }
+}
+
