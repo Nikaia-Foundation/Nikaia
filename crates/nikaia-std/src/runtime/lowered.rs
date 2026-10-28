@@ -7,6 +7,10 @@ pub use nikaia_std::error::Full;
 #[allow(unused_imports)]
 pub use nikaia_std::abort::panic;
 #[allow(unused_imports)]
+use nikaia_std::bytes::Bytes;
+#[allow(unused_imports)]
+use nikaia_std::bytes::{ByteCopy as _, ByteReads as _};
+#[allow(unused_imports)]
 use nikaia_std::text;
 
 mod http1_lowered {

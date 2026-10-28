@@ -678,6 +678,12 @@ fn lower_tools_files_cached(
     }
     rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n");
     rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::abort::panic;\n");
+    // **`Bytes` as a program has it** (Part I 1.3, the prelude): the type,
+    // its constructor and the reads a `ref Bytes` (lowered `&[u8]`) answers.
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::bytes::Bytes;\n");
+    rust.push_str(
+        "#[allow(unused_imports)]\nuse nikaia_std::bytes::{ByteCopy as _, ByteReads as _};\n",
+    );
     imports.sort();
     for import in imports {
         rust.push_str("#[allow(unused_imports)]\n");
