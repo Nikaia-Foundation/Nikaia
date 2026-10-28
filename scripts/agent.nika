@@ -15,7 +15,8 @@
 // the gate step it appends the run's row (`tokenspeed.nika --short`, read from the
 // run's transcript under ~/.claude/projects) to the Runs table of
 // docs/tokenspeed.md, once per agent id; it does not commit the file, the
-// supervisor's commit takes it. Before any escalation it resumes the run's
+// supervisor's commit takes it. A brief's `Cut: PATH:A-B` lines are converted
+// first (`agent_draft`) and the draft named in the prompt. Before any escalation it resumes the run's
 // session once and writes its answer to what held it up to BRIEF.debrief.md
 // (the cost goes to DIR/cost.txt). `--dry-run` prints the command only.
 
@@ -68,6 +69,40 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
     v.push("--allowedTools")
     v.push(agent_tools(agent))
     return v
+}
+
+// The converter's draft of the brief's `Cut: PATH:A-B` lines (L2, 2026-10-28),
+// converted in one run with the options of its `Convert:` line: BRIEF's stem
+// `.draft.nika`, `.draft.nika.notes` (stderr) and `.draft.nika.rs` (the Rust
+// read). Returns the draft's path, or "" without Cut: lines or converter.
+fn agent_draft(abs: String, body: String) -> String throws {
+    let converter = "crates/rs2nika/convert/target/nikaia/bin/rs2nika"
+    let mut rust: Vec[String] = []
+    let mut options: Vec[String] = []
+    for line in body.split("\n") {
+        let t = line.trim()
+        if t.starts_with("Cut: ") {
+            let cut = (t.strip_prefix("Cut: ") ?? "").trim().clone()
+            let at = cut.split(":").collect()
+            if at.len() == 2 {
+                let span = at[1].replace("-", ",")
+                rust.push(process::run("sed", ["-n", f"{span}p", at[0].clone()]).stdout.clone())
+            }
+        } else if t.starts_with("Convert: ") {
+            for word in (t.strip_prefix("Convert: ") ?? "").trim().split(" ") { if word != "" { options.push(word.clone()) } }
+        }
+    }
+    if rust.len() == 0 || !fs::exists(converter, fs::Root::Anywhere) { return "" }
+    let mut stem = abs.clone()
+    if abs.ends_with(".md") { stem = (abs.strip_suffix(".md") ?? "").clone() }
+    let draft = f"{stem}.draft.nika"
+    fs::write(f"{draft}.rs", fs::Root::Anywhere, rust.join(""))
+    options.push("--file")
+    options.push(f"{draft}.rs")
+    let out = process::run(converter, options)
+    fs::write(draft.clone(), fs::Root::Anywhere, out.stdout.clone())
+    fs::write(f"{draft}.notes", fs::Root::Anywhere, out.stderr.clone())
+    return draft
 }
 
 // The debrief's question, asked in the run's own session without tools.
@@ -210,7 +245,11 @@ fn main() throws {
         return
     }
     let wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()
-    let claude_args = agent_args(abs.clone(), text, wanted.clone())
+    let mut claude_args = agent_args(abs.clone(), text.clone(), wanted.clone())
+    if !dry {
+        let draft = agent_draft(abs.clone(), text.clone())
+        if draft != "" { claude_args[1] = claude_args[1].clone() + f". The converter's draft of its Cut: lines is {draft}, its notes {draft}.notes, the Rust it read {draft}.rs" }
+    }
     if dry {
         println(claude + " " + claude_args.join(" "))
         return
