@@ -669,7 +669,20 @@ impl TrEm {
         }
         let inner = f"{ind}    "
         let mut out: Vec[String] = [head]
+        // `None` first: `Some(_)` is `_`, which would also take the `null`
+        // (the two never overlap in Rust, so the order is free)
+        let mut ordered: Vec[i64] = []
         for a in arms {
+            if self.is_none_pat(self.t.nth(a, 0)) {
+                ordered.push(a)
+            }
+        }
+        for a in arms {
+            if !self.is_none_pat(self.t.nth(a, 0)) {
+                ordered.push(a)
+            }
+        }
+        for a in ordered {
             let ns = self.nodes(a)
             let p = ns[0]
             let body = ns[ns.len() - 1]
