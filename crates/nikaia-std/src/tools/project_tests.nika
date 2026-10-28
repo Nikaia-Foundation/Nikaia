@@ -1,0 +1,223 @@
+// **The test runner's discovery and verdicts** (P3a, #125): what
+// `crates/nikaia/src/project.rs` did to find a package's output tests and test
+// programs, to read what they expect, and to say whether a test passed, moved.
+// `project.rs` keeps the run loop (`run_tests`, `outcome_of`,
+// `run_program_test`, `bless`, `bless_program`, `explain_output`), the
+// `Sandbox` and the process spawns, and calls these; the three structs are
+// Nikaia's and `project.rs` re-exports them.
+//
+// **What a test expects is `Bytes`**: a file is read as bytes and compared as
+// bytes, never as text that might not be (ADR-269 D22, ADR-247 D2).
+
+use std::fs
+use std::collections
+
+/// **What one test did, at one setting** ([ADR-269](../../../docs/specification/adr/adr-269.md) D1).
+pub struct ProjectTestsOutcome {
+    /// Whether the process ended successfully.
+    pub ended_well: bool,
+    pub passed: bool,
+    pub stdout: Bytes,
+    pub stderr: String,
+    /// Each file the test's `NAME.out/` names, and what the program wrote
+    /// under that name - nothing where it wrote nothing
+    /// ([ADR-247](../../../docs/specification/adr/adr-247.md) D2).
+    pub files: Vec[(String, Bytes?)],
+}
+
+/// **An output test** ([ADR-269](../../../docs/specification/adr/adr-269.md) D13,
+/// [ADR-247](../../../docs/specification/adr/adr-247.md) D2): named by a
+/// `tests/NAME.stdout` or a `tests/NAME.out/`, with what goes in beside them.
+pub struct OutputTest {
+    pub name: String,
+    /// The package's `tests/`, where its expectations are blessed to.
+    pub dir: fs::Path,
+    /// `NAME.stdout`, where there is one.
+    pub stdout: Bytes?,
+    /// `NAME.stderr`, where there is one (ADR-269 D22).
+    pub stderr: Bytes?,
+    /// `NAME.out/`: each file by the name it has under the working directory.
+    pub files: Vec[(String, Bytes)],
+    /// `NAME.in/`, copied into the working directory before the run.
+    pub inputs: fs::Path?,
+    pub stdin: Bytes,
+    pub args: Vec[String],
+}
+
+/// **A test program** ([ADR-269](../../../docs/specification/adr/adr-269.md)
+/// D22): `tests/NAME.nika`, with what it must produce beside it.
+pub struct ProgramTest {
+    pub name: String,
+    pub dir: fs::Path,
+    pub stdout: Bytes?,
+    /// What it writes to standard error, or, where it is refused, the
+    /// compiler's whole message (it starts `error`).
+    pub stderr: Bytes?,
+}
+
+/// Every file under `dir`, by its name relative to it with `/` between the
+/// parts, sorted.
+fn files_under(dir: ref fs::Path) -> Vec[(String, fs::Path)] throws {
+    let mut found: Vec[(String, fs::Path)] = fs::walk(dir, fs::Root::Anywhere).iter().map(fn(name) { (name.text_of(), dir.join(name)) }).collect()
+    found.sort()
+    return found
+}
+
+/// Whether `path` names a directory; a name that is not there names none.
+fn project_tests_is_dir(path: ref fs::Path) -> bool {
+    let found = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return found.is_dir()
+}
+
+/// Whether `path` names a file; a name that is not there names none.
+fn project_tests_is_file(path: ref fs::Path) -> bool {
+    let found = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return found.is_file()
+}
+
+/// A file's bytes, nothing where it is not there; a file that is there and
+/// cannot be read is the failure.
+fn project_tests_optional(path: ref fs::Path) -> Bytes? throws {
+    if !fs::exists(path, fs::Root::Anywhere) {
+        return null
+    }
+    return fs::read(path, fs::Root::Anywhere)
+}
+
+/// The names in `dir` that end in `.ending`, without it, sorted: a test's
+/// name is the file's stem.
+fn project_tests_stems(dir: ref fs::Path, ending: String, want_dir: bool) -> collections::BTreeSet[String] {
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    let entries = fs::read_dir(dir, fs::Root::Anywhere) catch { return names }
+    for name in entries.iter() {
+        let text = name.text_of()
+        let stem: String = (text.strip_suffix(ending) ?? "").clone()
+        if stem.is_empty() {
+            continue
+        }
+        let path = dir.join(name)
+        let right = match want_dir {
+            true => project_tests_is_dir(path),
+            false => project_tests_is_file(path),
+        }
+        if right {
+            names.insert(stem)
+        }
+    }
+    return names
+}
+
+/// The package's output tests, by name. A `tests/` that is not there holds
+/// none; a file that is there and cannot be read is an error, not a test that
+/// quietly has no input.
+pub fn output_tests(root: ref fs::Path) -> Vec[OutputTest] throws {
+    let dir = root.join("tests")
+    let mut names = project_tests_stems(dir, ".stdout", false)
+    for name in project_tests_stems(dir, ".out", true) {
+        names.insert(name)
+    }
+    let mut tests: Vec[OutputTest] = []
+    for name in names {
+        // A `NAME.nika` beside them makes the files that program's (D22).
+        if project_tests_is_file(dir.join(f"{name}.nika")) {
+            continue
+        }
+        let stdout = project_tests_optional(dir.join(f"{name}.stdout"))
+        let out = dir.join(f"{name}.out")
+        let mut files: Vec[(String, Bytes)] = []
+        if project_tests_is_dir(out) {
+            for (relative, path) in files_under(out) {
+                files.push((relative, fs::read(path, fs::Root::Anywhere)))
+            }
+        }
+        let given = dir.join(f"{name}.in")
+        let inputs: fs::Path? = match project_tests_is_dir(given) {
+            true => given,
+            false => null,
+        }
+        let stdin = project_tests_optional(dir.join(f"{name}.stdin")) ?? Bytes([])
+        let mut args: Vec[String] = []
+        let listed = project_tests_optional(dir.join(f"{name}.args"))
+        if listed != null {
+            let bytes = listed ?? Bytes([])
+            args = bytes.text().lines().map(fn(line) { line.clone() }).collect()
+        }
+        let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
+        tests.push(OutputTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, files: files, inputs: inputs, stdin: stdin, args: args })
+    }
+    return tests
+}
+
+/// Copy every file under `from` to the same name under `to`, making the
+/// directories on the way.
+pub fn copy_into(from: ref fs::Path, to: ref fs::Path) throws {
+    for (relative, path) in files_under(from) {
+        let target = to.join(relative)
+        match target.parent() {
+            null => {}
+            parent => fs::create_dir(parent, fs::Root::Anywhere; recursive: true),
+        }
+        fs::copy(path, target, fs::Root::Anywhere)
+    }
+}
+
+/// The package's test programs, by name.
+pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
+    let dir = root.join("tests")
+    let mut tests: Vec[ProgramTest] = []
+    for name in project_tests_stems(dir, ".nika", false) {
+        let stdout = project_tests_optional(dir.join(f"{name}.stdout"))
+        let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
+        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr })
+    }
+    return tests
+}
+
+/// Whether a stderr file holds a compiler's refusal, whatever stage produced
+/// it: a checker's `error[NK…]` or a parse error's plain `error:` (ADR-269 D22,
+/// #834). rustc's own failure is told apart by its `could not compile`.
+pub fn is_refusal(text: String) -> bool {
+    return (text.starts_with("error") || text.contains("\nerror")) && !does_not_compile(text)
+}
+
+/// Whether the build failed in rustc: not a refusal by the Nikaia compiler.
+pub fn does_not_compile(text: String) -> bool {
+    return text.contains("could not compile")
+}
+
+/// What names an output test in its report: its `.stdout`, or its `.out/`.
+pub fn named_by(output: ref OutputTest) -> String {
+    return match output.stdout != null {
+        true => f"{output.name}.stdout",
+        false => f"{output.name}.out/",
+    }
+}
+
+/// **A line difference** ([ADR-247](../../../docs/specification/adr/adr-247.md)
+/// D4): `-` an expected line, `+` a produced one, and two lines of context
+/// around each change, from a longest common subsequence of the lines.
+pub fn project_tests_difference(expected: ref Bytes, produced: ref Bytes) -> String {
+    let want = expected.text() catch { return "  the bytes differ, and they are not text\n" }
+    let got = produced.text() catch { return "  the bytes differ, and they are not text\n" }
+    // **The lines are Nikaia's** (`tools/diffs.nika`, #125).
+    return differing_lines(want, got)
+}
+
+/// Whether every setting did the same.
+pub fn project_tests_agree(outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> bool {
+    return (1..<outcomes.len()).all(fn(at) { outcomes[at - 1].1 == outcomes[at].1 })
+}
+
+/// Print one test's line, and say whether it passed: at every setting, and the
+/// same way at each.
+pub fn project_tests_verdict(label: String, outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> bool {
+    let agree = project_tests_agree(outcomes)
+    let passed = agree && (0..<outcomes.len()).all(fn(at) { outcomes[at].1.passed })
+    let said = match (passed, agree) {
+        (true, _) => "ok",
+        (false, true) => "FAILED",
+        (false, false) => "FAILED (the settings disagree)",
+    }
+    println(f"{label} ... {said}")
+    return passed
+}

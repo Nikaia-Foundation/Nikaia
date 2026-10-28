@@ -1619,6 +1619,14 @@ mod project_check_lowered {
 #[allow(unused_imports)]
 pub use project_check_lowered::*;
 
+mod project_tests_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/project_tests.rs");
+}
+#[allow(unused_imports)]
+pub use project_tests_lowered::*;
+
 mod proofs_book_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2645,6 +2653,10 @@ pub mod paths {
 pub mod project_check {
     #[allow(unused_imports)]
     pub use super::{project_check_summary, project_check_let_refuted_claims_through, project_check_let_unproved_claims_through, project_check_lint_where_nothing_crosses, project_check_locked_proofs, project_check_locked_ledger_missing, project_check_locked_ledger_changed};
+}
+pub mod project_tests {
+    #[allow(unused_imports)]
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, program_tests, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]

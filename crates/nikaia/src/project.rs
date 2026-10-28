@@ -25,7 +25,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use nikaia_std::bytes::Bytes;
+use nikaia_std::rt::exec::block_on;
 use nikaia_std::tools::project_check;
+use nikaia_std::tools::project_tests::{self, ProjectTestsOutcome as Outcome};
+pub use nikaia_std::tools::project_tests::{OutputTest, ProgramTest};
 
 use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
@@ -3399,136 +3403,9 @@ fn executable_in(messages: &str) -> Option<std::path::PathBuf> {
         .next_back()
 }
 
-/// **What one test did, at one setting** ([ADR-269](../../docs/specification/adr/adr-269.md) D1).
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Outcome {
-    /// Whether the process ended successfully.
-    ended_well: bool,
-    passed: bool,
-    stdout: Vec<u8>,
-    stderr: String,
-    /// Each file the test's `NAME.out/` names, and what the program wrote
-    /// under that name - nothing where it wrote nothing
-    /// ([ADR-247](../../docs/specification/adr/adr-247.md) D2).
-    files: Vec<(String, Option<Vec<u8>>)>,
-}
-
-/// **An output test** ([ADR-269](../../docs/specification/adr/adr-269.md) D13,
-/// [ADR-247](../../docs/specification/adr/adr-247.md) D2): named by a
-/// `tests/NAME.stdout` or a `tests/NAME.out/`, with what goes in beside them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OutputTest {
-    pub name: String,
-    /// The package's `tests/`, where its expectations are blessed to.
-    pub dir: PathBuf,
-    /// `NAME.stdout`, where there is one.
-    pub stdout: Option<Vec<u8>>,
-    /// `NAME.stderr`, where there is one (ADR-269 D22).
-    pub stderr: Option<Vec<u8>>,
-    /// `NAME.out/`: each file by the name it has under the working directory.
-    pub files: Vec<(String, Vec<u8>)>,
-    /// `NAME.in/`, copied into the working directory before the run.
-    pub inputs: Option<PathBuf>,
-    pub stdin: Vec<u8>,
-    pub args: Vec<String>,
-}
-
-/// Every file under `dir`, by its name relative to it with `/` between the
-/// parts, sorted.
-fn files_under(dir: &Path) -> Result<Vec<(String, PathBuf)>> {
-    let mut found = Vec::new();
-    let mut pending = vec![dir.to_path_buf()];
-    while let Some(at) = pending.pop() {
-        for entry in std::fs::read_dir(&at).with_context(|| format!("reading {}", at.display()))? {
-            let path = entry?.path();
-            if path.is_dir() {
-                pending.push(path);
-                continue;
-            }
-            let relative = path
-                .strip_prefix(dir)
-                .expect("a file under the directory walked")
-                .components()
-                .map(|c| c.as_os_str().to_string_lossy().into_owned())
-                .collect::<Vec<_>>()
-                .join("/");
-            found.push((relative, path));
-        }
-    }
-    found.sort();
-    Ok(found)
-}
-
-/// The package's output tests, by name. A `tests/` that is not there holds
-/// none; a file that is there and cannot be read is an error, not a test that
-/// quietly has no input.
+/// The package's output tests, by name (`tools/project_tests.nika`).
 pub fn output_tests(root: &Path) -> Result<Vec<OutputTest>> {
-    let dir = root.join("tests");
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        return Ok(Vec::new());
-    };
-    let mut names: BTreeSet<String> = BTreeSet::new();
-    for entry in entries.filter_map(|entry| entry.ok()) {
-        let path = entry.path();
-        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned());
-        match (path.extension().and_then(|x| x.to_str()), stem) {
-            (Some("stdout"), Some(stem)) if path.is_file() => {
-                names.insert(stem);
-            }
-            (Some("out"), Some(stem)) if path.is_dir() => {
-                names.insert(stem);
-            }
-            _ => {}
-        }
-    }
-    let optional = |path: PathBuf| -> Result<Option<Vec<u8>>> {
-        match std::fs::read(&path) {
-            Ok(bytes) => Ok(Some(bytes)),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(error) => Err(error).with_context(|| format!("reading {}", path.display())),
-        }
-    };
-    // A `NAME.nika` beside them makes the files that program's (D22).
-    names.retain(|name| !dir.join(format!("{name}.nika")).is_file());
-    names
-        .into_iter()
-        .map(|name| {
-            let stdout = optional(dir.join(format!("{name}.stdout")))?;
-            let out = dir.join(format!("{name}.out"));
-            let files = match out.is_dir() {
-                true => files_under(&out)?
-                    .into_iter()
-                    .map(|(relative, path)| {
-                        std::fs::read(&path)
-                            .with_context(|| format!("reading {}", path.display()))
-                            .map(|bytes| (relative, bytes))
-                    })
-                    .collect::<Result<Vec<_>>>()?,
-                false => Vec::new(),
-            };
-            let inputs = Some(dir.join(format!("{name}.in"))).filter(|p| p.is_dir());
-            let stdin = optional(dir.join(format!("{name}.stdin")))?.unwrap_or_default();
-            let args = optional(dir.join(format!("{name}.args")))?
-                .map(|bytes| {
-                    String::from_utf8_lossy(&bytes)
-                        .lines()
-                        .map(str::to_string)
-                        .collect()
-                })
-                .unwrap_or_default();
-            let stderr = optional(dir.join(format!("{name}.stderr")))?;
-            Ok(OutputTest {
-                name,
-                dir: dir.clone(),
-                stdout,
-                stderr,
-                files,
-                inputs,
-                stdin,
-                args,
-            })
-        })
-        .collect()
+    block_on(project_tests::output_tests(root)).map_err(|e| anyhow!("{e}"))
 }
 
 /// **A directory of a test's own, removed when it goes**
@@ -3557,18 +3434,6 @@ impl Drop for Sandbox {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
-}
-
-fn copy_into(from: &Path, to: &Path) -> Result<()> {
-    for (relative, path) in files_under(from)? {
-        let target = to.join(&relative);
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::copy(&path, &target)
-            .with_context(|| format!("copying {} for a test", path.display()))?;
-    }
-    Ok(())
 }
 
 /// Run a built program with its arguments and its standard input, in `dir`,
@@ -3651,7 +3516,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 Outcome {
                     ended_well,
                     passed: ended_well,
-                    stdout: out.stdout,
+                    stdout: out.stdout.into(),
                     stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
                     files: Vec::new(),
                 },
@@ -3663,7 +3528,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
             shown_path(&test.path, suite.root),
             test.line
         );
-        if !verdict(&label, &outcomes) {
+        if !project_tests::project_tests_verdict(&label, &outcomes) {
             failed.push((label, outcomes, None));
         }
     }
@@ -3672,23 +3537,26 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
         for (setting, binary) in suite.programs {
             let own = Sandbox::new()?;
             if let Some(inputs) = &output.inputs {
-                copy_into(inputs, &own.0)?;
+                block_on(project_tests::copy_into(inputs, &own.0)).map_err(|e| anyhow!("{e}"))?;
             }
             let out = outcome_of(binary, &output.args, &output.stdin, &own.0, &own.0)?;
-            let files: Vec<(String, Option<Vec<u8>>)> = output
+            let files: Vec<(String, Option<Bytes>)> = output
                 .files
                 .iter()
-                .map(|(relative, _)| (relative.clone(), std::fs::read(own.0.join(relative)).ok()))
+                .map(|(relative, _)| {
+                    let got = std::fs::read(own.0.join(relative)).ok();
+                    (relative.clone(), got.map(Bytes::from))
+                })
                 .collect();
             let ended_well = out.status.success();
             let printed_right = output
                 .stdout
                 .as_ref()
-                .is_none_or(|want| *want == out.stdout);
+                .is_none_or(|want| *want == *out.stdout);
             let said_right = output
                 .stderr
                 .as_ref()
-                .is_none_or(|want| *want == out.stderr);
+                .is_none_or(|want| *want == *out.stderr);
             let wrote_right = output
                 .files
                 .iter()
@@ -3699,13 +3567,17 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 Outcome {
                     ended_well,
                     passed: ended_well && printed_right && said_right && wrote_right,
-                    stdout: out.stdout,
+                    stdout: out.stdout.into(),
                     stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
                     files,
                 },
             ));
         }
-        let label = format!("output \"{}\" (tests/{})", output.name, named_by(output));
+        let label = format!(
+            "output \"{}\" (tests/{})",
+            output.name,
+            project_tests::named_by(output)
+        );
         if suite.bless {
             match bless(output, &outcomes)? {
                 Blessed::Unchanged => println!("{label} ... ok"),
@@ -3717,7 +3589,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
             }
             continue;
         }
-        if !verdict(&label, &outcomes) {
+        if !project_tests::project_tests_verdict(&label, &outcomes) {
             failed.push((label, outcomes, Some(output)));
         }
     }
@@ -3741,7 +3613,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
             }
             continue;
         }
-        if !verdict(&label, &outcomes) {
+        if !project_tests::project_tests_verdict(&label, &outcomes) {
             failed.push((label, outcomes, None));
         }
     }
@@ -3775,65 +3647,9 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
     Ok(if failed.is_empty() { 0 } else { 1 })
 }
 
-/// **A test program** ([ADR-269](../../docs/specification/adr/adr-269.md)
-/// D22): `tests/NAME.nika`, with what it must produce beside it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProgramTest {
-    pub name: String,
-    pub dir: PathBuf,
-    pub stdout: Option<Vec<u8>>,
-    /// What it writes to standard error, or, where it is refused, the
-    /// compiler's whole message (it starts `error`).
-    pub stderr: Option<Vec<u8>>,
-}
-
-/// The package's test programs, by name.
+/// The package's test programs, by name (`tools/project_tests.nika`).
 pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
-    let dir = root.join("tests");
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        return Ok(Vec::new());
-    };
-    let mut names: BTreeSet<String> = BTreeSet::new();
-    for entry in entries.filter_map(|entry| entry.ok()) {
-        let path = entry.path();
-        if path.is_file()
-            && path.extension().and_then(|x| x.to_str()) == Some("nika")
-            && let Some(stem) = path.file_stem()
-        {
-            names.insert(stem.to_string_lossy().into_owned());
-        }
-    }
-    let optional = |path: PathBuf| -> Result<Option<Vec<u8>>> {
-        match std::fs::read(&path) {
-            Ok(bytes) => Ok(Some(bytes)),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(error) => Err(error).with_context(|| format!("reading {}", path.display())),
-        }
-    };
-    names
-        .into_iter()
-        .map(|name| {
-            Ok(ProgramTest {
-                stdout: optional(dir.join(format!("{name}.stdout")))?,
-                stderr: optional(dir.join(format!("{name}.stderr")))?,
-                dir: dir.clone(),
-                name,
-            })
-        })
-        .collect()
-}
-
-/// Whether a stderr file holds a compiler's refusal, whatever stage produced
-/// it: a checker's `error[NK…]` or a parse error's plain `error:` (ADR-269 D22,
-/// #834). rustc's own failure is told apart by its `could not compile`.
-fn is_refusal(text: &[u8]) -> bool {
-    (text.starts_with(b"error") || text.windows(6).any(|w| w == b"\nerror"))
-        && !does_not_compile(text)
-}
-
-/// Whether the build failed in rustc: not a refusal by the Nikaia compiler.
-fn does_not_compile(text: &[u8]) -> bool {
-    text.windows(17).any(|w| w == b"could not compile")
+    block_on(project_tests::program_tests(root)).map_err(|e| anyhow!("{e}"))
 }
 
 /// **Build and run one test program** in a package of its own, in a directory
@@ -3880,7 +3696,7 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
     let built = run("build", &own.0)?;
     if !built.status.success() {
         let mut shown = relocate(&built.stderr);
-        let broken = !is_refusal(shown.as_bytes());
+        let broken = !project_tests::is_refusal(&shown);
         if broken {
             shown = format!("the program does not compile (rustc failed, not a refusal):\n{shown}");
         }
@@ -3891,23 +3707,22 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
                     .stderr
                     .as_deref()
                     .is_some_and(|want| want == shown.as_bytes()),
-            stdout: Vec::new(),
+            stdout: Bytes::default(),
             stderr: shown,
             files: Vec::new(),
         });
     }
     let out = run("run", &own.0)?;
     let ended_well = out.status.success();
-    let printed_right = test.stdout.as_ref().is_none_or(|want| *want == out.stdout);
+    let printed_right = test.stdout.as_ref().is_none_or(|want| *want == *out.stdout);
     let said = relocate(&out.stderr);
-    let said_right = test
-        .stderr
-        .as_ref()
-        .is_none_or(|want| !is_refusal(want) && *want == said.as_bytes());
+    let said_right = test.stderr.as_ref().is_none_or(|want| {
+        !project_tests::is_refusal(&String::from_utf8_lossy(want)) && *want == *said.as_bytes()
+    });
     Ok(Outcome {
         ended_well,
         passed: ended_well && printed_right && said_right,
-        stdout: out.stdout,
+        stdout: out.stdout.into(),
         stderr: said,
         files: Vec::new(),
     })
@@ -3924,7 +3739,7 @@ fn bless_program(test: &ProgramTest, outcomes: &[(String, Outcome)]) -> Result<B
     if !agree {
         return Ok(Blessed::Refused("the settings disagree"));
     }
-    let refused = !first.ended_well && is_refusal(first.stderr.as_bytes());
+    let refused = !first.ended_well && project_tests::is_refusal(&first.stderr);
     if !first.ended_well && !refused && first.stderr.starts_with("the program does not compile") {
         return Ok(Blessed::Refused("the program does not compile"));
     }
@@ -3947,14 +3762,6 @@ fn bless_program(test: &ProgramTest, outcomes: &[(String, Outcome)]) -> Result<B
     Ok(Blessed::Written)
 }
 
-/// What names an output test in its report: its `.stdout`, or its `.out/`.
-fn named_by(output: &OutputTest) -> String {
-    match output.stdout.is_some() {
-        true => format!("{}.stdout", output.name),
-        false => format!("{}.out/", output.name),
-    }
-}
-
 /// **What an output test got wrong, as differences**
 /// ([ADR-247](../../docs/specification/adr/adr-247.md) D4).
 fn explain_output(output: &OutputTest, outcome: &Outcome) {
@@ -3965,37 +3772,30 @@ fn explain_output(output: &OutputTest, outcome: &Outcome) {
         && *want != outcome.stdout
     {
         println!("standard output (- expected, + printed):");
-        print!("{}", difference(want, &outcome.stdout));
+        print!(
+            "{}",
+            project_tests::project_tests_difference(want, &outcome.stdout)
+        );
     }
     if let Some(want) = &output.stderr
         && *want != outcome.stderr.as_bytes()
     {
         println!("standard error (- expected, + written):");
-        print!("{}", difference(want, outcome.stderr.as_bytes()));
+        print!(
+            "{}",
+            project_tests::project_tests_difference(want, outcome.stderr.as_bytes())
+        );
     }
     for ((relative, want), (_, got)) in output.files.iter().zip(&outcome.files) {
         match got {
             None => println!("{relative}: not written"),
             Some(got) if got != want => {
                 println!("{relative} (- expected, + written):");
-                print!("{}", difference(want, got));
+                print!("{}", project_tests::project_tests_difference(want, got));
             }
             Some(_) => {}
         }
     }
-}
-
-/// **A line difference** ([ADR-247](../../docs/specification/adr/adr-247.md)
-/// D4): `-` an expected line, `+` a produced one, and two lines of context
-/// around each change, from a longest common subsequence of the lines.
-fn difference(expected: &[u8], produced: &[u8]) -> String {
-    let (Ok(expected), Ok(produced)) =
-        (std::str::from_utf8(expected), std::str::from_utf8(produced))
-    else {
-        return "  the bytes differ, and they are not text\n".to_string();
-    };
-    // **The lines are Nikaia's** (`tools/diffs.nika`, #125).
-    nikaia_std::tools::diffs::differing_lines(expected, produced)
 }
 
 /// What `--bless` did with one output test.
@@ -4051,20 +3851,6 @@ fn bless(output: &OutputTest, outcomes: &[(String, Outcome)]) -> Result<Blessed>
 /// A test that failed: what it is called, what each setting did, and the
 /// output test it is, where it is one.
 type Failed<'a> = (String, Vec<(String, Outcome)>, Option<&'a OutputTest>);
-
-/// Print one test's line, and say whether it passed: at every setting, and the
-/// same way at each.
-fn verdict(label: &str, outcomes: &[(String, Outcome)]) -> bool {
-    let agree = outcomes.windows(2).all(|pair| pair[0].1 == pair[1].1);
-    let passed = agree && outcomes.iter().all(|(_, o)| o.passed);
-    let said = match (passed, agree) {
-        (true, _) => "ok",
-        (false, true) => "FAILED",
-        (false, false) => "FAILED (the settings disagree)",
-    };
-    println!("{label} ... {said}");
-    passed
-}
 
 /// A test's file as the project names it.
 fn shown_path(path: &Path, root: &Path) -> String {
@@ -4390,15 +4176,15 @@ mod tests {
     /// #823: only the Nikaia compiler's `error[NKxxxx]` is a refusal.
     #[test]
     fn a_rustc_failure_is_no_refusal() {
-        assert!(is_refusal(b"error[NK1103]: mismatched\n"));
-        assert!(is_refusal(b"error: expected `)`\n"));
-        assert!(!is_refusal(
-            b"error[E0308]: mismatched\nerror: could not compile `p`\n"
+        assert!(project_tests::is_refusal("error[NK1103]: mismatched\n"));
+        assert!(project_tests::is_refusal("error: expected `)`\n"));
+        assert!(!project_tests::is_refusal(
+            "error[E0308]: mismatched\nerror: could not compile `p`\n"
         ));
-        assert!(!is_refusal(
-            b"error[NK1103]: x\nerror: could not compile `p`\n"
+        assert!(!project_tests::is_refusal(
+            "error[NK1103]: x\nerror: could not compile `p`\n"
         ));
-        assert!(!is_refusal(b"warning: unused\n"));
+        assert!(!project_tests::is_refusal("warning: unused\n"));
     }
 
     /// `--locked` names the entry a changed line belongs to.
