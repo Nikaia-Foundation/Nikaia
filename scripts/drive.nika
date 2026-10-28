@@ -127,6 +127,14 @@ fn drive_paths(dir: String, brief: String) -> Vec[String] throws {
     all.push(f"{brief}.report.md")
     if stem != "" { all.push(f"{stem}.report.md") }
     all.push(f"{brief}.run.json")
+    // What agent.nika keeps of the run (owner, 2026-10-28: keep the history).
+    all.push(f"{brief}.debrief.md")
+    if stem != "" {
+        all.push(f"{stem}.debrief.md")
+        all.push(f"{stem}.draft.nika")
+        all.push(f"{stem}.draft.nika.notes")
+        all.push(f"{stem}.draft.nika.rs")
+    }
     all.push(f"{dir}/cost.txt")
     all.push(f"{dir}/tokens.txt")
     all.push("docs/tokenspeed.md")

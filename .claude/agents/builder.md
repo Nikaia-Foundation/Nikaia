@@ -43,7 +43,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   with repeated `tail`, `ps` or `sleep` calls.
 * **Cheap checks while working, the gate once at the end** (owner,
   2026-10-28). Between steps run only the tests the brief names and the ones
-  your change touches (one program, one `it` filter). Before the run's last
+  your change touches (one program, one `it` filter). An `it` filter such as
+  `package` also matches `nikaia_test::the_compiler_test_package_passes_at_both_settings`,
+  ten minutes that repeat `nikaia test --both-settings`: add `--skip
+  nikaia_test::the_compiler_test_package` (P4a debrief, 2026-10-28). Before the run's last
   commit, once, run the gate (#852): besides the touched tests, the guard set: `cargo test --profile fast -p nikaia --test it --
   range_spelling:: shipped_ledger:: contracts::every_std_module
   dependency_ledger::` (repository-wide scans no NK code leads to: they kept
