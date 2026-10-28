@@ -13086,7 +13086,7 @@ fn rs2nika_interned(mut ctx: Rs2nikaCtx, src: String) -> String {
         let l: String = lines[i].clone()
         if rs2nika_fn_name(l) != "" && rs2nika_indent(l) == "" {
             if head >= 0 && wants {
-                out[head] = rs2nika_with_intern(out[head])
+                out = rs2nika_interned_head(out, head)
             }
             head = out.len()
             wants = false
@@ -13098,9 +13098,33 @@ fn rs2nika_interned(mut ctx: Rs2nikaCtx, src: String) -> String {
         i = i + 1
     }
     if head >= 0 && wants {
-        out[head] = rs2nika_with_intern(out[head])
+        out = rs2nika_interned_head(out, head)
     }
     return out.join("\n")
+}
+
+/// The header at `head` with `intern` as its last parameter: on its line, or
+/// for one written a parameter a line, as a line before its `)`.
+fn rs2nika_interned_head(given: ref Vec[String], head: i64) -> Vec[String] {
+    let mut out: Vec[String] = given.clone()
+    let one = rs2nika_with_intern(out[head])
+    if one != out[head] || out[head].contains("intern:") {
+        out[head] = one
+        return out
+    }
+    let mut j = head + 1
+    while j < out.len() && j < head + 40 {
+        let t: String = out[j].trim().clone()
+        if t.contains("intern:") {
+            return out
+        }
+        if t.starts_with(")") && rs2nika_indent(out[j]) == "" {
+            out.insert(j, "    intern: impl Fn(&str) -> winnow_grammar::Symbol,")
+            return out
+        }
+        j = j + 1
+    }
+    return out
 }
 
 /// A one-line Rust header with `intern` as its last parameter (R268).
@@ -13109,7 +13133,9 @@ fn rs2nika_with_intern(line: String) -> String {
         return line.clone()
     }
     let c: Vec[scalar] = line.chars().collect()
-    let open = rs2nika_find_from(c, "(", 0)
+    // the parameters' `(`, after the name: not `pub(crate)`'s
+    let named = rs2nika_find_from(c, "fn ", 0)
+    let open = if named >= 0 { rs2nika_find_from(c, "(", named) } else { -1 }
     let close = if open >= 0 { rs2nika_closing(c, open, '(', ')') } else { -1 }
     if close < 0 {
         return line.clone()

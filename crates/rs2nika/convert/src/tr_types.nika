@@ -128,7 +128,15 @@ impl TrEm {
                 let pl = self.t.kid(seg, "PARENTHESIZED_ARG_LIST")
                 let mut ps: Vec[String] = []
                 for a in self.nodes(pl) {
-                    ps.push(self.ty(self.t.nth(a, 0)))
+                    // a borrowed parameter stays borrowed: `&str` -> `ref String`
+                    let at = self.t.nth(a, 0)
+                    let pt_text = self.ty(at)
+                    let plain = pt_text == "i64" || pt_text == "f64" || pt_text == "bool" || pt_text == "scalar" || pt_text.starts_with("ref ")
+                    if self.t.is(at, "REF_TYPE") && !self.t.has_tok(at, "MUT_KW") && !plain {
+                        ps.push(f"ref {pt_text}")
+                    } else {
+                        ps.push(pt_text)
+                    }
                 }
                 let mut out = f"fn({ps.join(", ")})"
                 let ret = self.t.kid(seg, "RET_TYPE")
@@ -137,6 +145,10 @@ impl TrEm {
                     if r != "()" {
                         out = f"{out} -> {r}"
                     }
+                }
+                // a tools file's function parameters say their lambda does not pause
+                if self.profile != "none" && self.profile != "" {
+                    out = f"{out} sync"
                 }
                 return out
             }
