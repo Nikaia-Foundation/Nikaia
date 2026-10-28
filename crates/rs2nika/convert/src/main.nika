@@ -229,6 +229,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R220 `x.with_context(|| format!(m))?` / `.with_context(|| m)?` / `.context(m)?` over a call -> `x catch { throw format!(m) }`",
         "R219 `return match call { Ok(v) if g => a, .., Ok(v) => b, Err(e) => d }`, one-line arms -> `let v = call catch { return d }`, `if g { return a }`, `return b`",
         "R222 a receiver rust-analyzer finds an `Option`'s `map`/`and_then`/`map_or`/`is_some_and` on (`--facts`) counts as an option for R96: `name.map(|n| f(n))` -> `(match name { n => f(n), null => null })`",
+        "R223 `e == Some(v)` -> `(match e { got => got == v, null => false })`, `!=` with `null => true` (a `T?` is compared with `null` or a `T?` only, NK1102)",
         "R221 `return match call { Ok(v) => a, Err(e) if g => b, Err(e) => d }` -> `let v = call catch { if g { return b } return d }`, `return a`",
         "R218 `let r = call` right before `match r {` (`Ok`/`Err` arms), `r` read nowhere else -> `match call {`, so R160 takes it",
         "R217 `std::fs::read_dir(d)` -> `fs::read_dir(d, fs::Root::Anywhere)`, names in byte order with no failure per entry: `.filter_map(|e| e.ok())` / `.flatten()` go, `e.path()` -> `d.join(e)`, `.file_name().into_string().ok()` -> `name.to_text().ok()`, the `.sort()` after it goes; `.with_context(|| format!(m))?` -> `catch { throw format!(m) }`, `.into_iter().flatten()` -> `catch { [] }`; `let Ok(es) = ..` keeps `d` for `for e in es`",
@@ -5214,7 +5215,53 @@ fn rs2nika_opt_comb_hit(mut ctx: Rs2nikaCtx, given: String) -> String {
     if matched != general {
         rs2nika_hit(ctx, "R96")
     }
-    return matched
+    let compared: String = rs2nika_some_compared(matched)
+    if compared != matched {
+        rs2nika_hit(ctx, "R223")
+    }
+    return compared
+}
+
+/// R223: `e == Some(v)` -> `(match e { got => got == v, null => false })`,
+/// `!=` with `null => true`: a `T?` is compared with `null` or a `T?` only
+/// (NK1102), `e` read once (ADR-352).
+fn rs2nika_some_compared(given: String) -> String {
+    let mut s: String = given.clone()
+    let mut from = 0
+    while true {
+        let c: Vec[scalar] = s.chars().collect()
+        let eq = rs2nika_find_from(c, " == Some(", from)
+        let ne = rs2nika_find_from(c, " != Some(", from)
+        let mut at = eq
+        if at < 0 || (ne >= 0 && ne < at) {
+            at = ne
+        }
+        if at < 0 {
+            break
+        }
+        from = at + 1
+        let op: String = rs2nika_text(c, at + 1, at + 3)
+        let open = at + " == Some".len()
+        let end = rs2nika_closing(c, open, '(', ')')
+        let start = rs2nika_recv_start(c, at)
+        if end < 0 || start >= at {
+            continue
+        }
+        let lhs: String = rs2nika_text(c, start, at)
+        let v: String = rs2nika_text(c, open + 1, end).trim().clone()
+        if v == "" || rs2nika_replace_word(v, "got", "\u{a7}") != v || rs2nika_replace_word(lhs, "got", "\u{a7}") != lhs {
+            continue
+        }
+        let mut none: String = "false"
+        if op == "!=" {
+            none = "true"
+        }
+        let pre: String = rs2nika_text(c, 0, start)
+        let post: String = rs2nika_text(c, end + 1, c.len())
+        s = f"{pre}(match {lhs} {{ got => got {op} {v}, null => {none} }}){post}"
+        from = 0
+    }
+    return s
 }
 
 /// R63: what R79 leaves of `o.is_some_and(f)` on a plain path `o`, `o`
@@ -7643,7 +7690,7 @@ fn rs2nika_todos(line: String, opts: ref Vec[String]) -> Vec[String] {
         todo.push("`.enumerate()`: a `while` with an index")
     }
     let head_end = line.find("=>") ?? 0
-    let head: String = line[0..<head_end].clone()
+    let head: String = rs2nika_some_compared(line[0..<head_end])
     let some_arm = head_end > 0 && (head.contains(" Some(") || head.contains("(Some(") || head.contains("|Some(")) && !head.trim_start().starts_with("Some(")
     if some_arm {
         todo.push(rs2nika_some_todo(head))
