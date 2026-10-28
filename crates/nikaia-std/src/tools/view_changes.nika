@@ -1,0 +1,939 @@
+// crates/nikaia-std/src/tools/view_changes.nika
+//
+// **What happens to data while a view of it is still used**
+// ([ADR-353](../../../../docs/specification/adr/adr-353.md) D3, D4; Part I 6.6),
+// moved from the compiler's `view_changes.rs` (ADR-294, #125).
+//
+// A view is a local bound to a call that hands back views of its arguments
+// (`let r = longest(x, y)`, the ledger's `borrows`) or to an element or a
+// field read off a place (`let e = ys[0]`, ADR-094 D4, ADR-354). While such a
+// view is still used - a later statement of the block that binds it names it,
+// or a loop around the change does - the data it may point into is watched:
+//
+// * a **change in place** of that data, a method that changes the value or an
+//   assignment to a part of it, is `NK2305`, at the change (D4);
+// * **giving it up** by assigning the variable a new value is not a change: the
+//   old buffer lives on (D3). Where the assignment stands in the block that
+//   declares the variable, the lowering binds the new value as a name of its
+//   own (`let y = v`), and the old one lives to the end of that block, longer
+//   than any view of it there - no copy. The end of a scope is the tether's
+//   own case (`contracts::keep`): the buffer is put into the frame's keep.
+//
+// The walk reads the tree and both ledgers, as `views` does; whether a `let`
+// lends a place is the checker's fact (`lent_lets`), handed in. A literal's
+// holes are read by the parser only, so they are asked for (`holes_of`).
+
+use std::collections
+
+/// What the lowering does at a give-up: an assignment written as a binding of
+/// its own (by the statement's first byte, with whether that binding is
+/// changed later), and the `let`s that no longer need `mut` because every
+/// change to them became such a binding.
+pub struct VcGiveUps {
+    pub rebound: collections::BTreeMap[i64, bool],
+    pub unmuted: collections::BTreeSet[i64],
+    /// The `let`s of variables given a new value in a block nested below
+    /// them while a view made outside is used afterwards, with that view's
+    /// name: the buffer lives in the frame's keep from its `let`.
+    pub kept: collections::BTreeMap[i64, String],
+}
+
+/// The refusals (`NK2305`) and the give-ups of one unit.
+pub struct VcAnswer {
+    pub findings: Vec[Finding],
+    pub give_ups: VcGiveUps,
+}
+
+/// What the walk is asked against: the unit's words and items, both ledgers,
+/// the `let`s that lend a place, and the `??`s that lend their left side, by
+/// the id of the `??` or of its fallback (`vc_coalesced`).
+pub struct VcAsk {
+    pub names: ref winnow_grammar::InternerContext,
+    pub items: ref Vec[Spanned[Item]],
+    pub own: ref Ledger,
+    pub library: ref Ledger,
+    pub lent: ref collections::BTreeSet[i64],
+    pub coalesced: ref collections::BTreeSet[i64],
+}
+
+struct VcView {
+    name: String,
+    roots: collections::BTreeSet[String],
+    /// The parts of its roots it reads, as written (`walk.state.summaries`),
+    /// where it is known: a root none of them starts with is read whole. A
+    /// change to a part that neither holds nor lies inside one of them leaves
+    /// the view alone, as it does below (#739).
+    parts: collections::BTreeSet[String],
+    /// The statement that made it, and the call or the place it came from.
+    made: Span,
+    from: String,
+    /// The callee's way out that may hand back the root, where it is known.
+    way_out: collections::BTreeMap[String, String],
+    /// The first later statement that uses it, where one does.
+    used: Span?,
+    /// The call that made it, as written (`longest(x, y)`), where one did.
+    call: String?,
+    /// The way out the refusal names, where it is not a copy of the view.
+    help: String?,
+}
+
+struct VcWalk {
+    findings: Vec[Finding],
+    give_ups: VcGiveUps,
+    /// Each variable's `let`, by name, as the walk last met it.
+    lets: collections::BTreeMap[String, i64],
+    /// Every method both ledgers know, by its name: the keys ending in
+    /// `::name`, each with whether it is the unit's own, looked up once per
+    /// call rather than by a scan of every function at each one.
+    methods: collections::BTreeMap[String, Vec[(bool, String)]],
+}
+
+// A call among a statement's expressions, as the walk asks about it: a method
+// call (its name, its receiver's root and path) or a call of a function by
+// its name, and each argument's root and, where it is a variable, its name.
+struct VcCall {
+    method: bool,
+    callee: String?,
+    root: String?,
+    path: String,
+    roots: Vec[String?],
+    names: Vec[String?],
+}
+
+/// The refusals (`NK2305`) and the give-ups of one unit.
+pub fn vc_analyse(ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> VcAnswer {
+    let mut methods: collections::BTreeMap[String, Vec[(bool, String)]] = collections::BTreeMap()
+    for (key, _) in ask.own.functions {
+        vc_index(methods, key, true)
+    }
+    for (key, _) in ask.library.functions {
+        vc_index(methods, key, false)
+    }
+    let mut walk = VcWalk { findings: [], give_ups: VcGiveUps { rebound: collections::BTreeMap(), unmuted: collections::BTreeSet(), kept: collections::BTreeMap() }, lets: collections::BTreeMap(), methods: methods }
+    let none: Vec[VcView] = []
+    for item in ask.items {
+        match item.node {
+            Item::Fn { body, .. } => vc_block(body, none, ask, holes_of, walk),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { body, .. } => vc_block(body, none, ask, holes_of, walk),
+                        else => {}
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    return VcAnswer { findings: walk.findings, give_ups: walk.give_ups }
+}
+
+fn vc_index(mut methods: collections::BTreeMap[String, Vec[(bool, String)]], key: ref String, own: bool) {
+    if !key.contains("::") {
+        return
+    }
+    let name = (key.rsplit("::").next() ?? "").clone()
+    let mut held = methods.remove(name) ?? []
+    held.push((own, key.clone()))
+    methods.insert(name, held)
+}
+
+/// **The `??`s whose answer is a view of their left side** (#739): the
+/// checker's facts, by the id of the `??` (`lent_coalesces`,
+/// `view_coalesces`, `text_view_fallbacks`, `lent_list_reads`,
+/// `lent_map_fallbacks`, `map_read_views`) or of its fallback
+/// (`view_fallbacks`). A `let` bound to one lends the place it reads.
+pub fn vc_coalesced(facts: ref CheckFacts) -> collections::BTreeSet[i64] {
+    let mut ids: collections::BTreeSet[i64] = collections::BTreeSet()
+    for (id, _) in facts.lent_coalesces {
+        ids.insert(id)
+    }
+    vc_insert_all(ids, facts.view_coalesces)
+    vc_insert_all(ids, facts.text_view_fallbacks)
+    vc_insert_all(ids, facts.lent_list_reads)
+    vc_insert_all(ids, facts.lent_map_fallbacks)
+    vc_insert_all(ids, facts.view_fallbacks)
+    vc_insert_all(ids, facts.map_read_views)
+    return ids
+}
+
+fn vc_insert_all(mut ids: collections::BTreeSet[i64], set: ref collections::BTreeSet[i64]) {
+    for id in set {
+        ids.insert(id)
+    }
+}
+
+/// Whether a callee takes its parameter `index` as its own: the body keeps it
+/// or changes it, so it is not lowered as a view (Part I 6.5). One lowered as a
+/// view whose result keeps it (`pair(a: String) -> Pair`, lent since #678)
+/// is only read: the result is a view of the caller's text (#708).
+fn vc_owns(contract: ref FnContract, index: i64) -> bool {
+    let signature = contract.signature ?? return false
+    if index < 0 || index >= signature.params.len() {
+        return false
+    }
+    let param = signature.params[index].0
+    if param == "self" {
+        return false
+    }
+    return (contract.keeps.contains(param) && !signature.params[index].1.is_a_view()) || signature.mutable.contains(param)
+}
+
+/// The position of the parameter `name`, or `-1`.
+fn vc_param_index(signature: ref Signature, name: ref String) -> i64 {
+    for i in 0..<signature.params.len() {
+        if signature.params[i].0 == name {
+            return i
+        }
+    }
+    return -1
+}
+
+/// Whether `expr` is a place under `name`.
+fn vc_rooted(expr: ref Expr, name: ref String, ask: ref VcAsk) -> bool {
+    let root = root_of(ask.names, expr) ?? return false
+    return root == name
+}
+
+/// The place a read names, down its fields (`walk.state.summaries` for
+/// `walk.state.summaries[k]`): an element is read as part of its container.
+fn vc_path_of(expr: ref Expr, ask: ref VcAsk) -> String {
+    return match expr {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::Field { base, name, .. } => f"{vc_path_of(base, ask)}.{ask.names.resolve(name)}",
+        Expr::Index { base, .. } => vc_path_of(base, ask),
+        Expr::SafeField { base, .. } => vc_path_of(base, ask),
+        Expr::Unary { expr, .. } => vc_path_of(expr, ask),
+        else => "",
+    }
+}
+
+/// What a place under `root` may point into, and the parts of it read: `root`
+/// itself, and where `root` is a view still in scope, what that view points
+/// into (#739).
+fn vc_through(root: ref String, part: String, outer: ref Vec[VcView]) -> (collections::BTreeSet[String], collections::BTreeSet[String]) {
+    let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
+    roots.insert(root.clone())
+    let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
+    parts.insert(part)
+    let at = vc_last_named(outer, root)
+    if at >= 0 {
+        for each in outer[at].roots {
+            roots.insert(each.clone())
+        }
+        for each in outer[at].parts {
+            parts.insert(each.clone())
+        }
+    }
+    return (roots, parts)
+}
+
+/// The last view called `name`, or `-1`.
+fn vc_last_named(views: ref Vec[VcView], name: ref String) -> i64 {
+    let mut i = views.len() - 1
+    while i >= 0 {
+        if views[i].name == name {
+            return i
+        }
+        i -= 1
+    }
+    return -1
+}
+
+/// The first view still to be used that may point into `root`, or `-1`.
+fn vc_first_viewing(views: ref Vec[VcView], root: ref String) -> i64 {
+    for i in 0..<views.len() {
+        if views[i].used != null && views[i].roots.contains(root) {
+            return i
+        }
+    }
+    return -1
+}
+
+/// The last such view, or `-1`.
+fn vc_last_viewing(views: ref Vec[VcView], root: ref String) -> i64 {
+    let mut i = views.len() - 1
+    while i >= 0 {
+        if views[i].used != null && views[i].roots.contains(root) {
+            return i
+        }
+        i -= 1
+    }
+    return -1
+}
+
+/// Whether a view still to be used may read the place `path` under `root`
+/// changes: it points into `root`, and it reads all of it or a part that
+/// holds `path` or lies inside it.
+fn vc_watches(view: ref VcView, root: ref String, path: ref String) -> bool {
+    if view.used == null || !view.roots.contains(root) {
+        return false
+    }
+    let mut read = false
+    for part in view.parts {
+        if part != root && !part.starts_with(f"{root}.") {
+            continue
+        }
+        read = true
+        if part == path || part.starts_with(f"{path}.") || path.starts_with(f"{part}.") {
+            return true
+        }
+    }
+    return !read
+}
+
+fn vc_any_watches(views: ref Vec[VcView], root: ref String, path: ref String) -> bool {
+    for view in views {
+        if vc_watches(view, root, path) {
+            return true
+        }
+    }
+    return false
+}
+
+/// The calls among a statement's own expressions, a literal's holes right
+/// after it, in the order they are written; nested blocks are walked apart.
+fn vc_calls(stmt: ref Stmt, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[VcCall] {
+    let mut out: Vec[VcCall] = []
+    match stmt {
+        Stmt::Let { value, .. } => vc_calls_in(value, ask, holes_of, out),
+        Stmt::Comptime { value, .. } => vc_calls_in(value, ask, holes_of, out),
+        Stmt::Assign { target, value, .. } => {
+            vc_calls_in(target, ask, holes_of, out)
+            vc_calls_in(value, ask, holes_of, out)
+        }
+        Stmt::For { iter, .. } => vc_calls_in(iter, ask, holes_of, out),
+        Stmt::While { cond, .. } => vc_calls_in(cond, ask, holes_of, out),
+        Stmt::Return(value) => {
+            let returned = value ?? return out
+            vc_calls_in(returned, ask, holes_of, out)
+        }
+        Stmt::Expr(expr) => vc_calls_in(expr, ask, holes_of, out),
+        else => {}
+    }
+    return out
+}
+
+fn vc_calls_in(expr: ref Expr, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut out: Vec[VcCall]) {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let mut roots: Vec[String?] = []
+            let mut names: Vec[String?] = []
+            for arg in args {
+                roots.push(root_of(ask.names, arg))
+                names.push(vc_variable(arg, ask))
+            }
+            out.push(VcCall { method: true, callee: ask.names.resolve(method).clone(), root: root_of(ask.names, receiver), path: vc_path_of(receiver, ask), roots: roots, names: names })
+        }
+        Expr::Call { func, args, .. } => {
+            let mut roots: Vec[String?] = []
+            let mut names: Vec[String?] = []
+            for arg in args {
+                roots.push(root_of(ask.names, arg))
+                names.push(vc_variable(arg, ask))
+            }
+            out.push(VcCall { method: false, callee: vc_variable(func, ask), root: null, path: "", roots: roots, names: names })
+        }
+        else => {}
+    }
+    if check_visit_has_holes(expr) {
+        for hole in holes_of(expr) {
+            vc_calls_in(hole, ask, holes_of, out)
+        }
+    }
+    for child in check_visit_children(expr) {
+        vc_calls_in(child, ask, holes_of, out)
+    }
+}
+
+/// The name an expression is, where it is a variable.
+fn vc_variable(expr: ref Expr, ask: ref VcAsk) -> String? {
+    return match expr {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => null,
+    }
+}
+
+/// Whether one of a statement's own expressions is the variable `name`.
+fn vc_names_in_stmt(stmt: ref Stmt, name: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    return match stmt {
+        Stmt::Let { value, .. } => vc_names_in(value, name, ask, holes_of),
+        Stmt::Comptime { value, .. } => vc_names_in(value, name, ask, holes_of),
+        Stmt::Assign { target, value, .. } => vc_names_in(target, name, ask, holes_of) || vc_names_in(value, name, ask, holes_of),
+        Stmt::For { iter, .. } => vc_names_in(iter, name, ask, holes_of),
+        Stmt::While { cond, .. } => vc_names_in(cond, name, ask, holes_of),
+        Stmt::Return(value) => match value {
+            null => false,
+            returned => vc_names_in(returned, name, ask, holes_of),
+        },
+        Stmt::Expr(expr) => vc_names_in(expr, name, ask, holes_of),
+        else => false,
+    }
+}
+
+fn vc_names_in(expr: ref Expr, name: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    match expr {
+        Expr::Variable(n, _) => {
+            if ask.names.resolve(n) == name {
+                return true
+            }
+        }
+        else => {}
+    }
+    if check_visit_has_holes(expr) {
+        for hole in holes_of(expr) {
+            if vc_names_in(hole, name, ask, holes_of) {
+                return true
+            }
+        }
+    }
+    for child in check_visit_children(expr) {
+        if vc_names_in(child, name, ask, holes_of) {
+            return true
+        }
+    }
+    return false
+}
+
+fn vc_mentions_stmt(stmt: ref Stmt, name: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    if vc_names_in_stmt(stmt, name, ask, holes_of) {
+        return true
+    }
+    for inner in check_visit_stmt_blocks(stmt) {
+        for each in inner.stmts {
+            if vc_mentions_stmt(each.node, name, ask, holes_of) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+/// The innermost statement inside `stmt`'s blocks that first names `name`:
+/// where a loop's next round uses a view.
+fn vc_first_use(stmt: ref Stmt, name: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Span? {
+    for block in check_visit_stmt_blocks(stmt) {
+        for each in block.stmts {
+            if vc_mentions_stmt(each.node, name, ask, holes_of) {
+                return vc_first_use(each.node, name, ask, holes_of) ?? each.span.clone()
+            }
+        }
+    }
+    return null
+}
+
+/// Whether every method of that name the ledgers know changes its subject
+/// (`mutates`), or leaves it (`!mutates`).
+fn vc_methods_all(method: ref String, mutates: bool, ask: ref VcAsk, walk: ref VcWalk) -> bool {
+    let known = walk.methods[method] ?? return false
+    for entry in known {
+        if entry.0 {
+            let contract = ask.own.functions[entry.1] ?? continue
+            if contract.mutates != mutates {
+                return false
+            }
+        } else {
+            let contract = ask.library.functions[entry.1] ?? continue
+            if contract.mutates != mutates {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+/// Whether a method of that name the ledgers know keeps its argument
+/// `index`, counted after the subject.
+fn vc_method_keeps(method: ref String, index: i64, ask: ref VcAsk, walk: ref VcWalk) -> bool {
+    let known = walk.methods[method] ?? return false
+    for entry in known {
+        if entry.0 {
+            let contract = ask.own.functions[entry.1] ?? continue
+            if vc_subject_first(contract) && vc_owns(contract, index + 1) {
+                return true
+            }
+        } else {
+            let contract = ask.library.functions[entry.1] ?? continue
+            if vc_subject_first(contract) && vc_owns(contract, index + 1) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+fn vc_subject_first(contract: ref FnContract) -> bool {
+    let signature = contract.signature ?? return false
+    return signature.params.len() > 0 && signature.params[0].0 == "self"
+}
+
+/// Whether a statement changes `name`, or may: an assignment to it or a
+/// part of it, a method that changes it, or a call that is handed it.
+fn vc_changes(stmt: ref Stmt, name: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, walk: ref VcWalk) -> bool {
+    match stmt {
+        Stmt::Assign { target, .. } => {
+            if vc_rooted(target, name, ask) {
+                return true
+            }
+        }
+        else => {}
+    }
+    for call in vc_calls(stmt, ask, holes_of) {
+        if call.method {
+            let root = call.root ?? continue
+            let method = call.callee ?? continue
+            if root == name && !vc_methods_all(method, false, ask, walk) {
+                return true
+            }
+            continue
+        }
+        for index in 0..<call.roots.len() {
+            let root = call.roots[index] ?? continue
+            if root == name && vc_changes_argument(call.callee, index, ask) {
+                return true
+            }
+        }
+    }
+    for inner in check_visit_stmt_blocks(stmt) {
+        for each in inner.stmts {
+            if vc_changes(each.node, name, ask, holes_of, walk) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+/// Whether a call may change its argument `index`: the callee declares
+/// that parameter `mut`, or the ledgers do not know the callee.
+fn vc_changes_argument(callee: ref String?, index: i64, ask: ref VcAsk) -> bool {
+    let name = callee ?? return true
+    let contract = ask.own.functions[name] ?? ask.library.functions[name] ?? return true
+    let signature = contract.signature ?? return true
+    if index >= signature.params.len() {
+        return true
+    }
+    return signature.mutable.contains(signature.params[index].0)
+}
+
+/// The changes in place among a statement's own expressions.
+fn vc_changes_in(stmt: ref Stmt, at: ref Span, views: ref Vec[VcView], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
+    let calls = vc_calls(stmt, ask, holes_of)
+    let mut changed: Vec[(String, String)] = []
+    for call in calls {
+        if !call.method {
+            continue
+        }
+        let root = call.root ?? continue
+        let method = call.callee ?? continue
+        if vc_methods_all(method, true, ask, walk) {
+            changed.push((root.clone(), call.path.clone()))
+        }
+    }
+    for (root, path) in changed {
+        if vc_any_watches(views, root, path) {
+            vc_refuse(root, at, views, walk)
+        }
+    }
+    // D6: a whole variable handed to a parameter the callee keeps or
+    // changes - not lowered as a view (Part I 6.5) - has a new owner.
+    let mut handed: Vec[(String, String)] = []
+    for call in calls {
+        let callee = call.callee ?? continue
+        if call.method {
+            for index in 0..<call.names.len() {
+                let name = call.names[index] ?? continue
+                if vc_method_keeps(callee, index, ask, walk) {
+                    handed.push((name.clone(), callee.clone()))
+                }
+            }
+            continue
+        }
+        let contract = ask.own.functions[callee] ?? ask.library.functions[callee] ?? continue
+        for index in 0..<call.names.len() {
+            let name = call.names[index] ?? continue
+            if vc_owns(contract, index) {
+                handed.push((name.clone(), callee.clone()))
+            }
+        }
+    }
+    for (root, callee) in handed {
+        if vc_first_viewing(views, root) >= 0 {
+            vc_refuse_hand_over(root, callee, at, views, walk)
+        }
+    }
+}
+
+/// The view a `let` binds: the roots it may point into, where it is one.
+fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
+    match value {
+        Expr::Variable(other, _) => {
+            let held = vc_last_named(outer, ask.names.resolve(other))
+            if held < 0 {
+                return null
+            }
+            let mut view = outer[held].clone()
+            view.name = name.clone()
+            view.made = at.clone()
+            return view
+        }
+        Expr::Index { .. } => {
+            if !ask.lent.contains(at.start as i64) {
+                return null
+            }
+            return vc_place_view(at, name, value, outer, ask)
+        }
+        Expr::Field { .. } => {
+            if !ask.lent.contains(at.start as i64) {
+                return null
+            }
+            return vc_place_view(at, name, value, outer, ask)
+        }
+        // **A `??` that lends its left side** (#739): `walk.fns[key] ??
+        // return` is a view into `walk`, and `f.result ?? ""` into
+        // whatever `f` views.
+        Expr::Coalesce { value: left, fallback, .. } => {
+            if !ask.coalesced.contains(id_of(value) as i64) && !ask.coalesced.contains(id_of(fallback) as i64) {
+                return null
+            }
+            return vc_place_view(at, name, left, outer, ask)
+        }
+        Expr::Call { func, args, .. } => {
+            let callee = vc_variable(func, ask) ?? return null
+            let contract = ask.own.functions[callee] ?? ask.library.functions[callee] ?? return null
+            let signature = contract.signature ?? return null
+            let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
+            let mut way_out: collections::BTreeMap[String, String] = collections::BTreeMap()
+            for borrowed in contract.borrows {
+                let index = vc_param_index(signature, borrowed)
+                if index < 0 || index >= args.len() {
+                    continue
+                }
+                let root = root_of(ask.names, args[index]) ?? continue
+                way_out.insert(root.clone(), vc_returning(callee, borrowed, ask))
+                roots.insert(root)
+            }
+            if roots.len() == 0 {
+                return null
+            }
+            let mut shown: Vec[String] = []
+            for arg in args {
+                shown.push(root_of(ask.names, arg) ?? "..")
+            }
+            let written = shown.join(", ")
+            return VcView { name: name.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", help: null }
+        }
+        else => return null,
+    }
+}
+
+fn vc_place_view(at: ref Span, name: ref String, place: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
+    let root = root_of(ask.names, place) ?? return null
+    let (roots, parts) = vc_through(root, vc_path_of(place, ask), outer)
+    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, help: null }
+}
+
+/// The views a call keeps in the places its arguments hold (ADR-283 D27):
+/// the ledger's `stores` says `v:s`, so the argument at `v` holds views of
+/// the one at `s` from here on.
+fn vc_kept_in_places(at: ref Span, func: ref Expr, args: ref Vec[Expr], ask: ref VcAsk) -> Vec[VcView] {
+    let callee = vc_variable(func, ask) ?? return []
+    let contract = ask.own.functions[callee] ?? ask.library.functions[callee] ?? return []
+    let signature = contract.signature ?? return []
+    let mut out: Vec[VcView] = []
+    for entry in contract.stores {
+        let pieces: Vec[ref String] = entry.split(":").collect()
+        if pieces.len() < 2 {
+            continue
+        }
+        let place = pieces[0].clone()
+        let source = entry.bytes[place.len() + 1..<entry.len()].text() catch { continue }
+        let held_at = vc_param_index(signature, place)
+        let source_at = vc_param_index(signature, source)
+        if held_at < 0 || source_at < 0 || held_at >= args.len() || source_at >= args.len() {
+            continue
+        }
+        let holder = root_of(ask.names, args[held_at]) ?? continue
+        let root = root_of(ask.names, args[source_at]) ?? continue
+        let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
+        roots.insert(root.clone())
+        let mut way_out: collections::BTreeMap[String, String] = collections::BTreeMap()
+        way_out.insert(root.clone(), f"`{callee}` keeps views of what it was given as `{source}` in `{place}`.")
+        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`." })
+    }
+    return out
+}
+
+/// The way out of `callee` that hands back `param`: `return b`, where the
+/// body is in this unit.
+fn vc_returning(callee: ref String, param: ref String, ask: ref VcAsk) -> String {
+    for item in ask.items {
+        match item.node {
+            Item::Fn { name, body, .. } => {
+                let named = name ?? continue
+                if ask.names.resolve(named) == callee && vc_returns(body, param, ask) {
+                    return f"`{callee}` may hand back `{param}`: `return {param}`."
+                }
+            }
+            else => {}
+        }
+    }
+    return f"`{callee}` may hand back what it was given as `{param}`."
+}
+
+fn vc_returns(block: ref Block, param: ref String, ask: ref VcAsk) -> bool {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Return(value) => {
+                match value {
+                    null => {}
+                    returned => {
+                        if vc_rooted(returned, param, ask) {
+                            return true
+                        }
+                    }
+                }
+            }
+            else => {}
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            if vc_returns(inner, param, ask) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+/// The first statement from `from` on that names `name`.
+fn vc_used_after(block: ref Block, from: i64, name: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Span? {
+    for k in from..<block.stmts.len() {
+        if vc_mentions_stmt(block.stmts[k].node, name, ask, holes_of) {
+            return block.stmts[k].span.clone()
+        }
+    }
+    return null
+}
+
+fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
+    let mut views: Vec[VcView] = outer.clone()
+    let own_from = views.len()
+    // The `let`s of this block, by name: the statement and `mut`.
+    let mut declared: collections::BTreeMap[String, (i64, bool)] = collections::BTreeMap()
+    for j in 0..<block.stmts.len() {
+        let stmt = block.stmts[j]
+        for v in own_from..<views.len() {
+            let name = views[v].name.clone()
+            views[v].used = vc_used_after(block, j + 1, name, ask, holes_of)
+        }
+        let looping = match stmt.node {
+            Stmt::For { .. } => true,
+            Stmt::While { .. } => true,
+            else => false,
+        }
+        let at = stmt.span.clone()
+        vc_changes_in(stmt.node, at, views, ask, holes_of, walk)
+        match stmt.node {
+            Stmt::Assign { target, op, .. } => {
+                let whole = op == null && match target {
+                    Expr::Variable(_, _) => true,
+                    else => false,
+                }
+                vc_assign(block, j, target, whole, at, views, declared, ask, holes_of, walk)
+            }
+            // **A view kept in an argument's place** (ADR-283 D27):
+            // `words(t, v)` gives `v` views of `t`.
+            Stmt::Expr(expr) => {
+                match expr {
+                    Expr::Call { func, args, .. } => {
+                        for view in vc_kept_in_places(at, func, args, ask) {
+                            views.push(view)
+                        }
+                    }
+                    else => {}
+                }
+            }
+            Stmt::Let { names, value, mutable, .. } => {
+                if names.len() == 1 {
+                    let name = ask.names.resolve(names[0]).clone()
+                    vc_let(name, value, at, views, ask, walk)
+                    walk.lets.insert(name.clone(), at.start as i64)
+                    declared.insert(name, (at.start as i64, mutable))
+                }
+            }
+            else => {}
+        }
+        // Nested blocks: a loop around a change uses what its body names.
+        let mut inner_views = views.clone()
+        if looping {
+            for v in 0..<inner_views.len() {
+                let name = inner_views[v].name.clone()
+                if inner_views[v].used == null && vc_mentions_stmt(stmt.node, name, ask, holes_of) {
+                    inner_views[v].used = vc_first_use(stmt.node, name, ask, holes_of) ?? at.clone()
+                }
+            }
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            vc_block(inner, inner_views, ask, holes_of, walk)
+        }
+    }
+    // A `let mut` whose every change became a binding of its own.
+    for (name, entry) in declared {
+        if !entry.1 {
+            continue
+        }
+        let mut rebound = false
+        let mut other = false
+        for stmt in block.stmts {
+            let start = stmt.span.start as i64
+            if start == entry.0 {
+                continue
+            }
+            if walk.give_ups.rebound.contains_key(start) && vc_assigns_to(stmt.node, name, ask) {
+                rebound = true
+            } else if vc_changes(stmt.node, name, ask, holes_of, walk) {
+                other = true
+            }
+        }
+        if rebound && !other {
+            walk.give_ups.unmuted.insert(entry.0)
+        }
+    }
+}
+
+/// Whether a statement gives the variable `name` a new value.
+fn vc_assigns_to(stmt: ref Stmt, name: ref String, ask: ref VcAsk) -> bool {
+    return match stmt {
+        Stmt::Assign { target, .. } => match target {
+            Expr::Variable(n, _) => ask.names.resolve(n) == name,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+// An assignment: a change to a part of a watched place is refused, and a
+// whole new value is given up (D3) - as a binding of its own where the
+// variable is declared in this block, into the frame's keep where it is not.
+fn vc_assign(block: ref Block, j: i64, target: ref Expr, whole: bool, at: ref Span, mut views: Vec[VcView], declared: ref collections::BTreeMap[String, (i64, bool)], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
+    let root = root_of(ask.names, target) ?? return
+    let viewer = vc_first_viewing(views, root)
+    if !whole && vc_any_watches(views, root, vc_path_of(target, ask)) {
+        vc_refuse(root, at, views, walk)
+    } else if whole && viewer >= 0 && declared.contains_key(root) {
+        // Given up (D3): the old data lives on under the old binding, the
+        // new value is a binding of its own.
+        let mut changed = false
+        for k in j + 1..<block.stmts.len() {
+            if vc_changes(block.stmts[k].node, root, ask, holes_of, walk) {
+                changed = true
+                break
+            }
+        }
+        walk.give_ups.rebound.insert(at.start as i64, changed)
+    } else if whole && viewer >= 0 && walk.lets.contains_key(root) {
+        // Given up in a nested block: the frame's keep.
+        let bound = walk.lets[root] ?? 0
+        walk.give_ups.kept.insert(bound, views[viewer].name.clone())
+    }
+    if whole {
+        // The name holds other data now.
+        for v in 0..<views.len() {
+            views[v].roots.remove(root)
+        }
+    }
+}
+
+// A `let` of one name: it ends whatever the name viewed before, and binds a
+// view where its value is one, or follows a move of a variable.
+fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView], ask: ref VcAsk, mut walk: VcWalk) {
+    let mut left: Vec[VcView] = []
+    for view in views {
+        if view.name != name {
+            left.push(view.clone())
+        }
+    }
+    views = left
+    for v in 0..<views.len() {
+        views[v].roots.remove(name)
+    }
+    match vc_view_of(at, name, value, views, ask) {
+        null => {}
+        view => {
+            views.push(view)
+            return
+        }
+    }
+    // A move into a local (D3): the new name holds the same data, followed
+    // as the argument was, and the old buffer lives in the frame's keep from
+    // its `let`.
+    let other = vc_variable(value, ask) ?? return
+    let mut viewer: String? = null
+    for v in 0..<views.len() {
+        if views[v].roots.contains(other) {
+            views[v].roots.insert(name.clone())
+            if views[v].used != null && viewer == null {
+                viewer = views[v].name.clone()
+            }
+        }
+    }
+    let first = viewer ?? return
+    if walk.lets.contains_key(other) {
+        let bound = walk.lets[other] ?? 0
+        walk.give_ups.kept.insert(bound, first.clone())
+    }
+}
+
+fn vc_label(span: Span, word: ref String, text: String, main: bool) -> CheckLabel {
+    return CheckLabel { span: span, word: word.clone(), text: text, main: main }
+}
+
+/// D6: `root` handed to `callee`, which keeps it, while a view reads it.
+fn vc_refuse_hand_over(root: ref String, callee: ref String, at: ref Span, views: ref Vec[VcView], mut walk: VcWalk) {
+    let held = vc_last_viewing(views, root)
+    if held < 0 {
+        return
+    }
+    let view = views[held]
+    let name = view.name.clone()
+    let mut labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{callee}` keeps `{root}` and may change or discard it", true), vc_label(view.made.clone(), name, f"`{name}` may be the text of `{root}`", false)]
+    match view.used {
+        null => {}
+        used => labels.push(vc_label(used.clone(), name, f"`{name}` is read here", false)),
+    }
+    let mut notes: Vec[String] = []
+    match view.way_out[root] {
+        null => {}
+        way => notes.push(way.clone()),
+    }
+    let mut help = f"Use `{name}` first, or hand `{callee}` a copy: `{callee}({root}.clone())`."
+    match view.call {
+        null => {}
+        call => help.push_str(f" Or copy `{name}` itself: `let {name} = {call}.clone()`."),
+    }
+    walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{callee}` gets `{root}`, but `{name}` still reads its text afterwards.", notes: notes, help: help, warning: false, labels: labels })
+}
+
+fn vc_refuse(root: ref String, at: ref Span, views: ref Vec[VcView], mut walk: VcWalk) {
+    let held = vc_last_viewing(views, root)
+    if held < 0 {
+        return
+    }
+    let view = views[held]
+    let name = view.name.clone()
+    let mut labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{root}` changes here", true), vc_label(view.made.clone(), name, view.from.clone(), false)]
+    match view.used {
+        null => {}
+        used => labels.push(vc_label(used.clone(), name, f"`{name}` is used here, after the change", false)),
+    }
+    let mut notes: Vec[String] = []
+    match view.way_out[root] {
+        null => {}
+        way => notes.push(way.clone()),
+    }
+    let help: String = match view.help {
+        null => f"Use `{name}` before this change, or take a copy of it with `{name}.clone()` before the change.",
+        written => written.clone(),
+    }
+    walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is changed here, but `{name}` may point into its data and is used later.", notes: notes, help: help, warning: false, labels: labels })
+}

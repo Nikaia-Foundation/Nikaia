@@ -252,6 +252,7 @@ COMPILER_NIKA = {
     "check_defaults.nika": "check: defaults, attribute arguments, item constants and folds (U-d3)",
     "fold_bound.nika": "fold bound: the fewest bytes a rule takes, the most steps a fold takes, the merge and the counters' invariant (ADR-367)",
     "fmt.nika": "fmt: the printer of `nikaia fmt`, over the tokens with the comments the parser records (ADR-337, #101)",
+    "view_changes.nika": "view_changes: a change in place under a view still used (NK2305) and the give-ups - a new value as a binding of its own, or into the frame's keep (0.0.1260)",
 }
 
 

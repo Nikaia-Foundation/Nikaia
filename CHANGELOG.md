@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1260] — 2026-10-28
+
+**view_changes in Nikaia (ADR-294, #125; ADR-353 D3, D4)**
+- The analysis of a change in place under a view still used (NK2305) and its give-ups - a new value as a binding of its own, or into the frame's keep - moves from `crates/nikaia/src/view_changes.rs` to `tools/view_changes.nika`; the Rust file is a thin adapter. The keep plans and give-ups of every lowered file are unchanged. First draft by rs2nika `--engine tree`.
+
 ## [0.0.1259] — 2026-10-28
 
 **An argument made in a call to a function with a keep of its own is the caller's to keep (ADR-283)**

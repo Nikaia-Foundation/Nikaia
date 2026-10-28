@@ -1947,6 +1947,14 @@ mod types_lowered {
 #[allow(unused_imports)]
 pub use types_lowered::*;
 
+mod view_changes_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/view_changes.rs");
+}
+#[allow(unused_imports)]
+pub use view_changes_lowered::*;
+
 mod views_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2836,6 +2844,10 @@ pub mod type_rules {
 pub mod types {
     #[allow(unused_imports)]
     pub use super::{types_checked, nobody_knows};
+}
+pub mod view_changes {
+    #[allow(unused_imports)]
+    pub use super::{VcGiveUps, VcAnswer, VcAsk, vc_analyse, vc_coalesced};
 }
 pub mod views {
     #[allow(unused_imports)]
