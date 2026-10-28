@@ -62,6 +62,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [decision-records-1](adr-decision-records-1.md) | A record is named `ADR-<topic>-<n>` (one to three lowercase words, a number per topic); the numbered records keep their numbers until a consolidation replaces them; names are claimed under Reserved numbers; `check-adr-refs.py` checks both schemes and stays Python until `std::regex` is built | Accepted | yes |
 | [355](adr-355.md) | List patterns `[]`, `[x]`, `[a, .., z]`, `[h, ..rest]` (the rest a view `ref Array[T]`); `..` in a tuple or variant is the remaining values; one `..` per pattern (`NK1258`); a list `match` needs `else` | Accepted | yes |
 | [352](adr-352.md) | `null` is a pattern in a `match` over a `T?`: the other arms match the `T` (a bare name binds it, a literal compares with it); an unguarded `null` arm and a catch-all make it complete; `null` over a value that is never `null` is `NK1256` | Accepted | yes |
 | [382](adr-382.md) | A test that proves a local, a parameter or a path of fields from one (`p.name`, `self.cache`) is not `null` makes it a `T` where the proof holds: the rest of an `&&`, the right of `||` over `x == null`, the branch, a `while` body, the rest of a block after an early exit; a write to the name, or an assignment or `mut` hand-over of the path or a prefix, takes it back (`NK1102` names it); not a path: `v[i].f`, `f().x`; an enum's value is bound by `match` only | Accepted | built |
@@ -212,6 +213,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [regex-1](adr-regex-1.md) | `std::regex` is RE2's dialect, linear in the text; a pattern the build knows is source, compiled down a ladder of engines (literal, one-pass code, DFA as code or table, tagged DFA, bit-parallel NFA, flat NFA) laid down in the binary as read; a run-time pattern runs on Rust's automata crates; `--comptime` reports the stage | Accepted | no |
 | [319](adr-319.md) | A file name is `fs::Path`, the platform's own bytes (Unix raw, Windows WTF-8, UTF-8 where names are Unicode): text stands wherever one is asked, an `f"…"` builds one where its use asks, `to_text()` fails only for a name the operating system handed over, `display()` shows `�` and is not tracked, and a `String` is always valid UTF-8. | Accepted | no |
 | [320](adr-320.md) | Text is UTF-8 and is read through a view that names its unit - `s.bytes`, `s.scalars`, `s.graphemes`; there is no `char` (`scalar` and `u8`), no `s.len()` and no `s[i]`; a position the text hands out cuts it; `find` from a position; `'…'` is a `u8` or a `scalar` by use; graphemes are `std`'s; `==` compares bytes; a `Bytes` reads a word in the order its name says (`u64_le`, `u32_be`), and never past the end: a program pads the end itself (D13). | Accepted | no (#453) |
 | [318](adr-318.md) | An option's default is a build-time value, evaluated once where the function is declared, recorded in the ledger as its value and written into the call in the form a `comptime` crosses in; a `std` type the compiler cannot see into crosses through its `constant` column, and a `std` function runs at build time when it is written in Nikaia. | Accepted | no |
@@ -329,10 +331,15 @@ either finds the other. Records replaced as a whole are not here: they are in
 | [013](adr-013.md) D5 | [277](adr-277.md) D2 | a lambda takes the arguments it names |
 | [014](adr-014.md) D1 | [002](adr-002.md) D4 | `std`'s Nikaia half is lowered at release time and the `.rs` is committed |
 
+## Topics in use
+
+`decision-records`, `regex`.
+
 ## Reserved numbers
 
-A number is **taken when it is claimed here**, not when the record lands, so two
-branches writing records at the same time do not take the same number.
+A name - `regex-2`, or a number of the old scheme - is **taken when it is
+claimed here**, not when the record lands, so two branches writing records at
+the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
@@ -341,7 +348,7 @@ A row here is a claim and nothing else: it says the number is spoken for, not
 what the decision is. Delete the row in the same commit that adds the record.
 A claim whose branch is abandoned is deleted by whoever notices.
 
-**When a record has to move to another number, its citations move with it.**
+**When a record has to move to another name, its citations move with it.**
 `check-adr-refs.py` catches a citation of a decision that does not exist and a
 number held by two records, but not a citation that still resolves and now
 points at the record that took the old number. Every sentence that cited the old
@@ -349,13 +356,20 @@ number is checked by hand.
 
 ## Writing a new one
 
-Take the next free number (free means neither a file above, nor an archived one
-in [`docs/history/adr/`](../../history/adr/), nor a row under **Reserved
-numbers**) and claim it there first. Copy [`TEMPLATE.md`](TEMPLATE.md); its
-header block is, in this order:
+A record is named by its topic and a number
+([ADR-decision-records-1](adr-decision-records-1.md)): `ADR-<topic>-<n>`, the
+topic one to three lowercase words joined by `-`, the number counting that
+topic's records from 1. Take a topic from [Topics in use](#topics-in-use), or a
+new one where none fits, and the next free number of that topic (free means
+neither a file above, nor an archived one in
+[`docs/history/adr/`](../../history/adr/), nor a row under **Reserved
+numbers**), and claim the name there first. The file is `adr-<topic>-<n>.md`.
+The numbered records (`ADR-296`) keep their numbers until a consolidation
+replaces them; no new record takes a bare number. Copy
+[`TEMPLATE.md`](TEMPLATE.md); its header block is, in this order:
 
 ```markdown
-# ADR-NNN: A title that states the decision, not the topic
+# ADR-<topic>-<n>: A title that states the decision, not the topic
 
 **Status:** Accepted | Open
 **Date:** <day the decision was taken>

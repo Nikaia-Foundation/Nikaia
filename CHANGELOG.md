@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1252] — 2026-10-28
+
+**std::regex decided: RE2 dialect, known patterns compiled as source, run-time patterns on Rust's automata crates (ADR-regex-1, #673)**
+- std::regex is RE2's dialect (no backreference or lookaround, linear time); a match is a text::Match (ADR-regex-1 D1-D3, Part I 2.6). A pattern the build knows is source: compiled while building, a bad one stops the build (NK1244), down a ladder of engines S0-S6 laid down in the binary in the form they are read; a run-time pattern runs on regex-automata; --comptime reports each pattern's stage (ADR-regex-1 D4-D9). Decided and written down; not yet built. Records are named by topic from now on (ADR-decision-records-1).
+
 ## [0.0.1251] — 2026-10-28
 
 ### A tuple variant's value narrows after its `null` arm (#902)

@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
-"""Every `ADR-0NN Dn` / `ADR-0NN §x` citation must point at a heading that exists,
-and every ADR number belongs to exactly one record.
+"""Every `ADR-0NN Dn` / `ADR-topic-n Dn` / `… §x` citation must point at a heading
+that exists, and every ADR name belongs to exactly one record.
+
+A record is named `ADR-<topic>-<n>`: one to three lowercase words joined by `-`
+and a number (ADR-decision-records-1). The records from before carry a bare
+three-digit number until a consolidation replaces them; both are checked here.
+**Python, not Nikaia, for now** (ADR-decision-records-1 D5): the move waits
+for `std::regex` (#673 step 1), which this tool is made of.
 
 A decision is only citable if the number is stable, so a dangling `D7` is a
 defect in the same way a dangling link is. Run from the repository root; exits
@@ -20,6 +26,23 @@ import glob
 import os
 import re
 import sys
+
+# A record's name after `ADR-`: a number of the old scheme, or a topic of one to
+# three lowercase words and a number (ADR-decision-records-1 D1).
+TOPIC = r"[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*){0,2}-[1-9][0-9]*"
+NAME = r"(?:\d{3}|" + TOPIC + r")"
+FILE = re.compile(r"adr-(" + NAME + r")\.md$")
+
+
+def name_of(path):
+    """The record's name from its file, or None for a file that breaks the scheme."""
+    m = FILE.search(path)
+    return m.group(1) if m else None
+
+
+def records(where):
+    """The record files of a directory: every `adr-*.md` but the template."""
+    return sorted(glob.glob(f"{where}/adr-*.md"))
 
 ADR_DIR = "docs/specification/adr"
 # Records a later record replaced. They are read for history only, and only
@@ -59,31 +82,37 @@ def collisions():
     rows = [
         num
         for num, second in re.findall(
-            r"^\|\s*\[(\d{3})\]\(adr-\1\.md\)\s*\|([^|]*)\|", index, re.M
+            r"^\|\s*\[(" + NAME + r")\]\(adr-\1\.md\)\s*\|([^|]*)\|", index, re.M
         )
-        if not re.match(r"\s*\[\d{3}\]\(adr-\d{3}\.md\)", second)
+        if not re.match(r"\s*\[" + NAME + r"\]\(adr-" + NAME + r"\.md\)", second)
     ]
     for num in sorted(set(rows)):
         if rows.count(num) > 1:
             wrong.append(f"ADR-{num}: {rows.count(num)} index rows")
 
     archive = open(f"{ARCHIVE}/README.md", encoding="utf-8").read()
-    archived = re.findall(r"^\|\s*\[(\d{3})\]\(adr-\1\.md\)\s*\|", archive, re.M)
+    archived = re.findall(r"^\|\s*\[(" + NAME + r")\]\(adr-\1\.md\)\s*\|", archive, re.M)
     for num in sorted(set(rows) & set(archived)):
         wrong.append(f"ADR-{num}: indexed both as live and as archived")
-    for path in sorted(glob.glob(f"{ADR_DIR}/adr-*.md") + glob.glob(f"{ARCHIVE}/adr-*.md")):
-        num = re.search(r"adr-(\d{3})\.md$", path).group(1)
+    for path in records(ADR_DIR) + records(ARCHIVE):
+        num = name_of(path)
+        if num is None:
+            wrong.append(
+                f"{path}: not a record name - `adr-<topic>-<n>.md`, one to three"
+                " lowercase words and a number"
+            )
+            continue
         listed = archived if path.startswith(ARCHIVE) else rows
         first = open(path, encoding="utf-8").readline()
-        said = re.match(r"#\s*ADR-(\d{3})\b", first.strip())
+        said = re.match(r"#\s*ADR-(" + NAME + r"):", first.strip())
         if not said:
             wrong.append(f"{path}: the first line does not open `# ADR-{num}: …`")
         elif said.group(1) != num:
             wrong.append(f"{path}: titled ADR-{said.group(1)}")
         if num not in listed:
             wrong.append(f"ADR-{num}: a record with no index row")
-    live = {re.search(r"(\d{3})\.md$", p).group(1) for p in glob.glob(f"{ADR_DIR}/adr-*.md")}
-    for num in sorted(live & {re.search(r"(\d{3})\.md$", p).group(1) for p in glob.glob(f"{ARCHIVE}/adr-*.md")}):
+    live = {name_of(p) for p in records(ADR_DIR)} - {None}
+    for num in sorted(live & ({name_of(p) for p in records(ARCHIVE)} - {None})):
         wrong.append(f"ADR-{num}: a file both live and archived")
     return wrong
 
@@ -91,8 +120,10 @@ def collisions():
 def headings():
     """What each ADR actually offers: its `Dn` and its top-level section numbers."""
     have = {}
-    for path in sorted(glob.glob(f"{ADR_DIR}/adr-*.md") + glob.glob(f"{ARCHIVE}/adr-*.md")):
-        num = re.search(r"adr-(\d{3})\.md$", path).group(1)
+    for path in records(ADR_DIR) + records(ARCHIVE):
+        num = name_of(path)
+        if num is None:
+            continue
         text = open(path, encoding="utf-8").read()
         ds = set(re.findall(r"^#{2,4}\s+(D\d+)\b", text, re.M))
         # `## 3. Consequences` and `### 4.2 — …` both name a section.
@@ -122,7 +153,8 @@ def citations():
         # markdown form `[ADR-023](adr-023.md) D7` that every ADR header uses.
         for pattern in (
             r"ADR[- ]?(\d{3})((?:[^A-Za-z0-9]{0,4}(?:D\d+|§[\d.]+))+)",
-            r"\]\((?:[\w./-]*/)?adr-(\d{3})\.md\)((?:[^A-Za-z0-9]{0,4}(?:D\d+|§[\d.]+))+)",
+            r"ADR-(" + TOPIC + r")((?:[^A-Za-z0-9]{0,4}(?:D\d+|§[\d.]+))+)",
+            r"\]\((?:[\w./-]*/)?adr-(" + NAME + r")\.md\)((?:[^A-Za-z0-9]{0,4}(?:D\d+|§[\d.]+))+)",
         ):
             for m in re.finditer(pattern, text):
                 for label in re.findall(r"D\d+|§[\d.]+", m.group(2)):
@@ -144,7 +176,7 @@ NOTES = re.compile(
 def inversions():
     """ADRs citing a section of a notes file as if it were a rule."""
     found = []
-    for path in sorted(glob.glob(f"{ADR_DIR}/adr-*.md")):
+    for path in records(ADR_DIR):
         for line_no, line in enumerate(open(path, encoding="utf-8"), 1):
             if NOTES.search(line):
                 found.append((path, line_no, line.strip()[:90]))
@@ -159,14 +191,11 @@ def banished():
     the route rather than the answer and costs a second read, so only the
     history may name it: `docs/history/` and `CHANGELOG.md`.
     """
-    archived = {
-        re.search(r"(\d{3})\.md$", p).group(1) for p in glob.glob(f"{ARCHIVE}/adr-*.md")
-    }
+    archived = {name_of(p) for p in records(ARCHIVE)} - {None}
     if not archived:
         return []
-    pattern = re.compile(
-        r"ADR[- ]?(" + "|".join(sorted(archived)) + r")\b|adr-(" + "|".join(sorted(archived)) + r")\.md"
-    )
+    names = "|".join(re.escape(n) for n in sorted(archived))
+    pattern = re.compile(r"ADR[- ]?(" + names + r")(?![A-Za-z0-9_])|adr-(" + names + r")\.md")
     found = []
     files = set()
     for p in SEARCH:
@@ -180,6 +209,29 @@ def banished():
             m = pattern.search(line)
             if m:
                 found.append((f, line_no, m.group(0)))
+    return found
+
+
+def unknown(have):
+    """A name of the topic scheme that no record carries, cited with or without a `Dn`.
+
+    The old numbers are checked only where a `Dn` or `§` follows; a topic name is
+    checked wherever it stands, because a name that looks right is the easier one
+    to get wrong (`ADR-regex-1` against `ADR-regexp-1`).
+    """
+    found = []
+    files = set()
+    for p in SEARCH:
+        files |= {f for f in glob.glob(p, recursive=True) if os.path.isfile(f)}
+    for f in sorted(files):
+        if f.startswith("docs/history/") or "__pycache__" in f or "/target/" in f:
+            continue
+        if os.path.abspath(f) == os.path.abspath(__file__):
+            continue
+        for line_no, line in enumerate(open(f, encoding="utf-8", errors="ignore"), 1):
+            for m in re.finditer(r"(?<![A-Za-z0-9_])ADR-(" + TOPIC + r")(?![A-Za-z0-9_])", line):
+                if m.group(1) not in have:
+                    found.append((f, line_no, m.group(0)))
     return found
 
 
@@ -202,6 +254,7 @@ def main():
     inverted = inversions()
     collided = collisions()
     stale = banished()
+    missing = unknown(have)
 
     if bad:
         print(f"{len(bad)} dangling ADR citation(s):")
@@ -214,24 +267,28 @@ def main():
         print("  A note holds nothing normative (docs/README.md). Link the file,")
         print("  or make the argument in the ADR.")
     if collided:
-        print(f"{len(collided)} ADR number(s) not owned by exactly one record:")
+        print(f"{len(collided)} ADR name(s) not owned by exactly one record:")
         for line in collided:
             print(f"  {line}")
-        print("  A number is taken when it is claimed in the index's reserved table,")
+        print("  A name is taken when it is claimed in the index's reserved table,")
         print("  and a record is written once. Two rows or a mismatched title means")
-        print("  two records are wearing one number - move the later one.")
+        print("  two records are wearing one name - move the later one.")
     if stale:
         print(f"{len(stale)} citation(s) of an archived ADR outside the history:")
         for f, line_no, what in stale:
             print(f"  {f}:{line_no}: {what}")
         print("  Cite the record that replaced it (docs/history/adr/README.md maps")
         print("  every archived decision to its live one).")
-    if bad or inverted or collided or stale:
+    if missing:
+        print(f"{len(missing)} ADR name(s) that no record carries:")
+        for f, line_no, what in missing:
+            print(f"  {f}:{line_no}: {what}")
+    if bad or inverted or collided or stale or missing:
         return 1
 
     print(f"all ADR citations resolve ({len(citations())} checked)")
     print("no ADR borrows authority from a note")
-    print(f"every ADR number belongs to one record ({len(headings())} checked)")
+    print(f"every ADR name belongs to one record ({len(headings())} checked)")
     print("no live file cites an archived record")
     return 0
 

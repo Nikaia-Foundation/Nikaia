@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1251 (Draft)
+**Version:** 0.0.1252 (Draft)
 **Date:** 2026-10-28
 
 ---
@@ -807,6 +807,25 @@ finds the first match at or after `from` (default `s.start()`), `s.rfind(needle)
 -> text::Match?` the last. A match has `start` and `end`, positions of `s`, and
 `m.text()`, the matched text. A needle is a text or one scalar, `s.find(',')`,
 as the pattern of `contains`, `starts_with`, `split` and `replace` is (#877).
+
+**A pattern is searched with `std::regex`** ([ADR-regex-1](adr/adr-regex-1.md)):
+`regex::compile("(\\d{4})-(\\d{2})") -> regex::Regex throws regex::Error`. The
+dialect is RE2's, as Rust's `regex` crate writes it: no backreference, no
+lookaround, a search in time proportional to the text times the pattern. A match
+is the leftmost one, among those the one the pattern prefers. Text is matched by
+scalar, and `\d`, `\w`, `\s` are Unicode classes. `re.is_match(s) -> bool`,
+`re.find(s; from: text::Pos) -> text::Match?`, `re.find_all(s) -> Seq[text::Match]`
+(not overlapping), `re.captures(s; from: text::Pos) -> regex::Captures?` with
+`c.group(i)` and `c.named(name)`, each a `text::Match?` (group 0 the whole
+match), `re.replace_all(s, with) -> String` (`$1`, `${name}` in `with`) and
+`re.split(s) -> Seq[ref String]`. Every position is a `text::Pos` of `s`.
+
+A pattern the build knows - a literal, a text composed of `comptime` values,
+`asset("…")` - is source in the pattern language: `comptime DATE =
+regex::compile("…")` is compiled while the program is built, and a pattern
+that does not parse stops the build (`NK1244`). A pattern known only at run
+time is compiled then and fails with `regex::Error`. `--comptime` prints for
+each known pattern how it was compiled.
 
 **A text is cut by name, at its own positions:** `s.before(p)`, `s.after(p)`,
 `s.between(p, q)`, and `s.split_at(p)` for the first two at once. Each is a

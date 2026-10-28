@@ -1,6 +1,8 @@
-# ADR-NNN: <The decision, written as a statement>
+# ADR-<topic>-<n>: <The decision, written as a statement>
 
-*Copy this file to `adr-NNN.md`, fill every section, delete these italic notes.
+*Copy this file to `adr-<topic>-<n>.md` (ADR-decision-records-1: one to three
+lowercase words and the topic's next number), fill every section, delete these
+italic notes.
 The title is the answer, not the topic: "A list has no `+`", not "Operators on
 lists".*
 
