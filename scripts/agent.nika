@@ -279,8 +279,11 @@ fn main() throws {
     let stem = (abs.strip_suffix(".md") ?? "").clone()
     let mut report = f"{abs}.report.md"
     if !fs::exists(report.clone(), fs::Root::Anywhere) && stem != "" { report = f"{stem}.report.md" }
-    let old_cost = agent_read(f"{dir}/cost.txt")
-    fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, old_cost + f"{today} {cost}\n")
+    // A run cut off by the time limit prints no JSON: no empty cost line.
+    if cost != "" {
+        let old_cost = agent_read(f"{dir}/cost.txt")
+        fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, old_cost + f"{today} {cost}\n")
+    }
     let exe = agent_exe()
     if exe != "" {
         process::run(exe, ["run", "scripts/batch.nika", "--", dir.clone(), "--tokens", abs.clone(), f"{tokens}", f"{turns}"])

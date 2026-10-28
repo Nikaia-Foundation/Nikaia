@@ -22,10 +22,12 @@
 // output from FILE instead of running `cycle.nika` (for tests).
 // A builder's `Pushed: rejected` is rewritten when this driver pushed its commit.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
-// **A move that kept under 60% of the converter's draft stops the pipeline**
-// (owner, 2026-10-27): a builder report whose `Rs2nika:` reads `kept N of M
-// lines` with N < 0.6 M escalates, and the main session repairs the converter
-// before the next move. `--kept REPORT` prints `ok` or that line (for tests).
+// **A move that kept under 60% of the converter's draft calls for a converter
+// repair** (owner, 2026-10-27): a builder report whose `Rs2nika:` reads `kept N
+// of M lines` with N < 0.6 M prints `CONVERT drive: ...`, and the main session
+// repairs the converter beside the next move, which the driver starts at once
+// (owner, 2026-10-28: the pipeline no longer waits for the repair).
+// `--kept REPORT` prints `ok` or that line (for tests).
 // `nikaia run` compiles this script once, so a commit to it does nothing until a
 // restart: at the top of each round of a real run the driver reads
 // scripts/drive.nika again, and if it changed since the start it prints the one
@@ -83,7 +85,7 @@ fn drive_kept(report: String) -> String {
     let kept = text::parse_i64(words[0].clone()) ?? return ""
     let all = text::parse_i64(words[2].clone()) ?? return ""
     if all <= 0 || kept * 100 >= all * 60 { return "" }
-    return f"rs2nika kept {kept} of {all} lines, under 60%: repair the converter before the next move"
+    return f"rs2nika kept {kept} of {all} lines, under 60%: repair the converter beside the next move"
 }
 
 // Which action a cycle's output leads to, as one line:
@@ -298,7 +300,7 @@ fn main() throws {
     }
     if args.len() == 3 && args[1] == "--kept" {
         let why = drive_kept(drive_read(args[2].clone()))
-        if why == "" { println("ok") } else { println(f"ESCALATE drive: {why}") }
+        if why == "" { println("ok") } else { println(f"CONVERT drive: {why}") }
         return
     }
     if args.len() == 3 && args[1] == "--changed" {
@@ -357,7 +359,7 @@ fn main() throws {
             drive_tidy(dry, dir.clone())
             if !dry {
                 let why = drive_kept(drive_read(f"{brief}.report.md"))
-                if why != "" { drive_escalate(f"{drive_stem(brief.clone())}: {why}") }
+                if why != "" { println(f"CONVERT drive: {drive_stem(brief.clone())}: {why}") }
             }
             if dry {
                 println(f"DRY-RUN NEXT {drive_stem(action.clone())}")
