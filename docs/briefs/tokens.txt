@@ -113,3 +113,5 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 860621 19
 /home/user/Nikaia/docs/briefs/p3b-project-run-loop.md 5725963 75
 /home/user/Nikaia/docs/briefs/architect-task.md 945495 21
+/home/user/Nikaia/docs/briefs/p4a-project-members.md 0 0
+/home/user/Nikaia/docs/briefs/p4a-project-members.md 642502 12
