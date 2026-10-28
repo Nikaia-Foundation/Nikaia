@@ -181,7 +181,9 @@ fn drive_push(dry: bool) throws {
     if dry { return }
     let first = process::run("git", ["push", "origin", "develop"])
     if first.ok { return }
-    let pulled = process::run("git", ["pull", "--rebase", "origin", "develop"])
+    // The shared checkout holds other agents' unfinished files and build locks:
+    // they are stashed around the rebase, not a reason to stop (2026-10-28).
+    let pulled = process::run("git", ["pull", "--rebase", "--autostash", "origin", "develop"])
     if !pulled.ok { drive_escalate("push rejected, and git pull --rebase failed") }
     let second = process::run("git", ["push", "origin", "develop"])
     if !second.ok { drive_escalate("push rejected after one rebase") }
