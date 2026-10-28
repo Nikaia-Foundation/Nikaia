@@ -492,3 +492,164 @@ pub fn test_dispatcher(cli: ref String, with_use: bool, count: i64, dispatch: re
     text.push_str("    panic(f\"this build has no test numbered `{which}`\")\n}\n")
     return text
 }
+
+/// How many `test` blocks a file has: a test build of a program whose own
+/// files have none changes nothing.
+pub fn modules_test_count(items: ref Vec[Spanned[Item]]) -> i64 {
+    return items.iter().filter(fn(item) { match item.node { Item::Test { .. } => true, else => false } }).count()
+}
+
+/// **The entry's word for `std::cli`** (`use std::cli as c` calls it `c`),
+/// or nothing where it has no `use std::cli`: the dispatcher reads its
+/// arguments with it, and adds the `use` where there is none.
+pub fn modules_cli_word(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> String? {
+    for item in items {
+        let path = use_segments(names, item.node)
+        if path.len() == 2 && path[0] == "std" && path[1] == "cli" {
+            let alias = alias_of(names, item.node)
+            if alias.len() > 0 {
+                return alias
+            }
+            return "cli"
+        }
+    }
+    return null
+}
+
+/// **`main` gives its name to the dispatcher and goes**: `items` is the entry
+/// parsed again with the dispatcher (`dispatch`, `test_dispatcher`) appended,
+/// and the dispatcher is what a test build runs as `main`. `intern` is the
+/// entry's interner, which answers the symbol `main` already has.
+pub fn modules_dispatcher_as_main(mut items: Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, dispatch: ref String, intern: fn(ref String) -> winnow_grammar::Symbol sync) {
+    let main = intern("main")
+    let mut kept: Vec[Spanned[Item]] = []
+    for item in items.drain() {
+        let named = match item.node {
+            Item::Fn { name, .. } => a_symbols_text(names, name),
+            else => "",
+        }
+        if named == "main" {
+            continue
+        }
+        if named == dispatch {
+            let node = modules_named(item.node, main)
+            kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })
+        } else {
+            kept.push(item)
+        }
+    }
+    items.extend(kept)
+}
+
+// A function under another name; any other item as it is.
+fn modules_named(item: Item, to: winnow_grammar::Symbol) -> Item {
+    return match item {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => Item::Fn { name: to, generics: generics, receiver: receiver, args: args, config: config, spread: spread, ret_type: ret_type, body: body, is_sync: is_sync, sync_by: sync_by, is_public: is_public, can_throw: can_throw, is_extern: is_extern },
+        other => other,
+    }
+}
+
+/// **Every `test` block of one file, as a function** (ADR-269 D1): the `k`th
+/// becomes `test_function(k)`, counted from `first` over the program's own
+/// files, and `throws`, so a failure that leaves its body leaves `main` -
+/// which prints it and ends the process unsuccessfully. The answer is each
+/// test's title as written and the line its block starts on in `source`.
+pub fn modules_tests_as_functions(mut items: Vec[Spanned[Item]], source: ref String, first: i64, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[(String, i64)] {
+    let mut tests: Vec[(String, i64)] = []
+    let mut kept: Vec[Spanned[Item]] = []
+    for item in items.drain() {
+        let start = item.span.start as i64
+        match item.node {
+            Item::Test { name, body } => {
+                let function: winnow_grammar::Symbol? = intern(test_function(first + tests.len()))
+                tests.push((name, modules_line_of(source, start)))
+                let node = Item::Fn { name: function, generics: [], receiver: null, args: [], config: [], spread: null, ret_type: null, body: body, is_sync: false, sync_by: [], is_public: false, can_throw: true, is_extern: false }
+                kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })
+            },
+            other => kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes }),
+        }
+    }
+    items.extend(kept)
+    return tests
+}
+
+// The line the byte `at` of `source` stands on, the first being 1.
+fn modules_line_of(source: ref String, at: i64) -> i64 {
+    let mut line = 1
+    let mut seen = 0
+    for b in source.bytes() {
+        if seen >= at {
+            break
+        }
+        if b as i64 == 10 {
+            line += 1
+        }
+        seen += 1
+    }
+    return line
+}
+
+/// **Every name an expression of this file writes**, added to `out`: a path's
+/// last segment, a variable, a method. Over-approximate on purpose (a local
+/// with a function's name counts as a call of it), which is the cautious
+/// direction for a permission. The holes of an `f"..."` are expressions too.
+pub fn modules_names_in(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], mut out: collections::BTreeSet[String]) {
+    let mut bodies: Vec[ref Block] = []
+    for item in items {
+        match item.node {
+            Item::Fn { body, .. } => bodies.push(body),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { body, .. } => bodies.push(body),
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    for body in bodies {
+        for e in visited_in_block(body) {
+            modules_note(names, e, out)
+        }
+    }
+}
+
+// The name one expression writes, into `out`. A struct literal names the type
+// it builds: a `pub` type whose maps are the keyed one (a barrier) is built
+// with it.
+fn modules_note(names: ref winnow_grammar::InternerContext, e: ref Expr, mut out: collections::BTreeSet[String]) {
+    match e {
+        Expr::Path(segments, _) => {
+            if segments.len() > 0 {
+                out.insert(names.resolve(segments[segments.len() - 1]).clone())
+            }
+        },
+        Expr::Variable(n, _) => {
+            out.insert(names.resolve(n).clone())
+        },
+        Expr::MethodCall { method, .. } => {
+            out.insert(names.resolve(method).clone())
+        },
+        Expr::SafeMethod { method, .. } => {
+            out.insert(names.resolve(method).clone())
+        },
+        Expr::StructLit { name, .. } => {
+            out.insert(names.resolve(name).clone())
+        },
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr, .. } => {
+                        for inner in visited_in_expr(expr) {
+                            modules_note(names, inner, out)
+                        }
+                    },
+                    else => {},
+                }
+            }
+        },
+        else => {},
+    }
+}

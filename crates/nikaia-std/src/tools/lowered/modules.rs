@@ -272,3 +272,124 @@ pub fn test_dispatcher(cli: &str, with_use: bool, count: i64, dispatch: &str) ->
     text
 }
 
+pub fn modules_test_count(items: &[Spanned<Item>]) -> i64 { items.iter().filter(|&item| { matches!(item.node, Item::Test { .. }) }).count() as i64 }
+
+pub fn modules_cli_word(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Option<String> {
+    for item in items.iter() {
+        let path = use_segments(names, &item.node);
+        if path.len() == 2 && *nikaia_std::index::get(&path, 0) == "std" && *nikaia_std::index::get(&path, 1) == "cli" {
+            let alias = alias_of(names, &item.node);
+            if !alias.is_empty() { return Some(alias); }
+            return Some(String::from("cli"));
+        }
+    }
+    None
+}
+
+pub fn modules_dispatcher_as_main(items: &mut Vec<Spanned<Item>>, names: &winnow_grammar::InternerContext, dispatch: &str, intern: &impl Fn(&str) -> winnow_grammar::Symbol) {
+    let main = intern("main");
+    let mut kept: Vec<Spanned<Item>> = vec![];
+    for item in items.drain(..) {
+        let named = match item.node {
+            Item::Fn { name, .. } => a_symbols_text(names, name),
+            _ => String::from(""),
+        };
+        if named == "main" { continue; }
+        if named == dispatch {
+            let node = modules_named(item.node, main);
+            kept.push(Spanned { node, span: item.span, doc: item.doc, attributes: item.attributes });
+        } else { kept.push(item); }
+    }
+    items.extend(kept);
+}
+
+pub(crate) fn modules_named(item: Item, to: winnow_grammar::Symbol) -> Item {
+    match item {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => Item::Fn { name: Some(to), generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern },
+        other => other,
+    }
+}
+
+pub fn modules_tests_as_functions(items: &mut Vec<Spanned<Item>>, source: &str, first: i64, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Vec<(String, i64)> {
+    let mut tests: Vec<(String, i64)> = vec![];
+    let mut kept: Vec<Spanned<Item>> = vec![];
+    for item in items.drain(..) {
+        let start = item.span.start as i64;
+        match item.node {
+            Item::Test { name, body } => {
+                let function: Option<winnow_grammar::Symbol> = Some(intern(&test_function(first + tests.len() as i64)));
+                tests.push((name, modules_line_of(source, start)));
+                let node = Item::Fn { name: function, generics: vec![], receiver: None, args: vec![], config: vec![], spread: None, ret_type: None, body, is_sync: false, sync_by: vec![], is_public: false, can_throw: true, is_extern: false };
+                kept.push(Spanned { node, span: item.span, doc: item.doc, attributes: item.attributes });
+            },
+            other => { kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes }); },
+        }
+    }
+    items.extend(kept);
+    tests
+}
+
+pub(crate) fn modules_line_of(source: &str, at: i64) -> i64 {
+    let mut line: i64 = 1;
+    let mut seen: i64 = 0;
+    for b in source.bytes() {
+        if seen >= at { break; }
+        if (b as i64) == 10 { line += 1; }
+        seen += 1;
+    }
+    line
+}
+
+pub fn modules_names_in(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], out: &mut collections::BTreeSet<String>) {
+    let mut bodies: Vec<&Block> = vec![];
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { body, .. } => { bodies.push(body); },
+            Item::Impl { methods, .. } => {
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { body, .. } => { bodies.push(body); },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    for body in bodies.iter() {
+        let body = *body;
+        for e in visited_in_block(body) { modules_note(names, e, out); }
+    }
+}
+
+pub(crate) fn modules_note(names: &winnow_grammar::InternerContext, e: &Expr, out: &mut collections::BTreeSet<String>) {
+    match e {
+        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(names.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_owned()); } },
+        Expr::Variable(n, _) => {
+            let n = *n;
+            out.insert(names.resolve(n).to_owned());
+        },
+        Expr::MethodCall { method, .. } => {
+            let method = *method;
+            out.insert(names.resolve(method).to_owned());
+        },
+        Expr::SafeMethod { method, .. } => {
+            let method = *method;
+            out.insert(names.resolve(method).to_owned());
+        },
+        Expr::StructLit { name, .. } => {
+            let name = *name;
+            out.insert(names.resolve(name).to_owned());
+        },
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Hole { expr, .. } => { for inner in visited_in_expr(expr) { modules_note(names, inner, out); } },
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
+}
+

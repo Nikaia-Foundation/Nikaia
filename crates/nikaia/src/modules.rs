@@ -574,19 +574,6 @@ pub struct TestCase {
     pub line: usize,
 }
 
-/// The name the `k`th test's function has in a test build.
-fn test_function(k: usize) -> String {
-    nikaia_std::tools::modules::test_function(k as i64)
-}
-
-/// Whether a function is a `test` block a test build turned into one
-/// ([`test_function`]): its `assert`s are the test's verdict, not claims the
-/// prover holds ([ADR-269](../../docs/specification/adr/adr-269.md) D11).
-pub fn is_a_test_function(name: &str) -> bool {
-    name.strip_prefix("__nikaia_test_")
-        .is_some_and(|k| !k.is_empty() && k.bytes().all(|b| b.is_ascii_digit()))
-}
-
 /// The function a test build's entry dispatches from, before it takes `main`'s
 /// place.
 const DISPATCH: &str = "__nikaia_tests";
@@ -1028,20 +1015,13 @@ impl Program {
 /// (ADR-303 D4). A test's function `throws`, so a failure that leaves its body
 /// leaves `main` - which prints it and ends the process unsuccessfully.
 fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestCase>)> {
+    use nikaia_std::tools::modules;
     let own: Vec<usize> = (0..units.len())
         .filter(|&at| units[at].package.is_none())
         .collect();
-    let count: usize = own
+    let count: i64 = own
         .iter()
-        .map(|&at| {
-            units[at]
-                .parsed
-                .program
-                .items
-                .iter()
-                .filter(|item| matches!(item.node, Item::Test { .. }))
-                .count()
-        })
+        .map(|&at| modules::modules_test_count(&units[at].parsed.program.items))
         .sum();
     if count == 0 || units.is_empty() || units[0].package.is_some() {
         return Ok((units, Vec::new()));
@@ -1049,98 +1029,40 @@ fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestC
 
     // The entry first, because it is parsed again with the dispatcher in it.
     let entry = &units[0];
-    let cli = entry
-        .parsed
-        .program
-        .items
-        .iter()
-        .find_map(|item| match &item.node {
-            Item::Import { path, alias }
-                if path.len() == 2
-                    && entry.parsed.text(path[0]) == "std"
-                    && entry.parsed.text(path[1]) == "cli" =>
-            {
-                Some(alias.map_or("cli", |a| entry.parsed.text(a)).to_string())
-            }
-            _ => None,
-        });
+    let cli = modules::modules_cli_word(&entry.parsed.interner, &entry.parsed.program.items);
     let mut text = entry.source.clone();
     text.push('\n');
     // The dispatcher's own text is Nikaia's (`tools/modules.nika`).
-    text.push_str(&nikaia_std::tools::modules::test_dispatcher(
+    text.push_str(&modules::test_dispatcher(
         cli.as_deref().unwrap_or("cli"),
         cli.is_none(),
-        count as i64,
+        count,
         DISPATCH,
     ));
     let mut parsed = parser::parse_to_ast(&text)
         .with_context(|| format!("{} with its tests", entry.path.display()))?;
-    // `main` gives its name to the dispatcher and goes.
-    let mut main = None;
-    let interner = parsed.interner.clone();
-    parsed.program.items.retain(|item| match &item.node {
-        Item::Fn {
-            name: Some(name), ..
-        } if interner.resolve(*name) == "main" => {
-            main = Some(*name);
-            false
-        }
-        _ => true,
+    let interner = &parsed.interner;
+    modules::modules_dispatcher_as_main(&mut parsed.program.items, interner, DISPATCH, &|text| {
+        interner.intern_string(text)
     });
-    let main = match main {
-        Some(name) => name,
-        None => match parser::parse_expression(&parsed.interner, "main")? {
-            crate::ast::Expr::Variable(name, _) => name,
-            _ => anyhow::bail!("`main` did not parse as a name"),
-        },
-    };
-    for item in &mut parsed.program.items {
-        if let Item::Fn {
-            name: Some(name), ..
-        } = &mut item.node
-            && parsed.interner.resolve(*name) == DISPATCH
-        {
-            *name = main;
-        }
-    }
     units[0].parsed = parsed;
 
     let mut tests = Vec::new();
     for at in own {
         let unit = &mut units[at];
-        for item in &mut unit.parsed.program.items {
-            let Item::Test { name: title, body } = &item.node else {
-                continue;
-            };
-            let name =
-                match parser::parse_expression(&unit.parsed.interner, &test_function(tests.len()))?
-                {
-                    crate::ast::Expr::Variable(name, _) => name,
-                    _ => anyhow::bail!("a test's function name did not parse as a name"),
-                };
+        let interner = &unit.parsed.interner;
+        let found = modules::modules_tests_as_functions(
+            &mut unit.parsed.program.items,
+            &unit.source,
+            tests.len() as i64,
+            &|text| interner.intern_string(text),
+        );
+        for (title, line) in found {
             tests.push(TestCase {
-                title: title.clone(),
+                title,
                 path: unit.path.clone(),
-                line: unit.source[..item.span.at().min(unit.source.len())]
-                    .matches('\n')
-                    .count()
-                    + 1,
+                line: line as usize,
             });
-            item.node = Item::Fn {
-                name: Some(name),
-                generics: Vec::new(),
-                receiver: None,
-                args: Vec::new(),
-                config: Vec::new(),
-                spread: None,
-                ret_type: None,
-                body: body.clone(),
-                is_sync: false,
-                sync_by: Vec::new(),
-                is_public: false,
-                can_throw: true,
-                is_extern: false,
-            };
         }
     }
     Ok((units, tests))
@@ -1150,67 +1072,16 @@ fn std_ledger() -> &'static crate::contracts::Ledger {
     crate::contracts::std_ledger()
 }
 
-/// Every name an expression of these files writes: a path's last segment, a
-/// variable, a method. Over-approximate on purpose (a local with a function's
-/// name counts as a call of it), which is the cautious direction for a
-/// permission. The holes of an `f"..."` are expressions too.
-fn names_in(files: &[&crate::parser::Parsed]) -> std::collections::BTreeSet<String> {
-    use crate::ast::{Block, Expr, FPart, Item};
-
-    fn note(
-        parsed: &crate::parser::Parsed,
-        e: &Expr,
-        names: &mut std::collections::BTreeSet<String>,
-    ) {
-        match e {
-            Expr::Path(segments, _) => {
-                if let Some(last) = segments.last() {
-                    names.insert(parsed.text(*last).to_string());
-                }
-            }
-            Expr::Variable(n, _) => {
-                names.insert(parsed.text(*n).to_string());
-            }
-            Expr::MethodCall { method, .. } | Expr::SafeMethod { method, .. } => {
-                names.insert(parsed.text(*method).to_string());
-            }
-            // A struct literal names the type it builds: a `pub` type whose
-            // maps are the keyed one (a barrier) is built with it.
-            Expr::StructLit { name, .. } => {
-                names.insert(parsed.text(*name).to_string());
-            }
-            Expr::LitInterpolated { parts, .. } => {
-                for part in parts {
-                    if let FPart::Hole { expr, .. } = part {
-                        let mut inner = std::collections::BTreeSet::new();
-                        crate::emit::visit_expr(expr, &mut |e| note(parsed, e, &mut inner));
-                        names.extend(inner);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mut names = std::collections::BTreeSet::new();
+/// Every name an expression of these files writes (`modules_names_in`,
+/// `tools/modules.nika`).
+fn names_in(files: &[&crate::parser::Parsed]) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
     for parsed in files {
-        let mut bodies: Vec<&Block> = Vec::new();
-        for item in &parsed.program.items {
-            match &item.node {
-                Item::Fn { body, .. } => bodies.push(body),
-                Item::Impl { methods, .. } => {
-                    for method in methods {
-                        if let Item::Fn { body, .. } = &method.node {
-                            bodies.push(body);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-        for body in bodies {
-            crate::emit::visit_block(body, &mut |e| note(parsed, e, &mut names));
-        }
+        nikaia_std::tools::modules::modules_names_in(
+            &parsed.interner,
+            &parsed.program.items,
+            &mut names,
+        );
     }
     names
 }
