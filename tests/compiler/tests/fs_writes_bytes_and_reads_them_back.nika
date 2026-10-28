@@ -1,0 +1,32 @@
+// `std::fs` writes a `Vec[u8]` that is not text (a 0, a 255, a u64 little-endian)
+// and reads back the same bytes; the probe the move of `sysroot.rs` (S2) needed.
+use std::fs
+
+fn le(mut out: Vec[u8], n: u64) {
+    for i in 0..<8 {
+        out.push(((n >> (8 * i)) & 255) as u8)
+    }
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    let mut data: Vec[u8] = [0, 255, 10, 128]
+    le(data, 258)
+    for b in "ab".bytes() {
+        data.push(b)
+    }
+    fs::create_dir("c/d", root; recursive: true)
+    fs::write("c/d/x.bin", root, data.clone())
+    fs::rename("c/d/x.bin", "c/d/y.bin", root)
+    let back = fs::read("c/d/y.bin", root)
+    let mut seen: Vec[u8] = []
+    for b in back.iter() {
+        seen.push(b)
+    }
+    println(f"{seen.len()} {seen == data} {seen[1]} {seen[4]} {seen[5]} {seen[13]}")
+    for name in fs::read_dir("c/d", root) {
+        println(f"{name}")
+    }
+    fs::remove("c/d/y.bin", root)
+    println(f"{fs::exists("c/d/y.bin", root)}")
+}
