@@ -1,0 +1,14 @@
+// ADR-352 D1 per position, #902: no arm before takes `R::Opaque(null)`, so
+// `name` may still be `null` and stays a `String?`.
+enum R { Opaque(String?), Method }
+
+fn show(r: R) -> String {
+    return match r {
+        R::Method => "m",
+        R::Opaque(name) => f"@{name}",
+    }
+}
+
+fn main() {
+    println(show(R::Opaque("x")))
+}

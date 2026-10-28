@@ -792,6 +792,98 @@ fn check_core_flow_set_fields(mut state: CheckState, world: ref CheckWorld, arms
     }
 }
 
+/// **A variant's value is its `T` once the arms before it cover `null`
+/// there** (ADR-352 D1 per position, #902), as a tuple's position and a
+/// struct's field are: a bare name at a `T?` value of `R::V(…)` binds the
+/// `T` where an earlier unguarded arm of the same variant has `null` there
+/// and takes all, or says the same, at each other value; a variant or a
+/// literal there is matched against the `T`. The values are kept for the
+/// lowering by their index, which writes them `Some(…)`.
+fn check_core_flow_set_variant(mut state: CheckState, world: ref CheckWorld, arms: ref Vec[MatchArm], at: i64, typed: ref Ty) sync {
+    let parts: Vec[MatchPattern] = check_core_flow_variant_values(arms[at].pattern) ?? return
+    let key = check_core_flow_variant_key(state, world, arms[at].pattern, typed)
+    let types: Vec[Ty] = state.variant_parts[key]?.clone() ?? return
+    if types.len() != parts.len() {
+        return
+    }
+    let mut set: Vec[i64] = []
+    for i in 0..<types.len() {
+        let nullable = match types[i] {
+            Ty::Nullable(_) => true,
+            else => false,
+        }
+        let mut covered = false
+        if nullable && check_core_flow_a_bare_name(state, world, parts[i], types[i]) {
+            let mut before = 0
+            while before < at && !covered {
+                let arm = arms[before]
+                before += 1
+                if arm.guard != null || check_core_flow_variant_key(state, world, arm.pattern, typed) != key {
+                    continue
+                }
+                let earlier: Vec[MatchPattern] = check_core_flow_variant_values(arm.pattern) ?? continue
+                if earlier.len() == types.len() {
+                    covered = check_core_flow_covers_null_at(state, world, earlier, parts, i, types)
+                }
+            }
+        } else if nullable && check_core_flow_a_value_part(state, world, parts[i], types[i]) {
+            covered = true
+        }
+        if covered {
+            set.push(i)
+        }
+    }
+    if set.len() > 0 {
+        state.facts.set_positions.insert(id_of(arms[at].body) as i64, set)
+    }
+}
+
+/// The values of a variant's pattern `R::V(…)`, where it is one and has no
+/// `..` among them.
+fn check_core_flow_variant_values(pattern: ref MatchPattern) -> Vec[MatchPattern]? sync {
+    match pattern {
+        MatchPattern::Tuple { path, parts } => {
+            if path.len() == 0 {
+                return null
+            }
+            for part in parts {
+                if pattern_is_rest(part) {
+                    return null
+                }
+            }
+            return parts.clone()
+        },
+        else => return null,
+    }
+}
+
+/// The ledger's key of a variant's pattern; empty for another pattern.
+fn check_core_flow_variant_key(state: ref CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty) -> String sync {
+    let owner = match typed {
+        Ty::Named { name, .. } => name.clone(),
+        else => return "",
+    }
+    return match pattern {
+        MatchPattern::Tuple { path, .. } => if path.len() > 0 { state.pattern_variant(world, path, owner) } else { "" },
+        else => "",
+    }
+}
+
+/// The parts of a pattern `set_positions` counts in: a struct pattern's
+/// fields as written, a variant's values.
+fn check_core_flow_set_parts(pattern: ref MatchPattern) -> Vec[MatchPattern]? sync {
+    match pattern {
+        MatchPattern::Named { fields, .. } => {
+            let mut out: Vec[MatchPattern] = []
+            for field in fields {
+                out.push(field.pat.clone())
+            }
+            return out
+        },
+        else => return check_core_flow_variant_values(pattern),
+    }
+}
+
 /// The fields of a pattern with named fields, where the pattern is one.
 fn check_core_flow_named_parts(pattern: ref MatchPattern) -> Vec[PatternField]? sync {
     return match pattern {
@@ -846,14 +938,18 @@ fn check_core_flow_covers_null_field(state: ref CheckState, world: ref CheckWorl
     return null_there
 }
 
-/// **What an arm's pattern binds, each struct field found set as its `T`**
-/// (#886): `check_core_flow_set_fields` kept the fields by their index.
+/// **What an arm's pattern binds, each struct field or variant's value found
+/// set as its `T`** (#886, #902): `check_core_flow_set_fields` and
+/// `check_core_flow_set_variant` kept them by their index.
 fn check_core_flow_arm_pattern_parts(state: ref CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty, body: ref Expr) -> collections::BTreeMap[String, Ty] sync {
     let mut parts = state.pattern_parts(world, pattern, typed)
-    let fields: Vec[PatternField] = check_core_flow_named_parts(pattern) ?? return parts
+    let written: Vec[MatchPattern] = check_core_flow_set_parts(pattern) ?? return parts
     let set: Vec[i64] = state.facts.set_positions.get(id_of(body) as i64)?.clone() ?? return parts
     for i in set {
-        let name: String = match fields[i].pat {
+        if i >= written.len() {
+            continue
+        }
+        let name: String = match written[i] {
             MatchPattern::Path(one) => world.words.resolve(one[0]).clone(),
             else => continue,
         }
@@ -1198,6 +1294,7 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
             arm_typed = set_tuple ?? arm_typed
         }
         check_core_flow_set_fields(state, world, arms, taken, arm_typed)
+        check_core_flow_set_variant(state, world, arms, taken, arm_typed)
         let got = check_core_flow_arm(state, world, host, value, on, arm, arm_typed, lendable, through_the_reference, mut_subject, choice, taken, span)
         taken += 1
         if got != null {

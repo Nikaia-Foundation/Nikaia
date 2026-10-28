@@ -379,12 +379,13 @@ impl EmitState {
 
     /// **An arm's pattern, with each tuple position the checker found set
     /// written `Some(…)`** (ADR-352 D4 per position, #879): the arms before
-    /// it took `null` there.
+    /// it took `null` there; a variant's value too (#902), `R::V(Some(…))`.
     fn emit_core_arm_pattern_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arm: ref MatchArm, wild: bool, lent_key: i64, collect: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
         let set: Vec[i64] = self.facts.set_positions.get(node_key(arm.body))?.clone() ?? []
         if set.len() > 0 {
             match arm.pattern {
-                MatchPattern::Tuple { parts, .. } => {
+                MatchPattern::Tuple { path, parts } => {
+                    out.push(emit_match_path(world, path))
                     out.push("(")
                     let mut n = 0
                     let mut i: i64 = 0
@@ -393,6 +394,12 @@ impl EmitState {
                             out.push(", ")
                         }
                         let some = set.contains(i)
+                        if path.len() > 0 && collect && self.boxed_part(world, path, i) && !binds_a_part(part) {
+                            out.push(f"__nikaia_box{n}")
+                            n += 1
+                            i += 1
+                            continue
+                        }
                         if some {
                             out.push("Some(")
                         }

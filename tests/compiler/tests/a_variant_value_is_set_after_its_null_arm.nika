@@ -1,0 +1,30 @@
+// ADR-352 D1 per position, #902: a variant's value narrows as a tuple's
+// position and a struct's field do - a bare name at a `T?` value is the `T`
+// once an earlier arm of the same variant took `null` there and everything
+// else.
+enum R { Opaque(String?), Method }
+
+enum V { Pair(String?, i64), Other }
+
+fn show(r: R) -> String {
+    return match r {
+        R::Opaque(null) => "none",
+        R::Opaque(name) => f"@{name}",
+        R::Method => "m",
+    }
+}
+
+fn pair(v: V) -> i64 {
+    match v {
+        V::Pair(null, _) => 0,
+        V::Pair(name, n) => name.len() + n,
+        V::Other => -1,
+    }
+}
+
+fn main() {
+    println(f"{show(R::Opaque("x"))} {show(R::Opaque(null))} {show(R::Method)}")
+    println(pair(V::Pair("abc", 10)))
+    println(pair(V::Pair(null, 10)))
+    println(pair(V::Other))
+}

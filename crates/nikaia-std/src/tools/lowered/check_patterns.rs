@@ -128,7 +128,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
+    pub fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
         let mut written: Vec<String> = vec![];
         for part in path.iter() {
             let part = *part;

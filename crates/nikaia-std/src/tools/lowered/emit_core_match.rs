@@ -251,13 +251,20 @@ impl EmitState {
         }, || vec![].into());
         if !set.is_empty() {
             match &arm.pattern {
-                MatchPattern::Tuple { parts, .. } => {
+                MatchPattern::Tuple { path, parts } => {
+                    out.push(&emit_match_path(world, path));
                     out.push("(");
                     let mut n: i64 = 0;
                     let mut i: i64 = 0;
                     for part in parts.iter() {
                         if i > 0 { out.push(", "); }
                         let some = set.contains(&i);
+                        if !path.is_empty() && collect && self.boxed_part(world, path, i) && !binds_a_part(part) {
+                            out.push(&format!("__nikaia_box{}", n));
+                            n += 1;
+                            i += 1;
+                            continue;
+                        }
                         if some { out.push("Some("); }
                         n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)?;
                         if some { out.push(")"); }

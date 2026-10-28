@@ -149,7 +149,7 @@ impl CheckState {
 
     /// The ledger's key of the variant a pattern names: `Owner::One` for one
     /// segment, the path as written otherwise.
-    fn pattern_variant(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], owner: ref String) -> String sync {
+    pub fn pattern_variant(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], owner: ref String) -> String sync {
         let mut written: Vec[String] = []
         for part in path {
             written.push(world.words.resolve(part).clone())
