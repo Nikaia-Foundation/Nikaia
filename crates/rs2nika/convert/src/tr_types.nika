@@ -171,6 +171,14 @@ impl TrEm {
         if name == "str" || name == "String" || name == "Cow" || name == "OsString" || name == "OsStr" {
             return "String"
         }
+        // `std::path`'s paths are `fs::Path`, a list of bytes `Bytes`
+        if name == "Path" || name == "PathBuf" {
+            self.uses.insert("fs")
+            return "fs::Path"
+        }
+        if name == "Vec" && args.len() == 1 && args[0] == "u8" {
+            return "Bytes"
+        }
         if name == "Self" && self.self_ty != "" {
             return self.self_ty.clone()
         }
