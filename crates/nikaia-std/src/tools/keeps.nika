@@ -715,6 +715,20 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
                 names.push(one)
             }
         }
+        Expr::Field { .. } => {
+            // **A field of a parameter a method takes whole moves out of the
+            // parameter** (`b.xs.drain()`): the parameter is kept, or it is
+            // lowered as a `&B` whose field the body cannot give away. Only
+            // where an entry is known to take its receiver: a field's type is
+            // not asked here, so no answer is not read as a move.
+            let root = keeps_field_root(receiver, interner, context) ?? return
+            let ours = receiver_taken_in(own, context.own_methods, method, null)
+            let theirs = receiver_taken_in(library, context.library_methods, method, null)
+            if ours.hit || theirs.hit {
+                walk.uses.kept.insert(root)
+            }
+            return
+        }
         else => {}
     }
     if names.len() == 0 {
@@ -727,6 +741,20 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
         for name in names {
             walk.uses.kept.insert(name.clone())
         }
+    }
+}
+
+/// The parameter a chain of fields `p.a.b` starts at, or `null`.
+fn keeps_field_root(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> String? {
+    match expr {
+        Expr::Field { base, .. } => return keeps_field_root(base, interner, context),
+        Expr::Variable(ident, _) => {
+            if context.parameters.contains(interner.resolve(ident)) {
+                return interner.resolve(ident).clone()
+            }
+            return null
+        }
+        else => return null,
     }
 }
 

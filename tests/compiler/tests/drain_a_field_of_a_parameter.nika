@@ -1,0 +1,21 @@
+// A method that takes a field of a parameter whole moves out of the parameter
+// (`tools/keeps.nika`): `b` is the function's own, not a `&B` whose field
+// cannot be given away. Found writing the numbering pass (#903, ADR-383).
+
+struct Bag {
+    words: Vec[String],
+}
+
+fn emptied(bag: Bag) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for word in bag.words.drain() {
+        out.push(word)
+    }
+    return out
+}
+
+fn main() {
+    let words = emptied(Bag { words: ["one", "two"] })
+    println(words.len())
+    println(words[1])
+}

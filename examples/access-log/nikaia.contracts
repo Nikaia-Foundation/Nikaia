@@ -38,6 +38,7 @@ signature = "(input: ?) -> Report"
 
 [fn."Report::merge"]
 sync = true
+keeps = ["other"]
 views = ["self: borrowed", "other: borrowed"]
 signature = "(ref mut self, other: Report)"
 

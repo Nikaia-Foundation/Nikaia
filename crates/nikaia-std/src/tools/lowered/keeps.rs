@@ -432,6 +432,13 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
             if context.parameters.contains(interner.resolve(ident)) { names.push(interner.resolve(ident).to_owned()); }
             for one in keeps_viewed_of(receiver, interner, context, own, library, &walk) { names.push(one); }
         },
+        Expr::Field { .. } => {
+            let root = match keeps_field_root(receiver, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let ours = receiver_taken_in(own, context.own_methods, method, None);
+            let theirs = receiver_taken_in(library, context.library_methods, method, None);
+            if ours.hit || theirs.hit { walk.uses.kept.insert(root); }
+            return;
+        },
         _ => { },
     }
     if names.is_empty() { return; }
@@ -439,6 +446,18 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
     let ours = receiver_taken_in(own, context.own_methods, method, (owner).as_deref());
     let theirs = receiver_taken_in(library, context.library_methods, method, (owner).as_deref());
     if context.unresolved || ours.hit || theirs.hit || !ours.any && !theirs.any { for name in names.iter() { walk.uses.kept.insert(name.to_owned()); } }
+}
+
+pub(crate) fn keeps_field_root(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<String> {
+    match expr {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return keeps_field_root(base, interner, context) },
+        Expr::Variable(ident, _) => {
+            let ident = *ident;
+            if context.parameters.contains(interner.resolve(ident)) { return Some(interner.resolve(ident).to_owned()); }
+            return None;
+        },
+        _ => return None,
+    }
 }
 
 pub(crate) fn takes_its_receiver(contract: &FnContract) -> bool {
