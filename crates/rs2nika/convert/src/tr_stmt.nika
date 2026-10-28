@@ -684,14 +684,36 @@ impl TrEm {
                 lead.push(f"{inner}let {x} = {cs}[{i}]")
             }
         }
+        // `for x in xs.iter_mut()` (also `.skip(k)`): an index, and `x` in
+        // the body is the place `xs[i]` itself, so a change lands in the list
+        let mut alias: String = ""
+        let mut was: String? = null
         if head == "" {
-            if self.t.is(it, "METHOD_CALL_EXPR") && self.src(self.t.kid(it, "NAME_REF")) == "iter_mut" {
-                let xs = self.expr(self.t.nth(it, 0))
+            let mut from: String = "0"
+            let mut mut_it = it
+            if self.t.is(it, "METHOD_CALL_EXPR") && self.src(self.t.kid(it, "NAME_REF")) == "skip" {
+                let recv = self.t.nth(it, 0)
+                if self.t.is(recv, "METHOD_CALL_EXPR") && self.src(self.t.kid(recv, "NAME_REF")) == "iter_mut" {
+                    from = self.args(it).join(", ")
+                    mut_it = recv
+                }
+            }
+            if self.t.is(mut_it, "METHOD_CALL_EXPR") && self.src(self.t.kid(mut_it, "NAME_REF")) == "iter_mut" {
+                let xs = self.expr(self.t.nth(mut_it, 0))
                 let i = self.fresh("at")
                 let x = self.pat(p)
-                self.todos += 1
-                head = f"{ind}for {i} in 0..<{xs}.len() {{"
-                lead.push(f"{inner}let {x} = {xs}[{i}] // TODO(rs2nika): `iter_mut`: write the change back, `{xs}[{i}] = ..`")
+                head = f"{ind}for {i} in {from}..<{xs}.len() {{"
+                // keyed by the Rust name, which `path_expr` looks up (`view`
+                // is written `view_`)
+                let raw = self.t.name_of(p)
+                if self.t.is(p, "IDENT_PAT") && !self.binds(body_n, raw) {
+                    alias = raw.clone()
+                    was = self.aliases[raw]?.clone()
+                    self.aliases.insert(raw.clone(), f"{xs}[{i}]")
+                } else {
+                    self.todos += 1
+                    lead.push(f"{inner}let {x} = {xs}[{i}] // TODO(rs2nika): `iter_mut`: write the change back, `{xs}[{i}] = ..`")
+                }
             } else {
                 head = f"{ind}for {self.pat(p)} in {self.expr(it)} {{"
             }
@@ -708,6 +730,16 @@ impl TrEm {
         }
         for l in self.block(body_n, inner, "stmt") {
             out.push(l)
+        }
+        if alias != "" {
+            match was {
+                null => {
+                    self.aliases.remove(alias)
+                },
+                w => {
+                    self.aliases.insert(alias, w)
+                },
+            }
         }
         out.push(f"{ind}}}")
         return out

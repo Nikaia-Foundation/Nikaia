@@ -31,7 +31,7 @@ impl TrEm {
         if kind == "PATH_TYPE" {
             return self.path_ty(n)
         } else if kind == "REF_TYPE" || kind == "PAREN_TYPE" || kind == "PTR_TYPE" {
-            let inner = self.t.nth(n, 0)
+            let inner = self.referent(n)
             if self.t.is(inner, "SLICE_TYPE") {
                 return f"Vec[{self.ty(self.t.nth(inner, 0))}]"
             }
@@ -174,11 +174,21 @@ impl TrEm {
         return f"{path}[{args.join(", ")}]"
     }
 
+    /// The type a reference refers to, past its lifetime: `&'a T` -> `T`.
+    fn referent(ref self, n: i64) -> i64 {
+        for k in self.nodes(n) {
+            if !self.t.is(k, "LIFETIME") {
+                return k
+            }
+        }
+        return -1
+    }
+
     /// The type of a parameter: `&mut T` lends it changeable (`mut x: T`, R3),
     /// `&T` as `ref T` unless it is copied anyway (a number, a text, R4).
     fn param_ty(ref mut self, n: i64) -> (String, bool) {
         if self.t.is(n, "REF_TYPE") {
-            let inner = self.t.nth(n, 0)
+            let inner = self.referent(n)
             let t = self.ty(n)
             if self.t.has_tok(n, "MUT_KW") {
                 return (t, true)

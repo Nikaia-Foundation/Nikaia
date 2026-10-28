@@ -12,6 +12,7 @@
 // (`matches!`), and hangs that tree beside the call (`margs`).
 
 use std::collections
+use std::text
 
 pub struct TrEm {
     pub t: RtTree,
@@ -42,6 +43,9 @@ pub struct TrEm {
     pub fns: collections::BTreeSet[String],
     /// nested items, written after the top-level item that holds them
     pub hoisted: Vec[String],
+    /// a name that stands for a place while a body is written: the variable
+    /// of `for x in xs.iter_mut()` is `xs[i]`
+    pub aliases: collections::BTreeMap[String, String],
 }
 
 pub fn tr_convert(t: RtTree, profile: String, prefix: String) -> String {
@@ -63,6 +67,7 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String) -> String {
         todos: 0,
         fns: collections::BTreeSet(),
         hoisted: [],
+        aliases: collections::BTreeMap(),
     }
     if em.t.nodes.len() == 0 {
         return ""
@@ -122,6 +127,22 @@ impl TrEm {
     /// The child nodes of `n` (no tokens).
     fn nodes(ref self, n: i64) -> Vec[i64] {
         return self.t.nodes_of(n)
+    }
+
+    /// Whether a pattern inside `n` binds `name` again.
+    fn binds(ref self, n: i64, name: ref String) -> bool {
+        if n < 0 {
+            return false
+        }
+        if self.t.is(n, "IDENT_PAT") && self.t.name_of(n) == name {
+            return true
+        }
+        for k in self.nodes(n) {
+            if self.binds(k, name) {
+                return true
+            }
+        }
+        return false
     }
 
     /// The name a `PATH` / `PATH_EXPR` / `PATH_TYPE` ends in.
@@ -277,12 +298,18 @@ impl TrEm {
                 }
                 self.t.nodes.push(RtNode { kind: node.kind, text: node.text, tok: node.tok, kids: kids, parent: parent, start: node.start, end: node.end })
             }
-            let fns = self.t.kids_of(base, "FN")
-            for c in 0..<calls.len() {
-                if c >= fns.len() {
-                    break
+            // by name, not by order: a call whose text does not parse leaves
+            // an `ERROR` in place of its `fn`, and the rest would slide
+            for f in self.t.kids_of(base, "FN") {
+                let fname = self.t.name_of(f).clone()
+                if !fname.starts_with("__rt") {
+                    continue
                 }
-                let body = self.t.kid(fns[c], "BLOCK_EXPR")
+                let c = text::parse_i64(tr_drop_prefix(fname, "__rt")) ?? -1
+                if c < 0 || c >= calls.len() {
+                    continue
+                }
+                let body = self.t.kid(f, "BLOCK_EXPR")
                 let found = self.t.find(body, shapes[c])
                 if found >= 0 {
                     self.margs.insert(calls[c], found)

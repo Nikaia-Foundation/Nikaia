@@ -128,7 +128,18 @@ pub fn rt_parse(src: String) -> RtTree throws {
         eprintln(f"rust-analyzer parse failed: {res.stderr}")
         return RtTree { nodes: [] }
     }
-    return rt_from_dump(res.stdout)
+    // the dump shortens a long token's text (`"Use `x` before  ..`), so a
+    // token's text is read out of the source at its offsets
+    let mut tree = rt_from_dump(res.stdout)
+    for i in 0..<tree.nodes.len() {
+        if tree.nodes[i].tok && tree.nodes[i].end <= src.len() {
+            let whole: String = src.bytes[tree.nodes[i].start..<tree.nodes[i].end].text() catch { "" }
+            if whole.len() == tree.nodes[i].end - tree.nodes[i].start {
+                tree.nodes[i].text = whole.clone()
+            }
+        }
+    }
+    return tree
 }
 
 /// The tree as `rust-analyzer parse` printed it, for `--tree`.

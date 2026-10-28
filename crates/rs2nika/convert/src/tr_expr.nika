@@ -128,6 +128,57 @@ impl TrEm {
         return tr_drop_prefix(text, ind)
     }
 
+    /// `X::default()` of a struct of this file, written out field by field:
+    /// `X { a: [], b: collections::HashMap(), .. }`; "" where a field's type
+    /// has no default the converter knows.
+    fn default_of_struct(ref mut self, name: ref String) -> String {
+        for st in self.t.kids_of(0, "STRUCT") {
+            if self.t.name_of(st) != name {
+                continue
+            }
+            let list = self.t.kid(st, "RECORD_FIELD_LIST")
+            let mut parts: Vec[String] = []
+            for f in self.t.kids_of(list, "RECORD_FIELD") {
+                let ty = self.ty(self.t.nth(f, self.nodes(f).len() - 1))
+                let value = self.default_of(ty)
+                if value == "" {
+                    return ""
+                }
+                parts.push(f"{self.t.name_of(f)}: {value}")
+            }
+            return f"{name} {{ {parts.join(", ")} }}"
+        }
+        return ""
+    }
+
+    /// The default value of a type as Nikaia writes it, or "".
+    fn default_of(ref mut self, ty: ref String) -> String {
+        if ty.ends_with("?") {
+            return "null"
+        }
+        if ty == "String" {
+            return "\"\""
+        }
+        if ty == "bool" {
+            return "false"
+        }
+        if ty == "f64" || ty == "f32" {
+            return "0.0"
+        }
+        if ty == "i64" || ty == "i32" || ty == "u8" || ty == "u32" || ty == "u64" {
+            return "0"
+        }
+        if ty.starts_with("Vec[") {
+            return "[]"
+        }
+        for c in ["HashMap", "HashSet", "BTreeMap", "BTreeSet"] {
+            if ty.starts_with(f"collections::{c}[") {
+                return f"collections::{c}()"
+            }
+        }
+        return self.default_of_struct(ty)
+    }
+
     fn path_expr(ref mut self, n: i64) -> String {
         let segs = self.segs(n)
         if segs.len() == 1 {
@@ -138,7 +189,14 @@ impl TrEm {
             if name == "self" {
                 return "self"
             }
-            if self.prefix != "" && self.fns.contains(name) {
+            match self.aliases[name] {
+                null => {},
+                place => {
+                    return place.clone()
+                },
+            }
+            // a local or a parameter of that name is not the function
+            if self.prefix != "" && self.fns.contains(name) && !self.binds(self.t.up(n, "FN"), name) {
                 return f"{self.prefix}{name}"
             }
             return tr_ident(name)
@@ -341,6 +399,10 @@ impl TrEm {
                 return f"{ty}({self.args(n).join(", ")})"
             }
             if last == "default" && segs.len() == 2 {
+                let written = self.default_of_struct(ty)
+                if written != "" {
+                    return written
+                }
                 return self.todo("`Default` (write the value out)", n)
             }
         }
@@ -602,7 +664,15 @@ impl TrEm {
                 } else if nr >= 0 && self.t.has_tok(k, "COLON") {
                     fields.push(f"{self.src(nr)}: {self.expr(v)}")
                 } else {
-                    fields.push(self.expr(v))
+                    // a shorthand whose name is written otherwise (a prefix,
+                    // an alias) names its field
+                    let e = self.expr(v)
+                    let field = self.src(v)
+                    if e == field {
+                        fields.push(e)
+                    } else {
+                        fields.push(f"{field}: {e}")
+                    }
                 }
             } else if !self.t.nodes[k].tok && after_dots {
                 base = self.expr(k)
