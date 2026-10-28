@@ -1,6 +1,6 @@
 use std::text
 
-fn load(path: ref Path) -> String? sync {
+pub fn load(path: ref Path) -> String? sync {
     return fs::read_to_string(path, fs::Root::Anywhere) catch {
         let e = error
         eprintln(f"cannot read {path.display()}: {e}")
@@ -8,7 +8,7 @@ fn load(path: ref Path) -> String? sync {
     }
 }
 
-fn parse(s: String) -> i64 sync {
+pub fn parse(s: String) -> i64 sync {
     let n = text::parse_i64(s) catch { return -1 }
     if n > 0 {
         return n
@@ -16,7 +16,7 @@ fn parse(s: String) -> i64 sync {
     return 0
 }
 
-fn direct(s: String) -> i64 sync {
+pub fn direct(s: String) -> i64 sync {
     return text::parse_i64(s) catch {
         let err = error
         eprintln(f"{err}")
@@ -24,7 +24,7 @@ fn direct(s: String) -> i64 sync {
     }
 }
 
-fn reused(s: String) -> i64 sync {
+pub fn reused(s: String) -> i64 sync {
     let r = text::parse_i64(s)
     let shown = f"{r}"
     // TODO(rs2nika): `match` on `Ok`/`Err`: over a kept `Result` (not a call): Nikaia holds no `Result`; match where the call is made, `let v = call catch { <the Err arm> }`
@@ -34,7 +34,7 @@ fn reused(s: String) -> i64 sync {
     }
 }
 
-fn later(s: String) -> i64 sync {
+pub fn later(s: String) -> i64 sync {
     let r = text::parse_i64(s)
     // TODO(rs2nika): `match` on `Ok`/`Err`: over a kept `Result` (not a call): Nikaia holds no `Result`; match where the call is made, `let v = call catch { <the Err arm> }`
     match r {

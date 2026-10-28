@@ -1,0 +1,7 @@
+/// Every file under `dir`, by its name relative to it.
+pub fn files_under(dir: ref Path) -> Vec[(String, PathBuf)] throws {
+    let mut found: Vec[(String, PathBuf)] = fs::walk(dir, fs::Root::Anywhere).iter().map(fn(name) { (name.text_of(), dir.join(name)) }).collect()
+    found.sort()
+    return found
+}
+

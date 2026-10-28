@@ -1,0 +1,18 @@
+pub fn is_refusal(text: String) -> bool {
+    return (text.starts_with("error") || text.contains("\nerror")) && !failed(text)
+}
+
+fn failed(text: String) -> bool {
+    return text.contains("failed")
+}
+
+pub fn packed(body: ref Vec[u8]) -> i64 {
+    return body.len() + 1
+}
+
+pub fn difference(expected: ref Vec[u8], produced: ref Vec[u8]) -> String {
+    let want = expected.text() catch { return "  not text\n" }
+    let got = produced.text() catch { return "  not text\n" }
+    return lines(want, got)
+}
+

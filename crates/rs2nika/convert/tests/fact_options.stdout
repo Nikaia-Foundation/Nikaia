@@ -1,13 +1,13 @@
-fn named(item: ref Item) -> String sync {
+pub fn named(item: ref Item) -> String sync {
     let name = match item { Item::Fn { name, .. } => name, else => return String::new() }
     return (match name { n => resolve(n), null => null }).unwrap_or_default()
 }
 
-fn part(c: ref Crossing) -> (String, String)? sync {
+pub fn part(c: ref Crossing) -> (String, String)? sync {
     return (match c.refused_part() { part => (part, c.refused_at()), null => null })
 }
 
-fn other(r: Result[u8, E]) -> u8 sync throws {
+pub fn other(r: Result[u8, E]) -> u8 sync throws {
     // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
     return r.map(fn(v) { v + 1 })
 }

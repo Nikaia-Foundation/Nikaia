@@ -1,5 +1,5 @@
 /// The pieces of a text.
-fn pieces(text: String) -> Vec[String]? {
+pub fn pieces(text: String) -> Vec[String]? {
     let mut out: Vec[String] = []
     let pieces: Vec[String] = text.split("\n").collect()
     for at in 0..<pieces.len() {

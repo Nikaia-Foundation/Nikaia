@@ -1,4 +1,4 @@
-fn tally(arms: ref Vec[bool]) -> i64 sync {
+pub fn tally(arms: ref Vec[bool]) -> i64 sync {
     let mut numbers = 0
     let mut known = 0
     for arm in arms {

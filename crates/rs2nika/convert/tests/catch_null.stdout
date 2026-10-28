@@ -1,9 +1,9 @@
-fn port(n: i64) -> String sync {
+pub fn port(n: i64) -> String sync {
     let p = half(n) catch { null }
     return show(p)
 }
 
-fn report(n: i64) sync {
+pub fn report(n: i64) sync {
     match half(n) catch { null } {
         v => {
             println(f"got {v}")
@@ -12,40 +12,40 @@ fn report(n: i64) sync {
     }
 }
 
-fn quiet(n: i64) sync {
+pub fn quiet(n: i64) sync {
     match half(n) catch { null } {
         v => println(f"half {v}"),
         null => {},
     }
 }
 
-fn touched(n: i64) sync {
+pub fn touched(n: i64) sync {
     if (half(n) catch { null }) != null {
         println("even")
     }
 }
 
-fn even(n: i64) -> bool sync {
+pub fn even(n: i64) -> bool sync {
     return (half(n) catch { null }) != null
 }
 
-fn odd(n: i64) -> bool sync {
+pub fn odd(n: i64) -> bool sync {
     return (half(n) catch { null }) == null
 }
 
-fn not_odd(n: i64) -> bool sync {
+pub fn not_odd(n: i64) -> bool sync {
     return (half(n) catch { null }) != null
 }
 
-fn four(n: i64) -> bool sync {
+pub fn four(n: i64) -> bool sync {
     return (match half(n) catch { null } { v => v == 4, null => false })
 }
 
-fn kept(n: i64) -> i64? sync {
+pub fn kept(n: i64) -> i64? sync {
     return half(n) catch { null }
 }
 
-fn quartered(n: i64) -> String sync {
+pub fn quartered(n: i64) -> String sync {
     let q = match half(n) catch { null } {
         v => v / 2,
         null => 0,

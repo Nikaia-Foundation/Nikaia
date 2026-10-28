@@ -1,14 +1,14 @@
-fn listed(shown: ref Vec[String], n: i64) -> String sync {
+pub fn listed(shown: ref Vec[String], n: i64) -> String sync {
     return match n {
         0 => "",
         else => {
-            let hole_4 = shown.join(", ")
-            f"{hole_4} and `{shown.len()}`"
+            let hole_6 = shown.join(", ")
+            f"{hole_6} and `{shown.len()}`"
         },
     }
 }
 
-fn pick(o: i64?, strict: bool) -> i64 sync {
+pub fn pick(o: i64?, strict: bool) -> i64 sync {
     return match o {
         x if x > 0 => x,
         null if strict => return -1,

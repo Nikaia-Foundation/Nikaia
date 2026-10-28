@@ -81,6 +81,9 @@ struct Rs2nikaCtx {
     // R244: rs2nika.names' `[forms]`, `{x} == Sync::Inferred` and `inferred_sync({x})`
     form_from: Vec[String],
     form_to: Vec[String],
+    // R245: whether every name takes `--prefix`, and the tools file it names
+    prefix_all: bool,
+    prefix_file: String,
 }
 
 /// The rules, as `--rules` prints them.
@@ -266,6 +269,17 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R242 rs2nika.names' `[fields]`: a Rust-kept struct lent as `&[T]` and read by fields is one list per field (`units[i].package` -> `packages[i]`, `units.len()` -> the first list's, one closure over one field -> that list); read by `.len()` only it is `units: i64`; a call of a function Nikaia lacks handed `units[i]` becomes a callback parameter `f: fn(.., i64) -> R sync`, called with `i`",
         "R243 at a loop's end, `match e { Some(p) => a, None => { b } }` -> `let p = e ?? { b; continue }` and `a`; `let x = m.get(k).is_some_and(|v| c)` read only as `!x` in an `if .. { continue }` -> `let v = m.get(k) ?? continue` and `if !c { continue }`",
         "R244 rs2nika.names' `[forms]`: an expression a move spells otherwise, `{x}` the receiver chain (`{x}.absorb_renaming(` -> `absorb_into({x}, `)",
+        "R245 `--prefix` only where another tools/*.nika declares the name, unless the file it names (most functions under the prefix) prefixes most of its own; no tools known: every name, as R41",
+        "R246 a top-level `fn` no other function of the file calls, and a private top-level `struct` with its fields, are `pub`: the Rust that stays calls them",
+        "R247 a draft that calls `fs::` gets `use std::fs`",
+        "R248 `p.is_dir()`/`p.is_file()` of a path -> `<prefix>is_dir(p)`, a helper by `fs::metadata` appended; `p.exists()` -> `fs::exists(p)`",
+        "R249 `match std::fs::read(p) { Ok(b) => Ok(Some(b)), Err(e) if ..NotFound => Ok(None), Err(e) => .. }` -> `if !fs::exists(p) { return null }` then the read; the same closure in two functions is lifted once (R227), a `PathBuf` parameter lent",
+        "R250 a tail `xs.into_iter().map(|x| { ..; Ok(v) }).collect()` into `Result<Vec<T>>` -> a `for` loop pushing to a list named by the function's plural; a `xs.retain(|y| c);` before -> `if !c { continue }`",
+        "R251 a `&[u8]` parameter tested only by `starts_with(b\"..\")`/`windows(n).any(|w| w == b\"..\")` -> `String`, the tests on text (`contains`)",
+        "R252 a hand walk (`pending` stack, `read_dir`, `strip_prefix`) -> `fs::walk(d).iter().map(fn(name) { ..name.text_of()..d.join(name).. }).collect()`",
+        "R253 `.with_context(..)`/`.context(..)` right after a `std::fs::` call goes: `IoError` names the path",
+        "R254 `let (Ok(a), Ok(b)) = (x, y) else { .. }` -> one `let Ok(a) = x else { .. }` a value; `std::str::from_utf8(b)` -> `b.text()`",
+        "R255 a struct field of `Vec<u8>` is `Bytes` (what was read)",
         "R227 a local closure with arguments only ever called (`let count = |family: &str| ..;`) -> a function of the module after the file's functions, the locals it captures its first parameters, each call `count(a)` -> `prefix_count(findings, a)`, f-strings too; types from annotations, `--facts`, a `.count()`/`.len()` or text tail; one unknown, the closure stays (R82)",
         "R224 the project's own rs2nika.names (in the working directory, or `--names FILE`): what was decided converting the files before, read before the converter's table: `old new` renames (R47), `[types]` `Rust type = Nikaia type` (`&'static str = ref String`), a reason after ` #`",
         "R221 `return match call { Ok(v) => a, Err(e) if g => b, Err(e) => d }` -> `let v = call catch { if g { return b } return d }`, `return a`",
@@ -862,7 +876,7 @@ fn rs2nika_signature(mut ctx: Rs2nikaCtx, line: String) -> String {
     }
     let mut name: String = name0.clone()
     let pre: String = ctx.prefix.clone()
-    if pre != "" && !decl && !ctx.impl_other && !rs2nika_starts(name, pre) {
+    if pre != "" && !decl && !ctx.impl_other && !rs2nika_starts(name, pre) && (rs2nika_takes_prefix(ctx, name0) || ctx.renamed_from.contains(name0)) {
         rs2nika_hit(ctx, "R41")
         name = f"{ctx.prefix}{name0}"
     }
@@ -1205,6 +1219,9 @@ fn rs2nika_read_dirs(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]
                         head = f"({call} catch {{ throw format!({m}) }})"
                         k = wclose + 2
                     }
+                } else if rs2nika_at(c, k, "?") {
+                    // R253 dropped the context: `std` fails with its own text
+                    k = k + 1
                 } else if rs2nika_at(c, k, ".into_iter().flatten()") {
                     head = f"({call} catch {{ [] }})"
                     k = k + ".into_iter().flatten()".len()
@@ -2067,7 +2084,7 @@ fn rs2nika_std_fs(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
             }
             let root: String = "fs::Root::Anywhere"
             let mut call: String = ""
-            if args.len() == 1 && (name == "read_to_string" || name == "read" || name == "metadata" || name == "exists") {
+            if args.len() == 1 && (name == "read_to_string" || name == "read" || name == "metadata" || name == "exists" || name == "walk") {
                 call = f"fs::{name}({args[0]}, {root})"
             } else if args.len() == 2 && name == "write" {
                 call = f"fs::write({args[0]}, {root}, {args[1]})"
@@ -11796,6 +11813,11 @@ fn rs2nika_struct_field(mut ctx: Rs2nikaCtx, line: String) -> String {
     if rest.ends_with(",") {
         rest = rest[0..<rest.len() - ",".len()].trim().clone()
     }
+    // R255: a field of bytes holds what was read, `Bytes` (P3a's tests)
+    if rest.contains("Vec<u8>") {
+        rest = rest.replace("Vec<u8>", "Bytes")
+        rs2nika_hit(ctx, "R255")
+    }
     let ty = rs2nika_ty(ctx, rest)
     rs2nika_hit(ctx, "R78")
     return f"{ind}{vis}{name}: {ty},"
@@ -11810,7 +11832,7 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
 /// converts: the names `tools/*.nika` declares (R66), rs2nika.names and its
 /// `[view]` table. Each file starts from a copy, so files convert side by side.
 pub fn rs2nika_loaded(repo: String, view: bool, names: String) -> Rs2nikaCtx {
-    let mut ctx = Rs2nikaCtx { profile: "", free: false, world: "", prefix: "", hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], type_from: [], type_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: [], parsed_names: [], impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [], tool_types: collections::BTreeSet(), only_fns: [], only_consts: [], only_methods: [], field_from: [], field_to: [], form_from: [], form_to: [] }
+    let mut ctx = Rs2nikaCtx { profile: "", free: false, world: "", prefix: "", hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], type_from: [], type_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: [], parsed_names: [], impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [], tool_types: collections::BTreeSet(), only_fns: [], only_consts: [], only_methods: [], field_from: [], field_to: [], form_from: [], form_to: [], prefix_all: true, prefix_file: "" }
     // the project's decisions first: they win over the converter's own table
     rs2nika_project_names(ctx, names, repo.clone(), true)
     if repo != "" {
@@ -11882,6 +11904,803 @@ fn rs2nika_project_names(mut ctx: Rs2nikaCtx, path: String, repo: String, rename
     }
 }
 
+// **P3a's decisions as rules** (R245-R255): what the move of project.rs's
+// test discovery (b8547a6) rewrote by hand that follows from a decision a
+// move already made, or from what `std` has.
+
+/// R245: the tools file a `--prefix` names: the one declaring the most
+/// functions under that prefix, "" where none does.
+fn rs2nika_prefix_file(ctx: ref Rs2nikaCtx, prefix: String) -> String {
+    let mut files: Vec[String] = []
+    let mut counts: Vec[i64] = []
+    let mut i = 0
+    while i < ctx.tool_names.len() {
+        if rs2nika_starts(ctx.tool_names[i].clone(), prefix) {
+            let f: String = ctx.tool_files[i].clone()
+            let mut k = 0
+            while k < files.len() && files[k] != f {
+                k = k + 1
+            }
+            if k == files.len() {
+                files.push(f)
+                counts.push(0)
+            }
+            counts[k] = counts[k] + 1
+        }
+        i = i + 1
+    }
+    let mut best: String = ""
+    let mut most = 0
+    let mut k = 0
+    while k < files.len() {
+        if counts[k] > most {
+            most = counts[k]
+            best = files[k].clone()
+        }
+        k = k + 1
+    }
+    return best
+}
+
+/// R245: whether every name of the draft takes `--prefix`: where the file
+/// it names took it for most of its functions (`check_*.nika`,
+/// `sysroot_cache.nika`), or where no tools/*.nika is known to tell a
+/// clash. A new file, or one that took it only for a clash
+/// (`project_tests.nika`, the briefs since M2: "prefix where `where.nika`
+/// finds a clash"), prefixes a name only where another file declares it.
+fn rs2nika_prefix_all(ctx: ref Rs2nikaCtx, prefix: String) -> bool {
+    if prefix == "" || ctx.tool_names.len() == 0 {
+        return true
+    }
+    let target = rs2nika_prefix_file(ctx, prefix)
+    if target == "" {
+        return false
+    }
+    let mut own = 0
+    let mut marked = 0
+    let mut i = 0
+    while i < ctx.tool_names.len() {
+        if ctx.tool_files[i] == target {
+            own = own + 1
+            if rs2nika_starts(ctx.tool_names[i].clone(), prefix) {
+                marked = marked + 1
+            }
+        }
+        i = i + 1
+    }
+    return marked * 2 > own
+}
+
+/// R245: whether `name` takes the prefix: always where the file prefixes
+/// all, else where a tools/*.nika file other than the target declares it
+/// (one namespace).
+fn rs2nika_takes_prefix(ctx: ref Rs2nikaCtx, name: String) -> bool {
+    if ctx.prefix_all {
+        return true
+    }
+    let mut i = 0
+    while i < ctx.tool_names.len() {
+        if ctx.tool_names[i] == name && ctx.tool_files[i] != ctx.prefix_file {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// The element type `T` of a function's `-> Result<Vec<T>>`, its header
+/// starting at line `at`; "" for any other result.
+fn rs2nika_result_elem(lines: ref Vec[String], at: i64) -> String {
+    let mut head: String = lines[at].trim().clone()
+    let mut j = at + 1
+    while !head.ends_with("{") && !head.ends_with(";") && j < lines.len() && j < at + 12 {
+        head = f"{head} {lines[j].trim()}"
+        j = j + 1
+    }
+    let (_, ret) = head.split_once("-> Result<Vec<") ?? ("", "")
+    if ret == "" {
+        return ""
+    }
+    let rc: Vec[scalar] = f"<{ret}".chars().collect()
+    let close = rs2nika_closing(rc, 0, '<', '>')
+    if close <= 1 {
+        return ""
+    }
+    return rs2nika_text(rc, 1, close)
+}
+
+/// R246: a moved item the Rust that stays still uses is `pub` (the adapter
+/// calls `nikaia_std::tools::<m>::f` and reads the fields): a top-level
+/// `fn` no other function of the file calls (it would be dead otherwise),
+/// a top-level `struct` and its fields (P3a: `Outcome`, `copy_into`,
+/// `named_by`, `verdict`).
+fn rs2nika_moved_pub(mut ctx: Rs2nikaCtx, src: String) -> String {
+    let mut lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut names: Vec[String] = []
+    let mut starts: Vec[i64] = []
+    let mut ends: Vec[i64] = []
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        let n = rs2nika_fn_name(l)
+        if n != "" && !l.starts_with(" ") && l.trim_end().ends_with("{") {
+            let mut j = i + 1
+            while j < lines.len() && lines[j].trim_end() != "}" {
+                j = j + 1
+            }
+            names.push(n)
+            starts.push(i)
+            ends.push(j)
+            i = j
+        }
+        i = i + 1
+    }
+    let mut k = 0
+    while k < names.len() {
+        let l: String = lines[starts[k]].clone()
+        if l.starts_with("fn ") && names[k] != "main" {
+            let mut used = false
+            let mut j = 0
+            while j < lines.len() && !used {
+                let t: String = lines[j].trim().clone()
+                if (j < starts[k] || j > ends[k]) && !t.starts_with("//") && rs2nika_free_uses(t, names[k], true) > 0 {
+                    used = true
+                }
+                j = j + 1
+            }
+            if !used {
+                lines[starts[k]] = f"pub {l}"
+                rs2nika_hit(ctx, "R246")
+            }
+        }
+        k = k + 1
+    }
+    let mut in_struct = false
+    i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        if in_struct {
+            if l.starts_with("}") {
+                in_struct = false
+            } else {
+                let t: String = l.trim().clone()
+                let (fname, _) = t.split_once(":") ?? ("", "")
+                if l.starts_with("    ") && !l.starts_with("     ") && fname != "" && rs2nika_all_word(fname) {
+                    lines[i] = f"    pub {t}"
+                    rs2nika_hit(ctx, "R246")
+                }
+            }
+        } else if l.starts_with("struct ") && l.trim_end().ends_with("{") {
+            lines[i] = f"pub {l}"
+            in_struct = true
+            rs2nika_hit(ctx, "R246")
+        }
+        i = i + 1
+    }
+    return lines.join("\n")
+}
+
+/// R248: `p.is_dir()` / `p.is_file()` of a path -> `<prefix>is_dir(p)`, a
+/// function after the file's: `fs::Path` has neither, `fs::metadata` tells
+/// it, and a name that is not there is neither (S2's `fs::metadata(..)
+/// catch`, P3a's `project_tests_is_dir`); `p.exists()` ->
+/// `std::fs::exists(p)` (R237). Not on a value of `metadata(..)` or
+/// `file_type()`, which has them.
+fn rs2nika_path_tests(mut ctx: Rs2nikaCtx, src: String) -> String {
+    let lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut out: Vec[String] = []
+    let mut kinds: Vec[String] = []
+    let mut meta: Vec[String] = []
+    for l in lines {
+        if rs2nika_fn_name(l) != "" {
+            meta = []
+        }
+        let mut line: String = l.clone()
+        let t: String = l.trim().clone()
+        if t.starts_with("let ") && (t.contains("metadata(") || t.contains("file_type(")) {
+            let (lhs, _) = t.split_once(" = ") ?? ("", "")
+            let bound: String = (lhs.strip_prefix("let ") ?? "").trim().trim_start_matches("mut ").trim().clone()
+            meta.push(bound)
+        }
+        if t.starts_with("//") {
+            out.push(line)
+            continue
+        }
+        for kind in ["is_dir", "is_file", "exists"] {
+            let lead: String = f".{kind}()"
+            let mut from = 0
+            while true {
+                let c: Vec[scalar] = line.chars().collect()
+                let at = rs2nika_find_from(c, lead, from)
+                if at < 0 {
+                    break
+                }
+                from = at + 1
+                let start = rs2nika_recv_start(c, at)
+                let recv: String = rs2nika_text(c, start, at)
+                if recv == "" || recv.contains("metadata") || recv.contains("file_type") || meta.contains(recv) {
+                    continue
+                }
+                let p: String = rs2nika_unled(recv, "&")
+                let mut call: String = f"std::fs::exists({p})"
+                if kind != "exists" {
+                    call = f"{ctx.prefix}{kind}({p})"
+                    if !kinds.contains(kind) {
+                        kinds.push(kind.clone())
+                    }
+                }
+                line = f"{rs2nika_text(c, 0, start)}{call}{rs2nika_text(c, at + lead.chars().count(), c.len())}"
+                rs2nika_hit(ctx, "R248")
+                from = 0
+            }
+        }
+        out.push(line)
+    }
+    for kind in kinds {
+        let what: String = if kind == "is_dir" { "a directory" } else { "a file" }
+        if out.len() > 0 && out[out.len() - 1].trim() != "" {
+            out.push("")
+        }
+        out.push(f"/// Whether `path` names {what}; a name that is not there names none.")
+        out.push(f"fn {ctx.prefix}{kind}(path: &Path) -> bool {{")
+        out.push("    let Ok(found) = std::fs::metadata(path) else { return false };")
+        out.push(f"    found.{kind}()")
+        out.push("}")
+    }
+    return out.join("\n")
+}
+
+/// R249: a read that answers nothing for a file that is not there, `match
+/// std::fs::read(p) { Ok(b) => Ok(Some(b)), Err(e) if e.kind() ==
+/// io::ErrorKind::NotFound => Ok(None), Err(e) => Err(e).., }` at the end of
+/// its block -> `if !std::fs::exists(p) { return Ok(None); }` and
+/// `Ok(Some(std::fs::read(p)?))`: Nikaia's `IoError` has no kind to match,
+/// `fs::exists` asks first (P3a's `project_tests_optional`).
+fn rs2nika_missing_reads(mut ctx: Rs2nikaCtx, src: String) -> String {
+    let lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut out: Vec[String] = []
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        let t: String = l.trim().clone()
+        let ind = rs2nika_indent(l)
+        let mut read: String = ""
+        for f in ["read", "read_to_string"] {
+            if t.starts_with(f"match std::fs::{f}(") && t.ends_with(") {") {
+                read = f.clone()
+            }
+        }
+        if read != "" && i + 4 < lines.len() {
+            let arg: String = ((t.strip_prefix(f"match std::fs::{read}(") ?? "").strip_suffix(") {") ?? "").clone()
+            let a1: String = lines[i + 1].trim().clone()
+            let a2: String = lines[i + 2].trim().clone()
+            let a3: String = lines[i + 3].trim().clone()
+            let close: String = lines[i + 4].trim().clone()
+            let (b, _) = (a1.strip_prefix("Ok(") ?? "").split_once(")") ?? ("", "")
+            let (e, _) = (a2.strip_prefix("Err(") ?? "").split_once(")") ?? ("", "")
+            let mut next = i + 5
+            while next < lines.len() && lines[next].trim() == "" {
+                next = next + 1
+            }
+            let tail = next < lines.len() && lines[next].trim().starts_with("}")
+            let missing = a2.starts_with(f"Err({e}) if {e}.kind() == ") && a2.ends_with("ErrorKind::NotFound => Ok(None),")
+            if tail && close == "}" && b != "" && e != "" && a1 == f"Ok({b}) => Ok(Some({b}))," && missing && a3.starts_with("Err(") && a3.contains(" => Err(") {
+                out.push(f"{ind}if !std::fs::exists({arg}) {{")
+                out.push(f"{ind}    return Ok(None);")
+                out.push(f"{ind}}}")
+                out.push(f"{ind}Ok(Some(std::fs::{read}({arg})?))")
+                rs2nika_hit(ctx, "R249")
+                i = i + 5
+                continue
+            }
+        }
+        out.push(l.clone())
+        i = i + 1
+    }
+    return out.join("\n")
+}
+
+/// R250: a function's tail `xs.into_iter().map(|x| { ..; Ok(v) }).collect()`
+/// into `Result<Vec<T>>` -> `let mut acc: Vec<T> = Vec::new();`, `for x in
+/// xs { ..; acc.push(v); }` and `Ok(acc)`: a tools file fails by `throws`, a
+/// `?` in the body then goes (R144), and `collect` makes no `Result` (P3a's
+/// `output_tests`, `program_tests`). A `xs.retain(|y| c);` just before ->
+/// `if !c { continue; }` at the loop's start, its comment with it (`std`'s
+/// sets have no `retain`). The list is named by the function's last word
+/// where that is a plural (`output_tests` -> `tests`), else `out`.
+fn rs2nika_result_loops(mut ctx: Rs2nikaCtx, src: String) -> String {
+    let lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut out: Vec[String] = []
+    let mut elem: String = ""
+    let mut fn_name: String = ""
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        let n = rs2nika_fn_name(l)
+        if n != "" {
+            fn_name = n.clone()
+            elem = rs2nika_result_elem(lines, i)
+        }
+        let t: String = l.trim().clone()
+        let ind = rs2nika_indent(l)
+        let mut recv: String = ""
+        let mut how: String = ""
+        let mut head: String = ""
+        let mut at = -1
+        if elem != "" && rs2nika_is_path(t) && i + 2 < lines.len() {
+            let t1: String = lines[i + 1].trim().clone()
+            if t1 == ".into_iter()" || t1 == ".iter()" {
+                recv = t.clone()
+                how = t1.clone()
+                head = lines[i + 2].trim().clone()
+                at = i + 2
+            }
+        } else if elem != "" && (t.contains(".into_iter().map(|") || t.contains(".iter().map(|")) {
+            let (r, rest) = t.split_once(".into_iter()") ?? t.split_once(".iter()") ?? ("", "")
+            if rs2nika_is_path(r) {
+                recv = r.clone()
+                how = if t.contains(".into_iter().map(|") { ".into_iter()" } else { ".iter()" }
+                head = rest.clone()
+                at = i
+            }
+        }
+        if at < 0 || !head.starts_with(".map(|") || !head.ends_with("| {") {
+            out.push(l.clone())
+            i = i + 1
+            continue
+        }
+        let var: String = ((head.strip_prefix(".map(|") ?? "").strip_suffix("| {") ?? "").trim().clone()
+        let split = at > i
+        let bind: String = if split { f"{ind}        " } else { f"{ind}    " }
+        // the closure's end, then `.collect()` and the function's `}`
+        let mut j = at + 1
+        let mut end = -1
+        while j < lines.len() && end < 0 {
+            let lj: String = lines[j].trim_end().clone()
+            if split && lj == f"{ind}    }})" && j + 2 < lines.len() {
+                let tc: String = lines[j + 1].trim().clone()
+                if tc.starts_with(".collect") && tc.ends_with("()") && lines[j + 2].trim() == "}" {
+                    end = j
+                }
+            } else if !split && (lj == f"{ind}}}).collect()" || (lj.starts_with(f"{ind}}}).collect::<") && lj.ends_with("()"))) && j + 1 < lines.len() && lines[j + 1].trim() == "}" {
+                end = j
+            }
+            if lj.trim() != "" && !lj.starts_with(bind) && end < 0 && rs2nika_indent(lj).len() <= ind.len() + 4 && lj.trim() != "})" && !lj.trim().starts_with("})") {
+                break
+            }
+            j = j + 1
+        }
+        if end < 0 {
+            out.push(l.clone())
+            i = i + 1
+            continue
+        }
+        // the `Ok(` the body ends with
+        let mut ok = end - 1
+        while ok > at && !lines[ok].starts_with(f"{bind}Ok(") {
+            ok = ok - 1
+        }
+        let last: String = lines[end - 1].clone()
+        let one = ok == end - 1 && last.trim_end().ends_with(")")
+        if ok <= at || !(one || last.trim_end() == f"{bind})" || last.trim_end() == f"{bind}}})") {
+            out.push(l.clone())
+            i = i + 1
+            continue
+        }
+        let (_, last_word) = fn_name.rsplit_once("_") ?? ("", "")
+        let tail0: String = if last_word == "" { fn_name.clone() } else { last_word.clone() }
+        let mut acc: String = "out"
+        if tail0.len() > 1 && tail0.ends_with("s") && tail0 != var && tail0 != recv {
+            acc = tail0.clone()
+        }
+        // a `xs.retain(|y| c);` before the chain, and its comment, go into the loop
+        let mut lead: Vec[String] = []
+        let n0 = out.len()
+        if n0 > 0 && out[n0 - 1].trim().starts_with(f"{recv}.retain(|") && out[n0 - 1].trim().ends_with(");") {
+            let kept: String = ((out[n0 - 1].trim().strip_prefix(f"{recv}.retain(|") ?? "").strip_suffix(");") ?? "").clone()
+            let (p, cond) = kept.split_once("| ") ?? ("", "")
+            if rs2nika_all_word(p) && rs2nika_all_word(var) {
+                let mut c0 = n0 - 1
+                while c0 > 0 && out[c0 - 1].trim().starts_with("//") {
+                    c0 = c0 - 1
+                }
+                let mut q = c0
+                while q < n0 - 1 {
+                    lead.push(f"    {out[q]}")
+                    q = q + 1
+                }
+                lead.push(f"{ind}    if {rs2nika_negated(rs2nika_free_word(cond, p, var))} {{")
+                lead.push(f"{ind}        continue;")
+                lead.push(f"{ind}    }}")
+                let mut keep: Vec[String] = []
+                q = 0
+                while q < c0 {
+                    keep.push(out[q].clone())
+                    q = q + 1
+                }
+                out = keep
+            }
+        }
+        out.push(f"{ind}let mut {acc}: Vec<{elem}> = Vec::new();")
+        if how == ".iter()" {
+            out.push(f"{ind}for {var} in {recv}.iter() {{")
+        } else {
+            out.push(f"{ind}for {var} in {recv} {{")
+        }
+        for x in lead {
+            out.push(x.clone())
+        }
+        let mut k = at + 1
+        while k < end {
+            let mut b: String = lines[k].clone()
+            if b.starts_with(bind) {
+                let rest: String = (b.strip_prefix(bind) ?? "").clone()
+                b = f"{ind}    {rest}"
+            }
+            if k == ok {
+                b = b.replacen("Ok(", f"{acc}.push(", 1)
+            }
+            if k == end - 1 {
+                b = f"{b.trim_end()};"
+            }
+            out.push(b)
+            k = k + 1
+        }
+        out.push(f"{ind}}}")
+        out.push(f"{ind}Ok({acc})")
+        rs2nika_hit(ctx, "R250")
+        i = if split { end + 2 } else { end + 1 }
+    }
+    return out.join("\n")
+}
+
+/// R251: a `&[u8]` parameter read only by `p.starts_with(b"..")`,
+/// `p.ends_with(b"..")`, `p.windows(n).any(|w| w == b"..")` and handed on
+/// whole -> `&str`, the literals text, the window `p.contains("..")`:
+/// `Bytes` has none of these tests, the caller hands the text over (P3a's
+/// `is_refusal`, `does_not_compile`).
+fn rs2nika_byte_text(mut ctx: Rs2nikaCtx, src: String) -> String {
+    let mut lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        if rs2nika_fn_name(l) == "" || !l.contains(": &[u8]") || !l.trim_end().ends_with("{") {
+            i = i + 1
+            continue
+        }
+        let ind = rs2nika_indent(l)
+        let mut end = i + 1
+        while end < lines.len() && lines[end].trim_end() != f"{ind}}}" {
+            end = end + 1
+        }
+        let c: Vec[scalar] = l.chars().collect()
+        let open = rs2nika_find_from(c, "(", 0)
+        let close = rs2nika_closing(c, open, '(', ')')
+        let mut head: String = l.clone()
+        let mut body: Vec[String] = []
+        let mut k = i + 1
+        while k < end {
+            body.push(lines[k].clone())
+            k = k + 1
+        }
+        let mut changed = false
+        if open > 0 && close > open {
+            for a in rs2nika_split_args(rs2nika_text(c, open + 1, close)) {
+                let (p0, ty) = a.split_once(":") ?? ("", "")
+                let p: String = p0.trim().clone()
+                if ty.trim() != "&[u8]" || !rs2nika_all_word(p) {
+                    continue
+                }
+                let mut texts: Vec[String] = []
+                let mut fits = true
+                let mut tests = 0
+                for b in body {
+                    let mut s: String = b.clone()
+                    for m in ["starts_with", "ends_with"] {
+                        let before: String = s.clone()
+                        s = s.replace(f"{p}.{m}(b\"", f"{p}.{m}(\"")
+                        if s != before {
+                            tests = tests + 1
+                        }
+                    }
+                    let mut from = 0
+                    while true {
+                        let sc: Vec[scalar] = s.chars().collect()
+                        let at = rs2nika_find_from(sc, f"{p}.windows(", from)
+                        if at < 0 {
+                            break
+                        }
+                        from = at + 1
+                        let wopen = at + p.chars().count() + ".windows".len()
+                        let wclose = rs2nika_closing(sc, wopen, '(', ')')
+                        if wclose < 0 || !rs2nika_at(sc, wclose + 1, ".any(|") {
+                            continue
+                        }
+                        let aopen = wclose + ".any".len() + 1
+                        let aclose = rs2nika_closing(sc, aopen, '(', ')')
+                        let inner: String = rs2nika_text(sc, aopen + 1, aclose)
+                        let (w, cmp) = (inner.strip_prefix("|") ?? "").split_once("| ") ?? ("", "")
+                        let lit: String = ((cmp.strip_prefix(f"{w} == b\"") ?? "").strip_suffix("\"") ?? "").clone()
+                        if aclose < 0 || !rs2nika_all_word(w) || lit == "" || lit.contains("\"") {
+                            continue
+                        }
+                        s = f"{rs2nika_text(sc, 0, at)}{p}.contains(\"{lit}\"){rs2nika_text(sc, aclose + 1, sc.len())}"
+                        tests = tests + 1
+                        from = 0
+                    }
+                    // every other use hands it on whole
+                    let sc: Vec[scalar] = s.chars().collect()
+                    let pc: Vec[scalar] = p.chars().collect()
+                    let mut at = 0
+                    while at + pc.len() <= sc.len() {
+                        if rs2nika_text(sc, at, at + pc.len()) == p && (at == 0 || !(rs2nika_word(sc[at - 1]) || sc[at - 1] == '.')) && (at + pc.len() == sc.len() || !rs2nika_word(sc[at + pc.len()])) {
+                            let after: String = rs2nika_text(sc, at + pc.len(), sc.len())
+                            let tested = after.starts_with(".contains(\"") || after.starts_with(".starts_with(\"") || after.starts_with(".ends_with(\"")
+                            let handed = (after.starts_with(")") || after.starts_with(",")) && at > 0 && (sc[at - 1] == '(' || sc[at - 1] == ' ')
+                            if !tested && !handed {
+                                fits = false
+                            }
+                        }
+                        at = at + 1
+                    }
+                    texts.push(s)
+                }
+                if fits && tests > 0 {
+                    body = texts
+                    head = head.replace(f"{p}: &[u8]", f"{p}: &str")
+                    changed = true
+                }
+            }
+        }
+        if changed {
+            lines[i] = head
+            k = i + 1
+            while k < end {
+                lines[k] = body[k - i - 1].clone()
+                k = k + 1
+            }
+            rs2nika_hit(ctx, "R251")
+        }
+        i = end + 1
+    }
+    return lines.join("\n")
+}
+
+/// R252: a walk by hand, `let mut pending = vec![d.to_path_buf()]; while let
+/// Some(at) = pending.pop() { for e in std::fs::read_dir(&at)? { .. } }`,
+/// that pushes the directories and keeps each file by its name relative to
+/// `d` -> the list it fills is `std::fs::walk(d).iter().map(|name|
+/// ..).collect()` (R237: `fs::walk(d, fs::Root::Anywhere)`, the files under
+/// `d` by relative name, `/` between the parts), the relative name
+/// `name.text_of()`, the path `d.join(name)` (sources.nika since 0.0.307,
+/// P3a's `files_under`).
+fn rs2nika_walks(mut ctx: Rs2nikaCtx, src: String) -> String {
+    let lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut out: Vec[String] = []
+    let mut elem: String = ""
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        let t: String = l.trim().clone()
+        if rs2nika_fn_name(l) != "" {
+            elem = rs2nika_result_elem(lines, i)
+        }
+        let ind = rs2nika_indent(l)
+        if !(t.starts_with("let mut ") && t.contains(" = vec![") && t.ends_with(".to_path_buf()];") && i + 1 < lines.len()) {
+            out.push(l.clone())
+            i = i + 1
+            continue
+        }
+        let (lhs, rhs) = (t.strip_prefix("let mut ") ?? "").split_once(" = vec![") ?? ("", "")
+        let pend: String = lhs.trim().clone()
+        let dir: String = (rhs.strip_suffix(".to_path_buf()];") ?? "").clone()
+        let w: String = lines[i + 1].trim().clone()
+        let mut end = i + 2
+        while end < lines.len() && lines[end].trim_end() != f"{ind}}}" {
+            end = end + 1
+        }
+        let mut path: String = ""
+        let mut rel: String = ""
+        let mut found: String = ""
+        let mut pushed: String = ""
+        let mut reads = false
+        let mut cut = false
+        let mut k = i + 2
+        while k < end {
+            let b: String = lines[k].trim().clone()
+            reads = reads || b.contains("read_dir(")
+            cut = cut || b.contains(".strip_prefix(")
+            let (bl, br) = (b.strip_prefix("let ") ?? "").split_once(" = ") ?? ("", "")
+            if b.starts_with("let ") && b.ends_with(".path();") && rs2nika_all_word(bl) {
+                path = bl.clone()
+            } else if b.starts_with("let ") && path != "" && rs2nika_all_word(bl) && (br == path || br.starts_with(f"{path}.strip_prefix(")) {
+                rel = bl.clone()
+            }
+            if b.contains(".push(") && b.ends_with(");") && !b.starts_with(f"{pend}.push(") {
+                let (f, arg) = b.split_once(".push(") ?? ("", "")
+                found = f.clone()
+                pushed = (arg.strip_suffix(");") ?? "").clone()
+            }
+            k = k + 1
+        }
+        let loops = w.starts_with("while let Some(") && w.ends_with(f" = {pend}.pop() {{")
+        let mut made = -1
+        let mut q = 0
+        while q < out.len() {
+            if found != "" && out[q].trim() == f"let mut {found} = Vec::new();" {
+                made = q
+            }
+            q = q + 1
+        }
+        if !loops || !reads || !cut || path == "" || rel == "" || !rs2nika_all_word(found) || !rs2nika_all_word(dir) || made < 0 || end >= lines.len() {
+            out.push(l.clone())
+            i = i + 1
+            continue
+        }
+        let each: String = rs2nika_free_word(rs2nika_free_word(pushed, rel, "name.text_of()"), path, f"{dir}.join(name)")
+        let typed: String = if elem != "" { f": Vec<{elem}>" } else { "" }
+        out[made] = f"{rs2nika_indent(out[made])}let mut {found}{typed} = std::fs::walk({dir}).iter().map(|name| {each}).collect();"
+        rs2nika_hit(ctx, "R252")
+        i = end + 1
+    }
+    return out.join("\n")
+}
+
+/// R253: anyhow's `.with_context(..)` / `.context(..)` right after a
+/// `std::fs::` call goes, also where rustfmt put it on the next line:
+/// `std`'s `IoError` names the path itself (P3a: an unreadable test file
+/// fails with std's text); the `?` stays for R144.
+fn rs2nika_fs_contexts(mut ctx: Rs2nikaCtx, src: String) -> String {
+    let lines: Vec[String] = src.split("\n").map(fn(l) { l.clone() }).collect()
+    let mut out: Vec[String] = []
+    let mut i = 0
+    while i < lines.len() {
+        let line: String = lines[i].clone()
+        if !line.contains("std::fs::") {
+            out.push(line)
+            i = i + 1
+            continue
+        }
+        let mut joined = false
+        let mut given: String = line.clone()
+        if i + 1 < lines.len() && line.trim_end().ends_with(")") {
+            let nt: String = lines[i + 1].trim().clone()
+            if nt.starts_with(".with_context(") || nt.starts_with(".context(") {
+                given = f"{line.trim_end()}{nt}"
+                joined = true
+            }
+        }
+        let dropped = rs2nika_fs_context_dropped(given)
+        if dropped != given {
+            out.push(dropped)
+            rs2nika_hit(ctx, "R253")
+            i = if joined { i + 2 } else { i + 1 }
+            continue
+        }
+        out.push(line)
+        i = i + 1
+    }
+    return out.join("\n")
+}
+
+/// `line` without the contexts right after its `std::fs::` calls (R253).
+fn rs2nika_fs_context_dropped(line: String) -> String {
+    let mut s: String = line.clone()
+    let mut from = 0
+    while true {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, "std::fs::", from)
+        if at < 0 {
+            break
+        }
+        from = at + 1
+        let mut e = at + "std::fs::".len()
+        while e < c.len() && rs2nika_word(c[e]) {
+            e = e + 1
+        }
+        if e >= c.len() || c[e] != '(' {
+            continue
+        }
+        let close = rs2nika_closing(c, e, '(', ')')
+        if close < 0 {
+            continue
+        }
+        for lead in [".with_context(", ".context("] {
+            if rs2nika_at(c, close + 1, lead) {
+                let open = close + lead.chars().count()
+                let wclose = rs2nika_closing(c, open, '(', ')')
+                if wclose > open {
+                    s = f"{rs2nika_text(c, 0, close + 1)}{rs2nika_text(c, wclose + 1, c.len())}"
+                }
+            }
+        }
+    }
+    return s
+}
+
+/// R254: `let (Ok(a), Ok(b)) = (x, y) else { jump };` -> one `let Ok(a) = x
+/// else { jump };` a value (R146 writes each `let a = x catch { jump }`);
+/// `std::str::from_utf8(b)` -> `b.text()` of the bytes (P3a's
+/// `difference`, `Bytes` since 9c19957).
+fn rs2nika_ok_pairs(mut ctx: Rs2nikaCtx, src: String) -> String {
+    let mut lines: Vec[String] = []
+    for l in src.split("\n") {
+        lines.push(rs2nika_utf8_text(l))
+    }
+    if src.contains("std::str::from_utf8(") {
+        rs2nika_hit(ctx, "R254")
+    }
+    let mut out: Vec[String] = []
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        let ind = rs2nika_indent(l)
+        let mut whole: String = l.trim().clone()
+        if !whole.starts_with("let (Ok(") {
+            out.push(l.clone())
+            i = i + 1
+            continue
+        }
+        let mut j = i
+        while !whole.ends_with("};") && j + 1 < lines.len() && j < i + 8 {
+            j = j + 1
+            whole = f"{whole} {lines[j].trim()}"
+        }
+        let c: Vec[scalar] = whole.chars().collect()
+        let open = "let ".len()
+        let close = rs2nika_closing(c, open, '(', ')')
+        let rest: String = rs2nika_text(c, close + 1, c.len()).trim().clone()
+        let value: String = (rest.strip_prefix("= ") ?? "").trim().clone()
+        let vc: Vec[scalar] = value.chars().collect()
+        let vclose = if value.starts_with("(") { rs2nika_closing(vc, 0, '(', ')') } else { -1 }
+        let tail: String = if vclose > 0 { rs2nika_text(vc, vclose + 1, vc.len()).trim().clone() } else { "" }
+        let jump: String = ((tail.strip_prefix("else {") ?? "").strip_suffix("};") ?? "").trim().clone()
+        let pats: Vec[String] = if close > open { rs2nika_split_args(rs2nika_text(c, open + 1, close)) } else { [] }
+        let vals: Vec[String] = if vclose > 0 { rs2nika_split_args(rs2nika_text(vc, 1, vclose)) } else { [] }
+        if jump == "" || pats.len() < 2 || pats.len() != vals.len() || !rs2nika_all_ok(pats) {
+            out.push(l.clone())
+            i = i + 1
+            continue
+        }
+        let mut k = 0
+        while k < pats.len() {
+            out.push(f"{ind}let {pats[k]} = {vals[k]} else {{ {jump} }};")
+            k = k + 1
+        }
+        rs2nika_hit(ctx, "R254")
+        i = j + 1
+    }
+    return out.join("\n")
+}
+
+/// Whether every pattern is an `Ok(..)` (R254).
+fn rs2nika_all_ok(pats: ref Vec[String]) -> bool {
+    for p in pats {
+        if !p.starts_with("Ok(") {
+            return false
+        }
+    }
+    return true
+}
+
+/// `std::str::from_utf8(b)` -> `b.text()` in one line (R254).
+fn rs2nika_utf8_text(line: String) -> String {
+    let mut s: String = line.clone()
+    while s.contains("std::str::from_utf8(") {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, "std::str::from_utf8(", 0)
+        let open = at + "std::str::from_utf8".len()
+        let close = rs2nika_closing(c, open, '(', ')')
+        if close < 0 {
+            break
+        }
+        let arg: String = rs2nika_unled(rs2nika_text(c, open + 1, close).trim().clone(), "&")
+        let recv: String = if rs2nika_is_path(arg) { arg.clone() } else { f"({arg})" }
+        s = f"{rs2nika_text(c, 0, at)}{recv}.text(){rs2nika_text(c, close + 1, c.len())}"
+    }
+    return s
+}
+
 /// One file, from what `rs2nika_loaded` read: no file is read here.
 pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_given: String, prefix: String, facts: ref Vec[String]) -> Rs2nikaOut {
     // R83: `check-free` / `emit-free` turn the methods into free functions
@@ -11907,6 +12726,8 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
     ctx.free = free
     ctx.world = world
     ctx.prefix = prefix.clone()
+    ctx.prefix_file = rs2nika_prefix_file(ctx, prefix)
+    ctx.prefix_all = rs2nika_prefix_all(ctx, prefix)
     let src = rs2nika_take_marks(ctx, given_src)
     ctx.opt_names = rs2nika_opt_names(src)
     for name in rs2nika_fact_options(src, facts) {
@@ -11917,7 +12738,12 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
     ctx.parsed_names = rs2nika_parsed_names(src)
     ctx.view = view
     rs2nika_enum_arity(ctx, src)
-    let freed = rs2nika_field_lists(ctx, rs2nika_loop_tails(ctx, rs2nika_free_methods(ctx, src.clone())))
+    // R249-R254: P3a's decisions, on the Rust text
+    let walked0 = rs2nika_walks(ctx, rs2nika_result_loops(ctx, src.clone()))
+    let tested0 = rs2nika_missing_reads(ctx, rs2nika_path_tests(ctx, walked0))
+    let decided = rs2nika_ok_pairs(ctx, rs2nika_byte_text(ctx, rs2nika_fs_contexts(ctx, tested0)))
+    // R246 after R83: the free functions the rest of the file does not call are `pub`
+    let freed = rs2nika_moved_pub(ctx, rs2nika_field_lists(ctx, rs2nika_loop_tails(ctx, rs2nika_free_methods(ctx, decided))))
     let aliased = rs2nika_parsed_alias(ctx, freed)
     let pruned0 = rs2nika_rust_impls(ctx, aliased)
     let pruned1 = rs2nika_tool_paths(ctx, pruned0)
@@ -11948,7 +12774,7 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
             } else if raw.trim_end().ends_with("(") {
                 pending = name.clone()
             }
-            if prefix != "" && !rs2nika_starts(name, prefix) {
+            if prefix != "" && !rs2nika_starts(name, prefix) && rs2nika_takes_prefix(ctx, name) {
                 ctx.renamed_from.push(name.clone())
                 ctx.renamed_to.push(f"{prefix}{name}")
             }
@@ -11959,7 +12785,7 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
     // file take the prefix those functions get
     if prefix != "" {
         for name in ctx.only_fns.clone() {
-            if !rs2nika_starts(name, prefix) && !ctx.renamed_from.contains(name) {
+            if !rs2nika_starts(name, prefix) && !ctx.renamed_from.contains(name) && rs2nika_takes_prefix(ctx, name) {
                 ctx.renamed_from.push(name.clone())
                 ctx.renamed_to.push(f"{prefix}{name}")
                 rs2nika_hit(ctx, "R235")
@@ -12707,6 +13533,10 @@ fn rs2nika_lent(ty: String) -> String {
 fn rs2nika_lift_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String], facts: ref Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = given.clone()
     let mut lifted: Vec[String] = []
+    // R249: the closures lifted, by name and by what they are; the same
+    // closure written again in another function takes the one lifted
+    let mut lifted_names: Vec[String] = []
+    let mut lifted_keys: Vec[String] = []
     // a name the file declares, or one closure took already, is not lifted twice
     let mut taken: collections::BTreeSet[String] = collections::BTreeSet()
     for l in given {
@@ -12786,7 +13616,7 @@ fn rs2nika_lift_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String], facts: ref
         let colon = lhs.find(":") ?? lhs.len()
         let name: String = lhs[..<colon].trim().clone()
         let given_ty: String = if colon < lhs.len() { lhs[colon + ":".len()..].trim().clone() } else { "" }
-        let closure = colon == lhs.len() && rest.starts_with("|") && !rest.starts_with("||") && rs2nika_all_word(name) && !taken.contains(name)
+        let closure = colon == lhs.len() && rest.starts_with("|") && !rest.starts_with("||") && rs2nika_all_word(name) && (!taken.contains(name) || lifted_names.contains(name))
         if !closure {
             if rs2nika_all_word(name) && name != "" {
                 names.push(name.clone())
@@ -12918,6 +13748,10 @@ fn rs2nika_lift_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String], facts: ref
         }
         let mut a = 0
         while a < pnames.len() {
+            // R249: an owned path it only reads is lent (`fs::Path` is taken by `ref`)
+            if ptypes[a] == "PathBuf" || ptypes[a] == "std::path::PathBuf" {
+                ptypes[a] = "&Path"
+            }
             unknown = unknown || ptypes[a] == ""
             sig.push(f"{pnames[a]}: {ptypes[a]}")
             a = a + 1
@@ -12927,14 +13761,26 @@ fn rs2nika_lift_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String], facts: ref
             i = i + 1
             continue
         }
-        if lifted.len() > 0 || (out.len() > 0 && out[out.len() - 1].trim() != "") {
+        let what: String = f"{name}\t{rs2nika_join(sig, ", ")}\t{ret}\t{text}"
+        let again = lifted_names.contains(name)
+        if again && !lifted_keys.contains(what) {
+            i = i + 1
+            continue
+        }
+        if again {
+            rs2nika_hit(ctx, "R249")
+        } else if lifted.len() > 0 || (out.len() > 0 && out[out.len() - 1].trim() != "") {
             lifted.push("")
         }
-        lifted.push(f"fn {name}({rs2nika_join(sig, ", ")}) -> {ret} {{")
-        for b in body {
-            lifted.push(b.clone())
+        if !again {
+            lifted.push(f"fn {name}({rs2nika_join(sig, ", ")}) -> {ret} {{")
+            for b in body {
+                lifted.push(b.clone())
+            }
+            lifted.push("}")
+            lifted_names.push(name.clone())
+            lifted_keys.push(what)
         }
-        lifted.push("}")
         // the closure's lines go, the line numbers stay (`--facts`)
         k = i
         while k <= last {
@@ -12949,7 +13795,7 @@ fn rs2nika_lift_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String], facts: ref
                 k = k + 1
             }
         }
-        if ctx.prefix != "" && !rs2nika_starts(name, ctx.prefix) {
+        if ctx.prefix != "" && !rs2nika_starts(name, ctx.prefix) && !again {
             ctx.renamed_from.push(name.clone())
             ctx.renamed_to.push(f"{ctx.prefix}{name}")
         }
@@ -13790,6 +14636,17 @@ fn rs2nika_as_file(text: String, state: String) -> String {
         rs2nika_flush(cur, cur_method, cur_ind, free, meth)
     }
     let mut out: Vec[String] = ["use std::collections", ""]
+    // R247: a draft that calls `fs::` uses `std::fs` (P3a, S2)
+    let mut calls_fs = false
+    for x in free {
+        calls_fs = calls_fs || x.contains("fs::")
+    }
+    for x in meth {
+        calls_fs = calls_fs || x.contains("fs::")
+    }
+    if calls_fs && !text.contains("use std::fs") {
+        out = ["use std::collections", "use std::fs", ""]
+    }
     for x in free {
         out.push(x.clone())
     }

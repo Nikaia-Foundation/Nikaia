@@ -1,7 +1,7 @@
-fn check_x_plain(a: String) -> i64 {
+pub fn check_x_plain(a: String) -> i64 {
     return a.len()
 }
-fn check_x_threaded(a: String) -> i64 sync {
+pub fn check_x_threaded(a: String) -> i64 sync {
     return a.len()
 }
 

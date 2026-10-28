@@ -12,6 +12,8 @@ cache::use_entry host.use_entry # the user cache's mark, a `SysrootHost` method 
 crate::comptime_run::unique_beside host.unique_beside # a `SysrootHost` method (S2)
 crate::contracts::sync::Pause ModulesPause # modules.rs's pause, `ModulesPause` in modules.nika (M1)
 sync::Pause ModulesPause # the same, by its short path (M1)
+verdict project_tests_verdict # `verdict` is a test runner's word other tools may want: prefixed (project_tests.nika, P3a)
+difference project_tests_difference # the same: diffs.nika has `differing_lines` beside it (P3a)
 
 # [view]: what `--view` (R177) renames, in this order. The parsed files are
 # `ParsedView`s named `unit`. A bare word is renamed as a word (not after a
@@ -36,6 +38,11 @@ check::Severity = CheckSeverity # the same re-export
 PathBuf = fs::Path # std's file name, `std::path::PathBuf` lowered; its methods are `nikaia_std::fs::path` (sysroot_cache.nika, S2)
 &Path = ref fs::Path # the same, lent (S2)
 (Span,String) = Site # a pause's site, `Site { span, what }` (sync.nika, M1)
+Outcome = ProjectTestsOutcome # project.rs's `Outcome` is project_tests.nika's, re-exported under its old name (P3a)
+Option<Vec<u8>> = Bytes? # a file read where there is one: what a test expects is `Bytes`, compared as bytes (P3a)
+# P3a: `OutputTest` and `ProgramTest` are Nikaia structs holding `Bytes` and
+# `fs::Path` (R255 writes a `Vec<u8>` field as `Bytes`); a plain `Vec<u8>` or
+# `&[u8]` stays `Vec[u8]`, a buffer being built (S2's packed `body`, `sha256_hex`)
 
 # [fields]: `Type.field chain = list: Nikaia type`, a struct the Rust side
 # keeps, lent as `&[Type]` and read by fields: one list per field read,

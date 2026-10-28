@@ -1,4 +1,4 @@
-fn sum_summary(all: ref Vec[Finding], extra: i64) -> String {
+pub fn sum_summary(all: ref Vec[Finding], extra: i64) -> String {
     let findings: Vec[ref Finding] = all.iter().filter(fn(f) { f.error }).collect()
     let mut refused: Vec[String] = []
     let more = fn(n) { n + extra }

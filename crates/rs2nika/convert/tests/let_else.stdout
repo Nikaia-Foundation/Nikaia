@@ -1,4 +1,4 @@
-fn bound(types: ref Vec[Ty]) -> i64 sync {
+pub fn bound(types: ref Vec[Ty]) -> i64 sync {
     let mut known: Vec[Ty] = []
     let mut numbers: i64 = 0
     for ty in types {

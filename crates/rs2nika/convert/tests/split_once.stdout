@@ -1,11 +1,11 @@
-fn cut(line: String) -> (String, String)? sync {
+pub fn cut(line: String) -> (String, String)? sync {
     let (key, value) = line.split_once('=') ?? return null
     return (key.trim().clone(), value.to_string())
 }
-fn owner(path: String) -> (String, String) sync {
+pub fn owner(path: String) -> (String, String) sync {
     return path.rsplit_once("::") ?? ("", path)
 }
-fn none_yet() -> (String, i64)? sync {
+pub fn none_yet() -> (String, i64)? sync {
     let found: (String, i64)? = null
     return found
 }

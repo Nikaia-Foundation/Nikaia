@@ -1,9 +1,9 @@
-fn twice(text: String) -> Tree sync throws {
+pub fn twice(text: String) -> Tree sync throws {
     let again = read_tree(text) catch { bail!("does not parse: {error}") }
     return again
 }
 
-fn format_all(files: Vec[String]) -> i64 sync {
+pub fn format_all(files: Vec[String]) -> i64 sync {
     let mut code = 0
     for file in files {
         let formatted = format(file) catch {
@@ -17,17 +17,17 @@ fn format_all(files: Vec[String]) -> i64 sync {
     return code
 }
 
-fn stage(text: String) -> Stage sync {
+pub fn stage(text: String) -> Stage sync {
     lower(text) catch { return Stage::Refused }
     return Stage::Lowered
 }
 
-fn hole(text: String) -> Hole sync {
+pub fn hole(text: String) -> Hole sync {
     let expr = read_tree(text) catch { let e = error; return Hole::Refused(e.to_string()) }
     return Hole::Parsed(expr)
 }
 
-fn dump(ty: String) -> Computed sync {
+pub fn dump(ty: String) -> Computed sync {
     let dump = dumper(ty) catch {
         match error {
             Wall::NoForm { because } => {
@@ -41,7 +41,7 @@ fn dump(ty: String) -> Computed sync {
     return Computed::Value(dump)
 }
 
-fn run_it() sync {
+pub fn run_it() sync {
     let mut held = run() catch {
         eprintln(f"{error}")
         return
@@ -51,7 +51,7 @@ fn run_it() sync {
     done()
 }
 
-fn open_cache() -> Cache? sync {
+pub fn open_cache() -> Cache? sync {
     let cache = Cache::open() catch {
         eprintln(f"warning: {error:#}")
         null
@@ -59,7 +59,7 @@ fn open_cache() -> Cache? sync {
     return cache
 }
 
-fn position(starts: ref Vec[i64], at: i64) -> i64 sync {
+pub fn position(starts: ref Vec[i64], at: i64) -> i64 sync {
     // TODO(rs2nika): `match` on `Ok`/`Err`: `binary_search`: its `Err` is the place to insert at, not a failure; Nikaia's `xs.binary_search(x)` (Part I) and a test of what it hands back
     let line = match starts.binary_search(at) {
         Ok(i) => i,
@@ -68,7 +68,7 @@ fn position(starts: ref Vec[i64], at: i64) -> i64 sync {
     return line
 }
 
-fn report(said: Result[Out]) -> i64 sync {
+pub fn report(said: Result[Out]) -> i64 sync {
     // TODO(rs2nika): `match` on `Ok`/`Err`: over a kept `Result` (not a call): Nikaia holds no `Result`; match where the call is made, `let v = call catch { <the Err arm> }`
     match said {
         Ok(out) => {
@@ -81,13 +81,13 @@ fn report(said: Result[Out]) -> i64 sync {
     return 0
 }
 
-fn first_line(path: String) -> String sync {
+pub fn first_line(path: String) -> String sync {
     let text = read_file(path) catch { return "" }
     show(text)
     return path.to_string()
 }
 
-fn note(path: String) sync {
+pub fn note(path: String) sync {
     match read_file(path) catch { null } {
         text => {
             show(text)

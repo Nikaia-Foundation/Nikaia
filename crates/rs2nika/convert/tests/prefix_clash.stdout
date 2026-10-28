@@ -1,0 +1,8 @@
+fn pt_verdict(label: String) -> bool {
+    return label.is_empty()
+}
+
+pub fn named_by(label: String) -> bool {
+    return pt_verdict(label)
+}
+

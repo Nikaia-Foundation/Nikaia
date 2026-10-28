@@ -1,4 +1,4 @@
-fn soften(mut findings: Vec[Finding], on: String) {
+pub fn soften(mut findings: Vec[Finding], on: String) {
     if on != "warn" {
         return
     }

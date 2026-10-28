@@ -1,0 +1,22 @@
+use std::collections
+use std::fs
+
+pub struct Outcome {
+    pub passed: bool,
+    pub stdout: Bytes,
+    pub files: Vec[(String, Bytes?)],
+}
+
+pub fn read_all(path: ref Path) -> Vec[u8] throws {
+    let bytes = fs::read(path, fs::Root::Anywhere)
+    return bytes
+}
+
+fn helper(n: i64) -> i64 {
+    return n + 1
+}
+
+pub fn entry(n: i64) -> i64 {
+    return helper(n) * 2
+}
+

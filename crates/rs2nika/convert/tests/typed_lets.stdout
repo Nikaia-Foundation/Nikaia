@@ -1,4 +1,4 @@
-fn groups(units: ref Vec[Unit]) -> Vec[i64] sync {
+pub fn groups(units: ref Vec[Unit]) -> Vec[i64] sync {
     let mut out: Vec[i64] = []
     let mut notes: Vec[String] = []
     notes.push(f"{units.len()} units")

@@ -5,8 +5,8 @@ enum Token {
     End,
 }
 
-struct Pt {
-    x: i64,
+pub struct Pt {
+    pub x: i64,
 }
 
 impl Pt {
@@ -20,7 +20,7 @@ impl Pt {
     }
 }
 
-fn tail(s: String) -> String sync {
+pub fn tail(s: String) -> String sync {
     let rest = s[2..]
     let all = s
     return f"{rest}{all}"

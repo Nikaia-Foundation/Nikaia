@@ -2,7 +2,7 @@ fn first_word(text: String) -> String? sync {
     return text.split(' ').next()
 }
 
-fn arms(binary: String, at: i64?, shape: Shape?) -> i64 sync {
+pub fn arms(binary: String, at: i64?, shape: Shape?) -> i64 sync {
     let binary = match binary.rsplit_once('-') {
         (name, hash) if hash.len() > 3 => name.to_string(),
         null => binary,
@@ -22,7 +22,7 @@ fn arms(binary: String, at: i64?, shape: Shape?) -> i64 sync {
     return width + dot + binary.len()
 }
 
-fn paths(table: ref Table, n: i64, name: String?, kept: String?) -> i64 sync {
+pub fn paths(table: ref Table, n: i64, name: String?, kept: String?) -> i64 sync {
     let path = (match table.get("path") { x => x.as_str(), null => null })
     let c = (match u32::try_from(n) catch { null } { x => char::from_u32(x), null => null })
     let size = (match name { n => n.len() + 1, null => null }) ?? 0
@@ -34,7 +34,7 @@ fn paths(table: ref Table, n: i64, name: String?, kept: String?) -> i64 sync {
     return size + kept_len + x
 }
 
-fn chains(dependency: Dep?, recorded: String?, ready: bool) -> i64 sync {
+pub fn chains(dependency: Dep?, recorded: String?, ready: bool) -> i64 sync {
     if dependency != null {
         let shipped = shipped_ledger(dependency.root)
         if shipped != null && shipped.fresh() {

@@ -1,4 +1,4 @@
-fn pick(o: i64?, k: i64) -> i64 sync {
+pub fn pick(o: i64?, k: i64) -> i64 sync {
     let given = o ?? panic(f"no value for {k}")
     return match given {
         0 => 1,
@@ -6,7 +6,7 @@ fn pick(o: i64?, k: i64) -> i64 sync {
     }
 }
 
-fn guard_n(n: i64) -> i64 sync {
+pub fn guard_n(n: i64) -> i64 sync {
     if n < 0 {
         panic(f"negative: {n}")
     }
@@ -16,7 +16,7 @@ fn guard_n(n: i64) -> i64 sync {
     return n
 }
 
-fn half(n: i64) -> i64 sync {
+pub fn half(n: i64) -> i64 sync {
     return match n % 2 {
         0 => n / 2,
         1 => n,
@@ -24,7 +24,7 @@ fn half(n: i64) -> i64 sync {
     }
 }
 
-fn positive(n: i64) -> i64 sync {
+pub fn positive(n: i64) -> i64 sync {
     if n > 0 {
         return n
     }

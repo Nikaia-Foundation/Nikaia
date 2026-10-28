@@ -1,5 +1,5 @@
 /// The keys that were inferred.
-fn lost(keys: ref Vec[String], committed: ref collections::BTreeMap[String, Contract], pauses: ref collections::BTreeMap[String, i64]) -> String {
+pub fn lost(keys: ref Vec[String], committed: ref collections::BTreeMap[String, Contract], pauses: ref collections::BTreeMap[String, i64]) -> String {
     let mut out: String = ""
     for key in keys {
         if key.is_empty() {
@@ -21,7 +21,7 @@ fn lost(keys: ref Vec[String], committed: ref collections::BTreeMap[String, Cont
 
 /// Both ledgers, merged.
 // ADAPTER: bleibt in Rust (`Ledger`)
-fn merged(mut library: Ledger, own: ref Ledger, renames: ref collections::BTreeMap[String, String]) -> Ledger {
+pub fn merged(mut library: Ledger, own: ref Ledger, renames: ref collections::BTreeMap[String, String]) -> Ledger {
     absorb_into(library, null, renames, own.clone())
     return library
 }

@@ -1,5 +1,5 @@
 /// Reads what the cache holds.
-fn cached(path: ref fs::Path) -> String? {
+pub fn cached(path: ref fs::Path) -> String? {
     let text = fs::read_to_string(path, fs::Root::Anywhere) catch { "" }
     let _ = fs::metadata(path, fs::Root::Anywhere) catch { return null }
     fs::remove(path, fs::Root::Anywhere) catch {}

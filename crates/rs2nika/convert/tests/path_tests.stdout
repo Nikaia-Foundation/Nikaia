@@ -1,0 +1,30 @@
+pub fn pt_listed(dir: ref Path) -> Vec[String] throws {
+    let mut out: Vec[String] = []
+    if pt_is_dir(dir) && pt_optional(dir.join("a")) != null {
+        out.push("a")
+    }
+    return out
+}
+
+pub fn pt_other(dir: ref Path) -> bool throws {
+    return pt_is_file(dir.join("b")) && fs::exists(dir, fs::Root::Anywhere) && pt_optional(dir.join("b")) == null
+}
+
+/// Whether `path` names a directory; a name that is not there names none.
+fn pt_is_dir(path: ref Path) -> bool {
+    let found = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return found.is_dir()
+}
+
+/// Whether `path` names a file; a name that is not there names none.
+fn pt_is_file(path: ref Path) -> bool {
+    let found = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return found.is_file()
+}
+
+fn pt_optional(path: ref Path) -> Vec[u8]? throws {
+    if !fs::exists(path, fs::Root::Anywhere) {
+        return null
+    }
+    return fs::read(path, fs::Root::Anywhere)
+}

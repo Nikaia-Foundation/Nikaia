@@ -1,4 +1,4 @@
-fn how(claim: ref Claim) -> String sync {
+pub fn how(claim: ref Claim) -> String sync {
     let given = claim.held ?? return "refused"
     return match given {
         Held::Proved => "proved",
@@ -9,7 +9,7 @@ fn how(claim: ref Claim) -> String sync {
     }
 }
 
-fn first(rows: ref Vec[Row]) -> i64 sync {
+pub fn first(rows: ref Vec[Row]) -> i64 sync {
     for row in rows {
         let given = row.kind ?? continue
         let n = match given {

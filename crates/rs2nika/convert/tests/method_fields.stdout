@@ -14,7 +14,7 @@
 
 
 /// The cache's files, packed.
-fn cache_pack(level: i64, root: ref fs::Path, name: String) -> String {
+pub fn cache_pack(level: i64, root: ref fs::Path, name: String) -> String {
     let dir = cache_std_dir(root)
     let n = cache_count(level)
     return f"{dir.display()}/{name}/{n}"

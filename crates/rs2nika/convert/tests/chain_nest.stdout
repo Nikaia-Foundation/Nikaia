@@ -1,4 +1,4 @@
-fn chain_probe(items: ref Vec[Item], key: String, bad: ref Vec[String]) -> i64 sync {
+pub fn chain_probe(items: ref Vec[Item], key: String, bad: ref Vec[String]) -> i64 sync {
     let mut n = 0
     for item in items {
         match item.shape {

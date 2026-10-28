@@ -1,5 +1,5 @@
 /// The packed bytes.
-fn packed(name: String, body: ref Vec[u8]) -> Vec[u8] {
+pub fn packed(name: String, body: ref Vec[u8]) -> Vec[u8] {
     let mut out: Vec[u8] = []
     for b in name.bytes() {
         out.push(b)
@@ -14,7 +14,7 @@ fn packed(name: String, body: ref Vec[u8]) -> Vec[u8] {
 }
 
 /// The key, trimmed.
-fn key(text: String) -> String {
+pub fn key(text: String) -> String {
     return text.trim().clone()
 }
 

@@ -1,10 +1,10 @@
 use std::text
 
-fn width(name: String?) -> i64 sync {
+pub fn width(name: String?) -> i64 sync {
     return (name ?? "").len()
 }
 
-fn first(a: i64?, b: i64?) -> i64 sync {
+pub fn first(a: i64?, b: i64?) -> i64 sync {
     let x = (a ?? b) ?? 0
     return x
 }
@@ -18,21 +18,21 @@ fn read(path: String) -> String sync throws {
     return text
 }
 
-fn count(path: String) -> i64 sync {
+pub fn count(path: String) -> i64 sync {
     return (read(path) catch { "" }).len()
 }
 
-fn need(v: i64?) -> i64 sync throws {
+pub fn need(v: i64?) -> i64 sync throws {
     let x = v ?? throw "missing"
     return x + 1
 }
 
-fn head(path: String) -> Vec[String] sync {
+pub fn head(path: String) -> Vec[String] sync {
     let text = read(path) catch { return [] }
     return [text]
 }
 
-fn digits(s: String) -> i64? sync {
+pub fn digits(s: String) -> i64? sync {
     let n = text::parse_i64(s) ?? return null
     return n
 }

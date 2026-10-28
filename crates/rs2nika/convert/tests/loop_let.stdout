@@ -1,5 +1,5 @@
 // ADAPTER: bleibt in Rust (`Ledger`)
-fn reach(plain: ref collections::BTreeMap[String, Ledger], words: ref Vec[String], package: String, mut seen: Ledger) {
+pub fn reach(plain: ref collections::BTreeMap[String, Ledger], words: ref Vec[String], package: String, mut seen: Ledger) {
     for word in words {
         let ours = word.clone()
         if ours == package {

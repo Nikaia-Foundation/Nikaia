@@ -1,4 +1,4 @@
-fn walk(units: ref Vec[Unit], files: ref Vec[(String, String)], extra: ref Vec[String]) -> Vec[String] sync {
+pub fn walk(units: ref Vec[Unit], files: ref Vec[(String, String)], extra: ref Vec[String]) -> Vec[String] sync {
     let mut out: Vec[String] = []
     for at in 0..<units.len() {
         let unit = units[at]

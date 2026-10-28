@@ -1,4 +1,4 @@
-fn take(mut at: collections::BTreeMap[i64, i64], k: i64) -> i64 sync {
+pub fn take(mut at: collections::BTreeMap[i64, i64], k: i64) -> i64 sync {
     match at.remove(k) {
         v => {
             return v + 1
@@ -8,7 +8,7 @@ fn take(mut at: collections::BTreeMap[i64, i64], k: i64) -> i64 sync {
     return 0
 }
 
-fn take_or(mut at: collections::BTreeMap[i64, i64], k: i64) -> i64 sync {
+pub fn take_or(mut at: collections::BTreeMap[i64, i64], k: i64) -> i64 sync {
     let mut n = 0
     match at.remove(k) {
         v => {
@@ -21,7 +21,7 @@ fn take_or(mut at: collections::BTreeMap[i64, i64], k: i64) -> i64 sync {
     return n
 }
 
-fn first(mut xs: Vec[i64]) -> i64 sync {
+pub fn first(mut xs: Vec[i64]) -> i64 sync {
     match xs.pop() {
         top => {
             match xs.pop() {
@@ -37,15 +37,15 @@ fn first(mut xs: Vec[i64]) -> i64 sync {
     return -1
 }
 
-fn long(o: String?) -> bool sync {
+pub fn long(o: String?) -> bool sync {
     return (match o { s => s.len() > 2, null => false })
 }
 
-fn big(o: i64?) -> bool sync {
+pub fn big(o: i64?) -> bool sync {
     return (match o { value => positive(value), null => false })
 }
 
-fn positive(n: i64) -> bool sync {
+pub fn positive(n: i64) -> bool sync {
     return n > 0
 }
 

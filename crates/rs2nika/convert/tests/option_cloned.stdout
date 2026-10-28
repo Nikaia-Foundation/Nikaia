@@ -1,4 +1,4 @@
-fn first(xs: ref Vec[String], ns: ref Vec[i64]) -> String? sync {
+pub fn first(xs: ref Vec[String], ns: ref Vec[i64]) -> String? sync {
     let a = xs.first()?.clone()
     let n = ns.last()?.clone()
     return a

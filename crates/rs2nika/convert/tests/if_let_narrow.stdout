@@ -1,4 +1,4 @@
-fn big(limit: i64?, other: i64?) -> i64 sync {
+pub fn big(limit: i64?, other: i64?) -> i64 sync {
     if limit != null && limit > 3 {
         return limit + 1
     }

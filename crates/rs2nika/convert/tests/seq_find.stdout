@@ -1,4 +1,4 @@
-fn seq_probe(outer: ref Vec[View], root: String, detail: String) -> i64? sync {
+pub fn seq_probe(outer: ref Vec[View], root: String, detail: String) -> i64? sync {
     let held = outer.iter().rev().find(fn(v) { v.name == root }) ?? return null
     let line = detail.lines().find(fn(line) { line.contains("stopped") }) ?? detail
     // TODO(rs2nika): `.find(..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle

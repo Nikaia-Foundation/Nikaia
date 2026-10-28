@@ -1,0 +1,22 @@
+pub fn program_tests(dir: ref Path, mut names: collections::BTreeSet[String]) -> Vec[Test] throws {
+    let mut tests: Vec[Test] = []
+    for name in names {
+        // A name with a program beside it is not an output test.
+        if name.ends_with(".nika") {
+            continue
+        }
+        let size = measure(name)
+        tests.push(Test { name, size })
+    }
+    return tests
+}
+
+pub fn sizes(dir: ref Path, names: Vec[String]) -> Vec[i64] throws {
+    let mut sizes: Vec[i64] = []
+    for name in names {
+        let size = measure(name)
+        sizes.push(size + 1)
+    }
+    return sizes
+}
+

@@ -1,4 +1,4 @@
-fn parse(name: String) -> i64 sync throws {
+pub fn parse(name: String) -> i64 sync throws {
     return match name {
         "one" => 1,
-        else => Err(refused!("There's no target called `{name}`. Use one } }  fn kept(x: i64) -> i64 { x + 1 }  fn whole(name: str) -> String { f"no `{name}` here, try another" } "
+        else => Err(refused!("There's no target called `{name}`. Use one } }  pub fn kept(x: i64) -> i64 { x + 1 }  pub fn whole(name: str) -> String { f"no `{name}` here, try another" } "

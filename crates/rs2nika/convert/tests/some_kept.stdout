@@ -1,11 +1,11 @@
-fn args_of(t: ref Ty) -> Vec[Ty]? sync {
+pub fn args_of(t: ref Ty) -> Vec[Ty]? sync {
     return match t {
         Ty::Named { args, .. } => args.clone(),
         else => null,
     }
 }
 
-fn first_arg(t: ref Ty) -> Ty? sync {
+pub fn first_arg(t: ref Ty) -> Ty? sync {
     if t.args.is_empty() {
         return null
     }

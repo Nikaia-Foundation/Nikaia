@@ -1,4 +1,4 @@
-fn run_all() -> ExitCode sync {
+pub fn run_all() -> ExitCode sync {
     run() catch {
         if is_a_refusal(error) {
             eprintln(f"{error:#}")
@@ -10,7 +10,7 @@ fn run_all() -> ExitCode sync {
     return ExitCode::SUCCESS
 }
 
-fn size(path: ref Path) -> u64 sync {
+pub fn size(path: ref Path) -> u64 sync {
     let m = fs::metadata(path) catch {
         let e = error
         if e.kind() == io::ErrorKind::NotFound {
@@ -21,7 +21,7 @@ fn size(path: ref Path) -> u64 sync {
     return m.len()
 }
 
-fn last(path: ref Path) -> u64 sync {
+pub fn last(path: ref Path) -> u64 sync {
     // TODO(rs2nika): `match` on `Ok`/`Err`: a guard on an `Ok`/`Err` arm: `let v = call catch { <the Err arms> }`, a guard of `Err` as an `if` inside the block, one of `Ok` as an `if` after it
     return match fs::metadata(path) {
         Ok(m) => m.len(),

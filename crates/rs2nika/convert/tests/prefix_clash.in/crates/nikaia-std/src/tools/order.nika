@@ -1,0 +1,4 @@
+/// Whether the order holds.
+pub fn verdict(n: i64) -> bool {
+    return n > 0
+}

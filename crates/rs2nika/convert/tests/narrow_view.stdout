@@ -3,7 +3,7 @@ pub struct Seeds {
     shapes: collections::BTreeMap[String, Shape],
 }
 
-fn emit_x_names_of(unit: ref ParsedView) -> Vec[String] {
+pub fn emit_x_names_of(unit: ref ParsedView) -> Vec[String] {
     let mut out: Vec[String] = []
     for item in unit.items {
         out.push(unit.text(item.name))

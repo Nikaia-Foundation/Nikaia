@@ -1,4 +1,4 @@
-fn names(units: ref Vec[Unit]) -> collections::BTreeSet[String] {
+pub fn names(units: ref Vec[Unit]) -> collections::BTreeSet[String] {
     for unit in units {
         let package = unit.package?.clone() ?? continue
         println(f"{package}")

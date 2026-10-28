@@ -1,12 +1,12 @@
-fn an_or_a(ty: String) -> String sync {
+pub fn an_or_a(ty: String) -> String sync {
     if (ty.starts_with('i') || ty.starts_with('a')) { "an" } else { "a" }
 }
 
-fn wide(o: String?) -> bool sync {
+pub fn wide(o: String?) -> bool sync {
     return (match o { x => x.len() > 1 && x.len() < 5, null => false })
 }
 
-fn head(v: ref Vec[String]) -> i64? sync {
+pub fn head(v: ref Vec[String]) -> i64? sync {
     for s in v {
         let t = s.strip_prefix("a") ?? continue
         return t.len()

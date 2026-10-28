@@ -12,14 +12,14 @@ enum Shape {
     Index(Expr, Expr),
 }
 
-fn first_of(s: ref Shape) -> bool sync {
+pub fn first_of(s: ref Shape) -> bool sync {
     return match s {
         Shape::Pair(a, ..) => is_call(a),
         Shape::Index(_, i, ..) => is_call(i),
     }
 }
 
-fn count(xs: ref Vec[Expr]) -> i64 sync {
+pub fn count(xs: ref Vec[Expr]) -> i64 sync {
     return match xs {
         [first, ..rest] => 1 + count(rest),
         [] => 0,

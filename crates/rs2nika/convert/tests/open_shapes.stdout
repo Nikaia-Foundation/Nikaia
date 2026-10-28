@@ -1,4 +1,4 @@
-fn shape_shapes(attribute: ref Attribute, names: ref Names, mut state: State) -> String? {
+pub fn shape_shapes(attribute: ref Attribute, names: ref Names, mut state: State) -> String? {
     let fields = state.fields_of(names) ?? {
         state.missing += 1
         return null

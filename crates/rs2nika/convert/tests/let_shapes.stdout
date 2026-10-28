@@ -1,4 +1,4 @@
-fn emit_x_pick(e: ref Expr) -> i64 {
+pub fn emit_x_pick(e: ref Expr) -> i64 {
     let (callee, given) = match e {
         Expr::Call { name, args } => (name.clone(), args),
         else => return 0,
@@ -6,7 +6,7 @@ fn emit_x_pick(e: ref Expr) -> i64 {
     return given.len()
 }
 
-fn emit_x_first(items: ref Vec[Item]) -> i64 {
+pub fn emit_x_first(items: ref Vec[Item]) -> i64 {
     for m in items {
         let (name, args, ret) = match m.node { Item::Fn { name, args, ret_type: ret, .. } => (name ?? continue, args, ret ?? continue), else => continue }
         return args.len()
@@ -14,7 +14,7 @@ fn emit_x_first(items: ref Vec[Item]) -> i64 {
     return 0
 }
 
-fn emit_x_named(mut bodies: Vec[Body], name: String) {
+pub fn emit_x_named(mut bodies: Vec[Body], name: String) {
     bodies.push(Body { name: name })
 }
 

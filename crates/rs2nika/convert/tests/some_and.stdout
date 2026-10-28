@@ -1,4 +1,4 @@
-fn probe(o: String?, n: i64?) -> bool sync {
+pub fn probe(o: String?, n: i64?) -> bool sync {
     if (match n { k => k > 3, null => false }) {
         return true
     }

@@ -1,6 +1,6 @@
 use std::text
 
-fn a(s: String) -> i64? sync {
+pub fn a(s: String) -> i64? sync {
     let at = 1 + (s.find(":") ?? return null)
     let n = (s.find(",") ?? return null) + 1
     // TODO(rs2nika): `.get(range)`: Nikaia has no `get` of a range (NK1171); test the bounds, then cut `s[a..]` / `s[a..<b]`
@@ -8,7 +8,7 @@ fn a(s: String) -> i64? sync {
     return (at + n + m)
 }
 
-fn b(s: String) -> String sync {
+pub fn b(s: String) -> String sync {
     let w = text::parse_i64(s) ?? 0
     // TODO(rs2nika): `.find(..)` with a function, a closure or a list of `char`s as the needle: Nikaia's text methods take a text; a loop over `.chars()`, or one call per needle
     let r = s.find(char::is_whitespace)
@@ -21,7 +21,7 @@ fn b(s: String) -> String sync {
     return f"{w:>4}{k:x}{{}}"
 }
 
-fn c(one: scalar) -> String sync {
+pub fn c(one: scalar) -> String sync {
     let s = f"'\\u{{{one as i64:x}}}'"
     return f"{{{s}}}"
 }

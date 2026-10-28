@@ -1,10 +1,10 @@
-fn header_of(code: i64, header: String?) -> i64 sync {
+pub fn header_of(code: i64, header: String?) -> i64 sync {
     if code == 0 && header != null {
         return header.len()
     }
     return 0
 }
-fn flags(a_program: bool) -> i64 sync {
+pub fn flags(a_program: bool) -> i64 sync {
     if a_program {
         let flags = std::env::var_os(LINK_VAR)
         if flags != null && !flags.is_empty() {
@@ -13,7 +13,7 @@ fn flags(a_program: bool) -> i64 sync {
     }
     return 0
 }
-fn peeked(line: String, next: String?) -> bool sync {
+pub fn peeked(line: String, next: String?) -> bool sync {
     if line == "x" && next != null && next.starts_with("use ") {
         let n = next
         return true

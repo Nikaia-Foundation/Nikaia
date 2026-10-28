@@ -1,0 +1,4 @@
+--profile
+check-free
+--file
+f.rs

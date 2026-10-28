@@ -4,7 +4,7 @@ enum Reached {
     Method,
 }
 
-fn shown(r: Reached) -> String sync {
+pub fn shown(r: Reached) -> String sync {
     return match r {
         Reached::Opaque(null) => "none",
         Reached::Opaque(name) => f"@{name}",
@@ -14,7 +14,7 @@ fn shown(r: Reached) -> String sync {
     }
 }
 
-fn late(r: Reached) -> String sync {
+pub fn late(r: Reached) -> String sync {
     return match r {
         Reached::Opaque(null) => "none",
         Reached::Opaque(name) => name,
@@ -23,7 +23,7 @@ fn late(r: Reached) -> String sync {
     }
 }
 
-fn kept(r: Reached) -> String sync {
+pub fn kept(r: Reached) -> String sync {
     return match r {
         Reached::Pair(null, 1) => "one",
         // TODO(rs2nika): a `Some(` in a variant pattern: no unguarded arm of `Reached::Pair` before `Some(a)` takes `None` there with `_`, a name, `None` or the same variant at each other position (a literal does not count), and no reorder or added `(None, _)` arm gives one (ADR-352 D1 per position)

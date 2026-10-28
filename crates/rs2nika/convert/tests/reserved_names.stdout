@@ -1,4 +1,4 @@
-fn entered(grammar_: String, throws_: bool) -> String sync {
+pub fn entered(grammar_: String, throws_: bool) -> String sync {
     let with_ = grammar_.len()
     if throws_ {
         return f"{grammar_} {with_}"

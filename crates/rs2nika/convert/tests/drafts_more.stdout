@@ -11,7 +11,7 @@ trait Named {
     fn name(ref self) -> String sync
 }
 
-fn more_chosen(names: ref Vec[String], body: ref Block, expected: Ty?, tail: Span?, how: Wrap?) -> Vec[String] {
+pub fn more_chosen(names: ref Vec[String], body: ref Block, expected: Ty?, tail: Span?, how: Wrap?) -> Vec[String] {
     let all = names.iter().map(fn(x) { x.clone() }).collect()
     let n = count(body)
     let _ = first(body)
@@ -47,16 +47,16 @@ fn more_chosen(names: ref Vec[String], body: ref Block, expected: Ty?, tail: Spa
     return all
 }
 
-fn more_evens(xs: ref Vec[i64]) -> Vec[i64] {
+pub fn more_evens(xs: ref Vec[i64]) -> Vec[i64] {
     return xs.iter().filter(fn(x) { x % 2 == 0 }).collect()
 }
 
-fn more_hashed() -> u64 {
+pub fn more_hashed() -> u64 {
     let basis = (0xcbf2_9ce4_8422_2325 as u64)
     return basis ^ (0b1010 as u8) as u64 ^ 0xFF as u64
 }
 
-fn more_either(args: ref Vec[Arg], ret: ref Ty?) -> bool {
+pub fn more_either(args: ref Vec[Arg], ret: ref Ty?) -> bool {
     if args.iter().map(fn(a) { a.ty }).any(fn(t) { t.is_view }) || (match ret { t => t.is_view, null => false }) {
         return true
     }
@@ -64,7 +64,7 @@ fn more_either(args: ref Vec[Arg], ret: ref Ty?) -> bool {
     return all
 }
 
-fn more_gathered(first: ref Unit, beside: ref Vec[Unit], keys: ref collections::BTreeMap[String, Ty], more: ref collections::BTreeMap[String, Ty]) -> Vec[String] {
+pub fn more_gathered(first: ref Unit, beside: ref Vec[Unit], keys: ref collections::BTreeMap[String, Ty], more: ref collections::BTreeMap[String, Ty]) -> Vec[String] {
     let mut seen: i64 = 0
     // ADAPTER: bleibt in Rust (`std::iter::once(`)
     let mut chained = [first]
@@ -81,7 +81,7 @@ fn more_gathered(first: ref Unit, beside: ref Vec[Unit], keys: ref collections::
     return names
 }
 
-fn more_named(unit: ref CheckWorld, word: Word) -> bool {
+pub fn more_named(unit: ref CheckWorld, word: Word) -> bool {
     return unit.words.resolve(word) == "x"
 }
 
@@ -95,11 +95,11 @@ impl Mark {
     }
 }
 
-fn more_after_mark() -> i64 {
+pub fn more_after_mark() -> i64 {
     return 0
 }
 
-fn more_listed(places: String, c: scalar) -> String {
+pub fn more_listed(places: String, c: scalar) -> String {
     let q = if c == '"' { 1 } else { 2 }
     return f"{places}; repeatable {q}"
 }
@@ -125,7 +125,7 @@ impl Moved {
     }
 }
 
-fn more_fresh() -> Moved {
+pub fn more_fresh() -> Moved {
     return Moved()
 }
 
@@ -139,14 +139,14 @@ fn more_walked(mut state: CheckState, world: ref CheckWorld) sync {
     }
 }
 
-fn more_told(with_: String, throw_: i64) {
+pub fn more_told(with_: String, throw_: i64) {
     println(f"told {with_} with {throw_} items")
     eprintln("")
     eprint("no holes, with care")
     print(f"{with_}: '{'x'}'")
 }
 
-fn more_lazy(xs: ref Vec[i64]) -> i64 {
+pub fn more_lazy(xs: ref Vec[i64]) -> i64 {
     let g = fn() {
         let y = 1
         y + 2
@@ -155,12 +155,12 @@ fn more_lazy(xs: ref Vec[i64]) -> i64 {
     return g()
 }
 
-struct Left {
-    n: i64,
+pub struct Left {
+    pub n: i64,
 }
 
-struct Right {
-    m: i64,
+pub struct Right {
+    pub m: i64,
 }
 
 impl Left {

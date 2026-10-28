@@ -25,7 +25,7 @@ pub fn run(x: u64) -> u64 sync {
     return a
 }
 
-fn again(x: u64) -> u64 sync {
+pub fn again(x: u64) -> u64 sync {
     return x
 }
 

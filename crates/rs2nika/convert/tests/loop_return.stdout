@@ -1,4 +1,4 @@
-fn probe(xs: ref Vec[String], m: ref collections::BTreeMap[String, i64]) -> i64? sync {
+pub fn probe(xs: ref Vec[String], m: ref collections::BTreeMap[String, i64]) -> i64? sync {
     let mut n = 0
     for x in xs {
         let w = m.get(x) ?? continue

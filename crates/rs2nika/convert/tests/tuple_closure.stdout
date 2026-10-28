@@ -1,5 +1,5 @@
 /// The names of the files.
-fn names(files: ref Vec[(String, String)]) -> Vec[String] {
+pub fn names(files: ref Vec[(String, String)]) -> Vec[String] {
     return files.iter().map(fn(file) { f"{file.0}: {file.1.len()}" }).collect()
 }
 

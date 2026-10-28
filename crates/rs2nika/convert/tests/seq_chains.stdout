@@ -1,5 +1,5 @@
 // ADAPTER: bleibt in Rust (a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`)
-fn chains(units: ref Vec[ref CheckWorld], errors: ref Vec[String], members: ref Vec[Member], parsed: ref CheckWorld, held: ref Vec[ClaimHeld], at: i64) -> u64 sync {
+pub fn chains(units: ref Vec[ref CheckWorld], errors: ref Vec[String], members: ref Vec[Member], parsed: ref CheckWorld, held: ref Vec[ClaimHeld], at: i64) -> u64 sync {
     for parsed in units {
         visit(parsed)
     }
@@ -50,7 +50,7 @@ fn chains(units: ref Vec[ref CheckWorld], errors: ref Vec[String], members: ref 
     return folded
 }
 
-fn join(answers: Vec[Crossing]) -> Crossing sync {
+pub fn join(answers: Vec[Crossing]) -> Crossing sync {
     let mut folded = Crossing::May
     for x in answers {
         folded = threads::worst_of(folded, x)
@@ -58,7 +58,7 @@ fn join(answers: Vec[Crossing]) -> Crossing sync {
     return folded
 }
 
-fn casts(head: Expr, casts: Vec[Ty]) -> Expr sync {
+pub fn casts(head: Expr, casts: Vec[Ty]) -> Expr sync {
     let mut expr = head
     for ty in casts {
         expr = Expr::Cast { expr: (expr), ty }

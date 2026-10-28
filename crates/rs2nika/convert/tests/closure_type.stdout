@@ -1,4 +1,4 @@
-fn probe(xs: ref Vec[String]) -> i64 sync {
+pub fn probe(xs: ref Vec[String]) -> i64 sync {
     let h = fn(a) { a + 1 }
     if g(xs[0]) {
         return h(1)

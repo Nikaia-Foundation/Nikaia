@@ -1,4 +1,4 @@
-fn comment(bytes: ref Vec[u8], at: i64) -> i64 sync {
+pub fn comment(bytes: ref Vec[u8], at: i64) -> i64 sync {
     return match bytes[at] {
         47 if (match bytes.get(at + 1) { got => got == 47, null => false }) => 1,
         47 if (match bytes.get(at + 1) { got => got == 42, null => false }) => 2,
@@ -6,7 +6,7 @@ fn comment(bytes: ref Vec[u8], at: i64) -> i64 sync {
     }
 }
 
-fn quoted(bytes: ref Vec[u8], i: i64) -> i64? sync {
+pub fn quoted(bytes: ref Vec[u8], i: i64) -> i64? sync {
     if (match bytes.get(i) { got => got != 34, null => true }) {
         return null
     }
