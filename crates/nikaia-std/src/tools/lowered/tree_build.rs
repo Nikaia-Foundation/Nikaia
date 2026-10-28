@@ -30,15 +30,11 @@ pub fn params_of(receiver: Option<Receiver>, args: Vec<FnArg>, zone: Option<Conf
     }
 }
 
-pub fn guarded(jump: Stmt, cond: Expr, span: Span, id: node_id::NodeId) -> Stmt { Stmt::Expr(Expr::If { cond: Box::new(cond), then_branch: Block { stmts: vec![Spanned { node: jump, span, doc: None, attributes: vec![] }] }, else_branch: None, id }) }
+pub fn guarded(jump: Stmt, cond: Expr, span: Span) -> Stmt { Stmt::Expr(Expr::If { cond: Box::new(cond), then_branch: Block { stmts: vec![Spanned { node: jump, span, doc: None, attributes: vec![] }] }, else_branch: None, id: node_id::NodeId::parsed() }) }
 
-pub fn fold_binary(head: Expr, tail: Vec<(BinaryOp, Expr, Span)>, first: u32) -> Expr {
+pub fn fold_binary(head: Expr, tail: Vec<(BinaryOp, Expr, Span)>) -> Expr {
     let mut lhs = head;
-    let mut next = first;
-    for step in tail.into_iter() {
-        lhs = Expr::Binary { op: step.0, lhs: Box::new(lhs), rhs: Box::new(step.1), span: step.2, grouped: false, id: numbered_id(next) };
-        next = next + 1u32;
-    }
+    for step in tail.into_iter() { lhs = Expr::Binary { op: step.0, lhs: Box::new(lhs), rhs: Box::new(step.1), span: step.2, grouped: false, id: node_id::NodeId::parsed() }; }
     lhs
 }
 
@@ -52,21 +48,19 @@ pub fn grouped(e: Expr) -> Expr {
     }
 }
 
-pub fn fold_postfix(base: Expr, tail: Vec<Postfix>, first: u32) -> Expr {
+pub fn fold_postfix(base: Expr, tail: Vec<Postfix>) -> Expr {
     let mut recv = base;
-    let mut next = first;
     for step in tail.into_iter() {
-        let id = numbered_id(next);
+        let id = node_id::NodeId::parsed();
         recv = match step {
             Postfix::Field(name) => Expr::Field { base: Box::new(recv), name, id },
             Postfix::SafeField(name) => Expr::SafeField { base: Box::new(recv), name, id },
             Postfix::SafeMethod(method, args, config) => Expr::SafeMethod { receiver: Box::new(recv), method, args, config, id },
             Postfix::Method(method, args, config) => Expr::MethodCall { receiver: Box::new(recv), method, args, config, id },
             Postfix::Index(index) => Expr::Index { base: Box::new(recv), index: Box::new(index), id },
-            Postfix::IndexFrom(start, len) => Expr::Index { base: Box::new(recv.clone()), index: Box::new(Expr::Range { start: Box::new(start), end: Box::new(Expr::MethodCall { receiver: Box::new(recv), method: len, args: vec![], config: vec![], id: numbered_id(next + 1u32) }), inclusive: false, id: numbered_id(next + 2u32) }), id },
+            Postfix::IndexFrom(start, len) => Expr::Index { base: Box::new(recv.clone()), index: Box::new(Expr::Range { start: Box::new(start), end: Box::new(Expr::MethodCall { receiver: Box::new(recv), method: len, args: vec![], config: vec![], id: node_id::NodeId::parsed() }), inclusive: false, id: node_id::NodeId::parsed() }), id },
             Postfix::With(fields, at) => Expr::With { base: Box::new(recv), fields, at, id },
         };
-        next = next + 3u32;
     }
     recv
 }

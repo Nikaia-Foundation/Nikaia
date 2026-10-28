@@ -82,8 +82,9 @@ fn ids_follow_parse_order() {
         "the same source gives the same ids"
     );
 
-    // `a`, `b`, `c`, then `b * c`, then `a + (b * c)`: a node is made after
-    // what it holds, and left to right.
+    // `a + (b * c)`, `a`, `b * c`, `b`, `c`: the numbering pass gives a node
+    // its number before what it holds, and goes left to right, dense
+    // ([ADR-383](../../../../docs/specification/adr/adr-383.md) D3).
     let Stmt::Let { value, .. } = &main_body(&first).stmts[0].node else {
         panic!("a let");
     };
@@ -108,10 +109,10 @@ fn ids_follow_parse_order() {
     let (Expr::Variable(_, b), Expr::Variable(_, c)) = (&**b, &**c) else {
         panic!("`b` and `c`");
     };
-    let numbers = [a.get(), b.get(), c.get(), product.get(), sum.get()];
+    let numbers = [sum.get(), a.get(), product.get(), b.get(), c.get()];
     assert!(
-        numbers.windows(2).all(|pair| pair[0] < pair[1]),
-        "a, b, c, b * c, a + b * c: {numbers:?}"
+        numbers.windows(2).all(|pair| pair[0] + 1 == pair[1]),
+        "a + b * c, a, b * c, b, c: {numbers:?}"
     );
 }
 

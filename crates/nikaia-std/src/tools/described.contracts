@@ -64,3 +64,24 @@ pub = true
 sync = true
 touches = []
 signature = "(number: u32) -> node_id::NodeId"
+
+# The id of a node the grammar makes, not yet numbered (ADR-383 D1).
+[fn."node_id::NodeId::parsed"]
+pub = true
+sync = true
+touches = []
+signature = "() -> node_id::NodeId"
+
+# Whether the numbering pass has still to number it (ADR-383 D3).
+[fn."node_id::NodeId::is_parsed"]
+pub = true
+sync = true
+touches = []
+signature = "(self: node_id::NodeId) -> bool"
+
+# Where the node was read, until the pass numbers it (ADR-383 D4).
+[fn."node_id::NodeId::span"]
+pub = true
+sync = true
+touches = []
+signature = "(self: node_id::NodeId) -> (u32, u32)?"

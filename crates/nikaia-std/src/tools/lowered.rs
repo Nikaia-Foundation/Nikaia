@@ -1535,6 +1535,14 @@ mod names_lowered {
 #[allow(unused_imports)]
 pub use names_lowered::*;
 
+mod node_numbers_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/node_numbers.rs");
+}
+#[allow(unused_imports)]
+pub use node_numbers_lowered::*;
+
 mod order_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2577,6 +2585,10 @@ pub mod modules {
 pub mod names {
     #[allow(unused_imports)]
     pub use super::{names_in, names_in_block, names_in_statement};
+}
+pub mod node_numbers {
+    #[allow(unused_imports)]
+    pub use super::{NodeNumbersItems, NodeNumbersExpr, node_numbers_items, node_numbers_expr};
 }
 pub mod order {
     #[allow(unused_imports)]

@@ -1,0 +1,624 @@
+// crates/nikaia-std/src/tools/node_numbers.nika
+//
+// **The numbering pass** ([ADR-383](../../../docs/specification/adr/adr-383.md)):
+// the grammar builds every node with a parsed, unnumbered id
+// (`NodeId::parsed()`), and this walk gives them their numbers, once, right
+// after the parse and before the first rewrite (D2). It walks the finished
+// tree in the order it stands in the input - a node before its children,
+// children left to right - and gives every parsed node the next number from
+// `first`, so the ids of a file are `first .. first + n` with no gap, the same
+// on any number of cores (D3). A node with a fresh id (ADR-340 D2) is passed
+// over; its children are not.
+//
+// **Where a node was read moves into the span table here** (D4): the span a
+// rule put on the id is the entry `id - first` of the list the pass returns,
+// `null` where no rule gave one. The tree goes in and comes out by value
+// (ADR-094 D7).
+
+use std::node_id
+
+/// A file's items, numbered: the tree, the span of each number less `first`,
+/// and the next free number.
+pub struct NodeNumbersItems {
+    pub items: Vec[Spanned[Item]],
+    pub spans: Vec[Span?],
+    pub next: u32,
+}
+
+/// One expression, numbered - a hole of a template, a type's rule read
+/// again: the tree, its spans, and the next free number.
+pub struct NodeNumbersExpr {
+    pub expr: Expr,
+    pub spans: Vec[Span?],
+    pub next: u32,
+}
+
+/// What the walk carries: the next number and the spans given so far.
+struct NodeNumbersState {
+    next: u32,
+    spans: Vec[Span?],
+}
+
+/// Numbers a parsed file's items from `first`.
+pub fn node_numbers_items(items: Vec[Spanned[Item]], first: u32) -> NodeNumbersItems {
+    let mut st = NodeNumbersState { next: first, spans: [] }
+    let numbered = numbers_items(items, st)
+    return NodeNumbersItems { items: numbered, spans: st.spans, next: st.next }
+}
+
+/// Numbers one parsed expression from `first`.
+pub fn node_numbers_expr(expr: Expr, first: u32) -> NodeNumbersExpr {
+    let mut st = NodeNumbersState { next: first, spans: [] }
+    let numbered = numbers_expr(expr, st)
+    return NodeNumbersExpr { expr: numbered, spans: st.spans, next: st.next }
+}
+
+/// The next number for a parsed id, with its span recorded; any other id as
+/// it is.
+fn numbers_id(id: node_id::NodeId, mut st: NodeNumbersState) -> node_id::NodeId {
+    if !id.is_parsed() {
+        return id
+    }
+    let read = id.span()
+    if read == null {
+        let none: Span? = null
+        st.spans.push(none)
+    } else {
+        let pair = read ?? (0, 0)
+        st.spans.push(Span { start: pair.0, end: pair.1 })
+    }
+    let numbered = node_id::NodeId::numbered(st.next)
+    st.next = st.next + 1
+    return numbered
+}
+
+fn numbers_items(items: Vec[Spanned[Item]], mut st: NodeNumbersState) -> Vec[Spanned[Item]] {
+    let mut out: Vec[Spanned[Item]] = []
+    for item in items.drain() {
+        let attributes = numbers_attributes(item.attributes, st)
+        let node = numbers_item(item.node, st)
+        out.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: attributes })
+    }
+    return out
+}
+
+fn numbers_attributes(attributes: Vec[Attribute], mut st: NodeNumbersState) -> Vec[Attribute] {
+    let mut out: Vec[Attribute] = []
+    for a in attributes.drain() {
+        let args = numbers_exprs(a.args, st)
+        let config = numbers_config(a.config, st)
+        out.push(Attribute { name: a.name, args: args, config: config, span: a.span })
+    }
+    return out
+}
+
+fn numbers_item(item: Item, mut st: NodeNumbersState) -> Item {
+    match item {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => {
+            let args2 = numbers_fn_args(args, st)
+            let config2 = numbers_config_params(config, st)
+            let body2 = numbers_block(body, st)
+            return Item::Fn { name: name, generics: generics, receiver: receiver, args: args2, config: config2, spread: spread, ret_type: ret_type, body: body2, is_sync: is_sync, sync_by: sync_by, is_public: is_public, can_throw: can_throw, is_extern: is_extern }
+        },
+        Item::Enum { name, variants, is_public, is_extern } => {
+            return Item::Enum { name: name, variants: numbers_variants(variants, st), is_public: is_public, is_extern: is_extern }
+        },
+        Item::Struct { name, generics, fields, is_public, is_extern, rules } => {
+            let fields2 = numbers_field_defs(fields, st)
+            let rules2 = numbers_rules(rules, st)
+            return Item::Struct { name: name, generics: generics, fields: fields2, is_public: is_public, is_extern: is_extern, rules: rules2 }
+        },
+        Item::Impl { trait_name, target, methods } => {
+            return Item::Impl { trait_name: trait_name, target: target, methods: numbers_items(methods, st) }
+        },
+        Item::Trait { name, methods, is_public } => {
+            return Item::Trait { name: name, methods: numbers_trait_methods(methods, st), is_public: is_public }
+        },
+        Item::Extern { abi, library, declarations, opaque } => {
+            let declarations2 = numbers_trait_methods(declarations, st)
+            let opaque2 = numbers_opaque(opaque, st)
+            return Item::Extern { abi: abi, library: library, declarations: declarations2, opaque: opaque2 }
+        },
+        Item::Test { name, body } => {
+            return Item::Test { name: name, body: numbers_block(body, st) }
+        },
+        Item::Bench { name, body } => {
+            return Item::Bench { name: name, body: numbers_block(body, st) }
+        },
+        Item::Grammar(def) => {
+            let mut rules: Vec[GrammarRule] = []
+            for rule in def.rules.drain() {
+                let mut alts: Vec[GrammarAlt] = []
+                for alt in rule.alts.drain() {
+                    let pattern = numbers_spanned_pattern(alt.pattern, st)
+                    let action = numbers_maybe_block(alt.action, st)
+                    alts.push(GrammarAlt { pattern: pattern, action: action })
+                }
+                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts: alts, span: rule.span })
+            }
+            return Item::Grammar(GrammarDef { name: def.name, rules: rules, public: def.public })
+        },
+        Item::Comptime { name, ty, value, public, bounds } => {
+            let value2 = numbers_expr(value, st)
+            let bounds2 = numbers_config(bounds, st)
+            return Item::Comptime { name: name, ty: ty, value: value2, public: public, bounds: bounds2 }
+        },
+        Item::Import { path, alias } => {
+            return Item::Import { path: path, alias: alias }
+        },
+    }
+}
+
+fn numbers_rules(rules: Vec[Spanned[Expr]], mut st: NodeNumbersState) -> Vec[Spanned[Expr]] {
+    let mut out: Vec[Spanned[Expr]] = []
+    for rule in rules.drain() {
+        let attributes = numbers_attributes(rule.attributes, st)
+        let node = numbers_expr(rule.node, st)
+        out.push(Spanned { node: node, span: rule.span, doc: rule.doc, attributes: attributes })
+    }
+    return out
+}
+
+fn numbers_opaque(opaque: Vec[Spanned[OpaqueType]], mut st: NodeNumbersState) -> Vec[Spanned[OpaqueType]] {
+    let mut out: Vec[Spanned[OpaqueType]] = []
+    for o in opaque.drain() {
+        let attributes = numbers_attributes(o.attributes, st)
+        out.push(Spanned { node: o.node, span: o.span, doc: o.doc, attributes: attributes })
+    }
+    return out
+}
+
+fn numbers_trait_methods(methods: Vec[Spanned[TraitMethod]], mut st: NodeNumbersState) -> Vec[Spanned[TraitMethod]] {
+    let mut out: Vec[Spanned[TraitMethod]] = []
+    for m in methods.drain() {
+        let attributes = numbers_attributes(m.attributes, st)
+        let node = numbers_trait_method(m.node, st)
+        out.push(Spanned { node: node, span: m.span, doc: m.doc, attributes: attributes })
+    }
+    return out
+}
+
+fn numbers_trait_method(method: TraitMethod, mut st: NodeNumbersState) -> TraitMethod {
+    let args = numbers_fn_args(method.args, st)
+    let config = numbers_config_params(method.config, st)
+    return TraitMethod { name: method.name, generics: method.generics, receiver: method.receiver, args: args, config: config, ret_type: method.ret_type, is_sync: method.is_sync, can_throw: method.can_throw }
+}
+
+fn numbers_fn_args(args: Vec[FnArg], mut st: NodeNumbersState) -> Vec[FnArg] {
+    let mut out: Vec[FnArg] = []
+    for a in args.drain() {
+        let attributes = numbers_attributes(a.attributes, st)
+        out.push(FnArg { name: a.name, ty: a.ty, mutable: a.mutable, span: a.span, attributes: attributes })
+    }
+    return out
+}
+
+fn numbers_config_params(params: Vec[ConfigParam], mut st: NodeNumbersState) -> Vec[ConfigParam] {
+    let mut out: Vec[ConfigParam] = []
+    for p in params.drain() {
+        let default = numbers_expr(p.default, st)
+        out.push(ConfigParam { name: p.name, ty: p.ty, default: default, default_span: p.default_span })
+    }
+    return out
+}
+
+fn numbers_variants(variants: Vec[EnumVariant], mut st: NodeNumbersState) -> Vec[EnumVariant] {
+    let mut out: Vec[EnumVariant] = []
+    for v in variants.drain() {
+        let attributes = numbers_attributes(v.attributes, st)
+        let fields = match v.fields {
+            VariantFields::Named(defs) => VariantFields::Named(numbers_field_defs(defs, st)),
+            other => other,
+        }
+        out.push(EnumVariant { name: v.name, fields: fields, attributes: attributes, span: v.span })
+    }
+    return out
+}
+
+fn numbers_field_defs(fields: Vec[FieldDef], mut st: NodeNumbersState) -> Vec[FieldDef] {
+    let mut out: Vec[FieldDef] = []
+    for f in fields.drain() {
+        let attributes = numbers_attributes(f.attributes, st)
+        let mut default: FieldDefault? = null
+        if f.default != null {
+            let given = f.default ?? FieldDefault { value: Expr::LitNull(node_id::NodeId::numbered(0)), span: Span::nowhere() }
+            default = FieldDefault { value: numbers_expr(given.value, st), span: given.span }
+        }
+        out.push(FieldDef { name: f.name, ty: f.ty, is_public: f.is_public, span: f.span, default: default, attributes: attributes })
+    }
+    return out
+}
+
+fn numbers_spanned_pattern(pattern: Spanned[Pattern], mut st: NodeNumbersState) -> Spanned[Pattern] {
+    let attributes = numbers_attributes(pattern.attributes, st)
+    let node = numbers_pattern(pattern.node, st)
+    return Spanned { node: node, span: pattern.span, doc: pattern.doc, attributes: attributes }
+}
+
+fn numbers_spanned_patterns(patterns: Vec[Spanned[Pattern]], mut st: NodeNumbersState) -> Vec[Spanned[Pattern]] {
+    let mut out: Vec[Spanned[Pattern]] = []
+    for p in patterns.drain() {
+        out.push(numbers_spanned_pattern(p, st))
+    }
+    return out
+}
+
+fn numbers_pattern(pattern: Pattern, mut st: NodeNumbersState) -> Pattern {
+    match pattern {
+        Pattern::Seq(parts) => {
+            return Pattern::Seq(numbers_spanned_patterns(parts, st))
+        },
+        Pattern::Choice(parts) => {
+            return Pattern::Choice(numbers_spanned_patterns(parts, st))
+        },
+        Pattern::Bind { name, pat } => {
+            return Pattern::Bind { name: name, pat: numbers_spanned_pattern(pat, st) }
+        },
+        Pattern::Ref { name, generics, args } => {
+            return Pattern::Ref { name: name, generics: generics, args: numbers_spanned_patterns(args, st) }
+        },
+        Pattern::Repeat { pat, rep } => {
+            return Pattern::Repeat { pat: numbers_spanned_pattern(pat, st), rep: rep }
+        },
+        Pattern::Group(pat) => {
+            return Pattern::Group(numbers_spanned_pattern(pat, st))
+        },
+        Pattern::Fold(spec) => {
+            let init = numbers_expr(spec.init, st)
+            let step = numbers_expr(spec.step, st)
+            let merge = numbers_maybe_expr(spec.merge, st)
+            let config = numbers_config(spec.config, st)
+            return Pattern::Fold(FoldSpec { parallel: spec.parallel, rule: spec.rule, init: init, step: step, merge: merge, config: config })
+        },
+        other => {
+            return other
+        },
+    }
+}
+
+fn numbers_block(block: Block, mut st: NodeNumbersState) -> Block {
+    let mut out: Vec[Spanned[Stmt]] = []
+    for s in block.stmts.drain() {
+        let attributes = numbers_attributes(s.attributes, st)
+        let node = numbers_stmt(s.node, st)
+        out.push(Spanned { node: node, span: s.span, doc: s.doc, attributes: attributes })
+    }
+    return Block { stmts: out }
+}
+
+fn numbers_maybe_block(block: Block?, mut st: NodeNumbersState) -> Block? {
+    if block == null {
+        return null
+    }
+    return numbers_block(block ?? Block { stmts: [] }, st)
+}
+
+fn numbers_stmt(stmt: Stmt, mut st: NodeNumbersState) -> Stmt {
+    match stmt {
+        Stmt::Let { names, shape, mutable, ty, value } => {
+            return Stmt::Let { names: names, shape: shape, mutable: mutable, ty: ty, value: numbers_expr(value, st) }
+        },
+        Stmt::Comptime { name, ty, value, bounds } => {
+            let value2 = numbers_expr(value, st)
+            let bounds2 = numbers_config(bounds, st)
+            return Stmt::Comptime { name: name, ty: ty, value: value2, bounds: bounds2 }
+        },
+        Stmt::Assign { target, op, value } => {
+            let target2 = numbers_expr(target, st)
+            let value2 = numbers_expr(value, st)
+            return Stmt::Assign { target: target2, op: op, value: value2 }
+        },
+        Stmt::For { bindings, shape, iter, body } => {
+            let iter2 = numbers_expr(iter, st)
+            let body2 = numbers_block(body, st)
+            return Stmt::For { bindings: bindings, shape: shape, iter: iter2, body: body2 }
+        },
+        Stmt::While { cond, body } => {
+            let cond2 = numbers_expr(cond, st)
+            let body2 = numbers_block(body, st)
+            return Stmt::While { cond: cond2, body: body2 }
+        },
+        Stmt::Return(value) => {
+            return Stmt::Return(numbers_maybe_expr(value, st))
+        },
+        Stmt::Expr(value) => {
+            return Stmt::Expr(numbers_expr(value, st))
+        },
+        other => {
+            return other
+        },
+    }
+}
+
+fn numbers_exprs(exprs: Vec[Expr], mut st: NodeNumbersState) -> Vec[Expr] {
+    let mut out: Vec[Expr] = []
+    for e in exprs.drain() {
+        out.push(numbers_expr(e, st))
+    }
+    return out
+}
+
+fn numbers_maybe_expr(expr: Expr?, mut st: NodeNumbersState) -> Expr? {
+    if expr == null {
+        return null
+    }
+    return numbers_expr(expr ?? Expr::LitNull(node_id::NodeId::numbered(0)), st)
+}
+
+fn numbers_config(config: Vec[ConfigArg], mut st: NodeNumbersState) -> Vec[ConfigArg] {
+    let mut out: Vec[ConfigArg] = []
+    for c in config.drain() {
+        out.push(ConfigArg { name: c.name, value: numbers_expr(c.value, st) })
+    }
+    return out
+}
+
+fn numbers_field_inits(fields: Vec[FieldInit], mut st: NodeNumbersState) -> Vec[FieldInit] {
+    let mut out: Vec[FieldInit] = []
+    for f in fields.drain() {
+        out.push(FieldInit { name: f.name, value: numbers_maybe_expr(f.value, st) })
+    }
+    return out
+}
+
+fn numbers_match_pattern(pattern: MatchPattern, mut st: NodeNumbersState) -> MatchPattern {
+    match pattern {
+        MatchPattern::List(parts) => {
+            return MatchPattern::List(numbers_match_patterns(parts, st))
+        },
+        MatchPattern::Literal(value) => {
+            return MatchPattern::Literal(numbers_expr(value, st))
+        },
+        MatchPattern::Tuple { path, parts } => {
+            return MatchPattern::Tuple { path: path, parts: numbers_match_patterns(parts, st) }
+        },
+        MatchPattern::Named { path, fields, rest } => {
+            return MatchPattern::Named { path: path, fields: numbers_pattern_fields(fields, st), rest: rest }
+        },
+        MatchPattern::Or(parts) => {
+            return MatchPattern::Or(numbers_match_patterns(parts, st))
+        },
+        MatchPattern::Range { start, end } => {
+            let start2 = numbers_expr(start, st)
+            let end2 = numbers_expr(end, st)
+            return MatchPattern::Range { start: start2, end: end2 }
+        },
+        other => {
+            return other
+        },
+    }
+}
+
+fn numbers_pattern_fields(fields: Vec[PatternField], mut st: NodeNumbersState) -> Vec[PatternField] {
+    let mut out: Vec[PatternField] = []
+    for f in fields.drain() {
+        out.push(PatternField { name: f.name, pat: numbers_match_pattern(f.pat, st) })
+    }
+    return out
+}
+
+fn numbers_match_arms(arms: Vec[MatchArm], mut st: NodeNumbersState) -> Vec[MatchArm] {
+    let mut out: Vec[MatchArm] = []
+    for arm in arms.drain() {
+        let pattern = numbers_match_pattern(arm.pattern, st)
+        let guard = numbers_maybe_expr(arm.guard, st)
+        let body = numbers_expr(arm.body, st)
+        out.push(MatchArm { pattern: pattern, guard: guard, body: body })
+    }
+    return out
+}
+
+fn numbers_select_arms(arms: Vec[SelectArm], mut st: NodeNumbersState) -> Vec[SelectArm] {
+    let mut out: Vec[SelectArm] = []
+    for arm in arms.drain() {
+        let value = numbers_expr(arm.value, st)
+        let body = numbers_block(arm.body, st)
+        out.push(SelectArm { binding: arm.binding, value: value, body: body, at: arm.at })
+    }
+    return out
+}
+
+fn numbers_fparts(parts: Vec[FPart], mut st: NodeNumbersState) -> Vec[FPart] {
+    let mut out: Vec[FPart] = []
+    for part in parts.drain() {
+        out.push(match part {
+            FPart::Hole { expr, spec, at } => FPart::Hole { expr: numbers_expr(expr, st), spec: spec, at: at },
+            other => other,
+        })
+    }
+    return out
+}
+
+fn numbers_match_patterns(patterns: Vec[MatchPattern], mut st: NodeNumbersState) -> Vec[MatchPattern] {
+    let mut out: Vec[MatchPattern] = []
+    for p in patterns.drain() {
+        out.push(numbers_match_pattern(p, st))
+    }
+    return out
+}
+
+/// One expression: its own number first, then its children in the order they
+/// are written.
+fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
+    match expr {
+        Expr::LitInt { value, negative, id } => {
+            return Expr::LitInt { value: value, negative: negative, id: numbers_id(id, st) }
+        },
+        Expr::Match { value, arms, id } => {
+            let id2 = numbers_id(id, st)
+            let value2 = numbers_expr(value, st)
+            return Expr::Match { value: value2, arms: numbers_match_arms(arms, st), id: id2 }
+        },
+        Expr::Range { start, end, inclusive, id } => {
+            let id2 = numbers_id(id, st)
+            let start2 = numbers_expr(start, st)
+            let end2 = numbers_expr(end, st)
+            return Expr::Range { start: start2, end: end2, inclusive: inclusive, id: id2 }
+        },
+        Expr::Tuple(items, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Tuple(numbers_exprs(items, st), id2)
+        },
+        Expr::ListLit { items, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::ListLit { items: numbers_exprs(items, st), id: id2 }
+        },
+        Expr::ListRepeat { value, count, id } => {
+            let id2 = numbers_id(id, st)
+            let value2 = numbers_expr(value, st)
+            let count2 = numbers_expr(count, st)
+            return Expr::ListRepeat { value: value2, count: count2, id: id2 }
+        },
+        Expr::LitStr { text, id } => {
+            return Expr::LitStr { text: text, id: numbers_id(id, st) }
+        },
+        Expr::LitInterpolated { parts, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::LitInterpolated { parts: numbers_fparts(parts, st), id: id2 }
+        },
+        Expr::LitChar(text, id) => {
+            return Expr::LitChar(text, numbers_id(id, st))
+        },
+        Expr::LitBool(value, id) => {
+            return Expr::LitBool(value, numbers_id(id, st))
+        },
+        Expr::LitNull(id) => {
+            return Expr::LitNull(numbers_id(id, st))
+        },
+        Expr::Variable(name, id) => {
+            return Expr::Variable(name, numbers_id(id, st))
+        },
+        Expr::Block(block, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Block(numbers_block(block, st), id2)
+        },
+        Expr::Overlap(block, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Overlap(numbers_block(block, st), id2)
+        },
+        Expr::Select(arms, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Select(numbers_select_arms(arms, st), id2)
+        },
+        Expr::If { cond, then_branch, else_branch, id } => {
+            let id2 = numbers_id(id, st)
+            let cond2 = numbers_expr(cond, st)
+            let then2 = numbers_block(then_branch, st)
+            let else2 = numbers_maybe_block(else_branch, st)
+            return Expr::If { cond: cond2, then_branch: then2, else_branch: else2, id: id2 }
+        },
+        Expr::Call { func, args, config, id } => {
+            let id2 = numbers_id(id, st)
+            let func2 = numbers_expr(func, st)
+            let args2 = numbers_exprs(args, st)
+            let config2 = numbers_config(config, st)
+            return Expr::Call { func: func2, args: args2, config: config2, id: id2 }
+        },
+        Expr::Spawn { body, is_move, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::Spawn { body: numbers_expr(body, st), is_move: is_move, id: id2 }
+        },
+        Expr::Dsl { target, package, context, content, id } => {
+            return Expr::Dsl { target: target, package: package, context: context, content: content, id: numbers_id(id, st) }
+        },
+        Expr::Path(segments, id) => {
+            return Expr::Path(segments, numbers_id(id, st))
+        },
+        Expr::MethodCall { receiver, method, args, config, id } => {
+            let id2 = numbers_id(id, st)
+            let receiver2 = numbers_expr(receiver, st)
+            let args2 = numbers_exprs(args, st)
+            let config2 = numbers_config(config, st)
+            return Expr::MethodCall { receiver: receiver2, method: method, args: args2, config: config2, id: id2 }
+        },
+        Expr::Field { base, name, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::Field { base: numbers_expr(base, st), name: name, id: id2 }
+        },
+        Expr::StructLit { name, fields, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::StructLit { name: name, fields: numbers_field_inits(fields, st), id: id2 }
+        },
+        Expr::With { base, fields, at, id } => {
+            let id2 = numbers_id(id, st)
+            let base2 = numbers_expr(base, st)
+            let fields2 = numbers_field_inits(fields, st)
+            return Expr::With { base: base2, fields: fields2, at: at, id: id2 }
+        },
+        Expr::Closure { params, mutable, body, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::Closure { params: params, mutable: mutable, body: numbers_block(body, st), id: id2 }
+        },
+        Expr::Unary { op, expr, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::Unary { op: op, expr: numbers_expr(expr, st), id: id2 }
+        },
+        Expr::Binary { op, lhs, rhs, span, grouped, id } => {
+            let id2 = numbers_id(id, st)
+            let lhs2 = numbers_expr(lhs, st)
+            let rhs2 = numbers_expr(rhs, st)
+            return Expr::Binary { op: op, lhs: lhs2, rhs: rhs2, span: span, grouped: grouped, id: id2 }
+        },
+        Expr::SafeField { base, name, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::SafeField { base: numbers_expr(base, st), name: name, id: id2 }
+        },
+        Expr::SafeMethod { receiver, method, args, config, id } => {
+            let id2 = numbers_id(id, st)
+            let receiver2 = numbers_expr(receiver, st)
+            let args2 = numbers_exprs(args, st)
+            let config2 = numbers_config(config, st)
+            return Expr::SafeMethod { receiver: receiver2, method: method, args: args2, config: config2, id: id2 }
+        },
+        Expr::Try(inner, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Try(numbers_expr(inner, st), id2)
+        },
+        Expr::Throw(inner, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Throw(numbers_expr(inner, st), id2)
+        },
+        Expr::Return(value, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Return(numbers_maybe_expr(value, st), id2)
+        },
+        Expr::Break(id) => {
+            return Expr::Break(numbers_id(id, st))
+        },
+        Expr::Continue(id) => {
+            return Expr::Continue(numbers_id(id, st))
+        },
+        Expr::LitFloat(text, id) => {
+            return Expr::LitFloat(text, numbers_id(id, st))
+        },
+        Expr::Index { base, index, id } => {
+            let id2 = numbers_id(id, st)
+            let base2 = numbers_expr(base, st)
+            let index2 = numbers_expr(index, st)
+            return Expr::Index { base: base2, index: index2, id: id2 }
+        },
+        Expr::Cast { expr, ty, id } => {
+            let id2 = numbers_id(id, st)
+            return Expr::Cast { expr: numbers_expr(expr, st), ty: ty, id: id2 }
+        },
+        Expr::Coalesce { value, fallback, id } => {
+            let id2 = numbers_id(id, st)
+            let value2 = numbers_expr(value, st)
+            let fallback2 = numbers_expr(fallback, st)
+            return Expr::Coalesce { value: value2, fallback: fallback2, id: id2 }
+        },
+        Expr::Asm { bindings, code, id } => {
+            return Expr::Asm { bindings: bindings, code: code, id: numbers_id(id, st) }
+        },
+        Expr::Unsafe(block, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Unsafe(numbers_block(block, st), id2)
+        },
+        Expr::TryCatch { expr, handler, id } => {
+            let id2 = numbers_id(id, st)
+            let expr2 = numbers_expr(expr, st)
+            let handler2 = numbers_block(handler, st)
+            return Expr::TryCatch { expr: expr2, handler: handler2, id: id2 }
+        },
+    }
+}
