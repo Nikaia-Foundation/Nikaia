@@ -1,0 +1,29 @@
+error[NK1105]: You're assigning `Vec[ref String]` to something that holds `Vec[String]`.
+   --> tests/a_view_list_lent_to_a_ref_list_parameter_beside_its_own_text_is_refused.nika:35:15
+    |
+ 35 |         out = named.split("\n").map(fn(l) { l.to_string() }).collect()
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it a `Vec[String]`, or change the declaration to `Vec[ref String]`.
+error[NK1105]: You're assigning `Vec[ref String]` to something that holds `Vec[String]`.
+   --> tests/a_view_list_lent_to_a_ref_list_parameter_beside_its_own_text_is_refused.nika:45:17
+    |
+ 45 |         lines = named.split("\n").map(fn(l) { l.to_string() }).collect()
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it a `Vec[String]`, or change the declaration to `Vec[ref String]`.
+error[NK1105]: You're assigning `Vec[ref String]` to something that holds `Vec[String]`.
+   --> tests/a_view_list_lent_to_a_ref_list_parameter_beside_its_own_text_is_refused.nika:55:17
+    |
+ 55 |         words = named.split("\n").map(fn(l) { l.to_string() }).collect()
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it a `Vec[String]`, or change the declaration to `Vec[ref String]`.
+error[NK1105]: You're assigning `Vec[ref String]` to something that holds `Vec[String]`.
+   --> tests/a_view_list_lent_to_a_ref_list_parameter_beside_its_own_text_is_refused.nika:66:24
+    |
+ 66 |         holder.lines = named.split("\n").map(fn(l) { l.to_string() }).collect()
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it a `Vec[String]`, or change the declaration to `Vec[ref String]`.
+4 type errors

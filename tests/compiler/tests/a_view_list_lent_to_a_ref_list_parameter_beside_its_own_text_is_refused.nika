@@ -1,0 +1,69 @@
+// A list that holds views on one path and text of its own on another, lent
+// whole to a parameter declared `ref Vec[String]` (`&[String]` below, a type
+// the tier walk does not follow): the list keeps text of its own, and so does
+// what is linked to it, so the views (`to_string()` of text is the text
+// itself, ADR-282 D8) are refused where they go in (D25), rather than the list
+// becoming `EitherText` and the generated Rust failing - for a function's and
+// a method's parameter, a list handed back and a list stored in a field.
+
+fn shout(given: ref Vec[String]) -> Vec[String] {
+    return given.iter().map(fn(l) { l.to_uppercase() }).collect()
+}
+
+fn draft() -> String {
+    return "one\ntwo"
+}
+
+struct Joiner {
+    glue: String,
+}
+
+impl Joiner {
+    fn join(ref self, given: ref Vec[String]) -> String {
+        return given.join(self.glue)
+    }
+}
+
+struct Holder {
+    lines: Vec[String],
+}
+
+fn picked(split: bool) -> Vec[String] {
+    let mut out: Vec[String] = ["x"]
+    if split {
+        let named = draft()
+        out = named.split("\n").map(fn(l) { l.to_string() }).collect()
+    }
+    return out
+}
+
+fn main() {
+    let stages: Vec[String] = ["split", "shout"]
+    let mut lines: Vec[String] = ["a", "b"]
+    if stages.contains("split") {
+        let named = draft()
+        lines = named.split("\n").map(fn(l) { l.to_string() }).collect()
+    }
+    if stages.contains("shout") {
+        lines = shout(lines)
+    }
+    println(lines.join(","))
+
+    let mut words: Vec[String] = ["c"]
+    if stages.contains("split") {
+        let named = draft()
+        words = named.split("\n").map(fn(l) { l.to_string() }).collect()
+    }
+    let joiner = Joiner { glue: "+" }
+    println(joiner.join(words))
+
+    println(shout(picked(true)).join(","))
+    println(shout(picked(false)).join(","))
+
+    let mut holder = Holder { lines: ["d"] }
+    if stages.contains("split") {
+        let named = draft()
+        holder.lines = named.split("\n").map(fn(l) { l.to_string() }).collect()
+    }
+    println(joiner.join(holder.lines))
+}

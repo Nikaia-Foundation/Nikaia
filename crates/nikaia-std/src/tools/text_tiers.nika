@@ -784,6 +784,10 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
     if !linked {
         flow_type(owner, ty, path.clone(), kinds, ask, walk)
     }
+    if ty.is_view && value != null {
+        let lent_value = value ?? return
+        lent_whole(lent_value, ask, walk)
+    }
     // **A view of static text read out of a position** is remembered with
     // where it goes (ADR-282 D29).
     if plain && kinds.still && value != null {
@@ -1409,6 +1413,20 @@ fn unlinked_inside(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: 
         path.pop()
         at += 1
     }
+}
+
+/// **A container lent whole to a `ref` one** - `ref Vec[String]`, a `ref`
+/// map - is a type this walk does not follow: its text is `String` below
+/// (`&[String]`), so the positions of the container it comes from are never
+/// both kinds, and neither is anything linked to them (a list handed back,
+/// a field it was stored in): a view kept there is built into text of its
+/// own, not taken as `EitherText`.
+fn lent_whole(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    let source = source_of(value, ask, walk) ?? return
+    if !a_container(ask.names, source.ty) {
+        return
+    }
+    unlinked_inside(source.owner, source.ty, [], ask, walk)
 }
 
 /// Every position a value's text may be read out of whole: through the

@@ -523,6 +523,10 @@ pub(crate) fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds,
         linked = back != "" && back == position_word(&owner, &path);
     }
     if !linked { flow_type(&owner, &ty, &mut path.to_owned(), kinds, ask, walk); }
+    if ty.is_view && value.is_some() {
+        let lent_value = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        lent_whole(lent_value, ask, walk);
+    }
     if plain && kinds.still && value.is_some() {
         let given_value = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut sources: Vec<String> = vec![];
@@ -977,6 +981,12 @@ pub(crate) fn unlinked_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>,
         path.pop();
         at += 1;
     }
+}
+
+pub(crate) fn lent_whole(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) {
+    let source = match source_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if !a_container(ask.names, &source.ty) { return; }
+    unlinked_inside(&source.owner, &source.ty, &mut vec![], ask, walk);
 }
 
 pub(crate) fn still_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
