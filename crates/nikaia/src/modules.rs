@@ -66,31 +66,9 @@ impl Unit {
 }
 
 /// A package this program depends on: the name a `use` writes, and where it is
-/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15).
-///
-/// The name is the **manifest key** and nothing inside the package, which is D2
-/// rule 1: a package does not name itself, so two libraries that both want to be
-/// `http` are the consumer's to name apart.
-#[derive(Debug, Clone)]
-pub struct Dependency {
-    pub name: String,
-    /// The package's own directory - the one its `src/` is in.
-    pub root: PathBuf,
-    /// The names **it** may reach - its own manifest keys. Its files are read
-    /// here so that this program's checks know its public surface, and they are
-    /// checked as it would check them
-    /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D21): a package
-    /// that depends on a package is a package, not a rule broken.
-    pub reachable: BTreeSet<String>,
-    /// How **its** package keys are read in this build: its own word for a
-    /// package, mapped to the one word this build uses for that directory
-    /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D20, and
-    /// `project::renames_in` computes it).
-    ///
-    /// Empty for a dependency that depends on nothing, which is most of them,
-    /// and empty for every key it already spells the way this build does.
-    pub renames: BTreeMap<String, String>,
-}
+/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15). Declared in
+/// `tools/project_members.nika`, which finds them (P4a).
+pub use nikaia_std::tools::project_members::ProjectMembersDependency as Dependency;
 
 /// Every file of the package the entry belongs to, entry first.
 ///

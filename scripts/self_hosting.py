@@ -56,6 +56,7 @@ COMPILER_NIKA = {
     "parse_notes.nika": "parser: a parse error's reading, the text half (0.0.347)",
     "diffs.nika": "project: what changed in a ledger, and an output test's difference (0.0.350)",
     "project_check.nika": "project: the refusal summary of check, the switches that make a finding a warning, the --locked texts (P2)",
+    "project_members.nika": "project: a build's packages, a dependency's renames, the members and the order they are lowered in, a package's crate root (P4a)",
     "project_tests.nika": "project: the test runner's discovery of output tests and test programs, what they expect, the refusal test, the verdict line (P3a)",
     "sysroot_cache.nika": "sysroot: the sysroot's paths, the CPU levels and native's key, the tools package as files, lower-std's cache keys and entries (S2)",
     "types.nika": "types: a name declared twice, a bound naming no trait, a type nothing declares (0.0.354)",
