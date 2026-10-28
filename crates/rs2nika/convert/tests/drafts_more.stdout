@@ -2,7 +2,7 @@
 use std::collections
 
 // TODO(rs2nika): `static` behind a lock: no globals in tools/*.nika; a field of the state struct (the lock drops), set through `mut self`
-static CACHE: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new([])
+static MORE_CACHE: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new([])
 
 // ADAPTER: bleibt in Rust (`impl std::fmt::Display for Shape`: Rust's `Display`)
 

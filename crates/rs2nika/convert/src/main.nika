@@ -174,7 +174,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
         "R63  what R79 leaves of `o.is_some_and(..)`, `o` read once: `o.is_some_and(|x| p)` -> `(match o { x => p, null => false })`, `o.is_some_and(f)` -> `(match o { value => f(value), null => false })` (ADR-352)",
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
-        "--engine lines|tree picks the converter: `tree` parses the Rust after the line engine's passes on its text and writes Nikaia from the syntax tree, then runs the line engine's later stages that help it (the default); `lines` is the line engine alone (`--out` and `--file` use it)",
+        "--engine lines|tree picks the converter: `tree` parses the Rust after the line engine's passes on its text and writes Nikaia from the syntax tree, then runs the line engine's later stages that help it (the default); `lines` is the line engine alone (`--out` uses it)",
         "--check DRAFT --as NAME checks the draft as tools/NAME.nika in a copy of std's source, its findings grouped by code",
         "R68  a positional rest `V(a, ..)` and a slice pattern pass through; `rest @ ..` -> `..rest` (ADR-355)",
         "R70  a `format!` hole hoisted out of a match arm (R81) -> the arm becomes a block holding it",
@@ -14691,27 +14691,55 @@ fn rs2nika_static_fns(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String
 /// `ProjectMembersForeign`), wherever the code names them: R294's rule for
 /// every name of the file, its types included (P4b).
 fn rs2nika_own_types(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
-    if !rs2nika_prefixed_draft(ctx) {
+    // a `-free` profile's file is a tools file too: its types and constants
+    // carry its prefix (M3a, P5a)
+    if !rs2nika_prefixed_draft(ctx) && !(ctx.free && ctx.prefix != "") {
         return given.clone()
     }
     let camel = rs2nika_camel(ctx.prefix)
+    let upper: String = ctx.prefix.to_uppercase()
+    let types_too = rs2nika_prefixed_draft(ctx) || ctx.free
+    let consts_too = true
     let mut names: Vec[String] = []
+    let mut consts: Vec[String] = []
     for l in given {
-        for lead in ["pub struct ", "struct ", "pub enum ", "enum "] {
-            if l.starts_with(lead) {
+        // a constant of the file's own (a `pub` one is the file's surface)
+        if consts_too && (l.starts_with("const ") || l.starts_with("static ")) {
+            let hc: Vec[scalar] = (l.split_once(" ") ?? ("", "")).1.chars().collect()
+            let mut e = 0
+            while e < hc.len() && rs2nika_word(hc[e]) {
+                e = e + 1
+            }
+            let n = rs2nika_text(hc, 0, e)
+            if n != "" && !n.starts_with(upper) && !consts.contains(n) {
+                consts.push(n)
+            }
+        }
+        for lead in ["pub struct ", "struct ", "pub enum ", "enum ", "pub trait ", "trait "] {
+            if types_too && l.starts_with(lead) {
                 let hc: Vec[scalar] = (l.strip_prefix(lead) ?? "").chars().collect()
                 let mut e = 0
                 while e < hc.len() && rs2nika_word(hc[e]) {
                     e = e + 1
                 }
                 let n = rs2nika_text(hc, 0, e)
-                if n != "" && !n.starts_with(camel) && !names.contains(n) {
+                // under `-free` a type with an `impl` of its own, and a trait,
+                // keep their names: they are the file's state and its seams
+                let mut kept = false
+                if !rs2nika_prefixed_draft(ctx) {
+                    for m in given {
+                        if m.starts_with(f"impl {n} ") || m.starts_with(f"impl {n}<") || m.ends_with(f" for {n} {{") || lead.contains("trait") {
+                            kept = true
+                        }
+                    }
+                }
+                if n != "" && !kept && !n.starts_with(camel) && !names.contains(n) {
                     names.push(n)
                 }
             }
         }
     }
-    if names.len() == 0 {
+    if names.len() == 0 && consts.len() == 0 {
         return given.clone()
     }
     let mut out: Vec[String] = []
@@ -14720,6 +14748,9 @@ fn rs2nika_own_types(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]
         if !s.trim().starts_with("//") {
             for n in names {
                 s = rs2nika_replace_word(s, n, f"{camel}{n}")
+            }
+            for n in consts {
+                s = rs2nika_replace_word(s, n, f"{upper}{n}")
             }
         }
         out.push(s)
@@ -16894,32 +16925,48 @@ fn rs2nika_scan(mut ctx: Rs2nikaCtx, viewed: ref String, prefix: ref String) -> 
 
 /// The passes of the line engine on the Rust lines, before they are
 /// translated one by one.
-fn rs2nika_rust_passes(mut ctx: Rs2nikaCtx, lines: ref Vec[String], facts: ref Vec[String]) -> Vec[String] {
-    let walked = rs2nika_visits(ctx, lines)
-    let consts0 = rs2nika_lift_consts(ctx, walked)
-    let consts = rs2nika_self_type(ctx, consts0)
+fn rs2nika_rust_passes(mut ctx: Rs2nikaCtx, lines: ref Vec[String], facts: ref Vec[String], skip: ref Vec[String]) -> Vec[String] {
+    let mut walked: Vec[String] = lines.clone()
+    if !skip.contains("visits") { walked = rs2nika_visits(ctx, lines) }
+    let mut consts0: Vec[String] = walked.clone()
+    if !skip.contains("lift_consts") { consts0 = rs2nika_lift_consts(ctx, walked) }
+    let mut consts: Vec[String] = consts0.clone()
+    if !skip.contains("self_type") { consts = rs2nika_self_type(ctx, consts0) }
     let lifted = rs2nika_lift_closures(ctx, consts, facts)
     let typed = rs2nika_typed_closures(ctx, lifted, facts)
-    let inlined0 = rs2nika_inline_closures(ctx, typed)
-    let inlined = rs2nika_filter_loops(ctx, inlined0)
-    let hoisted = rs2nika_hoist(ctx, inlined)
-    let first = rs2nika_join_chains(ctx, hoisted)
-    let split = rs2nika_join_split(ctx, first)
-    let chained1 = rs2nika_join_chains(ctx, split)
+    let mut inlined0: Vec[String] = typed.clone()
+    if !skip.contains("inline_closures") { inlined0 = rs2nika_inline_closures(ctx, typed) }
+    let mut inlined: Vec[String] = inlined0.clone()
+    if !skip.contains("filter_loops") { inlined = rs2nika_filter_loops(ctx, inlined0) }
+    let mut hoisted: Vec[String] = inlined.clone()
+    if !skip.contains("hoist") { hoisted = rs2nika_hoist(ctx, inlined) }
+    let mut first: Vec[String] = hoisted.clone()
+    if !skip.contains("join_chains") { first = rs2nika_join_chains(ctx, hoisted) }
+    let mut split: Vec[String] = first.clone()
+    if !skip.contains("join_split") { split = rs2nika_join_split(ctx, first) }
+    let mut chained1: Vec[String] = split.clone()
+    if !skip.contains("join_chains") { chained1 = rs2nika_join_chains(ctx, split) }
     let chained1b = rs2nika_loop_lets(ctx, rs2nika_map_updates(ctx, rs2nika_let_wraps(ctx, chained1)))
     let chained000 = rs2nika_text_lines(ctx, rs2nika_byte_parts(ctx, rs2nika_tuple_closures(ctx, rs2nika_std_fs(ctx, rs2nika_paths(ctx, rs2nika_read_dirs(ctx, chained1b))))))
     // R239 again: an arm it wrote may hold a `last_mut()?`
-    let chained00 = rs2nika_text_lines(ctx, chained000)
+    let mut chained00: Vec[String] = chained000.clone()
+    if !skip.contains("text_lines") { chained00 = rs2nika_text_lines(ctx, chained000) }
     let chained0 = chained00.iter().map(fn(l) { rs2nika_contexts(ctx, l) }).collect()
-    let chained = rs2nika_results(ctx, chained0)
+    let mut chained: Vec[String] = chained0.clone()
+    if !skip.contains("results") { chained = rs2nika_results(ctx, chained0) }
     for name in rs2nika_opt_lets(chained, ctx.opt_names) {
         ctx.opt_names.push(name.clone())
     }
-    let nested = rs2nika_nest_chains(ctx, chained)
-    let joined0 = rs2nika_option_matches(ctx, nested)
-    let joined2 = rs2nika_some_matches(ctx, joined0)
-    let joined1 = rs2nika_tuple_matches(ctx, joined2)
-    let joined = rs2nika_field_tests(ctx, joined1)
+    let mut nested: Vec[String] = chained.clone()
+    if !skip.contains("nest_chains") { nested = rs2nika_nest_chains(ctx, chained) }
+    let mut joined0: Vec[String] = nested.clone()
+    if !skip.contains("option_matches") { joined0 = rs2nika_option_matches(ctx, nested) }
+    let mut joined2: Vec[String] = joined0.clone()
+    if !skip.contains("some_matches") { joined2 = rs2nika_some_matches(ctx, joined0) }
+    let mut joined1: Vec[String] = joined2.clone()
+    if !skip.contains("tuple_matches") { joined1 = rs2nika_tuple_matches(ctx, joined2) }
+    let mut joined: Vec[String] = joined1.clone()
+    if !skip.contains("field_tests") { joined = rs2nika_field_tests(ctx, joined1) }
     return joined
 }
 
@@ -16928,7 +16975,7 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
     let (src, viewed) = rs2nika_front(ctx, given_src, profile_given, prefix, facts)
     let free = ctx.free
     let lines = rs2nika_scan(ctx, viewed, prefix)
-    let joined = rs2nika_rust_passes(ctx, lines, facts)
+    let joined = rs2nika_rust_passes(ctx, lines, facts, [])
     let mut out: Vec[String] = []
     let mut in_struct = false
     let mut in_enum = false
@@ -20495,7 +20542,7 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
     let scanned = rs2nika_scan(ctx, viewed, prefix)
     // The line engine's passes on the Rust text first: the tree parses what
     // they wrote.
-    let parsed = rs2nika_rust_passes(ctx, scanned, facts).join("\n")
+    let parsed = rs2nika_rust_passes(ctx, scanned, facts, rs2nika_tree_skips()).join("\n")
     let t = rt_parse(parsed) catch { return "" }
     let mut world: String = ""
     if ctx.free {
@@ -20560,6 +20607,23 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
     if stages.contains("uses") { lines = rs2nika_lift_uses(ctx, lines) }
     if stages.contains("usetext") { return rs2nika_use_text(lines) }
     return rs2nika_join(lines, "\n")
+}
+
+/// The line engine's passes the tree engine skips: they write Nikaia's text
+/// for an option's `match` (`let given = e ?? return ..` is not Rust, the
+/// parse loses the arm) or join a chain the tree writes itself (measured on
+/// both corpora: each costs lines).
+fn rs2nika_tree_skips() -> Vec[String] {
+    return ["join_chains", "join_split", "results", "option_matches", "some_matches", "field_tests"]
+}
+
+/// `--passes`: the Rust the tree engine parses, after the line engine's
+/// passes on its text.
+fn rs2nika_passed(loaded: ref Rs2nikaCtx, given_src: String, profile: String, prefix: String, facts: ref Vec[String]) -> String {
+    let mut ctx: Rs2nikaCtx = loaded.clone()
+    let (src, viewed) = rs2nika_front(ctx, given_src, profile, prefix, facts)
+    let scanned = rs2nika_scan(ctx, viewed, prefix)
+    return rs2nika_rust_passes(ctx, scanned, facts, rs2nika_tree_skips()).join("\n")
 }
 
 /// `--out DIR a.rs b.rs ..`: the repository is read once, the files are
@@ -20683,10 +20747,10 @@ fn main() throws {
     let mut paths: Vec[String] = []
     let mut out_dir: String = ""
     let mut lints: Vec[String] = []
-    // the syntax-tree converter (tree.nika, tr_*.nika) and its tree print;
-    // `--file` uses the line engine
+    // the syntax-tree converter (tree.nika, tr_*.nika) and its tree print
     let mut engine: String = "tree"
     let mut dump_tree = false
+    let mut passes = false
     let mut args: Vec[String] = []
     for a in cli::args() {
         args.push(a)
@@ -20720,6 +20784,8 @@ fn main() throws {
             view = true
         } else if arg == "--tree" {
             dump_tree = true
+        } else if arg == "--passes" {
+            passes = true
         } else if arg == "--engine" {
             at = at + 1
             engine = args[at].clone()
@@ -20847,13 +20913,26 @@ fn main() throws {
         println(rt_dump(rt_parse(text)))
         return
     }
-    if engine == "tree" && !whole {
-        let draft = rs2nika_tree(rs2nika_loaded(repo, profile.contains("+view"), names), text, profile, prefix, rs2nika_read_facts(facts_path, path))
-        print(draft)
+    if passes {
+        println(rs2nika_passed(rs2nika_loaded(repo, profile.contains("+view"), names), text, profile, prefix, rs2nika_read_facts(facts_path, path)))
         return
     }
-    let out = rs2nika_convert(text, profile, prefix, repo, rs2nika_read_facts(facts_path, path), names)
-    if whole {
+    let loaded = rs2nika_loaded(repo, profile.contains("+view"), names)
+    let facts = rs2nika_read_facts(facts_path, path)
+    // the line engine's run says what is missing and what has a twin
+    let out = rs2nika_convert_in(loaded, text, profile, prefix, facts)
+    if engine == "tree" {
+        let draft = rs2nika_tree(loaded, text, profile, prefix, facts)
+        // R44 for the tree: its draft is laid out as a file already
+        if whole && !draft.contains("use std::collections") {
+            print(f"use std::collections\n{draft}")
+        } else {
+            print(draft)
+        }
+        if whole && !draft.ends_with("\n") {
+            println("")
+        }
+    } else if whole {
         print(rs2nika_as_file(out.text, rs2nika_state_of(profile)))
     } else {
         println(out.text)

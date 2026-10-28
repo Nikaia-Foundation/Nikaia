@@ -4,5 +4,5 @@ pub comptime TARGETS: Array[ref String, 2] = ["x86_64-unknown-linux-gnu", "aarch
 
 pub comptime ONE: Array[ref String, 2] = ["a", "b"]
 
-comptime MAX: i64 = 3
+comptime EMIT_X_MAX: i64 = 3
 

@@ -563,6 +563,22 @@ impl TrEm {
         if m == "unwrap_or_default" && a.len() == 0 {
             return self.todo("`unwrap_or_default` (write the default: `?? 0`, `?? \"\"`, `?? []`)", n)
         }
+        // `c.then(|| v)` / `c.then_some(v)` -> `if c { v } else { null }`
+        if (m == "then" || m == "then_some") && a.len() == 1 {
+            let mut v: String = a[0].clone()
+            if m == "then" {
+                let (p, body) = self.closure_parts(arg_nodes[0])
+                if p != "_" {
+                    return f"{r}.{m}({al})"
+                }
+                v = body
+            }
+            let mut c: String = r.clone()
+            if self.t.is(recv_n, "PAREN_EXPR") {
+                c = self.expr(self.t.nth(recv_n, 0))
+            }
+            return f"(if {c} {{ {v} }} else {{ null }})"
+        }
         if m == "is_some" && a.len() == 0 {
             return f"{r} != null"
         }
