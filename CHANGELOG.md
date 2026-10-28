@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1253] — 2026-10-28
+
+**Node ids from a pass of their own; owned parts and parameters; `?.` on a file's name**
+- The parser numbers the nodes of a file in a pass of its own, in input order and without gaps, right after the parse (ADR-383); ids no longer follow the order the grammar made the nodes in.
+- A method that takes a field of a by-value parameter whole (`b.xs.drain()`) keeps the parameter: it is lowered owned, not as a reference whose field cannot be given away.
+- A variant's Vec[String] part taken in a match arm is owned - returned, handed on, drained or made the match's value, it is Vec[String] even where only literals built the variant (also a struct pattern's fields); a drained part no longer lowers to an unused let mut (#905).
+- emit: `?.` on a file's name calls std's path methods.
+
 ## [0.0.1252] — 2026-10-28
 
 **std::regex decided: RE2 dialect, known patterns compiled as source, run-time patterns on Rust's automata crates (ADR-regex-1, #673)**
