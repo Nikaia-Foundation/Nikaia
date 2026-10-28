@@ -293,6 +293,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R266 a closure body that is one `(match ..)` loses the parentheses: `fn(item) { match item.node { .. } }`",
         "R267 `.resolve(x).to_string()` -> `.resolve(x).clone()` (the interner's answer is a text already)",
         "R268 a symbol from a text through the tools' interner callback (M2, `check_walked_kept_call`): `match parser::parse_expression(i, t)? { Expr::Variable(n, _) => n, _ => bail!(..) }` and `i.intern_string(t)` -> `intern(t)`, the function takes `intern: fn(ref String) -> winnow_grammar::Symbol sync`",
+        "R269 `std::path` as `fs::Path`: `p.canonicalize()` / `std::fs::canonicalize(p)` -> `fs::canonical(p, fs::Root::Anywhere)` (throws), `p.to_path_buf()` -> `p.clone()`, `p.display().to_string()` -> `p.display()`; `Path.strip_prefix` is an option: `.ok()` after it goes, `.unwrap_or_else(|_| d)` after it -> `?? d`",
+        "R270 `r.map(|p| e(p)).unwrap_or_else(|| e(x))` / `.unwrap_or(e(x))`, `p` once in `e` -> `e(r ?? x)`: `(path.strip_prefix(root) ?? path).display()`",
         "R227 a local closure with arguments only ever called (`let count = |family: &str| ..;`) -> a function of the module after the file's functions, the locals it captures its first parameters, each call `count(a)` -> `prefix_count(findings, a)`, f-strings too; types from annotations, `--facts`, a `.count()`/`.len()` or text tail; one unknown, the closure stays (R82)",
         "R224 the project's own rs2nika.names (in the working directory, or `--names FILE`): what was decided converting the files before, read before the converter's table: `old new` renames (R47), `[types]` `Rust type = Nikaia type` (`&'static str = ref String`), a reason after ` #`",
         "R221 `return match call { Ok(v) => a, Err(e) if g => b, Err(e) => d }` -> `let v = call catch { if g { return b } return d }`, `return a`",
@@ -2056,10 +2058,143 @@ fn rs2nika_tuple_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
     return out
 }
 
+/// R269: `std::path`'s calls as `std`'s `fs::Path` writes them (f8614268):
+/// `p.canonicalize()` -> `std::fs::canonicalize(p)`, which R237 writes
+/// `fs::canonical(p, fs::Root::Anywhere)` (it throws, as Rust's returned a
+/// `Result`); `p.to_path_buf()` -> `p.clone()`; `p.display().to_string()` ->
+/// `p.display()` (a text already). `Path.strip_prefix` gives an option, not
+/// a `Result`: `.ok()` after it goes, and the `|_|` of an `.unwrap_or_else`
+/// after it (and after one `.map(..)`) is `||`, so R20 writes `??`.
+fn rs2nika_paths(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for l in given {
+        let mut line: String = l.clone()
+        if line.contains(".display().to_string()") {
+            line = line.replace(".display().to_string()", ".display()")
+            rs2nika_hit(ctx, "R269")
+        }
+        if line.contains(".to_path_buf()") {
+            line = line.replace(".to_path_buf()", ".clone()")
+            rs2nika_hit(ctx, "R269")
+        }
+        let mut from = 0
+        while true {
+            let c: Vec[scalar] = line.chars().collect()
+            let at = rs2nika_find_from(c, ".canonicalize()", from)
+            if at < 0 {
+                break
+            }
+            from = at + 1
+            let start = rs2nika_recv_start(c, at)
+            if start >= at {
+                continue
+            }
+            let recv: String = rs2nika_text(c, start, at)
+            line = f"{rs2nika_text(c, 0, start)}std::fs::canonicalize({recv}){rs2nika_text(c, at + ".canonicalize()".len(), c.len())}"
+            rs2nika_hit(ctx, "R269")
+        }
+        from = 0
+        while true {
+            let c: Vec[scalar] = line.chars().collect()
+            let at = rs2nika_find_from(c, ".strip_prefix(", from)
+            if at < 0 {
+                break
+            }
+            from = at + 1
+            let close = rs2nika_closing(c, at + ".strip_prefix".len(), '(', ')')
+            if close < 0 {
+                continue
+            }
+            let head: String = rs2nika_text(c, 0, close + 1)
+            let mut rest: String = rs2nika_text(c, close + 1, c.len())
+            if rest.starts_with(".ok()") {
+                line = f"{head}{rs2nika_after(rest, ".ok()")}"
+                rs2nika_hit(ctx, "R269")
+                continue
+            }
+            let mut mapped: String = ""
+            if rest.starts_with(".map(") {
+                let r: Vec[scalar] = rest.chars().collect()
+                let shut = rs2nika_closing(r, ".map".len(), '(', ')')
+                if shut < 0 {
+                    continue
+                }
+                mapped = rs2nika_text(r, 0, shut + 1)
+                rest = rs2nika_text(r, shut + 1, r.len())
+            }
+            if rest.starts_with(".unwrap_or_else(|_|") {
+                line = f"{head}{mapped}.unwrap_or_else(||{rs2nika_after(rest, ".unwrap_or_else(|_|")}"
+                rs2nika_hit(ctx, "R269")
+            }
+        }
+        out.push(rs2nika_mapped_fallbacks(ctx, line))
+    }
+    return out
+}
+
+/// R270: an option mapped and then given a fallback that is the map's body
+/// over another value, `r.map(|p| e(p)).unwrap_or_else(|| e(x))` (or
+/// `.unwrap_or(e(x))`) -> `e(r.unwrap_or(x))`, so R20 writes `e(r ?? x)`:
+/// `(path.strip_prefix(root) ?? path).display()`. Only where `p` stands once
+/// in the body and the fallback is the body with `x` in its place.
+fn rs2nika_mapped_fallbacks(mut ctx: Rs2nikaCtx, given: String) -> String {
+    let mut line: String = given.clone()
+    let mut from = 0
+    while true {
+        let c: Vec[scalar] = line.chars().collect()
+        let at = rs2nika_find_from(c, ".map(|", from)
+        if at < 0 {
+            break
+        }
+        from = at + 1
+        let shut = rs2nika_closing(c, at + ".map".len(), '(', ')')
+        if shut < 0 {
+            continue
+        }
+        let closure: String = rs2nika_text(c, at + ".map(|".len(), shut)
+        let (bound, body0) = closure.split_once("|") ?? ("", "")
+        let p: String = bound.trim().clone()
+        let body: String = body0.trim().clone()
+        if p == "" || p == "_" || !p.chars().all(fn(ch) { rs2nika_word(ch) }) || body.starts_with("{") {
+            continue
+        }
+        let after: String = rs2nika_text(c, shut + 1, c.len())
+        let mut lead: String = ""
+        if after.starts_with(".unwrap_or_else(||") {
+            lead = ".unwrap_or_else(||"
+        } else if after.starts_with(".unwrap_or(") {
+            lead = ".unwrap_or("
+        } else {
+            continue
+        }
+        let a: Vec[scalar] = after.chars().collect()
+        let end = rs2nika_closing(a, after.find("(") ?? 0, '(', ')')
+        if end < 0 {
+            continue
+        }
+        let fallback: String = rs2nika_text(a, lead.len(), end).trim().clone()
+        let marked = rs2nika_replace_word(body, p, "¤")
+        let (pre, post) = marked.split_once("¤") ?? ("", "")
+        if !marked.contains("¤") || post.contains("¤") || !fallback.starts_with(pre) || !fallback.ends_with(post) || fallback.len() <= pre.len() + post.len() {
+            continue
+        }
+        let x: String = ((fallback.strip_prefix(pre) ?? "").strip_suffix(post) ?? "").clone()
+        let start = rs2nika_recv_start(c, at)
+        if start >= at {
+            continue
+        }
+        let recv: String = rs2nika_text(c, start, at)
+        line = f"{rs2nika_text(c, 0, start)}{pre}{recv}.unwrap_or({x}){post}{rs2nika_text(a, end + 1, a.len())}"
+        rs2nika_hit(ctx, "R270")
+    }
+    return line
+}
+
 /// R237: the calls of `std::fs` as `std`'s `fs` writes them, the root named
 /// (`fs::Root::Anywhere`, as R217): `std::fs::read_to_string(p)` ->
 /// `fs::read_to_string(p, fs::Root::Anywhere)`, also `read`, `metadata`,
-/// `exists`; `write(p, x)` -> `write(p, fs::Root::Anywhere, x)`, `rename(a, b)`
+/// `exists`, `canonicalize` -> `canonical` (R269); `write(p, x)` ->
+/// `write(p, fs::Root::Anywhere, x)`, `rename(a, b)`
 /// / `copy(a, b)` -> `(a, b, fs::Root::Anywhere)`, `create_dir_all(p)` ->
 /// `create_dir(p, fs::Root::Anywhere; recursive: true)`, `remove_file(p)` ->
 /// `remove(p, fs::Root::Anywhere)`, `remove_dir_all(p)` with `recursive:
@@ -2103,6 +2238,8 @@ fn rs2nika_std_fs(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
                 call = f"fs::write({args[0]}, {root}, {args[1]})"
             } else if args.len() == 2 && (name == "rename" || name == "copy") {
                 call = f"fs::{name}({args[0]}, {args[1]}, {root})"
+            } else if args.len() == 1 && name == "canonicalize" {
+                call = f"fs::canonical({args[0]}, {root})"
             } else if args.len() == 1 && name == "create_dir_all" {
                 call = f"fs::create_dir({args[0]}, {root}; recursive: true)"
             } else if args.len() == 1 && name == "create_dir" {
@@ -13709,7 +13846,7 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
     let split = rs2nika_join_split(ctx, first)
     let chained1 = rs2nika_join_chains(ctx, split)
     let chained1b = rs2nika_loop_lets(ctx, rs2nika_map_updates(ctx, rs2nika_let_wraps(ctx, chained1)))
-    let chained000 = rs2nika_text_lines(ctx, rs2nika_byte_parts(ctx, rs2nika_tuple_closures(ctx, rs2nika_std_fs(ctx, rs2nika_read_dirs(ctx, chained1b)))))
+    let chained000 = rs2nika_text_lines(ctx, rs2nika_byte_parts(ctx, rs2nika_tuple_closures(ctx, rs2nika_std_fs(ctx, rs2nika_paths(ctx, rs2nika_read_dirs(ctx, chained1b))))))
     // R239 again: an arm it wrote may hold a `last_mut()?`
     let chained00 = rs2nika_text_lines(ctx, chained000)
     let chained0 = chained00.iter().map(fn(l) { rs2nika_contexts(ctx, l) }).collect()

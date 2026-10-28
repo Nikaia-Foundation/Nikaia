@@ -1,0 +1,27 @@
+pub fn a1(path: ref Path) -> PathBuf throws {
+    let p = fs::canonical(path, fs::Root::Anywhere)
+    let q = fs::canonical(p, fs::Root::Anywhere)
+    return q
+}
+
+pub fn a2(path: ref Path, root: ref Path) -> PathBuf? {
+    let r = path.strip_prefix(root) ?? return null
+    return r.clone()
+}
+
+pub fn a3(path: ref Path, root: ref Path) -> String {
+    let rest = path.strip_prefix(root) ?? path
+    return rest.display()
+}
+
+pub fn a4(path: ref Path) -> PathBuf {
+    return fs::canonical(path, fs::Root::Anywhere) catch { path.clone() }
+}
+
+/// A test's file as the project names it.
+pub fn shown_name(path: ref Path, root: ref Path) -> String {
+    let path = fs::canonical(path, fs::Root::Anywhere) catch { path.clone() }
+    let root = fs::canonical(root, fs::Root::Anywhere) catch { root.clone() }
+    return (path.strip_prefix(root) ?? path).display()
+}
+

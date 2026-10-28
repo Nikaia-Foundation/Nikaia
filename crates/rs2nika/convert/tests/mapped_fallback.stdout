@@ -1,0 +1,13 @@
+pub fn width(name: String?, other: String) -> i64 {
+    return (name ?? other).len()
+}
+
+pub fn label(name: String?, other: String) -> String {
+    let shown = f"<{name ?? other}>"
+    return shown
+}
+
+pub fn count(name: String?) -> i64 {
+    return name?.len() ?? 0
+}
+
