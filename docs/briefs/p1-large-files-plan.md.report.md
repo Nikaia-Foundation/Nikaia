@@ -10,6 +10,6 @@ Deviation: none
 Found: none
 Needs: none
 Changelog: none
-Owner: where do a Nikaia grammar's nodes get their ids, given ADR-339 D3 (no grammar state)? The compiler's 71 `_state.user().id()` actions need an answer before the grammar can move
+Owner: none (answered by the owner 2026-10-28: ADR-383, built by #903)
 Disk freed: 0
 Rs2nika: none
