@@ -26,22 +26,21 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use crate::ast::{self, Block, Expr, Item, Span, Spanned, Stmt};
+use crate::ast::{Expr, Item};
 use crate::build_time::Value;
 use crate::contracts::ty::Ty;
 use crate::grammar_run::Wall;
 use crate::parser::Parsed;
 
-/// The name the sub-program hands the value back under.
-pub(crate) const VALUE_FN: &str = "__nikaia_comptime_value";
+use nikaia_std::tools::comptime_tree as tree;
+/// The name the sub-program hands the value back under. **The sub-program's
+/// tree work is Nikaia's** (`tools/comptime_tree.nika`, K1 and K2); what
+/// stays here holds the `Parsed` files and hands their items over.
+pub(crate) use nikaia_std::tools::comptime_tree::VALUE_FN;
 
-/// **The sub-program for one initialiser**, or nothing where this stage does
-/// not build one: a type with no written form, or an earlier `comptime` whose
-/// value is not a literal.
-///
-/// `bound` is the `comptime` being worked out; `known` is what an earlier one
-/// came to, by name, and nothing for one not worked out yet - which is left
-/// out, as the one being worked out is.
+/// **The sub-program for one initialiser** (`comptime_sub_program`), or
+/// nothing where this stage does not build one: a type with no written form,
+/// or an earlier `comptime` whose value is not a literal.
 pub(crate) fn sub_program(
     parsed: &Parsed,
     bound: &str,
@@ -50,188 +49,56 @@ pub(crate) fn sub_program(
     known: &dyn Fn(&str) -> Option<Value>,
     typed: &dyn Fn(&str) -> Option<Ty>,
 ) -> Option<Parsed> {
-    let mut kept = unit_without_its_constants(parsed, bound, known, typed)?;
-    let returns = written_type(ty, &kept)?;
-    let main = kept.interner.intern_string("main");
-    let value_fn = kept.interner.intern_string(VALUE_FN);
-    kept.program.items.push(Spanned::new(
-        a_function(main, None, Vec::new()),
-        Span::nowhere(),
-    ));
-    let mut stmts = constants_as_lets(parsed, bound, known, &kept);
-    stmts.push(Spanned::new(
-        Stmt::Return(Some(value.clone())),
-        Span::nowhere(),
-    ));
-    kept.program.items.push(Spanned::new(
-        a_function(value_fn, Some(returns), stmts),
-        Span::nowhere(),
-    ));
-    Some(kept)
+    let mut kept = parsed.keeping(|item| tree::comptime_keeps(item, &parsed.interner));
+    let interner = &kept.interner;
+    let built = tree::comptime_sub_program(
+        &mut kept.program.items,
+        &parsed.program.items,
+        &parsed.interner,
+        bound,
+        value,
+        ty,
+        &known,
+        &typed,
+        &|text: &str| interner.intern_string(text),
+    );
+    built.then_some(kept)
 }
 
-/// **An earlier `comptime` that holds a `std` type's value**, as a `let` at
-/// the head of the value function (ADR-318 D5, #519): `let A:
-/// time::Duration = time::Duration::new(90, 0)`. Its constructor is not a
-/// program's to write and an item cannot hold it, but this run is the
-/// compiler's own, and a later `comptime` reads `A` here.
-fn constants_as_lets(
-    parsed: &Parsed,
-    bound: &str,
-    known: &dyn Fn(&str) -> Option<Value>,
-    kept: &Parsed,
-) -> Vec<Spanned<Stmt>> {
-    let name = |text: &str| kept.interner.intern_string(text);
-    parsed
-        .program
-        .items
-        .iter()
-        .filter_map(|item| {
-            let Item::Comptime {
-                name: bound_here,
-                ty,
-                ..
-            } = &item.node
-            else {
-                return None;
-            };
-            let named = parsed.text(*bound_here);
-            if named == bound {
-                return None;
-            }
-            let Some(Value::Constant { constructor, parts }) = known(named) else {
-                return None;
-            };
-            let args = parts
-                .iter()
-                .map(|part| literal_of(part, kept))
-                .collect::<Option<Vec<_>>>()?;
-            Some(Spanned::new(
-                Stmt::Let {
-                    names: vec![name(named)],
-                    shape: Vec::new(),
-                    mutable: false,
-                    ty: ty.clone(),
-                    value: Expr::Call {
-                        func: Box::new(Expr::Path(
-                            constructor.split("::").map(name).collect(),
-                            crate::ast::NodeId::fresh(),
-                        )),
-                        args,
-                        config: Vec::new(),
-                        id: crate::ast::NodeId::fresh(),
-                    },
-                },
-                Span::nowhere(),
-            ))
-        })
-        .collect()
-}
-
-/// **One file of the program as the sub-program carries it**: without its
-/// `fn main`, and with each `comptime` that is not `bound` as the literal it
-/// came to - or left out, where it has not been worked out. Nothing where one
-/// that was worked out has no literal here.
+/// **One file of the program as the sub-program carries it**
+/// (`comptime_unit_without_its_constants`), or nothing where a constant that
+/// was worked out has no literal here.
 pub(crate) fn unit_without_its_constants(
     parsed: &Parsed,
     bound: &str,
     known: &dyn Fn(&str) -> Option<Value>,
     typed: &dyn Fn(&str) -> Option<Ty>,
 ) -> Option<Parsed> {
-    let mut kept = parsed.keeping(|item| match item {
-        // **The program's `main` is not this program's**, and its constants
-        // are carried below as what they came to.
-        Item::Fn {
-            name: Some(name), ..
-        } => parsed.text(*name) != "main",
-        Item::Comptime { .. } => false,
-        _ => true,
-    });
-    for item in &parsed.program.items {
-        let Item::Comptime {
-            name,
-            ty: declared,
-            public,
-            ..
-        } = &item.node
-        else {
-            continue;
-        };
-        let named = parsed.text(*name);
-        if named == bound {
-            continue;
-        }
-        let Some(held) = known(named) else {
-            continue;
-        };
-        // Carried by `constants_as_lets` (#519).
-        if matches!(held, Value::Constant { .. }) {
-            continue;
-        }
-        // **Its type goes with it** (#779): where none is written, the one
-        // the checker found, so a list's numbers keep their element type
-        // rather than default to `i64`.
-        let ty = match declared {
-            Some(written) => Some(written.clone()),
-            None => typed(named)
-                .and_then(|found| held_as(found, &held))
-                .and_then(|found| written_type(&found, &kept)),
-        };
-        kept.program.items.push(Spanned::new(
-            Item::Comptime {
-                name: *name,
-                ty,
-                value: literal_of(&held, &kept)?,
-                public: *public,
-                bounds: Vec::new(),
-            },
-            item.span,
-        ));
-    }
-    Some(kept)
+    let mut kept = parsed.keeping(|item| tree::comptime_keeps(item, &parsed.interner));
+    let interner = &kept.interner;
+    let carried = tree::comptime_unit_without_its_constants(
+        &mut kept.program.items,
+        &parsed.program.items,
+        &parsed.interner,
+        bound,
+        &known,
+        &typed,
+        &|text: &str| interner.intern_string(text),
+    );
+    carried.then_some(kept)
 }
 
 /// **Without what reads a constant the sub-program does not hold** (#528,
-/// #529): the one being worked out, one not worked out yet, one carried only
-/// as a `let` of the value function. A `test` block turned function, or any
-/// function beside `main` that names one, named a constant the generated Rust
-/// did not declare, and the whole run failed for an item it never calls.
-///
-/// What goes is followed through: a function that calls a dropped one goes
-/// too. Names are matched as words, over-approximately (`tools/names.nika`) -
-/// the value cannot reach a reader of a constant it is computing, and a
-/// program that had such a reader did not build before, so a word shared by
-/// accident drops nothing from a program that built. The value function and
-/// `main` are always kept, and what went is handed back: a value function
-/// that names it reaches a constant not worked out yet, which is for the
-/// interpreter to answer, not this run.
+/// #529; `comptime_drop_readers`, one file at a time). What goes is followed
+/// through: a function that calls a dropped one goes too, so the files are
+/// gone over until nothing more goes. What went is handed back.
 pub(crate) fn without_readers(units: &mut [Parsed], absent: BTreeSet<String>) -> BTreeSet<String> {
     let mut gone = absent;
     loop {
         let before = gone.len();
         for unit in units.iter_mut() {
-            let mut dropped = Vec::new();
-            let mut items = std::mem::take(&mut unit.program.items);
-            items.retain_mut(|item| {
-                if let Item::Impl { methods, .. } = &mut item.node {
-                    methods.retain(|method| match reads_any(unit, &method.node, &gone) {
-                        Some(own) => {
-                            dropped.extend(own);
-                            false
-                        }
-                        None => true,
-                    });
-                    return true;
-                }
-                match reads_any(unit, &item.node, &gone) {
-                    Some(own) => {
-                        dropped.extend(own);
-                        false
-                    }
-                    None => true,
-                }
-            });
-            unit.program.items = items;
+            let dropped =
+                tree::comptime_drop_readers(&mut unit.program.items, &unit.interner, &gone);
             gone.extend(dropped);
         }
         if gone.len() == before {
@@ -240,46 +107,13 @@ pub(crate) fn without_readers(units: &mut [Parsed], absent: BTreeSet<String>) ->
     }
 }
 
-/// `Some` - with the item's own name, where it has one - when `item` is a
-/// body that names something in `gone` and may be left out.
-fn reads_any(parsed: &Parsed, item: &Item, gone: &BTreeSet<String>) -> Option<Option<String>> {
-    use nikaia_std::tools::names::names_in_block;
-    let mut named = BTreeSet::new();
-    let own = match item {
-        // An option's default is not read here: the call is handed the
-        // value the ledger recorded for it.
-        Item::Fn { name, body, .. } => {
-            let own = name.map(|n| parsed.text(n).to_string());
-            if matches!(own.as_deref(), Some("main" | VALUE_FN)) {
-                return None;
-            }
-            names_in_block(body, &parsed.interner, &mut named);
-            own
-        }
-        Item::Test { body, .. } | Item::Bench { body, .. } => {
-            names_in_block(body, &parsed.interner, &mut named);
-            None
-        }
-        _ => return None,
-    };
-    named.iter().any(|name| gone.contains(name)).then_some(own)
-}
-
 /// Every `comptime` the files declare, by name.
 pub(crate) fn constants_of<'a>(files: impl IntoIterator<Item = &'a Parsed>) -> BTreeSet<String> {
-    files
-        .into_iter()
-        .flat_map(|parsed| {
-            parsed
-                .program
-                .items
-                .iter()
-                .filter_map(|item| match &item.node {
-                    Item::Comptime { name, .. } => Some(parsed.text(*name).to_string()),
-                    _ => None,
-                })
-        })
-        .collect()
+    let mut out = BTreeSet::new();
+    for parsed in files {
+        tree::comptime_constants_of(&parsed.program.items, &parsed.interner, &mut out);
+    }
+    out
 }
 
 /// **A program of several files, lowered as one** (Part I 9.1): each file
@@ -436,46 +270,16 @@ pub(crate) fn by_package(units: &[&Parsed]) -> BTreeMap<String, crate::contracts
         .collect()
 }
 
-/// **What a compiled build-time run came to.**
-pub(crate) enum Computed {
-    /// The value.
-    Value(Value),
-    /// A callee the rule forbids (D2), named as the call resolves.
-    Forbidden {
-        callee: String,
-        because: &'static str,
-    },
-    /// The run stopped, and what it said.
-    Stopped(String),
-    /// This compiler builds no program for it, and why, as a sentence: the
-    /// value is refused (`NK1127`), never interpreted (ADR-321 D1).
-    NotHere(String),
-}
+/// **What a compiled build-time run came to**: the checker's own
+/// `CheckComputed` (`tools/check_host.nika`).
+pub(crate) use nikaia_std::tools::check_host::CheckComputed as Computed;
 
 /// What a call's left-out option stands for where its default is not known in
-/// a run (#468): the emitter's placeholder, which only a refused default
-/// reaches.
-pub(crate) const NOT_COMPUTED_YET: &str = "a default not computed yet";
-
-/// **A default's type as its run builds it** (#468): the value a view
-/// views - `ref String`'s `String` - which the run hands back, and which is
-/// written into the ledger the same way.
-pub(crate) fn as_built(ty: Ty) -> Ty {
-    match ty {
-        // `ref String` is read as `str`.
-        Ty::Named { name, args, .. } if name == "str" => Ty::Named {
-            name: "String".to_string(),
-            args,
-            view: false,
-        },
-        Ty::Named { name, args, .. } => Ty::Named {
-            name,
-            args,
-            view: false,
-        },
-        other => other,
-    }
-}
+/// a run (#468), and a default's type as its run builds it: Nikaia's
+/// (`tools/comptime_tree.nika`).
+pub(crate) use nikaia_std::tools::comptime_tree::{
+    NOT_COMPUTED_YET, comptime_as_built as as_built,
+};
 
 /// **Compile and run an initialiser** (ADR-321 D1): `value`, standing in
 /// `files[here]`, of type `ty`, with every file of the program around it and
@@ -625,7 +429,10 @@ fn computed(
     {
         let callee =
             culprit(files[here], value, &derived, library).unwrap_or_else(|| bound.to_string());
-        return Computed::Forbidden { callee, because };
+        return Computed::Forbidden {
+            callee,
+            because: because.to_string(),
+        };
     }
     let counted = crate::emit::Build {
         counts_steps: true,
@@ -755,92 +562,36 @@ const NOT_CARRIED: &str = "A `comptime` declared beside it came to a value this 
 /// **ADR-321 D19's note**: a check with no place to compile build-time code.
 pub(crate) const NOWHERE: &str = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it";
 
-/// **The callee the rule forbids, named as the call resolves**: a function by
-/// its name or its path, a method by its key (`Reader::read`), read off the
-/// program's entries and then `std`'s.
+/// **The callee nothing declares** (`comptime_undeclared_callee`): neither
+/// `library` nor a file of the program, each read with its own interner.
 fn undeclared_callee(
     files: &[&Parsed],
     here: usize,
     value: &Expr,
     library: &crate::contracts::Ledger,
 ) -> Option<String> {
-    let declared = |name: &str| {
-        library.functions.contains_key(name)
-            || files.iter().any(|file| {
-                file.program.items.iter().any(|item| match &item.node {
-                    Item::Fn {
-                        name: Some(named), ..
-                    } => file.text(*named) == name,
-                    Item::Struct { name: named, .. } | Item::Enum { name: named, .. } => {
-                        file.text(*named) == name
-                    }
-                    _ => false,
-                })
-            })
-    };
-    let mut found = None;
-    crate::emit::visit_expr(value, &mut |expr: &Expr| {
-        if found.is_some() {
-            return;
-        }
-        if let Expr::Call { func, .. } = expr
-            && let Expr::Variable(name, _) = &**func
-        {
-            let name = files[here].text(*name);
-            if !declared(name) {
-                found = Some(name.to_string());
-            }
-        }
-    });
-    found
+    tree::comptime_undeclared_callee(&files[here].interner, value, library, &|name: &str| {
+        files
+            .iter()
+            .any(|file| tree::comptime_declares(&file.program.items, &file.interner, name))
+    })
 }
 
-/// **The callee the rule forbids**, see [`culprit`]'s callers; the callee
-/// nothing declares is [`undeclared_callee`]'s.
+/// **The callee the rule forbids** (`comptime_culprit`): the rule (D2) is
+/// asked of the program's entry for a key, and then of `std`'s.
 fn culprit(
     parsed: &Parsed,
     value: &Expr,
     derived: &crate::contracts::Ledger,
     library: &crate::contracts::Ledger,
 ) -> Option<String> {
-    let forbidden = |key: &str| {
+    tree::comptime_culprit(&parsed.interner, value, derived, &|key: &str| {
         derived
             .functions
             .get(key)
             .or_else(|| library.functions.get(key))
             .is_some_and(|contract| crate::build_time::may_not_run(contract).is_some())
-    };
-    let mut found = None;
-    crate::emit::visit_expr(value, &mut |expr: &Expr| {
-        if found.is_some() {
-            return;
-        }
-        let key = match expr {
-            Expr::Call { func, .. } => match &**func {
-                Expr::Variable(name, _) => Some(parsed.text(*name).to_string()),
-                Expr::Path(path, _) => Some(
-                    path.iter()
-                        .map(|segment| parsed.text(*segment))
-                        .collect::<Vec<_>>()
-                        .join("::"),
-                ),
-                _ => None,
-            },
-            Expr::MethodCall { method, .. } | Expr::SafeMethod { method, .. } => {
-                let method = format!("::{}", parsed.text(*method));
-                derived
-                    .functions
-                    .keys()
-                    .find(|key| key.ends_with(&method) && forbidden(key))
-                    .cloned()
-            }
-            _ => None,
-        };
-        if let Some(key) = key.filter(|key| forbidden(key)) {
-            found = Some(key);
-        }
-    });
-    found
+    })
 }
 
 // --- the defaults a ledger records -------------------------------------------
@@ -909,187 +660,6 @@ pub(crate) fn known_default(package: Option<&str>, key: &str, at: usize) -> Opti
 /// The workshop defaults are compiled in now, where a build set one.
 pub(crate) fn defaults_workshop() -> Option<std::sync::Arc<crate::grammar_run::Workshop>> {
     DEFAULTS.with(|held| held.borrow().clone())
-}
-
-fn a_function(
-    name: winnow_grammar::Symbol,
-    ret_type: Option<ast::Type>,
-    stmts: Vec<Spanned<Stmt>>,
-) -> Item {
-    Item::Fn {
-        name: Some(name),
-        generics: Vec::new(),
-        receiver: None,
-        args: Vec::new(),
-        config: Vec::new(),
-        spread: None,
-        ret_type,
-        body: Block { stmts },
-        is_sync: false,
-        sync_by: Vec::new(),
-        is_public: false,
-        can_throw: false,
-        is_extern: false,
-    }
-}
-
-/// **An earlier `comptime`'s value as the literal that writes it**: a number,
-/// a truth value, text, and a list, a tuple, a struct or a variant of those.
-/// The names a struct or a variant needs are interned in `parsed`, the file
-/// the literal goes into.
-fn literal_of(value: &Value, parsed: &Parsed) -> Option<Expr> {
-    let name = |text: &str| parsed.interner.intern_string(text);
-    let all = |items: &[Value]| -> Option<Vec<Expr>> {
-        items.iter().map(|item| literal_of(item, parsed)).collect()
-    };
-    match value {
-        Value::Int(n) => Some(Expr::LitInt {
-            value: n.magnitude,
-            negative: n.negative,
-            id: crate::ast::NodeId::fresh(),
-        }),
-        Value::Bool(b) => Some(Expr::LitBool(*b, crate::ast::NodeId::fresh())),
-        Value::Float(f) => Some(Expr::LitFloat(
-            format!("{f:?}"),
-            crate::ast::NodeId::fresh(),
-        )),
-        Value::Text(text) => Some(Expr::LitStr {
-            text: crate::build_time::written(text),
-            id: crate::ast::NodeId::fresh(),
-        }),
-        Value::List(items) => Some(Expr::ListLit {
-            items: all(items)?,
-            id: crate::ast::NodeId::fresh(),
-        }),
-        Value::Tuple(parts) => Some(Expr::Tuple(all(parts)?, crate::ast::NodeId::fresh())),
-        // **A `std` type's constructor is not a program's to write**
-        // (ADR-318 D5): an item cannot hold one, and the value function
-        // gets it as a `let` instead (`constants_as_lets`, #519).
-        Value::Constant { .. } => None,
-        Value::Struct { name: ty, fields } => Some(Expr::StructLit {
-            name: name(ty),
-            fields: fields
-                .iter()
-                .map(|(field, held)| {
-                    Some(ast::FieldInit {
-                        name: name(field),
-                        value: Some(literal_of(held, parsed)?),
-                    })
-                })
-                .collect::<Option<_>>()?,
-            id: crate::ast::NodeId::fresh(),
-        }),
-        Value::Variant {
-            ty,
-            variant,
-            payload,
-        } => {
-            let path = Expr::Path(vec![name(ty), name(variant)], crate::ast::NodeId::fresh());
-            match payload.is_empty() {
-                true => Some(path),
-                false => Some(Expr::Call {
-                    func: Box::new(path),
-                    args: all(payload)?,
-                    config: Vec::new(),
-                    id: crate::ast::NodeId::fresh(),
-                }),
-            }
-        }
-    }
-}
-
-/// **The type a worked-out `comptime` is carried under** (#779): the one
-/// found, in the shape a `comptime` holds (`NK1167`): text as `ref String`, a
-/// `Vec` as the `Array` of as many elements as it came to, and so inside.
-fn held_as(found: Ty, held: &Value) -> Option<Ty> {
-    match (found, held) {
-        (Ty::Named { name, args, .. }, Value::Text(_)) if name == "String" && args.is_empty() => {
-            Some(Ty::Named {
-                name,
-                args,
-                view: true,
-            })
-        }
-        (Ty::Named { name, args, view }, Value::List(items))
-            if name == "Vec" && args.len() == 1 =>
-        {
-            let element = args.into_iter().next()?;
-            let element = match items.first() {
-                Some(first) => held_as(element, first)?,
-                None => element,
-            };
-            Some(Ty::Named {
-                name: "Array".to_string(),
-                args: vec![element, Ty::Count(i64::try_from(items.len()).ok()?)],
-                view,
-            })
-        }
-        // **An open number past `i64`** (ADR-287 D21) is carried as the
-        // type it fits, which its literal alone would not default to.
-        (Ty::Unknown, Value::Int(n)) if n.magnitude > i64::MAX as u64 => {
-            let fits = match n.negative {
-                false => "u64",
-                true if n.magnitude == 1 << 63 => return Some(Ty::Unknown),
-                // Below `i64::MIN` no Nikaia type holds it: the checker has
-                // refused it (`NK1116`) before a value is carried.
-                true => return None,
-            };
-            Some(Ty::Named {
-                name: fits.to_string(),
-                args: Vec::new(),
-                view: false,
-            })
-        }
-        (found, _) => Some(found),
-    }
-}
-
-/// `ty` as the sub-program writes it in the value function's signature.
-fn written_type(ty: &Ty, parsed: &Parsed) -> Option<ast::Type> {
-    let plain = |name: &str| ast::Type {
-        name: parsed.interner.intern_string(name),
-        generics: Vec::new(),
-        is_view: false,
-        is_tuple: false,
-        is_nullable: false,
-        code: Box::new(None),
-        count: None,
-        is_mut: false,
-        is_slice: false,
-        either: false,
-        lasting: false,
-    };
-    match ty {
-        Ty::Named { name, args, view } => {
-            let mut out = plain(name);
-            out.is_view = *view;
-            out.generics = args
-                .iter()
-                .map(|arg| written_type(arg, parsed))
-                .collect::<Option<_>>()?;
-            Some(out)
-        }
-        Ty::Count(n) => {
-            let mut out = plain(&n.to_string());
-            out.count = Some(*n);
-            Some(out)
-        }
-        Ty::Tuple(parts) => {
-            let mut out = plain("");
-            out.is_tuple = true;
-            out.generics = parts
-                .iter()
-                .map(|part| written_type(part, parsed))
-                .collect::<Option<_>>()?;
-            Some(out)
-        }
-        Ty::Nullable(inner) => {
-            let mut out = written_type(inner, parsed)?;
-            out.is_nullable = true;
-            Some(out)
-        }
-        _ => None,
-    }
 }
 
 /// **The lowered sub-program with a `main` of its own**: the generated one

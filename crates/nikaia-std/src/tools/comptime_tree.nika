@@ -1,0 +1,471 @@
+// **The tree work of a `comptime`'s sub-program** (ADR-321 D1, K1 and K2 of
+// `docs/selfhosting-plan.md`): the file's items without its `fn main` and its
+// constants, the constants already worked out as literals, the value function,
+// and what a refused run is blamed on. The Rust host (`comptime_run.rs`) holds
+// the `Parsed` files, copies one with `Parsed::keeping(comptime_keeps)` and
+// hands its items here, with the interner that answers the copy's symbols.
+
+use std::collections
+
+/// The name the sub-program hands the value back under.
+pub comptime VALUE_FN: ref String = "__nikaia_comptime_value"
+
+/// What a call's left-out option stands for where its default is not known in
+/// a run (#468): the emitter's placeholder, which only a refused default
+/// reaches.
+pub comptime NOT_COMPUTED_YET: ref String = "a default not computed yet"
+
+/// **What the sub-program keeps of a file as it was written**: everything but
+/// the program's `main`, which is not this program's, and its constants, which
+/// are carried as what they came to (`comptime_unit_without_its_constants`).
+pub fn comptime_keeps(item: ref Item, words: ref winnow_grammar::InternerContext) -> bool {
+    return match item {
+        Item::Fn { name, .. } => a_symbols_text(words, name) != "main",
+        Item::Comptime { .. } => false,
+        else => true,
+    }
+}
+
+/// **The sub-program for one initialiser**, added to `items`, or false where
+/// this stage does not build one: a type with no written form, or an earlier
+/// `comptime` whose value is not a literal.
+///
+/// `items` is the file's items `comptime_keeps` kept, `source` the file's own
+/// and `words` its interner; `intern` interns into the copy `items` belongs to.
+/// `bound` is the `comptime` being worked out; `known` is what an earlier one
+/// came to, by name, and nothing for one not worked out yet - which is left
+/// out, as the one being worked out is.
+pub fn comptime_sub_program(mut items: Vec[Spanned[Item]], source: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> bool {
+    if !comptime_unit_without_its_constants(items, source, words, bound, known, typed, intern) {
+        return false
+    }
+    let returns = comptime_written_type(ty, intern) ?? return false
+    let main = intern("main")
+    let value_fn = intern(VALUE_FN)
+    items.push(Spanned { node: comptime_a_function(main, null, []), span: Span::nowhere(), doc: null, attributes: [] })
+    let mut stmts = comptime_constants_as_lets(source, words, bound, known, intern)
+    stmts.push(Spanned { node: Stmt::Return(value.clone()), span: Span::nowhere(), doc: null, attributes: [] })
+    items.push(Spanned { node: comptime_a_function(value_fn, returns, stmts), span: Span::nowhere(), doc: null, attributes: [] })
+    return true
+}
+
+/// **An earlier `comptime` that holds a `std` type's value**, as a `let` at
+/// the head of the value function (ADR-318 D5, #519): `let A:
+/// time::Duration = time::Duration::new(90, 0)`. Its constructor is not a
+/// program's to write and an item cannot hold it, but this run is the
+/// compiler's own, and a later `comptime` reads `A` here.
+fn comptime_constants_as_lets(source: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, bound: String, known: fn(ref String) -> BuildValue? sync, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[Spanned[Stmt]] {
+    let mut out: Vec[Spanned[Stmt]] = []
+    for item in source {
+        match item.node {
+            Item::Comptime { name, ty, .. } => {
+                let stmt = comptime_constant_as_let(words, name, ty, bound, known, intern) ?? continue
+                out.push(stmt)
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+// One constant as `comptime_constants_as_lets` writes it; nothing for one that
+// is `bound`, not worked out, not a `std` type's value, or has a part with no
+// literal.
+fn comptime_constant_as_let(words: ref winnow_grammar::InternerContext, bound_here: winnow_grammar::Symbol, ty: ref Type?, bound: String, known: fn(ref String) -> BuildValue? sync, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Spanned[Stmt]? {
+    let named = words.resolve(bound_here).clone()
+    if named == bound {
+        return null
+    }
+    let held = known(named) ?? return null
+    return match held {
+        BuildValue::Constant { constructor, parts } => {
+            let mut args: Vec[Expr] = []
+            for part in parts {
+                args.push(comptime_literal_of(part, intern) ?? return null)
+            }
+            let names: Vec[winnow_grammar::Symbol] = [intern(named)]
+            let path: Vec[winnow_grammar::Symbol] = constructor.split("::").map(fn(segment) { intern(segment) }).collect()
+            let call = Expr::Call { func: Expr::Path(path, fresh_id()), args: args, config: [], id: fresh_id() }
+            let node = Stmt::Let { names: names, shape: [], mutable: false, ty: ty?.clone(), value: call }
+            Spanned { node: node, span: Span::nowhere(), doc: null, attributes: [] }
+        },
+        else => null,
+    }
+}
+
+/// **One file of the program as the sub-program carries it**: `items`, the
+/// file's items without its `fn main` (`comptime_keeps`), gains each `comptime`
+/// of `source` that is not `bound` as the literal it came to - or none, where
+/// it has not been worked out. False where one that was worked out has no
+/// literal here.
+pub fn comptime_unit_without_its_constants(mut items: Vec[Spanned[Item]], source: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, bound: String, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> bool {
+    for item in source {
+        match item.node {
+            Item::Comptime { name, ty: declared, public, .. } => {
+                let named = words.resolve(name).clone()
+                if named == bound {
+                    continue
+                }
+                let held = known(named) ?? continue
+                // Carried by `comptime_constants_as_lets` (#519).
+                if (match held { BuildValue::Constant { .. } => true, else => false }) {
+                    continue
+                }
+                let ty = comptime_carried_type(declared, named, held, typed, intern)
+                let value = comptime_literal_of(held, intern) ?? return false
+                let node = Item::Comptime { name: name, ty: ty, value: value, public: public, bounds: [] }
+                items.push(Spanned { node: node, span: Span { start: item.span.start, end: item.span.end }, doc: null, attributes: [] })
+            },
+            else => {},
+        }
+    }
+    return true
+}
+
+// **Its type goes with it** (#779): where none is written, the one the
+// checker found, so a list's numbers keep their element type rather than
+// default to `i64`.
+fn comptime_carried_type(declared: ref Type?, named: String, held: ref BuildValue, typed: fn(ref String) -> Ty? sync, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Type? {
+    if declared == null {
+        let found = typed(named) ?? return null
+        let shaped = comptime_held_as(found, held) ?? return null
+        return comptime_written_type(shaped, intern)
+    }
+    let written = declared ?? return null
+    return written.clone()
+}
+
+/// **Without what reads a constant the sub-program does not hold** (#528,
+/// #529), in one file: the one being worked out, one not worked out yet, one
+/// carried only as a `let` of the value function. A `test` block turned
+/// function, or any function beside `main` that names one, named a constant
+/// the generated Rust did not declare, and the whole run failed for an item it
+/// never calls.
+///
+/// The answer is the names of what went, which the host adds to `gone` and
+/// follows through: a function that calls a dropped one goes too. Names are
+/// matched as words, over-approximately (`tools/names.nika`) - the value
+/// cannot reach a reader of a constant it is computing, and a program that had
+/// such a reader did not build before, so a word shared by accident drops
+/// nothing from a program that built. The value function and `main` are always
+/// kept: a value function that names what went reaches a constant not worked
+/// out yet, which is for the interpreter to answer, not this run.
+pub fn comptime_drop_readers(mut items: Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, gone: ref collections::BTreeSet[String]) -> Vec[String] {
+    let mut dropped: Vec[String] = []
+    let mut kept: Vec[Spanned[Item]] = []
+    for item in items.drain() {
+        match item.node {
+            Item::Impl { trait_name, target, methods } => {
+                let mut left: Vec[Spanned[Item]] = []
+                for method in methods {
+                    if comptime_reads_any(words, method.node, gone) {
+                        comptime_note_own(words, method.node, dropped)
+                    } else {
+                        left.push(method.clone())
+                    }
+                }
+                let node = Item::Impl { trait_name: trait_name, target: target, methods: left }
+                kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })
+            },
+            other => {
+                if comptime_reads_any(words, other, gone) {
+                    comptime_note_own(words, other, dropped)
+                } else {
+                    kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes })
+                }
+            },
+        }
+    }
+    items.extend(kept)
+    return dropped
+}
+
+// A dropped item's own name, where it has one, into `dropped`.
+fn comptime_note_own(words: ref winnow_grammar::InternerContext, item: ref Item, mut dropped: Vec[String]) {
+    match item {
+        Item::Fn { name, .. } => {
+            if name != null {
+                dropped.push(a_symbols_text(words, name))
+            }
+        },
+        else => {},
+    }
+}
+
+/// Whether `item` is a body that names something in `gone` and may be left
+/// out.
+fn comptime_reads_any(words: ref winnow_grammar::InternerContext, item: ref Item, gone: ref collections::BTreeSet[String]) -> bool {
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    match item {
+        // An option's default is not read here: the call is handed the
+        // value the ledger recorded for it.
+        Item::Fn { name, body, .. } => {
+            let own = a_symbols_text(words, name)
+            if own == "main" || own == VALUE_FN {
+                return false
+            }
+            names_in_block(body, words, named)
+        },
+        Item::Test { body, .. } => names_in_block(body, words, named),
+        Item::Bench { body, .. } => names_in_block(body, words, named),
+        else => return false,
+    }
+    for name in named {
+        if gone.contains(name) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Every `comptime` one file declares, by name, added to `out`.
+pub fn comptime_constants_of(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[String]) {
+    for item in items {
+        match item.node {
+            Item::Comptime { name, .. } => {
+                out.insert(words.resolve(name).clone())
+            },
+            else => {},
+        }
+    }
+}
+
+/// **A default's type as its run builds it** (#468): the value a view
+/// views - `ref String`'s `String` - which the run hands back, and which is
+/// written into the ledger the same way.
+pub fn comptime_as_built(ty: Ty) -> Ty {
+    return match ty {
+        // `ref String` is read as `str`.
+        Ty::Named { name, args, .. } if name == "str" => Ty::Named { name: "String", args: args, view: false },
+        Ty::Named { name, args, .. } => Ty::Named { name: name, args: args, view: false },
+        other => other,
+    }
+}
+
+/// **The callee nothing declares**, the first call by name in `value` that
+/// neither `library` has nor a file of the program declares
+/// (`declared_in_files`, over `comptime_declares`): its result has no type,
+/// so neither has the value, and the callee is why.
+pub fn comptime_undeclared_callee(words: ref winnow_grammar::InternerContext, value: ref Expr, library: ref Ledger, declared_in_files: fn(ref String) -> bool sync) -> String? {
+    for expr in visited_in_expr(value) {
+        match expr {
+            Expr::Call { func, .. } => match func {
+                Expr::Variable(name, _) => {
+                    let name = words.resolve(name).clone()
+                    if !library.functions.contains_key(name) && !declared_in_files(name) {
+                        return name
+                    }
+                },
+                else => {},
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+/// Whether one file declares `name`: a function, a struct or an enum.
+pub fn comptime_declares(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, name: String) -> bool {
+    return items.iter().any(fn(item) { comptime_declared_as(item.node, words) == name })
+}
+
+// The name an item declares a function, a struct or an enum under; "" for any
+// other.
+fn comptime_declared_as(item: ref Item, words: ref winnow_grammar::InternerContext) -> String {
+    return match item {
+        Item::Fn { name, .. } => a_symbols_text(words, name),
+        Item::Struct { name, .. } => words.resolve(name).clone(),
+        Item::Enum { name, .. } => words.resolve(name).clone(),
+        else => "",
+    }
+}
+
+/// **The callee the rule forbids, named as the call resolves**: a function by
+/// its name or its path, a method by its key (`Reader::read`), read off the
+/// program's entries (`derived`) and then `std`'s. `forbidden` asks the rule
+/// (D2) of the entry a key names.
+pub fn comptime_culprit(words: ref winnow_grammar::InternerContext, value: ref Expr, derived: ref Ledger, forbidden: fn(ref String) -> bool sync) -> String? {
+    for expr in visited_in_expr(value) {
+        let key = comptime_key_of(words, expr, derived, forbidden) ?? continue
+        if forbidden(key) {
+            return key
+        }
+    }
+    return null
+}
+
+// The ledger key a call in `value` resolves to, a method's the first forbidden
+// one of the program's entries that ends in it.
+fn comptime_key_of(words: ref winnow_grammar::InternerContext, expr: ref Expr, derived: ref Ledger, forbidden: fn(ref String) -> bool sync) -> String? {
+    return match expr {
+        Expr::Call { func, .. } => match func {
+            Expr::Variable(name, _) => words.resolve(name).clone(),
+            Expr::Path(path, _) => {
+                let segments: Vec[String] = path.iter().map(fn(segment) { words.resolve(segment).clone() }).collect()
+                segments.join("::")
+            },
+            else => null,
+        },
+        Expr::MethodCall { method, .. } => comptime_method_key(words, method, derived, forbidden),
+        Expr::SafeMethod { method, .. } => comptime_method_key(words, method, derived, forbidden),
+        else => null,
+    }
+}
+
+// The first key of the program's entries that ends in `::method` and is
+// forbidden.
+fn comptime_method_key(words: ref winnow_grammar::InternerContext, method: winnow_grammar::Symbol, derived: ref Ledger, forbidden: fn(ref String) -> bool sync) -> String? {
+    let method = f"::{words.resolve(method)}"
+    for (key, _) in derived.functions {
+        if key.ends_with(method) && forbidden(key) {
+            return key.clone()
+        }
+    }
+    return null
+}
+
+fn comptime_a_function(name: winnow_grammar::Symbol?, ret_type: Type?, stmts: Vec[Spanned[Stmt]]) -> Item {
+    return Item::Fn { name: name, generics: [], receiver: null, args: [], config: [], spread: null, ret_type: ret_type, body: Block { stmts: stmts }, is_sync: false, sync_by: [], is_public: false, can_throw: false, is_extern: false }
+}
+
+/// **An earlier `comptime`'s value as the literal that writes it**: a number,
+/// a truth value, text, and a list, a tuple, a struct or a variant of those.
+/// The names a struct or a variant needs are interned by `intern`, into the
+/// file the literal goes into.
+fn comptime_literal_of(value: ref BuildValue, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Expr? {
+    return match value {
+        BuildValue::Int(n) => Expr::LitInt { value: n.magnitude, negative: n.negative, id: fresh_id() },
+        BuildValue::Bool(b) => Expr::LitBool(b, fresh_id()),
+        BuildValue::Float(f) => Expr::LitFloat(f"{f:?}", fresh_id()),
+        BuildValue::Text(text) => Expr::LitStr { text: as_a_literal(text), id: fresh_id() },
+        BuildValue::List(items) => Expr::ListLit { items: comptime_literals_of(items, intern) ?? return null, id: fresh_id() },
+        BuildValue::Tuple(parts) => Expr::Tuple(comptime_literals_of(parts, intern) ?? return null, fresh_id()),
+        // **A `std` type's constructor is not a program's to write**
+        // (ADR-318 D5): an item cannot hold one, and the value function
+        // gets it as a `let` instead (`comptime_constants_as_lets`, #519).
+        BuildValue::Constant { .. } => null,
+        BuildValue::Struct { name: ty, fields } => {
+            let named = intern(ty)
+            let mut inits: Vec[FieldInit] = []
+            for (field, held) in fields {
+                let value = comptime_literal_of(held, intern) ?? return null
+                inits.push(FieldInit { name: intern(field), value: value })
+            }
+            Expr::StructLit { name: named, fields: inits, id: fresh_id() }
+        },
+        BuildValue::Variant { ty, variant, payload } => {
+            let segments: Vec[winnow_grammar::Symbol] = [intern(ty), intern(variant)]
+            let path = Expr::Path(segments, fresh_id())
+            match payload.is_empty() {
+                true => path,
+                false => Expr::Call { func: path, args: comptime_literals_of(payload, intern) ?? return null, config: [], id: fresh_id() },
+            }
+        },
+    }
+}
+
+// Each of `values` as its literal; nothing where one has none.
+fn comptime_literals_of(values: ref Vec[BuildValue], intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[Expr]? {
+    let mut out: Vec[Expr] = []
+    for value in values {
+        out.push(comptime_literal_of(value, intern) ?? return null)
+    }
+    return out
+}
+
+/// **The type a worked-out `comptime` is carried under** (#779): the one
+/// found, in the shape a `comptime` holds (`NK1167`): text as `ref String`, a
+/// `Vec` as the `Array` of as many elements as it came to, and so inside.
+fn comptime_held_as(found: Ty, held: ref BuildValue) -> Ty? {
+    return match found {
+        Ty::Named { name, args, view } => comptime_held_named(name, args, view, held),
+        // **An open number past `i64`** (ADR-287 D21) is carried as the
+        // type it fits, which its literal alone would not default to.
+        Ty::Unknown => match held {
+            BuildValue::Int(n) => comptime_held_wide(n),
+            else => Ty::Unknown,
+        },
+        other => other,
+    }
+}
+
+// `comptime_held_as` of a named type.
+fn comptime_held_named(name: String, args: Vec[Ty], view: bool, held: ref BuildValue) -> Ty? {
+    match held {
+        BuildValue::Text(_) => {
+            if name == "String" && args.is_empty() {
+                return Ty::Named { name: name, args: args, view: true }
+            }
+        },
+        BuildValue::List(items) => {
+            if name == "Vec" && args.len() == 1 {
+                let element = match items.is_empty() {
+                    true => args[0].clone(),
+                    false => comptime_held_as(args[0].clone(), items[0]) ?? return null,
+                }
+                return Ty::Named { name: "Array", args: [element, Ty::Count(items.len())], view: view }
+            }
+        },
+        else => {},
+    }
+    return Ty::Named { name: name, args: args, view: view }
+}
+
+// `comptime_held_as` of an open number.
+fn comptime_held_wide(n: ref Integer) -> Ty? {
+    if n.magnitude <= 9223372036854775807 {
+        return Ty::Unknown
+    }
+    if !n.negative {
+        return Ty::Named { name: "u64", args: [], view: false }
+    }
+    if n.magnitude == 9223372036854775808 {
+        return Ty::Unknown
+    }
+    // Below `i64::MIN` no Nikaia type holds it: the checker has refused it
+    // (`NK1116`) before a value is carried.
+    return null
+}
+
+/// `ty` as the sub-program writes it in the value function's signature.
+fn comptime_written_type(ty: ref Ty, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Type? {
+    return match ty {
+        Ty::Named { name, args, view } => {
+            let mut out = comptime_plain(name.clone(), intern)
+            out.is_view = view
+            out.generics = comptime_written_types(args, intern) ?? return null
+            out
+        },
+        Ty::Count(n) => {
+            let mut out = comptime_plain(f"{n}", intern)
+            out.count = n
+            out
+        },
+        Ty::Tuple(parts) => {
+            let mut out = comptime_plain("", intern)
+            out.is_tuple = true
+            out.generics = comptime_written_types(parts, intern) ?? return null
+            out
+        },
+        Ty::Nullable(inner) => {
+            let mut out = comptime_written_type(inner, intern) ?? return null
+            out.is_nullable = true
+            out
+        },
+        else => null,
+    }
+}
+
+// Each of `tys` as written; nothing where one has no written form.
+fn comptime_written_types(tys: ref Vec[Ty], intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[Type]? {
+    let mut out: Vec[Type] = []
+    for ty in tys {
+        out.push(comptime_written_type(ty, intern) ?? return null)
+    }
+    return out
+}
+
+// A type of that name and nothing else.
+fn comptime_plain(name: String, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Type {
+    return Type { name: intern(name), generics: [], is_view: false, is_tuple: false, is_nullable: false, code: null, count: null, is_mut: false, is_slice: false, either: false, lasting: false }
+}
