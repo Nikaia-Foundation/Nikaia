@@ -112,3 +112,4 @@
 /home/user/Nikaia/docs/briefs/s3-fs-canonical.md 484332 7
 /home/user/Nikaia/docs/briefs/architect-task.md 860621 19
 /home/user/Nikaia/docs/briefs/p3b-project-run-loop.md 5725963 75
+/home/user/Nikaia/docs/briefs/architect-task.md 945495 21
