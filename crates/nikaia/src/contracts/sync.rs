@@ -35,7 +35,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::ast::{Block, Expr, Span, Stmt};
+use crate::ast::{Block, Expr, Stmt};
 use crate::parser::Parsed;
 
 use crate::check::MethodCalls;
@@ -170,11 +170,8 @@ pub fn infer(
                 start.clone(),
                 Pause {
                     chain: chain.clone(),
-                    unit: node.unit as usize,
-                    site: node
-                        .site
-                        .as_ref()
-                        .map(|site| (site.span, site.what.clone())),
+                    unit: node.unit,
+                    site: node.site.clone(),
                 },
             );
         }
@@ -193,19 +190,9 @@ pub struct Noted {
     pub why: BTreeMap<String, Pause>,
 }
 
-/// **The way from a function to the statement that makes it pause**.
-#[derive(Debug, Clone)]
-pub struct Pause {
-    /// The function, the ones of its package it calls on the way, and last the
-    /// one that pauses itself.
-    pub chain: Vec<String>,
-    /// The unit the last one is written in, by its place in the list
-    /// [`infer`] was handed.
-    pub unit: usize,
-    /// The statement and what in it pauses; `None` where it is a method call
-    /// only the type checker resolved.
-    pub site: Option<(Span, String)>,
-}
+/// **The way from a function to the statement that makes it pause**, in
+/// Nikaia (`tools/modules.nika`, which says it, ADR-294, #125).
+pub use nikaia_std::tools::modules::ModulesPause as Pause;
 
 /// What one expression tells either analysis, where it is a call at all.
 ///

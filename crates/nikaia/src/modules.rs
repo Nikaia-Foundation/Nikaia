@@ -302,25 +302,19 @@ fn one_namespace(units: &[Unit]) -> Result<()> {
 /// read as one, and a call of the one met the other's parameters (found
 /// moving `trust`'s walk into Nikaia, #125).
 pub(crate) fn declared_once(files: &[(&Path, &Parsed)]) -> Result<()> {
-    let mut seen: BTreeMap<String, PathBuf> = BTreeMap::new();
-    for (path, parsed) in files {
-        for name in declared_names(parsed) {
-            if let Some(first) = seen.get(&name) {
-                if first == path {
-                    continue;
-                }
-                return Err(crate::diagnostics::refuse(format!(
-                    "`{name}` is declared twice in this package: in {} and in {}.\n\
-                     All files of a package share their names. Rename one of the two, or \
-                     keep one declaration and use it from the other file.",
-                    first.display(),
-                    path.display()
-                )));
-            }
-            seen.insert(name, path.to_path_buf());
-        }
+    // In Nikaia (`tools/modules.nika`, ADR-294, #125).
+    let paths: Vec<String> = files
+        .iter()
+        .map(|(path, _)| path.display().to_string())
+        .collect();
+    let declared: Vec<Vec<String>> = files
+        .iter()
+        .map(|(_, parsed)| declared_names(parsed))
+        .collect();
+    match nikaia_std::tools::modules::declared_once(&paths, &declared) {
+        Some(message) => Err(crate::diagnostics::refuse(message)),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 /// The names a file declares: what `one_namespace` counts.
@@ -412,16 +406,17 @@ fn sources_of<'a>(units: impl IntoIterator<Item = &'a Unit>) -> BTreeMap<String,
 ///
 /// The units arrive grouped (`collect_with`), so this is a walk and not a sort.
 fn groups(units: &[Unit]) -> Vec<std::ops::Range<usize>> {
-    let mut out = Vec::new();
-    let mut at = 0;
-    while at < units.len() {
-        let from = at;
-        while at < units.len() && units[at].package == units[from].package {
-            at += 1;
-        }
-        out.push(from..at);
-    }
-    out
+    // In Nikaia (`tools/modules.nika`).
+    nikaia_std::tools::modules::groups(&packages_of(units))
+        .into_iter()
+        .map(|(from, to)| from as usize..to as usize)
+        .collect()
+}
+
+/// Each unit's package, `None` for the program's own: what the Nikaia half
+/// of the assembly reads of a unit.
+fn packages_of(units: &[Unit]) -> Vec<Option<String>> {
+    units.iter().map(|unit| unit.package.clone()).collect()
 }
 
 /// One package's contracts: the ledger it ships where that may be believed, and
@@ -492,31 +487,6 @@ fn package_ledger_checked(
     // own build writes says what it was derived from.
     own.sources = sources;
     (own, Some(checked), noted)
-}
-
-/// **What another package may rely on about pausing**
-/// ([ADR-288](../../../docs/specification/adr/adr-288.md) D28): what its source
-/// wrote, `sync` or `sync(f)`, and not what the inference observed about
-/// today's body. Each entry `another` says is across the boundary and reads
-/// `"inferred"` reads as *may pause* in the copy this returns -
-/// [`Sync::Unpromised`](crate::contracts::Sync::Unpromised), so a refusal can
-/// say that the callee does not promise it rather than that it pauses.
-///
-/// **The copy is the checker's and never the lowering's** (D3): a call is
-/// checked against the promise and lowered by what the body is, so an
-/// unpromised `sync` callee is still called without an `.await`. `std` has no
-/// `"inferred"` entry, its ledger being written by hand, so only a package's
-/// entries are ever changed.
-pub(crate) fn as_promised(
-    mut ledger: crate::contracts::Ledger,
-    another: impl Fn(&str) -> bool,
-) -> crate::contracts::Ledger {
-    for (key, contract) in ledger.functions.iter_mut() {
-        if contract.sync_claim == crate::contracts::Sync::Inferred && another(key) {
-            contract.sync_claim = crate::contracts::Sync::Unpromised;
-        }
-    }
-    ledger
 }
 
 /// A package's committed `nikaia.contracts`, where it has one this compiler can
@@ -695,109 +665,50 @@ impl Program {
                 .collect();
             crate::type_rules::across_files(&mut files);
         }
-        let mut contracts = crate::contracts::Ledger::empty();
-        let mut as_its_own: std::collections::BTreeMap<String, crate::contracts::Ledger> =
-            std::collections::BTreeMap::new();
-
-        // **A package at a time, not a file at a time.** `absorb` qualifies the
-        // types *inside* an entry with the package's name, and it can only do
-        // that for the types the ledger it is given declares - so a package whose
-        // `Request` is in one file and whose `route(r: Request)` is in another has
-        // to arrive as one ledger, or the signature keeps the bare name and a
-        // caller writing `http::Request` is told the two are different types.
-        // That was the file-level defect (issue #229's cross-file type entry,
-        // since closed) one level up.
-        //
-        // The units arrive grouped (`collect_with`), so this is a walk and not a
-        // sort - and the order inside a package is the order they were read in,
-        // which Part III 13.5 needs to stay a function of the tree.
-        //
-        // **And the inference is the package's, not each file's**
-        // ([ADR-100](../../../docs/specification/adr/adr-100.md) D2). The group
-        // is handed over whole rather than inferred file by file and merged
-        // afterwards: merging joins *answers*, and the answer to `sync` is a
-        // fixpoint over a call graph, so a graph that stopped at the file
-        // boundary had already read a callee in the file next door as one it
-        // could not vouch for. That is what `NK1129` was refusing.
-        //
         // **The dependencies first, and the program's own package last**
-        // (D5). A package's ledger is a build input of everything that depends
-        // on it, so it has to exist before its consumer is checked - and what
-        // the consumer then resolves `http::ok` against is that *answer*,
-        // rather than a worse one derived here from half the graph. That order
-        // is the whole of why this is two passes over the groups and not one.
+        // (ADR-100 D5): their ledgers, merged in Nikaia
+        // (`tools/modules.nika`, ADR-294, #125).
+        let mut contracts = crate::contracts::Ledger::empty();
         let mut library = crate::contracts::std_library();
-        // **And the described crates' answers**:
-        // the check reads `contracts/<crate>.contracts`
-        // beside `std`, so the program's own `sync` inference does too, or a
-        // function that only calls a described `sync` entry is inferred to pause
-        // and a `sync` caller is refused (`NK2202`). `std` wins a collision, as
-        // in [`crate::project::Foreign::library`].
-        for (name, contract) in &described.functions {
-            library
-                .functions
-                .entry(name.clone())
-                .or_insert_with(|| contract.clone());
+        let ranges = groups(&units);
+        let mut reaches = BTreeMap::new();
+        let mut their_renames = BTreeMap::new();
+        for dependency in dependencies.iter().rev() {
+            reaches.insert(dependency.name.clone(), dependency.reachable.clone());
+            their_renames.insert(dependency.name.clone(), dependency.renames.clone());
         }
-        for (name, contract) in &described.types {
-            library
-                .types
-                .entry(name.clone())
-                .or_insert_with(|| contract.clone());
-        }
-        let mut plain: std::collections::BTreeMap<String, crate::contracts::Ledger> =
-            std::collections::BTreeMap::new();
-
-        for group in groups(&units) {
-            let Some(package) = units[group.start].package.clone() else {
-                continue;
-            };
-            let renames = units[group.start].renames.clone();
-            let own = package_ledger(
-                &units[group.clone()],
-                dependencies.iter().find(|d| d.name == package),
-                // **`std` alone for a dependency's own inference.** Its own
-                // dependencies are deliberately invisible here (ADR-286 D21),
-                // which is exactly why a ledger derived on this side is the
-                // second-best answer and D1 prefers the one it shipped.
-                &crate::contracts::std_library(),
-            );
-            plain.insert(package.clone(), own.clone());
-            // **The program's own inference reads the dependency as promised**
-            // (ADR-288 D28): a call into it that only the inference calls `sync`
-            // makes the caller *may pause*. `contracts` keeps the entry as it
-            // is, because that is what the lowering reads (D3).
-            library.absorb_renaming(Some(&package), &renames, as_promised(own.clone(), |_| true));
-            contracts.absorb_renaming(Some(&package), &renames, own);
-        }
-
-        // **And what each reaches, under its own words for it** (#497): a file
-        // of `lib` that writes `c::Id` for a package this build calls `deep` is
-        // checked against `deep`'s ledger absorbed as `c`. After every package
-        // is read, because the order the groups arrive in is not the order
-        // they depend on each other. Without it the type was not known, and a
-        // type nothing knows is refused.
-        for (package, own) in &plain {
-            let mut seen_by_it = own.clone();
-            if let Some(dependency) = dependencies.iter().find(|d| &d.name == package) {
-                for word in &dependency.reachable {
-                    let ours = dependency.renames.get(word).unwrap_or(word);
-                    if let Some(theirs) = plain.get(ours).filter(|_| ours != package) {
-                        seen_by_it.absorb(Some(word), as_promised(theirs.clone(), |_| true));
-                    }
-                }
-            }
-            as_its_own.insert(package.clone(), seen_by_it);
-        }
+        let as_its_own = nikaia_std::tools::modules::dependency_ledgers(
+            &mut library,
+            &mut contracts,
+            described,
+            &packages_of(&units),
+            &units.iter().map(|u| u.renames.clone()).collect::<Vec<_>>(),
+            &reaches,
+            &their_renames,
+            &|from: i64, to: i64| {
+                let group = &units[from as usize..to as usize];
+                package_ledger(
+                    group,
+                    dependencies
+                        .iter()
+                        .find(|d| Some(&d.name) == group[0].package.as_ref()),
+                    // **`std` alone for a dependency's own inference.** Its own
+                    // dependencies are deliberately invisible here (ADR-286 D21),
+                    // which is exactly why a ledger derived on this side is the
+                    // second-best answer and D1 prefers the one it shipped.
+                    &crate::contracts::std_library(),
+                )
+            },
+        );
 
         let mut paused_by_code = BTreeMap::new();
         let mut pauses = BTreeMap::new();
         // The library is `std`'s exactly when nothing was added to it above.
         let std_alone =
-            described.functions.is_empty() && described.types.is_empty() && plain.is_empty();
+            described.functions.is_empty() && described.types.is_empty() && as_its_own.is_empty();
         let mut own_checked = None;
         let mut own_groups = 0;
-        for group in groups(&units) {
+        for group in ranges {
             if units[group.start].package.is_some() {
                 continue;
             }
@@ -812,11 +723,10 @@ impl Program {
             });
             paused_by_code.extend(noted.by_code);
             pauses.extend(noted.why.into_iter().map(|(name, mut pause)| {
-                pause.unit += group.start;
+                pause.unit += group.start as i64;
                 (name, pause)
             }));
-            contracts.sources = own.sources.clone();
-            contracts.absorb_renaming(None, &renames, own);
+            nikaia_std::tools::modules::absorb_own(&mut contracts, &renames, &own);
         }
 
         Ok(Program {
@@ -836,132 +746,63 @@ impl Program {
     /// Each unit's path as a message says it: the entry under
     /// [`Program::entry_shown_as`] where that is set.
     pub fn shown_paths(&self) -> Vec<String> {
-        self.units
+        // In Nikaia (`tools/modules.nika`, ADR-294, #125).
+        let paths: Vec<String> = self
+            .units
             .iter()
-            .enumerate()
-            .map(|(at, unit)| match (&self.entry_shown_as, at) {
-                (Some(shown), 0) => shown.clone(),
-                _ => unit.path.display().to_string(),
-            })
-            .collect()
+            .map(|u| u.path.display().to_string())
+            .collect();
+        nikaia_std::tools::modules::shown_paths(&paths, self.entry_shown_as.as_deref())
     }
 
     /// **[ADR-288](../../../docs/specification/adr/adr-288.md) D29's note**:
     /// the program's own `pub` functions that could promise more about pausing
-    /// than they do, each with the word that would promise it - empty where
-    /// there is none.
-    ///
-    /// Two lists. A function whose entry says `"inferred"` never pauses, and
-    /// `sync` would promise it. One that pauses only where the lambdas it is
-    /// given do would keep `sync(f)`, naming them; a parameter it keeps is left
-    /// out, because `sync(f)` cannot name one (D4, `NK2210`). Since D1 a caller
-    /// in another package counts on neither until it is written.
+    /// than they do (`tools/modules.nika`).
     pub fn could_promise(&self) -> String {
-        // In Nikaia (`tools/modules.nika`, ADR-294, #125).
-        let theirs: BTreeSet<String> = self.as_its_own.keys().cloned().collect();
-        nikaia_std::tools::modules::could_promise(&self.contracts, &theirs, &self.paused_by_code)
+        nikaia_std::tools::modules::could_promise(
+            &self.contracts,
+            &self.as_its_own,
+            &self.paused_by_code,
+        )
     }
 
-    /// **[ADR-288](../../../docs/specification/adr/adr-288.md) D32's warning**:
-    /// every `pub` function of the program's own that the committed ledger says
-    /// could not pause (`"inferred"`) and that now can, at the statement that
-    /// made it, with the calls that lead there - empty where none has.
-    ///
-    /// Under D1 no consumer is refused by this, since none relied on the
-    /// inference; what the author loses is the promise D2 offered, and the
-    /// property the package's own callers may count on. The committed ledger is
-    /// the acknowledgement: once the new entry is committed it is not said
-    /// again. A written `sync` needs no warning, because a body that breaks it
-    /// is refused (`NK2202`).
+    /// **[ADR-288](../../../docs/specification/adr/adr-288.md) D32's warning**
+    /// for every `pub` function of the program's own that could not pause in
+    /// the committed ledger and now can (`tools/modules.nika`).
     pub fn lost_sync(&self, committed: &crate::contracts::Ledger) -> String {
-        let mut out = String::new();
-        for (key, now) in &self.contracts.functions {
-            let mine = !key
-                .split_once("::")
-                .is_some_and(|(package, _)| self.as_its_own.contains_key(package));
-            let was_inferred = committed
-                .functions
-                .get(key)
-                .is_some_and(|before| before.sync_claim == crate::contracts::Sync::Inferred);
-            if !mine || !now.public || !was_inferred || now.sync_claim.is_sync() {
-                continue;
-            }
-            let pause = self.pauses.get(key);
-            let path = nikaia_std::tools::modules::pause_path;
-            let mut notes = Vec::new();
-            if let Some(pause) = pause
-                && pause.chain.len() > 1
-            {
-                notes.push(format!("{}, which pauses here.", path(&pause.chain)));
-            }
-            let what = pause
-                .and_then(|pause| pause.site.as_ref())
-                .map(|(_, what)| what.clone());
-            if let Some(what) = &what {
-                notes.push(format!("{what} can pause."));
-            }
-            let finding = crate::check::Finding {
-                severity: crate::check::Severity::Warning,
-                span: pause
-                    .and_then(|pause| pause.site.as_ref())
-                    .map_or(crate::ast::Span { start: 0, end: 0 }, |(span, _)| *span),
-                code: "NK2211".to_string(),
-                message: format!("`{key}` could not pause before, and now it can."),
-                notes,
-                help: Some(format!(
-                    "If `{key}` should not pause, move this out of it; if it may, commit \
-                     `nikaia.contracts`, and this is not said again."
-                )),
-                labels: Vec::new(),
-            };
-            match pause.and_then(|pause| pause.site.as_ref().map(|_| pause.unit)) {
-                Some(unit) => out.push_str(&crate::diagnostics::render_finding(
-                    &finding,
-                    &self.units[unit].path.display().to_string(),
-                    &self.units[unit].source,
-                )),
-                // A method call only the type checker resolved: there is no
-                // statement this walk can point at, and the warning says so
-                // without one rather than not at all.
-                None => {
-                    out.push_str(&nikaia_std::tools::modules::lost_sync_unplaced(
-                        &finding.message,
-                        finding.help.as_deref().unwrap_or_default(),
-                    ));
-                }
-            }
-        }
-        out
+        nikaia_std::tools::modules::lost_sync(
+            &self.contracts,
+            &self.as_its_own,
+            &self.pauses,
+            committed,
+            &|finding: &crate::check::Finding, unit: i64| {
+                let unit = &self.units[unit as usize];
+                crate::diagnostics::render_finding(
+                    finding,
+                    &unit.path.display().to_string(),
+                    &unit.source,
+                )
+            },
+        )
     }
 
     /// **The program's contracts as its own files are checked against them**
-    /// ([ADR-288](../../../docs/specification/adr/adr-288.md) D28): every
-    /// dependency's entry reads only what that package's source promised about
-    /// pausing ([`as_promised`]). [`Program::contracts`] stays the ledger the
+    /// ([ADR-288](../../../docs/specification/adr/adr-288.md) D28), in
+    /// `tools/modules.nika`. [`Program::contracts`] stays the ledger the
     /// lowering reads and the one written beside the program.
     pub fn contracts_as_promised(&self) -> crate::contracts::Ledger {
-        as_promised(self.contracts.clone(), |key| {
-            key.split_once("::")
-                .is_some_and(|(package, _)| self.as_its_own.contains_key(package))
-        })
+        nikaia_std::tools::modules::contracts_as_promised(&self.contracts, &self.as_its_own)
     }
 
-    /// The **packages** this program reaches, by the name a `use` writes.
-    ///
-    /// What it is for is telling a `package::item` call from a `Type::method`
-    /// one. Empty for a program of its own files, which is every program today:
-    /// the files of a package share one namespace, so nothing in it is qualified
-    /// (ADR-286 D1), and depending on another package is not built (D2).
+    /// The **packages** this program reaches, by the name a `use` writes
+    /// (`tools/modules.nika`).
     pub fn package_names(&self) -> std::collections::BTreeSet<String> {
-        self.units
-            .iter()
-            .filter_map(|u| u.package.clone())
-            .collect()
+        nikaia_std::tools::modules::package_names(&packages_of(&self.units))
     }
 
     /// Whether this is one file, in which case nothing about the build changes.
     pub fn is_single_file(&self) -> bool {
-        self.units.len() == 1
+        nikaia_std::tools::modules::is_single_file(self.units.len() as i64)
     }
 
     /// Every source that took part, in the order they are emitted - which is

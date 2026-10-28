@@ -2588,7 +2588,7 @@ pub mod maps {
 }
 pub mod modules {
     #[allow(unused_imports)]
-    pub use super::{declared_names, a_use_refused, could_promise, pause_path, lost_sync_unplaced, test_function, test_dispatcher};
+    pub use super::{declared_names, a_use_refused, could_promise, pause_path, lost_sync, ModulesPause, lost_sync_unplaced, declared_once, groups, as_promised, contracts_as_promised, dependency_ledgers, absorb_own, shown_paths, package_names, is_single_file, test_function, test_dispatcher};
 }
 pub mod names {
     #[allow(unused_imports)]

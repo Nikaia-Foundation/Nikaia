@@ -108,9 +108,10 @@ fn alias_of(names: ref winnow_grammar::InternerContext, item: ref Item) -> Strin
 /// given do would keep `sync(f)`, naming them - unless they keep one, which
 /// `sync(f)` cannot name (D4, `NK2210`). Empty where there is nothing to say.
 ///
-/// `theirs` is the words of the packages this program depends on, whose
+/// `theirs` is the packages this program depends on, each under its word and
+/// with its ledger as it reads it itself (`Program::as_its_own`), whose
 /// entries are not the program's to promise.
-pub fn could_promise(contracts: ref Ledger, theirs: ref collections::BTreeSet[String], paused_by_code: ref collections::BTreeMap[String, Vec[String]]) -> String {
+pub fn could_promise(contracts: ref Ledger, theirs: ref collections::BTreeMap[String, Ledger], paused_by_code: ref collections::BTreeMap[String, Vec[String]]) -> String {
     let mut never: Vec[String] = []
     for (key, contract) in contracts.functions {
         if !of_a_dependency(key, theirs) && contract.public && inferred_sync(contract.sync_claim) {
@@ -155,9 +156,9 @@ pub fn could_promise(contracts: ref Ledger, theirs: ref collections::BTreeSet[St
     return out
 }
 
-fn of_a_dependency(key: ref String, theirs: ref collections::BTreeSet[String]) -> bool {
+fn of_a_dependency(key: ref String, theirs: ref collections::BTreeMap[String, Ledger]) -> bool {
     let parts: Vec[ref String] = key.splitn(2, "::").collect()
-    return parts.len() == 2 && theirs.contains(parts[0])
+    return parts.len() == 2 && theirs.contains_key(parts[0])
 }
 
 fn inferred_sync(claim: ref Sync) -> bool {
@@ -186,11 +187,285 @@ pub fn pause_path(chain: ref Vec[String]) -> String {
     return steps.join(", which ")
 }
 
+/// **[ADR-288](../../../docs/specification/adr/adr-288.md) D32's warning**:
+/// every `pub` function of the program's own that the committed ledger says
+/// could not pause (`"inferred"`) and that now can, at the statement that
+/// made it, with the calls that lead there - empty where none has.
+///
+/// Under D1 no consumer is refused by this, since none relied on the
+/// inference; what the author loses is the promise D2 offered, and the
+/// property the package's own callers may count on. The committed ledger is
+/// the acknowledgement: once the new entry is committed it is not said
+/// again. A written `sync` needs no warning, because a body that breaks it
+/// is refused (`NK2202`). `render` says a finding at the statement of the unit
+/// it names (`diagnostics::render_finding`).
+pub fn lost_sync(contracts: ref Ledger, theirs: ref collections::BTreeMap[String, Ledger], pauses: ref collections::BTreeMap[String, ModulesPause], committed: ref Ledger, render: fn(ref CheckFinding, i64) -> String sync) -> String {
+    let mut out: String = ""
+    for (key, now) in contracts.functions {
+        if of_a_dependency(key, theirs) || !now.public || now.sync_claim.is_sync() {
+            continue
+        }
+        let before = committed.functions[key] ?? continue
+        if !inferred_sync(before.sync_claim) {
+            continue
+        }
+        let message = f"`{key}` could not pause before, and now it can."
+        let help = f"If `{key}` should not pause, move this out of it; if it may, commit `nikaia.contracts`, and this is not said again."
+        // A method call only the type checker resolved: there is no
+        // statement this walk can point at, and the warning says so
+        // without one rather than not at all.
+        let pause = pauses[key] ?? {
+            out.push_str(lost_sync_unplaced(message, help))
+            continue
+        }
+        let site = pause.site?.clone() ?? {
+            out.push_str(lost_sync_unplaced(message, help))
+            continue
+        }
+        let mut notes: Vec[String] = []
+        if pause.chain.len() > 1 {
+            notes.push(f"{pause_path(pause.chain)}, which pauses here.")
+        }
+        notes.push(f"{site.what} can pause.")
+        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: "NK2211", message: message, notes: notes, help: help, labels: [] }
+        out.push_str(render(finding, pause.unit))
+    }
+    return out
+}
+
+/// **The way from a function to the statement that makes it pause**
+/// (ADR-288 D32), as `contracts::sync` finds it.
+pub struct ModulesPause {
+    /// The function, the ones of its package it calls on the way, and last the
+    /// one that pauses itself.
+    pub chain: Vec[String],
+    /// The unit the last one is written in, by its place in the list the
+    /// inference was handed.
+    pub unit: i64,
+    /// The statement and what in it pauses; `null` where it is a method call
+    /// only the type checker resolved.
+    pub site: Site?,
+}
+
 /// ADR-288 D32's warning where there is no statement to point at - a method
 /// call only the type checker resolved - said without one rather than not at
 /// all.
 pub fn lost_sync_unplaced(message: ref String, help: ref String) -> String {
     return f"warning[NK2211]: {message}\n   = note: a method call it makes, or one of the calls it leads to, can pause.\n   = help: {help}\n"
+}
+
+// --- A program of several packages (ADR-286, ADR-100) ---
+
+/// The same rule for any set of files that is one package: a project's, and
+/// `std`'s toolchain package (`sysroot::lower_tools`), whose files were lowered
+/// into one namespace without it - two private `a_call`s in two files were
+/// read as one, and a call of the one met the other's parameters (found
+/// moving `trust`'s walk into Nikaia, #125). `declared` holds the names each
+/// file of `paths` declares (`declared_names`); the refusal for the first
+/// name two files declare, or nothing.
+pub fn declared_once(paths: ref Vec[String], declared: ref Vec[Vec[String]]) -> String? {
+    let mut seen: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for at in 0..<paths.len() {
+        let path = paths[at].clone()
+        for name in declared[at] {
+            if seen.contains_key(name) {
+                let first = (seen[name] ?? "").clone()
+                if first == path {
+                    continue
+                }
+                return f"`{name}` is declared twice in this package: in {first} and in {path}.\nAll files of a package share their names. Rename one of the two, or keep one declaration and use it from the other file."
+            }
+            seen.insert(name.clone(), path.clone())
+        }
+    }
+    return null
+}
+
+/// The runs of units that belong to one package, in the order they were read,
+/// each as the place of its first unit and the place after its last; a unit
+/// is named by its package, `null` for the program's own.
+///
+/// The units arrive grouped (`collect_with`), so this is a walk and not a sort.
+pub fn groups(packages: ref Vec[String?]) -> Vec[(i64, i64)] {
+    let mut out: Vec[(i64, i64)] = []
+    let mut at = 0
+    while at < packages.len() {
+        let from = at
+        while at < packages.len() && packages[at] == packages[from] {
+            at += 1
+        }
+        out.push((from, at))
+    }
+    return out
+}
+
+/// **What another package may rely on about pausing**
+/// ([ADR-288](../../../docs/specification/adr/adr-288.md) D28): what its source
+/// wrote, `sync` or `sync(f)`, and not what the inference observed about
+/// today's body. Each entry `another` says is across the boundary and reads
+/// `"inferred"` reads as *may pause* in `ledger` after this -
+/// `Sync::Unpromised`, so a refusal can say that the callee does not promise
+/// it rather than that it pauses.
+///
+/// **The copy is the checker's and never the lowering's** (D3): a call is
+/// checked against the promise and lowered by what the body is, so an
+/// unpromised `sync` callee is still called without an `.await`. `std` has no
+/// `"inferred"` entry, its ledger being written by hand, so only a package's
+/// entries are ever changed.
+pub fn as_promised(mut ledger: Ledger, another: fn(ref String) -> bool sync) {
+    let mut unpromised: Vec[String] = []
+    for (key, contract) in ledger.functions {
+        if inferred_sync(contract.sync_claim) && another(key) {
+            unpromised.push(key.clone())
+        }
+    }
+    for key in unpromised {
+        let mut entry = (ledger.functions[key] ?? continue).clone()
+        entry.sync_claim = Sync::Unpromised
+        ledger.functions.insert(key.clone(), entry)
+    }
+}
+
+/// **The program's contracts as its own files are checked against them**
+/// ([ADR-288](../../../docs/specification/adr/adr-288.md) D28): every
+/// dependency's entry reads only what that package's source promised about
+/// pausing ([`as_promised`]). `contracts` stays the ledger the lowering reads
+/// and the one written beside the program.
+pub fn contracts_as_promised(contracts: ref Ledger, theirs: ref collections::BTreeMap[String, Ledger]) -> Ledger {
+    let mut promised = contracts.clone()
+    as_promised(promised, fn(key) { of_a_dependency(key, theirs) })
+    return promised
+}
+
+/// **The dependencies' ledgers, merged** (ADR-100 D1, D2, D5): into `library`,
+/// the ledger the program's own inference reads, as each package promised
+/// them; into `contracts`, the one the lowering reads, as they are; and
+/// returned, each package's under its word, as that package reads itself
+/// (`Program::as_its_own`). `packages` and `renames` are each unit's,
+/// `reaches` and `their_renames` each dependency's by its word, and
+/// `package_ledger` one group's own ledger, by its first unit and the place
+/// after its last (`groups`).
+///
+/// **A package at a time, not a file at a time.** `absorb` qualifies the
+/// types *inside* an entry with the package's name, and it can only do
+/// that for the types the ledger it is given declares - so a package whose
+/// `Request` is in one file and whose `route(r: Request)` is in another has
+/// to arrive as one ledger, or the signature keeps the bare name and a
+/// caller writing `http::Request` is told the two are different types.
+/// That was the file-level defect (issue #229's cross-file type entry,
+/// since closed) one level up.
+///
+/// The units arrive grouped (`collect_with`), so this is a walk and not a
+/// sort - and the order inside a package is the order they were read in,
+/// which Part III 13.5 needs to stay a function of the tree.
+///
+/// **And the inference is the package's, not each file's**
+/// ([ADR-100](../../../docs/specification/adr/adr-100.md) D2). The group
+/// is handed over whole rather than inferred file by file and merged
+/// afterwards: merging joins *answers*, and the answer to `sync` is a
+/// fixpoint over a call graph, so a graph that stopped at the file
+/// boundary had already read a callee in the file next door as one it
+/// could not vouch for. That is what `NK1129` was refusing.
+///
+/// **The dependencies first, and the program's own package last**
+/// (D5). A package's ledger is a build input of everything that depends
+/// on it, so it has to exist before its consumer is checked - and what
+/// the consumer then resolves `http::ok` against is that *answer*,
+/// rather than a worse one derived here from half the graph. That order
+/// is the whole of why this is two passes over the groups and not one:
+/// the program's own groups are the caller's, after this.
+pub fn dependency_ledgers(mut library: Ledger, mut contracts: Ledger, described: ref Ledger, packages: ref Vec[String?], renames: ref Vec[collections::BTreeMap[String, String]], reaches: ref collections::BTreeMap[String, collections::BTreeSet[String]], their_renames: ref collections::BTreeMap[String, collections::BTreeMap[String, String]], package_ledger: fn(i64, i64) -> Ledger sync) -> collections::BTreeMap[String, Ledger] {
+    // **And the described crates' answers**:
+    // the check reads `contracts/<crate>.contracts`
+    // beside `std`, so the program's own `sync` inference does too, or a
+    // function that only calls a described `sync` entry is inferred to pause
+    // and a `sync` caller is refused (`NK2202`). `std` wins a collision, as
+    // in `project::Foreign::library`.
+    for (name, contract) in described.functions {
+        if !library.functions.contains_key(name) {
+            library.functions.insert(name.clone(), contract.clone())
+        }
+    }
+    for (name, contract) in described.types {
+        if !library.types.contains_key(name) {
+            library.types.insert(name.clone(), contract.clone())
+        }
+    }
+    let mut plain: collections::BTreeMap[String, Ledger] = collections::BTreeMap()
+    for (from, to) in groups(packages) {
+        let package = packages[from]?.clone() ?? continue
+        let module: String? = package.clone()
+        let own = package_ledger(from, to)
+        // **The program's own inference reads the dependency as promised**
+        // (ADR-288 D28): a call into it that only the inference calls `sync`
+        // makes the caller *may pause*. `contracts` keeps the entry as it
+        // is, because that is what the lowering reads (D3).
+        let mut promised = own.clone()
+        as_promised(promised, fn(key) { true })
+        absorb_into(library, module, renames[from], promised)
+        absorb_into(contracts, module, renames[from], own)
+        plain.insert(package, own)
+    }
+
+    // **And what each reaches, under its own words for it** (#497): a file
+    // of `lib` that writes `c::Id` for a package this build calls `deep` is
+    // checked against `deep`'s ledger absorbed as `c`. After every package
+    // is read, because the order the groups arrive in is not the order
+    // they depend on each other. Without it the type was not known, and a
+    // type nothing knows is refused.
+    let none: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut as_its_own: collections::BTreeMap[String, Ledger] = collections::BTreeMap()
+    for (package, own) in plain {
+        let mut seen_by_it = own.clone()
+        // The words and renames of a dependency are a few, and copied.
+        let words = reaches[package]?.clone() ?? collections::BTreeSet()
+        let renamed = their_renames[package]?.clone() ?? collections::BTreeMap()
+        for word in words {
+            let ours = (renamed[word] ?? word).clone()
+            if ours == package {
+                continue
+            }
+            let theirs = plain[ours] ?? continue
+            let mut promised = theirs.clone()
+            as_promised(promised, fn(key) { true })
+            let module: String? = word.clone()
+            absorb_into(seen_by_it, module, none, promised)
+        }
+        as_its_own.insert(package.clone(), seen_by_it)
+    }
+    return as_its_own
+}
+
+/// One group of the program's own files into `contracts`, its ledger `own`
+/// (ADR-100 D2): under no package's name, and with the sources it was derived
+/// from as the program's.
+pub fn absorb_own(mut contracts: Ledger, renames: ref collections::BTreeMap[String, String], own: ref Ledger) {
+    contracts.sources = own.sources.clone()
+    let module: String? = null
+    absorb_into(contracts, module, renames, own)
+}
+
+/// Each unit's path as a message says it: the entry under `shown_as` where
+/// that is set (`Program::entry_shown_as`, #510).
+pub fn shown_paths(paths: ref Vec[String], shown_as: ref String?) -> Vec[String] {
+    return (0..<paths.len()).map(fn(at) { if at == 0 && shown_as != null { shown_as?.clone() ?? "" } else { paths[at].clone() } }).collect()
+}
+
+/// The **packages** this program reaches, by the name a `use` writes, from
+/// each unit's package (`null` for the program's own).
+///
+/// What it is for is telling a `package::item` call from a `Type::method`
+/// one. Empty for a program of its own files, which is every program today:
+/// the files of a package share one namespace, so nothing in it is qualified
+/// (ADR-286 D1), and depending on another package is not built (D2).
+pub fn package_names(packages: ref Vec[String?]) -> collections::BTreeSet[String] {
+    return packages.iter().filter_map(fn(p) { p?.clone() }).collect()
+}
+
+/// Whether a program of `units` units is one file, in which case nothing
+/// about the build changes.
+pub fn is_single_file(units: i64) -> bool {
+    return units == 1
 }
 
 // --- A test build (ADR-269 D1) ---
