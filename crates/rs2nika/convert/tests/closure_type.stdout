@@ -1,6 +1,4 @@
 fn probe(xs: ref Vec[String]) -> i64 sync {
-    let f: fn(ref String, i64) -> i64 sync = fn(a, b) { a.len() + b }
-    let g: fn(ref String) -> bool sync = fn(a) { a.is_empty() }
     let h = fn(a) { a + 1 }
     if g(xs[0]) {
         return h(1)
@@ -8,3 +6,10 @@ fn probe(xs: ref Vec[String]) -> i64 sync {
     return f(xs[0], 1)
 }
 
+fn f(a: String, b: i64) -> i64 sync {
+    return a.len() + b
+}
+
+fn g(a: String) -> bool sync {
+    return a.is_empty()
+}

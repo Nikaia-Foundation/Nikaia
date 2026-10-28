@@ -5,6 +5,8 @@ contracts::TEXT "String"
 tail_of tail_value_of
 ty::base( type_last_segment(
 base( type_last_segment(
+check::Finding CheckFinding # check/mod.rs re-exports check_state::CheckFinding as Finding (project_check.nika, P2)
+check::Severity CheckSeverity # the same re-export; also `check::Severity::Warning` in expressions
 
 # [view]: what `--view` (R177) renames, in this order. The parsed files are
 # `ParsedView`s named `unit`. A bare word is renamed as a word (not after a
@@ -24,3 +26,5 @@ unit.name( unit.text(
 # [types]: `Rust type = Nikaia type`, what a move decided (spaces in the Rust
 # type do not count), its reason after ` #` (R224). Extend in the commit of the move.
 [types]
+check::Finding = CheckFinding # check/mod.rs re-exports check_state::CheckFinding as Finding (project_check.nika, P2)
+check::Severity = CheckSeverity # the same re-export
