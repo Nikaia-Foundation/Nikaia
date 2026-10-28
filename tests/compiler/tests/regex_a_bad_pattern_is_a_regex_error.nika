@@ -1,0 +1,15 @@
+// A pattern that does not compile (ADR-regex-1 D3, D8): `regex::dynamic`
+// throws a `regex::Error`, and its message is the engine's.
+use std::regex
+
+fn compile(pattern: String) -> regex::Regex[regex::Dynamic] throws {
+    return regex::dynamic(pattern)
+}
+
+fn main() throws {
+    let re = compile("(") catch {
+        println(f"{error}")
+        return
+    }
+    println(f"compiled {re.is_match("(")}")
+}

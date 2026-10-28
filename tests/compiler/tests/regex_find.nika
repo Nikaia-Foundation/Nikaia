@@ -1,0 +1,16 @@
+// `re.find(s)` (ADR-regex-1 D3): the leftmost match, its text a view of `s`,
+// in a text of several bytes a scalar; `null` where nothing matches.
+use std::regex
+
+fn main() throws {
+    let s = "äöü 12 €"
+    let num = regex::dynamic("\\d+")
+    let m = num.find(s) ?? return
+    println(f"[{m.text()}] {m.text().len()}")
+    let word = regex::dynamic("\\w+")
+    let w = word.find(s) ?? return
+    println(f"[{w.text()}]")
+    let alt = regex::dynamic("ab|a")
+    println(f"[{(alt.find("xab") ?? return).text()}]")
+    println(f"{num.find("none") == null}")
+}

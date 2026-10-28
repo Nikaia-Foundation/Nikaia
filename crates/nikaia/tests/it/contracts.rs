@@ -811,7 +811,7 @@ fn every_std_module_is_in_the_shipped_ledger() {
         .expect("std ships a ledger");
     let shipped = Ledger::parse(&shipped).expect("std's ledger parses");
 
-    for module in ["cli", "fs", "html", "io", "list", "text"] {
+    for module in ["cli", "fs", "html", "io", "list", "regex", "text"] {
         assert!(
             shipped
                 .functions

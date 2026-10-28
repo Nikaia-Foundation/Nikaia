@@ -692,6 +692,12 @@ impl Full for crate::process::Exit {
     }
 }
 
+impl Full for crate::regex::Error {
+    fn full(&self) -> String {
+        format!("{self}\n{BELOW}")
+    }
+}
+
 impl Full for crate::grammar::ParseError {
     fn full(&self) -> String {
         format!("{self}\n{BELOW}")

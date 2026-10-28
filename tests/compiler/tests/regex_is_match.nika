@@ -1,0 +1,9 @@
+// `re.is_match(s)` (ADR-regex-1 D3): whether the pattern matches anywhere.
+use std::regex
+
+fn main() throws {
+    let re = regex::dynamic("\\d{4}-\\d{2}")
+    println(f"{re.is_match("on 2026-10 it")} {re.is_match("on 26-10")} {re.is_match("")}")
+    let empty = regex::dynamic("")
+    println(f"{empty.is_match("")}")
+}

@@ -1,0 +1,11 @@
+// `c.named(name)` (ADR-regex-1 D3): the group of that name, `null` where it
+// did not take part or no group has the name.
+use std::regex
+
+fn main() throws {
+    let re = regex::dynamic("(?P<year>\\d{4})-(?P<month>\\d{2})(?:-(?P<day>\\d{2}))?")
+    let c = re.captures("since 2026-10, more") ?? return
+    println((c.named("year") ?? return).text())
+    println((c.named("month") ?? return).text())
+    println(f"{c.named("day") == null} {c.named("hour") == null}")
+}

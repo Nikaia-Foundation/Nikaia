@@ -1,0 +1,11 @@
+// A literal pattern handed to `regex::dynamic` is allowed (ADR-regex-1 D3):
+// it is compiled while the program runs, as any other.
+use std::regex
+
+fn main() throws {
+    let re = regex::dynamic("hello")
+    println(f"{re.is_match("say hello")} {(re.find("hello, hello") ?? return).text()}")
+    let text = "a.b"
+    let dot = regex::dynamic("\\.")
+    println(f"{dot.split(text).count()}")
+}

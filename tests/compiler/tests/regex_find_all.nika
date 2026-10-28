@@ -1,0 +1,18 @@
+// `re.find_all(s)` (ADR-regex-1 D3): every match, left to right, not
+// overlapping: `aa` in `aaaa` is found twice, not three times.
+use std::regex
+
+fn main() throws {
+    let aa = regex::dynamic("aa")
+    let mut n = 0
+    for m in aa.find_all("aaaa") {
+        println(m.text())
+        n += 1
+    }
+    println(f"{n}")
+    let num = regex::dynamic("\\d+")
+    println(f"{num.find_all("a1 b22 c333 €4").count()}")
+    for m in num.find_all("a1 b22 c333 €4") {
+        println(m.text())
+    }
+}

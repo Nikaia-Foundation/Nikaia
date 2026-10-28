@@ -37,6 +37,12 @@ hashbrown = { version = "0.17", default-features = false }
 # **`Bytes::find` is `memchr`** (ADR-320 D6, #701): a word-wide search for one
 # byte, never a loop over them. Already in every build through `winnow`.
 memchr = "2"
+# **A pattern that arrives at run time runs on Rust's automata crates**
+# (ADR-regex-1 D8, `src/regex.rs`): `regex::Regex[regex::Dynamic]` wraps the
+# `meta::Regex` of this crate, which brings `regex-syntax` (the dialect, the
+# message of a pattern that does not parse) and `aho-corasick` (its literal
+# prefilter). No type of it appears in a program.
+regex-automata = "0.4"
 # Views that outlive the scope that read their buffer (ADR-283); the `unsafe`
 # it takes lives there, with its own checks (ADR-218).
 tether = { path = "../unsafe/tether" }

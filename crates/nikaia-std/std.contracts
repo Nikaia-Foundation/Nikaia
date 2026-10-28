@@ -6038,3 +6038,133 @@ pub = true
 sync = true
 touches = []
 signature = "(self) -> bool"
+
+# --- `regex`: a pattern searched (ADR-regex-1, run-time patterns) ------------
+#
+# **Everything on `regex::Dynamic`, the floor of D6** (owner, 2026-10-28): a
+# pattern known only when the program runs, compiled by `regex-automata`'s
+# `meta::Regex` (D8, `src/regex.rs`). The engines a pattern the build knows is
+# compiled to come later as types beside `Dynamic`, which is why the type has
+# its parameter from the start (D3). No positions yet: a match is its text,
+# and `start`, `end` and `from:` come with ADR-374.
+
+# What a regular expression runs on: one type per engine, and each engine's
+# calls are its own.
+[trait."regex::Engine"]
+
+# The engine of a pattern compiled while the program runs.
+[type."regex::Dynamic"]
+pub = true
+crosses = true
+copies = true
+
+[impl."regex::Engine for regex::Dynamic"]
+
+# A compiled pattern, typed by its engine `E`, a `regex::Engine`.
+#
+# **Read-only and shared between threads**: one value is searched from any
+# number of tasks at once, so it crosses.
+[type."regex::Regex"]
+pub = true
+crosses = true
+
+# A pattern that does not compile: the message says what is wrong and where.
+[type."regex::Error"]
+pub = true
+crosses = true
+compares = true
+
+# The groups of one match, group 0 the whole match; each a view of the text
+# that was searched.
+[type."regex::Captures"]
+pub = true
+
+# One match of a search, a view of the searched text (ADR-374's `text::Match`,
+# without its positions until that is built).
+[type."text::Match"]
+pub = true
+copies = true
+compares = true
+
+# A pattern known only at run time, compiled: RE2's dialect (D1), a backslash
+# written `\\` (D2). A pattern that does not parse is a `regex::Error` with the
+# engine's message.
+[fn."regex::dynamic"]
+pub = true
+sync = true
+touches = []
+throws = ["regex::Error"]
+signature = "(pattern: ref String) -> regex::Regex[regex::Dynamic]"
+
+# Whether the pattern matches anywhere in `s`.
+[fn."regex::Regex::is_match"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> bool"
+
+# The leftmost match in `s`, among those the one the pattern prefers, or
+# `null`.
+[fn."regex::Regex::find"]
+pub = true
+sync = true
+touches = []
+returns = "ref(s)"
+signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> text::Match?"
+
+# Every match in `s`, left to right, not overlapping.
+[fn."regex::Regex::find_all"]
+pub = true
+sync = true
+touches = []
+returns = "ref(self | s)"
+signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> Seq[text::Match] sync"
+
+# The groups of the match `find` finds, or `null` where there is none.
+[fn."regex::Regex::captures"]
+pub = true
+sync = true
+touches = []
+returns = "ref(s)"
+signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> regex::Captures?"
+
+# `s` with every match replaced by `with`, in which `$1` stands for group 1's
+# text and `${name}` for the group called `name`'s (`$$` is a `$`).
+[fn."regex::Regex::replace_all"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String, with: ref String) -> String"
+
+# The pieces of `s` between the matches, each a view of `s`: a match at the
+# start or the end gives an empty piece there.
+[fn."regex::Regex::split"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> Seq[ref(self | s) String] sync"
+
+# Group `i`'s match, 0 the whole one; `null` where the group did not take part
+# in the match or there is no group `i`.
+[fn."regex::Captures::group"]
+pub = true
+sync = true
+touches = []
+returns = "ref(self)"
+signature = "(self: ref regex::Captures, i: i64) -> text::Match?"
+
+# The match of the group called `name`; `null` where it did not take part in
+# the match or no group has that name.
+[fn."regex::Captures::named"]
+pub = true
+sync = true
+touches = []
+returns = "ref(self)"
+signature = "(self: ref regex::Captures, name: ref String) -> text::Match?"
+
+# The matched text, a view of the text that was searched.
+[fn."text::Match::text"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self) -> ref(self) String"

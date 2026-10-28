@@ -63,6 +63,7 @@ pub mod num;
 pub mod par;
 pub mod process;
 pub mod range;
+pub mod regex;
 pub mod rt;
 pub mod search;
 pub mod seq;
@@ -106,6 +107,9 @@ pub mod text {
     include!("text.rs");
     include!("text_float.rs");
     include!("text_normal.rs");
+    /// One match of a search, a view of the searched text (ADR-374, without
+    /// its positions until that is built): what `std::regex` hands back.
+    pub use crate::regex::Match;
 }
 
 /// **`std`'s own Nikaia, which every program runs** (#723): one package in
@@ -675,6 +679,9 @@ pub mod prelude {
     // reason: a module reached through its prefix has to be in scope in the
     // generated file.
     pub use crate::process;
+    // **A pattern searched** (ADR-regex-1). Here for `net`'s reason: a module
+    // reached through its prefix has to be in scope in the generated file.
+    pub use crate::regex;
     // **What a parse fails with**
     // ([ADR-296](../../../docs/specification/adr/adr-296.md) D38): written bare,
     // like `Overtaken`, because a program never writes a path to it — it

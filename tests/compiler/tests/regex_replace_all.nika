@@ -1,0 +1,12 @@
+// `re.replace_all(s, with)` (ADR-regex-1 D3): every match replaced, `$1` and
+// `${name}` standing for a group's text, `$$` for a `$`.
+use std::regex
+
+fn main() throws {
+    let re = regex::dynamic("(?P<key>\\w+)=(\\d+)")
+    println(re.replace_all("a=1, bb=22; c", "$2:${key}"))
+    println(re.replace_all("x=5", "$$${key}"))
+    println(re.replace_all("nothing here", "[$1]"))
+    let space = regex::dynamic("\\s+")
+    println(space.replace_all("ä  ö \t ü", " "))
+}

@@ -1,0 +1,14 @@
+// `re.split(s)` (ADR-regex-1 D3): the pieces between the matches, each a view
+// of `s`, in a text of several bytes a scalar; a match at either end leaves
+// an empty piece there.
+use std::regex
+
+fn main() throws {
+    let num = regex::dynamic("\\d+")
+    for piece in num.split("äöü 12 €") {
+        println(f"<{piece}>")
+    }
+    let sep = regex::dynamic("[,;]\\s*")
+    let parts: Vec[ref String] = sep.split(",a, b;c").collect()
+    println(f"{parts.len()} <{parts[0]}> <{parts[3]}>")
+}

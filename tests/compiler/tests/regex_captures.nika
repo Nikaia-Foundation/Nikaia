@@ -1,0 +1,17 @@
+// `re.captures(s)` and `c.group(i)` (ADR-regex-1 D3): group 0 is the whole
+// match, a group that did not take part is `null`, and so is one past the
+// groups.
+use std::regex
+
+fn main() throws {
+    let re = regex::dynamic("(\\d+)(x)?-(\\w+)")
+    let c = re.captures("at 12-ab!") ?? return
+    println((c.group(0) ?? return).text())
+    println((c.group(1) ?? return).text())
+    println(f"{c.group(2) == null}")
+    println((c.group(3) ?? return).text())
+    println(f"{c.group(4) == null} {c.group(-1) == null}")
+    let d = re.captures("7x-q") ?? return
+    println((d.group(2) ?? return).text())
+    println(f"{re.captures("no digits") == null}")
+}
