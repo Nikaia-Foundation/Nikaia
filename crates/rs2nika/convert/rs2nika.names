@@ -20,3 +20,7 @@ parsed unit
 unit.text(* unit.text(
 unit.name(* unit.text(
 unit.name( unit.text(
+
+# [types]: `Rust type = Nikaia type`, what a move decided (spaces in the Rust
+# type do not count), its reason after ` #` (R224). Extend in the commit of the move.
+[types]

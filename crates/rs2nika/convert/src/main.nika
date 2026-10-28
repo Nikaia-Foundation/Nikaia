@@ -43,6 +43,10 @@ struct Rs2nikaCtx {
     alias_to: Vec[String],
     equiv_from: Vec[String],
     equiv_to: Vec[String],
+    /// R224: the project's `[types]`, a Rust type (without spaces) and its
+    /// Nikaia type side by side
+    type_from: Vec[String],
+    type_to: Vec[String],
     todo_extra: Vec[String],
     arity: Vec[String],
     host_fns: Vec[String],
@@ -230,6 +234,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R219 `return match call { Ok(v) if g => a, .., Ok(v) => b, Err(e) => d }`, one-line arms -> `let v = call catch { return d }`, `if g { return a }`, `return b`",
         "R222 a receiver rust-analyzer finds an `Option`'s `map`/`and_then`/`map_or`/`is_some_and` on (`--facts`) counts as an option for R96: `name.map(|n| f(n))` -> `(match name { n => f(n), null => null })`",
         "R223 `e == Some(v)` -> `(match e { got => got == v, null => false })`, `!=` with `null => true` (a `T?` is compared with `null` or a `T?` only, NK1102)",
+        "R224 the project's own rs2nika.names (in the working directory, or `--names FILE`): what was decided converting the files before, read before the converter's table: `old new` renames (R47), `[types]` `Rust type = Nikaia type` (`&'static str = ref String`), a reason after ` #`",
         "R221 `return match call { Ok(v) => a, Err(e) if g => b, Err(e) => d }` -> `let v = call catch { if g { return b } return d }`, `return a`",
         "R218 `let r = call` right before `match r {` (`Ok`/`Err` arms), `r` read nowhere else -> `match call {`, so R160 takes it",
         "R217 `std::fs::read_dir(d)` -> `fs::read_dir(d, fs::Root::Anywhere)`, names in byte order with no failure per entry: `.filter_map(|e| e.ok())` / `.flatten()` go, `e.path()` -> `d.join(e)`, `.file_name().into_string().ok()` -> `name.to_text().ok()`, the `.sort()` after it goes; `.with_context(|| format!(m))?` -> `catch { throw format!(m) }`, `.into_iter().flatten()` -> `catch { [] }`; `let Ok(es) = ..` keeps `d` for `for e in es`",
@@ -445,6 +450,16 @@ fn rs2nika_strip_paths(mut ctx: Rs2nikaCtx, text: String) -> String {
 /// A Rust type in Nikaia's spelling.
 fn rs2nika_ty(mut ctx: Rs2nikaCtx, given: String) -> String {
     let mut t: String = given.trim().clone()
+    // R224: a type the project decided on
+    let flat: String = t.replace(" ", "")
+    let mut d = 0
+    while d < ctx.type_from.len() {
+        if ctx.type_from[d] == flat {
+            rs2nika_hit(ctx, "R224")
+            return ctx.type_to[d].clone()
+        }
+        d = d + 1
+    }
     if t.contains("'") {
         let t2: String = rs2nika_lifetimes(t)
         if t2 != t {
@@ -7080,6 +7095,23 @@ fn rs2nika_typed_empty(mut ctx: Rs2nikaCtx, given: Vec[String]) -> Vec[String] {
                 rs2nika_hit(ctx, "R181")
             }
         }
+        // R181 inside a line: `null => throw refused!("..")`, `f(refused!("..{x}"))`
+        let mut from = 0
+        while true {
+            let c: Vec[scalar] = line.chars().collect()
+            let k = rs2nika_find_from(c, "refused!(\"", from)
+            if k < 0 { break }
+            let open = k + "refused!(".len()
+            let end = rs2nika_group_end(c, open)
+            let said = rs2nika_text(c, open, end - 1)
+            from = open
+            if c[end - 1] != ')' || rs2nika_split_args(said.clone()).len() != 1 { continue }
+            let f = if said.contains("{") { "f" } else { "" }
+            let before = rs2nika_text(c, 0, k)
+            let after = rs2nika_text(c, end, c.len())
+            line = f"{before}Refused::Because({f}{said}){after}"
+            rs2nika_hit(ctx, "R181")
+        }
         let st: String = line.trim().clone()
         // R183: a text parameter is a text already: `name.to_string()` -> `name`
         if ctx.free && (st.starts_with("fn ") || st.starts_with("pub fn ")) {
@@ -10841,23 +10873,76 @@ fn rs2nika_struct_field(mut ctx: Rs2nikaCtx, line: String) -> String {
     return f"{ind}{vis}{name}: {ty},"
 }
 
-pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo: String, facts: ref Vec[String]) -> Rs2nikaOut {
-    let loaded = rs2nika_loaded(repo, profile_given.contains("+view"))
+pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo: String, facts: ref Vec[String], names: String) -> Rs2nikaOut {
+    let loaded = rs2nika_loaded(repo, profile_given.contains("+view"), names)
     return rs2nika_convert_in(loaded, src, profile_given, prefix, facts)
 }
 
 /// What a run reads from the repository, once for all the files it
 /// converts: the names `tools/*.nika` declares (R66), rs2nika.names and its
 /// `[view]` table. Each file starts from a copy, so files convert side by side.
-pub fn rs2nika_loaded(repo: String, view: bool) -> Rs2nikaCtx {
-    let mut ctx = Rs2nikaCtx { profile: "", free: false, world: "", prefix: "", hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: [], parsed_names: [], impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [] }
+pub fn rs2nika_loaded(repo: String, view: bool, names: String) -> Rs2nikaCtx {
+    let mut ctx = Rs2nikaCtx { profile: "", free: false, world: "", prefix: "", hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], type_from: [], type_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: [], parsed_names: [], impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [] }
+    // the project's decisions first: they win over the converter's own table
+    rs2nika_project_names(ctx, names, repo.clone(), true)
     if repo != "" {
-        rs2nika_load(ctx, repo)
+        rs2nika_load(ctx, repo.clone())
+        // its renames `rs2nika_load` read; its `[types]` are read here
+        rs2nika_project_names(ctx, f"{repo}/crates/rs2nika/convert/rs2nika.names", "", false)
     }
     if view {
         ctx.view_names = rs2nika_view_names(repo)
     }
     return ctx
+}
+
+/// R224: the project's own table, what was decided while converting the
+/// files before: `rs2nika.names` in the working directory (or `--names
+/// FILE`). A line `old new` renames as R47 does; under `[types]` a line
+/// `RustType Nikaia type` writes that type wherever the Rust one stands
+/// (matched without spaces, lifetimes included: `&'static str = ref String`).
+/// What follows ` #` on a line is the reason, for the next reader.
+/// The converter's own table (`repo` empty, `renames` false) gives its
+/// `[types]` only: `rs2nika_load` read its renames.
+fn rs2nika_project_names(mut ctx: Rs2nikaCtx, path: String, repo: String, renames: bool) {
+    if path == "" {
+        return
+    }
+    let table = fs::read_to_string(ref path, fs::Root::Anywhere) catch {
+        return
+    }
+    // the converter's own table is read by `rs2nika_load`, not twice
+    let own = fs::read_to_string(f"{repo}/crates/rs2nika/convert/rs2nika.names", fs::Root::Anywhere) catch { "" }
+    if repo != "" && own == table {
+        return
+    }
+    let mut section: String = ""
+    for l in table.split("\n") {
+        let st: String = l.trim().clone()
+        if st == "" || st.starts_with("#") {
+            continue
+        }
+        if st.starts_with("[") {
+            section = st.clone()
+            continue
+        }
+        let body: String = st[0..<(st.find(" #") ?? st.len())].clone()
+        let parts: Vec[String] = body.split_whitespace().map(fn(p) { p.clone() }).collect()
+        if parts.len() < 2 {
+            continue
+        }
+        if section == "" && renames {
+            ctx.equiv_from.push(parts[0].clone())
+            ctx.equiv_to.push(parts[1].clone())
+        } else if section == "[types]" {
+            // `Rust type = Nikaia type`: either side may hold spaces
+            let eq = body.find(" = ") ?? body.len()
+            if eq < body.len() {
+                ctx.type_from.push(body[0..<eq].replace(" ", ""))
+                ctx.type_to.push(body[eq + " = ".len()..<body.len()].trim().clone())
+            }
+        }
+    }
 }
 
 /// One file, from what `rs2nika_loaded` read: no file is read here.
@@ -13147,7 +13232,7 @@ fn rs2nika_corpus(dir: String) -> i64 {
         }
         cases.push(Rs2nikaCase { name: name, floor: text::parse_i64(cols[1].clone()) ?? 0, profile: cols[2].clone(), prefix: prefix, before: before, after: after })
     }
-    let loaded = rs2nika_loaded("", cases.iter().any(fn(c) { c.profile.contains("+view") }))
+    let loaded = rs2nika_loaded("", cases.iter().any(fn(c) { c.profile.contains("+view") }), "")
     let scores: Vec[Rs2nikaScore] = cases.par_iter().map(fn(c) { rs2nika_score(rs2nika_convert_in(loaded, c.before.clone(), c.profile.clone(), c.prefix.clone(), []).text, c.after.clone()) }).collect()
     let mut bad = 0
     let mut i = 0
@@ -13167,7 +13252,7 @@ fn rs2nika_corpus(dir: String) -> i64 {
 /// is something to say, `DIR/<name>.notes`. Without `--prefix` each file's
 /// functions are prefixed with its name (`project_`). The number of files
 /// that could not be read or written.
-fn rs2nika_many(paths: ref Vec[String], out_dir: String, profile: String, prefix: String, repo: String, facts_path: String, whole: bool) -> i64 {
+fn rs2nika_many(paths: ref Vec[String], out_dir: String, profile: String, prefix: String, repo: String, facts_path: String, whole: bool, names: String) -> i64 {
     let mut jobs: Vec[Rs2nikaCase] = []
     let mut facts: Vec[Vec[String]] = []
     let mut bad = 0
@@ -13189,7 +13274,7 @@ fn rs2nika_many(paths: ref Vec[String], out_dir: String, profile: String, prefix
         jobs.push(Rs2nikaCase { name: name, floor: 0, profile: profile.clone(), prefix: own, before: text, after: "" })
         facts.push(rs2nika_read_facts(facts_path, p.clone()))
     }
-    let loaded = rs2nika_loaded(repo, profile.contains("+view"))
+    let loaded = rs2nika_loaded(repo, profile.contains("+view"), names)
     let mut at: Vec[i64] = []
     let mut i = 0
     while i < jobs.len() {
@@ -13273,6 +13358,8 @@ fn main() throws {
     let mut corpus: String = ""
     let mut repo: String = "?"
     let mut facts_path: String = ""
+    // R224: the project's decisions
+    let mut names: String = "rs2nika.names"
     let mut only: String = ""
     let mut path: String = ""
     let mut paths: Vec[String] = []
@@ -13318,6 +13405,9 @@ fn main() throws {
         } else if arg == "--facts" {
             at = at + 1
             facts_path = args[at].clone()
+        } else if arg == "--names" {
+            at = at + 1
+            names = args[at].clone()
         } else if arg == "--repo" {
             at = at + 1
             repo = args[at].clone()
@@ -13391,7 +13481,7 @@ fn main() throws {
             eprintln("several files are converted into a directory: `--out DIR`")
             process::exit(2)
         }
-        if rs2nika_many(paths, out_dir, profile, prefix, repo, facts_path, whole) > 0 {
+        if rs2nika_many(paths, out_dir, profile, prefix, repo, facts_path, whole, names) > 0 {
             process::exit(1)
         }
         return
@@ -13407,7 +13497,7 @@ fn main() throws {
             process::exit(1)
         }
     }
-    let out = rs2nika_convert(text, profile, prefix, repo, rs2nika_read_facts(facts_path, path))
+    let out = rs2nika_convert(text, profile, prefix, repo, rs2nika_read_facts(facts_path, path), names)
     if whole {
         print(rs2nika_as_file(out.text, rs2nika_state_of(profile)))
     } else {

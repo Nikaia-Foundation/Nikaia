@@ -139,7 +139,13 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   F` takes them (`rust-analyzer lsif crates/nikaia > x.lsif`, two minutes,
   then `nikaia run -- x.lsif > F` in `crates/rs2nika/facts`; delete the 100 MB
   `x.lsif` after), and closures get their types and options their `match`
-  from them (R82, R222); open
+  from them (R82, R222). **What a move decides goes into `rs2nika.names`**
+  (R224): a name the Nikaia code spells otherwise (`old new`), and under
+  `[types]` a Rust type it writes otherwise (`Rc<RefCell<Node>> = NodeId`,
+  matched without spaces), each with its reason after ` #`, in the commit of
+  the move, so the next draft already carries the decision. A project of its
+  own keeps its table in the directory it converts from (or `--names FILE`);
+  it is read before the converter's; open
   lowering defects are GitHub issues, the language options against the usual
   hurdles in `docs/history/mitigation-hurdles.md`.
 

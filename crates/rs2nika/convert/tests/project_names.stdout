@@ -1,0 +1,8 @@
+pub fn emit_x_name(node: NodeId) -> ref String {
+    return lookup(world, node)
+}
+
+pub fn emit_x_label(t: String) -> String {
+    return t
+}
+

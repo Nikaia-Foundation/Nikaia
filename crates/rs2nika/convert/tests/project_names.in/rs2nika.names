@@ -1,0 +1,5 @@
+# What this project decided while converting its files (R224).
+build_ctx world # the context is the world in Nikaia
+[types]
+&'static str = ref String # a name read from a table, lent
+Rc<RefCell<Node>> = NodeId # nodes live in the arena, by id
