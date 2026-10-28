@@ -899,6 +899,14 @@ mod comptime_driver_lowered {
 #[allow(unused_imports)]
 pub use comptime_driver_lowered::*;
 
+mod comptime_tree_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/comptime_tree.rs");
+}
+#[allow(unused_imports)]
+pub use comptime_tree_lowered::*;
+
 mod contract_changes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2365,6 +2373,10 @@ pub mod claim_names {
 pub mod comptime_driver {
     #[allow(unused_imports)]
     pub use super::{cr_bundle_source, cr_bundle_manifest, cr_with_driver};
+}
+pub mod comptime_tree {
+    #[allow(unused_imports)]
+    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_as_built, comptime_undeclared_callee, comptime_declares, comptime_culprit};
 }
 pub mod contract_changes {
     #[allow(unused_imports)]

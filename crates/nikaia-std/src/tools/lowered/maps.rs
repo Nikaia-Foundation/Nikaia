@@ -28,8 +28,8 @@ pub(crate) struct MpPosition {
 
 #[derive(Debug, Clone)]
 pub struct MpHeld<'a, 'a1> {
-    pub units: &'a Vec<&'a Program>,
-    pub words: &'a1 Vec<&'a1 winnow_grammar::InternerContext>,
+    pub units: &'a [&'a Program],
+    pub words: &'a1 [&'a1 winnow_grammar::InternerContext],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

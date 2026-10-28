@@ -180,6 +180,10 @@ impl EmitState {
                     let field_text = emit_text(world, field.name);
                     let slot = format!("{}.{}", text, field_text);
                     let mut lowered = self.emit_fn_ty(world, walk, host, &field.ty, EmitLifetimes::Named, "<field>", &slot);
+                    if lowered.starts_with("&'a Vec<") && lowered.ends_with('>') {
+                        let element = nikaia_std::index::or(nikaia_std::index::or(lowered.strip_prefix("&'a Vec<"), || "").strip_suffix('>'), || "");
+                        lowered = format!("&'a [{}]", element);
+                    }
                     let mut position = 0;
                     for each in slots.iter() {
                         if *each == field_text {

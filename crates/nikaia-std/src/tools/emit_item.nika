@@ -241,6 +241,13 @@ impl EmitState {
                     let field_text = emit_text(world, field.name)
                     let slot = f"{text}.{field_text}"
                     let mut lowered = self.emit_fn_ty(world, walk, host, field.ty, EmitLifetimes::Named, "<field>", slot)
+                    // **A view of a list is a slice**, as a parameter's is
+                    // (#458): what a `ref Vec[T]` parameter hands the field is
+                    // a `&[T]`.
+                    if lowered.starts_with("&'a Vec<") && lowered.ends_with(">") {
+                        let element = (lowered.strip_prefix("&'a Vec<") ?? "").strip_suffix(">") ?? ""
+                        lowered = f"&'a [{element}]"
+                    }
                     let mut position = 0
                     for each in slots {
                         if each == field_text {

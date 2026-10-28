@@ -120,6 +120,7 @@ COMPILER_NIKA = {
     "prover_loops.nika": "prove: a while loop as the logic layer's loop problem, closed forms and intervals, an invariant checked by three queries (0.0.1000)",
     "grammar_decode.nika": "grammar_run: what a grammar run at build time printed read back, and the text of the sub-program and its manifest (0.0.755)",
     "comptime_driver.nika": "comptime_run: the sub-program's main and its site table, and the bundle it links against (0.0.757)",
+    "comptime_tree.nika": "comptime_run: the sub-program's tree - the file without its main and constants, the constants as literals, the value function - and the callee a refused run is blamed on (K1, K2)",
     "build_eval.nika": "build_time: the evaluator of a build-time expression - calls, loops, text, structs, variants and a grammar run (0.0.760)",
     "bounds_matched.nika": "bounds: what a grammar alternative's bindings matched, and what a callee's ledger entry ensures (0.0.763)",
     "proofs_book.nika": "proofs: nikaia.proofs as text, read back and rendered (0.0.763)",

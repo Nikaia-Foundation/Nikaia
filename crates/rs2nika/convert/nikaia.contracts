@@ -9,8 +9,574 @@
 # something this compiler cannot name.
 version = 4
 
+[fn."RtTree::collect_text"]
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64, mut parts: Vec[String])"
+
+[fn."RtTree::find"]
+pub = true
+sync = "inferred"
+keeps = ["n"]
+touches = []
+views = ["self: borrowed", "kind: borrowed"]
+signature = "(ref self, n: i64, kind: ref String) -> i64"
+
+[fn."RtTree::has_tok"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed", "kind: borrowed"]
+signature = "(ref self, n: i64, kind: ref String) -> bool"
+
+[fn."RtTree::is"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed", "kind: borrowed"]
+signature = "(ref self, n: i64, kind: ref String) -> bool"
+
+[fn."RtTree::kid"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed", "kind: borrowed"]
+signature = "(ref self, n: i64, kind: ref String) -> i64"
+
+[fn."RtTree::kids_of"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed", "kind: borrowed"]
+signature = "(ref self, n: i64, kind: ref String) -> Vec[i64]"
+
+[fn."RtTree::kind"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> String"
+
+[fn."RtTree::name_of"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> String"
+
+[fn."RtTree::nodes_of"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> Vec[i64]"
+
+[fn."RtTree::nth"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64, i: i64) -> i64"
+
+[fn."RtTree::text"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> String"
+
+[fn."RtTree::toks"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> Vec[String]"
+
+[fn."RtTree::up"]
+pub = true
+sync = "inferred"
+keeps = ["n"]
+touches = []
+views = ["self: borrowed", "kind: borrowed"]
+signature = "(ref self, n: i64, kind: ref String) -> i64"
+
+[fn."TrEm::and_parts"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref self, n: i64, mut out: Vec[i64])"
+
+[fn."TrEm::args"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> Vec[String]"
+
+[fn."TrEm::arm"]
+sync = "inferred"
+keeps = ["body"]
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, body: i64, ind: String, mode: ref String) -> Vec[String]"
+
+[fn."TrEm::arm_lines"]
+sync = "inferred"
+touches = []
+views = ["lines: borrowed"]
+signature = "(ref self, pat_text: String, lines: ref Vec[String], ind: String) -> Vec[String]"
+
+[fn."TrEm::attrs"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> Vec[String]"
+
+[fn."TrEm::bin"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::binds"]
+sync = "inferred"
+touches = []
+views = ["self: borrowed", "name: borrowed"]
+signature = "(ref self, n: i64, name: ref String) -> bool"
+
+[fn."TrEm::block"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String]"
+
+[fn."TrEm::bound_names"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> Vec[String]"
+
+[fn."TrEm::bound_ty"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::call"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::cast"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::chain"]
+sync = "inferred"
+keeps = ["at"]
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, conds: Vec[i64], at: i64, then_b: i64, ind: String, mode: ref String, flag: String) -> Vec[String]"
+
+[fn."TrEm::closure"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::closure_parts"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, c: i64) -> (String, String)"
+
+[fn."TrEm::closure_unit"]
+sync = "inferred"
+touches = []
+signature = "(ref self, c: i64, body: i64) -> bool"
+
+[fn."TrEm::collect_names"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64, mut out: Vec[String])"
+
+[fn."TrEm::const_item"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::default_of"]
+sync = "inferred"
+touches = []
+views = ["ty: borrowed"]
+signature = "(ref mut self, ty: ref String) -> String"
+
+[fn."TrEm::default_of_ctor"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::default_of_struct"]
+sync = "inferred"
+touches = []
+views = ["name: borrowed"]
+signature = "(ref mut self, name: ref String) -> String"
+
+[fn."TrEm::docs"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::else_part"]
+sync = "inferred"
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, mut out: Vec[String], else_n: i64, ind: String, mode: ref String)"
+
+[fn."TrEm::entry_or_insert"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> Vec[String]"
+
+[fn."TrEm::enum_item"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::expr"]
+pub = true
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::fields"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, list: i64, ind: String, public: bool) -> Vec[String]"
+
+[fn."TrEm::file"]
+pub = true
+sync = "inferred"
+touches = []
+signature = "(ref mut self, root: i64) -> String"
+
+[fn."TrEm::find_ctors"]
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref mut self)"
+
+[fn."TrEm::flow"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String]"
+
+[fn."TrEm::flow_value"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::fn_item"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String, in_impl: bool) -> Vec[String]"
+
+[fn."TrEm::fn_ty"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, params: i64, ret: i64) -> String"
+
+[fn."TrEm::for_expr"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::fresh"]
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref mut self, base: String) -> String"
+
+[fn."TrEm::fstring"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, args: Vec[i64]) -> String"
+
+[fn."TrEm::gen_args"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> Vec[i64]"
+
+[fn."TrEm::generics"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::graft_macros"]
+locks = true
+views = ["self: tethered"]
+signature = "(ref mut self)"
+
+[fn."TrEm::hole"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::if_expr"]
+sync = "inferred"
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String]"
+
+[fn."TrEm::if_let"]
+sync = "inferred"
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, le: i64, then_b: i64, else_n: i64, ind: String, mode: ref String) -> Vec[String]"
+
+[fn."TrEm::impl_item"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::is_flow"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> bool"
+
+[fn."TrEm::is_item"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> bool"
+
+[fn."TrEm::is_none_pat"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> bool"
+
+[fn."TrEm::is_some_pat"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> bool"
+
+[fn."TrEm::item"]
+pub = true
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::items_of"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::iter_chain"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref self, n: i64) -> bool"
+
+[fn."TrEm::iterable"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref self, n: i64) -> i64"
+
+[fn."TrEm::label_note"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String, mut out: Vec[String])"
+
+[fn."TrEm::last_seg"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> String"
+
+[fn."TrEm::let_else"]
+sync = "inferred"
+keeps = ["init"]
+touches = []
+signature = "(ref mut self, p: i64, init: i64, els: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::let_stmt"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::lit"]
+pub = true
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::mac"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::match_expr"]
+sync = "inferred"
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, n: i64, ind: String, mode: ref String) -> Vec[String]"
+
+[fn."TrEm::method"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::narrows"]
+sync = "inferred"
+keeps = ["e"]
+touches = []
+signature = "(ref self, e: i64) -> bool"
+
+[fn."TrEm::nodes"]
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> Vec[i64]"
+
+[fn."TrEm::optional_expr"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> bool"
+
+[fn."TrEm::param_ty"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> (String, bool)"
+
+[fn."TrEm::param_type_node"]
+sync = "inferred"
+touches = []
+signature = "(ref self, p: i64) -> i64"
+
+[fn."TrEm::pat"]
+pub = true
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::path_expr"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::path_text"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref self, n: i64) -> String"
+
+[fn."TrEm::path_ty"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::range"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::record"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::referent"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> i64"
+
+[fn."TrEm::refutable"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> bool"
+
+[fn."TrEm::ret"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::segs"]
+sync = "inferred"
+keeps = ["n"]
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> Vec[String]"
+
+[fn."TrEm::src"]
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref self, n: i64) -> String"
+
+[fn."TrEm::stmt"]
+sync = "inferred"
+keeps = ["k"]
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, k: i64, ind: String, mode: ref String, last: bool) -> Vec[String]"
+
+[fn."TrEm::struct_item"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::tail"]
+pub = true
+sync = "inferred"
+keeps = ["e"]
+touches = []
+views = ["mode: borrowed"]
+signature = "(ref mut self, e: i64, ind: String, mode: ref String) -> Vec[String]"
+
+[fn."TrEm::todo"]
+sync = "inferred"
+touches = []
+views = ["self: borrowed"]
+signature = "(ref mut self, what: String, n: i64) -> String"
+
+[fn."TrEm::todo_item"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, what: String, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::trait_item"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
+[fn."TrEm::ty"]
+pub = true
+sync = "inferred"
+keeps = ["n"]
+touches = []
+signature = "(ref mut self, n: i64) -> String"
+
+[fn."TrEm::vis"]
+sync = "inferred"
+touches = []
+signature = "(ref self, n: i64) -> ref String"
+
+[fn."TrEm::while_expr"]
+sync = "inferred"
+touches = []
+signature = "(ref mut self, n: i64, ind: String) -> Vec[String]"
+
 [fn."main"]
-throws = ["process::Exit"]
+throws = ["io::IoError", "process::Exit"]
 locks = true
 signature = "()"
 
@@ -367,17 +933,15 @@ signature = "(mut ctx: Rs2nikaCtx, line: String) -> String"
 
 [fn."rs2nika_convert"]
 pub = true
-keeps = ["src"]
 locks = true
-views = ["profile_given: borrowed", "prefix: borrowed", "repo: borrowed", "facts: borrowed", "names: borrowed"]
+views = ["src: borrowed", "profile_given: borrowed", "prefix: borrowed", "repo: borrowed", "facts: borrowed", "names: borrowed"]
 signature = "(src: String, profile_given: String, prefix: String, repo: String, facts: ref Vec[String], names: String) -> Rs2nikaOut"
 
 [fn."rs2nika_convert_in"]
 pub = true
 sync = "inferred"
-keeps = ["given_src"]
 touches = []
-views = ["loaded: borrowed", "profile_given: borrowed", "prefix: borrowed", "facts: borrowed"]
+views = ["loaded: borrowed", "given_src: borrowed", "profile_given: borrowed", "prefix: borrowed", "facts: borrowed"]
 signature = "(loaded: ref Rs2nikaCtx, given_src: String, profile_given: String, prefix: String, facts: ref Vec[String]) -> Rs2nikaOut"
 
 [fn."rs2nika_corpus"]
@@ -1662,6 +2226,13 @@ touches = []
 views = ["src: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, src: String) -> String"
 
+[fn."rs2nika_place_lists"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["src: borrowed"]
+signature = "(src: String) -> String"
+
 [fn."rs2nika_prefix_all"]
 sync = "inferred"
 touches = []
@@ -2699,6 +3270,145 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
 
+[fn."rt_dump"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["t: borrowed"]
+signature = "(t: ref RtTree) -> String"
+
+[fn."rt_from_dump"]
+pub = true
+sync = "inferred"
+returns = "kind: ref(dump)"
+touches = []
+views = ["dump: borrowed", "<result>: borrowed"]
+signature = "(dump: String) -> RtTree"
+
+[fn."rt_number"]
+sync = "inferred"
+touches = []
+views = ["t: borrowed"]
+signature = "(t: ref String) -> (i64, String)"
+
+[fn."rt_parse"]
+pub = true
+throws = ["io::IoError"]
+returns = "ref(src)"
+locks = true
+views = ["src: borrowed", "<result>: tethered"]
+signature = "(src: String) -> RtTree"
+
+[fn."rt_unquote"]
+sync = "inferred"
+touches = []
+views = ["q: borrowed"]
+signature = "(q: ref String) -> String"
+
+[fn."tr_byte_value"]
+sync = "inferred"
+touches = []
+views = ["inner: borrowed"]
+signature = "(inner: ref String) -> String"
+
+[fn."tr_check"]
+pub = true
+throws = ["io::IoError"]
+locks = true
+views = ["draft: borrowed", "name: borrowed", "repo: borrowed"]
+signature = "(draft: String, name: String, repo: String) -> i64"
+
+[fn."tr_check_code"]
+sync = "inferred"
+touches = []
+views = ["finding: borrowed"]
+signature = "(finding: String) -> String"
+
+[fn."tr_check_compiler"]
+sync = "inferred"
+views = ["repo: borrowed"]
+signature = "(repo: String) -> String"
+
+[fn."tr_check_findings"]
+sync = "inferred"
+touches = []
+views = ["stderr: borrowed", "tmp: borrowed"]
+signature = "(stderr: String, tmp: String) -> Vec[String]"
+
+[fn."tr_convert"]
+pub = true
+keeps = ["prefix", "profile", "t"]
+locks = true
+signature = "(t: RtTree, profile: String, prefix: String) -> String"
+
+[fn."tr_drop_prefix"]
+sync = "inferred"
+keeps = ["s"]
+touches = []
+views = ["p: borrowed"]
+signature = "(s: String, p: ref String) -> String"
+
+[fn."tr_drop_suffix"]
+sync = "inferred"
+keeps = ["s"]
+touches = []
+views = ["p: borrowed"]
+signature = "(s: String, p: ref String) -> String"
+
+[fn."tr_format_like"]
+sync = "inferred"
+touches = []
+views = ["name: borrowed"]
+signature = "(name: String) -> bool"
+
+[fn."tr_ident"]
+sync = "inferred"
+touches = []
+views = ["name: borrowed"]
+signature = "(name: String) -> String"
+
+[fn."tr_iter_method"]
+sync = "inferred"
+touches = []
+views = ["m: borrowed"]
+signature = "(m: String) -> bool"
+
+[fn."tr_leaves"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(line: String) -> bool"
+
+[fn."tr_option_method"]
+sync = "inferred"
+touches = []
+views = ["m: borrowed"]
+signature = "(m: String) -> bool"
+
+[fn."tr_raw_string"]
+sync = "inferred"
+touches = []
+views = ["text: borrowed"]
+signature = "(text: String) -> String"
+
+[fn."tr_split_commas"]
+sync = "inferred"
+touches = []
+views = ["t: borrowed"]
+signature = "(t: ref RtTree, tt: i64) -> Vec[String]"
+
+[fn."tr_unindent"]
+sync = "inferred"
+touches = []
+views = ["ind: borrowed"]
+signature = "(lines: Vec[String], ind: String) -> String"
+
+[fn."tr_wide_int"]
+sync = "inferred"
+touches = []
+views = ["name: borrowed"]
+signature = "(name: String) -> bool"
+
 [type."Rs2nikaCase"]
 fields = ["name: String", "floor: i64", "profile: String", "prefix: String", "before: String", "after: String"]
 
@@ -2715,3 +3425,17 @@ fields = ["kept: i64", "total: i64", "kinds: Vec[String]"]
 
 [type."Rs2nikaTupleArm"]
 fields = ["variant: String", "lines: Vec[String]", "head: i64", "parts: Vec[String]", "guard: String", "after: String", "all: bool"]
+
+[type."RtNode"]
+pub = true
+fields = ["pub kind: ref String", "pub text: String", "pub tok: bool", "pub kids: Vec[i64]", "pub parent: i64", "pub start: i64", "pub end: i64"]
+tethered = ["kind"]
+
+[type."RtTree"]
+pub = true
+fields = ["pub nodes: Vec[RtNode]"]
+tethered = ["nodes"]
+
+[type."TrEm"]
+pub = true
+fields = ["pub t: RtTree", "pub profile: String", "pub prefix: String", "pub pre: Vec[String]", "pub ind: String", "pub uses: collections::BTreeSet[String]", "pub uniq: i64", "pub fails: bool", "pub opt: bool", "pub unit: bool", "pub self_ty: String", "pub ctors: collections::BTreeSet[String]", "pub margs: collections::BTreeMap[i64, i64]", "pub optional: collections::BTreeSet[String]", "pub todos: i64", "pub fns: collections::BTreeSet[String]", "pub hoisted: Vec[String]", "pub aliases: collections::BTreeMap[String, String]"]

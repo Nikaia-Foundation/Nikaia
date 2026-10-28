@@ -378,7 +378,7 @@ pub(crate) struct FbField<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct FbFn<'a, 'a1> {
-    pub(crate) args: &'a Vec<FnArg>,
+    pub(crate) args: &'a [FnArg],
     pub(crate) body: &'a1 Block,
     pub(crate) has_receiver: bool,
     pub(crate) owner: Option<FbTy>,

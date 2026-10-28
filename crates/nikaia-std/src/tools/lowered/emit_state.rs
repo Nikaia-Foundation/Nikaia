@@ -17,7 +17,7 @@ pub struct EmitKeptCall {
 pub struct EmitWorld<'a, 'a1, 'a2, 'a3> {
     pub words: &'a winnow_grammar::InternerContext,
     pub aliases: &'a1 collections::BTreeMap<String, String>,
-    pub items: &'a2 Vec<Spanned<Item>>,
+    pub items: &'a2 [Spanned<Item>],
     pub library: &'a3 Ledger,
 }
 

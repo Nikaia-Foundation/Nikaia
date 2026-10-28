@@ -1301,18 +1301,6 @@ pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {
     }
 }
 
-/// Every expression inside this one, this one included.
-///
-/// `pub(crate)` because the checker reads it too
-/// ([ADR-281](../../docs/specification/adr/adr-281.md)): `NK2205` asks whether
-/// a `get` is written anywhere inside a `set`'s argument, and a second walk
-/// over the same shape is a second thing to keep in step with the AST.
-pub(crate) fn visit_expr<'a>(expr: &'a Expr, f: &mut impl FnMut(&'a Expr)) {
-    for each in nikaia_std::tools::emit_walk::visited_in_expr(expr) {
-        f(each);
-    }
-}
-
 /// **An `f"…"` as the format string the language below reads**
 /// ([ADR-309](../../docs/specification/adr/adr-309.md) D9): each run of text
 /// as written - an escape and a doubled brace mean there what they mean here

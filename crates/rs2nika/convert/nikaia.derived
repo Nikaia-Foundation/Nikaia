@@ -7,4 +7,11 @@ toolchain = "nikaia 0.1.0"
 inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies"
 
 [sources]
-"main.nika" = "74309fc0106d8b2cd9ba1a8623ee3ce1f57e7e6476585c9e638076e2079460b7"
+"main.nika" = "d711e9a4686a1e8d475e5020e813a0a751e4a397a8dffeb846f4ed344e17db6d"
+"tr_check.nika" = "138484e4123739e441d082b428aefd79dd81b3082347deacae0225066cada10c"
+"tr_core.nika" = "46fa6a5305c3a197347b287f43567b9158ce22e07c52ad8175512ba8e8775cc0"
+"tr_expr.nika" = "3c057accc46520647d20409705ff0fcb4d9adf890bf3cb42d0f22018f51a53fa"
+"tr_items.nika" = "01be978807c27eebafd153c60684461e97ce49e9471aed3e946fe9d126a54c18"
+"tr_stmt.nika" = "89b9e1c8bc71082293bd30c0826d8d14c082937e6eea67003d7f09bc17841c64"
+"tr_types.nika" = "291d2d9bfc4be977c11e9af908b12ee2094fcff6741a059b12215bfd2783884d"
+"tree.nika" = "c893c68f1ea27192ee12aebfe61fc53c374fe2f719b291c65657fc5003dde011"
