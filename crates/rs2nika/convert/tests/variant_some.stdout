@@ -1,0 +1,34 @@
+enum Reached {
+    Opaque(String?),
+    Pair(String?, i64),
+    Method,
+}
+
+fn shown(r: Reached) -> String sync {
+    return match r {
+        Reached::Opaque(null) => "none",
+        Reached::Opaque(name) => f"@{name}",
+        Reached::Pair(null, _) => "no pair",
+        Reached::Pair(a, n) => f"{a} {n}",
+        Reached::Method => "m",
+    }
+}
+
+fn late(r: Reached) -> String sync {
+    return match r {
+        Reached::Opaque(null) => "none",
+        Reached::Opaque(name) => name,
+        Reached::Method => "m",
+        else => "other",
+    }
+}
+
+fn kept(r: Reached) -> String sync {
+    return match r {
+        Reached::Pair(null, 1) => "one",
+        // TODO(rs2nika): a `Some(` in a variant pattern: no unguarded arm of `Reached::Pair` before `Some(a)` takes `None` there with `_`, a name, `None` or the same variant at each other position (a literal does not count), and no reorder or added `(None, _)` arm gives one (ADR-352 D1 per position)
+        Reached::Pair(Some(a), n) => f"{a} {n}",
+        else => "other",
+    }
+}
+

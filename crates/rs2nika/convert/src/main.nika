@@ -200,7 +200,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R161 a `Result` read as a value where Nikaia has the form: `x.parse().is_ok()` / `.is_err()` -> `text::parse_i64(x) != null` / `== null` (R109); `return x.ok()` in a `T?` function -> `return x catch { return null }`; a statement `x.ok()` over a call that hands back nothing (`flush()`, `writeln!`, `fs::create_dir_all` ..) -> `x catch {}`; `if x.is_err() {` / `if !x.is_ok() {` whose body leaves -> `x catch {`; else, over a call, `x.ok()` -> `x catch { null }`, `x.is_ok()` / `.is_err()` -> `(x catch { null }) != null` / `== null`, `x.is_ok_and(fn(v) { b })` -> `(match x catch { null } { v => b, null => false })` (#884)",
         "R170 `if let Some(x) = e {` over anything but a plain name (a call, a field) -> `match e { x => {..}, null => {..} }`: `e` read once (ADR-352)",
         "R171 `panic!(\"..{}..\", a)` / `unreachable!(..)` -> `panic(f\"..{a}..\")` (R15), `panic!(\"..\")` -> `panic(\"..\")`, `unreachable!()` -> `panic(\"unreachable\")`; R55's `None => panic!(..)` arm -> `?? panic(..)` and a tail panic (R42), no `return`",
-        "R172 a multi-line tuple `match` with `Some(..)` / `None` at a position (#879, ADR-352 D1 per position): `Some(p)` -> `p` where `p` is a variant or a literal other than a text, or a name or `_` an unguarded arm before it covers (`None` there; `_`, a name or the same part elsewhere): `(None, None)`, `(None, Some(p))`, `(Some(e), _)` -> `(null, null)`, `(null, p)`, `(e, _)`; else the `None` arms move up past the arms no value matches with them, else before a closing `_ => b` an arm `(None, _) => b` is written above the first arm that needs it; an arm left as written keeps a TODO with its reason",
+        "R172 a multi-line tuple `match` with `Some(..)` / `None` at a position (#879, ADR-352 D1 per position): `Some(p)` -> `p` where `p` is a variant or a literal other than a text, or a name or `_` an unguarded arm before it covers (`None` there; `_`, a name or the same part elsewhere): `(None, None)`, `(None, Some(p))`, `(Some(e), _)` -> `(null, null)`, `(null, p)`, `(e, _)`; else the `None` arms move up past the arms no value matches with them, else before a closing `_ => b` an arm `(None, _) => b` is written above the first arm that needs it; an arm left as written keeps a TODO with its reason; the same per variant for `V(Some(p))` after `V(None)` (#902), without the added arm",
         "R173 a struct pattern's field `f: Some(x)` -> `f: x` (`f` for `Some(f)` and `Some(_)`) and the guard `x != null` on the arm (ADR-382 D2; in `if let`, `let .. else`, let-chains and `match` arms)",
         "R174 a walk of the emitter `emit::visit_block(b, &mut |e| { .. });` (`visit_stmt`, `visit_expr`) -> `for e in visited_in_block(b) { .. }` (tools/emit_walk.nika), the closure's `return` -> `continue`",
         "R175 a method whose body is one call on a field of `self` (`self.tables.count(&parsed.interner, ty)`) is written out at each `self.count(..)`, its parameters replaced by the arguments",
@@ -7557,6 +7557,9 @@ fn rs2nika_some_todo(head: String) -> String {
     if head.trim_start().starts_with("(") || (at >= 0 && (at == 0 || !rs2nika_word(c[at - 1]))) {
         return rs2nika_some_tuple()
     }
+    if at > 0 {
+        return rs2nika_some_variant()
+    }
     return "`match` on `Some`/`None`: `let x = e ?? <none arm>`"
 }
 
@@ -7659,6 +7662,11 @@ fn rs2nika_some_field_arm(mut ctx: Rs2nikaCtx, line: String) -> String {
     }
     rs2nika_hit(ctx, "R173")
     return f"{sf[0]} if {guard}{line[arrow..<line.len()]}"
+}
+
+/// The TODO of a `Some(` in a variant pattern R172 cannot write.
+fn rs2nika_some_variant() -> String {
+    return "a `Some(` in a variant pattern of a `match` R172 does not read (one written on a line, or an arm it cannot split): `V(Some(p))` -> `V(p)` once an arm of `V` before it takes `None` there (ADR-352 D1, #902)"
 }
 
 /// The TODO of a `Some(` in a tuple pattern R172 cannot write.
@@ -9481,8 +9489,11 @@ fn rs2nika_filter_chain(mut ctx: Rs2nikaCtx, chain: String, ind: String) -> Vec[
 /// its lines (comments above it, its pattern line, its body), its parts as
 /// written (`None`, `Some(..)`, a name, `_`, a value), its guard (`""` for
 /// none) and its line from ` =>` on. `all` is an arm that takes every value
-/// (`_ =>`, `name =>`).
+/// (`_ =>`, `name =>`). `variant` is the path of a tuple variant whose
+/// values are the parts (`Stmt::Return` of `Stmt::Return(Some(v))`, #902),
+/// `""` for a tuple.
 struct Rs2nikaTupleArm {
+    variant: String,
     lines: Vec[String],
     head: i64,
     parts: Vec[String],
@@ -9492,8 +9503,9 @@ struct Rs2nikaTupleArm {
 }
 
 /// R172: the parts of a tuple pattern `(a, b, ..)`, or `null` where `pat` is
-/// not one (a single pattern in brackets, `(a) | (b)`).
-fn rs2nika_tuple_parts(pat: String) -> Vec[String]? {
+/// not one (fewer than `least` parts: a single pattern in brackets, `(a) |
+/// (b)`).
+fn rs2nika_tuple_parts(pat: String, least: i64) -> Vec[String]? {
     let c: Vec[scalar] = pat.chars().collect()
     if c.len() < 2 || c[0] != '(' || c[c.len() - 1] != ')' {
         return null
@@ -9532,7 +9544,7 @@ fn rs2nika_tuple_parts(pat: String) -> Vec[String]? {
     if last != "" {
         out.push(last)
     }
-    if out.len() < 2 {
+    if (out.len() as i64) < least {
         return null
     }
     return out
@@ -9625,6 +9637,9 @@ fn rs2nika_tuple_apart(a: ref Rs2nikaTupleArm, b: ref Rs2nikaTupleArm) -> bool {
     if a.all || b.all {
         return false
     }
+    if a.variant != b.variant {
+        return true
+    }
     let mut i = 0
     while i < a.parts.len() {
         let x: String = a.parts[i].clone()
@@ -9675,7 +9690,7 @@ fn rs2nika_tuple_plan(arms: ref Vec[Rs2nikaTupleArm], order: ref Vec[i64]) -> Ve
                     let before = arms[order[e]]
                     let had: Vec[String] = done[e].clone()
                     e = e + 1
-                    if before.guard != "" || before.all || had[0] == "!" || had[i] != "None" {
+                    if before.guard != "" || before.all || before.variant != arm.variant || had.len() == 0 || had[0] == "!" || had[i] != "None" {
                         continue
                     }
                     covered = true
@@ -9691,7 +9706,7 @@ fn rs2nika_tuple_plan(arms: ref Vec[Rs2nikaTupleArm], order: ref Vec[i64]) -> Ve
                 if covered {
                     parts.push(inner.clone())
                 } else {
-                    why = f"no unguarded arm before `{p}` takes `None` there with `_`, a name, `None` or the same variant at each other position (a literal does not count), and no reorder or added `(None, _)` arm gives one (ADR-352 D1 per position)"
+                    why = f"no unguarded arm{rs2nika_tuple_of(arm)} before `{p}` takes `None` there with `_`, a name, `None` or the same variant at each other position (a literal does not count), and no reorder or added `(None, _)` arm gives one (ADR-352 D1 per position)"
                 }
             } else {
                 why = f"a pattern inside `{p}` at a tuple position: only a name, `_`, a variant or a literal is matched against the `T`"
@@ -9710,11 +9725,20 @@ fn rs2nika_tuple_plan(arms: ref Vec[Rs2nikaTupleArm], order: ref Vec[i64]) -> Ve
     return done
 }
 
+/// R172: ` of the same variant` for an arm of a variant pattern, `""` for a
+/// tuple.
+fn rs2nika_tuple_of(arm: ref Rs2nikaTupleArm) -> String {
+    if arm.variant == "" {
+        return ""
+    }
+    return f" of `{arm.variant}`"
+}
+
 /// R172: how many arms a plan leaves as written.
 fn rs2nika_tuple_left(plan: ref Vec[Vec[String]]) -> i64 {
     let mut n = 0
     for parts in plan {
-        if parts[0] == "!" {
+        if parts.len() > 0 && parts[0] == "!" {
             n = n + 1
         }
     }
@@ -9774,7 +9798,7 @@ fn rs2nika_tuple_none_arm(ind: String, width: i64, pos: i64, last: ref Rs2nikaTu
     if !body.ends_with(",") {
         body = f"{body},"
     }
-    return Rs2nikaTupleArm { lines: [f"{ind}({parts.join(", ")}){body}"], head: 0, parts: parts, guard: "", after: body, all: false }
+    return Rs2nikaTupleArm { variant: "", lines: [f"{ind}({parts.join(", ")}){body}"], head: 0, parts: parts, guard: "", after: body, all: false }
 }
 
 /// R172: the position of the first `Some(name)` or `Some(_)` of an arm, or
@@ -9798,13 +9822,23 @@ fn rs2nika_tuple_arm(t: String, width: i64) -> Rs2nikaTupleArm? {
         return null
     }
     let mut end = rs2nika_tuple_close(c, 0)
-    if c[0] != '(' {
+    let mut variant: String = ""
+    let mut v = 0
+    while v < c.len() && (rs2nika_word(c[v]) || c[v] == ':') {
+        v = v + 1
+    }
+    let path: String = rs2nika_text(c, 0, v)
+    let own = path == "Some" || path == "None" || path == "Ok" || path == "Err"
+    if c[0] != '(' && v < c.len() && c[v] == '(' && !own && rs2nika_tuple_unit(path) {
+        variant = path.clone()
+        end = rs2nika_tuple_close(c, v)
+    } else if c[0] != '(' {
         end = (t.find(" ") ?? 0) - 1
     }
     if end < 0 {
         return null
     }
-    let pat: String = rs2nika_text(c, 0, end + 1)
+    let pat: String = rs2nika_text(c, variant.chars().count(), end + 1)
     let rest: String = rs2nika_text(c, end + 1, c.len())
     let mut guard: String = ""
     let mut after: String = rest.clone()
@@ -9817,13 +9851,23 @@ fn rs2nika_tuple_arm(t: String, width: i64) -> Rs2nikaTupleArm? {
         return null
     }
     if rs2nika_tuple_all(pat) || pat == "_" {
-        return Rs2nikaTupleArm { lines: [], head: 0, parts: [pat.clone()], guard: guard, after: after, all: true }
+        return Rs2nikaTupleArm { variant: "", lines: [], head: 0, parts: [pat.clone()], guard: guard, after: after, all: true }
     }
-    let parts: Vec[String] = rs2nika_tuple_parts(pat) ?? return null
+    if variant == "" && !own && rs2nika_tuple_unit(pat) {
+        return Rs2nikaTupleArm { variant: pat.clone(), lines: [], head: 0, parts: [], guard: guard, after: after, all: false }
+    }
+    if variant != "" {
+        let values: Vec[String] = rs2nika_tuple_parts(pat, 1) ?? return null
+        if values.contains("..") {
+            return null
+        }
+        return Rs2nikaTupleArm { variant: variant, lines: [], head: 0, parts: values, guard: guard, after: after, all: false }
+    }
+    let parts: Vec[String] = rs2nika_tuple_parts(pat, 2) ?? return null
     if width >= 0 && parts.len() as i64 != width {
         return null
     }
-    return Rs2nikaTupleArm { lines: [], head: 0, parts: parts, guard: guard, after: after, all: false }
+    return Rs2nikaTupleArm { variant: "", lines: [], head: 0, parts: parts, guard: guard, after: after, all: false }
 }
 
 /// R172: a `match` whose arms are tuple patterns with `Some(..)` and `None`
@@ -9879,20 +9923,21 @@ fn rs2nika_tuple_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Str
         let mut ok = starts.len() >= 2
         let mut somes = 0
         let mut width = -1
+        let mut variants = false
         let mut a = 0
         while a < starts.len() && ok {
-            let mut arm: Rs2nikaTupleArm = rs2nika_tuple_arm(out[starts[a]].trim().clone(), width) ?? Rs2nikaTupleArm { lines: [], head: -1, parts: [], guard: "", after: "", all: false }
+            let mut arm: Rs2nikaTupleArm = rs2nika_tuple_arm(out[starts[a]].trim().clone(), width) ?? Rs2nikaTupleArm { variant: "", lines: [], head: -1, parts: [], guard: "", after: "", all: false }
             if arm.head < 0 {
                 ok = false
                 break
             }
-            if !arm.all {
+            if arm.variant != "" {
+                variants = true
+            } else if !arm.all {
                 width = arm.parts.len() as i64
-                for p in arm.parts {
-                    if rs2nika_tuple_some(p) != "" {
-                        somes = somes + 1
-                    }
-                }
+            }
+            if !arm.all {
+                somes = somes + arm.parts.iter().filter(fn(p) { rs2nika_tuple_some(p) != "" }).count()
             }
             let to = if a + 1 < starts.len() { froms[a + 1] } else { j }
             let mut r = froms[a]
@@ -9904,7 +9949,9 @@ fn rs2nika_tuple_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Str
             arms.push(arm)
             a = a + 1
         }
-        if !ok || somes == 0 || width < 0 {
+        // a `match` on a tuple or on an enum, not both
+        let tupled = width >= 0
+        if !ok || somes == 0 || tupled == variants {
             i = i + 1
             continue
         }
@@ -9927,12 +9974,12 @@ fn rs2nika_tuple_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Str
         // a `(None, _) => b` arm above the first arm that needs it
         let last = arms[arms.len() - 1].clone()
         let one_line = last.lines.len() - last.head == 1 && !last.after.trim_end().ends_with("{")
-        let wild = last.all && last.parts[0] == "_" && last.guard == "" && one_line
+        let wild = last.all && last.parts[0] == "_" && last.guard == "" && one_line && !variants
         let mut tries = 0
         while left > 0 && wild && tries < width {
             tries = tries + 1
             let mut k2 = 0
-            while k2 < order.len() && plan[k2][0] != "!" {
+            while k2 < order.len() && (plan[k2].len() == 0 || plan[k2][0] != "!") {
                 k2 = k2 + 1
             }
             let pos = rs2nika_tuple_named(arms[order[k2]])
@@ -9980,12 +10027,15 @@ fn rs2nika_tuple_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Str
             for q in 0..<arm.lines.len() {
                 if q as i64 != arm.head || arm.all {
                     new.push(arm.lines[q].clone())
-                } else if parts[0] == "!" {
+                } else if parts.len() > 0 && parts[0] == "!" {
                     ctx.tuple_line.push(arm.lines[q].trim().clone())
                     ctx.tuple_why.push(parts[1].clone())
                     new.push(arm.lines[q].clone())
                 } else {
-                    let written = f"{arm_ind}({parts.join(", ")}){arm.guard}{arm.after}"
+                    let mut written = f"{arm_ind}{arm.variant}({parts.join(", ")}){arm.guard}{arm.after}"
+                    if arm.variant != "" && parts.len() == 0 {
+                        written = f"{arm_ind}{arm.variant}{arm.guard}{arm.after}"
+                    }
                     if written != arm.lines[q] || n as i64 != order[n] {
                         wrote = true
                     }
@@ -11009,11 +11059,12 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, src: String, profile_given: St
                 }
                 for t in rs2nika_todos(line, ctx.opt_names) {
                     let mut said: String = t.clone()
-                    if t == rs2nika_some_tuple() {
+                    if t == rs2nika_some_tuple() || t == rs2nika_some_variant() {
+                        let kind = if t == rs2nika_some_tuple() { "tuple" } else { "variant" }
                         let mut w = 0
                         while w < ctx.tuple_line.len() {
                             if ctx.tuple_line[w] == line.trim() {
-                                said = f"a `Some(` in a tuple pattern: {ctx.tuple_why[w]}"
+                                said = f"a `Some(` in a {kind} pattern: {ctx.tuple_why[w]}"
                                 break
                             }
                             w = w + 1
