@@ -60,7 +60,10 @@ crates/<crate>/src/<file>.rs:A-B` line per Rust range it moves, and one
 `Convert: --profile check|check-free|emit [--prefix X_]` line. `agent.nika`
 converts them before the agent starts and names the draft
 (`<brief>.draft.nika`, `.notes`, `.rs`) in its prompt, so the builder starts
-from it instead of cutting and converting itself. Name in the brief what the
+from it instead of cutting and converting itself. Give `--prefix X_`
+whenever the target file prefixes its names (most do, R245): without it the
+draft keeps the Rust names and every signature and call is rewritten (P4b kept
+21 of 79 lines, its costliest edit). Name in the brief what the
 builder would otherwise look up: the callees' locations (`where.nika`), the
 syntax gaps the draft hits, the tests to run between steps. Cut 400-600 lines
 a brief.
