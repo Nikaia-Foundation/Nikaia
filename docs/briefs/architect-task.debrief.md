@@ -1,16 +1,10 @@
-1. **What cost the most:** the facts for the K1+K2 brief, about 12 of my 30 turns.
-   - Reading about 700 lines of `comptime_run.rs`.
-   - Finding the Nikaia counterparts: `fresh_id`, `visited_in_expr`, M2's host shape with `intern`, and the existing `CheckComputed` twin.
-   - Two converter trial runs, once with `--profile check` and once with `check-free`.
-
-   The plan row K1 gave the line ranges but none of these.
-2. **What the brief could have handed me:**
-   - That R0 is due, and the quiet-moment check for it: which processes and worktrees are running, and whether `crates/` or `scripts/` has uncommitted files.
-   - That the plan has no row for P5, although `bootstrap-week.md` schedules it.
-   - That `--prefix` only renames names that clash.
-   - The `common.part` placeholder.
-   - That `check/*` and `contracts/*` are lane 2's files, which ruled out editing callers there.
-3. **Checks run:**
-   - Useful: `where.nika` on the K names, the caller grep, the converter score, and `git worktree list` with `ps`, which showed C1 was not quiet.
-   - Wasted: reading 75 lines of the P4b brief only to copy its layout, and the converter's `--help`, which does not exist.
-4. **The change that would have saved the most:** an "R0 due?" line in `architect-input.txt`, filled in by `drive.nika`. It would print the running agents, the worktrees and `git status --short crates scripts`. Also, every plan row should carry its `Cut:`/`Convert:` lines and its known Nikaia twins, so a move brief is pasted from the row rather than worked out again.
+1. **What cost the most turns.** Finding out that CI was red, and why. The input said `BATCH DONE`, but `develop` had been red since c7e5b66. I spent about 8 calls walking the run list, the failed jobs per run, the annotations, the job steps and a log download the proxy blocked. Even then I never learned the cause, because the sweep step writes no annotations.
+2. **What I looked up that the brief could have handed me:**
+   - **CI state.** `architect-input.txt` should carry the CI line (`status.nika`) and the failing job and step, not just the stop word.
+   - **Code locations.** P5a and M3a needed function line numbers, the existing Nikaia twins (`project_settings.nika`, `modules.nika`) and the host-callback precedents (`SysrootHost`, P4b's `sha256_hex`). P5-plan's debrief already asks for these.
+   - **`std` coverage.** I couldn't cheaply check whether `std::fs` has `append` in Part III 17: the grep came back as 50 KB. So I left `trace` as the builder's choice.
+3. **Checks run and wasted:**
+   - **Useful:** run and job lists, `where.nika` for callers, a range sanity check against a4b33a0 (no change since), and a grep of the cut ranges for `std` and host calls.
+   - **Wasted:** the job-log download (proxy-blocked, as the State already said), a search for which test dumps converter files (no answer), and two Part III greps that were too broad.
+   - **Missed:** `git pull --rebase` failed on another lane's unstaged files. The push went through anyway as a fast-forward (origin/develop is fb686ff), but I didn't check the push output directly.
+4. **One change that would have saved the most:** make `drive.nika`/`cycle.nika` emit `RED` whenever the latest completed run on `develop` failed, with the failing job and step, and put that into `architect-input.txt`. Also add the sweep annotations as a standing CI rule. Together they would have saved about 10 calls, and the red would have been caught five hours earlier.

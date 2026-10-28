@@ -1,4 +1,4 @@
 Result: done
-Batch: k1-comptime-tree.md p5-lane1-plan.md
+Batch: b-fixforward-sweep.md p5a-project-settings.md m3a-modules-collect.md
 Owner: none
-Needs: R0 (#921) is due (#557 steps 1-2 on develop) but C1 is not quiet: crates/rs2nika/convert/src/main.nika uncommitted (edited 14:06); supervisor runs R0 once it is committed, between or after this batch.
+Notes: develop CI red since c7e5b66 (arm64 accepted-sweep, cause not readable: logs proxy-blocked, no annotations); fix-forward first. R0 still waits for the converter lane's uncommitted files in C1.
