@@ -31,6 +31,7 @@ use nikaia_std::tools::project_members::{
     self, ProjectMembersForeignHost, ProjectMembersHost, ProjectMembersManifest,
     ProjectMembersMember, ProjectMembersRefusal, project_members_canonical as canonical,
 };
+use nikaia_std::tools::project_settings::{self, ProjectSettingsRefusal, ProjectWords};
 use nikaia_std::tools::project_tests::{self, ProjectTestsOutcome as Outcome};
 pub use nikaia_std::tools::project_tests::{OutputTest, ProgramTest};
 
@@ -44,7 +45,7 @@ use orchestrator::project::{
 
 use crate::contracts::SignatureOps;
 use crate::contracts::{Ledger, sync};
-use crate::emit::{Build, Target};
+use crate::emit::Build;
 use crate::manifest::{Dependency, Manifest};
 use crate::sysroot::{Codegen, Sysroot};
 use crate::{assets, check, diagnostics, modules, refuse, refused};
@@ -128,178 +129,38 @@ pub const TRACE_VAR: &str = "NIKAIA_WRAPPER_TRACE";
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub build: Build,
-    pub target: String,
-    pub user_parallelism: String,
-    pub reentrancy_check: String,
-    /// `--optimization`, or `[build] optimization`: `name:level` words,
-    /// comma-separated, the last one for a name deciding
-    /// ([ADR-306](../../docs/specification/adr/adr-306.md) D1). Empty where
-    /// neither says anything.
-    pub optimization: String,
-    /// **What a claim shown false with values is**
-    /// ([ADR-269](../../docs/specification/adr/adr-269.md) D8): `error`, the
-    /// default, refuses the program; `warn` builds it, the claim checked where
-    /// it is reached. The bypass for a program a better prover now refutes.
-    pub refuted_claims: String,
-    /// **What a claim the compiler did not prove is**
-    /// ([ADR-380](../../docs/specification/adr/adr-380.md) D2): `error`, the
-    /// default, refuses the program (`NK1300`); `warn` builds it, each such
-    /// claim a warning and a check where it is reached.
-    pub unproved_claims: String,
-    /// **What is made** (ADR-284 D4): `"program"`, or `"c-library"`, which
-    /// exports every `pub extern fn` with a body and writes the header.
-    pub artifact: String,
-    /// The prefix of every exported symbol (ADR-284 D13): `symbol-prefix`, or
-    /// the package's name with `-` written `_`.
-    pub symbol_prefix: String,
-    /// **Whether this is `nikaia test`'s build**
-    /// ([ADR-269](../../docs/specification/adr/adr-269.md) D1): the program's
-    /// `test` blocks are compiled, and its `main` runs them by number. A
-    /// choice like the others, so the cache and the wrapper both see it.
-    pub tests: bool,
-    /// **A binding to write beside the library** (`nikaia bind <language>`,
-    /// [ADR-284](../../docs/specification/adr/adr-284.md) D26): `python` or `node`,
-    /// or none for a plain build.
-    pub bind: Option<String>,
-    /// **The CPU level `--cpu` named** ([ADR-002](../../docs/specification/adr/adr-002.md)
-    /// D6), where it is not the target's baseline: the build may use every
-    /// instruction it has, in the program and in `std`. None is the baseline,
-    /// and no `-C target-cpu` at all.
-    pub cpu: Option<String>,
+    /// The words (`project_settings.nika`, P1).
+    pub words: ProjectWords,
 }
 
-/// `error` or `warn`, what `--refuted-claims` and `[build] refuted-claims`
-/// may say ([ADR-269](../../docs/specification/adr/adr-269.md) D8).
+/// A build setting's word refused, as the error it was before the move (P1).
+fn refusal(thrown: nikaia_std::error::Thrown<ProjectSettingsRefusal>) -> anyhow::Error {
+    let ProjectSettingsRefusal::Refused(why) = thrown.split().0;
+    anyhow!(why)
+}
+
 fn refuted_claims(word: &str) -> Result<String> {
-    match word {
-        "error" | "warn" => Ok(word.to_string()),
-        other => Err(anyhow!(
-            "`refuted-claims` is `error` or `warn`, not `{other}`. `error` refuses a program \
-             with a claim the compiler shows false with values; `warn` builds it and checks the \
-             claim when it runs."
-        )),
-    }
+    project_settings::refuted_claims(word.to_string()).map_err(refusal)
 }
 
-/// `error` or `warn`, what `--unproved-claims` and `[build] unproved-claims`
-/// may say ([ADR-380](../../docs/specification/adr/adr-380.md) D2).
 fn unproved_claims(word: &str) -> Result<String> {
-    match word {
-        "error" | "warn" => Ok(word.to_string()),
-        other => Err(anyhow!(
-            "`unproved-claims` is `error` or `warn`, not `{other}`. `error` refuses a program \
-             with a claim the compiler did not prove; `warn` builds it and checks the claim \
-             when it runs."
-        )),
-    }
+    project_settings::unproved_claims(word.to_string()).map_err(refusal)
 }
 
-/// **`name:on` or `name:off` words, comma-separated**, to what they decide
-/// ([ADR-306](../../docs/specification/adr/adr-306.md) D14). The names are
-/// `remove-bounds-checks` and `remove-overflow-checks`
-/// ([ADR-306](../../docs/specification/adr/adr-306.md) D6); a later word for
-/// a name wins over an earlier one.
+fn artifact(word: &str) -> Result<String> {
+    project_settings::artifact(word.to_string()).map_err(refusal)
+}
+
+/// `--optimization`'s words to what they decide
+/// ([ADR-306](../../docs/specification/adr/adr-306.md) D14):
+/// `project_settings::optimizations`, its refusal as an error.
 pub fn optimizations(
     words: &str,
 ) -> Result<(crate::bounds::BoundsChecks, crate::bounds::OverflowChecks)> {
-    let mut bounds = crate::bounds::BoundsChecks::Kept;
-    let mut overflow = crate::bounds::OverflowChecks::Kept;
-    for word in words.split(',').map(str::trim).filter(|w| !w.is_empty()) {
-        let Some((name, level)) = word.split_once(':') else {
-            return Err(anyhow!(
-                "`--optimization={word}` needs `on` or `off`: write \
-                 `--optimization=remove-bounds-checks:on` or \
-                 `--optimization=remove-overflow-checks:on`"
-            ));
-        };
-        match name {
-            "remove-bounds-checks" => {
-                bounds = crate::bounds::BoundsChecks::parse(level).ok_or_else(|| {
-                    anyhow!(
-                        "`remove-bounds-checks` is `on` or `off`, not `{level}`{}",
-                        renamed(level)
-                    )
-                })?;
-            }
-            // Read by `skip_free_at_exit` and `prove_through_loops`; checked
-            // here with the rest.
-            "skip-free-at-exit" | "prove-through-loops" => {
-                if !matches!(level, "on" | "off") {
-                    return Err(anyhow!("`{name}` is `on` or `off`, not `{level}`"));
-                }
-            }
-            "remove-overflow-checks" => {
-                overflow = crate::bounds::OverflowChecks::parse(level).ok_or_else(|| {
-                    anyhow!(
-                        "`remove-overflow-checks` is `on` or `off`, not `{level}`{}",
-                        renamed(level)
-                    )
-                })?;
-            }
-            _ => {
-                return Err(anyhow!(
-                    "there is no optimization called `{name}`: the ones there are, are \
-                     `remove-bounds-checks`, `remove-overflow-checks`, `prove-through-loops` \
-                     and `skip-free-at-exit`"
-                ));
-            }
-        }
-    }
-    Ok((bounds, overflow))
+    project_settings::optimizations(words).map_err(refusal)
 }
 
-/// **`prove-through-loops:on`**
-/// ([ADR-361](../../docs/specification/adr/adr-361.md) D10): an index's, an
-/// overflow's or a shift's check a loop leaves open is asked once more through
-/// the loop's invariant. The last word for the name wins; [`optimizations`]
-/// has already refused a word that is not `on` or `off`.
-pub fn prove_through_loops(words: &str) -> bool {
-    words
-        .split(',')
-        .map(str::trim)
-        .filter_map(|w| w.strip_prefix("prove-through-loops:"))
-        .next_back()
-        .is_some_and(|level| level == "on")
-}
-
-/// **`skip-free-at-exit:on`**
-/// ([ADR-348](../../docs/specification/adr/adr-348.md) D1): what `main` still
-/// holds at its end dies, and every cleanup runs, but its memory is left to the
-/// operating system. The last word for the name wins; [`optimizations`] has
-/// already refused a word that is not `on` or `off`.
-pub fn skip_free_at_exit(words: &str) -> bool {
-    words
-        .split(',')
-        .map(str::trim)
-        .filter_map(|w| w.strip_prefix("skip-free-at-exit:"))
-        .next_back()
-        .is_some_and(|level| level == "on")
-}
-
-/// **The words before ADR-306 D14**: `basic` and `aggressive` were levels of
-/// how hard the compiler proved and whether it dropped what it proved, in one
-/// word. What is proved no longer depends on the option, so the old words name
-/// the one thing they still mean.
-fn renamed(level: &str) -> &'static str {
-    match level {
-        "aggressive" | "basic" => {
-            ". The compiler now proves the same at every build, and the option only says \
-             whether a proved check is written without it: `aggressive` and `basic` are `on`"
-        }
-        _ => "",
-    }
-}
-
-/// `[build] artifact` (ADR-284 D4): a program, or a library C calls.
-fn artifact(word: &str) -> Result<String> {
-    match word {
-        "program" | "c-library" => Ok(word.to_string()),
-        other => Err(anyhow!(
-            "`artifact` is `program` or `c-library`, not `{other}`. `c-library` makes a shared and \
-             a static library of the package, and its header, from every `pub extern fn` with a body."
-        )),
-    }
-}
+pub use project_settings::{prove_through_loops, skip_free_at_exit};
 
 /// `[build] symbol-prefix` (ADR-284 D13): a C identifier, or the build refuses
 /// it, naming the character.
@@ -324,7 +185,7 @@ fn symbol_prefix(word: &str) -> Result<String> {
 impl Settings {
     /// Whether this build makes a library C calls (ADR-284 D4).
     pub fn library(&self) -> bool {
-        self.artifact == "c-library"
+        self.words.artifact == "c-library"
     }
 
     /// Resolve every switch before anything is read, so a mistyped one fails on
@@ -369,17 +230,19 @@ impl Settings {
         build.called_from_c = artifact == "c-library";
         Ok(Settings {
             build,
-            target,
-            user_parallelism,
-            reentrancy_check,
-            optimization,
-            refuted_claims,
-            unproved_claims,
-            artifact,
-            symbol_prefix,
-            tests: false,
-            bind: None,
-            cpu: None,
+            words: ProjectWords {
+                target,
+                user_parallelism,
+                reentrancy_check,
+                optimization,
+                refuted_claims,
+                unproved_claims,
+                artifact,
+                symbol_prefix,
+                tests: false,
+                bind: None,
+                cpu: None,
+            },
         })
     }
 
@@ -395,10 +258,10 @@ impl Settings {
     /// ([ADR-380](../../docs/specification/adr/adr-380.md) D2), the same way.
     pub fn refutations(&mut self, refuted: Option<&str>, unproved: Option<&str>) -> Result<()> {
         if let Some(word) = refuted {
-            self.refuted_claims = refuted_claims(word)?;
+            self.words.refuted_claims = refuted_claims(word)?;
         }
         if let Some(word) = unproved {
-            self.unproved_claims = unproved_claims(word)?;
+            self.words.unproved_claims = unproved_claims(word)?;
         }
         Ok(())
     }
@@ -423,7 +286,7 @@ impl Settings {
                 target.name()
             );
         }
-        self.cpu = (level != levels[0]).then(|| level.to_string());
+        self.words.cpu = (level != levels[0]).then(|| level.to_string());
         Ok(())
     }
 
@@ -431,24 +294,16 @@ impl Settings {
     /// for the baseline, the level's name, and for `native` the CPU `rustc`
     /// finds on this machine, never the word.
     pub fn cpu_key(&self) -> Result<String> {
-        match self.cpu.as_deref() {
+        match self.words.cpu.as_deref() {
             None => Ok(String::new()),
             Some("native") => crate::sysroot::native_cpu(self.build.target.triple()),
             Some(level) => Ok(level.to_string()),
         }
     }
 
-    /// What Cargo is told for the CPU level: `-C target-cpu` for every crate
-    /// built for the target, the program's and `std`'s, through Cargo's own
-    /// configuration rather than the user's `RUSTFLAGS` (ADR-002 D6, ADR-325).
+    /// What Cargo is told for the CPU level (ADR-002 D6, ADR-325).
     pub fn cpu_config(&self) -> Vec<String> {
-        match &self.cpu {
-            None => Vec::new(),
-            Some(level) => vec![format!(
-                "target.\"{}\".rustflags=[\"-C\", \"target-cpu={level}\"]",
-                self.build.target.triple()
-            )],
-        }
+        project_settings::cpu_config(&self.words, self.build.target)
     }
 
     /// **`--cpu` against the user's `RUSTFLAGS`** (#753, ADR-002 D6, Part III
@@ -457,14 +312,14 @@ impl Settings {
     /// `CARGO_ENCODED_RUSTFLAGS`: the user's flags, then `-C target-cpu=L` last
     /// (the level wins, the flags still apply). `None` where nothing is needed.
     pub fn cpu_rustflags(&self) -> Result<Option<String>> {
-        if self.cpu.is_none() {
+        if self.words.cpu.is_none() {
             return Ok(None);
         }
         let encoded = std::env::var("CARGO_ENCODED_RUSTFLAGS").ok();
         let plain = std::env::var("RUSTFLAGS").ok();
-        Ok(encoded_with_cpu(
-            encoded.as_deref(),
-            plain.as_deref(),
+        Ok(project_settings::encoded_with_cpu(
+            &encoded,
+            &plain,
             &self.cpu_key()?,
         ))
     }
@@ -477,7 +332,7 @@ impl Settings {
         (self.build.bounds, self.build.overflow) = optimizations(&words)?;
         self.build.skip_free_at_exit = skip_free_at_exit(&words);
         self.build.prove_through_loops = prove_through_loops(&words);
-        self.optimization = words;
+        self.words.optimization = words;
         Ok(())
     }
 
@@ -487,37 +342,45 @@ impl Settings {
     /// to disagree.
     fn as_env(&self) -> Vec<(String, OsString)> {
         vec![
-            (TARGET_VAR.to_string(), OsString::from(&self.target)),
+            (TARGET_VAR.to_string(), OsString::from(&self.words.target)),
             (
                 PARALLELISM_VAR.to_string(),
-                OsString::from(&self.user_parallelism),
+                OsString::from(&self.words.user_parallelism),
             ),
             (
                 REENTRANCY_VAR.to_string(),
-                OsString::from(&self.reentrancy_check),
+                OsString::from(&self.words.reentrancy_check),
             ),
             (
                 OPTIMIZATION_VAR.to_string(),
-                OsString::from(&self.optimization),
+                OsString::from(&self.words.optimization),
             ),
             (
                 REFUTED_VAR.to_string(),
-                OsString::from(&self.refuted_claims),
+                OsString::from(&self.words.refuted_claims),
             ),
             (
                 UNPROVED_VAR.to_string(),
-                OsString::from(&self.unproved_claims),
+                OsString::from(&self.words.unproved_claims),
             ),
-            (ARTIFACT_VAR.to_string(), OsString::from(&self.artifact)),
-            (PREFIX_VAR.to_string(), OsString::from(&self.symbol_prefix)),
+            (
+                ARTIFACT_VAR.to_string(),
+                OsString::from(&self.words.artifact),
+            ),
+            (
+                PREFIX_VAR.to_string(),
+                OsString::from(&self.words.symbol_prefix),
+            ),
         ]
         .into_iter()
         .chain(
-            self.tests
+            self.words
+                .tests
                 .then(|| (TESTS_VAR.to_string(), OsString::from("1"))),
         )
         .chain(
-            self.cpu
+            self.words
+                .cpu
                 .as_ref()
                 .map(|level| (CPU_VAR.to_string(), OsString::from(level))),
         )
@@ -544,103 +407,55 @@ impl Settings {
         build.called_from_c = artifact == "c-library";
         Ok(Settings {
             build,
-            target,
-            user_parallelism,
-            reentrancy_check,
-            optimization,
-            refuted_claims,
-            unproved_claims,
-            artifact,
-            symbol_prefix,
-            tests: std::env::var_os(TESTS_VAR).is_some(),
-            bind: None,
-            cpu: std::env::var(CPU_VAR)
-                .ok()
-                .filter(|level| !level.is_empty()),
+            words: ProjectWords {
+                target,
+                user_parallelism,
+                reentrancy_check,
+                optimization,
+                refuted_claims,
+                unproved_claims,
+                artifact,
+                symbol_prefix,
+                tests: std::env::var_os(TESTS_VAR).is_some(),
+                bind: None,
+                cpu: std::env::var(CPU_VAR)
+                    .ok()
+                    .filter(|level| !level.is_empty()),
+            },
         })
     }
 
-    /// The cache's view of this build (ADR-021 D5).
-    ///
-    /// The backend is `"rust"` because it names **the lowering that produced the
-    /// artifact**, not the flag the user typed, and a bare invocation *is*
-    /// `--backend rust` ([ADR-004](../../docs/specification/adr/adr-004.md) D1),
-    /// so the two spellings share one entry - which is correct, because it is
-    /// one lowering. The dimension itself stays in
-    /// [`orchestrator::cache::Key::build`] (D5, D7) so that the day a second
-    /// backend caches, the literal here becomes that backend's name and the two
-    /// cannot collide.
+    /// The cache's view of this build (ADR-021 D5): the key is
+    /// `project_settings::choices_key`'s, and the backend is `"rust"` because it
+    /// names **the lowering that produced the artifact**, not the flag the user
+    /// typed, and a bare invocation *is* `--backend rust`
+    /// ([ADR-004](../../docs/specification/adr/adr-004.md) D1), so the two
+    /// spellings share one entry - which is correct, because it is one lowering.
+    /// The dimension itself stays in [`orchestrator::cache::Key::build`] (D5, D7)
+    /// so that the day a second backend caches, the literal here becomes that
+    /// backend's name and the two cannot collide.
     pub fn choices(&self) -> Choices {
+        let cpu_key = match self.words.cpu {
+            Some(_) => self.cpu_key().unwrap_or_default(),
+            None => String::new(),
+        };
+        let build = &self.build;
         Choices::new(
-            format!(
-                "{}/{}/{}{}{}{}{}{}{}{}{}{}",
-                self.target,
-                self.user_parallelism,
-                self.reentrancy_check,
-                if self.tests { "/tests" } else { "" },
-                // A build that lets a refuted claim through must not hand its
-                // lowering to one that refuses it.
-                if self.refuted_claims == "warn" {
-                    "/refuted-claims:warn"
-                } else {
-                    ""
-                },
-                // The same for a claim not proved (ADR-380 D2).
-                if self.unproved_claims == "warn" {
-                    "/unproved-claims:warn"
-                } else {
-                    ""
-                },
-                match self.build.bounds {
-                    crate::bounds::BoundsChecks::Kept => String::new(),
-                    level => format!("/remove-bounds-checks:{}", level.name()),
-                },
-                match self.build.overflow {
-                    crate::bounds::OverflowChecks::Kept => String::new(),
-                    level => format!("/remove-overflow-checks:{}", level.name()),
-                },
-                match self.build.skip_free_at_exit {
-                    true => "/skip-free-at-exit:on",
-                    false => "",
-                },
-                match self.build.prove_through_loops {
-                    true => "/prove-through-loops:on",
-                    false => "",
-                },
-                // A library's lowering carries its entry points' wrappers,
-                // named by the prefix.
-                match self.library() {
-                    true => format!("/c-library:{}", self.symbol_prefix),
-                    false => String::new(),
-                },
-                // A `comptime` that reads `target::has` answers for the level
-                // (ADR-371 D6), so the lowering is kept per level.
-                match self.cpu {
-                    Some(_) => format!("/cpu:{}", self.cpu_key().unwrap_or_default()),
-                    None => String::new(),
-                }
+            project_settings::choices_key(
+                &self.words,
+                build.bounds,
+                build.overflow,
+                build.skip_free_at_exit,
+                build.prove_through_loops,
+                &cpu_key,
             ),
             "rust",
         )
     }
 
     /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.
-    ///
-    /// Not a choice, which is why it is not in the codegen table: WebAssembly
-    /// traps and has no stack to unwind, and a build that asked for `unwind`
-    /// there would be asking for something the machine does not have.
-    fn panic_strategy(&self) -> &'static str {
-        match self.build.target {
-            Target::X86_64Linux | Target::Aarch64Linux => "unwind",
-            Target::Wasm32Unknown => "abort",
-            target @ Target::Rust(_) => {
-                if target.is_bare_metal() || target.triple().starts_with("wasm") {
-                    "abort"
-                } else {
-                    "unwind"
-                }
-            }
-        }
+    fn panic_strategy(&self) -> String {
+        project_settings::panic_strategy(self.build.target)
     }
 }
 
@@ -1086,7 +901,7 @@ pub fn lower_reading(
     // its `comptime`s** (ADR-321 D1, ADR-318 D1): the ledger inferred while
     // the program is read records the value.
     let program = crate::comptime_run::defaults_compiled_in(reads.workshop().place(), || {
-        match (settings.tests, layout.in_project) {
+        match (settings.words.tests, layout.in_project) {
             (true, in_project) => modules::Program::read_for_tests(input, packages, in_project),
             (false, true) => modules::Program::read_with(input, packages),
             (false, false) => modules::Program::read_one(input),
@@ -1127,13 +942,13 @@ pub fn lower_reading(
             let package = Manifest::read(&layout.root.join("nikaia.toml"))
                 .ok()
                 .and_then(|m| m.package_name().map(str::to_string))
-                .unwrap_or_else(|| settings.symbol_prefix.clone());
+                .unwrap_or_else(|| settings.words.symbol_prefix.clone());
             crate::cexport::export(
                 &program,
-                &settings.symbol_prefix,
+                &settings.words.symbol_prefix,
                 &package,
-                settings.user_parallelism == "yes",
-                &settings.target,
+                settings.words.user_parallelism == "yes",
+                &settings.words.target,
             )?
         }
         false => None,
@@ -1248,9 +1063,9 @@ pub fn lower_reading(
                                 around,
                                 &unit.path,
                                 &unit.source,
-                                &settings.user_parallelism,
-                                &settings.refuted_claims,
-                                &settings.unproved_claims,
+                                &settings.words.user_parallelism,
+                                &settings.words.refuted_claims,
+                                &settings.words.unproved_claims,
                                 settings.library(),
                                 keep.then_some(&mut facts),
                             )
@@ -1918,7 +1733,7 @@ pub fn explain(
                     &program.contracts,
                     library,
                     reads,
-                    settings.unproved_claims != "warn",
+                    settings.words.unproved_claims != "warn",
                     // **Red and green only on a terminal**, and never where
                     // `NO_COLOR` is set (Part III, `--asserts`).
                     std::env::var_os("NO_COLOR").is_none()
@@ -2217,8 +2032,8 @@ impl Project {
             && self.settings.build.reentrancy_check.is_on()
             // **A CPU level is `std`'s too** (ADR-002 D6): the library this
             // path links was built at the baseline, so `--cpu` takes Cargo's.
-            && self.settings.cpu.is_none()
-            && self.manifest.codegen_for(&self.settings.target).is_empty()
+            && self.settings.words.cpu.is_none()
+            && self.manifest.codegen_for(&self.settings.words.target).is_empty()
             // A trace is asked about the wrapper Cargo runs.
             && std::env::var_os(TRACE_VAR).is_none()
             // The user's linker and flags are applied by Cargo (#786).
@@ -2243,7 +2058,7 @@ impl Project {
             out.push((member.name.clone(), self.cargo_member(member, rust, kind)?));
         }
 
-        let codegen = self.manifest.codegen_for(&self.settings.target);
+        let codegen = self.manifest.codegen_for(&self.settings.words.target);
         Ok(Workspace {
             members: out,
             // One profile, because a Nikaia build has no dev/release division
@@ -2287,8 +2102,8 @@ impl Project {
     /// machine code looks like.
     fn codegen(&self) -> Codegen {
         Codegen::new(
-            &self.manifest.codegen_for(&self.settings.target),
-            self.settings.panic_strategy(),
+            &self.manifest.codegen_for(&self.settings.words.target),
+            &self.settings.panic_strategy(),
         )
     }
 
@@ -2435,7 +2250,7 @@ impl Project {
             // package's. A consumer reads the ledger the program's build
             // writes, and `nikaia test` in a package must leave its committed
             // files as they were.
-            if !(at == 0 && self.settings.tests && self.variant.is_some()) {
+            if !(at == 0 && self.settings.words.tests && self.variant.is_some()) {
                 write_ledger(
                     &member.root.join("nikaia.contracts"),
                     &lowered.ledger,
@@ -2617,9 +2432,9 @@ impl Project {
                 Some(_) => None,
                 None => {
                     let tree = Sysroot::resolve().rlib_cache(
-                        &self.settings.target,
+                        &self.settings.words.target,
                         &self.codegen(),
-                        &self.settings.reentrancy_check,
+                        &self.settings.words.reentrancy_check,
                         &self.settings.cpu_key()?,
                     );
                     // What projects that are gone left there goes (ADR-021 D12.5).
@@ -2686,7 +2501,7 @@ impl Project {
             write_if_changed(&made.join(format!("{package}.h")), header)?;
             // **The binding asked for, over it** (D26): `<package>/__init__.py`
             // beside the library it loads.
-            if self.settings.bind.as_deref() == Some("python")
+            if self.settings.words.bind.as_deref() == Some("python")
                 && let Some(python) = &python
             {
                 let module = made.join(package.replace('-', "_"));
@@ -2697,7 +2512,7 @@ impl Project {
             }
             // `node/<package>.c` and its `binding.gyp` (D28), which the
             // host's toolchain compiles against the library.
-            if self.settings.bind.as_deref() == Some("node")
+            if self.settings.words.bind.as_deref() == Some("node")
                 && let Some(node) = &node
             {
                 let module = made.join("node");
@@ -2803,7 +2618,7 @@ impl Project {
         // **The program the build lowered**, test build included (ADR-269
         // D1): a test build's entry has its dispatcher, and a map rebuilt
         // from the other program places a warning in the wrong file.
-        let mut program = match self.settings.tests {
+        let mut program = match self.settings.words.tests {
             true => modules::Program::read_for_tests(&self.entry(), &self.packages()?, true)?,
             false => modules::Program::read_with(&self.entry(), &self.packages()?)?,
         };
@@ -3576,29 +3391,17 @@ fn trace(invocation: &Invocation, verdict: &str) {
     }
 }
 
-/// The user's flags (`CARGO_ENCODED_RUSTFLAGS` first, as Cargo reads them,
-/// else `RUSTFLAGS` split on whitespace) followed by `-C target-cpu=CPU`,
-/// joined with `\x1f`; `None` when neither variable is set (#753).
-fn encoded_with_cpu(encoded: Option<&str>, plain: Option<&str>, cpu: &str) -> Option<String> {
-    let mut flags: Vec<String> = match (encoded, plain) {
-        (Some(e), _) => e
-            .split('\x1f')
-            .filter(|f| !f.is_empty())
-            .map(String::from)
-            .collect(),
-        (None, Some(p)) => p.split_whitespace().map(String::from).collect(),
-        (None, None) => return None,
-    };
-    flags.push("-C".to_string());
-    flags.push(format!("target-cpu={cpu}"));
-    Some(flags.join("\x1f"))
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
     fn cpu_comes_after_the_users_rustflags() {
-        use super::encoded_with_cpu as e;
+        let e = |encoded: Option<&str>, plain: Option<&str>, cpu: &str| {
+            nikaia_std::tools::project_settings::encoded_with_cpu(
+                &encoded.map(String::from),
+                &plain.map(String::from),
+                cpu,
+            )
+        };
         assert_eq!(e(None, None, "x86-64-v3"), None);
         assert_eq!(
             e(None, Some(" -C  overflow-checks=off "), "x86-64-v3").unwrap(),

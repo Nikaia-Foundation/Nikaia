@@ -525,7 +525,7 @@ fn lower_to_rust(
         "Lowered {} to {} (target: {}{})",
         input.display(),
         output_path.display(),
-        settings.target,
+        settings.words.target,
         if lowered.reused {
             ", lowering from cache"
         } else {
@@ -688,7 +688,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
                      in `[build]` (ADR-284 D4, D26)."
                 );
             }
-            project.settings.bind = Some(language.clone());
+            project.settings.words.bind = Some(language.clone());
             project.settings.optimize(&args.optimization)?;
             project.settings.choose_cpu(args.cpu.as_deref())?;
             return drive(args, &project, "build", &[]);
@@ -819,7 +819,7 @@ fn test_command(
     }
     let settings: Vec<String> = match both_settings {
         true => vec!["no".to_string(), "yes".to_string()],
-        false => vec![project.settings.user_parallelism.clone()],
+        false => vec![project.settings.words.user_parallelism.clone()],
     };
     // **Each binary is kept where the next build will not overwrite it**: the
     // test build and the program land at the same path, and so do the two
@@ -834,7 +834,7 @@ fn test_command(
                 continue;
             }
             let mut built = Project::open(&start, args.target.as_deref(), Some(setting))?;
-            built.settings.tests = testing;
+            built.settings.words.tests = testing;
             built.variant = Some(format!(
                 "{setting}-{}",
                 if testing { "tests" } else { "program" }

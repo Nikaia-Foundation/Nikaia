@@ -57,6 +57,7 @@ COMPILER_NIKA = {
     "diffs.nika": "project: what changed in a ledger, and an output test's difference (0.0.350)",
     "project_check.nika": "project: the refusal summary of check, the switches that make a finding a warning, the --locked texts (P2)",
     "project_members.nika": "project: a build's packages, a dependency's renames, the members and the order they are lowered in, a package's crate root (P4a); a build's foreign boundary: the crates it declares, their descriptions and sources that moved, the proofs' digest (P4b)",
+    "project_settings.nika": "project: the build settings' words, what `--refuted-claims`, `--unproved-claims`, `--optimization` and `artifact` may say, the cache key of a build, the CPU level's Cargo configuration and RUSTFLAGS, the panic strategy (P1)",
     "project_tests.nika": "project: the test runner's discovery of output tests and test programs, what they expect, the refusal test, the verdict line (P3a)",
     "sysroot_cache.nika": "sysroot: the sysroot's paths, the CPU levels and native's key, the tools package as files, lower-std's cache keys and entries (S2)",
     "types.nika": "types: a name declared twice, a bound naming no trait, a type nothing declares (0.0.354)",

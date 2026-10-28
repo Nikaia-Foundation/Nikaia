@@ -1627,6 +1627,14 @@ mod project_members_lowered {
 #[allow(unused_imports)]
 pub use project_members_lowered::*;
 
+mod project_settings_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/project_settings.rs");
+}
+#[allow(unused_imports)]
+pub use project_settings_lowered::*;
+
 mod project_tests_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2668,6 +2676,10 @@ pub mod project_check {
 pub mod project_members {
     #[allow(unused_imports)]
     pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_dependencies_first, project_members_members_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest};
+}
+pub mod project_settings {
+    #[allow(unused_imports)]
+    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu};
 }
 pub mod project_tests {
     #[allow(unused_imports)]

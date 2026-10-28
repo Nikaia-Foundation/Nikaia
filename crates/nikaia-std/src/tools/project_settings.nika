@@ -1,0 +1,216 @@
+// The build settings' words (P1, #125): what `--refuted-claims`,
+// `--unproved-claims`, `--optimization`, `[build] artifact` and `--cpu` may
+// say, the cache's key of a build and what a panic does on its target. The
+// Rust adapter is `Settings` in `crates/nikaia/src/project.rs`: it keeps
+// `build: Build` and holds these words.
+
+/// A word a build setting does not take, in the words the compiler reports.
+pub enum ProjectSettingsRefusal {
+    Refused(String),
+}
+
+impl Error for ProjectSettingsRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            ProjectSettingsRefusal::Refused(why) => why.clone(),
+        }
+    }
+}
+
+/// **The build switches as words**: flag over manifest over built-in
+/// default. The cache key and the diagnostics want the word (ADR-021 D5
+/// hashes what was asked for); the emitter wants the parsed value, which
+/// `Settings::build` holds beside them.
+pub struct ProjectWords {
+    pub target: String,
+    pub user_parallelism: String,
+    pub reentrancy_check: String,
+    /// `--optimization`, or `[build] optimization`: `name:level` words,
+    /// comma-separated, the last one for a name deciding
+    /// ([ADR-306](../../../docs/specification/adr/adr-306.md) D1). Empty where
+    /// neither says anything.
+    pub optimization: String,
+    /// **What a claim shown false with values is**
+    /// ([ADR-269](../../../docs/specification/adr/adr-269.md) D8): `error`, the
+    /// default, refuses the program; `warn` builds it, the claim checked where
+    /// it is reached. The bypass for a program a better prover now refutes.
+    pub refuted_claims: String,
+    /// **What a claim the compiler did not prove is**
+    /// ([ADR-380](../../../docs/specification/adr/adr-380.md) D2): `error`, the
+    /// default, refuses the program (`NK1300`); `warn` builds it, each such
+    /// claim a warning and a check where it is reached.
+    pub unproved_claims: String,
+    /// **What is made** (ADR-284 D4): `"program"`, or `"c-library"`, which
+    /// exports every `pub extern fn` with a body and writes the header.
+    pub artifact: String,
+    /// The prefix of every exported symbol (ADR-284 D13): `symbol-prefix`, or
+    /// the package's name with `-` written `_`.
+    pub symbol_prefix: String,
+    /// **Whether this is `nikaia test`'s build**
+    /// ([ADR-269](../../../docs/specification/adr/adr-269.md) D1): the program's
+    /// `test` blocks are compiled, and its `main` runs them by number. A
+    /// choice like the others, so the cache and the wrapper both see it.
+    pub tests: bool,
+    /// **A binding to write beside the library** (`nikaia bind <language>`,
+    /// [ADR-284](../../../docs/specification/adr/adr-284.md) D26): `python` or `node`,
+    /// or none for a plain build.
+    pub bind: String?,
+    /// **The CPU level `--cpu` named** ([ADR-002](../../../docs/specification/adr/adr-002.md)
+    /// D6), where it is not the target's baseline: the build may use every
+    /// instruction it has, in the program and in `std`. None is the baseline,
+    /// and no `-C target-cpu` at all.
+    pub cpu: String?,
+}
+
+/// `error` or `warn`, what `--refuted-claims` and `[build] refuted-claims`
+/// may say ([ADR-269](../../../docs/specification/adr/adr-269.md) D8).
+pub fn refuted_claims(word: String) -> String throws {
+    return match word {
+        "error" | "warn" => word,
+        else => throw ProjectSettingsRefusal::Refused(f"`refuted-claims` is `error` or `warn`, not `{word}`. `error` refuses a program with a claim the compiler shows false with values; `warn` builds it and checks the claim when it runs."),
+    }
+}
+
+/// `error` or `warn`, what `--unproved-claims` and `[build] unproved-claims`
+/// may say ([ADR-380](../../../docs/specification/adr/adr-380.md) D2).
+pub fn unproved_claims(word: String) -> String throws {
+    return match word {
+        "error" | "warn" => word,
+        else => throw ProjectSettingsRefusal::Refused(f"`unproved-claims` is `error` or `warn`, not `{word}`. `error` refuses a program with a claim the compiler did not prove; `warn` builds it and checks the claim when it runs."),
+    }
+}
+
+/// **`name:on` or `name:off` words, comma-separated**, to what they decide
+/// ([ADR-306](../../../docs/specification/adr/adr-306.md) D14). The names are
+/// `remove-bounds-checks` and `remove-overflow-checks`
+/// ([ADR-306](../../../docs/specification/adr/adr-306.md) D6); a later word for
+/// a name wins over an earlier one.
+pub fn optimizations(words: String) -> (BoundsChecks, OverflowChecks) throws {
+    let mut bounds = BoundsChecks::Kept
+    let mut overflow = OverflowChecks::Kept
+    for word in words.split(",").map(fn(w) { w.trim() }).filter(fn(w) { !w.is_empty() }) {
+        let (name, level) = word.split_once(":") ?? throw ProjectSettingsRefusal::Refused(f"`--optimization={word}` needs `on` or `off`: write `--optimization=remove-bounds-checks:on` or `--optimization=remove-overflow-checks:on`")
+        match name {
+            "remove-bounds-checks" => {
+                bounds = BoundsChecks::parse(level) ?? throw ProjectSettingsRefusal::Refused(f"`remove-bounds-checks` is `on` or `off`, not `{level}`{project_settings_renamed(level)}")
+            },
+            // Read by `skip_free_at_exit` and `prove_through_loops`; checked
+            // here with the rest.
+            "skip-free-at-exit" | "prove-through-loops" => {
+                if !(match level { "on" | "off" => true, else => false }) {
+                    throw ProjectSettingsRefusal::Refused(f"`{name}` is `on` or `off`, not `{level}`")
+                }
+            },
+            "remove-overflow-checks" => {
+                overflow = OverflowChecks::parse(level) ?? throw ProjectSettingsRefusal::Refused(f"`remove-overflow-checks` is `on` or `off`, not `{level}`{project_settings_renamed(level)}")
+            },
+            else => throw ProjectSettingsRefusal::Refused(f"there is no optimization called `{name}`: the ones there are, are `remove-bounds-checks`, `remove-overflow-checks`, `prove-through-loops` and `skip-free-at-exit`"),
+        }
+    }
+    return (bounds, overflow)
+}
+
+/// **`prove-through-loops:on`**
+/// ([ADR-361](../../../docs/specification/adr/adr-361.md) D10): an index's, an
+/// overflow's or a shift's check a loop leaves open is asked once more through
+/// the loop's invariant. The last word for the name wins; [`optimizations`]
+/// has already refused a word that is not `on` or `off`.
+pub fn prove_through_loops(words: String) -> bool {
+    return (words.split(",").map(fn(w) { w.trim() }).filter_map(fn(w) { w.strip_prefix("prove-through-loops:") }).last() ?? "") == "on"
+}
+
+/// **`skip-free-at-exit:on`**
+/// ([ADR-348](../../../docs/specification/adr/adr-348.md) D1): what `main` still
+/// holds at its end dies, and every cleanup runs, but its memory is left to the
+/// operating system. The last word for the name wins; [`optimizations`] has
+/// already refused a word that is not `on` or `off`.
+pub fn skip_free_at_exit(words: String) -> bool {
+    return (words.split(",").map(fn(w) { w.trim() }).filter_map(fn(w) { w.strip_prefix("skip-free-at-exit:") }).last() ?? "") == "on"
+}
+
+/// **The words before ADR-306 D14**: `basic` and `aggressive` were levels of
+/// how hard the compiler proved and whether it dropped what it proved, in one
+/// word. What is proved no longer depends on the option, so the old words name
+/// the one thing they still mean.
+fn project_settings_renamed(level: String) -> String {
+    return match level {
+        "aggressive" | "basic" => ". The compiler now proves the same at every build, and the option only says whether a proved check is written without it: `aggressive` and `basic` are `on`",
+        else => "",
+    }
+}
+
+/// `[build] artifact` (ADR-284 D4): a program, or a library C calls.
+pub fn artifact(word: String) -> String throws {
+    return match word {
+        "program" | "c-library" => word,
+        else => throw ProjectSettingsRefusal::Refused(f"`artifact` is `program` or `c-library`, not `{word}`. `c-library` makes a shared and a static library of the package, and its header, from every `pub extern fn` with a body."),
+    }
+}
+
+/// What Cargo is told for the CPU level: `-C target-cpu` for every crate
+/// built for the target, the program's and `std`'s, through Cargo's own
+/// configuration rather than the user's `RUSTFLAGS` (ADR-002 D6, ADR-325).
+pub fn cpu_config(words: ref ProjectWords, target: Target) -> Vec[String] {
+    return match words.cpu?.clone() {
+        level => [f"target.\"{target.triple()}\".rustflags=[\"-C\", \"target-cpu={level}\"]"],
+        null => [],
+    }
+}
+
+/// The cache's view of this build (ADR-021 D5): the key of
+/// `Settings::choices`, whose backend is `"rust"`. `cpu_key` is
+/// `Settings::cpu_key`'s answer, read only where a level is named.
+pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: String) -> String {
+    let tests = if words.tests { "/tests" } else { "" }
+    // A build that lets a refuted claim through must not hand its
+    // lowering to one that refuses it.
+    let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" }
+    // The same for a claim not proved (ADR-380 D2).
+    let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" }
+    let removed_bounds = match bounds { BoundsChecks::Kept => "", else => f"/remove-bounds-checks:{bounds.name()}" }
+    let removed_overflow = match overflow { OverflowChecks::Kept => "", else => f"/remove-overflow-checks:{overflow.name()}" }
+    let skip_free = if skip_free_on { "/skip-free-at-exit:on" } else { "" }
+    let through_loops = if through_loops_on { "/prove-through-loops:on" } else { "" }
+    // A library's lowering carries its entry points' wrappers,
+    // named by the prefix.
+    let library = if words.artifact == "c-library" { f"/c-library:{words.symbol_prefix}" } else { "" }
+    // A `comptime` that reads `target::has` answers for the level
+    // (ADR-371 D6), so the lowering is kept per level.
+    let cpu = if words.cpu != null { f"/cpu:{cpu_key}" } else { "" }
+    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{removed_bounds}{removed_overflow}{skip_free}{through_loops}{library}{cpu}"
+}
+
+/// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.
+///
+/// Not a choice, which is why it is not in the codegen table: WebAssembly
+/// traps and has no stack to unwind, and a build that asked for `unwind`
+/// there would be asking for something the machine does not have.
+pub fn panic_strategy(target: Target) -> String {
+    return match target {
+        Target::X86_64Linux | Target::Aarch64Linux => "unwind",
+        Target::Wasm32Unknown => "abort",
+        else => {
+            if target.is_bare_metal() || target.triple().starts_with("wasm") {
+                "abort"
+            } else {
+                "unwind"
+            }
+        },
+    }
+}
+
+/// The user's flags (`CARGO_ENCODED_RUSTFLAGS` first, as Cargo reads them,
+/// else `RUSTFLAGS` split on whitespace) followed by `-C target-cpu=CPU`,
+/// joined with `\x1f`; `null` when neither variable is set (#753).
+pub fn encoded_with_cpu(encoded: String?, plain: String?, cpu: String) -> String? {
+    let mut flags: Vec[String] = match encoded?.clone() {
+        e => e.split("\x1f").filter(fn(f) { !f.is_empty() }).map(fn(f) { f.clone() }).collect(),
+        null => match plain?.clone() {
+            p => p.split_whitespace().map(fn(f) { f.clone() }).collect(),
+            null => return null,
+        },
+    }
+    flags.push("-C")
+    flags.push(f"target-cpu={cpu}")
+    return flags.join("\x1f")
+}

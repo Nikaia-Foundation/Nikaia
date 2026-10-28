@@ -28,9 +28,11 @@ fn settings(manifest: &str) -> Settings {
 /// **The key exists, and `yes` is the default.**
 #[test]
 fn the_manifest_carries_it_and_it_is_on_by_default() {
-    assert_eq!(settings("").reentrancy_check, "yes");
+    assert_eq!(settings("").words.reentrancy_check, "yes");
     assert_eq!(
-        settings("[build]\nreentrancy-check = \"no\"\n").reentrancy_check,
+        settings("[build]\nreentrancy-check = \"no\"\n")
+            .words
+            .reentrancy_check,
         "no"
     );
     assert!(settings("").build.reentrancy_check.is_on());
