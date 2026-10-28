@@ -56,6 +56,7 @@ COMPILER_NIKA = {
     "parse_notes.nika": "parser: a parse error's reading, the text half (0.0.347)",
     "diffs.nika": "project: what changed in a ledger, and an output test's difference (0.0.350)",
     "project_check.nika": "project: the refusal summary of check, the switches that make a finding a warning, the --locked texts (P2)",
+    "sysroot_cache.nika": "sysroot: the sysroot's paths, the CPU levels and native's key, the tools package as files, lower-std's cache keys and entries (S2)",
     "types.nika": "types: a name declared twice, a bound naming no trait, a type nothing declares (0.0.354)",
     "views.nika": "views: where a naked view parameter's view ends up, NK2302 and the buffer the emitter names (0.0.355)",
     "render.nika": "diagnostics: a finding laid out on the lines it is about, each place underlined, and NK2202's message (0.0.356, 0.0.358), a relayed rustc message, laid out (0.0.748)",

@@ -31,6 +31,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use nikaia_std::rt::exec::block_on;
+use nikaia_std::tools::sysroot_cache;
 use orchestrator::cache::{self, Key, Layout};
 
 /// The development override, named for what it is.
@@ -38,27 +40,6 @@ use orchestrator::cache::{self, Key, Layout};
 /// It replaced `NIKAIA_STD_PATH`, which named a *crate directory* and could
 /// therefore only ever answer one of the questions this module answers.
 pub const SYSROOT_VAR: &str = "NIKAIA_SYSROOT";
-
-/// `std`'s directory inside a sysroot. The same name it has in the checkout, so
-/// that `crates/` *is* a sysroot and the in-tree flow needs no special case.
-pub const STD_DIR: &str = "nikaia-std";
-
-/// The extension `std`'s Nikaia half carries.
-const NIKA: &str = "nika";
-
-/// Where the Nikaia that the **toolchain** uses lives, under `std`'s `src`.
-///
-/// A directory rather than a naming convention, because what separates the two
-/// is not what the files are like but what `std` promises about them
-/// ([`Sysroot::tool_modules`]).
-const TOOLS: &str = "tools";
-
-/// **Where `std`'s own unpublished Nikaia lives** (#723), under `std`'s `src`:
-/// what a *program* runs - the HTTP/1 head's grammar - as opposed to what only
-/// the compiler runs, in [`TOOLS`]. A package of its own, lowered the same
-/// way into its own `package.rs`, because `std` compiles the tools only for
-/// the compiler (the `compiler` feature) and this into every program.
-const RUNTIME: &str = "runtime";
 
 /// **The toolchain's Nikaia is one package** (ADR-294): every `.nika` in
 /// `src/tools` shares one namespace, as the files of a package do (Part I 9.1,
@@ -119,67 +100,37 @@ impl Sysroot {
 
     /// The `nikaia-std` a generated project depends on by path.
     pub fn std_dir(&self) -> PathBuf {
-        self.root.join(STD_DIR)
+        sysroot_cache::sysroot_std_dir(&self.root)
     }
 
-    /// `std`'s Nikaia half, in a fixed order.
-    ///
-    /// Sorted, because [ADR-005](../../../docs/specification/adr/adr-005.md) D8
-    /// bans consuming a directory listing in filesystem order anywhere output
-    /// depends on it, and the release step below writes files from this list.
-    ///
-    /// **The top level only, and that is the rule that says what `std` is.**
-    /// A `.nika` beside `lib.rs` is a module of `std` and
-    /// `crates/nikaia/tests/contracts.rs` requires `std.contracts` to carry
-    /// every `pub` thing it declares. What is in [`Self::tool_modules`] is not.
+    /// `std`'s Nikaia half, sorted (`sysroot_std_modules`).
     pub fn std_modules(&self) -> Result<Vec<PathBuf>> {
-        self.nika_in(&self.std_dir().join("src"), "std's Nikaia modules")
+        listed(sysroot_cache::sysroot_std_modules(&self.root), || {
+            let src = self.std_dir().join("src");
+            format!("reading {} for std's Nikaia modules", src.display())
+        })
     }
 
-    /// **Nikaia the toolchain uses and `std` does not publish**, in `src/tools`.
-    ///
-    /// `tools/rust.nika` is the reading half of `nikaia describe`
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D13), lowered the
-    /// same way `std`'s own Nikaia half is and reached by the compiler as an
-    /// ordinary Rust module ([ADR-290](../../../docs/specification/adr/adr-290.md)
-    /// D1). It lives in this crate because this is where the release step
-    /// already looks, and in a directory of its own because **a `.nika` beside
-    /// `lib.rs` means something**: that `std` offers it, and that
-    /// `std.contracts` has to say so. This one is not offered and must not be
-    /// in that file.
-    /// The directory of the toolchain's Nikaia package, which `std` compiles
-    /// only under its `compiler` feature (#723).
+    /// The directory of the toolchain's Nikaia package (`sysroot_tools_dir`).
     pub fn tools_dir(&self) -> PathBuf {
-        self.std_dir().join("src").join(TOOLS)
+        sysroot_cache::sysroot_tools_dir(&self.root)
     }
 
     /// The directory of `std`'s run-time Nikaia package (#723): unpublished
     /// like the tools, but compiled into every program.
     pub fn runtime_dir(&self) -> PathBuf {
-        self.std_dir().join("src").join(RUNTIME)
+        sysroot_cache::sysroot_runtime_dir(&self.root)
     }
 
+    /// The toolchain's Nikaia modules, sorted (`sysroot_tool_modules`).
     pub fn tool_modules(&self) -> Result<Vec<PathBuf>> {
-        let dir = self.std_dir().join("src").join(TOOLS);
-        match dir.is_dir() {
-            false => Ok(Vec::new()),
-            true => self.nika_in(&dir, "the toolchain's Nikaia modules"),
-        }
-    }
-
-    /// Every `.nika` directly in one directory, sorted.
-    fn nika_in(&self, src: &Path, what: &str) -> Result<Vec<PathBuf>> {
-        let mut out = Vec::new();
-        let entries = std::fs::read_dir(src)
-            .with_context(|| format!("reading {} for {what}", src.display()))?;
-        for entry in entries {
-            let path = entry?.path();
-            if path.extension().and_then(|e| e.to_str()) == Some(NIKA) {
-                out.push(path);
-            }
-        }
-        out.sort();
-        Ok(out)
+        listed(sysroot_cache::sysroot_tool_modules(&self.root), || {
+            let dir = self.tools_dir();
+            format!(
+                "reading {} for the toolchain's Nikaia modules",
+                dir.display()
+            )
+        })
     }
 
     /// Where the compiled `std` for this build goes (ADR-002 D4).
@@ -221,32 +172,13 @@ impl Sysroot {
 }
 
 /// **The CPU levels `--cpu` takes for `triple`**, the baseline first
-/// ([ADR-002](../../docs/specification/adr/adr-002.md) D6). x86-64 has its four
-/// named levels; a target without named levels takes only its baseline, the
-/// CPU `rustc` builds for when told none. Every target takes `native`.
+/// (`sysroot_cpu_levels`, ADR-002 D6).
 pub fn cpu_levels(triple: &str) -> Result<Vec<String>> {
-    let mut levels: Vec<String> = match triple.starts_with("x86_64") {
-        true => ["x86-64", "x86-64-v2", "x86-64-v3", "x86-64-v4"]
-            .map(str::to_string)
-            .to_vec(),
-        false => {
-            let cpus = rustc_cpus(triple, &[])?;
-            let baseline = cpus
-                .lines()
-                .find(|line| line.contains("default target CPU"))
-                .and_then(|line| line.split_whitespace().next())
-                .unwrap_or("generic");
-            vec![baseline.to_string()]
-        }
-    };
-    levels.push("native".to_string());
-    Ok(levels)
+    sysroot_cache::sysroot_cpu_levels(triple, &Host).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
-/// **What `native` means on this machine**, as the compiled `std`'s key
-/// holds it (ADR-002 D6): the CPU `rustc` finds and the features it turns on,
-/// never the word, so a cache directory moved to another machine is not
-/// taken for that machine's.
+/// **What `native` means on this machine** (`sysroot_native_cpu`, ADR-002
+/// D6), asked of `rustc` once a process.
 pub fn native_cpu(triple: &str) -> Result<String> {
     // Asked once a process: the key is read for each lowering and each cache.
     static ASKED: std::sync::Mutex<BTreeMap<String, String>> =
@@ -255,17 +187,7 @@ pub fn native_cpu(triple: &str) -> Result<String> {
         return Ok(known);
     }
     let said = rustc_cpus(triple, &["--print", "cfg", "-C", "target-cpu=native"])?;
-    let cpu = said
-        .lines()
-        .find(|line| line.trim_start().starts_with("native "))
-        .and_then(|line| line.split("currently ").nth(1))
-        .map(|rest| rest.trim_end_matches([')', '.']))
-        .unwrap_or("");
-    let features: Vec<&str> = said
-        .lines()
-        .filter(|line| line.starts_with("target_feature="))
-        .collect();
-    let key = format!("native={cpu};{}", features.join(","));
+    let key = sysroot_cache::sysroot_native_cpu(&said);
     if let Ok(mut held) = ASKED.lock() {
         held.insert(triple.to_string(), key.clone());
     }
@@ -458,13 +380,9 @@ pub fn lower_tools_at(dir: &Path, build: crate::emit::Build) -> Result<Package> 
 
 /// The package's files: every `.nika` in `dir`, sorted.
 fn tools_sources(dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
-        .with_context(|| format!("reading {}", dir.display()))?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().is_some_and(|e| e == NIKA))
-        .collect();
-    paths.sort();
-    Ok(paths)
+    listed(sysroot_cache::sysroot_nika_in(dir), || {
+        format!("reading {}", dir.display())
+    })
 }
 
 /// **The tools package from these files, in this order** (#581 step 9): what
@@ -597,33 +515,34 @@ fn lower_tools_files_cached(
     timer.lap("trust");
     // **The package's interface**, the same for every file of it.
     let interface: Option<String> = cache.compiler.as_ref().map(|compiler| {
-        let mut read: Vec<u8> = Vec::new();
-        let mut part = |bytes: &[u8]| {
-            read.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
-            read.extend_from_slice(bytes);
-        };
-        part(b"nikaia-lower-file-v1");
-        part(compiler.as_bytes());
-        part(
-            std::env::var("NIKAIA_LOWER_CACHE_SALT")
-                .unwrap_or_default()
-                .as_bytes(),
-        );
-        part(format!("{build:?}{provenance:?}{facts_reusable}").as_bytes());
-        part(format!("{own:?}").as_bytes());
-        for (path, (text, one)) in paths.iter().zip(texts.iter().zip(&parsed)) {
-            part(path.file_name().unwrap_or_default().as_encoded_bytes());
-            part(without_bodies(text, one).as_bytes());
-        }
-        cache::sha256_hex(&read)
+        let names: Vec<String> = paths
+            .iter()
+            .map(|path| {
+                let name = path.file_name().unwrap_or_default();
+                name.to_string_lossy().into_owned()
+            })
+            .collect();
+        let bodiless: Vec<String> = texts
+            .iter()
+            .zip(&parsed)
+            .map(|(text, one)| without_bodies(text, one))
+            .collect();
+        sysroot_cache::sysroot_interface(
+            compiler,
+            &std::env::var("NIKAIA_LOWER_CACHE_SALT").unwrap_or_default(),
+            &format!("{build:?}{provenance:?}{facts_reusable}"),
+            &format!("{own:?}"),
+            &names,
+            &bodiless,
+            &Host,
+        )
     });
     let file_key = |at: usize| -> Option<String> {
-        let mut read = interface.clone()?.into_bytes();
-        let name = paths[at].file_name()?.as_encoded_bytes();
-        read.extend_from_slice(&(name.len() as u64).to_le_bytes());
-        read.extend_from_slice(name);
-        read.extend_from_slice(texts[at].as_bytes());
-        Some(cache::sha256_hex(&read))
+        let name = paths[at].file_name()?.to_string_lossy();
+        let interface = interface.as_deref()?;
+        Some(sysroot_cache::sysroot_file_key(
+            interface, &name, &texts[at], &Host,
+        ))
     };
 
     // **Each file checked and lowered on its own, on every core** (#667): a
@@ -784,95 +703,42 @@ pub struct Package {
     files: Vec<(String, String)>,
 }
 
-/// The line that starts a file in a package's cache entry.
-const PACKED: &str = "//@@ file ";
-
+/// The package's files as `sysroot_cache.nika` reads and writes them.
 impl Package {
     /// The generated files: path below the package's directory, and text.
     pub fn files(&self) -> &[(String, String)] {
         &self.files
     }
 
-    /// What is committed in `dir`: the index and every file under `lowered/`.
+    /// What is committed in `dir` (`sysroot_committed`).
     pub fn committed(dir: &Path) -> Package {
-        let mut names = vec![TOOLS_PACKAGE.to_string()];
-        names.extend(Self::stale(dir, &[]));
-        let files = names
-            .into_iter()
-            .map(|name| {
-                let text = std::fs::read_to_string(dir.join(&name)).unwrap_or_default();
-                (name, text)
-            })
-            .collect();
-        Package { files }
+        Package {
+            files: block_on(sysroot_cache::sysroot_committed(dir)),
+        }
     }
 
-    /// The package as one text, each `include!` of the index replaced by the
-    /// file it names: what a test compiles when it has no directory.
+    /// The package as one text (`sysroot_inlined`).
     pub fn inlined(&self) -> String {
-        let mut text = self
-            .files
-            .first()
-            .map(|(_, t)| t.clone())
-            .unwrap_or_default();
-        for (name, body) in self.files.iter().skip(1) {
-            text = text.replace(&format!("include!(\"{name}\");"), body);
-        }
-        text
+        sysroot_cache::sysroot_inlined(&self.files)
     }
 
     /// Whether any file holds `needle`.
     pub fn contains(&self, needle: &str) -> bool {
-        self.files.iter().any(|(_, text)| text.contains(needle))
+        sysroot_cache::sysroot_contains(&self.files, needle)
     }
 
-    /// The paths below `dir` that differ from what is committed there, or
-    /// are committed and no longer generated.
+    /// The paths below `dir` that differ from what is committed there
+    /// (`sysroot_drift`).
     pub fn drift(&self, dir: &Path) -> Vec<String> {
-        let mut drifted: Vec<String> = self
-            .files
-            .iter()
-            .filter(|(name, text)| {
-                std::fs::read_to_string(dir.join(name)).ok().as_deref() != Some(text.as_str())
-            })
-            .map(|(name, _)| name.clone())
-            .collect();
-        let kept: Vec<&str> = self.files.iter().map(|(name, _)| name.as_str()).collect();
-        for stale in Self::stale(dir, &kept) {
-            drifted.push(stale);
-        }
-        drifted
-    }
-
-    /// The generated files under `dir/lowered/` that `kept` does not name.
-    fn stale(dir: &Path, kept: &[&str]) -> Vec<String> {
-        let mut stale: Vec<String> = std::fs::read_dir(dir.join(TOOLS_FILES))
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
-            .map(|name| format!("{TOOLS_FILES}/{name}"))
-            .filter(|name| !kept.contains(&name.as_str()))
-            .collect();
-        stale.sort();
-        stale
+        block_on(sysroot_cache::sysroot_drift(&self.files, dir))
     }
 
     fn pack(&self) -> String {
-        self.files
-            .iter()
-            .map(|(name, text)| format!("{PACKED}{name}\n{text}"))
-            .collect()
+        sysroot_cache::sysroot_pack(&self.files)
     }
 
     fn unpack(packed: &str) -> Option<Package> {
-        let mut files: Vec<(String, String)> = Vec::new();
-        for line in packed.split_inclusive('\n') {
-            match line.strip_prefix(PACKED) {
-                Some(name) => files.push((name.trim_end().to_string(), String::new())),
-                None => files.last_mut()?.1.push_str(line),
-            }
-        }
-        (!files.is_empty()).then_some(Package { files })
+        sysroot_cache::sysroot_unpack(packed).map(|files| Package { files })
     }
 }
 
@@ -1295,8 +1161,8 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
                 rust
             }
         };
-        let kept: Vec<&str> = rust.files.iter().map(|(name, _)| name.as_str()).collect();
-        for stale in Package::stale(&package, &kept) {
+        let kept: Vec<String> = rust.files.iter().map(|(name, _)| name.clone()).collect();
+        for stale in sysroot_cache::sysroot_stale(&package, &kept) {
             let _ = std::fs::remove_file(package.join(&stale));
             changed.push(package.join(stale));
         }
@@ -1340,9 +1206,6 @@ struct LoweredBefore {
 /// separates entries by hand while a lowering is being worked on.
 const COMPILER_IDENTITY: &str = env!("NIKAIA_COMPILER");
 
-/// The file in an entry's directory that holds what was lowered.
-const LOWERED: &str = "lowered.rs";
-
 impl LoweredBefore {
     /// No cache: nothing is read and nothing is written.
     fn none() -> LoweredBefore {
@@ -1368,51 +1231,69 @@ impl LoweredBefore {
         }
     }
 
-    /// The key for lowering `files` as `what`, or `None` where one of them
-    /// cannot be read (the lowering then says why) or the compiler could not.
+    /// The key for lowering `files` as `what` (`sysroot_lowered_key`).
     fn key(&self, what: &str, files: &[PathBuf]) -> Option<String> {
-        let mut read: Vec<u8> = Vec::new();
-        for part in ["nikaia-lower-std-v1", self.compiler.as_deref()?, what] {
-            read.extend_from_slice(part.as_bytes());
-            read.push(0);
-        }
-        for file in files {
-            let source = std::fs::read(file).ok()?;
-            let name = file.file_name()?.as_encoded_bytes();
-            read.extend_from_slice(&(name.len() as u64).to_le_bytes());
-            read.extend_from_slice(name);
-            read.extend_from_slice(&(source.len() as u64).to_le_bytes());
-            read.extend_from_slice(&source);
-        }
-        Some(cache::sha256_hex(&read))
+        block_on(sysroot_cache::sysroot_lowered_key(
+            self.compiler.clone(),
+            what,
+            files,
+            &Host,
+        ))
     }
 
     fn get(&self, key: Option<&str>) -> Option<String> {
-        let entry = self.root.join(key?);
-        self.compiler.as_ref()?;
-        let rust = std::fs::read_to_string(entry.join(LOWERED)).ok()?;
-        cache::use_entry(&entry);
-        Some(rust)
+        block_on(sysroot_cache::sysroot_lowered_get(
+            &self.root,
+            self.compiler.is_some(),
+            key.map(str::to_string),
+            &Host,
+        ))
     }
 
     fn put(&self, key: Option<&str>, rust: &str) {
-        let (Some(key), Some(_)) = (key, &self.compiler) else {
-            return;
-        };
-        let entry = self.root.join(key);
-        if std::fs::create_dir_all(&entry).is_err() {
-            return;
-        }
-        // Whole or not at all: a reader never sees half an entry.
-        let partial = crate::comptime_run::unique_beside(&entry.join(LOWERED));
-        if std::fs::write(&partial, rust).is_ok()
-            && std::fs::rename(&partial, entry.join(LOWERED)).is_ok()
-        {
-            cache::use_entry(&entry);
-        } else {
-            let _ = std::fs::remove_file(&partial);
-        }
+        block_on(sysroot_cache::sysroot_lowered_put(
+            &self.root,
+            self.compiler.is_some(),
+            key.map(str::to_string),
+            rust,
+            &Host,
+        ))
     }
+}
+
+/// **What `sysroot_cache.nika` asks of the compiler**: SHA-256, the user
+/// cache's marks, a name no other writer takes, and `rustc`.
+struct Host;
+
+impl sysroot_cache::SysrootHost for Host {
+    fn sha256_hex(&self, read: &[u8]) -> String {
+        cache::sha256_hex(read)
+    }
+
+    fn use_entry(&self, entry: &Path) {
+        cache::use_entry(entry)
+    }
+
+    fn unique_beside(&self, path: &Path) -> PathBuf {
+        crate::comptime_run::unique_beside(path)
+    }
+
+    fn rustc_cpus(
+        &self,
+        triple: &str,
+        more: &[String],
+    ) -> std::result::Result<String, Box<dyn std::error::Error>> {
+        let more: Vec<&str> = more.iter().map(String::as_str).collect();
+        rustc_cpus(triple, &more).map_err(|e| format!("{e:#}").into())
+    }
+}
+
+/// A listing of `sysroot_cache.nika`, its failure said with what was read.
+fn listed(
+    found: std::result::Result<Vec<PathBuf>, nikaia_std::error::Thrown<nikaia_std::io::IoError>>,
+    what: impl FnOnce() -> String,
+) -> Result<Vec<PathBuf>> {
+    found.map_err(|e| anyhow::anyhow!("{e}")).with_context(what)
 }
 
 #[cfg(test)]

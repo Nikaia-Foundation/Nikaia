@@ -7,6 +7,9 @@ ty::base( type_last_segment(
 base( type_last_segment(
 check::Finding CheckFinding # check/mod.rs re-exports check_state::CheckFinding as Finding (project_check.nika, P2)
 check::Severity CheckSeverity # the same re-export; also `check::Severity::Warning` in expressions
+cache::sha256_hex host.sha256_hex # `std` has no SHA-256: a `SysrootHost` method (sysroot_cache.nika, S2)
+cache::use_entry host.use_entry # the user cache's mark, a `SysrootHost` method (S2)
+crate::comptime_run::unique_beside host.unique_beside # a `SysrootHost` method (S2)
 
 # [view]: what `--view` (R177) renames, in this order. The parsed files are
 # `ParsedView`s named `unit`. A bare word is renamed as a word (not after a
@@ -28,3 +31,5 @@ unit.name( unit.text(
 [types]
 check::Finding = CheckFinding # check/mod.rs re-exports check_state::CheckFinding as Finding (project_check.nika, P2)
 check::Severity = CheckSeverity # the same re-export
+PathBuf = fs::Path # std's file name, `std::path::PathBuf` lowered; its methods are `nikaia_std::fs::path` (sysroot_cache.nika, S2)
+&Path = ref fs::Path # the same, lent (S2)

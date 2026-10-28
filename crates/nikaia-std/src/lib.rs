@@ -260,6 +260,9 @@ pub mod runtime {
     clippy::map_entry,
     clippy::large_enum_variant,
     clippy::double_ended_iterator_last,
+    clippy::precedence,
+    clippy::manual_unwrap_or_default,
+    clippy::needless_borrows_for_generic_args,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):

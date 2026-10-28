@@ -1,0 +1,360 @@
+// **The sysroot's paths, the tools package as files, and `lower-std`'s cache
+// keys** (S2, #125): what `crates/nikaia/src/sysroot.rs` did with the file
+// system and SHA-256, moved. `sysroot.rs` keeps the driver (`lower_std`, the
+// runs of `lower_tools*`, `in_parallel`, `Phases`), `Sysroot::resolve`, the
+// compiled `std`'s directory and the `ASKED` memo of `native_cpu`, and calls
+// these; what `std` cannot say yet (SHA-256, the user cache, a `rustc`
+// process) it answers as the `SysrootHost`.
+//
+// **The keys are the bytes the Rust hashed, in the same order**: a part is its
+// length as a `u64` little-endian and then its bytes, a part of a module key
+// ends with a `0`. The `Debug` texts a file key reads are made in Rust and
+// passed in, so no key changed with the move.
+
+use std::fs
+
+/// `std`'s directory inside a sysroot. The same name it has in the checkout, so
+/// that `crates/` *is* a sysroot and the in-tree flow needs no special case.
+comptime SYSROOT_STD_DIR: ref String = "nikaia-std"
+
+/// The extension `std`'s Nikaia half carries.
+comptime SYSROOT_NIKA: ref String = "nika"
+
+/// Where the Nikaia that the **toolchain** uses lives, under `std`'s `src`.
+///
+/// A directory rather than a naming convention, because what separates the two
+/// is not what the files are like but what `std` promises about them
+/// (`sysroot_tool_modules`).
+comptime SYSROOT_TOOLS: ref String = "tools"
+
+/// **Where `std`'s own unpublished Nikaia lives** (#723), under `std`'s `src`:
+/// what a *program* runs - the HTTP/1 head's grammar - as opposed to what only
+/// the compiler runs, in `SYSROOT_TOOLS`.
+comptime SYSROOT_RUNTIME: ref String = "runtime"
+
+/// **The toolchain's Nikaia is one package** (ADR-294), lowered into this one
+/// index file beside its sources.
+comptime SYSROOT_TOOLS_PACKAGE: ref String = "lowered.rs"
+
+/// The directory beside the index that holds one generated file per `.nika`
+/// (#667 step 4).
+comptime SYSROOT_TOOLS_FILES: ref String = "lowered"
+
+/// The line that starts a file in a package's cache entry.
+comptime SYSROOT_PACKED: ref String = "//@@ file "
+
+/// The file in an entry's directory that holds what was lowered.
+comptime SYSROOT_LOWERED: ref String = "lowered.rs"
+
+/// What the sysroot's cache asks of the compiler.
+pub trait SysrootHost {
+    /// The SHA-256 of `read`, in lowercase hex (`std` has no SHA-256).
+    fn sha256_hex(ref self, read: ref Vec[u8]) -> String sync
+    /// Marks a cache entry as used now, so the user cache's pruning keeps it.
+    fn use_entry(ref self, entry: ref fs::Path) sync
+    /// A name beside `path` that no other writer takes, for a file that is
+    /// renamed onto `path` once it is whole.
+    fn unique_beside(ref self, path: ref fs::Path) -> fs::Path sync
+    /// `rustc --print target-cpus` for `triple`, with `more` arguments.
+    fn rustc_cpus(ref self, triple: ref String, more: ref Vec[String]) -> String sync throws
+}
+
+/// The `nikaia-std` a generated project depends on by path.
+pub fn sysroot_std_dir(root: ref fs::Path) -> fs::Path sync {
+    return root.join(SYSROOT_STD_DIR)
+}
+
+/// The directory of the toolchain's Nikaia package, which `std` compiles
+/// only under its `compiler` feature (#723).
+///
+/// `tools/rust.nika` is the reading half of `nikaia describe`
+/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D13), lowered the
+/// same way `std`'s own Nikaia half is and reached by the compiler as an
+/// ordinary Rust module ([ADR-290](../../../docs/specification/adr/adr-290.md)
+/// D1). It lives in this crate because this is where the release step
+/// already looks, and in a directory of its own because **a `.nika` beside
+/// `lib.rs` means something**: that `std` offers it, and that
+/// `std.contracts` has to say so. This one is not offered and must not be
+/// in that file.
+pub fn sysroot_tools_dir(root: ref fs::Path) -> fs::Path sync {
+    return sysroot_std_dir(root).join("src").join(SYSROOT_TOOLS)
+}
+
+/// The directory of `std`'s run-time Nikaia package (#723): unpublished
+/// like the tools, but compiled into every program.
+pub fn sysroot_runtime_dir(root: ref fs::Path) -> fs::Path sync {
+    return sysroot_std_dir(root).join("src").join(SYSROOT_RUNTIME)
+}
+
+/// `std`'s Nikaia half, in a fixed order.
+///
+/// Sorted, because [ADR-005](../../../docs/specification/adr/adr-005.md) D8
+/// bans consuming a directory listing in filesystem order anywhere output
+/// depends on it, and the release step writes files from this list.
+///
+/// **The top level only, and that is the rule that says what `std` is.**
+/// A `.nika` beside `lib.rs` is a module of `std` and
+/// `crates/nikaia/tests/contracts.rs` requires `std.contracts` to carry
+/// every `pub` thing it declares. What is in `sysroot_tool_modules` is not.
+pub fn sysroot_std_modules(root: ref fs::Path) -> Vec[fs::Path] sync throws {
+    return sysroot_nika_in(sysroot_std_dir(root).join("src"))
+}
+
+/// **Nikaia the toolchain uses and `std` does not publish**, in `src/tools`;
+/// none where the sysroot has no such directory.
+pub fn sysroot_tool_modules(root: ref fs::Path) -> Vec[fs::Path] sync throws {
+    let dir = sysroot_tools_dir(root)
+    let found = fs::metadata(dir, fs::Root::Anywhere) catch { return [] }
+    if !found.is_dir() {
+        return []
+    }
+    return sysroot_nika_in(dir)
+}
+
+/// Every `.nika` directly in one directory, sorted: `std`'s modules, and the
+/// files of a tools package.
+pub fn sysroot_nika_in(src: ref fs::Path) -> Vec[fs::Path] sync throws {
+    let mut names: Vec[String] = fs::read_dir(src, fs::Root::Anywhere).iter().filter(fn(name) { (name.extension()?.text_of() ?? "") == SYSROOT_NIKA }).map(fn(name) { name.text_of() }).collect()
+    names.sort()
+    return names.iter().map(fn(name) { src.join(name) }).collect()
+}
+
+/// **The CPU levels `--cpu` takes for `triple`**, the baseline first
+/// ([ADR-002](../../docs/specification/adr/adr-002.md) D6). x86-64 has its four
+/// named levels; a target without named levels takes only its baseline, the
+/// CPU `rustc` builds for when told none. Every target takes `native`.
+pub fn sysroot_cpu_levels[H: SysrootHost](triple: ref String, host: ref H) -> Vec[String] sync throws {
+    let mut levels: Vec[String] = match triple.starts_with("x86_64") {
+        true => ["x86-64", "x86-64-v2", "x86-64-v3", "x86-64-v4"],
+        false => {
+            let cpus = host.rustc_cpus(triple, [])
+            let line = cpus.lines().find(fn(line) { line.contains("default target CPU") }) ?? ""
+            [(line.split_whitespace().next() ?? "generic").clone()]
+        }
+    }
+    levels.push("native")
+    return levels
+}
+
+/// **What `native` means on this machine**, as the compiled `std`'s key
+/// holds it (ADR-002 D6), from what `rustc` said for `-C target-cpu=native`:
+/// the CPU it finds and the features it turns on, never the word, so a cache
+/// directory moved to another machine is not taken for that machine's.
+pub fn sysroot_native_cpu(said: ref String) -> String sync {
+    let line = said.lines().find(fn(line) { line.trim_start().starts_with("native ") }) ?? ""
+    let mut cpu: String = (line.split("currently ").nth(1) ?? "").clone()
+    while cpu.ends_with(")") || cpu.ends_with(".") {
+        let cut: String = cpu.trim_end_matches(")").trim_end_matches(".").clone()
+        cpu = cut
+    }
+    let features: Vec[String] = said.lines().filter(fn(line) { line.starts_with("target_feature=") }).collect()
+    return f"native={cpu};{features.join(",")}"
+}
+
+/// `n` as the eight bytes of a `u64`, little-endian.
+fn sysroot_length(mut read: Vec[u8], n: i64) sync {
+    for i in 0..<8 {
+        read.push(((n >> (8 * i)) & 255) as u8)
+    }
+}
+
+/// One part of a key: the length of `text` in bytes, then its bytes.
+fn sysroot_part(mut read: Vec[u8], text: ref String) sync {
+    sysroot_length(read, text.len())
+    for b in text.bytes() {
+        read.push(b)
+    }
+}
+
+/// One part of a module key: the bytes of `text`, then a `0`.
+fn sysroot_ended(mut read: Vec[u8], text: ref String) sync {
+    for b in text.bytes() {
+        read.push(b)
+    }
+    read.push(0)
+}
+
+/// **The tools package's interface** (#667, #801), the same for every file of
+/// it: the compiler, the salt, the build with the package's trust (`setting`,
+/// the Rust `Debug` text) and its inferred ledger (`own`), and of every file
+/// its name and its text without bodies (`bodiless`), in file order.
+pub fn sysroot_interface[H: SysrootHost](compiler: ref String, salt: ref String, setting: ref String, own: ref String, names: ref Vec[String], bodiless: ref Vec[String], host: ref H) -> String sync {
+    let mut read: Vec[u8] = []
+    sysroot_part(read, "nikaia-lower-file-v1")
+    sysroot_part(read, compiler)
+    sysroot_part(read, salt)
+    sysroot_part(read, setting)
+    sysroot_part(read, own)
+    for at in 0..<names.len() {
+        sysroot_part(read, names[at])
+        sysroot_part(read, bodiless[at])
+    }
+    return host.sha256_hex(read)
+}
+
+/// **A file's key**: the package's interface, the file's name and its own
+/// text, so a body change lowers that file alone.
+pub fn sysroot_file_key[H: SysrootHost](interface: ref String, name: ref String, text: ref String, host: ref H) -> String sync {
+    let mut read: Vec[u8] = []
+    for b in interface.bytes() {
+        read.push(b)
+    }
+    sysroot_part(read, name)
+    for b in text.bytes() {
+        read.push(b)
+    }
+    return host.sha256_hex(read)
+}
+
+/// What is committed in `dir`: the index and every file under `lowered/`,
+/// each with its text (empty where it cannot be read).
+pub fn sysroot_committed(dir: ref fs::Path) -> Vec[(String, String)] {
+    let mut names: Vec[String] = [SYSROOT_TOOLS_PACKAGE.clone()]
+    names.extend(sysroot_stale(dir, []))
+    let mut files: Vec[(String, String)] = []
+    for name in names {
+        let text = fs::read_to_string(dir.join(name), fs::Root::Anywhere) catch { "" }
+        files.push((name.clone(), text))
+    }
+    return files
+}
+
+/// The package as one text, each `include!` of the index replaced by the
+/// file it names: what a test compiles when it has no directory.
+pub fn sysroot_inlined(files: ref Vec[(String, String)]) -> String sync {
+    if files.is_empty() {
+        return ""
+    }
+    let mut text: String = files[0].1.clone()
+    for at in 1..<files.len() {
+        let replaced = text.replace(f"include!(\"{files[at].0}\");", files[at].1)
+        text = replaced
+    }
+    return text
+}
+
+/// Whether any file holds `needle`.
+pub fn sysroot_contains(files: ref Vec[(String, String)], needle: ref String) -> bool sync {
+    return files.iter().any(fn(file) { file.1.contains(needle) })
+}
+
+/// Whether `path` holds exactly `text`; not where it cannot be read.
+fn sysroot_holds(path: ref fs::Path, text: ref String) -> bool {
+    let now = fs::read_to_string(path, fs::Root::Anywhere) catch { return false }
+    return now == text
+}
+
+/// The paths below `dir` that differ from what is committed there, or
+/// are committed and no longer generated.
+pub fn sysroot_drift(files: ref Vec[(String, String)], dir: ref fs::Path) -> Vec[String] {
+    let mut drifted: Vec[String] = []
+    for file in files {
+        if !sysroot_holds(dir.join(file.0), file.1) {
+            drifted.push(file.0.clone())
+        }
+    }
+    let kept: Vec[String] = files.iter().map(fn(file) { file.0.clone() }).collect()
+    drifted.extend(sysroot_stale(dir, kept))
+    return drifted
+}
+
+/// The generated files under `dir/lowered/` that `kept` does not name.
+pub fn sysroot_stale(dir: ref fs::Path, kept: ref Vec[String]) -> Vec[String] sync {
+    let listed = fs::read_dir(dir.join(SYSROOT_TOOLS_FILES), fs::Root::Anywhere) catch { [] }
+    let mut stale: Vec[String] = listed.iter().map(fn(name) { f"{SYSROOT_TOOLS_FILES}/{name.text_of()}" }).filter(fn(name) { !kept.contains(name) }).collect()
+    stale.sort()
+    return stale
+}
+
+/// A package as one text, for its cache entry: each file after a
+/// `SYSROOT_PACKED` line that names it.
+pub fn sysroot_pack(files: ref Vec[(String, String)]) -> String sync {
+    return files.iter().map(fn(file) { f"{SYSROOT_PACKED}{file.0}\n{file.1}" }).join("")
+}
+
+/// The files of a packed package; none where the text does not start with a
+/// `SYSROOT_PACKED` line or names no file.
+pub fn sysroot_unpack(packed: ref String) -> Vec[(String, String)]? sync {
+    let mut files: Vec[(String, String)] = []
+    let pieces: Vec[String] = packed.split("\n").collect()
+    for at in 0..<pieces.len() {
+        // Each line with its own `\n`, as it stood in the text.
+        let line: String = match at + 1 < pieces.len() {
+            true => f"{pieces[at]}\n",
+            false => pieces[at].clone(),
+        }
+        if line.is_empty() {
+            continue
+        }
+        if line.starts_with(SYSROOT_PACKED) {
+            files.push(((line.strip_prefix(SYSROOT_PACKED) ?? "").trim_end().clone(), ""))
+        } else {
+            if files.is_empty() {
+                return null
+            }
+            let last = files.len() - 1
+            files[last].1.push_str(line)
+        }
+    }
+    if files.is_empty() {
+        return null
+    }
+    return files
+}
+
+/// **The key for lowering `files` as `what`** (#667): the compiler, `what`,
+/// and the name and bytes of every file read, in order; none where one of
+/// them cannot be read (the lowering then says why) or there is no compiler.
+pub fn sysroot_lowered_key[H: SysrootHost](compiler: String?, what: ref String, files: ref Vec[fs::Path], host: ref H) -> String? {
+    let given = compiler ?? return null
+    let mut read: Vec[u8] = []
+    sysroot_ended(read, "nikaia-lower-std-v1")
+    sysroot_ended(read, given)
+    sysroot_ended(read, what)
+    for file in files {
+        let source = fs::read(file, fs::Root::Anywhere) catch { return null }
+        let name = file.file_name() ?? return null
+        sysroot_part(read, name.text_of())
+        sysroot_length(read, source.len())
+        for b in source.iter() {
+            read.push(b)
+        }
+    }
+    return host.sha256_hex(read)
+}
+
+/// What the cache under `root` holds for `key`, marked as used; none where
+/// there is no key, no compiler (`cached` false) or no readable entry.
+pub fn sysroot_lowered_get[H: SysrootHost](root: ref fs::Path, cached: bool, key: String?, host: ref H) -> String? {
+    let entry = root.join(key ?? return null)
+    if !cached {
+        return null
+    }
+    let rust = fs::read_to_string(entry.join(SYSROOT_LOWERED), fs::Root::Anywhere) catch { return null }
+    host.use_entry(entry)
+    return rust
+}
+
+/// Writes `rust` as the cache's entry for `key`, whole or not at all: a
+/// reader never sees half an entry. An entry that cannot be written is not.
+pub fn sysroot_lowered_put[H: SysrootHost](root: ref fs::Path, cached: bool, key: String?, rust: ref String, host: ref H) {
+    let at = key ?? return
+    if !cached {
+        return
+    }
+    let entry = root.join(at)
+    fs::create_dir(entry, fs::Root::Anywhere; recursive: true) catch { return }
+    let partial = host.unique_beside(entry.join(SYSROOT_LOWERED))
+    if sysroot_written(partial, entry.join(SYSROOT_LOWERED), rust) {
+        host.use_entry(entry)
+        return
+    }
+    fs::remove(partial, fs::Root::Anywhere) catch { return }
+}
+
+/// Whether `rust` went to `partial` and `partial` became `whole`.
+fn sysroot_written(partial: ref fs::Path, whole: ref fs::Path, rust: ref String) -> bool {
+    fs::write(partial, fs::Root::Anywhere, rust) catch { return false }
+    fs::rename(partial, whole, fs::Root::Anywhere) catch { return false }
+    return true
+}

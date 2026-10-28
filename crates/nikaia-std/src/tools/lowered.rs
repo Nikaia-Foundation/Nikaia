@@ -1807,6 +1807,14 @@ mod sync_lowered {
 #[allow(unused_imports)]
 pub use sync_lowered::*;
 
+mod sysroot_cache_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sysroot_cache.rs");
+}
+#[allow(unused_imports)]
+pub use sysroot_cache_lowered::*;
+
 mod template_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2729,6 +2737,10 @@ pub mod surface {
 pub mod sync {
     #[allow(unused_imports)]
     pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, Site, SyncNode, SyncGraph, unit_sync, Violation, unit_violations};
+}
+pub mod sysroot_cache {
+    #[allow(unused_imports)]
+    pub use super::{SysrootHost, sysroot_std_dir, sysroot_tools_dir, sysroot_runtime_dir, sysroot_std_modules, sysroot_tool_modules, sysroot_nika_in, sysroot_cpu_levels, sysroot_native_cpu, sysroot_interface, sysroot_file_key, sysroot_committed, sysroot_inlined, sysroot_contains, sysroot_drift, sysroot_stale, sysroot_pack, sysroot_unpack, sysroot_lowered_key, sysroot_lowered_get, sysroot_lowered_put};
 }
 pub mod template {
     #[allow(unused_imports)]
