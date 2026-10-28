@@ -2,10 +2,13 @@
 //
 // What a file of a package declares, and whether its `use` lines name what
 // the package may reach - the two questions the compiler's `modules` asks of
-// one parsed file, moved from Rust (ADR-294, #125). Reading the files, the
-// manifest and the ledgers stays Rust.
+// one parsed file, moved from Rust (ADR-294, #125); and which files a
+// program is (M3a): the directory listed, each file read and checked, the
+// refusals said. Parsing, the manifest and the ledgers stay Rust, asked
+// through `ModulesHost` and `ModulesLedgerHost`.
 
 use std::collections
+use std::fs
 
 /// The names a file declares: what one package's namespace counts
 /// (ADR-286 D1). A method belongs to its type and a grammar's rule to its
@@ -652,4 +655,310 @@ fn modules_note(names: ref winnow_grammar::InternerContext, e: ref Expr, mut out
         },
         else => {},
     }
+}
+
+/// What collecting a program's files asks of the compiler (M3a, #125).
+/// `Parsed` stays Rust until the parser moves: the host parses a file, keeps
+/// it, and answers about it by its number.
+pub trait ModulesHost {
+    /// Parses `source`, read at `path`, as a file of `package`, keeps it and
+    /// gives its number; `null` where it does not parse, and the host holds
+    /// the refusal, rendered against `path` where it is a finding.
+    fn parse_unit(ref self, path: ref fs::Path, source: ref String, package: String?) -> i64? sync
+    /// The names file `unit` declares (`declared_names`).
+    fn declared(ref self, unit: i64) -> Vec[String] sync
+    /// The refusal of file `unit`'s first `use` that names what it may not
+    /// reach (`a_use_refused`), or nothing.
+    fn use_refused(ref self, unit: i64, at: ref fs::Path, reachable: ref collections::BTreeSet[String], alone: bool) -> String? sync
+    /// The Rust crates the manifest at `path` declares, under the name a
+    /// program writes them by; none where it does not read.
+    fn foreign_crates(ref self, path: ref fs::Path) -> Vec[String] sync
+}
+
+/// Why collecting a program's files stopped.
+pub enum ModulesRefusal {
+    /// A file did not parse: the host holds the refusal.
+    Parse,
+    /// A statement about the program, in the words the compiler reports.
+    Refused(String),
+    /// A file or directory that could not be read: what was read, and why not.
+    Unreadable { what: String, why: String },
+}
+
+impl Error for ModulesRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            ModulesRefusal::Parse => "a file did not parse",
+            ModulesRefusal::Refused(why) => why.clone(),
+            ModulesRefusal::Unreadable { what, why } => f"{what}: {why}",
+        }
+    }
+}
+
+/// One file of a package as collecting found it. Rust makes it a `Unit`
+/// with the parsed file the host kept as number `parsed`.
+pub struct ModulesUnit {
+    pub path: fs::Path,
+    pub source: String,
+    pub parsed: i64,
+    /// The package this file belongs to, as a **consumer** would write it -
+    /// and `null` for every file of the program being built, whose names are
+    /// the program's own.
+    pub package: String?,
+    /// The package names **inside this file** that are another word for a
+    /// package this build already has a word for - see
+    /// `ProjectMembersDependency::renames`. Empty for every file of the
+    /// program itself, whose words are this build's by definition.
+    pub renames: collections::BTreeMap[String, String],
+}
+
+/// **Whether a file has a project to declare its dependencies in**
+/// ([ADR-260](../../../docs/specification/adr/adr-260.md) D2): what a `use` of
+/// a package nobody declares is told depends on it. A file of a project is
+/// missing a line in its `nikaia.toml`; a file outside one has no `nikaia.toml`
+/// for the line to be missing from.
+pub enum ModulesStanding {
+    InProject,
+    Alone,
+}
+
+/// Where a project keeps its sources and what its entry point is called
+/// (Part III, 13.1).
+comptime MODULES_SRC: ref String = "src"
+
+comptime MODULES_ENTRY: ref String = "main.nika"
+
+/// How a consumer writes a name from a file of `package`: `http::serve` for
+/// another package, and plain `serve` inside the program's own.
+pub fn modules_qualify(package: String?, name: String) -> String {
+    let package = package ?? return name.clone()
+    return f"{package}::{name}"
+}
+
+/// Every file of the package the entry belongs to, entry first, and then the
+/// files of the packages this program depends on
+/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15).
+///
+/// **The directory decides, not the `use` lines** (ADR-286 D1). Every `.nika`
+/// beside the entry takes part, whether or not anything names it - which is what
+/// makes moving a declaration from one file to another housekeeping rather than a
+/// change to the package's surface.
+///
+/// Entry first because the entry is where `fn main` may be written, and the rest
+/// sorted by file name: the order files are emitted in has to be a function of
+/// the source tree alone (Part III 13.5's determinism), and a directory listing
+/// is not sorted anywhere.
+///
+/// A dependency's files come **after** the program's own, in the order the
+/// manifest sorted its names, so the emitted file stays a function of the source
+/// tree (Part III 13.5). Each is read from the package's `src/`, because a
+/// dependency is a project and that is where a project keeps its files
+/// (Part III, 13.1).
+pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], host: ref H) -> Vec[ModulesUnit] throws {
+    let mut names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
+    // **A Rust crate is a package a `use` may name** (Part III 15.2's `use
+    // image`), under the name a call writes it by (ADR-290 D1).
+    for name in modules_foreign_beside(entry, host) {
+        names.insert(name.clone())
+    }
+    let mut units = modules_package_at(entry, null, names, collections::BTreeMap(), host)
+
+    // **Read, and not emitted** ([ADR-286](../../../docs/specification/adr/adr-286.md)
+    // D1). A dependency is its own crate now, so its files are Cargo's to
+    // compile - but its *surface* is this program's to check against, and a
+    // package's surface is what its files declare. So they arrive here tagged
+    // with the name this program reaches them by, the ledger and the checks see
+    // them, and `Program::emit` writes none of them.
+    //
+    // **And its own `use` lines are checked against its own manifest keys**,
+    // not against nothing: a package that depends on a package is a package
+    // (D3), and the level below it is its business rather than a rule it broke.
+    for dependency in dependencies {
+        let src = dependency.root.join(MODULES_SRC)
+        if !modules_is_dir(src) {
+            throw ModulesRefusal::Refused(f"`{dependency.name}` is a dependency by path, but {src.display()} doesn't exist.\nA package is a directory with a `{MODULES_SRC}/` folder in it.")
+        }
+        let package: String? = dependency.name.clone()
+        units.extend(modules_package_at(src.join(MODULES_ENTRY), package, dependency.reachable, dependency.renames, host))
+    }
+    return units
+}
+
+/// One package: the directory an entry sits in, checked as a namespace of its
+/// own.
+fn modules_package_at[H: ModulesHost](entry: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
+    let base = modules_base_of(entry)
+    // `read_dir` gives the names sorted by their bytes: the order Rust's
+    // sorted paths had, since they differ only in that last part.
+    let names = fs::read_dir(base, fs::Root::Anywhere) catch { throw ModulesRefusal::Unreadable { what: f"cannot read {base.display()}", why: f"{error}" } }
+    // The entry by its name: `x.nika` and the `./x.nika` the directory
+    // lists are one file (#774).
+    let entry_name = entry.file_name()?.text_of() ?? ""
+    let beside: Vec[fs::Path] = names.iter().filter(fn(name) { (name.extension()?.text_of() ?? "") == "nika" }).filter(fn(name) { name.text_of() != entry_name }).map(fn(name) { base.join(name) }).collect()
+
+    // A library needs no `main.nika`: what a package offers is its public
+    // surface, and an entry point is what a *program* has.
+    let mut units: Vec[ModulesUnit] = []
+    if modules_is_file(entry) {
+        units.push(modules_read_unit(entry, package?.clone(), reachable, renames, ModulesStanding::InProject, host))
+    }
+    for path in beside {
+        units.push(modules_read_unit(path, package?.clone(), reachable, renames, ModulesStanding::InProject, host))
+    }
+    modules_one_namespace(units, host)
+    return units
+}
+
+/// The directory an entry sits in, `.` for a bare file name.
+fn modules_base_of(entry: ref fs::Path) -> fs::Path {
+    let here: fs::Path = "."
+    let parent = entry.parent() ?? return here
+    if parent.text_of().is_empty() {
+        return here
+    }
+    return parent
+}
+
+/// The entry and nothing beside it - a `.nika` file compiled on its own.
+///
+/// `nikaia lower` outside a project is not a package: a directory of loose examples is
+/// a directory of programs, and compiling one of them must not pull in the other
+/// ten. A package is a directory **of a project**, which is what a `nikaia.toml`
+/// declares.
+pub fn modules_collect_one[H: ModulesHost](entry: ref fs::Path, host: ref H) -> Vec[ModulesUnit] throws {
+    return [modules_read_unit(entry, null, collections::BTreeSet(), collections::BTreeMap(), ModulesStanding::Alone, host)]
+}
+
+/// One file read, parsed by the host and its `use` lines checked.
+fn modules_read_unit[H: ModulesHost](path: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], standing: ModulesStanding, host: ref H) -> ModulesUnit throws {
+    let source = fs::read_to_string(path, fs::Root::Anywhere) catch { throw ModulesRefusal::Unreadable { what: f"cannot read {path.display()}", why: f"{error}" } }
+    // A parse error is a finding, rendered by the host where the path is
+    // known; it is a refusal of the program rather than a failure of this
+    // compiler (`diagnostics::Refused`).
+    let parsed = host.parse_unit(path, source, package?.clone()) ?? throw ModulesRefusal::Parse
+    modules_check_imports(parsed, path, reachable, standing, host)
+    return ModulesUnit { path: path.clone(), source: source, parsed: parsed, package: package, renames: renames.clone() }
+}
+
+/// **Two files of one package may not declare the same name** (ADR-286 D1),
+/// asked of a package's units (`declared_once`).
+///
+/// One namespace, so two `Row`s in it is an error rather than a rule about which
+/// of them a line means. Refused here and not left to `rustc`: it would report a
+/// duplicate definition against the generated file, which is exactly what
+/// Part III C.1 forbids - and it would name a line the user never wrote.
+fn modules_one_namespace[H: ModulesHost](units: ref Vec[ModulesUnit], host: ref H) throws {
+    let paths: Vec[String] = units.iter().map(fn(unit) { unit.path.display() }).collect()
+    let declared: Vec[Vec[String]] = units.iter().map(fn(unit) { host.declared(unit.parsed) }).collect()
+    let message = declared_once(paths, declared) ?? return
+    throw ModulesRefusal::Refused(message)
+}
+
+/// **Every `use` in a file, against the packages it may name**
+/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D11, D13, D14):
+/// `a_use_refused` over file `unit`, asked through the host.
+fn modules_check_imports[H: ModulesHost](unit: i64, at: ref fs::Path, reachable: ref collections::BTreeSet[String], standing: ModulesStanding, host: ref H) throws {
+    let alone = match standing {
+        ModulesStanding::Alone => true,
+        ModulesStanding::InProject => false,
+    }
+    let message = host.use_refused(unit, at, reachable, alone) ?? return
+    throw ModulesRefusal::Refused(message)
+}
+
+/// The directory of the project an entry belongs to: the nearest one above it
+/// with a `nikaia.toml`; none outside a project.
+pub fn modules_project_root(entry: ref fs::Path) -> fs::Path? {
+    let mut dir = entry.parent() ?? return null
+    while true {
+        if modules_is_file(dir.join("nikaia.toml")) {
+            return dir
+        }
+        dir = dir.parent() ?? return null
+    }
+    return null
+}
+
+/// The Rust crates the manifest of the project an entry belongs to declares,
+/// under the name a program writes them by; none outside a project.
+fn modules_foreign_beside[H: ModulesHost](entry: ref fs::Path, host: ref H) -> Vec[String] {
+    let root = modules_project_root(entry) ?? return []
+    return host.foreign_crates(root.join("nikaia.toml"))
+}
+
+/// Whether `path` names a directory; a name that is not there names none.
+fn modules_is_dir(path: ref fs::Path) -> bool {
+    let found = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return found.is_dir()
+}
+
+/// Whether `path` names a file; a name that is not there names none.
+fn modules_is_file(path: ref fs::Path) -> bool {
+    let found = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return found.is_file()
+}
+
+/// What a package's ledger asks of the compiler (M3a): `std` has no SHA-256,
+/// and reading a ledger stays Rust (`LedgerOps`).
+pub trait ModulesLedgerHost {
+    /// The SHA-256 of `text`'s bytes, in lowercase hex.
+    fn sha256_hex(ref self, text: ref String) -> String sync
+    /// The ledger at `path`, where it is there and parses (`Ledger::read_beside`).
+    fn read_beside(ref self, path: ref fs::Path) -> Ledger? sync
+}
+
+/// The units of one package, by file name and the SHA-256 of their bytes
+/// ([ADR-100](../../../docs/specification/adr/adr-100.md) D3): file `at` is
+/// at `paths[at]` and reads `texts[at]`.
+///
+/// **The same digest the cache key uses** ([ADR-021](../../../docs/specification/adr/adr-021.md)),
+/// because the record says so and because a build that hashed the same file
+/// twice with two digests would be paying twice to disagree with itself.
+pub fn modules_sources_of[H: ModulesLedgerHost](paths: ref Vec[fs::Path], texts: ref Vec[String], host: ref H) -> collections::BTreeMap[String, String] {
+    let mut sources: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for at in 0..<paths.len() {
+        // A unit always comes from a file; a path that ends in nothing
+        // is not one this compiler read, and naming it by its whole
+        // spelling is better than dropping it out of the table.
+        let name = paths[at].file_name()?.text_of() ?? paths[at].text_of()
+        sources.insert(name, host.sha256_hex(texts[at]))
+    }
+    return sources
+}
+
+/// A dependency's committed `nikaia.contracts`, published to what it reaches,
+/// where it may be believed against `sources`; none where the package is
+/// derived again ([ADR-100](../../../docs/specification/adr/adr-100.md) D1
+/// and D3).
+///
+/// **Believed is the fast path and the *correct* one**, not merely the quick
+/// one. A package's own build had its own dependencies in view and this one does
+/// not (ADR-286 D21), so an answer derived here can only be the same or worse -
+/// and two builds that derive the same function differently is the divergence
+/// D1 exists to make impossible.
+///
+/// **And it is never believed against its own sources.** The hashes in the
+/// header say which files the entries are an answer about; where one does not
+/// match, that package is derived again. A ledger with no `[sources]` at
+/// all is treated as not matching, which is the fail-closed direction
+/// ([ADR-010](../../../docs/specification/adr/adr-010.md) D1): *nothing was
+/// recorded* must not read as *nothing changed*.
+pub fn modules_believed[H: ModulesLedgerHost](dependency: ref ProjectMembersDependency, sources: ref collections::BTreeMap[String, String], host: ref H) -> Ledger? {
+    let shipped = modules_shipped_ledger(dependency.root, host) ?? return null
+    if !stale_units(shipped, sources).is_empty() {
+        return null
+    }
+    return published_entries(shipped, dependency.reachable)
+}
+
+/// A package's committed `nikaia.contracts`, where it has one this compiler can
+/// read.
+///
+/// **A ledger that does not parse is not an error here.** It is a generated file
+/// a person may have edited or an older compiler may have written, and the
+/// answer to both is the same as to a stale one: derive this package again. A
+/// build that failed because a *cache* was unreadable would be a worse build
+/// than one that is slower.
+fn modules_shipped_ledger[H: ModulesLedgerHost](root: ref fs::Path, host: ref H) -> Ledger? {
+    return host.read_beside(root.join("nikaia.contracts"))
 }

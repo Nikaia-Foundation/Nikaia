@@ -393,3 +393,198 @@ pub(crate) fn modules_note(names: &winnow_grammar::InternerContext, e: &Expr, ou
     }
 }
 
+pub trait ModulesHost {
+    fn parse_unit(&self, path: &std::path::Path, source: &str, package: Option<String>) -> Option<i64>;
+    fn declared(&self, unit: i64) -> Vec<String>;
+    fn use_refused(&self, unit: i64, at: &std::path::Path, reachable: &collections::BTreeSet<String>, alone: bool) -> Option<String>;
+    fn foreign_crates(&self, path: &std::path::Path) -> Vec<String>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModulesRefusal {
+    Parse,
+    Refused(String),
+    Unreadable { what: String, why: String },
+}
+
+impl ModulesRefusal {
+    pub(crate) fn message(&self) -> String {
+        match self {
+            ModulesRefusal::Parse => String::from("a file did not parse"),
+            ModulesRefusal::Refused(why) => why.to_string(),
+            ModulesRefusal::Unreadable { what, why } => format!("{}: {}", what, why),
+        }
+    }
+}
+impl std::fmt::Display for ModulesRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message())
+    }
+}
+impl std::error::Error for ModulesRefusal {}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModulesUnit {
+    pub path: fs::Path,
+    pub source: String,
+    pub parsed: i64,
+    pub package: Option<String>,
+    pub renames: collections::BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModulesStanding {
+    InProject,
+    Alone,
+}
+
+pub(crate) const MODULES_SRC: &str = "src";
+
+pub(crate) const MODULES_ENTRY: &str = "main.nika";
+
+pub fn modules_qualify(package: Option<String>, name: &str) -> String {
+    let package = match package { Some(__nikaia_value) => __nikaia_value, None => return name.to_string() };
+    format!("{}::{}", package, name)
+}
+
+pub async fn modules_collect_with<H: ModulesHost>(entry: &std::path::Path, dependencies: &[ProjectMembersDependency], host: &H) -> Result<Vec<ModulesUnit>, nikaia_std::error::Thrown<ModulesRefusal>> {
+    let mut names: collections::BTreeSet<String> = dependencies.iter().map(|d| { d.name.to_string() }).collect();
+    for name in modules_foreign_beside(entry, host) { names.insert(name.to_string()); }
+    let mut units = modules_package_at(entry, &None, &names, &collections::BTreeMap::new(), host).await?;
+    for dependency in dependencies.iter() {
+        let src = nikaia_std::fs::path::join(&(dependency.root), std::path::Path::new(&(MODULES_SRC)));
+        if !modules_is_dir(&src) { return Err(nikaia_std::error::throwing(ModulesRefusal::Refused(format!("`{}` is a dependency by path, but {} doesn't exist.\nA package is a directory with a `{}/` folder in it.", dependency.name, nikaia_std::fs::path::display(&(src)), MODULES_SRC)), &"modules_collect_with")); }
+        let package: Option<String> = Some(dependency.name.to_string());
+        units.extend(modules_package_at(&nikaia_std::fs::path::join(&(src), std::path::Path::new(&(MODULES_ENTRY))), &package, &dependency.reachable, &dependency.renames, host).await?);
+    }
+    Ok(units)
+}
+
+pub(crate) async fn modules_package_at<H: ModulesHost>(entry: &std::path::Path, package: &Option<String>, reachable: &collections::BTreeSet<String>, renames: &collections::BTreeMap<String, String>, host: &H) -> Result<Vec<ModulesUnit>, nikaia_std::error::Thrown<ModulesRefusal>> {
+    let base = modules_base_of(entry);
+    let names = match fs::read_dir(&base, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::throwing(ModulesRefusal::Unreadable { what: format!("cannot read {}", nikaia_std::fs::path::display(&(base))), why: format!("{}", error) }, &"modules_package_at")) },
+    };
+    let entry_name = nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(entry)).as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+        None => None,
+    }, || "".into());
+    let beside: Vec<fs::Path> = names.iter().filter(|&name| {
+        nikaia_std::index::or(match nikaia_std::fs::path::extension(&(name)).as_ref() {
+            Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+            None => None,
+        }, || "".into()) == "nika"
+    }).filter(|&name| { nikaia_std::fs::path::text_of(&(name)) != entry_name }).map(|name| { nikaia_std::fs::path::join(&(base), name) }).collect::<Vec<_>>();
+    let mut units: Vec<ModulesUnit> = vec![];
+    if modules_is_file(entry) {
+        units.push(modules_read_unit(entry, match package.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, reachable, renames, ModulesStanding::InProject, host).await?);
+    }
+    for path in beside.iter() {
+        units.push(modules_read_unit(path, match package.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, reachable, renames, ModulesStanding::InProject, host).await?);
+    }
+    modules_one_namespace(&units, host)?;
+    Ok(units)
+}
+
+pub(crate) fn modules_base_of(entry: &std::path::Path) -> fs::Path {
+    let here: fs::Path = std::path::PathBuf::from(".");
+    let parent = match nikaia_std::fs::path::parent(&(entry)) { Some(__nikaia_value) => __nikaia_value, None => return here };
+    if nikaia_std::fs::path::text_of(&(parent)).is_empty() { return here; }
+    parent
+}
+
+pub async fn modules_collect_one<H: ModulesHost>(entry: &std::path::Path, host: &H) -> Result<Vec<ModulesUnit>, nikaia_std::error::Thrown<ModulesRefusal>> {
+    Ok(vec![modules_read_unit(entry, None, &collections::BTreeSet::new(), &collections::BTreeMap::new(), ModulesStanding::Alone, host).await?])
+}
+
+pub(crate) async fn modules_read_unit<H: ModulesHost>(path: &std::path::Path, package: Option<String>, reachable: &collections::BTreeSet<String>, renames: &collections::BTreeMap<String, String>, standing: ModulesStanding, host: &H) -> Result<ModulesUnit, nikaia_std::error::Thrown<ModulesRefusal>> {
+    let source = match fs::read_to_string(path, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::throwing(ModulesRefusal::Unreadable { what: format!("cannot read {}", nikaia_std::fs::path::display(&(path))), why: format!("{}", error) }, &"modules_read_unit")) },
+    };
+    let parsed = match host.parse_unit(path, &source, match package.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ModulesRefusal::Parse, &"modules_read_unit")) };
+    modules_check_imports(parsed, path, reachable, standing, host)?;
+    Ok(ModulesUnit { path: nikaia_std::fs::path::clone(&(path)), source, parsed, package, renames: renames.to_owned() })
+}
+
+pub(crate) fn modules_one_namespace<H: ModulesHost>(units: &[ModulesUnit], host: &H) -> Result<(), nikaia_std::error::Thrown<ModulesRefusal>> {
+    let paths: Vec<String> = units.iter().map(|unit| { nikaia_std::fs::path::display(&(unit.path)) }).collect::<Vec<_>>();
+    let declared: Vec<Vec<String>> = units.iter().map(|unit| { host.declared(unit.parsed) }).collect::<Vec<_>>();
+    let message = match declared_once(&paths, &declared) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    return Err(nikaia_std::error::throwing(ModulesRefusal::Refused(message), &"modules_one_namespace"));
+}
+
+pub(crate) fn modules_check_imports<H: ModulesHost>(unit: i64, at: &std::path::Path, reachable: &collections::BTreeSet<String>, standing: ModulesStanding, host: &H) -> Result<(), nikaia_std::error::Thrown<ModulesRefusal>> {
+    let alone = match standing {
+        ModulesStanding::Alone => true,
+        ModulesStanding::InProject => false,
+    };
+    let message = match host.use_refused(unit, at, reachable, alone) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    return Err(nikaia_std::error::throwing(ModulesRefusal::Refused(message), &"modules_check_imports"));
+}
+
+pub fn modules_project_root(entry: &std::path::Path) -> Option<fs::Path> {
+    let mut dir = match nikaia_std::fs::path::parent(&(entry)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    loop {
+        if modules_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("nikaia.toml")))) { return Some(dir); }
+        dir = match nikaia_std::fs::path::parent(&(dir)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    }
+    None
+}
+
+pub(crate) fn modules_foreign_beside<H: ModulesHost>(entry: &std::path::Path, host: &H) -> Vec<String> {
+    let root = match modules_project_root(entry) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    host.foreign_crates(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml"))))
+}
+
+pub(crate) fn modules_is_dir(path: &std::path::Path) -> bool {
+    let found = match fs::metadata(path, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { return false; },
+    };
+    found.is_dir()
+}
+
+pub(crate) fn modules_is_file(path: &std::path::Path) -> bool {
+    let found = match fs::metadata(path, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { return false; },
+    };
+    found.is_file()
+}
+
+pub trait ModulesLedgerHost {
+    fn sha256_hex(&self, text: &str) -> String;
+    fn read_beside(&self, path: &std::path::Path) -> Option<Ledger>;
+}
+
+pub fn modules_sources_of<H: ModulesLedgerHost>(paths: &[fs::Path], texts: &[String], host: &H) -> collections::BTreeMap<String, String> {
+    let mut sources: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    for at in 0..paths.len() as i64 {
+        let name = nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(*nikaia_std::index::get(&paths, (at) as usize))).as_ref() {
+            Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+            None => None,
+        }, || nikaia_std::fs::path::text_of(&(*nikaia_std::index::get(&paths, (at) as usize))).into());
+        sources.insert(name, host.sha256_hex(nikaia_std::index::get(&texts, (at) as usize)));
+    }
+    sources
+}
+
+pub fn modules_believed<H: ModulesLedgerHost>(dependency: &ProjectMembersDependency, sources: &collections::BTreeMap<String, String>, host: &H) -> Option<Ledger> {
+    let shipped = match modules_shipped_ledger(&dependency.root, host) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !stale_units(&shipped, sources).is_empty() { return None; }
+    Some(published_entries(&shipped, &dependency.reachable))
+}
+
+pub(crate) fn modules_shipped_ledger<H: ModulesLedgerHost>(root: &std::path::Path, host: &H) -> Option<Ledger> { host.read_beside(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.contracts")))) }
+
