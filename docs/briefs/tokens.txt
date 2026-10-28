@@ -123,3 +123,4 @@
 /home/user/Nikaia/docs/briefs/p5-lane1-plan.md 4863901 52
 /home/user/Nikaia/docs/briefs/architect-task.md 2315350 36
 /home/user/Nikaia/docs/briefs/b-fixforward-sweep.md 1185617 31
+/home/user/Nikaia/docs/briefs/architect-task.md 904599 22
