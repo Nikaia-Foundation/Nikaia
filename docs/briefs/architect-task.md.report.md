@@ -1,4 +1,4 @@
 Result: done
-Batch: p5a-project-settings.md m3a-modules-collect.md
+Batch: m3a-modules-collect.md, mf-manifest-file.md
 Owner: none
-Note: cut at b-fixforward-sweep2 was false (KNOWN re-key for the same program and reason); rule added to docs/briefs/common.part. Sweep fixed forward in 1f3adf2; CI runs on 60b1154..986390f in progress.
+Notes: RED was the empty state file (CI green to 986390f; 2e13458/3ba472a running). P5a partial: its two defects filed as #933 (lowering) and #934 (NK2605), ready, with C3 lane briefs lane-lowering-933-host-result-view.md and lane-bugs-934-close-by-hand.md (not in batch.txt). builder-facts: own binary copy for long tests; method-shaped drafts. Commit cb3aa99.

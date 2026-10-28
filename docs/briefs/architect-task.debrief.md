@@ -1,15 +1,15 @@
-1. **Most cost:** reading all of `docs/architect.md`. About 100 of its 374 lines are the *State* history, and only the newest entry mattered. After that, two lookups: the stop line and the builder's report.
-2. **What the brief could have handed me:**
-   - The newest *State* entry.
-   - The commit each pending brief's line ranges were taken at (a4b33a0). I first diffed from fb686ff, which was the wrong commit, and needed a second call.
-   - The report path of the brief that cut the batch. The input line was truncated in the middle of the deviation text.
-3. **Checks:**
-   - Useful: `git log a4b33a0..HEAD` on `project.rs`/`modules.rs` showed both briefs' ranges still hold. Reading the report and `git show --stat 1f3adf2` confirmed the fix-forward landed.
-   - Wasted: the first `git log` from fb686ff, and the CI query. All six runs were still running, so it gave no verdict.
-   - Not done: I didn't confirm the push to `origin` (the push was silent), and I didn't re-paste the new rule into the `common.part` copies already inside `p5a`/`m3a`. Those two builders won't see it.
-4. **Best change:** have `drive.nika` write into `architect-input.txt`:
-   - the full deviation text and the report path;
-   - the current CI line (from `status.nika`);
-   - for each brief left in `batch.txt`, whether its `Cut:` files changed since the commit the brief names.
-
-   That turns my 7 calls into about 2. Second best: briefs should name `common.part` by reference, not paste it, so a rule change reaches briefs that are already written.
+1. **What cost the most:** working out what the MF move should actually be. The plan row says "100 %, no prerequisite", but `manifest.rs` is mostly `toml::Value` glue. I had to read the whole file and count its callers (one grep loop over 14 names). Only then could I set the shape: a Nikaia `ManifestFile` behind Rust wrappers, with `rooted` and the Rust tests staying in Rust. Reading the 375-line `architect.md` whole, including about 45 old *State* entries, was the second largest cost.
+2. **What I looked up that the task could have handed me:**
+   - That `RED` with no job list means an empty status file, not a red CI. One `gh api` call showed CI green.
+   - The lanes and which files each one owns (`bootstrap-week.md` section 3).
+   - That the search API is blocked; only repository endpoints work.
+   - That `project.rs` lines had shifted after P5a (`rooted` moved from 637 to 538).
+   - That `crates/nikaia-compiler` does not exist yet (R0 has not run).
+   - Where NK2605 is raised. `where.nika` found no definition for `check_crossings`, so I fell back to grep.
+3. **Checks run:**
+   - Useful: the CI runs list, the plan rows, the `git log` of `modules.rs` (to confirm M3a's line ranges still hold), and the caller counts.
+   - Wasted: two GitHub search calls (blocked) and the `check_crossings` part of the `where.nika` query, which found nothing.
+4. **The change that would save the most:**
+   - The driver should write `RED <run id> <failing jobs>`, or nothing, into `architect-input.txt`, never a bare `RED`.
+   - `architect.md`'s *State* should keep only the last three entries and move older ones to an archive file. That alone would have cut my reading by about a third.
+   - For MF itself: plan rows should say whether a range is decision logic or glue around an external crate, so the "100 %" draft share is not misleading.

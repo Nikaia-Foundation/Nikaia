@@ -127,3 +127,4 @@
 /home/user/Nikaia/docs/briefs/b-fixforward-sweep2.md 1369192 31
 /home/user/Nikaia/docs/briefs/architect-task.md 304029 9
 /home/user/Nikaia/docs/briefs/p5a-project-settings.md 1573653 11
+/home/user/Nikaia/docs/briefs/architect-task.md 1518667 26
