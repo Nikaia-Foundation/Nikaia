@@ -16,7 +16,7 @@ Score: self-hosting lane (`docs/priorities.md`, owner's direction 2026-10-27: mo
 * The converter's `Rs2nika:` costs are read by the converter lane: do not change `crates/rs2nika/`.
 
 ## To build
-1. Run the converter on a scratch file holding exactly the moved Rust (`rs2nika --profile check --file`), report `--score` under `Rs2nika:`. Move the functions (all but `rooted`) into the new `project_members.nika` (prefix `project_members_` where `where.nika` finds a clash) with their doc comments; `project.rs` calls the lowered functions; the moved Rust is deleted. `lower-std`: only the new lowered file and its index lines change; add the file to `scripts/self_hosting.py` as P3a did.
+1. Run the converter on a scratch file holding exactly the moved Rust (`rs2nika --profile check-free --file`: the code holds no `Checker`, `Emitter` or `self`), report `--score` under `Rs2nika:`. Move the functions (all but `rooted`) into the new `project_members.nika` (prefix `project_members_` where `where.nika` finds a clash) with their doc comments; `project.rs` calls the lowered functions; the moved Rust is deleted. `lower-std`: only the new lowered file and its index lines change; add the file to `scripts/self_hosting.py` as P3a did.
 2. In `docs/selfhosting-plan.md` split row P4 into P4a (built, `project_members.nika`) and P4b (the rest, as named above, prerequisite P4a); report the self-hosting % under `Tests:`.
 
 A lowering defect met is fixed in the compiler as its own commit with a test (*Fix, do not work around*, `CLAUDE.md`); if it is more than one step, stop and report it under `Needs:`. Known open checker defect, not yours: #909; write `.clone()` where rustc asks for it and name it in `Body:`.

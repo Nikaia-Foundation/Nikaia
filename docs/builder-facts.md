@@ -122,7 +122,9 @@ Rules from the sessions that moved the most; they save tokens, not just time.
 * **Edit scripts:** replace blocks bottom-up with exact-string asserts. Never
   `str.replace('', ...)` (an empty-slice replace corrupted `emit/mod.rs` once).
 * **The converter** `crates/rs2nika/convert` (a Nikaia project: `nikaia build`
-  there, then `target/nikaia/bin/rs2nika [--profile check|emit] [--prefix X_]
+  there, then `target/nikaia/bin/rs2nika [--profile check|check-free|emit] [--prefix X_]
+  (`check-free` for code without a `Checker`, `Emitter` or `self`: it writes no
+  `sync` on free functions, R85; measured on P3b, 75 against 72 of 126 lines)
   [--file] F.rs`) writes a first draft of a Rust function in Nikaia (TODO
   markers where it cannot), names on stderr the callees not yet in Nikaia and
   the functions tools/*.nika may already have; `--rules` lists its rules,
