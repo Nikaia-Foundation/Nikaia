@@ -1,0 +1,23 @@
+// A callee that takes a keep of its own (it keeps `made`) puts only what it
+// makes in it: the text `parts.join("-")`, made in the call and viewed by the
+// result, is still the caller's to keep.
+
+pub struct Tree {
+    pub n: Vec[String],
+}
+
+fn read(src: String) -> Tree {
+    let made = f"{src}!"
+    let mut t = Tree { n: [] }
+    let a: String = made.bytes[3..<6].text() catch { "" }
+    t.n.push(a)
+    let b: String = src.bytes[0..<2].text() catch { "" }
+    t.n.push(b)
+    return t
+}
+
+fn main() {
+    let parts: Vec[String] = ["ab", "cd"]
+    let t = read(parts.join("-"))
+    println(f"{t.n[0]} {t.n[1]}")
+}

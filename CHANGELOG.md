@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1259] — 2026-10-28
+
+**An argument made in a call to a function with a keep of its own is the caller's to keep (ADR-283)**
+- A callee that takes a keep puts only what it makes in it: text made in the call's arguments and viewed by its result (`parse(parts.join("\n"))`) is kept by the caller, beside the call or in the keep it was given (`made_arguments`, buffers.nika).
+
 ## [0.0.1258] — 2026-10-28
 
 **A keep for a struct of views a call makes, across the files of a package; text of either kind looks a key up (ADR-283, ADR-282 D14)**

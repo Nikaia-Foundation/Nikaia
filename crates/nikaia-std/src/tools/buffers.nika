@@ -1535,11 +1535,10 @@ fn holds_a_struct_of_views(ty: ref Ty, ask: ref BufferAsk) -> bool {
 // back a view - or a struct of this unit's that holds one, `Pair { left: a }`
 // (#678) - and takes no keep of its own, the view may point into it, so it
 // is a source - kept beside the call, or in the keep this function is given
-// where the view leaves through its result.
+// where the view leaves through its result. A callee that takes a keep of its
+// own puts only what it makes in it: an argument made in the call that its
+// result views is still the caller's to keep, `parse(parts.join("\n"))`.
 fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Expr], ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, mut out: collections::BTreeSet[(i64, String)], mut walk: BufferWalk) {
-    if takes_a_keep(contract) {
-        return
-    }
     stored_arguments(contract, named, args, ask, unaliased, walk)
     let signature = contract.signature ?? return
     let result = signature.result ?? return

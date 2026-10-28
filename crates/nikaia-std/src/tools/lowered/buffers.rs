@@ -1161,7 +1161,6 @@ pub(crate) fn holds_a_struct_of_views(ty: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '
 }
 
 pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
-    if takes_a_keep(contract) { return; }
     stored_arguments(contract, named, args, ask, unaliased, walk);
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
