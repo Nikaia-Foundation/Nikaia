@@ -142,7 +142,9 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   (the report's `Rs2nika:` field). `--out DIR A.rs B.rs ..` converts many
   files in one run, on all cores, reading the repository once: `DIR/<name>.nika`
   and `DIR/<name>.notes` (the stderr lines), each prefixed `<name>_` unless
-  `--prefix` is given; `--corpus` also scores its cases in parallel. Iterator chains (`.iter().map(..).sum()`,
+  `--prefix` is given; `--corpus` also scores its cases in parallel. It writes the draft from
+  rust-analyzer's syntax tree (`--engine tree`, the default; `--out` and
+  `--file` still take the line engine, `--engine lines`). Iterator chains (`.iter().map(..).sum()`,
   `.any(..)`, `.filter(..).map(..).collect()`) are the house style in
   `tools/*.nika`, as the converter writes them (owner, 2026-10-27). Rust's
   types come from rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`): `--facts
