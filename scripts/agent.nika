@@ -15,7 +15,9 @@
 // the gate step it appends the run's row (`tokenspeed.nika --short`, read from the
 // run's transcript under ~/.claude/projects) to the Runs table of
 // docs/tokenspeed.md, once per agent id; it does not commit the file, the
-// supervisor's commit takes it. `--dry-run` prints the command only.
+// supervisor's commit takes it. Before any escalation it resumes the run's
+// session once and writes its answer to what held it up to BRIEF.debrief.md
+// (the cost goes to DIR/cost.txt). `--dry-run` prints the command only.
 
 use std::cli
 use std::fs
@@ -61,12 +63,49 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
     v.push(agent_front(body, "budget_usd", "20"))
     v.push("--output-format")
     v.push("json")
-    v.push("--no-session-persistence")
     v.push("--session-id")
     v.push(session.clone())
     v.push("--allowedTools")
     v.push(agent_tools(agent))
     return v
+}
+
+// The debrief's question, asked in the run's own session without tools.
+fn agent_debrief_args(session: String, model: String) -> Vec[String] {
+    let mut v: Vec[String] = []
+    v.push("-p")
+    v.push("Your run is over. Without using any tool, answer in at most 15 lines of Markdown: (1) what cost you the most turns or time; (2) what you had to look up (ADRs, the language, file locations, the converter) that the brief could have handed you; (3) which checks you ran and which were wasted; (4) one change to the brief or builder.md that would have saved the most.")
+    v.push("--resume")
+    v.push(session)
+    v.push("--max-turns")
+    v.push("2")
+    v.push("--model")
+    v.push(model)
+    v.push("--output-format")
+    v.push("json")
+    return v
+}
+
+// The `result` string of claude's JSON, unescaped; "" if absent.
+fn agent_result(body: String) -> String {
+    let parts = body.split("\"result\":\"").collect()
+    if parts.len() < 2 { return "" }
+    let mut out: Vec[String] = []
+    let chars = parts[1].split("").collect()
+    let mut i = 0
+    while i < chars.len() {
+        let c = chars[i].clone()
+        if c == "\"" { return out.join("") }
+        if c == "\\" && i + 1 < chars.len() {
+            let next = chars[i + 1].clone()
+            if next == "n" { out.push("\n") } else if next == "t" { out.push("  ") } else { out.push(next) }
+            i += 2
+        } else {
+            out.push(c)
+            i += 1
+        }
+    }
+    return out.join("")
 }
 
 // The raw value after `"key":` (first occurrence), quotes removed; "" if absent.
@@ -206,6 +245,19 @@ fn main() throws {
     let exe = agent_exe()
     if exe != "" {
         process::run(exe, ["run", "scripts/batch.nika", "--", dir.clone(), "--tokens", abs.clone(), f"{tokens}", f"{turns}"])
+    }
+    // The debrief: the same session, resumed while its cache is warm, answers
+    // what held it up, before any escalation stops this script.
+    if !out.timed_out && session == wanted {
+        let asked = process::run(claude.clone(), agent_debrief_args(session.clone(), agent_front(text.clone(), "model", "sonnet")); within: 10.minutes())
+        let mut debrief = f"{abs}.debrief.md"
+        if stem != "" { debrief = f"{stem}.debrief.md" }
+        fs::write(debrief, fs::Root::Anywhere, agent_result(asked.stdout.clone()) + "\n")
+        let more = agent_json(asked.stdout.clone(), "total_cost_usd")
+        if more != "" {
+            let with_run = agent_read(f"{dir}/cost.txt")
+            fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, with_run + f"{today} {more}\n")
+        }
     }
     if out.timed_out { agent_escalate(dir.clone(), "timed out after 90 minutes") }
     if !out.ok { agent_escalate(dir.clone(), f"claude exited with code {out.code}") }

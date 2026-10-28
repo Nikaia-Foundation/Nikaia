@@ -41,8 +41,10 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Wait in one call.** Run a build or a test in the foreground with a long
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.
-* **The gate, before every commit (#852).** Besides the touched tests, always
-  run the guard set: `cargo test --profile fast -p nikaia --test it --
+* **Cheap checks while working, the gate once at the end** (owner,
+  2026-10-28). Between steps run only the tests the brief names and the ones
+  your change touches (one program, one `it` filter). Before the run's last
+  commit, once, run the gate (#852): besides the touched tests, the guard set: `cargo test --profile fast -p nikaia --test it --
   range_spelling:: shipped_ledger:: contracts::every_std_module
   dependency_ledger::` (repository-wide scans no NK code leads to: they kept
   `develop` red for runs 1902-1915). A change to `check/`, `emit/`,
@@ -104,7 +106,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   Run it with `target/fast/nikaia test --both-settings --project tests/compiler` (no `it`
   rebuild). A new `#[test]` in `crates/nikaia/tests/it/` only where the check
   needs the compiler's Rust API or the lowered text.
-* **Last step, always:** `export NIKAIA_CACHE_LIMIT=4G` holds for the whole
+* **Last step, always:** `export NIKAIA_CACHE_LIMIT=2G` holds for the whole
   run (the compiler prunes `target/nikaia-project-tests` to it, least recently
   used entry first). At the end: `d=target/nikaia-project-tests; [ $(df -m --output=avail / | tail -1) -lt 3072 ] && rm -rf $d; du -sh $d 2>/dev/null; df -h / | tail -1`, and report both figures, and the large cache entries (over 100 MB) newly created in this run: `find $d -mindepth 2 -maxdepth 2 -newer <your brief> -size +0 -type d -exec du -sm {} + | awk '$1>100'`.
 * **No `sysroot` in the touched tests** unless you changed `sysroot.rs`,

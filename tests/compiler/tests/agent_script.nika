@@ -28,7 +28,7 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     let fake = f"{tmp}/claude"
-    let json = "{\"is_error\":false,\"num_turns\":3,\"session_id\":\"SID\",\"total_cost_usd\":1.5,\"terminal_reason\":\"completed\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":20,\"cache_read_input_tokens\":30,\"output_tokens\":40}" + "}"
+    let json = "{\"is_error\":false,\"num_turns\":3,\"session_id\":\"SID\",\"total_cost_usd\":1.5,\"terminal_reason\":\"completed\",\"result\":\"held up by builds\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":20,\"cache_read_input_tokens\":30,\"output_tokens\":40}" + "}"
     let script = f"#!/bin/sh\nsid=\"\"\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --session-id ]; then sid=$2; fi; shift; done\necho '{json}' | sed \"s/SID/$sid/\"\ntouch {tmp}/b.report.md\n"
     fs::write(fake.clone(), fs::Root::Anywhere, script.clone())
     process::run("chmod", ["+x", fake.clone()]; dir: repo.clone())
@@ -47,6 +47,7 @@ fn main() throws {
     let line = ran.stdout.trim().split(" ").collect()
     println(f"run: ok={ran.ok} {line[0]} cost {line[5]} turns {line[7]}")
     println(fs::read_to_string(f"{tmp}/tokens.txt", fs::Root::Anywhere).trim().split(" ").collect()[1])
+    println(f"debrief: {fs::read_to_string(f"{tmp}/b.debrief.md", fs::Root::Anywhere).trim()} {fs::read_to_string(f"{tmp}/cost.txt", fs::Root::Anywhere).trim().split("\n").collect().len()}")
     fs::remove(f"{tmp}/b.report.md", fs::Root::Anywhere)
     let silent = f"{tmp}/silent"
     fs::write(silent.clone(), fs::Root::Anywhere, script.replace("touch", "true"))
