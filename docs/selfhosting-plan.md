@@ -800,3 +800,129 @@ existing file, so they may run side by side). Known risk of each:
   a `mut Vec[u8]` (`part`): a nested `fn` there.
 * S1 and C1 wait for the converter fixes named in their rows (both drafts are under
   60%: the rule stops the pipeline).
+
+## Large files 3: lane 1's drivers
+
+Read at a4b33a0 (`project.rs` 3,565 lines, `modules.rs` 1,088, `comptime_run.rs`
+1,269, `grammar_run.rs` 522, `manifest.rs` 599, `build_time.rs` 387: 7,430). The
+earlier tables' *Stays Rust* drivers are this week's work (`docs/bootstrap-week.md`
+section 1): the question per row is which part is Nikaia over host callbacks and which
+adapter lines it leaves. Line ranges are at a4b33a0: re-grep the names before cutting.
+*Draft* is as above, `rs2nika --profile check-free --prefix X_ --file` over a scratch
+cut of exactly the `Cut:` ranges (methods wrapped in `impl T { }`): the share of code
+lines in items without a TODO. *Rust lines* count comments; about 45% of them are.
+
+**How `Parsed` crosses, in every row** (the M2/K1 pattern, not a new one): `Parsed`
+stays a Rust struct until lane 2's parser rows (#557 step 3, #903) make it Nikaia's.
+Nikaia gets a file as items + `ref InternerContext` (or `ParsedView`), and where a row
+makes or keeps a `Parsed` (`parse_to_ast`, `keeping`, `growing`) the host does it and
+hands back an index into a Rust arena. So `Unit`, `Program` and `Project` stay Rust
+structs (their fields are read about 150, 50 and 86 times, in `it/` too) and their
+decisions move as functions over the fields they pass. A caller in a lane 2 file
+(`check/host.rs`, `contracts/mod.rs`, `emit/mod.rs`, `emit/seeds.rs`) keeps a one-line
+Rust forward.
+
+**`std` against Part III 17** (each row names what it needs): `fs` reads, writes,
+`read_dir` (sorted names), `canonical`, `create_dir` (recursive), `copy`, `rename`,
+`remove`, `metadata` and `process::run` (`dir:`, `env:`, `within:`, both streams
+captured) are there. Missing: environment variables and `temp_dir` (#922 step 2),
+SHA-256 (#922 step 1), a file's modification time (#922 step 4), inherited streams and a
+stdin text (#920 step 2), `exec` (none planned), `hard_link`, `current_exe`, a JSON
+reader (none: cargo's messages stay with `diagnostics`' `serde_json`). Until an entry
+exists, the row takes a host callback and the issue names it.
+
+| Id | Rust (file:lines) | Target (`tools/`) | Host | Prerequisite | Rust lines | Draft |
+| :--- | :--- | :--- | :--- | :--- | ---: | ---: |
+| P5a | `project.rs`: `Settings`' `resolve`, `refutations`, `choose_cpu`, `cpu_key`, `cpu_config`, `cpu_rustflags`, `optimize`, `as_env`, `from_env`, `choices`, `panic_strategy` (185-460); `Project`'s `open`, `entry`, `build_dir`, `own_dir`, `gen_dir`, `switches_path`, `ledger_path`, `packages`, `members` (1782-1929); `program_name`, `root_tag`, `own_copy` (2740-2780); `switches_beside`, `trace` (3354-3392) | `project_settings.nika` (`ProjectWords` is there) | `Settings` keeps `build: Build` (`emit/mod.rs`, lane 2): Nikaia returns the words and the four optimisation values, Rust calls `Build::parse`; added `env_var(name) -> String?`, `native_cpu(triple)`, `sha256_hex`, `hard_link(from, to) -> bool`; `cpu_levels` is `sysroot_cpu_levels` | #922 steps 1-2 or the callbacks (named in #922) | ~505 | 87% |
+| P5b | `project.rs`: `lower`, `reads_for`, `reads_for_file`, `read_file`, `packages_of_file`, `project_for_file`, `lower_reading` (663-1214), `foreign_library` (1271-1299) | new `project_lower.nika` (prefix `project_lower_`) | added: `program_read(input, packages, tests, in_project) -> i64`, `check_unit(program, at) -> String throws`, `emit(program) -> ProjectLowerEmitted`, `cache_lookup`/`cache_record` (`orchestrator::Cache` until Sunday's O rows), `cexport(program)`, `with_book`; the published-contract merge into `Ledger` (`ty.nika`) and the notes move | M3b (else the host carries `Program`'s eight reads too); converter: `match` on `Ok`/`Err` off R160's shape (2), `Option::map`, `.enumerate()` | ~580 | 36% |
+| P5c | `project.rs`: `drive`, `drive_to` (2110-2584), `libraries_in`, `executable_in` (2781-2844) | new `project_drive.nika` | added: `lower(member) -> ProjectLowerOut` (P5b), `cargo_workspace` and `Cargo::messages`/`run` (orchestrator until O rows), `run_fast_compile`, `run_directly` (exec), `artifacts_in(messages)` (`serde_json`), `toolchain_*` checks; `libraries::*` are Nikaia (`libraries.nika`) | P5a, P5b; #920 step 2 for `cargo build`'s passed-through stderr; converter: `drive_to` is one item, so one TODO (a `Some(` in a tuple pattern, `Ok`/`Err` shape, `.cloned()`, `Option::map`) zeroes it | ~540 | 2% |
+| P5d | `project.rs`: `Around`, `check`, `newly`, `keeps_that_moved`, `write_proofs`, `write_ledger`, `changed_lines` (1301-1594), `Explain`, `explain` (1596-1780), `report` (2586-2691) | `project_check.nika` (the summary and filters are there, P2) | added: `check_against(unit) -> Vec[Finding]` (`check/`, lane 2), `foreign_check`, `sync_violations`, `render_finding`/`render_sync_violation`/`render` (`diagnostics`), `explain_report(kind, unit) -> String` (one per analysis: `order`, `sharing`, `tether`, `claims`, `bounds_report`, `trust`, `unrolling`), `translate_units(messages)`; `Book` writing stays behind `write_book` | P2 (built); converter: a write through a match binding (#576), `.cloned()` | ~585 | 54% |
+| P5e | `project.rs`: `cargo_member`, `runs_without_cargo`, `cargo_workspace`, `crate_named`, `codegen` (1931-2108), `record_resolved_dependencies` (2692-2737), `Suite`, `run_tests` (2906-3053), `runtime_dependencies_for`, `runtime_features`, `runtime_dependencies`, `wrapper_main` (3156-3352) | `project_drive.nika` | `CargoProject`, `Workspace`, `Invocation`, `Lockfile` are Nikaia after the O rows; a TOML value crosses as its text (MF); `env!("NIKAIA_RUNTIME_*")` passed in; the test spawns stay (`outcome_of`, `run_program_test`, `Sandbox`) | the orchestrator's O rows (#923, Sunday), MF, #922 step 2 (`args`, environment); converter: a `Some(` in a struct pattern (#886) | ~570 | 63% |
+| M3a | `modules.rs`: `Unit::qualify`, `collect`, `collect_with`, `package_at`, `collect_one`, `Standing`, `read_unit`, `one_namespace`, `declared_once`, `declared_names`, `check_imports`, `sources_of`, `groups`, `packages_of`, `package_ledger*`, `shipped_ledger` (37-480), `foreign_beside`, `described_beside` (1066-1088) | `modules.nika` (`declared_once`, `a_use_refused`, `groups` are there) | `std::fs` reads and `read_dir`; added `parse_unit(path, source, package) -> i64 throws` (`parse_to_ast`, the refusal rendered by `diagnostics`; the `Parsed` kept in Rust's arena), `infer_package(units) -> Ledger` (`contracts`, lane 2), `read_beside`; Rust builds the `Unit`s from the indices | none; #922 step 1 for `sources_of`' digest (else `sha256_hex` callback) | ~470 | 95% |
+| M3b | `modules.rs`: `Program`, `TestCase`, `read*`, `of`, `shown_paths` .. `sources`, `emit`, `emit_reading`, `with_tests_as_functions`, `std_ledger`, `names_in` (482-1065) | `modules.nika` | `Program` stays a Rust struct (holds `Vec<Unit>`, `Checked`, `CheckFacts`); added `across_files(group)` (`type_rules`), `analyse_package*` (`trust`), `keyed_functions`, `barrier_names`, `needs_of`, `emit_module_body_at` (emitter, lane 2), `for_unit` (`proofs`) | M3a | ~585 | 100% |
+| MF | `manifest.rs`: `Manifest` and its readers, `table_of`, `libraries`, `codegen`, `dependencies` (1-358), `mod tests` (359-599: 16 tests, each a `tests/compiler` program or a `test` block of `manifest.nika`); `project.rs` `rooted` (637-661) | `manifest.nika` (the `decide` functions are there): `ManifestFile` with `build`, `package`, `codegen` and `ManifestDependency` holding TOML values as their text | Rust keeps `Manifest::read`/`parse` turning `toml::Value` into `ManifestFile` (`as_str`, `as_integer`, `as_table` read there) and parses a value's text back where `orchestrator` needs a `toml::Value` (until the O rows) | none | ~600 | 100% |
+| K3a | `comptime_run.rs`: `lowered_units`, `without_foreign`, `dependency_modules`, `by_package` (119-271), `compute`, `computed`, `worked_out_ahead` (284-544), `undeclared_callee`, `culprit` (565-595) | `comptime_tree.nika` | `Parsed` arena: `sub_program`, `unit_without_its_constants`, `keeping` give indices; added `infer_package(indices, library)`, `emit_body(index, ..)`, `emit_program`, `dumper`, `run_comptime(program, name) -> ComptimeRan` (the `Wall`s as a Nikaia enum), `evaluate_folded` (`BuildTime`); `AHEAD` stays a Rust `thread_local` behind `enter(bound) -> bool`/`leave(bound)` | K1, K2 (built); converter: a `Some(` in a struct pattern (#886), `Ok`/`Err` shape | ~455 | 58% |
+| K3b | `comptime_run.rs`: `Bundle`, `Flavour`, `bundle`, `run_bundle`, `run_fingerprint`, `read_record`, `bundle_text`, `bundle_dir`, `stamp_of`, `bundle_of`, `build_for_cpu`, `run`, `waited`, `cargo`, `rustc`, `toolchain`, `target_libdir`, `write_if_changed`, `unique_beside` (720-1269) | new `comptime_bundle.nika` | `process::run` for `cargo rustc`, `rustc`, `rustc -vV`, `--print target-libdir` (captured, `dir:`); `artifacts_in` as P5c (`serde_json`); the `OnceLock`, `CPU_LEVEL`/`NOT_BUILT` statics and `unique_beside`'s counter stay Rust | #920 (the child's progress note while it runs: `waited`), #922 steps 1, 2, 4 (digest, `CARGO`/`RUSTC`/`LD_LIBRARY_PATH`, `modified`); converter: `static` behind a lock, `.as_mut()`, `Result` read as a value | ~550 | 32% |
+| BT | `build_time.rs` (1-387: `Refusal`, `BuildTime`, `Host` and its `BtHost` impl, `rule_of`, `char_of`, the escape forwards, `may_not_run`, `is_the_builds_own`); `comptime_run.rs` the defaults (597-718: `DEFAULTS`, `KNOWN`, `defaults_compiled_in`, `defaults_known_from`, `known_default`, `defaults_workshop`, `with_driver`, `Bounds`) | `build_eval.nika` (`bt_evaluate`, `BtHost` are there), `comptime_tree.nika` | `Refusal` becomes `BtRefusal`'s owner (the `Host(slot)` indirection goes); `BtHost`'s `constant`, `variant_of`, `rule_of` move to Nikaia over items; the `thread_local`s stay with one-line setters | K3a; converter: `thread_local!` cells, `match` on a kept `Result` | ~510 | 76% |
+| GR | `grammar_run.rs` (1-522: `Wall`, `Ask`, `Workshop`, `compile_and_run`, `cargo`, `write_if_changed`, `shared_target`, `manifest`, `driver`, `dumper`, `shapes`, `decode`) | new `grammar_run.nika` (`grammar_decode.nika` has `gr_manifest`, `gr_main`, `gr_decode`) | `process::run` for `cargo build` and the parser (captured); added as K3a: `emit_program`, `emit_body`, `infer_package`, `analyse`; `shapes` walks items in Nikaia; `Workshop`'s `Mutex`/`OnceLock` stay Rust | K3a (`without_foreign`, `dependency_modules`, `by_package`), #922 steps 1-2; converter: `.entry(..)` (2), `Option::map` | ~520 | 51% |
+
+**Cut/Convert** (ready to paste into a brief; ranges at a4b33a0):
+
+* P5a: `Cut: crates/nikaia/src/project.rs:185-460`, `:1782-1929`, `:2740-2780`, `:3354-3392`; `Convert: rs2nika --profile check-free --prefix project_settings_ --file <cut>.rs`
+* P5b: `Cut: crates/nikaia/src/project.rs:663-1214`, `:1271-1299`; `Convert: ... --prefix project_lower_`
+* P5c: `Cut: crates/nikaia/src/project.rs:2110-2584`, `:2781-2844`; `Convert: ... --prefix project_drive_`
+* P5d: `Cut: crates/nikaia/src/project.rs:1301-1594`, `:1596-1780`, `:2586-2691`; `Convert: ... --prefix project_check_`
+* P5e: `Cut: crates/nikaia/src/project.rs:1931-2108`, `:2692-2737`, `:2906-3053`, `:3156-3352`; `Convert: ... --prefix project_drive_`
+* M3a: `Cut: crates/nikaia/src/modules.rs:37-480`, `:1066-1088`; `Convert: ... --prefix modules_`
+* M3b: `Cut: crates/nikaia/src/modules.rs:482-1065`; `Convert: ... --prefix modules_`
+* MF: `Cut: crates/nikaia/src/manifest.rs:1-599`, `crates/nikaia/src/project.rs:637-661`; `Convert: ... --prefix manifest_` (draft over 1-358 and 637-661; the tests are rewritten, not converted)
+* K3a: `Cut: crates/nikaia/src/comptime_run.rs:119-544`, `:565-595`; `Convert: ... --prefix comptime_`
+* K3b: `Cut: crates/nikaia/src/comptime_run.rs:720-1269`; `Convert: ... --prefix comptime_bundle_`
+* BT: `Cut: crates/nikaia/src/build_time.rs:1-387`, `crates/nikaia/src/comptime_run.rs:597-718`; `Convert: ... --prefix build_time_`
+* GR: `Cut: crates/nikaia/src/grammar_run.rs:1-522`; `Convert: ... --prefix grammar_run_`
+
+No row splits a function; M3b and MF are the two at about 600. Callers (`where.nika`):
+`lower_reading` (`main.rs`, `project.rs`), `project_for_file`, `read_file`,
+`reads_for_file`, `wrapper_main`, `run_tests` (`main.rs`), `drive_to`, `explain`,
+`write_ledger` (`main.rs`, `project.rs`), `read_with` (`emit/mod.rs`, `emit/seeds.rs`,
+`project.rs`), `read_for_tests` (`main.rs`, `project.rs`), `compute` (`check/host.rs`,
+`contracts/mod.rs`), `known_default`, `defaults_workshop` (`contracts/mod.rs`),
+`defaults_compiled_in` (`emit/mod.rs`, `project.rs`, `specbook.rs`), `may_not_run`
+(`check/host.rs`), `run_bundle` (`run_fast.rs`), `runtime_dependencies_for`
+(`comptime_run.rs`, `grammar_run.rs`), `decode` (`build_time.rs`, `comptime_run.rs`).
+The `it/` tests read `Unit` fields in about 25 files, `Program`'s in 7, `Lowered`'s
+in 6, `Manifest::` in 3: none of these structs is reshaped, so none breaks.
+
+**Stays Rust** (the adapters these rows leave; each with why):
+
+* `project.rs` the `Settings`, `Project`, `Lowered`, `Member` struct shells and their
+  one-line forwards (~120): `Build` is `emit/mod.rs`'s and the fields are read in
+  `main.rs` and `it/`; they go when `main.rs`' calls do.
+* `project.rs` `WARNED`, `SHOWN_AS` (8): `thread_local`s, with one-line setters.
+* `project.rs` `Sandbox`, `outcome_of`, `run_program_test`'s spawn (~110): stdin text
+  and a test directory, until #920 step 2 (the bootstrap list's 250).
+* `project.rs` `run_directly` (~25): `exec` replaces the process (#281); no `std`
+  entry is planned.
+* `project.rs`/`comptime_run.rs` `artifacts_in` (~35): cargo's JSON messages, beside
+  `diagnostics`' `serde_json`.
+* `project.rs` `foreign_of`, `ForeignHost` (~45): SHA-256 until #922 step 1, then the
+  `Ledger` callbacks only.
+* `project.rs` `mod tests` (171), `manifest.rs` `mod tests` (241): #821, with the code
+  they test (MF converts its own).
+* `modules.rs` `Unit`, `Program` (~60) and the `Parsed` arena (~25): until `Parsed` is
+  Nikaia's.
+* `manifest.rs` `Manifest::read`/`parse` over `toml::Value`, `rooted` (~150): `toml`.
+* `comptime_run.rs` `AHEAD`, `DEFAULTS`, `KNOWN` (~30), `CPU_LEVEL`, `NOT_BUILT`,
+  `toolchain`/`target_libdir`'s `OnceLock` (~25), `LIBRARY_PATH`'s `cfg` (6),
+  `unique_beside`'s counter (8), `waited` (~40, until #920), `env!("NIKAIA_COMPILER")`.
+* `grammar_run.rs` `Workshop`'s `Mutex`/`OnceLock` (~30), `shared_target`'s `env!` (5).
+* `build_time.rs` the `BtHost` impl's reads of `Parsed` (`text`, `known`, `read`,
+  `run_grammar`: ~50): until `Parsed` is Nikaia's.
+
+So the six files leave about 1,000 adapter lines after these rows, about 600 of them
+waiting for #920, #922, `Parsed` or the O rows; over the bootstrap list's 250 + 350 +
+190 by the struct shells, which go with `main.rs`.
+
+**Order:** P5a, M3a, P5d, MF, M3b, P5b, K3a, BT, GR, K3b, P5c, P5e (P5b after M3b so
+its host does not carry `Program`; P5c after P5b; P5e after the O rows).
+**First two rows to brief: P5a, then M3a** (different files, both drafts over 85%).
+Known risk of each:
+
+* P5a: `Settings` holds the Rust `Build` and `Project`'s fields are read 86 times
+  (`project.rs` 56, `main.rs` 18, `sysroot.rs` 8): both stay Rust structs, so the
+  Nikaia functions take and return the words, not the structs, and the draft's
+  `impl Settings`/`impl Project` (which it wrote as Nikaia `impl`s) become free
+  functions over `ProjectWords` and a `ProjectPaths { root, variant }`; `as_env`,
+  `from_env`, `cpu_rustflags` read the environment before #922 step 2, through a
+  callback.
+* M3a: `Unit` holds `Parsed` and is read about 150 times in about 30 files (25 of
+  them `it/`), so it is not reshaped: Nikaia returns the file list, the packages and
+  the refusals, and Rust builds the `Unit`s from the arena indices. Every refusal text
+  and its path display must stay byte for byte (`tests/compiler` `.stderr`), and
+  `read_dir`'s order is Nikaia's sorted names where Rust sorted `PathBuf`s.
+
+Rows under 60% (P5b, P5c, P5d, K3a, K3b, GR) are recorded, not stopped (bootstrap
+L1); the converter repairs that lift most of them: `match` on `Ok`/`Err` off R160's
+shape (P5b, P5c, K3a, K3b), `Option::map`/`and_then` (P5b, P5c, P5e, GR), `.cloned()`
+of an iterator (P5c, P5d), a `Some(` in a tuple or struct pattern (#886: P5c, P5e,
+K3a), `.entry(..)` (GR).
