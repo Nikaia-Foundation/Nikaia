@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1269] — 2026-10-28
+
+**A list of text lent whole to a `ref Vec[String]` parameter keeps text of its own (ADR-282 D25)**
+- A list (or map) handed whole to a `ref` list or map parameter of text holds owned text: a view kept in it is refused where it goes in (NK1105), instead of the generated Rust failing on a `Vec<EitherText>`. It reaches a list handed back from a function and one stored in a field; method parameters go the same way. Literals and static text are still built where they stand.
+- Open: the NK1105 help for a list names `Vec[ref String]` where `.clone()` fits better; a tier walk that follows `ref` list parameters (the probe would then print as written) is a decision for ADR-282.
+
 ## [0.0.1268] — 2026-10-28
 
 **A grammar takes values: rule parameters and options, bounds and guards that are expressions, `count(p)` an `i64` (ADR-grammar-1 D2-D5, #932)**
