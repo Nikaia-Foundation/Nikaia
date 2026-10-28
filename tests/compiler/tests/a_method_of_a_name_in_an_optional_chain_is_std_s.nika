@@ -1,0 +1,11 @@
+// A method of a file's name reached through `?.` is `std`'s, as it is on a
+// plain receiver (ADR-319 D3): `text_of` exists only there, and `ends_with`
+// compares the bytes, where Rust's `Path` would compare whole components.
+use std::fs
+
+fn main() {
+    let p: fs::Path = "data2/a.nika"
+    let extension = p.extension()?.text_of() ?? ""
+    let ends = p.parent()?.ends_with("a2") ?? false
+    println(f"{extension} {ends}")
+}

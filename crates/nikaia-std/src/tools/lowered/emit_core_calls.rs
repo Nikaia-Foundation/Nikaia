@@ -576,23 +576,23 @@ impl EmitState {
                 _ => { },
             }
         }
-        if receiver.is_some() {
-            let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-            if self.facts.path_methods.contains_key(&node_key(on)) {
-                let known_text = match self.facts.path_methods.get(&node_key(on)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return Ok(()) };
-                let mut written = name.to_owned();
-                if name == "to_text" && known_text { written = String::from("text_of"); }
-                out.push(&format!("nikaia_std::fs::path::{}(&(", written));
+        if self.facts.path_methods.contains_key(&on_node) {
+            let known_text = match self.facts.path_methods.get(&on_node) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return Ok(()) };
+            let mut written = name.to_owned();
+            if name == "to_text" && known_text { written = String::from("text_of"); }
+            out.push(&format!("nikaia_std::fs::path::{}(&(", written));
+            if receiver.is_none() { out.push("__nikaia_it"); } else {
+                let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 self.emit_expr(world, walk, out, host, on, depth, flow, scope)?;
-                out.push(")");
-                if !args.is_empty() {
-                    out.push(", ");
-                    self.emit_core_args(world, walk, out, host, &name, args, &vec![], depth, flow, scope)?;
-                }
-                out.push(")");
-                if flow.can_throw && !flow.caught && self.method_can_fail(on_node) { out.push("?"); }
-                return Ok(());
             }
+            out.push(")");
+            if !args.is_empty() {
+                out.push(", ");
+                self.emit_core_args(world, walk, out, host, &name, args, &vec![], depth, flow, scope)?;
+            }
+            out.push(")");
+            if flow.can_throw && !flow.caught && self.method_can_fail(on_node) { out.push("?"); }
+            return Ok(());
         }
         let truncated = truncating(&name);
         if truncated.is_some() {

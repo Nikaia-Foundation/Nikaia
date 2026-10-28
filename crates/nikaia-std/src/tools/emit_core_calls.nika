@@ -836,29 +836,34 @@ impl EmitState {
         // **A method of a file's name is `std`'s function** (ADR-319 D3): Rust's
         // `Path` has methods by these names that compare whole components, so the
         // call is written to `nikaia_std::fs::path`, which compares the bytes.
-        if receiver != null {
-            let on = receiver ?? return
-            if self.facts.path_methods.contains_key(node_key(on)) {
-                let known_text = self.facts.path_methods.get(node_key(on)) ?? return
-                // **`to_text` on a name made from text cannot fail** (ADR-319 D5),
-                // and the checker said where.
-                let mut written = name.clone()
-                if name == "to_text" && known_text {
-                    written = "text_of"
-                }
-                out.push(f"nikaia_std::fs::path::{written}(&(")
-                self.emit_expr(world, walk, out, host, on, depth, flow, scope)
-                out.push(")")
-                if args.len() > 0 {
-                    out.push(", ")
-                    self.emit_core_args(world, walk, out, host, name, args, [], depth, flow, scope)
-                }
-                out.push(")")
-                if flow.can_throw && !flow.caught && self.method_can_fail(on_node) {
-                    out.push("?")
-                }
-                return
+        // A link of an optional chain (`p.extension()?.text_of()`) has no
+        // receiver: the chain's `match` bound the name as `__nikaia_it`, and
+        // `on_node` is the chain's receiver, which the checker keyed.
+        if self.facts.path_methods.contains_key(on_node) {
+            let known_text = self.facts.path_methods.get(on_node) ?? return
+            // **`to_text` on a name made from text cannot fail** (ADR-319 D5),
+            // and the checker said where.
+            let mut written = name.clone()
+            if name == "to_text" && known_text {
+                written = "text_of"
             }
+            out.push(f"nikaia_std::fs::path::{written}(&(")
+            if receiver == null {
+                out.push("__nikaia_it")
+            } else {
+                let on = receiver ?? return
+                self.emit_expr(world, walk, out, host, on, depth, flow, scope)
+            }
+            out.push(")")
+            if args.len() > 0 {
+                out.push(", ")
+                self.emit_core_args(world, walk, out, host, name, args, [], depth, flow, scope)
+            }
+            out.push(")")
+            if flow.can_throw && !flow.caught && self.method_can_fail(on_node) {
+                out.push("?")
+            }
+            return
         }
         // **`x.truncating_i32()` is Rust's `as`** (ADR-285 D13): the operation the
         // name says, bare and parenthesised by whoever needs it.
