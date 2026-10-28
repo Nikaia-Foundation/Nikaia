@@ -240,7 +240,11 @@ impl EmitState {
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is
                     // that value (ADR-296).
-                    self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
+                    if self.emit_action_can_fail(world, action) {
+                        self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(alt.pattern.node))
+                    } else {
+                        self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
+                    }
                     if as_bytes.len() > 0 {
                         out.push(" }")
                     }
@@ -263,6 +267,49 @@ impl EmitState {
                 },
             }
         }
+    }
+}
+
+/// Whether an alternative's own pattern has passed a commit point (`=>`)
+/// where its action runs.
+fn emit_passes_a_cut(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Cut => true,
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_passes_a_cut(part.node) }),
+        Pattern::Group(inner) => emit_passes_a_cut(inner.node),
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// Whether one of an action's statements can fail.
+    fn emit_action_can_fail(ref self, world: ref EmitWorld, action: ref Block) -> bool {
+        for stmt in action.stmts {
+            let at = stmt.span.start as i64
+            let fails = match stmt.node {
+                Stmt::Expr(value) => self.branch_can_fail(world, at, value),
+                Stmt::Let { value, .. } => self.branch_can_fail(world, at, value),
+                else => false,
+            }
+            if fails {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// **An action that can fail** (Part II 10.8, #557): its body runs as a
+    /// `throws` function's does, and its failure is the alternative's, with
+    /// the error's message in the `ParseError` (the backend's `external`).
+    /// Past a commit point it is the parse's error: no enclosing alternative
+    /// is tried; before one, the next alternative is.
+    fn emit_failing_action[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, action: ref Block, cut: bool) sync throws {
+        let mode = if cut { "Cut" } else { "Backtrack" }
+        let inside = EmitFlow::plain() with { can_throw: true }
+        out.push("{ let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = ")
+        self.emit_core_block(world, walk, out, host, action, 3, inside, EmitScope::plain(), EmitTail::Value)
+        out.push("; Ok(__nikaia_done) })(); ")
+        out.push(f"match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{mode}(<E as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}")
     }
 }
 

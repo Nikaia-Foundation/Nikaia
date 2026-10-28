@@ -177,7 +177,7 @@ impl EmitState {
                         out.push("{ ");
                         for name in as_bytes.iter() { out.push(&format!("let {} = {}.as_bytes(); ", name, name)); }
                     }
-                    self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return)?;
+                    if self.emit_action_can_fail(world, action) { self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?; } else { self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return)?; }
                     if !as_bytes.is_empty() { out.push(" }"); }
                     out.push("\n");
                 },
@@ -194,6 +194,41 @@ impl EmitState {
                 },
             }
         }
+        Ok(())
+    }
+}
+
+pub(crate) fn emit_passes_a_cut(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Cut => true,
+        Pattern::Seq(parts) => parts.iter().any(|part| { emit_passes_a_cut(&part.node) }),
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); emit_passes_a_cut(&inner.node) },
+        _ => false,
+    }
+}
+
+impl EmitState {
+    pub(crate) fn emit_action_can_fail(&self, world: &EmitWorld<'_, '_, '_, '_>, action: &Block) -> bool {
+        for stmt in action.stmts.iter() {
+            let at = stmt.span.start as i64;
+            let fails = match &stmt.node {
+                Stmt::Expr(value) => self.branch_can_fail(world, at, value),
+                Stmt::Let { value, .. } => self.branch_can_fail(world, at, value),
+                _ => false,
+            };
+            if fails { return true; }
+        }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_failing_action<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, action: &Block, cut: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let mode = if cut { "Cut" } else { "Backtrack" };
+        let inside = EmitFlow { can_throw: true, ..EmitFlow::plain() };
+        out.push("{ let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = ");
+        self.emit_core_block(world, walk, out, host, action, 3, inside, &EmitScope::plain(), EmitTail::Value)?;
+        out.push("; Ok(__nikaia_done) })(); ");
+        out.push(&format!("match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{}(<E as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}", mode));
         Ok(())
     }
 }

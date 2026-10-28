@@ -1,0 +1,47 @@
+// An action that fails inside an alternative (Part II 10.8, ADR-339 5, #557):
+// without a commit point before it, the failure is the alternative's, and the
+// next one is tried; past a commit point it is the parse's error, and the
+// action's message is what `ParseError` carries.
+use std::text
+
+struct TooBig { n: i64 }
+impl Error for TooBig { fn message(ref self) -> String { return f"{self.n} is too big" } }
+
+fn parse(t: String) -> i64 throws {
+    let n = text::parse_i64(t) ?? 0
+    if n > 99 {
+        throw TooBig { n: n }
+    }
+    return n
+}
+
+grammar G {
+    rule n -> i64 = t:text(digit+) { parse(t) }
+    entry rule soft -> i64 = x:n { x } | digit+ { -1 }
+    entry rule hard -> i64 = "#" => x:n { x } | "#" digit+ { -2 }
+    entry rule own -> i64 = "@" => t:text(digit+) { parse(t) } | "@" digit+ { -3 }
+}
+
+fn main() {
+    for input in ["42", "123"] {
+        let v = G::soft(input) catch {
+            println(f"soft {input}: {error}")
+            0
+        }
+        println(f"soft {input} = {v}")
+    }
+    for input in ["#42", "#123"] {
+        let v = G::hard(input) catch {
+            println(f"hard {input}: {error}")
+            0
+        }
+        println(f"hard {input} = {v}")
+    }
+    for input in ["@42", "@123"] {
+        let v = G::own(input) catch {
+            println(f"own {input}: {error}")
+            0
+        }
+        println(f"own {input} = {v}")
+    }
+}

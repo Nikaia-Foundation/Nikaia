@@ -1,0 +1,19 @@
+soft 42 = 42
+soft 123 = -1
+hard #42 = 42
+hard #123: 123 is too big at line 1, column 5
+   1 | #123
+           ^
+note: also possible here: a digit
+in item 4
+in n
+in hard
+hard #123 = 0
+own @42 = 42
+own @123: 123 is too big at line 1, column 5
+   1 | @123
+           ^
+note: also possible here: a digit
+in item 4
+in own
+own @123 = 0
