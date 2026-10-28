@@ -34,6 +34,20 @@ pub fn numbered_int_literal(value: u64, negative: bool, id: NodeId) -> Expr {
 /// Gives the node a new id: how a clone placed a second time in one tree stops
 /// being the same node as the first ([ADR-340](../../../docs/specification/adr/adr-340.md) D2).
 pub fn set_id(expr: &mut Expr, id: NodeId) {
+    *id_slot(expr) = id;
+}
+
+/// The node with `span` on its id, unless a rule inside already put one there
+/// ([ADR-383](../../../docs/specification/adr/adr-383.md) D4): what a grammar
+/// action does where it knows where the node was read.
+pub fn spanned(mut expr: Expr, span: Span) -> Expr {
+    let slot = id_slot(&mut expr);
+    *slot = slot.at(span.start, span.end);
+    expr
+}
+
+/// The node's id, to change in place.
+fn id_slot(expr: &mut Expr) -> &mut NodeId {
     match expr {
         Expr::LitInt { id: slot, .. }
         | Expr::Match { id: slot, .. }
@@ -75,6 +89,6 @@ pub fn set_id(expr: &mut Expr, id: NodeId) {
         | Expr::Unsafe(_, slot)
         | Expr::LitNull(slot)
         | Expr::Break(slot)
-        | Expr::Continue(slot) => *slot = id,
+        | Expr::Continue(slot) => slot,
     }
 }
