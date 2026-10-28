@@ -17,7 +17,7 @@ pub struct VcAnswer {
 #[derive(Debug, Clone)]
 pub struct VcAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5> {
     pub names: &'a winnow_grammar::InternerContext,
-    pub items: &'a1 Vec<Spanned<Item>>,
+    pub items: &'a1 [Spanned<Item>],
     pub own: &'a2 Ledger,
     pub library: &'a3 Ledger,
     pub lent: &'a4 collections::BTreeSet<i64>,

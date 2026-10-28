@@ -54,7 +54,7 @@ pub struct BufferAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
     pub own: &'a1 Ledger,
     pub own_methods: &'a2 MethodIndex,
     pub library: &'a3 Ledger,
-    pub items: &'a4 Vec<Spanned<Item>>,
+    pub items: &'a4 [Spanned<Item>],
     pub context: &'a5 KeepContext,
     pub given_up: &'a6 collections::BTreeMap<i64, String>,
 }

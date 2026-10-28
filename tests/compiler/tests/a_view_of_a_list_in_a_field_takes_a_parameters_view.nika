@@ -1,0 +1,28 @@
+// A field `ref Vec[T]` holds what a `ref Vec[T]` parameter hands it: both are
+// a view of a list, one shape below (#458).
+struct Walk {
+    names: ref Vec[String],
+    limit: i64,
+    found: i64,
+}
+
+impl Walk {
+    fn visit(ref mut self, at: i64) {
+        if self.names[at].len() > self.limit {
+            self.found += 1
+        }
+    }
+}
+
+fn longer(names: ref Vec[String], limit: i64) -> i64 {
+    let mut walk = Walk { names: names, limit: limit, found: 0 }
+    for at in 0..<names.len() {
+        walk.visit(at)
+    }
+    return walk.found
+}
+
+fn main() {
+    let names: Vec[String] = ["ab", "abcd", "abcdef"]
+    println(f"{longer(names, 3)} of {names.len()} are longer than 3")
+}

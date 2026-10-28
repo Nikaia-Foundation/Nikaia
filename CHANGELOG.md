@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1265] — 2026-10-28
+
+**A view of a list in a field is a slice, as a parameter's is (#125)**
+- A struct's field `ref Vec[T]` is lowered to `&'a [T]`, as a `ref Vec[T]` parameter already was (#458): a method that hands a parameter's view to the struct no longer fails in rustc with `&Vec<T>` against `&[T]`. Found by rs2nika's check loop on a walk that keeps its inputs in fields.
+
 ## [0.0.1264] — 2026-10-28
 
 **winnow-grammar 9b15c55 and winnow 1.0 (#932)**

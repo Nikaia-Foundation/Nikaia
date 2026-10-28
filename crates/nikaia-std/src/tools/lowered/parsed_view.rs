@@ -5,7 +5,7 @@
 pub struct ParsedView<'a, 'a1, 'a2, 'a3, 'a4, 'a5> {
     pub words: &'a winnow_grammar::InternerContext,
     pub aliases: &'a1 collections::BTreeMap<String, String>,
-    pub items: &'a2 Vec<Spanned<Item>>,
+    pub items: &'a2 [Spanned<Item>],
     pub package: Option<&'a3 str>,
     pub spans: &'a4 collections::BTreeMap<u32, Span>,
     pub viewed_arms: &'a5 collections::BTreeSet<i64>,
