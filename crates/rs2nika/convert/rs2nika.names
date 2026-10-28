@@ -10,6 +10,8 @@ check::Severity CheckSeverity # the same re-export; also `check::Severity::Warni
 cache::sha256_hex host.sha256_hex # `std` has no SHA-256: a `SysrootHost` method (sysroot_cache.nika, S2)
 cache::use_entry host.use_entry # the user cache's mark, a `SysrootHost` method (S2)
 crate::comptime_run::unique_beside host.unique_beside # a `SysrootHost` method (S2)
+crate::contracts::sync::Pause ModulesPause # modules.rs's pause, `ModulesPause` in modules.nika (M1)
+sync::Pause ModulesPause # the same, by its short path (M1)
 
 # [view]: what `--view` (R177) renames, in this order. The parsed files are
 # `ParsedView`s named `unit`. A bare word is renamed as a word (not after a
@@ -33,3 +35,20 @@ check::Finding = CheckFinding # check/mod.rs re-exports check_state::CheckFindin
 check::Severity = CheckSeverity # the same re-export
 PathBuf = fs::Path # std's file name, `std::path::PathBuf` lowered; its methods are `nikaia_std::fs::path` (sysroot_cache.nika, S2)
 &Path = ref fs::Path # the same, lent (S2)
+(Span,String) = Site # a pause's site, `Site { span, what }` (sync.nika, M1)
+
+# [fields]: `Type.field chain = list: Nikaia type`, a struct the Rust side
+# keeps, lent as `&[Type]` and read by fields: one list per field read,
+# named in the plural (R242). Extend in the commit of the move.
+[fields]
+Unit.package = packages: Vec[String?] # modules.rs's `Unit` stays Rust; its packages, in unit order (modules.nika, M1)
+Unit.path.display().to_string() = paths: Vec[String] # the units' paths as shown (M1)
+Unit.renames = renames: Vec[collections::BTreeMap[String, String]] # the units' package renames (M1)
+Unit.source = sources: Vec[String] # the units' texts (M1)
+Package.files = files: Vec[(String, String)] # sysroot.rs's packed package, one field (S2)
+
+# [forms]: `Rust form = Nikaia form`, an expression a move spells
+# otherwise; `{x}` is the receiver chain before the rest (R244).
+[forms]
+{x}.sync_claim == Sync::Inferred = inferred_sync({x}.sync_claim) # `Sync` stays Rust: modules.nika asks `inferred_sync` (M1)
+{x}.absorb_renaming( = absorb_into({x}, # `Ledger::absorb_renaming` is ledger_ops.nika's free `absorb_into` (M1)

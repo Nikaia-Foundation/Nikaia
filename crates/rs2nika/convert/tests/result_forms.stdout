@@ -10,7 +10,7 @@ fn first(a: i64?, b: i64?) -> i64 sync {
 }
 
 fn read(path: String) -> String sync throws {
-    let text = std::fs::read_to_string(path) catch { let e = error; throw f"{path}: {e}" }
+    let text = fs::read_to_string(path, fs::Root::Anywhere) catch { let e = error; throw f"{path}: {e}" }
     let n = text::parse_i64(text.trim()) ?? throw "not a number"
     if n == 0 {
         throw "zero"

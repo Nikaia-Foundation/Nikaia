@@ -1,6 +1,6 @@
 fn cut(line: String) -> (String, String)? sync {
     let (key, value) = line.split_once('=') ?? return null
-    return (key.trim().to_string(), value.to_string())
+    return (key.trim().clone(), value.to_string())
 }
 fn owner(path: String) -> (String, String) sync {
     return path.rsplit_once("::") ?? ("", path)

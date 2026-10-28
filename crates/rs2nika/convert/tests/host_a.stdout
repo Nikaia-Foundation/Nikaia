@@ -27,7 +27,7 @@ use std::text
     }
 
     fn value_fn(ref self, world: ref CheckWorld) -> String sync {
-        return VALUE_FN.to_string()
+        return VALUE_FN.clone()
     }
 
     fn place_of(ref self, world: ref CheckWorld, place: String, here: i64) -> CheckPlace sync {

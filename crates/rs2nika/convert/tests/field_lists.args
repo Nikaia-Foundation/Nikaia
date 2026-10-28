@@ -1,0 +1,5 @@
+--profile
+check-free
+--only
+report
+f.rs

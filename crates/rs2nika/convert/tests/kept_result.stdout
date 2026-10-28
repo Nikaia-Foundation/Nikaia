@@ -1,7 +1,7 @@
 use std::text
 
 fn load(path: ref Path) -> String? sync {
-    return std::fs::read_to_string(path) catch {
+    return fs::read_to_string(path, fs::Root::Anywhere) catch {
         let e = error
         eprintln(f"cannot read {path.display()}: {e}")
         null

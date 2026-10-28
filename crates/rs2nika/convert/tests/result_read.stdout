@@ -10,10 +10,10 @@ fn flushed(mut file: File, line: String) sync {
 }
 
 fn store(entry: ref Path) sync {
-    std::fs::create_dir_all(entry) catch {
+    fs::create_dir(entry, fs::Root::Anywhere; recursive: true) catch {
         return
     }
-    std::fs::remove_file(entry) catch {
+    fs::remove(entry, fs::Root::Anywhere) catch {
         eprintln("kept")
         return
     }
@@ -28,7 +28,7 @@ fn mode(other: String) -> bool sync {
 }
 
 fn kept(path: ref Path) -> String? sync {
-    let current = std::fs::read_to_string(path) catch { null }
+    let current = fs::read_to_string(path, fs::Root::Anywhere) catch { null }
     return current
 }
 

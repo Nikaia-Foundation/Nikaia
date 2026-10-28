@@ -1,0 +1,20 @@
+/// The packed bytes.
+fn packed(name: String, body: ref Vec[u8]) -> Vec[u8] {
+    let mut out: Vec[u8] = []
+    for b in name.bytes() {
+        out.push(b)
+    }
+    for i in 0..<8 {
+        out.push(((body.len() >> (8 * i)) & 255) as u8)
+    }
+    for b in body {
+        out.push(b)
+    }
+    return out
+}
+
+/// The key, trimmed.
+fn key(text: String) -> String {
+    return text.trim().clone()
+}
+

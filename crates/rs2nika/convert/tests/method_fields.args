@@ -1,0 +1,7 @@
+--profile
+check-free
+--prefix
+cache_
+--only
+pack
+f.rs

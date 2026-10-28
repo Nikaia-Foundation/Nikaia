@@ -1,0 +1,3 @@
+[forms]
+{x}.sync_claim == Sync::Inferred = inferred_sync({x}.sync_claim) # `Sync` stays Rust
+{x}.absorb_renaming( = absorb_into({x}, # a free function in Nikaia

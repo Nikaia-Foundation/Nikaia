@@ -10,7 +10,7 @@ fn port() -> i64? sync {
 }
 
 fn first(dir: ref Path) -> String? sync {
-    let text = (std::fs::read_to_string(dir.join("a")) catch { return null }).trim().to_string()
+    let text = (fs::read_to_string(dir.join("a"), fs::Root::Anywhere) catch { return null }).trim().clone()
     return text
 }
 
@@ -26,7 +26,7 @@ fn ledger(text: String) -> Ledger? sync {
 }
 
 fn ctx(path: ref Path) -> String sync throws {
-    let t = std::fs::read_to_string(path) catch { throw f"reading {path.display()}" }
+    let t = fs::read_to_string(path, fs::Root::Anywhere) catch { throw f"reading {path.display()}" }
     return t
 }
 
@@ -35,8 +35,8 @@ fn flag() -> bool sync {
 }
 
 fn ctx2(path: ref Path) -> i64 sync throws {
-    let n = (std::fs::read_to_string(path) catch { throw "reading" }).len()
-    let m = std::fs::read(path) catch { throw "bytes" }
+    let n = (fs::read_to_string(path, fs::Root::Anywhere) catch { throw "reading" }).len()
+    let m = fs::read(path, fs::Root::Anywhere) catch { throw "bytes" }
     return n + m.len()
 }
 

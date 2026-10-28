@@ -1,0 +1,6 @@
+[types]
+Finding = CheckFinding # the checker's finding
+
+[fields]
+Unit.package = packages: Vec[String?] # the units' packages
+Unit.source = sources: Vec[String] # the units' texts

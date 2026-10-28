@@ -1,0 +1,29 @@
+/// The pieces of a text.
+fn pieces(text: String) -> Vec[String]? {
+    let mut out: Vec[String] = []
+    let pieces: Vec[String] = text.split("\n").collect()
+    for at in 0..<pieces.len() {
+        // Each line with its own `\n`, as it stood in the text.
+        let line: String = match at + 1 < pieces.len() {
+            true => f"{pieces[at]}\n",
+            false => pieces[at].clone(),
+        }
+        if line.is_empty() {
+            continue
+        }
+        if line.starts_with("# ") {
+            out.push((line.strip_prefix("# ") ?? "").clone())
+        } else {
+            if out.is_empty() {
+                return null
+            }
+            let last = out.len() - 1
+            out[last].push_str(line)
+        }
+    }
+    if out.is_empty() {
+        return null
+    }
+    return out
+}
+

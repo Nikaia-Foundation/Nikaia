@@ -1,0 +1,29 @@
+
+
+
+
+
+
+
+
+
+/// What each unit says.
+pub fn report(sources: ref Vec[String], render_finding: fn(ref CheckFinding, i64) -> String sync, at: i64) -> String {
+    let mut out: String = ""
+    let finding = Finding { code: 1 }
+    out.push_str(render_finding(finding, at))
+    if sources.len() == 1 {
+        out.push_str(sources[0])
+    }
+    return out
+}
+
+
+
+
+
+
+
+
+
+

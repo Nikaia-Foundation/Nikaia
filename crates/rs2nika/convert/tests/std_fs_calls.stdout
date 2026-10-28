@@ -1,0 +1,16 @@
+/// Reads what the cache holds.
+fn cached(path: ref fs::Path) -> String? {
+    let text = fs::read_to_string(path, fs::Root::Anywhere) catch { "" }
+    let _ = fs::metadata(path, fs::Root::Anywhere) catch { return null }
+    fs::remove(path, fs::Root::Anywhere) catch {}
+    let ext = (path.extension() ?? return null).to_str() ?? return null
+    let level = match ext {
+        "nika" => {
+            let n = text.len()
+            n
+        }
+        else => 0,
+    }
+    return (f"{text}{level}")
+}
+
