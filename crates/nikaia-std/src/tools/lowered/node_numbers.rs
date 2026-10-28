@@ -120,7 +120,9 @@ pub(crate) fn numbers_item(item: Item, st: &mut NodeNumbersState) -> Item {
                     let action = numbers_maybe_block(alt.action, st);
                     alts.push(GrammarAlt { pattern, action });
                 }
-                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts, span: rule.span });
+                let args = numbers_fn_args(rule.args, st);
+                let config = numbers_config_params(rule.config, st);
+                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts, span: rule.span, args, config });
             }
             return Item::Grammar(GrammarDef { name: def.name, rules, public: def.public });
         },
@@ -210,6 +212,15 @@ pub(crate) fn numbers_pattern(pattern: Pattern, st: &mut NodeNumbersState) -> Pa
             let pat = nikaia_std::boxed::open(pat);
             return Pattern::Group(Box::new(numbers_spanned_pattern(pat, st)));
         },
+        Pattern::Call { name, args, config } => { return Pattern::Call { name, args: numbers_exprs(args, st), config: numbers_config(config, st) }; },
+        Pattern::Counted { pat, low, high, comma } => {
+            let pat = nikaia_std::boxed::open(pat);
+            let inner = numbers_spanned_pattern(pat, st);
+            let low2 = numbers_expr(low, st);
+            let high2 = numbers_maybe_expr(high, st);
+            return Pattern::Counted { pat: Box::new(inner), low: low2, high: high2, comma };
+        },
+        Pattern::Guard { cond, expected } => { return Pattern::Guard { cond: numbers_expr(cond, st), expected }; },
         Pattern::Fold(spec) => {
             let init = numbers_expr(spec.init, st);
             let step = numbers_expr(spec.step, st);

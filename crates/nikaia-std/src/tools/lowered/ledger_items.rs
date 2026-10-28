@@ -81,7 +81,11 @@ pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &colle
             let written = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
             result = Some(written_ty(words, aliases, written));
         }
-        contract.signature = Some(Signature { bounds: vec![], mutable: vec![], params: vec![(String::from("input"), Ty::Unknown)], config: vec![], result });
+        let mut params: Vec<(String, Ty)> = vec![(String::from("input"), Ty::Unknown)];
+        for arg in rule.args.iter() { params.push((words.resolve(arg.name).to_string(), written_ty(words, aliases, &arg.ty))); }
+        let mut options: Vec<ConfigContract> = vec![];
+        for option in rule.config.iter() { options.push(ConfigContract { name: words.resolve(option.name).to_string(), ty: written_ty(words, aliases, &option.ty), default: default_text(&option.default) }); }
+        contract.signature = Some(Signature { bounds: vec![], mutable: vec![], params, config: options, result });
         out.push(DeclaredFn { key: format!("{}::{}", owner, words.resolve(rule.name)), contract });
     }
     out

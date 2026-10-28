@@ -74,3 +74,35 @@ pub fn fold_postfix(base: Expr, tail: Vec<Postfix>) -> Expr {
     recv
 }
 
+pub fn counted_pattern(pat: Spanned<Pattern>, low: Expr, comma: bool, high: Option<Expr>, span: Span) -> Spanned<Pattern> {
+    let lo = tree_build_written_count(&low);
+    let mut hi: Option<u32> = None;
+    let mut high_written = true;
+    match high {
+        Some(ref bound) => {
+            hi = tree_build_written_count(bound);
+            high_written = hi.is_some();
+        },
+        None => { },
+    }
+    if lo.is_some() && high_written {
+        let n = nikaia_std::index::or(lo, || 0);
+        let mut rep = Repeat::Exactly(n);
+        if comma {
+            rep = match hi {
+                Some(m) => Repeat::Between(n, m),
+                None => Repeat::AtLeast(n),
+            };
+        }
+        return Spanned { node: Pattern::Repeat { pat: Box::new(pat), rep }, span, doc: None, attributes: vec![] };
+    }
+    Spanned { node: Pattern::Counted { pat: Box::new(pat), low, high, comma }, span, doc: None, attributes: vec![] }
+}
+
+pub(crate) fn tree_build_written_count(e: &Expr) -> Option<u32> {
+    match e {
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if !negative && value <= 4294967295u64 { Some(u32::try_from(value).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))) } else { None } },
+        _ => None,
+    }
+}
+

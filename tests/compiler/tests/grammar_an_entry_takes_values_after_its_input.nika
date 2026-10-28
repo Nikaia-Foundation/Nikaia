@@ -1,0 +1,29 @@
+// An entry takes the values its rule declares after its input, an option by
+// name, left out by its default (ADR-grammar-1 D2); `count(p)` is an `i64`
+// (D5); a bound may be a value (D3).
+
+grammar Fixed {
+    rule WS = "" -> { }
+
+    // `width` digits, read as a number; with `signed`, a `-` may stand first.
+    entry rule number(width: i64; signed: bool = false) -> i64 =
+        "-" if(signed) d:dec[i64](digit{width}) eof -> { 0 - d }
+      | d:dec[i64](digit{width}) eof -> { d }
+
+    // how many spaces lead, times ten: a count is a number like any other
+    entry rule indent -> i64 = n:count(" ") until(eof) eof -> { n * 10 }
+
+    // fewer than `limit` dots, then a `!`
+    entry rule dots(limit: i64) -> i64 = d:text("."{0, limit - 1}) "!" eof -> { d.len() as i64 }
+}
+
+fn main() {
+    println(Fixed::number("042", 3) catch { -1 })
+    println(Fixed::number("042", 2) catch { -1 })
+    println(Fixed::number("-07", 2; signed: true) catch { -1 })
+    println(Fixed::number("-07", 2) catch { -1 })
+    println(Fixed::indent("   x y") catch { -1 })
+    println(Fixed::dots("..!", 3) catch { -1 })
+    println(Fixed::dots("...!", 3) catch { -1 })
+    println(Fixed::dots("!", 0) catch { -1 })
+}

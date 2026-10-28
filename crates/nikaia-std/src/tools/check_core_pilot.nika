@@ -25,8 +25,47 @@ pub fn check_specialised(function: ref String, on: ref String) -> String {
 /// (ADR-366 D1): the argument decides, and a `Bytes` one is kept in
 /// `bytes_entries` and its grammar in `bytes_grammars`, for the lowering to
 /// compile the grammar over bytes too. The result and `throws` are as for text.
-pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, args: ref Vec[Expr], span: ref Span) -> Ty sync {
+pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+    // **The input first, then the values the entry takes** (ADR-grammar-1
+    // D2), checked against its contract as a function's arguments are.
+    let declared: FnContract? = world.own.functions[key]?.clone()
+    match declared {
+        contract => {
+            let signature = contract.signature ?? Signature::empty()
+            let wanted = signature.params.len() as i64 - 1
+            if wanted >= 0 && args.len() as i64 - 1 != wanted {
+                state.findings.push(check_refusal("NK1101", span, f"`{key}` takes the input and {counted(wanted, "value")}, but you passed {args.len()} arguments.", ["An entry takes the text or bytes to parse first, then the values its rule declares (ADR-grammar-1 D2)."], "Give the input, then one value for each, by position."))
+            }
+            for i in 1..<args.len() {
+                if i < signature.params.len() {
+                    let named = signature.params[i].0.clone()
+                    let given = check_core_expr(state, world, host, args[i], span)
+                    state.expect_type(world, given, signature.params[i].1, span, "argument", fn(was, wanted) { f"The value for `{named}` is `{was}`, but `{key}` takes `{wanted}`." })
+                }
+            }
+            for c in config {
+                let option = world.words.resolve(c.name).clone()
+                let mut found = false
+                for o in signature.config {
+                    if o.name == option {
+                        found = true
+                        let given = check_core_expr(state, world, host, c.value, span)
+                        state.expect_type(world, given, o.ty, span, "argument", fn(was, wanted) { f"The option `{option}` is `{was}`, but `{key}` takes `{wanted}`." })
+                    }
+                }
+                if !found {
+                    state.findings.push(check_refusal("NK1109", span, f"`{key}` has no option called `{option}`.", ["An entry's options are what its rule declares after its `;`."], "Name an option the rule declares."))
+                }
+            }
+        },
+        null => {},
+    }
+    let mut at = 0
     for arg in args {
+        at += 1
+        if at > 1 {
+            continue
+        }
         let given = check_core_expr(state, world, host, arg, span)
         let over_bytes = match given {
             Ty::Named { name, args: inner, .. } => name == "Bytes" && inner.len() == 0,

@@ -1,0 +1,46 @@
+error[NK1101]: `Item` takes 1 value before the `;`, but you passed 2.
+  --> tests/grammar_values_are_checked_where_they_stand.nika:9:29
+   |
+ 9 |     entry rule a -> i64 = v:Item(1, 2) -> { v }
+   |                             ^^^^^^^^^^
+   |
+   = note: A rule takes its values as a function takes its arguments (ADR-grammar-1 D2).
+   = help: Give one value for each, by position; an option goes after the `;` by name.
+error[NK1102]: The value for `n` here is `ref String`, but it has to be `i64`.
+   --> tests/grammar_values_are_checked_where_they_stand.nika:10:29
+    |
+ 10 |     entry rule b -> i64 = v:Item("x") -> { v }
+    |                             ^^^^^^^^^
+    |
+    = help: Make it an `i64`, or change the declaration to `ref String`.
+error[NK1109]: `Item` has no option called `wide`.
+   --> tests/grammar_values_are_checked_where_they_stand.nika:11:29
+    |
+ 11 |     entry rule c -> i64 = v:Item(1; wide: true) -> { v }
+    |                             ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It is a rule of grammar `G`; its options are what it declares after its `;`.
+    = help: Name an option the rule declares, or declare it.
+error[NK1102]: A guard here is `i64`, but it has to be `bool`.
+   --> tests/grammar_values_are_checked_where_they_stand.nika:12:40
+    |
+ 12 |     entry rule d -> i64 = m:count(" ") if(m) v:Item(m) -> { v }
+    |                                        ^^^^^
+    |
+    = help: A guard is a condition: compare, as in `if(m > n)`.
+error[NK1102]: A bound here is `ref String`, but it has to be `i64`.
+   --> tests/grammar_values_are_checked_where_they_stand.nika:13:27
+    |
+ 13 |     entry rule e -> i64 = " "{"two"} -> { 0 }
+    |                           ^^^^^^^^^^
+    |
+    = help: A bound counts repetitions: write an `i64`, such as `n` or `n - 1`.
+error[NK1101]: `Item` takes 1 value before the `;`, but none is given.
+   --> tests/grammar_values_are_checked_where_they_stand.nika:14:29
+    |
+ 14 |     entry rule f -> i64 = v:Item -> { v }
+    |                             ^^^^
+    |
+    = note: A rule declared with values is called with them, as a function is (ADR-grammar-1 D2).
+    = help: Write `Item(…)` with a value for each.
+6 type errors

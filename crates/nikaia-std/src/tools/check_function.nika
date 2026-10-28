@@ -273,10 +273,23 @@ pub fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref Ch
         // The rule's own key, so its answers land in its own entry.
         let outer_current: String? = state.current?.clone()
         state.current = f"{named}::{world.words.resolve(rule.name)}"
+        // **The values the rule takes** (ADR-grammar-1 D2): in scope in its
+        // patterns and its actions; an option's default is of its type.
+        let values = state.rule_values(world, host, rule)
+        for option in rule.config {
+            let given = check_core_expr(state, world, host, option.default, option.default_span)
+            state.expect_type(world, given, host.type_of(option.ty), option.default_span, "argument", fn(was, wanted) { f"This default is `{was}`, but the option is `{wanted}`." })
+        }
         for alt in rule.alts {
-            let frame = state.bindings_of(world, alt.pattern.node, rules)
             let outer_action: String? = state.inside_an_action?.clone()
             state.inside_an_action = world.words.resolve(rule.name).clone()
+            // What an argument, a bound or a guard computes may not pause,
+            // as an action may not (ADR-296 D35).
+            state.grammar_values(world, host, gram, alt.pattern, rules, values.clone())
+            let mut frame = values.clone()
+            for bound in state.bindings_of(world, alt.pattern.node, rules) {
+                frame.push(bound)
+            }
             state.scope.push(frame.clone())
             check_defaults_folds_in(state, world, host, gram, alt.pattern.node, alt.pattern.span)
             state.scope.pop()

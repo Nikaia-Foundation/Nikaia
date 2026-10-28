@@ -588,7 +588,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
             rule = nikaia_std::index::get(&entry, nikaia_std::index::at(split + "::".len() as i64..)).to_string();
         }
         state.a_grammar_reached_through_a_dot(&owner, &rule, span);
-        return check_core_grammar_call(state, world, host, &entry, args, span);
+        return check_core_grammar_call(state, world, host, &entry, args, config, span);
     }
     let empty_map: i64 = check_core_method_an_empty_map_read(&state, world, receiver, &name);
     let mut empty_entry: Vec<(String, Span)> = vec![];

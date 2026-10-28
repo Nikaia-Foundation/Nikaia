@@ -177,6 +177,19 @@ impl FbWidths {
             },
             Pattern::Cut => return 0,
             Pattern::Fold(_) => return 0,
+            // A bound this walk cannot evaluate takes at least none
+            // (ADR-grammar-1 D3); a guard matches nothing.
+            Pattern::Counted { .. } => return 0,
+            Pattern::Guard { .. } => return 0,
+            // What a rule takes does not depend on the values it is handed:
+            // every bound that does is counted as none.
+            Pattern::Call { name, .. } => {
+                let called = words.resolve(name).clone()
+                if self.rules.contains_key(called) {
+                    return self.rule(words, called, boundary)
+                }
+                return 0
+            },
             Pattern::Ref { name, args, .. } => {
                 let called = words.resolve(name).clone()
                 if self.rules.contains_key(called) {
@@ -356,6 +369,7 @@ pub fn fb_folds(pattern: ref Pattern) -> Vec[ref FoldSpec] {
         Pattern::Bind { pat, .. } => out.extend(fb_folds(pat.node)),
         Pattern::Group(pat) => out.extend(fb_folds(pat.node)),
         Pattern::Repeat { pat, .. } => out.extend(fb_folds(pat.node)),
+        Pattern::Counted { pat, .. } => out.extend(fb_folds(pat.node)),
         Pattern::Ref { args, .. } => {
             for p in args {
                 out.extend(fb_folds(p.node))

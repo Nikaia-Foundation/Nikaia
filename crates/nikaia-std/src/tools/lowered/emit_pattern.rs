@@ -64,7 +64,81 @@ impl EmitState {
             },
             Pattern::Cut => { out.push("=>"); },
             Pattern::Fold(spec) => { self.emit_fold(world, walk, out, host, spec)?; },
+            Pattern::Call { name, args, config } => { let name = *name; self.emit_pattern_call(world, walk, out, host, name, args, config)?; },
+            Pattern::Counted { pat, low, high, comma } => {
+                let pat = nikaia_std::boxed::open(pat); let comma = *comma;
+                let group = matches!(pat.node, Pattern::Seq(_) | Pattern::Choice(_));
+                if group { out.push("("); }
+                self.emit_pattern(world, walk, out, host, pat)?;
+                if group { out.push(")"); }
+                out.push("{0i64 + (");
+                self.emit_grammar_value(world, walk, out, host, low)?;
+                out.push(")");
+                if comma {
+                    out.push(", ");
+                    match high {
+                        Some(bound) => {
+                            out.push("0i64 + (");
+                            self.emit_grammar_value(world, walk, out, host, bound)?;
+                            out.push(")");
+                        },
+                        None => { },
+                    }
+                }
+                out.push("}");
+            },
+            Pattern::Guard { cond, expected } => {
+                out.push("if(");
+                self.emit_grammar_value(world, walk, out, host, cond)?;
+                match expected {
+                    Some(text) => { out.push(&format!(", {}", rust_string(text))); },
+                    None => { },
+                }
+                out.push(")");
+            },
         }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_grammar_value<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        self.emit_expr(world, walk, out, host, value, 0, EmitFlow::plain(), &EmitScope::plain())?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_pattern_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg]) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let called = emit_text(world, name);
+        out.push(&called.to_string());
+        let found: Option<GrammarRule> = match walk.grammar_values.get(&called.to_string()) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        let rule = match found { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(EmitRefused { message: format!("There's no rule called `{}` in this grammar.", called), at: None }, &"emit_pattern_call")) };
+        out.push("(");
+        let mut first = true;
+        for i in 0..rule.args.len() as i64 {
+            if !first { out.push(", "); }
+            first = false;
+            out.push(&format!("{} = ", emit_text(world, nikaia_std::index::get(&rule.args, (i) as usize).name)));
+            if ((i) as usize) < args.len() { self.emit_grammar_value(world, walk, out, host, nikaia_std::index::get(&args, (i) as usize))?; }
+        }
+        for option in rule.config.iter() {
+            if !first { out.push(", "); }
+            first = false;
+            let named = emit_text(world, option.name);
+            out.push(&format!("{} = ", named));
+            let mut given = false;
+            for c in config.iter() {
+                if !given && emit_text(world, c.name) == named {
+                    self.emit_grammar_value(world, walk, out, host, &c.value)?;
+                    given = true;
+                }
+            }
+            if !given { self.emit_grammar_value(world, walk, out, host, &option.default)?; }
+        }
+        out.push(")");
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -95,6 +169,12 @@ impl EmitState {
             out.push(", sep = ");
             self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 1))?;
             out.push(")");
+            return Ok(());
+        }
+        if called == "count" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains(&called) {
+            out.push(&format!("{}(p = (", emit_count_rule()));
+            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
+            out.push("))");
             return Ok(());
         }
         if called == "here" && generics.is_empty() && args.is_empty() && !walk.grammar_rules.contains(&called) {

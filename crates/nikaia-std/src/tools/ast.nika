@@ -1314,6 +1314,13 @@ pub struct GrammarRule {
     pub label: String?,
     pub alts: Vec[GrammarAlt],
     pub span: Span,
+    /// `rule Block(n: i64; c: Ctx = Ctx::BlockIn)`: the values the rule takes,
+    /// declared as a function's are, Subject ; Config
+    /// ([ADR-grammar-1](../../../docs/specification/adr/adr-grammar-1.md) D2):
+    /// `n` here, empty for a rule without parentheses ...
+    pub args: Vec[FnArg],
+    /// ... and `c`, an option with its default.
+    pub config: Vec[ConfigParam],
 }
 
 /// The keyed attribute of ADR-296 D9: `@frame`, `@frame(boundary: "\n")`,
@@ -1376,6 +1383,29 @@ pub enum Pattern {
     Cut,
     /// `fold(...)` / `par_fold(...)`
     Fold(FoldSpec),
+    /// `Block(n + 1; c: Ctx::BlockOut)`: a rule of the grammar handed values,
+    /// as a function is called (ADR-grammar-1 D2). A built-in called with
+    /// patterns (`until(";")`, `list(item, sep)`) is a `Ref`.
+    Call {
+        name: winnow_grammar::Symbol,
+        args: Vec[Expr],
+        config: Vec[ConfigArg],
+    },
+    /// `p{m}`, `p{0, n - 1}`, `p{n,}`: a repetition whose bound is a value
+    /// (ADR-grammar-1 D3). Bounds that are all integers written out are a
+    /// `Repeat`. `high` is null for `{n}` and `{n,}`; `comma` tells them apart.
+    Counted {
+        pat: Spanned[Pattern],
+        low: Expr,
+        high: Expr?,
+        comma: bool,
+    },
+    /// `if(cond)`, `if(cond, "a deeper indentation")`: matches nothing, and
+    /// fails the alternative where `cond` is false (ADR-grammar-1 D4).
+    Guard {
+        cond: Expr,
+        expected: String?,
+    },
 }
 
 pub enum Repeat {

@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1268] — 2026-10-28
+
+**A grammar takes values: rule parameters and options, bounds and guards that are expressions, `count(p)` an `i64` (ADR-grammar-1 D2-D5, #932)**
+- A rule declares values as a function does, Subject ; Config: `rule Block(n: i64; c: Ctx = Ctx::BlockIn) -> Yaml`, called `Block(n + 1)` or `Block(m; c: Ctx::BlockOut)`. An argument is a Nikaia expression over the rule's values and the bindings before it, checked where it stands: a wrong count is NK1101, a wrong type NK1102, an unknown option NK1109, an unknown rule NK1171. A rule with values written bare is NK1101.
+- An entry takes values the same way, after its input: `Yml::block(text, 2; c: Ctx::BlockOut)`.
+- A bound may be a value: `" "{m}`, `" "{0, n - 1}`, `p{n,}`, each an `i64`; integers written out stay what they were. To the analyses a bound they cannot evaluate has minimum 0 and no maximum.
+- `if(cond)` and `if(cond, "what was expected")` fail the alternative without consuming where `cond` is false.
+- `count(p)` yields an `i64`; the engine's `usize` is converted where the grammar is lowered.
+- A built-in (`until`, `list`, `count`, ...) takes patterns, any other name values; `rule PATH = raw_ident PATH_TAIL* -> { }` in `tools/rust.nika` is written without the group that now reads as a call. YAML's block structure by indentation is a test (`tests/compiler`), as the engine's own `yaml_indent_test` is.
+
 ## [0.0.1267] — 2026-10-28
 
 **A text field taken whole from a struct a call made is moved, not viewed; comptime's tree work in Nikaia (#125)**

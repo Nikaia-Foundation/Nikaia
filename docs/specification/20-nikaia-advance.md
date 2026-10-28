@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1267 (Draft)
+**Version:** 0.0.1268 (Draft)
 **Date:** 2026-10-28
 
 ---
@@ -602,7 +602,32 @@ and nothing is copied (10.6).
 the result type; the block after the second, after the pattern, is the action, one per alternative,
 and it may read every binding of that alternative. `entry` before `rule` makes
 the rule an entry a call can reach (`Json::value(input)`).
-A rule may take arguments and be used as `list(pair, ",")` is.
+**A rule may take values**, declared as a function's parameters are, Subject ;
+Config (Part I 5.1, [ADR-grammar-1](adr/adr-grammar-1.md) D2):
+`rule Block(n: i64; c: Ctx = Ctx::BlockIn) -> Yaml = …`. A call hands them over as
+a function call does, `Block(n + 1)`, `Block(m; c: Ctx::BlockOut)`: before the
+`;` by position, after it by name, an option left out taking its default. A
+rule declared with values is never written bare. An argument is an expression
+over the values in scope where it stands: the rule's own and the bindings
+written before it in its sequence, or in a sequence around it; what an
+alternative, a group or a repetition binds stays inside it. The rule's values
+are in scope in its actions too. An entry takes them after its input:
+`Yml::block(text, 2; c: Ctx::BlockOut)`. A name followed by `(` is a call: of
+the built-in where the name is one of the table's below, which take patterns,
+and of a rule of the grammar otherwise, which takes values. A value, a bound
+and a guard may not pause or fail, as an action may not.
+
+```nika
+grammar Yml {
+    rule WS = "" -> { }
+    entry rule doc -> Yaml = v:Block(-1) eof -> { v }
+    rule Block(n: i64; c: Ctx = Ctx::BlockIn) -> Yaml =
+        m:count(" ") if(m > n) v:Content(m) -> { v }
+      | m:count(" ") if(c == Ctx::BlockOut && m == n) s:Seq(m) -> { Yaml::Seq(s) }
+    rule SeqMore(m: i64) -> Yaml = " "{m} e:SeqEntry(m) -> { e }
+    …
+}
+```
 
 **An action may not pause.** A call that can pause is refused where it stands
 with `NK2209`. A fold's `init`, `step` and `merge` are action code. An action
@@ -637,7 +662,7 @@ and `rule WS = "" { }` skips nothing.
 | `p => q` | the **cut**: after `p`, `q` must follow; a failure in `q` is an error and no enclosing alternative is retried | as `p q` |
 | `p?` | `p` or nothing | a `T?` |
 | `p*`, `p+` | zero or more, one or more `p` | a list of what `p` yields, or the text matched where `p` is a character class |
-| `p{n}`, `p{n,}`, `p{n,m}` | exactly, at least, between `n` and `m` times; greedy and never giving one back. A brace after a pattern is always a bound, since an action stands after `->` ([ADR-grammar-1](adr/adr-grammar-1.md) D1) | as `p*` |
+| `p{n}`, `p{n,}`, `p{n,m}` | exactly, at least, between `n` and `m` times; greedy and never giving one back. A brace after a pattern is always a bound, since an action stands after `->` ([ADR-grammar-1](adr/adr-grammar-1.md) D1). A bound is an `i64` expression over the values in scope, `" "{m}`, `"."{0, n - 1}` (D3); one below zero admits no count, so `{0, n - 1}` with `n` at 0 matches nothing | as `p*` |
 | `( p )` | grouping | as `p` |
 | `[ p ]`, `paren( p )` | the delimiter around `p` in the **input**: `[`, `(`; a brace in the input is written `"{" p "}"` (ADR-grammar-1 D5) | as `p` |
 | `not(p)` | succeeds where `p` does not match, consuming nothing | nothing |
@@ -647,6 +672,8 @@ and `rule WS = "" { }` skips nothing.
 | `bytes(p)` | `p`, handing back the bytes it covered, unchecked | a view of the input's bytes |
 | `span(p)` | `p`, handing back the range it covered | over text a `text::Match` of the input; over `Bytes` a `Span` (two `u32`) |
 | `here` | the position, consuming nothing | over text a `text::Pos` of the input; over `Bytes` a `u32` |
+| `count(p)` | `p` as often as it matches | how often, an `i64`, never below 0 (ADR-grammar-1 D5) |
+| `if(cond)`, `if(cond, "what")` | nothing, where the `bool` `cond` holds; otherwise the alternative fails there without consuming, and the next is tried; the message names `"what"`, or the condition as written (D4) | nothing |
 | `same_line` | nothing; fails where the whitespace skipped just before this position held a line break | nothing |
 | `dec[T](p)` | `p`, its text read as the number type `T`; an error where it does not fit | `T` |
 | `intern(p)`, `ident` | `p`'s text interned (10.6); `ident` is an identifier, interned | a symbol |

@@ -337,7 +337,7 @@ grammar Rust {
     // A turbofish is read past: `spawn::<T>(…)` is a call to `spawn`.
     rule CALL -> ref String = p:text(PATH) TURBOFISH "(" -> { p }
 
-    rule PATH = raw_ident (PATH_TAIL)* -> { }
+    rule PATH = raw_ident PATH_TAIL* -> { }
     rule PATH_TAIL = "::" raw_ident -> { }
     rule TURBOFISH = "::" ANGLES -> { } | empty -> { }
 

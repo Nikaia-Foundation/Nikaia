@@ -484,7 +484,7 @@ impl EmitState {
         // grammar in this file and `value` one of its `entry` rules. First,
         // because it is not a call to anything the recursion graph or the ledger
         // knows.
-        if self.emit_call_grammar(world, walk, out, host, func, args, depth, flow, scope) {
+        if self.emit_call_grammar(world, walk, out, host, func, args, config, depth, flow, scope) {
             return
         }
         // **A variant with a boxed part is built with the part in its box**
@@ -605,16 +605,25 @@ impl EmitState {
     /// A grammar entered by a call: this file's (ADR-296 D24) or a package's
     /// `pub grammar`, entered by its path (ADR-296 D25, #520). `true` where it
     /// has been written.
-    fn emit_call_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    fn emit_call_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         match func {
             Expr::Path(segments, _) => {
-                if args.len() != 1 {
+                if args.len() == 0 {
                     return false
                 }
+                // **An entry takes values after its input** (ADR-grammar-1
+                // D2): `Yml::block(text, 2; c: Ctx::BlockOut)`.
                 if segments.len() == 2 && self.grammars.contains_key(emit_text(world, segments[0])) {
                     let parallelism = host.parallelism()
-                    self.emit_core_grammar_entry(world, walk, out, host, segments[0], segments[1], args[0], parallelism, depth, flow, scope)
+                    let mut values: Vec[Expr] = []
+                    for i in 1..<args.len() {
+                        values.push(args[i].clone())
+                    }
+                    self.emit_core_grammar_entry(world, walk, out, host, segments[0], segments[1], args[0], values, config, parallelism, depth, flow, scope)
                     return true
+                }
+                if args.len() != 1 {
+                    return false
                 }
                 if segments.len() != 3 {
                     return false

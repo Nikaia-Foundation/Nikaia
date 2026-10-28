@@ -1,0 +1,125 @@
+// YAML's block structure, written as its specification writes it: the
+// indentation `n` and the context `c` are values of the rules (ADR-grammar-1,
+// #932; the engine's `tests/yaml_indent_test.rs`, in Nikaia). A subset - block
+// sequences and mappings, one-line plain scalars, compact nested sequences
+// (`- - a`) - with what makes YAML context-sensitive:
+//
+// * a block's indentation is its first line's, and exceeds its parent's;
+// * every further entry is at exactly that indentation (`" "{m}`);
+// * a sequence that is a mapping's value may sit at the mapping's own
+//   indentation (the spec's `seq-spaces(n, block-out)`), nowhere else;
+// * a compact sequence continues at the column its first entry began in.
+
+enum Yaml {
+    Scalar(String),
+    Seq(Vec[Yaml]),
+    Map(Vec[(String, Yaml)]),
+}
+
+// The spec's block contexts that matter here.
+enum Ctx {
+    // a sequence entry's content
+    BlockIn,
+    // a mapping value
+    BlockOut,
+}
+
+grammar Yml {
+    // Whitespace is structure here: nothing is skipped.
+    rule WS = "" -> { }
+
+    // The document is a block at indentation -1: any indentation exceeds it.
+    entry rule doc -> Yaml = v:Block(-1) eof -> { v }
+
+    // A block on the lines below its parent, at the indentation of its first
+    // line, which exceeds the parent's. A sequence that is a mapping's value
+    // may also sit at the mapping's own indentation.
+    rule Block(n: i64; c: Ctx = Ctx::BlockIn) -> Yaml =
+        m:count(" ") if(m > n) v:Content(m) -> { v }
+      | m:count(" ") if(c == Ctx::BlockOut && m == n) s:Seq(m) -> { Yaml::Seq(s) }
+
+    // At column `m`, on the first line of a node.
+    rule Content(m: i64) -> Yaml =
+        s:Seq(m) -> { Yaml::Seq(s) }
+      | e:Map(m) -> { Yaml::Map(e) }
+      | s:Scalar "\n" -> { Yaml::Scalar(s.clone()) }
+
+    rule Seq(m: i64) -> Vec[Yaml] =
+        first:SeqEntry(m) rest:SeqMore(m)* -> {
+            let mut all = [first]
+            all.extend(rest)
+            all
+        }
+    rule SeqMore(m: i64) -> Yaml = " "{m} e:SeqEntry(m) -> { e }
+    rule SeqEntry(m: i64) -> Yaml = "-" v:After(m) -> { v }
+
+    rule Map(m: i64) -> Vec[(String, Yaml)] =
+        first:MapEntry(m) rest:MapMore(m)* -> {
+            let mut all = [first]
+            all.extend(rest)
+            all
+        }
+    rule MapMore(m: i64) -> (String, Yaml) = " "{m} e:MapEntry(m) -> { e }
+    rule MapEntry(m: i64) -> (String, Yaml) =
+        k:Key ":" v:After(m; c: Ctx::BlockOut) -> { (k.clone(), v) }
+
+    // What follows `-` or `key:`: a block on the lines below, or the rest of
+    // this line. After `-` that may be a compact node, whose further entries
+    // are at the column it began in: `- - a`.
+    rule After(m: i64; c: Ctx = Ctx::BlockIn) -> Yaml =
+        "\n" v:Block(m; c: c) -> { v }
+      | s:count(" ") if(s > 0 && c == Ctx::BlockIn, "a sequence entry") v:Content(m + 1 + s) -> { v }
+      | s:count(" ") if(s > 0) v:Scalar "\n" -> { Yaml::Scalar(v.clone()) }
+
+    rule Key -> String = s:until(":" | "\n") if(!s.is_empty() && !s.starts_with(" ")) -> { s }
+    rule Scalar -> String = s:until("\n") if(!s.is_empty()) -> { s }
+}
+
+fn show(v: ref Yaml) -> String {
+    return match v {
+        Yaml::Scalar(s) => s.clone(),
+        Yaml::Seq(items) => {
+            let mut parts: Vec[String] = []
+            for it in items {
+                parts.push(show(it))
+            }
+            f"[{parts.join(", ")}]"
+        },
+        Yaml::Map(entries) => {
+            let mut parts: Vec[String] = []
+            for (k, it) in entries {
+                parts.push(f"{k}: {show(it)}")
+            }
+            f"{{{parts.join(", ")}}}"
+        },
+    }
+}
+
+fn parse(text: String) -> String {
+    let v = Yml::doc(text) catch {
+        return "refused"
+    }
+    return show(v)
+}
+
+fn main() {
+    // nested mappings and sequences
+    println(parse("name: winnow\ntags:\n  - parser\n  - grammar\nowner:\n  login: keywan\n  repos:\n    - a\n    - b\n"))
+    // the indentation is the first line's: four spaces as well as two
+    println(parse("a:\n    - x\n    - y\nb: z\n"))
+    // an entry that does not agree is not one of them
+    println(parse("a:\n    - x\n   - y\n"))
+    println(parse("a:\n  b: 1\n   c: 2\n"))
+    // a mapping's sequence may sit at its own indentation
+    println(parse("a:\n- x\n- y\nb: z\n"))
+    // but a mapping there is no value of `a`
+    println(parse("a:\nb: z\n"))
+    // and a sequence entry's content is block-in: no exception there
+    println(parse("-\n- x\n"))
+    // a compact sequence continues where it began
+    println(parse("- - a\n  - b\n- c\n"))
+    println(parse("-   - a\n    - b\n"))
+    println(parse("- k: v\n  l: w\n"))
+    // a mapping value is no compact node: `- x` is a scalar
+    println(parse("a: - x\n"))
+}

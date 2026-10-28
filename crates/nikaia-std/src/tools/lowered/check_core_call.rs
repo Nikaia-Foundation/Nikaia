@@ -495,7 +495,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     let entered: Option<String> = state.grammar_path(name);
     if entered.is_some() {
         let entered_path: String = nikaia_std::index::or(entered, || "".into());
-        return check_core_grammar_call(state, world, host, &entered_path, args, span);
+        return check_core_grammar_call(state, world, host, &entered_path, args, config, span);
     }
     check_core_an_instantiation(state, world, host, name, id_of(func) as i64, args, span);
     if !config.is_empty() && args.is_empty() && state.declares_a_type(world, name) {

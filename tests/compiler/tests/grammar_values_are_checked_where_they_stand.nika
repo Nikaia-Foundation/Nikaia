@@ -1,0 +1,19 @@
+// What a grammar computes is checked as Nikaia, where it stands
+// (ADR-grammar-1 D2-D4): a rule's values by count, type and option name, a
+// bound as an `i64`, a guard as a `bool`, a rule with values not called bare.
+
+grammar G {
+    rule WS = "" -> { }
+    rule Item(n: i64; deep: bool = false) -> i64 = " "{n} digit -> { n }
+
+    entry rule a -> i64 = v:Item(1, 2) -> { v }
+    entry rule b -> i64 = v:Item("x") -> { v }
+    entry rule c -> i64 = v:Item(1; wide: true) -> { v }
+    entry rule d -> i64 = m:count(" ") if(m) v:Item(m) -> { v }
+    entry rule e -> i64 = " "{"two"} -> { 0 }
+    entry rule f -> i64 = v:Item -> { v }
+}
+
+fn main() {
+    println(G::a(" 1") catch { -1 })
+}

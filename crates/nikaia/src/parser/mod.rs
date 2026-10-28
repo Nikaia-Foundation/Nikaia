@@ -12,7 +12,8 @@ pub use nikaia_std::tools::parse_errors::RESERVED_WORDS;
 /// What the grammar's actions build the tree with - the postfix steps and the folds of
 /// a head and its tails - is `tools/tree_build.nika`'s (ADR-294, #125).
 pub use nikaia_std::tools::tree_build::{
-    Postfix, fold_binary, fold_postfix, grouped, guarded, params_of, split_mut, unpacked,
+    Postfix, counted_pattern, fold_binary, fold_postfix, grouped, guarded, params_of, split_mut,
+    unpacked,
 };
 
 /// One name or a flat tuple keeps no shape (ADR-356): only a nested pattern
@@ -1946,17 +1947,23 @@ grammar! {
                     label: None,
                     alts: Vec::new(),
                     span: Span::from(_span),
+                    args: Vec::new(),
+                    config: Vec::new(),
                 }
             }
           | frame:frame_attr?
             entry:kw_entry?
             KW_RULE
             name:NAME
+            values:fn_params?
             ret:return_type_arrow?
             label:rule_label?
             "="
             alts:g_alts
             -> {
+                // **A rule takes values as a function does** (ADR-grammar-1
+                // D2), Subject ; Config; a receiver has nothing to stand for.
+                let values = values.unwrap_or_else(FnParams::none);
                 GrammarRule {
                     name,
                     is_entry: entry.is_some(),
@@ -1965,6 +1972,8 @@ grammar! {
                     label,
                     alts,
                     span: Span::from(_span),
+                    args: values.args,
+                    config: values.config,
                 }
             }
 
@@ -2080,7 +2089,16 @@ grammar! {
             }
 
         rule g_postfix -> Spanned<Pattern> @=
-            a:g_atom rep:g_repeat? -> {
+            // **A bound is an expression** (ADR-grammar-1 D3): integers
+            // written out stay a `Repeat`, anything else is `Counted`.
+            a:g_atom "{" low:expr high:g_bound_high? "}" -> {
+                let (comma, high) = match high {
+                    Some(h) => (true, h),
+                    None => (false, None),
+                };
+                counted_pattern(a, low, comma, high, Span::from(_span))
+            }
+          | a:g_atom rep:g_repeat? -> {
                 match rep {
                     Some(r) => Spanned::new(Pattern::Repeat { pat: Box::new(a), rep: r }, Span::from(_span)),
                     None => a,
@@ -2093,24 +2111,15 @@ grammar! {
             "*" -> { Repeat::Star }
           | "+" -> { Repeat::Plus }
           | "?" -> { Repeat::Optional }
-          | r:g_bounds -> { r }
 
-        // **A brace group after a pattern is a bound** (Part II 10.8): an
-        // action stands after `->` (ADR-grammar-1 D1), so a brace here is
-        // nothing else, and a space before it or inside it changes nothing.
-        rule g_bounds -> Repeat =
-            "{" b:g_bound_body "}" -> { b }
-
-        rule g_bound_body -> Repeat =
-            n:number "," m:number -> { Repeat::Between(n, m) }
-          | n:number "," -> { Repeat::AtLeast(n) }
-          | n:number -> { Repeat::Exactly(n) }
-
-        rule number -> u32 =
-            d:digit1 -> { d.parse().unwrap_or(0) }
+        // `, m` or `,` alone, after a bound's first value.
+        // A brace there opens no block: `{1, { 1 }` is a bound left open.
+        rule g_bound_high -> Option<Expr> = "," not("{") high:expr? -> { high }
+          | "," -> { None }
 
         rule g_atom -> Spanned<Pattern> @=
             f:g_fold -> { f }
+          | g:g_guard -> { g }
           | s:STRING -> { Spanned::new(Pattern::Literal(s), Span::from(_span)) }
           | g:g_group -> { g }
           | r:g_ref -> { r }
@@ -2120,12 +2129,20 @@ grammar! {
                 Spanned::new(Pattern::Group(Box::new(p)), Span::from(_span))
             }
 
-        // A rule reference, a built-in (`digit`, `frame_end`), or a call to
-        // either (`until(";" | frame_end)`, `list(pair, ",")`). The grammar
-        // cannot tell them apart, and does not need to: what a name means is
-        // the backend's question.
+        // **`if(cond)`, `if(cond, "what was expected")`** (ADR-grammar-1 D4).
+        rule g_guard -> Spanned<Pattern> @=
+            KW_IF "(" => cond:expr expected:g_guard_expected? ")" -> {
+                Spanned::new(Pattern::Guard { cond, expected }, Span::from(_span))
+            }
+
+        rule g_guard_expected -> String = "," text:STRING -> { text }
+
+        // **A built-in takes patterns, a rule of the grammar values**
+        // (ADR-grammar-1 D2): `until(";")`, `list(item, sep)`, but
+        // `Block(n + 1; c: Ctx::BlockOut)`. The words of Part II 10.8 that take
+        // arguments are the built-ins; every other name is a rule.
         rule g_ref -> Spanned<Pattern> @=
-            name:NAME generics:generic_type_args? args:g_args? -> {
+            name:G_BUILTIN generics:generic_type_args? args:g_args? -> {
                 Spanned::new(
                     Pattern::Ref {
                         name,
@@ -2135,6 +2152,23 @@ grammar! {
                     Span::from(_span),
                 )
             }
+          | name:NAME values:called -> {
+                let (args, config) = values;
+                Spanned::new(Pattern::Call { name, args, config }, Span::from(_span))
+            }
+          | name:NAME generics:generic_type_args? -> {
+                Spanned::new(
+                    Pattern::Ref { name, generics: generics.unwrap_or_default(), args: Vec::new() },
+                    Span::from(_span),
+                )
+            }
+
+        rule G_BUILTIN -> Symbol = peek(G_BUILTIN_WORD) n:NAME -> { n }
+
+        rule G_BUILTIN_WORD =
+            ("until" | "text" | "bytes" | "peek" | "not" | "list" | "dec" | "span"
+             | "count" | "recover" | "paren" | "fail" | "intern") not(ident)
+            -> { () }
 
         // A trailing comma is accepted, as in every other list: `nikaia fmt`
         // writes one where it puts the arguments one per line.

@@ -51,6 +51,9 @@ impl CheckState {
             Pattern::Group(pat) => self.pattern_type(world, pat.node, rules),
             Pattern::Choice(alternatives) => self.choice_type(world, alternatives, rules),
             Pattern::Ref { name, generics, args } => self.reference_type(world, name, generics, args, rules),
+            // a rule handed values hands back its result (ADR-grammar-1 D2)
+            Pattern::Call { name, .. } => self.rule_results[world.words.resolve(name).clone()]?.clone() ?? Ty::Unknown,
+            Pattern::Counted { pat, .. } => self.repeat_type(world, pat.node, Repeat::Star, rules),
             else => Ty::Unknown,
         }
     }
@@ -126,6 +129,10 @@ impl CheckState {
             if called == "here" && args.len() == 0 {
                 return pattern_named("u32", false)
             }
+            // **How often `p` matched**, an `i64` (ADR-grammar-1 D5).
+            if called == "count" && args.len() == 1 {
+                return pattern_named("i64", false)
+            }
             if called == "peek" && args.len() == 1 {
                 return self.pattern_type(world, args[0].node, rules)
             }
@@ -171,6 +178,11 @@ impl CheckState {
                 }
             },
             Pattern::Repeat { pat, .. } => {
+                for inner in self.bindings_of(world, pat.node, rules) {
+                    out.push(inner)
+                }
+            },
+            Pattern::Counted { pat, .. } => {
                 for inner in self.bindings_of(world, pat.node, rules) {
                     out.push(inner)
                 }
@@ -269,4 +281,155 @@ pub fn grammar_positions_over_text(world: ref CheckWorld, key: ref String, named
     }
     let notes: Vec[String] = [f"Over a `Bytes` `{written}` is built (Part II 10.8); over text it is a `text::Match` or a `text::Pos`, which are not built yet (#743)."]
     return check_refusal("NK1187", span, f"`{key}` is handed text, and its grammar uses `{written}`, which this engine has over a `Bytes` only.", notes, f"Hand `{key}` the input as a `Bytes`.")
+}
+
+impl CheckState {
+    /// **The values a rule takes** (ADR-grammar-1 D2): its parameters and its
+    /// options, each a local of its patterns and of its actions.
+    pub fn rule_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, rule: ref GrammarRule) -> Vec[CheckLocal] sync {
+        let mut out: Vec[CheckLocal] = []
+        for arg in rule.args {
+            self.next_binding = self.next_binding + 1
+            out.push(CheckLocal::free(world.words.resolve(arg.name).clone(), host.type_of(arg.ty), self.next_binding))
+        }
+        for option in rule.config {
+            self.next_binding = self.next_binding + 1
+            out.push(CheckLocal::free(world.words.resolve(option.name).clone(), host.type_of(option.ty), self.next_binding))
+        }
+        return out
+    }
+
+    /// **What a pattern computes, checked where it stands** (ADR-grammar-1
+    /// D2-D4): a rule's arguments against its values, a bound as an `i64`, a
+    /// guard as a `bool`, each over what is in scope there - the rule's own
+    /// values and the bindings written before it in its sequence. Hands back
+    /// what is in scope after it: a sequence's bindings are its followers',
+    /// and what an alternative, a group or a repetition binds stays inside.
+    pub fn grammar_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, pattern: ref Spanned[Pattern], rules: ref collections::BTreeSet[String], scope: Vec[CheckLocal]) -> Vec[CheckLocal] sync {
+        match pattern.node {
+            Pattern::Seq(parts) => {
+                let mut now = scope
+                for part in parts {
+                    now = self.grammar_values(world, host, gram, part, rules, now)
+                }
+                return now
+            },
+            Pattern::Bind { name, pat } => {
+                self.grammar_values(world, host, gram, pat, rules, scope.clone())
+                let ty = self.pattern_type(world, pat.node, rules)
+                self.next_binding = self.next_binding + 1
+                let mut out = scope
+                out.push(CheckLocal::free(world.words.resolve(name).clone(), ty, self.next_binding))
+                return out
+            },
+            Pattern::Choice(parts) => {
+                for part in parts {
+                    self.grammar_values(world, host, gram, part, rules, scope.clone())
+                }
+                return scope
+            },
+            Pattern::Group(inner) => {
+                self.grammar_values(world, host, gram, inner, rules, scope.clone())
+                return scope
+            },
+            Pattern::Repeat { pat, .. } => {
+                self.grammar_values(world, host, gram, pat, rules, scope.clone())
+                return scope
+            },
+            Pattern::Ref { name, args, .. } => {
+                for arg in args {
+                    self.grammar_values(world, host, gram, arg, rules, scope.clone())
+                }
+                // **A rule that takes values is called with them**: `Block`
+                // alone, where `Block(n: i64)` was declared, has none to give.
+                let called = world.words.resolve(name).clone()
+                if args.len() == 0 && rules.contains(called) {
+                    for rule in gram.rules {
+                        if rule.name == name && rule.args.len() > 0 {
+                            self.findings.push(check_refusal("NK1101", pattern.span, f"`{called}` takes {counted(rule.args.len() as i64, "value")} before the `;`, but none is given.", ["A rule declared with values is called with them, as a function is (ADR-grammar-1 D2)."], f"Write `{called}(…)` with a value for each."))
+                        }
+                    }
+                }
+                return scope
+            },
+            Pattern::Counted { pat, low, high, .. } => {
+                self.grammar_values(world, host, gram, pat, rules, scope.clone())
+                let whole = pattern_named("i64", false)
+                self.grammar_fixed(world, host, low, whole.clone(), scope, pattern.span, "A bound", "A bound counts repetitions: write an `i64`, such as `n` or `n - 1`.")
+                match high {
+                    bound => self.grammar_fixed(world, host, bound, whole, scope, pattern.span, "A bound", "A bound counts repetitions: write an `i64`, such as `n` or `n - 1`."),
+                    null => {},
+                }
+                return scope
+            },
+            Pattern::Guard { cond, .. } => {
+                self.grammar_fixed(world, host, cond, pattern_named("bool", false), scope, pattern.span, "A guard", "A guard is a condition: compare, as in `if(m > n)`.")
+                return scope
+            },
+            Pattern::Call { name, args, config } => {
+                self.grammar_call(world, host, gram, name, args, config, scope, pattern.span)
+                return scope
+            },
+            else => return scope,
+        }
+    }
+
+    /// A bound or a guard: a value whose type the grammar fixes, so the help
+    /// says what to write rather than which declaration to change.
+    fn grammar_fixed[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, value: ref Expr, want: Ty, scope: ref Vec[CheckLocal], span: ref Span, what: ref String, help: String) sync {
+        self.scope.push(scope.clone())
+        let found = check_core_expr(self, world, host, value, span)
+        self.scope.pop()
+        if found.is_unknown() || found.text() == want.text() {
+            return
+        }
+        self.findings.push(check_refusal("NK1102", span, f"{what} here is `{found.text()}`, but it has to be `{want.text()}`.", [], help))
+    }
+
+    /// One value, typed in the scope it stands in, against what it must be.
+    fn grammar_value[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, value: ref Expr, want: Ty, scope: ref Vec[CheckLocal], span: ref Span, what: ref String) sync {
+        self.scope.push(scope.clone())
+        let found = check_core_expr(self, world, host, value, span)
+        self.scope.pop()
+        self.expect_type(world, found, want, span, "argument", fn(was, wanted) { f"{what} here is `{was}`, but it has to be `{wanted}`." })
+    }
+
+    /// **A rule of the grammar handed values** (ADR-grammar-1 D2), checked as
+    /// a function's call is: one value per parameter before the `;`, an
+    /// option by a name the rule declares, each of its type.
+    fn grammar_call[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, name: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], scope: ref Vec[CheckLocal], span: ref Span) sync {
+        let called = world.words.resolve(name).clone()
+        let grammar_name = world.words.resolve(gram.name).clone()
+        for rule in gram.rules {
+            if rule.name != name {
+                continue
+            }
+            if args.len() != rule.args.len() {
+                self.findings.push(check_refusal("NK1101", span, f"`{called}` takes {counted(rule.args.len() as i64, "value")} before the `;`, but you passed {args.len()}.", ["A rule takes its values as a function takes its arguments (ADR-grammar-1 D2)."], "Give one value for each, by position; an option goes after the `;` by name."))
+            }
+            for i in 0..<args.len() {
+                if i < rule.args.len() {
+                    let want = host.type_of(rule.args[i].ty)
+                    let what = f"The value for `{world.words.resolve(rule.args[i].name)}`"
+                    self.grammar_value(world, host, args[i], want, scope, span, what)
+                }
+            }
+            for given in config {
+                let option = world.words.resolve(given.name).clone()
+                let mut found = false
+                for declared in rule.config {
+                    if declared.name == given.name {
+                        found = true
+                        let what = f"The option `{option}`"
+                        self.grammar_value(world, host, given.value, host.type_of(declared.ty), scope, span, what)
+                    }
+                }
+                if !found {
+                    self.findings.push(check_refusal("NK1109", span, f"`{called}` has no option called `{option}`.", [f"It is a rule of grammar `{grammar_name}`; its options are what it declares after its `;`."], "Name an option the rule declares, or declare it."))
+                }
+            }
+            return
+        }
+        self.findings.push(check_refusal("NK1171", span, f"Grammar `{grammar_name}` has no rule called `{called}`.", ["A name called with values is a rule of the grammar; the built-ins that take patterns are Part II 10.8's."], "Declare the rule, or call one the grammar has."))
+    }
 }

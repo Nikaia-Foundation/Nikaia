@@ -4228,6 +4228,7 @@ fn bind_grammar_pattern(gname: ref String, rules: ref collections::BTreeSet[Stri
             }
         }
         Pattern::Repeat { pat, .. } => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
+        Pattern::Counted { pat, .. } => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
         Pattern::Group(pat) => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
         else => {}
     }
@@ -4240,6 +4241,9 @@ fn bind_grammar_pattern(gname: ref String, rules: ref collections::BTreeSet[Stri
 fn grammar_pattern_kinds(gname: ref String, rules: ref collections::BTreeSet[String], pattern: ref Pattern, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     return match pattern {
         Pattern::Repeat { pat, .. } => grammar_repeat_kinds(gname, rules, pat.node, ask, walk),
+        Pattern::Counted { pat, .. } => grammar_repeat_kinds(gname, rules, pat.node, ask, walk),
+        // a rule handed values hands back its result, as one without does
+        Pattern::Call { name, .. } => grammar_reference_kinds(gname, rules, ask.names.resolve(name), 0, [], ask, walk),
         Pattern::Group(pat) => grammar_pattern_kinds(gname, rules, pat.node, ask, walk),
         Pattern::Choice(parts) => grammar_choice_kinds(gname, rules, parts, ask, walk),
         Pattern::Ref { name, generics, args } => grammar_reference_kinds(gname, rules, ask.names.resolve(name), generics.len(), args, ask, walk),

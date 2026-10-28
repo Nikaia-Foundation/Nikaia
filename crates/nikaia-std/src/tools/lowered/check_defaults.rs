@@ -268,6 +268,7 @@ pub fn check_defaults_folds_in<H: CheckHost>(state: &mut CheckState, world: &Che
         Pattern::Choice(parts) => { for part in parts.iter() { check_defaults_folds_in(state, world, host, gram, &part.node, &part.span); } },
         Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); check_defaults_folds_in(state, world, host, gram, &pat.node, &pat.span); },
         Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); check_defaults_folds_in(state, world, host, gram, &pat.node, &pat.span); },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); check_defaults_folds_in(state, world, host, gram, &pat.node, &pat.span); },
         Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); check_defaults_folds_in(state, world, host, gram, &pat.node, &pat.span); },
         Pattern::Ref { args, .. } => { for arg in args.iter() { check_defaults_folds_in(state, world, host, gram, &arg.node, &arg.span); } },
         _ => { },

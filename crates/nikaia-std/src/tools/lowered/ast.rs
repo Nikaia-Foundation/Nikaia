@@ -387,6 +387,8 @@ pub struct GrammarRule {
     pub label: Option<String>,
     pub alts: Vec<GrammarAlt>,
     pub span: Span,
+    pub args: Vec<FnArg>,
+    pub config: Vec<ConfigParam>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -416,6 +418,9 @@ pub enum Pattern {
     Group(Box<Spanned<Pattern>>),
     Cut,
     Fold(FoldSpec),
+    Call { name: winnow_grammar::Symbol, args: Vec<Expr>, config: Vec<ConfigArg> },
+    Counted { pat: Box<Spanned<Pattern>>, low: Expr, high: Option<Expr>, comma: bool },
+    Guard { cond: Expr, expected: Option<String> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

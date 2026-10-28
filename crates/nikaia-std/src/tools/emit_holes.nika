@@ -267,8 +267,11 @@ fn emit_holes_fold_steps(pattern: ref Pattern) -> Vec[ref Expr] {
                 out.extend(emit_holes_fold_steps(each.node))
             }
         },
+        Pattern::Counted { pat, .. } => out.extend(emit_holes_fold_steps(pat.node)),
         Pattern::Literal(_) => {},
         Pattern::Cut => {},
+        Pattern::Call { .. } => {},
+        Pattern::Guard { .. } => {},
     }
     return out
 }

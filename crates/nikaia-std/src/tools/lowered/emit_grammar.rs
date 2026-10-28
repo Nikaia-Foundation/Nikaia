@@ -22,6 +22,8 @@ pub(crate) fn emit_any_writes_a_list(world: &EmitWorld<'_, '_, '_, '_>, parts: &
 
 pub(crate) fn emit_span_rule() -> &'static str { "__nikaia_span" }
 
+pub(crate) fn emit_count_rule() -> &'static str { "__nikaia_count" }
+
 pub(crate) fn emit_here_rule() -> &'static str { "__nikaia_here" }
 
 pub(crate) fn emit_writes_a_built_in(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, called: &str, arity: i64) -> bool {
@@ -30,6 +32,7 @@ pub(crate) fn emit_writes_a_built_in(world: &EmitWorld<'_, '_, '_, '_>, walk: &E
         Pattern::Choice(parts) => parts.iter().any(|part| { emit_writes_a_built_in(world, walk, &part.node, called, arity) }),
         Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_writes_a_built_in(world, walk, &pat.node, called, arity) },
         Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_writes_a_built_in(world, walk, &pat.node, called, arity) },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_writes_a_built_in(world, walk, &pat.node, called, arity) },
         Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); emit_writes_a_built_in(world, walk, &pat.node, called, arity) },
         Pattern::Ref { name, generics, args } => { let name = *name; emit_text(world, name) == called && generics.is_empty() && (args.len() as i64) == arity && !walk.grammar_rules.contains(called) || args.iter().any(|arg| { emit_writes_a_built_in(world, walk, &arg.node, called, arity) }) },
         _ => false,
@@ -156,6 +159,9 @@ impl EmitState {
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         for rule in def.rules.iter() { names.insert(emit_text(world, rule.name)); }
         walk.grammar_rules = names;
+        let mut valued: collections::BTreeMap<String, GrammarRule> = collections::BTreeMap::new();
+        for rule in def.rules.iter() { if !rule.args.is_empty() || !rule.config.is_empty() { valued.insert(emit_text(world, rule.name), rule.clone()); } }
+        walk.grammar_values = valued;
         for rule in def.rules.iter() {
             out.push("\n");
             let st = out.mark();
@@ -166,11 +172,18 @@ impl EmitState {
         for rule in def.rules.iter() { for alt in rule.alts.iter() { if emit_writes_a_list(world, &alt.pattern) { lists = true; } } }
         let mut spans = false;
         let mut heres = false;
+        let mut counts = false;
         for rule in def.rules.iter() {
             for alt in rule.alts.iter() {
                 spans = spans || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "span", 1);
                 heres = heres || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "here", 0);
+                counts = counts || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "count", 1);
             }
+        }
+        if counts {
+            out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> i64 =\n", emit_count_rule()));
+            out.push("          n:count(p)\n");
+            out.push("            -> { n as i64 }\n");
         }
         if spans {
             out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> ::nikaia_std::text::Span =\n", emit_span_rule()));
@@ -215,7 +228,11 @@ impl EmitState {
             Some(text) => { label = format!(" # {}", rust_string(text)); },
             None => { },
         }
-        out.push(&format!("        {}rule {}{}{} =\n", vis, emit_text(world, rule.name), ret, label));
+        let mut values: Vec<String> = vec![];
+        for arg in rule.args.iter() { values.push(format!("{}: {}", emit_text(world, arg.name), host.ty_named(walk, &arg.ty)?)); }
+        for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
+        let taken = if values.is_empty() { String::from("") } else { format!("({})", values.join(", ")) };
+        out.push(&format!("        {}rule {}{}{}{} =\n", vis, emit_text(world, rule.name), taken, ret, label));
         for i in 0..rule.alts.len() as i64 {
             let alt = nikaia_std::index::get(&rule.alts, (i) as usize);
             let separator = if i == 0 { "  " } else { "| " };

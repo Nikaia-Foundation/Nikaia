@@ -338,6 +338,7 @@ pub fn check_defaults_folds_in[H: CheckHost](mut state: CheckState, world: ref C
         },
         Pattern::Bind { pat, .. } => check_defaults_folds_in(state, world, host, gram, pat.node, pat.span),
         Pattern::Repeat { pat, .. } => check_defaults_folds_in(state, world, host, gram, pat.node, pat.span),
+        Pattern::Counted { pat, .. } => check_defaults_folds_in(state, world, host, gram, pat.node, pat.span),
         Pattern::Group(pat) => check_defaults_folds_in(state, world, host, gram, pat.node, pat.span),
         Pattern::Ref { args, .. } => {
             for arg in args {

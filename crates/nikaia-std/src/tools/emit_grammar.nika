@@ -41,6 +41,11 @@ fn emit_span_rule() -> String {
     return "__nikaia_span"
 }
 
+/// The template rule `count(p)` lowers to (ADR-grammar-1 D5).
+fn emit_count_rule() -> String {
+    return "__nikaia_count"
+}
+
 fn emit_here_rule() -> String {
     return "__nikaia_here"
 }
@@ -53,6 +58,7 @@ fn emit_writes_a_built_in(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref
         Pattern::Choice(parts) => parts.iter().any(fn(part) { emit_writes_a_built_in(world, walk, part.node, called, arity) }),
         Pattern::Bind { pat, .. } => emit_writes_a_built_in(world, walk, pat.node, called, arity),
         Pattern::Repeat { pat, .. } => emit_writes_a_built_in(world, walk, pat.node, called, arity),
+        Pattern::Counted { pat, .. } => emit_writes_a_built_in(world, walk, pat.node, called, arity),
         Pattern::Group(pat) => emit_writes_a_built_in(world, walk, pat.node, called, arity),
         Pattern::Ref { name, generics, args } => (emit_text(world, name) == called && generics.len() == 0 && args.len() == arity && !walk.grammar_rules.contains(called)) || args.iter().any(fn(arg) { emit_writes_a_built_in(world, walk, arg.node, called, arity) }),
         else => false,
@@ -218,6 +224,13 @@ impl EmitState {
             names.insert(emit_text(world, rule.name))
         }
         walk.grammar_rules = names
+        let mut valued: collections::BTreeMap[String, GrammarRule] = collections::BTreeMap()
+        for rule in def.rules {
+            if rule.args.len() > 0 || rule.config.len() > 0 {
+                valued.insert(emit_text(world, rule.name), rule.clone())
+            }
+        }
+        walk.grammar_values = valued
         for rule in def.rules {
             out.push("\n")
             let st = out.mark()
@@ -246,11 +259,18 @@ impl EmitState {
         // binds; these are for the rest.
         let mut spans = false
         let mut heres = false
+        let mut counts = false
         for rule in def.rules {
             for alt in rule.alts {
                 spans = spans || emit_writes_a_built_in(world, walk, alt.pattern.node, "span", 1)
                 heres = heres || emit_writes_a_built_in(world, walk, alt.pattern.node, "here", 0)
+                counts = counts || emit_writes_a_built_in(world, walk, alt.pattern.node, "count", 1)
             }
+        }
+        if counts {
+            out.push(f"\n        rule {emit_count_rule()}<T>(p: Rule<T>) -> i64 =\n")
+            out.push("          n:count(p)\n")
+            out.push("            -> { n as i64 }\n")
         }
         if spans {
             out.push(f"\n        rule {emit_span_rule()}<T>(p: Rule<T>) -> ::nikaia_std::text::Span =\n")
@@ -297,7 +317,17 @@ impl EmitState {
             text => { label = f" # {rust_string(text)}" },
             null => {},
         }
-        out.push(f"        {vis}rule {emit_text(world, rule.name)}{ret}{label} =\n")
+        // **The values a rule takes** (ADR-grammar-1 D2), its options after
+        // its parameters: the engine takes them by position.
+        let mut values: Vec[String] = []
+        for arg in rule.args {
+            values.push(f"{emit_text(world, arg.name)}: {host.ty_named(walk, arg.ty)}")
+        }
+        for option in rule.config {
+            values.push(f"{emit_text(world, option.name)}: {host.ty_named(walk, option.ty)}")
+        }
+        let taken = if values.is_empty() { "" } else { f"({values.join(", ")})" }
+        out.push(f"        {vis}rule {emit_text(world, rule.name)}{taken}{ret}{label} =\n")
 
         for i in 0..<rule.alts.len() {
             let alt = rule.alts[i]

@@ -643,7 +643,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     let entered: String? = state.grammar_path(name)
     if entered != null {
         let entered_path: String = entered ?? ""
-        return check_core_grammar_call(state, world, host, entered_path, args, span)
+        return check_core_grammar_call(state, world, host, entered_path, args, config, span)
     }
     // **A call to a function that walks a type's fields is an
     // instantiation** (ADR-304 D2).

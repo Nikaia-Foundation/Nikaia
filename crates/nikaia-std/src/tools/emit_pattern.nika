@@ -82,7 +82,98 @@ impl EmitState {
             },
             Pattern::Cut => out.push("=>"),
             Pattern::Fold(spec) => self.emit_fold(world, walk, out, host, spec),
+            Pattern::Call { name, args, config } => self.emit_pattern_call(world, walk, out, host, name, args, config),
+            Pattern::Counted { pat, low, high, comma } => {
+                let group = match pat.node {
+                    Pattern::Seq(_) => true,
+                    Pattern::Choice(_) => true,
+                    else => false,
+                }
+                if group {
+                    out.push("(")
+                }
+                self.emit_pattern(world, walk, out, host, pat)
+                if group {
+                    out.push(")")
+                }
+                // **A computed bound starts with an integer** (ADR-grammar-1
+                // D3), which is how the engine tells a bound from a brace in
+                // the input whatever the expression begins with.
+                out.push("{0i64 + (")
+                self.emit_grammar_value(world, walk, out, host, low)
+                out.push(")")
+                if comma {
+                    out.push(", ")
+                    match high {
+                        bound => {
+                            out.push("0i64 + (")
+                            self.emit_grammar_value(world, walk, out, host, bound)
+                            out.push(")")
+                        },
+                        null => {},
+                    }
+                }
+                out.push("}")
+            },
+            Pattern::Guard { cond, expected } => {
+                out.push("if(")
+                self.emit_grammar_value(world, walk, out, host, cond)
+                match expected {
+                    text => out.push(f", {rust_string(text)}"),
+                    null => {},
+                }
+                out.push(")")
+            },
         }
+    }
+
+    /// **A value in a grammar** (ADR-grammar-1 D2-D4): an argument, a bound,
+    /// a guard, written as the expression it is. It may not pause or fail,
+    /// as an action may not (the checker says so), so it is plain.
+    fn emit_grammar_value[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr) sync throws {
+        self.emit_expr(world, walk, out, host, value, 0, EmitFlow::plain(), EmitScope::plain())
+    }
+
+    /// **A rule of the grammar handed values** (ADR-grammar-1 D2): every
+    /// parameter by name, in the rule's order, an option left out by its
+    /// default. The engine matches by position and reads `name = expr` as a
+    /// value whatever the expression is.
+    fn emit_pattern_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg]) sync throws {
+        let called = emit_text(world, name)
+        out.push(called.clone())
+        let found: GrammarRule? = walk.grammar_values.get(called.clone())?.clone()
+        let rule = found ?? throw EmitRefused { message: f"There's no rule called `{called}` in this grammar.", at: null }
+        out.push("(")
+        let mut first = true
+        for i in 0..<rule.args.len() {
+            if !first {
+                out.push(", ")
+            }
+            first = false
+            out.push(f"{emit_text(world, rule.args[i].name)} = ")
+            if i < args.len() {
+                self.emit_grammar_value(world, walk, out, host, args[i])
+            }
+        }
+        for option in rule.config {
+            if !first {
+                out.push(", ")
+            }
+            first = false
+            let named = emit_text(world, option.name)
+            out.push(f"{named} = ")
+            let mut given = false
+            for c in config {
+                if !given && emit_text(world, c.name) == named {
+                    self.emit_grammar_value(world, walk, out, host, c.value)
+                    given = true
+                }
+            }
+            if !given {
+                self.emit_grammar_value(world, walk, out, host, option.default)
+            }
+        }
+        out.push(")")
     }
 
     /// A rule reference, a built-in, or a call to either.
@@ -110,6 +201,14 @@ impl EmitState {
             out.push(", sep = ")
             self.emit_pattern(world, walk, out, host, args[1])
             out.push(")")
+            return
+        }
+        // **`count(p)` is an `i64`** (ADR-grammar-1 D5): a template rule the
+        // grammar is given beside its own reads the engine's `usize`.
+        if called == "count" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains(called) {
+            out.push(f"{emit_count_rule()}(p = (")
+            self.emit_pattern(world, walk, out, host, args[0])
+            out.push("))")
             return
         }
         // `here`, and a `span(p)` no name binds directly, are the template

@@ -8,8 +8,42 @@ pub fn check_specialised(function: &str, on: &str) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, args: &[Expr], span: &Span) -> Ty {
+pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+    let declared: Option<FnContract> = match *nikaia_std::index::get(&world.own.functions, key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    match declared {
+        Some(contract) => {
+            let signature = nikaia_std::index::or(contract.signature, || Signature::empty());
+            let wanted = signature.params.len() as i64 - 1;
+            if wanted >= 0 && args.len() as i64 - 1 != wanted { state.findings.push(check_refusal("NK1101", span, format!("`{}` takes the input and {}, but you passed {} arguments.", key, counted(wanted, "value"), args.len() as i64), vec![String::from("An entry takes the text or bytes to parse first, then the values its rule declares (ADR-grammar-1 D2).")], Some(String::from("Give the input, then one value for each, by position.")))); }
+            for i in 1..args.len() as i64 {
+                if ((i) as usize) < signature.params.len() {
+                    let named = nikaia_std::index::get(&signature.params, (i) as usize).0.to_string();
+                    let given = check_core_expr(state, world, host, nikaia_std::index::get(&args, (i) as usize), span);
+                    state.expect_type(world, &given, &nikaia_std::index::get(&signature.params, (i) as usize).1, span, "argument", &|was, wanted| { format!("The value for `{}` is `{}`, but `{}` takes `{}`.", named, was, key, wanted) });
+                }
+            }
+            for c in config.iter() {
+                let option = world.words.resolve(c.name).to_string();
+                let mut found = false;
+                for o in signature.config.iter() {
+                    if o.name == option {
+                        found = true;
+                        let given = check_core_expr(state, world, host, &c.value, span);
+                        state.expect_type(world, &given, &o.ty, span, "argument", &|was, wanted| { format!("The option `{}` is `{}`, but `{}` takes `{}`.", option, was, key, wanted) });
+                    }
+                }
+                if !found { state.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", key, option), vec![String::from("An entry's options are what its rule declares after its `;`.")], Some(String::from("Name an option the rule declares.")))); }
+            }
+        },
+        None => { },
+    }
+    let mut at = 0;
     for arg in args.iter() {
+        at += 1;
+        if at > 1 { continue; }
         let given = check_core_expr(state, world, host, arg, span);
         let over_bytes = match given {
             Ty::Named { ref name, args: ref inner, .. } => name == "Bytes" && inner.is_empty(),

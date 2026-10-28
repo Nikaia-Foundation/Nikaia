@@ -90,10 +90,13 @@ impl CheckState {
             Pattern::Choice(parts) => { for part in parts.iter() { self.a_name_the_page_does_not_have(world, part); } },
             Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); self.a_name_the_page_does_not_have(world, pat); },
             Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); self.a_name_the_page_does_not_have(world, pat); },
+            Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); self.a_name_the_page_does_not_have(world, pat); },
             Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); self.a_name_the_page_does_not_have(world, inner); },
             Pattern::Literal(_) => { },
             Pattern::Cut => { },
             Pattern::Fold(_) => { },
+            Pattern::Call { .. } => { },
+            Pattern::Guard { .. } => { },
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

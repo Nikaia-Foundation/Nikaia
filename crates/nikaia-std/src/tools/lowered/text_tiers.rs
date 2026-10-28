@@ -3166,6 +3166,7 @@ pub(crate) fn bind_grammar_pattern(gname: &str, rules: &collections::BTreeSet<St
         Pattern::Choice(parts) => { for part in parts.iter() { bind_grammar_pattern(gname, rules, &part.node, ask, walk); } },
         Pattern::Ref { args, .. } => { for arg in args.iter() { bind_grammar_pattern(gname, rules, &arg.node, ask, walk); } },
         Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
         Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
         _ => { },
     }
@@ -3174,6 +3175,8 @@ pub(crate) fn bind_grammar_pattern(gname: &str, rules: &collections::BTreeSet<St
 pub(crate) fn grammar_pattern_kinds(gname: &str, rules: &collections::BTreeSet<String>, pattern: &Pattern, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     match pattern {
         Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_repeat_kinds(gname, rules, &pat.node, ask, walk) },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_repeat_kinds(gname, rules, &pat.node, ask, walk) },
+        Pattern::Call { name, .. } => { let name = *name; grammar_reference_kinds(gname, rules, ask.names.resolve(name), 0, &vec![], ask, walk) },
         Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); grammar_pattern_kinds(gname, rules, &pat.node, ask, walk) },
         Pattern::Choice(parts) => grammar_choice_kinds(gname, rules, parts, ask, walk),
         Pattern::Ref { name, generics, args } => { let name = *name; grammar_reference_kinds(gname, rules, ask.names.resolve(name), generics.len() as i64, args, ask, walk) },

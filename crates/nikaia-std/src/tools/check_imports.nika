@@ -233,10 +233,13 @@ impl CheckState {
             }
             Pattern::Bind { pat, .. } => self.a_name_the_page_does_not_have(world, pat),
             Pattern::Repeat { pat, .. } => self.a_name_the_page_does_not_have(world, pat),
+            Pattern::Counted { pat, .. } => self.a_name_the_page_does_not_have(world, pat),
             Pattern::Group(inner) => self.a_name_the_page_does_not_have(world, inner),
             Pattern::Literal(_) => {}
             Pattern::Cut => {}
             Pattern::Fold(_) => {}
+            Pattern::Call { .. } => {}
+            Pattern::Guard { .. } => {}
         }
     }
 

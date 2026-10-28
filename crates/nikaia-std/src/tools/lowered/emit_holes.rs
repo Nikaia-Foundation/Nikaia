@@ -189,8 +189,11 @@ pub(crate) fn emit_holes_fold_steps(pattern: &Pattern) -> Vec<&Expr> {
         Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(emit_holes_fold_steps(&pat.node)); },
         Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); out.extend(emit_holes_fold_steps(&inner.node)); },
         Pattern::Ref { args, .. } => { for each in args.iter() { out.extend(emit_holes_fold_steps(&each.node)); } },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(emit_holes_fold_steps(&pat.node)); },
         Pattern::Literal(_) => { },
         Pattern::Cut => { },
+        Pattern::Call { .. } => { },
+        Pattern::Guard { .. } => { },
     }
     out
 }

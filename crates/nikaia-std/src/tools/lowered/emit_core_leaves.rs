@@ -295,7 +295,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_grammar_entry<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: &Expr, parallelism: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_core_grammar_entry<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: &Expr, values: &[Expr], config: &[ConfigArg], parallelism: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let question = match flow.caught {
             true => "",
             false => "?",
@@ -307,12 +307,14 @@ impl EmitState {
         let mut parallel = false;
         let mut named = false;
         let mut rule_name: String = String::from("");
+        let mut entered: Option<GrammarRule> = None;
         for r in def.rules.iter() {
             if r.name == entry { named = true; }
             if r.is_entry && r.name == entry && !found {
                 found = true;
                 parallel = emit_leaf_par_fold(r);
                 rule_name = emit_text(world, r.name);
+                entered = Some(r.clone());
             }
         }
         if !found {
@@ -336,7 +338,31 @@ impl EmitState {
         }
         out.push(&format!("nikaia_std::grammar::parse{}(&*", over));
         self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
-        out.push(&format!(", {}::parse_{}()){}", lowered, rule_name, question));
+        out.push(&format!(", {}::parse_{}(", lowered, rule_name));
+        match entered {
+            Some(ref rule) => {
+                let mut first = true;
+                for i in 0..rule.args.len() as i64 {
+                    if !first { out.push(", "); }
+                    first = false;
+                    if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&values, (i) as usize), depth, flow, scope)?; }
+                }
+                for option in rule.config.iter() {
+                    if !first { out.push(", "); }
+                    first = false;
+                    let mut given = false;
+                    for c in config.iter() {
+                        if !given && c.name == option.name {
+                            self.emit_expr(world, walk, out, host, &c.value, depth, flow, scope)?;
+                            given = true;
+                        }
+                    }
+                    if !given { self.emit_expr(world, walk, out, host, &option.default, depth, flow, scope)?; }
+                }
+            },
+            None => { },
+        }
+        out.push(&format!(")){}", question));
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

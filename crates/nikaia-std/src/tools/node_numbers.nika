@@ -152,7 +152,9 @@ fn numbers_item(item: Item, mut st: NodeNumbersState) -> Item {
                     let action = numbers_maybe_block(alt.action, st)
                     alts.push(GrammarAlt { pattern: pattern, action: action })
                 }
-                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts: alts, span: rule.span })
+                let args = numbers_fn_args(rule.args, st)
+                let config = numbers_config_params(rule.config, st)
+                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts: alts, span: rule.span, args: args, config: config })
             }
             return Item::Grammar(GrammarDef { name: def.name, rules: rules, public: def.public })
         },
@@ -248,6 +250,18 @@ fn numbers_pattern(pattern: Pattern, mut st: NodeNumbersState) -> Pattern {
         },
         Pattern::Group(pat) => {
             return Pattern::Group(numbers_spanned_pattern(pat, st))
+        },
+        Pattern::Call { name, args, config } => {
+            return Pattern::Call { name: name, args: numbers_exprs(args, st), config: numbers_config(config, st) }
+        },
+        Pattern::Counted { pat, low, high, comma } => {
+            let inner = numbers_spanned_pattern(pat, st)
+            let low2 = numbers_expr(low, st)
+            let high2 = numbers_maybe_expr(high, st)
+            return Pattern::Counted { pat: inner, low: low2, high: high2, comma: comma }
+        },
+        Pattern::Guard { cond, expected } => {
+            return Pattern::Guard { cond: numbers_expr(cond, st), expected: expected }
         },
         Pattern::Fold(spec) => {
             let init = numbers_expr(spec.init, st)

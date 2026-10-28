@@ -138,7 +138,16 @@ pub fn declared_grammar(words: ref winnow_grammar::InternerContext, aliases: ref
             let written = rule.ret_type ?? return out
             result = written_ty(words, aliases, written)
         }
-        contract.signature = Signature { bounds: [], mutable: [], params: [("input", Ty::Unknown)], config: [], result: result }
+        // **The values the entry takes**, after its input (ADR-grammar-1 D2).
+        let mut params: Vec[(String, Ty)] = [("input", Ty::Unknown)]
+        for arg in rule.args {
+            params.push((words.resolve(arg.name).clone(), written_ty(words, aliases, arg.ty)))
+        }
+        let mut options: Vec[ConfigContract] = []
+        for option in rule.config {
+            options.push(ConfigContract { name: words.resolve(option.name).clone(), ty: written_ty(words, aliases, option.ty), default: default_text(option.default) })
+        }
+        contract.signature = Signature { bounds: [], mutable: [], params: params, config: options, result: result }
         out.push(DeclaredFn { key: f"{owner}::{words.resolve(rule.name)}", contract: contract })
     }
     return out

@@ -118,6 +118,14 @@ impl<'a> FbWidths<'a> {
             },
             Pattern::Cut => return 0u64,
             Pattern::Fold(_) => return 0u64,
+            Pattern::Counted { .. } => return 0u64,
+            Pattern::Guard { .. } => return 0u64,
+            Pattern::Call { name, .. } => {
+                let name = *name;
+                let called = words.resolve(name).to_string();
+                if self.rules.contains_key(&called) { return self.rule(words, called, boundary); }
+                return 0u64;
+            },
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
                 let called = words.resolve(name).to_string();
@@ -234,6 +242,7 @@ pub fn fb_folds(pattern: &Pattern) -> Vec<&FoldSpec> {
         Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(fb_folds(&pat.node)); },
         Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); out.extend(fb_folds(&pat.node)); },
         Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(fb_folds(&pat.node)); },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(fb_folds(&pat.node)); },
         Pattern::Ref { args, .. } => { for p in args.iter() { out.extend(fb_folds(&p.node)); } },
         _ => { },
     }

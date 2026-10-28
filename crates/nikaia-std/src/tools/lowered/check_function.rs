@@ -208,13 +208,20 @@ pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &Chec
             None => None,
         };
         state.current = Some(format!("{}::{}", named, world.words.resolve(rule.name)));
+        let values = state.rule_values(world, host, rule);
+        for option in rule.config.iter() {
+            let given = check_core_expr(state, world, host, &option.default, &option.default_span);
+            state.expect_type(world, &given, &host.type_of(&option.ty), &option.default_span, "argument", &|was, wanted| { format!("This default is `{}`, but the option is `{}`.", was, wanted) });
+        }
         for alt in rule.alts.iter() {
-            let frame = state.bindings_of(world, &alt.pattern.node, &rules);
             let outer_action: Option<String> = match state.inside_an_action.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
             state.inside_an_action = Some(world.words.resolve(rule.name).to_string());
+            state.grammar_values(world, host, gram, &alt.pattern, &rules, values.to_owned());
+            let mut frame = values.to_owned();
+            for bound in state.bindings_of(world, &alt.pattern.node, &rules) { frame.push(bound); }
             state.scope.push(frame.to_owned());
             check_defaults_folds_in(state, world, host, gram, &alt.pattern.node, &alt.pattern.span);
             state.scope.pop();

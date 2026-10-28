@@ -347,7 +347,7 @@ impl EmitState {
     pub fn emit_core_call_inner<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.emit_call_assert(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_kept(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(()); }
-        if self.emit_call_grammar(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(()); }
+        if self.emit_call_grammar(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_boxed_variant(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(()); }
         let pausing = call_pausing_key(world.words, world.aliases, &self.own_contracts, world.library, func);
         if pausing.is_some() && flow.in_lambda {
@@ -409,15 +409,18 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_call_grammar<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_call_grammar<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         Ok(match func {
             Expr::Path(segments, _) => {
-                if args.len() != 1 { return Ok(false); }
+                if args.is_empty() { return Ok(false); }
                 if segments.len() == 2 && self.grammars.contains_key(&emit_text(world, *nikaia_std::index::get(&segments, 0))) {
                     let parallelism = host.parallelism();
-                    self.emit_core_grammar_entry(world, walk, out, host, *nikaia_std::index::get(&segments, 0), *nikaia_std::index::get(&segments, 1), nikaia_std::index::get(&args, 0), &parallelism, depth, flow, scope)?;
+                    let mut values: Vec<Expr> = vec![];
+                    for i in 1..args.len() as i64 { values.push((*nikaia_std::index::get(&args, (i) as usize)).clone()); }
+                    self.emit_core_grammar_entry(world, walk, out, host, *nikaia_std::index::get(&segments, 0), *nikaia_std::index::get(&segments, 1), nikaia_std::index::get(&args, 0), &values, config, &parallelism, depth, flow, scope)?;
                     return Ok(true);
                 }
+                if args.len() != 1 { return Ok(false); }
                 if segments.len() != 3 { return Ok(false); }
                 let package = emit_text(world, *nikaia_std::index::get(&segments, 0));
                 let book = emit_text(world, *nikaia_std::index::get(&segments, 1));

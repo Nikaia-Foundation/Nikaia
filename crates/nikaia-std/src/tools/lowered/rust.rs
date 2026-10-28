@@ -204,7 +204,7 @@ grammar! {
             -> { p }
 
         rule PATH =
-            raw_ident(PATH_TAIL)*
+            raw_ident PATH_TAIL*
             -> { }
 
         rule PATH_TAIL =

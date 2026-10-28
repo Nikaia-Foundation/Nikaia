@@ -411,7 +411,7 @@ impl EmitState {
     /// `Measurements.file(data)` - the whole of what a user writes to run a
     /// grammar (ADR-296 D1, D2). `parallelism` is how the build asks the driver
     /// to cut the input.
-    pub fn emit_core_grammar_entry[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: ref Expr, parallelism: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    pub fn emit_core_grammar_entry[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: ref Expr, values: ref Vec[Expr], config: ref Vec[ConfigArg], parallelism: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **The `?` is the call's, and a `catch` is what takes it away.**
         let question = match flow.caught {
             true => "",
@@ -428,6 +428,7 @@ impl EmitState {
         let mut parallel = false
         let mut named = false
         let mut rule_name: String = ""
+        let mut entered: GrammarRule? = null
         for r in def.rules {
             if r.name == entry {
                 named = true
@@ -436,6 +437,7 @@ impl EmitState {
                 found = true
                 parallel = emit_leaf_par_fold(r)
                 rule_name = emit_text(world, r.name)
+                entered = r.clone()
             }
         }
         if !found {
@@ -467,7 +469,41 @@ impl EmitState {
         // A sequential entry rule: the parser is driven over the whole input once.
         out.push(f"nikaia_std::grammar::parse{over}(&*")
         self.emit_expr(world, walk, out, host, input, depth, flow, scope)
-        out.push(f", {lowered}::parse_{rule_name}()){question}")
+        out.push(f", {lowered}::parse_{rule_name}(")
+        // **The values an entry takes**, in its rule's order, an option left
+        // out by its default (ADR-grammar-1 D2).
+        match entered {
+            rule => {
+                let mut first = true
+                for i in 0..<rule.args.len() {
+                    if !first {
+                        out.push(", ")
+                    }
+                    first = false
+                    if i < values.len() {
+                        self.emit_expr(world, walk, out, host, values[i], depth, flow, scope)
+                    }
+                }
+                for option in rule.config {
+                    if !first {
+                        out.push(", ")
+                    }
+                    first = false
+                    let mut given = false
+                    for c in config {
+                        if !given && c.name == option.name {
+                            self.emit_expr(world, walk, out, host, c.value, depth, flow, scope)
+                            given = true
+                        }
+                    }
+                    if !given {
+                        self.emit_expr(world, walk, out, host, option.default, depth, flow, scope)
+                    }
+                }
+            },
+            null => {},
+        }
+        out.push(f")){question}")
     }
 
     /// The pieces of a template, appended to `__html` in order.
