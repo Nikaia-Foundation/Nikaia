@@ -1,4 +1,3 @@
 Result: done
-Batch: p4a-project-members.md p4b-project-foreign.md
+Batch: p4b-project-foreign.md p1-project-settings.md
 Owner: none
-Found: P3b's three lowering defects filed as #916 (ready, brief form), not batched (blocks no move).
