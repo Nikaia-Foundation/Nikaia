@@ -110,3 +110,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 963806 24
 /home/user/Nikaia/docs/briefs/m2-modules-tests.md 313123 4
 /home/user/Nikaia/docs/briefs/s3-fs-canonical.md 484332 7
+/home/user/Nikaia/docs/briefs/architect-task.md 860621 19
