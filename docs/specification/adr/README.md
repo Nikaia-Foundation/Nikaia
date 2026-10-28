@@ -213,7 +213,8 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
-| [regex-1](adr-regex-1.md) | `std::regex` is RE2's dialect, linear in the text; a pattern the build knows is source, compiled down a ladder of engines (literal, one-pass code, DFA as code or table, tagged DFA, bit-parallel NFA, flat NFA) laid down in the binary as read; a run-time pattern runs on Rust's automata crates; `--comptime` reports the stage | Accepted | no |
+| [regex-1](adr-regex-1.md) | `std::regex` is RE2's dialect, linear in the text; a regular expression is `regex::Regex[E]`, typed by its engine (`Literal`, `OnePass`, `Dfa`, `TaggedDfa`, `BitNfa`, `FlatNfa`, `Dynamic`), `regex::Any` for a mix; `regex::compile(comptime p)` chooses the engine while building, `regex::dynamic(p)` compiles at run time on Rust's automata crates; tables lie in the binary as read; `std`'s calls take `comptime? self` and are specialised per known pattern; `--comptime` reports | Accepted | no |
+| [specialization-1](adr-specialization-1.md) | A parameter marked `comptime?` (also `self`) makes a copy of the function per build-time value a call gives it and leaves the function as written for the rest; `@unroll` before a `for` makes the loop variable a build-time value in every turn (`NK1304` where the list is not one), `@unroll(up_to: N)` up to `N` elements, the body checked both ways (`NK1305`); an `if` or `match` on a known value is decided while building; nothing asks whether a value is known; a result type may be computed from `comptime` parameters; `--comptime` reports | Accepted | no |
 | [319](adr-319.md) | A file name is `fs::Path`, the platform's own bytes (Unix raw, Windows WTF-8, UTF-8 where names are Unicode): text stands wherever one is asked, an `f"…"` builds one where its use asks, `to_text()` fails only for a name the operating system handed over, `display()` shows `�` and is not tracked, and a `String` is always valid UTF-8. | Accepted | no |
 | [320](adr-320.md) | Text is UTF-8 and is read through a view that names its unit - `s.bytes`, `s.scalars`, `s.graphemes`; there is no `char` (`scalar` and `u8`), no `s.len()` and no `s[i]`; a position the text hands out cuts it; `find` from a position; `'…'` is a `u8` or a `scalar` by use; graphemes are `std`'s; `==` compares bytes; a `Bytes` reads a word in the order its name says (`u64_le`, `u32_be`), and never past the end: a program pads the end itself (D13). | Accepted | no (#453) |
 | [318](adr-318.md) | An option's default is a build-time value, evaluated once where the function is declared, recorded in the ledger as its value and written into the call in the form a `comptime` crosses in; a `std` type the compiler cannot see into crosses through its `constant` column, and a `std` function runs at build time when it is written in Nikaia. | Accepted | no |
@@ -333,7 +334,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Topics in use
 
-`decision-records`, `regex`.
+`decision-records`, `regex`, `specialization`.
 
 ## Reserved numbers
 

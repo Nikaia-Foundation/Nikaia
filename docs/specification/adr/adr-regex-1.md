@@ -1,9 +1,9 @@
-# ADR-regex-1: `std::regex` Is the RE2 Dialect; a Pattern the Build Knows Is Source and Is Compiled Down a Ladder of Engines, a Pattern That Arrives at Run Time Is Input for Rust's Automata Crates
+# ADR-regex-1: `std::regex` Is the RE2 Dialect; a Regular Expression Is Typed by Its Engine, a Pattern the Build Knows Is Compiled Down a Ladder of Engines and Run by `std`'s Code Specialised for It, a Pattern That Arrives at Run Time Runs on Rust's Automata Crates
 
 **Status:** Accepted
 **Date:** October 28, 2026
-**Answers:** whether and how `std` offers regular expressions ([#673](https://github.com/Nikaia-Foundation/Nikaia/issues/673)): which dialect, what the build does with a pattern it knows, which engine runs it, and what a pattern that arrives at run time runs on
-**Supersedes / Related:** [ADR-374](adr-374.md) (a position in a text, `text::Match`), [ADR-375](adr-375.md) (`ByteSet`, `Seq`, positions as facts), [ADR-377](adr-377.md) (`std::simd`), [ADR-296](adr-296.md) D7 (a grammar has no regex terminals), D23-D24 (a grammar is compiled to code), [ADR-318](adr-318.md) D5-D6 (a `std` type crosses into a `comptime` by its `constant` column; a `std` function runs at build time), [ADR-311](adr-311.md) (a build-time value crosses in its view form), [ADR-287](adr-287.md) (`comptime`), [ADR-218](adr-218.md) (`unsafe` lives in `crates/unsafe`), [ADR-188](adr-188.md) (a backslash is written `\\`)
+**Answers:** whether and how `std` offers regular expressions ([#673](https://github.com/Nikaia-Foundation/Nikaia/issues/673)): which dialect, what type a regular expression has, what the build does with a pattern it knows, which engine runs it, and what a pattern that arrives at run time runs on
+**Supersedes / Related:** [ADR-specialization-1](adr-specialization-1.md) (`comptime?`, `@unroll`, branches decided while building, a result type computed from a `comptime` parameter), [ADR-374](adr-374.md) (a position in a text, `text::Match`), [ADR-375](adr-375.md) (`ByteSet`, `Seq`, positions as facts), [ADR-377](adr-377.md) (`std::simd`), [ADR-296](adr-296.md) D7 (a grammar has no regex terminals), D42 (a `std` type over a crate's table), [ADR-318](adr-318.md) D5-D6 (a `std` type crosses into a `comptime` by its `constant` column; a `std` function runs at build time), [ADR-311](adr-311.md) (a build-time value crosses in its view form), [ADR-333](adr-333.md) D3 (a `comptime` parameter), [ADR-287](adr-287.md) (`comptime`), [ADR-295](adr-295.md) (a trait is not a type), [ADR-218](adr-218.md) (`unsafe` lives in `crates/unsafe`), [ADR-188](adr-188.md) (a backslash is written `\\`)
 
 ## 1. Question
 
@@ -24,9 +24,9 @@ pattern `a*a` accepts `aaa` as a regular expression and never as a grammar
 rule.
 
 A library sees a pattern when the program runs. A compiler sees most patterns
-while it builds - they are literals - and can do what no library can: compile
-the pattern to code, choose an engine for its shape, and leave nothing to do
-when the first text arrives.
+while it builds - they are literals - and can do what no library can: choose
+an engine for the pattern's shape, emit code made for it, and leave nothing to
+do when the first text arrives.
 
 ## 2. How others do it
 
@@ -36,6 +36,7 @@ when the first text arrives.
 | RE2, Go | run time | DFA built lazily, NFA simulation, literal prefilter | NFA simulation or one-pass |
 | Rust `regex` (`regex-automata`) | run time | literal prefilter, full DFA only for small patterns (by default up to 30 NFA states and 40 KiB), else lazy DFA, else Pike VM | Pike VM, one-pass or bounded backtracking over the matched span |
 | re2c, logos | build time | DFA emitted as code | re2c: tagged DFA (Laurikari), registers written on transitions |
+| C++ CTRE | build time (templates) | a matcher instantiated per pattern; the pattern is part of the type | yes |
 | Hyperscan | ahead of the scan, into a database | literals with SIMD, DFAs, bit-parallel NFAs in vector registers | no |
 
 What `regex-automata` 0.4 offers to a build, read in its source: a dense or
@@ -70,13 +71,17 @@ Adding the feature later never changes a pattern that works.
 `"\\d{4}"`, as Part I 2.5 already prints it. A raw-string form is not decided
 here ([ADR-188](adr-188.md) §4).
 
-### D3 — The type is `regex::Regex`; a match is a `text::Match`.
+### D3 — A regular expression is `regex::Regex[E]`, typed by its engine; a collection of different ones is `regex::Any`.
 
-`regex::compile(pattern) -> regex::Regex throws regex::Error`. A `Regex` is
-read-only and shared between threads. It searches a `String`; matching a
-`Bytes` is not decided here. Every position it gives is a `text::Pos` of the
-searched text ([ADR-374](adr-374.md)), and a match is `text::Match`, so
-`before`, `after` and `between` cut with it.
+`E` is the engine, a type implementing the trait `regex::Engine`: one per
+stage of D6 (`regex::Literal`, `regex::OnePass`, `regex::Dfa`,
+`regex::TaggedDfa`, `regex::BitNfa`, `regex::FlatNfa`) and `regex::Dynamic` for
+a pattern compiled at run time (D8). Each engine's calls are its own; a call
+chooses no engine while the program runs. A function over any regular
+expression is generic, `fn f[E: regex::Engine](re: regex::Regex[E])`, and is
+emitted once per engine. `regex::Any` is an `enum` with one variant per engine,
+`re.any()` makes one, and its calls choose the engine at run time - the one
+place where that happens, and only where the program writes it.
 
 | call | gives |
 |---|---|
@@ -88,35 +93,59 @@ searched text ([ADR-374](adr-374.md)), and a match is `text::Match`, so
 | `re.replace_all(s, with)` | `String`; `with` may name groups as `$1` or `${year}` |
 | `re.split(s)` | `Seq[ref String]`, the pieces between matches |
 
-**Why.** One match type for text, whatever found it. `find_all` is a `Seq`
-for the reason [ADR-375](adr-375.md) D3 gives.
+Every position is a `text::Pos` of the searched text ([ADR-374](adr-374.md)),
+and a match is `text::Match`, so `before`, `after` and `between` cut with it.
+A `Regex` is read-only and shared between threads. It searches a `String`;
+matching a `Bytes` is not decided here.
 
-### D4 — A pattern the build knows is source code, and the build compiles it.
+**Two ways in.** `regex::compile(comptime pattern) -> regex::Regex[E]` takes a
+pattern the build knows; the build chooses `E` from the pattern
+([ADR-specialization-1](adr-specialization-1.md) D7). A type written where the
+result is received is a contract: `comptime DATE: regex::Regex[regex::Dfa] =
+regex::compile("…")` is refused when the pattern needs another engine.
+`regex::dynamic(pattern) -> regex::Regex[regex::Dynamic] throws regex::Error`
+takes a pattern known only at run time. `regex::compile` with a pattern that is
+not a build-time value is refused at the call (ADR-333 D3), and the help names
+`regex::dynamic`.
 
-`regex::compile(p)` where `p` is a build-time text - a literal, a text
-composed of other `comptime` values, `asset("date.re")` - is a program in the
-pattern language, and the build compiles it as it compiles a `grammar`
-([ADR-296](adr-296.md) D23-D24): to code where code is the fastest form, to
-tables where it is not (D6). A pattern that does not parse stops the build
-with the engine's own message (`NK1244`, *it ran and stopped*).
+**Why.** Which engine a pattern needs is a fact the build knows; held in the
+type, it costs nothing while the program runs, and engines added later are
+types added, not cases added. **Rejected:** one type whose calls `match` on
+the engine (a branch on every call, also where every value has the same
+engine); a list of values typed by the trait (a trait is not a type,
+[ADR-295](adr-295.md)); one `compile` for both stages (its result's type would
+depend on whether a caller wrote `comptime`); the pattern itself as the type's
+parameter, `Regex[P]` (every pattern a different type).
 
-A pattern that is known only when the program runs is **input**, not source:
-`regex::compile(line)` compiles it then, on Rust's automata crates (D8), and a
-bad one is a `regex::Error`.
+### D4 — A pattern the build knows is source code: the build compiles it, and `std`'s code runs specialised for it.
 
-**Why.** [Part II 10.1](../20-nikaia-advance.md) forbids code nobody wrote;
-the pattern is code the user wrote, in another notation, as a grammar is. What
-the build can do with it, a library that sees it at run time cannot: compile
-it to code, pick the engine its shape needs, and lay down the result where the
-program reads it in place. **Rejected:** treating a known pattern as a value
-the library compiles at run time (it repeats work the build could do, every
-time the program starts); tables only, never code (it gives away the fastest
-form for the small patterns that are most of them).
+`regex::compile(p)` with a build-time text - a literal, a text composed of
+other `comptime` values, `asset("date.re")` - is a program in the pattern
+language. The build parses and checks it (a pattern that does not parse stops
+the build with the engine's own message, `NK1244`), chooses its engine (D6) and
+lays down its tables (D7). The code that runs is `std`'s own, written once in
+Nikaia: the calls of D3 take `comptime? self`, so a call on a known pattern
+calls a copy made for that pattern, in which the engine's states are constants
+and its loops over them are unrolled
+([ADR-specialization-1](adr-specialization-1.md) D1-D4). A pattern known only
+when the program runs is input, compiled by `regex::dynamic` (D8).
+
+**Why.** [Part II 10.1](../20-nikaia-advance.md) forbids code nobody wrote; the
+pattern is code the user wrote, in another notation, and the matcher is code
+`std` wrote, specialised for it by the rules every library has. **Rejected:**
+a case for regular expressions in the compiler's lowering (the next library
+with a pattern language would need its own); treating a known pattern as a
+value compiled at run time (it repeats work the build could do, every time the
+program starts); tables only, never code (it gives away the fastest form for
+the small patterns that are most of them).
 
 ### D5 — What the engine is held to.
 
-1. **The same matches** as Rust's `regex` crate gives for the same pattern and
-   text, checked by a differential test and by fuzzing against it.
+1. **The matches the specification defines** (D1). Rust's crate, which runs
+   `regex::Dynamic` (D8), is the oracle: a pattern compiled by `compile` and by
+   `dynamic` gives the same matches on the same text, checked by a
+   differential test in Nikaia and by fuzzing. A crate version that disagrees
+   with the specification is a finding, not the new meaning.
 2. **Linear** in the text, with **bounded memory**, for every pattern.
 3. **Nothing at run time that the build could do** for a pattern the build
    knows: no parsing, no compiling, no check of a table, as far as the stage
@@ -126,26 +155,25 @@ form for the small patterns that are most of them).
 5. **The pattern decides what is built.** A pattern without a capturing group
    gets no group machinery; group 0, the match's start and end, is always
    there. Which calls a program makes on a `Regex` is not read.
-6. **Visible**: the report says what each pattern got (D9).
+6. **Visible**: the type names the engine; the report says the rest (D9).
 7. **Bounded in binary size and build time**, by limits the build can be given.
 
-### D6 — A known pattern takes the cheapest stage that fits it.
+### D6 — A known pattern takes the cheapest engine that fits it.
 
-| stage | for | what runs |
-|---|---|---|
-| S0 literal | a literal, or a few alternatives of literals | `find`, `ByteSet`, a literal search; no automaton |
-| S1 one-pass | a pattern with one way on at every byte | straight-line code, groups included, no set of states |
-| S2 small DFA | a DFA under the code limit | the DFA as code: a block per state, a `match` on byte classes; a state that loops on a set of bytes skips them with `ByteSet` |
-| S3 DFA | a DFA under the table limit | the DFA's table, read in place (D7) |
-| S4 groups | capturing groups, not one-pass, a tagged DFA under its limit | a tagged DFA: a DFA whose transitions write positions into registers; no NFA at run time |
-| S5 bit-parallel NFA | up to as many NFA positions as the widest vector the build has | one bit a position, a step a few word or vector operations per byte (Glushkov, as Hyperscan) |
-| S6 NFA | anything larger | a flat NFA read in place, run by an NFA simulation and a lazily built DFA of our own |
+| stage | engine | for | what runs |
+|---|---|---|---|
+| S0 | `Literal` | a literal, or a few alternatives of literals | `find`, `ByteSet`, a literal search; no automaton |
+| S1 | `OnePass` | a pattern with one way on at every byte | straight-line code, groups included, no set of states |
+| S2 | `Dfa` | a DFA | under the unroll limit, the DFA as code: a block per state, a comparison per byte range, a state that loops on a set of bytes skipping them with `ByteSet`; over it, or for a pattern that reached the call through a run-time value, the DFA's table, read in place (D7) - one engine, `@unroll(up_to: N)` deciding (ADR-specialization-1 D3) |
+| S3 | `TaggedDfa` | capturing groups, not one-pass, a tagged DFA under its limit | a DFA whose transitions write positions into registers; no NFA at run time |
+| S4 | `BitNfa` | up to as many NFA positions as the widest vector the build has | one bit a position, a step a few word or vector operations per byte (Glushkov, as Hyperscan) |
+| S5 | `FlatNfa` | anything larger | a flat NFA read in place, run by an NFA simulation and a lazily built DFA of our own |
 
-Which stage a pattern takes is decided by the pattern and the limits alone.
-The limits are numbers the build can be given; their defaults are set by
-measurement. A stage not yet built falls to the next one that is; under all of
-them is the crate at run time from the already checked pattern, which is not a
-stage of its own but the floor.
+The engine is chosen by the pattern and the limits alone. The limits are
+numbers the build can be given; their defaults are set by measurement. A stage
+not yet built falls to the next one that is; under all of them is
+`regex::Dynamic` built at run time from the already checked pattern, which is
+not a stage but the floor.
 
 **Why.** The crate's own default says a full DFA is a small-pattern
 optimisation; the expensive cases - a DFA that grows with every position
@@ -163,11 +191,11 @@ target's byte order and is read where it lies. The crate's DFA is opened with
 `from_bytes_unchecked`, which reads its header and nothing else; the bytes come
 from the same build with the same crate, and the header carries its version.
 The call is `unsafe` and lives in a crate of its own under `crates/unsafe`
-([ADR-218](adr-218.md)). A stage of our own (S4-S6) is laid out flat: states as
-`u32` words, references as indices into the same table, names in one byte run
-with offsets - nothing that must be rebuilt, checked or relocated before it is
-read. The crate's NFA is not used for a known pattern: it is heap blocks joined
-by pointers and cannot lie in the binary.
+([ADR-218](adr-218.md)). An engine of our own (S3-S5) is laid out flat: states
+as `u32` words, references as indices into the same table, names in one byte
+run with offsets - nothing that must be rebuilt, checked or relocated before it
+is read. The crate's NFA is not used for a known pattern: it is heap blocks
+joined by pointers and cannot lie in the binary.
 
 **Why.** D5.3. A table that must be rebuilt or validated on first use is work
 the build has already done. **Rejected:** replaying the crate's NFA through its
@@ -177,50 +205,69 @@ that built them, its layout is not promised, and its handle writes a count).
 
 ### D8 — A pattern that arrives at run time runs on Rust's automata crates.
 
-`std`'s Rust half wraps `regex-automata` (with `regex-syntax`), as its maps
-wrap `hashbrown`'s table ([ADR-296](adr-296.md) D42). No type of the crate
-appears in a program, in the ledger or in a message. The crate is pinned in
-`Cargo.lock`; a version that changes what a pattern matches is a change to the
-specification's version, with its `CHANGELOG.md` heading. The build uses the
-same crates to parse a known pattern, to check it and to build the automata it
-lays down.
+`regex::Regex[regex::Dynamic]` wraps `regex-automata`'s `meta::Regex` (with
+`regex-syntax`), as `std`'s maps wrap `hashbrown`'s table
+([ADR-296](adr-296.md) D42). No type of the crate appears in a program, in the
+ledger or in a message. The crate is pinned in `Cargo.lock`; a version that
+changes what a pattern matches is caught by D5.1 before it is taken.
 
 **Why.** A run-time pattern has nothing to gain from the build; the crate is
-the tuned answer for it, and D5.1 makes it the reference the stages of our own
-are checked against.
+the tuned answer for it, and the oracle the engines of our own are checked
+against.
 
 ### D9 — `--comptime` says what each known pattern became.
 
-For each pattern the build compiled: the stage it took, the sizes (DFA bytes,
-NFA states, tagged registers), which limit sent it further down, whether a
-group stage was built because the pattern has capturing groups, and the
-prefilter. A pattern on the floor is listed as such.
+For each pattern the build compiled: its engine, the sizes (DFA bytes, NFA
+states, tagged registers), which limit sent it further down, whether a group
+stage was built because the pattern has capturing groups, and the prefilter;
+for each call, the copy it calls or why it calls the ordinary function
+([ADR-specialization-1](adr-specialization-1.md) D8). A pattern on the floor
+is listed as such.
 
-**Why.** A pattern changes stage silently when it grows; the report is where
-that is seen, as `--comptime` already shows what else the build computed.
+**Why.** A pattern changes engine silently when it grows; the type and the
+report are where that is seen.
+
+### D10 — The crates understand and translate a pattern; for a known pattern, the code that runs is ours.
+
+| part | where it runs | by whom |
+|---|---|---|
+| parsing a pattern, its error message | build; run time for `dynamic` | `regex-syntax` |
+| Unicode classes | build; run time for `dynamic` | `regex-syntax` |
+| literals for a prefilter | build | `regex-syntax` |
+| the NFA | build | `regex-automata`; read through its public states into our flat form |
+| determinising and minimising a DFA | build | `regex-automata` |
+| whether a pattern is one-pass | build | `regex-automata`'s one-pass builder, which fails on a pattern that is not |
+| S0 prefilter | run time | `find`, `ByteSet`; `aho-corasick`'s Teddy for many literals |
+| S1, S2 as code | run time | `std`, specialised per pattern |
+| S2 as a table | run time | `regex-automata`'s search over its own table, until a measurement says ours pays |
+| S3-S5 | build and run time | `std` |
+| a run-time pattern | run time | `regex-automata`'s `meta::Regex` |
+
+**Why.** The crates define the dialect (D1) and do years of work on parsing,
+Unicode and determinising that a build runs once; what runs per byte for a
+pattern the build knows is where knowing it pays (D4). A parser of our own
+would have to match the crate's in every flag and message, and could only
+differ from it.
 
 ## 4. What this does not decide
 
-* **Reading the calls a program makes** on a `Regex` to build less (an
-  `is_match`-only pattern without a reverse DFA): only once a measurement shows
-  it pays.
-* **Stages of our own for a pattern that arrives at run time.**
 * **Typed groups.** `dsl regex::Regex { (?P<year>\d{4}) } eod` giving a result
   struct with a field per named group is a record of its own.
 * **Regex terminals in a `grammar`** stay a goal ([ADR-296](adr-296.md) D7).
+* **Engines of our own for a pattern that arrives at run time.**
 * **A raw-string form** (D2), **matching bytes** (D3), **backreferences and
   lookaround** (D1): none is decided against; none is promised.
 
 ## 5. Consequences
 
 * A pattern written as a literal cannot be wrong at run time and, once its
-  stage is built, costs nothing before its first match.
-* The stages S1, S2 and S4-S6 are engines of our own, and each is held to the
-  crate's matches by test (D5.1). They are built one at a time, each after a
-  measurement says it pays.
-* Code per pattern adds build time and binary size; the limits and the report
-  (D9) are how that is kept in view.
+  engine is built, costs nothing before its first match.
+* The engines S1-S5 are ours, written in Nikaia on
+  [ADR-specialization-1](adr-specialization-1.md), each held to the crate by
+  test (D5.1) and built one at a time, each after a measurement says it pays.
+* Code per pattern adds build time and binary size; the limits, the type and
+  the report (D9) are how that is kept in view.
 * A table in the binary is in the target's byte order; a build for another
   target writes the target's.
-* `std` gains `regex-automata` and `regex-syntax`; `Cargo.lock` is where their
-  versions are decided.
+* `std` gains `regex-automata`, `regex-syntax` and, through them,
+  `aho-corasick`; `Cargo.lock` is where their versions are decided.

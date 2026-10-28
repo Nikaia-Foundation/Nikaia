@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1253 (Draft)
+**Version:** 0.0.1254 (Draft)
 **Date:** 2026-10-28
 
 ---
@@ -254,6 +254,31 @@ whether the value is that variant; what a variant carries is read with a
 `match`. Any other member is refused with `NK1180`. `T::fields` without a
 `Struct` bound, or `T::variants` without an `Enum` bound, is refused with
 `NK1171`.
+
+**A loop over a build-time value is unrolled where `@unroll` says so** ([ADR-specialization-1](adr/adr-specialization-1.md)).
+`@unroll` before a `for` makes the loop variable a build-time value in every
+turn: the body is emitted once per element with the element bound, a branch on
+it is decided while building, an `@unroll` over one of its parts unrolls, and it
+may stand where a build-time value is required. `continue` and `break` mean what
+they mean in any loop. The list must be a build-time value; one that is not is
+refused with `NK1304`. A list that comes from a `comptime?` parameter (Part I
+4.6) is unrolled in the copies made for known values and is an ordinary loop in
+the function as written. `@unroll(up_to: N)` unrolls a list of at most `N`
+elements and leaves a longer one an ordinary loop; the body is checked both
+ways, and the loop variable standing where only a build-time value is allowed is
+`NK1305`. A `for` without `@unroll` over anything but `T::fields` or
+`T::variants` is an ordinary loop; how any loop is laid out in machine code is
+not the language's. Each unrolled turn is checked with its element bound, a
+message names the loop and the turn, and every turn counts against the build's
+budget (`NK1152`).
+
+**An `if` or a `match` on a value known in this copy and turn is decided while
+the program is built**: only the branch taken is emitted, and the others are
+checked once. Nothing asks whether a value is known: what a program computes
+depends on its data, how fast it runs on the stage. `--comptime` lists each
+copy made for a value, each call and the copy it calls or why it calls the
+function as written, each unrolled loop with its turns or why it was not
+unrolled, and the branches decided.
 
 **A type is passed where the parameter list holds one** ([ADR-330](adr/adr-330.md)).
 A function that describes a type needs no value of it:
