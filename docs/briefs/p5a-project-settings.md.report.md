@@ -1,0 +1,15 @@
+Result: partial
+Files: crates/nikaia-std/src/tools/project_settings.nika crates/nikaia-std/src/tools/lowered/project_settings.rs crates/nikaia-std/src/tools/lowered.rs crates/nikaia/src/project.rs docs/selfhosting-plan.md assets/badges/self-hosted.svg
+Commit: project: settings and paths into Nikaia (P5a)
+Body: Settings and Project stay Rust; the Nikaia side is free functions over ProjectWords and (root: fs::Path, variant: String?), no ProjectPaths struct. Host is a trait, ProjectSettingsHost { env_var, native_cpu } (SysrootHost's precedent). Moved: resolve's and from_env's words (manifest read through a fn(key, default) callback), refutations, choose_cpu's check and refusal, cpu_key, cpu_rustflags, as_env, the wrapper's ten variable names (comptime, the Rust consts deleted), open's two refusal texts, own_dir/build_dir/gen_dir/switches_path/ledger_path, switches_beside. Rust Settings::of parses what Nikaia checked, in the old order (symbol prefix, Build::parse, optimizations). Still Rust: root_tag, program_name, own_copy (lowering defect, see Found), trace (checker defect, see Found), optimize and open's glue (they write Build, Manifest, Layout), entry (ENTRY), packages/members (already one-line forwards). No #909/#916 use.
+Part: #125
+Pushed: 2e134583e2d33afb6d45b6115da92e2b40fa3eb2
+Tests: --lib project:: 10 passed; it project cpu optimize settings switches + guard set 103 passed; nikaia test --project tests/compiler 242 passed, 1 failed (another agent's untracked a_view_list_lent_to_a_ref_list_parameter_beside_its_own_text_is_refused, in progress); clippy clean; lower-std fixpoint; self-hosting 82.1 %
+Gate: green
+Deviation: root_tag, program_name, own_copy and trace not moved (defects in Found, fixes need lane 2 files); optimize and Project::open keep their Rust bodies (they write Build/Manifest/Layout), open's refusal texts moved
+Found: (1) a String returned by a trait method on a generic `ref H`, then viewed, lowers as a view of the parameters: `fn tag[H: Hasher](seed: String, host: ref H) -> String { let hex = host.hex(seed); return hex.trim() }` lowers `fn tag<'r, H>(seed: &'r str, host: &'r H) -> &'r str` (rustc: cannot return value referencing local `hex`); with `host: ref Plain` it is `-> &'static str`. (2) NK2605 although the value is closed by hand: `fn closing() { let f = Flaky { name: "x" }; f.close() catch { println(f"{error}") } }` with a Cleanup that throws is refused (the it test cleanup_points FLAKY lowers without the checker so it does not see it); also `fs::open(..) catch { return }` then `file.close() catch {}`
+Needs: fix of both Found defects (views/tether lowering; check_crossings NK2605 after close), then root_tag, program_name, own_copy, trace move
+Changelog: none
+Owner: none
+Disk freed: 0 (target/nikaia-project-tests absent; / 6.9G free; no new cache entry over 100 MB)
+Rs2nika: kept 6 of 104 lines; costliest: the draft wrote methods on `impl Settings` (a Rust struct holding Build) where free functions over ProjectWords were needed (every signature and `self.` read redone); manifest.setting reads instead of a callback; Project's path methods on `self` instead of (root, variant)

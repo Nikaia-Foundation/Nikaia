@@ -1,0 +1,338 @@
+use std::collections
+use std::fs
+
+impl Settings {
+    /// Whether this build makes a library C calls (ADR-284 D4).
+    pub fn library(ref self) -> bool {
+        return self.words.artifact == "c-library"
+    }
+
+    /// Resolve every switch before anything is read, so a mistyped one fails on
+    /// its own account rather than after a compile (ADR-037 D5).
+    pub fn resolve(manifest: ref Manifest, target: String?, user_parallelism: String?) -> Settings throws {
+        let target = manifest.setting("target", target, default_target().name()).to_string()
+        let user_parallelism = manifest.setting("user-parallelism", user_parallelism, "no").to_string()
+        // **No flag of its own** ([ADR-281](../../docs/specification/adr/adr-281.md)
+        // D8): it *lives in the manifest*, because otherwise a shipped build is
+        // not reproducible, and Part I 1.2 names the two that a single build may
+        // override. The environment is not a second front door — it is how the
+        // resolved word reaches the wrapper, which Cargo owns the arguments of.
+        let reentrancy_check = manifest.setting("reentrancy-check", null, "yes").to_string()
+        let optimization = manifest.setting("optimization", null, "").to_string()
+        let refuted_claims = refuted_claims(manifest.setting("refuted-claims", null, "error"))
+        let unproved_claims = unproved_claims(manifest.setting("unproved-claims", null, "error"))
+        let artifact = artifact(manifest.setting("artifact", null, "program"))
+        let symbol_prefix = symbol_prefix(manifest.setting("symbol-prefix", null, (manifest.package_name() ?? "program").replace("-", "_")))
+        let mut build = Build::parse(target, user_parallelism, reentrancy_check)
+        (build.bounds, build.overflow) = optimizations(optimization)
+        build.skip_free_at_exit = skip_free_at_exit(optimization)
+        build.prove_through_loops = prove_through_loops(optimization)
+        build.called_from_c = artifact == "c-library"
+        return Settings { build: build, words: ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, artifact: artifact, symbol_prefix: symbol_prefix, tests: false, bind: null, cpu: null } }
+    }
+
+    /// **The command line's `--optimization` over the manifest's**
+    /// ([ADR-306](../../docs/specification/adr/adr-306.md) D1). Nothing a
+    /// program means depends on it, so a single build may say it, as it may
+    /// say `--target`.
+    /// **The command line's `--refuted-claims` over the manifest's**
+    /// ([ADR-269](../../docs/specification/adr/adr-269.md) D8): a single build
+    /// may let through a claim a newer prover refutes, as it may name another
+    /// target.
+    /// **The command line's `--unproved-claims` over the manifest's**
+    /// ([ADR-380](../../docs/specification/adr/adr-380.md) D2), the same way.
+    pub fn refutations(ref mut self, refuted: String?, unproved: String?) throws {
+        if refuted != null {
+            let word = refuted
+            self.words.refuted_claims = refuted_claims(word)
+        }
+        if unproved != null {
+            let word = unproved
+            self.words.unproved_claims = unproved_claims(word)
+        }
+        return
+    }
+
+    /// **`--cpu=LEVEL`** ([ADR-002](../../docs/specification/adr/adr-002.md)
+    /// D6): one of the target's levels, or the build fails naming them. The
+    /// baseline is the same build as no level at all.
+    pub fn choose_cpu(ref mut self, level: String?) throws {
+        let level = level ?? return
+        let target = self.build.target
+        let levels = cpu_levels(target.triple())
+        if !levels.iter().any(fn(known) { known == level }) {
+            let named = levels.iter().map(fn(known) { f"`{known}`" }).collect().join(", ")
+            throw Refused::Because(f"`--cpu={level}` is not a CPU level of `{target.name()}`. Its levels are: {named}.")
+        }
+        self.words.cpu = (if level != levels[0] { level.to_string() } else { null })
+        return
+    }
+
+    /// The CPU level as a dimension of the compiled `std` (ADR-002 D6): empty
+    /// for the baseline, the level's name, and for `native` the CPU `rustc`
+    /// finds on this machine, never the word.
+    pub fn cpu_key(ref self) -> String throws {
+        let given = self.words.cpu ?? return ""
+        return match given {
+            "native" => native_cpu(self.build.target.triple()),
+            level => level.to_string(),
+        }
+    }
+
+    /// What Cargo is told for the CPU level (ADR-002 D6, ADR-325).
+    pub fn cpu_config(ref self) -> Vec[String] {
+        return cpu_config(self.words, self.build.target)
+    }
+
+    /// **`--cpu` against the user's `RUSTFLAGS`** (#753, ADR-002 D6, Part III
+    /// 13.3). Cargo ignores the `rustflags` of `cpu_config` when `RUSTFLAGS` or
+    /// `CARGO_ENCODED_RUSTFLAGS` is set, so then the child gets
+    /// `CARGO_ENCODED_RUSTFLAGS`: the user's flags, then `-C target-cpu=L` last
+    /// (the level wins, the flags still apply). `None` where nothing is needed.
+    pub fn cpu_rustflags(ref self) -> String? throws {
+        if self.words.cpu == null {
+            return null
+        }
+        let encoded = std::env::var("CARGO_ENCODED_RUSTFLAGS") catch { null }
+        let plain = std::env::var("RUSTFLAGS") catch { null }
+        return encoded_with_cpu(encoded, plain, self.cpu_key())
+    }
+
+    pub fn optimize(ref mut self, flags: ref Vec[String]) throws {
+        if flags.is_empty() {
+            return
+        }
+        let words = flags.join(",")
+        (self.build.bounds, self.build.overflow) = optimizations(words)
+        self.build.skip_free_at_exit = skip_free_at_exit(words)
+        self.build.prove_through_loops = prove_through_loops(words)
+        self.words.optimization = words
+        return
+    }
+
+    /// The words, for the wrapper. Cargo owns the wrapper's arguments, so the
+    /// environment is the only channel the switches can travel down - and they
+    /// travel already resolved, because a second resolution is a second chance
+    /// to disagree.
+    fn as_env(ref self) -> Vec[(String, OsString)] {
+        let mut chained = [(TARGET_VAR.clone(), OsString::from(self.words.target)), (PARALLELISM_VAR.clone(), OsString::from(self.words.user_parallelism)), (REENTRANCY_VAR.clone(), OsString::from(self.words.reentrancy_check)), (OPTIMIZATION_VAR.clone(), OsString::from(self.words.optimization)), (REFUTED_VAR.clone(), OsString::from(self.words.refuted_claims)), (UNPROVED_VAR.clone(), OsString::from(self.words.unproved_claims)), (ARTIFACT_VAR.clone(), OsString::from(self.words.artifact)), (PREFIX_VAR.clone(), OsString::from(self.words.symbol_prefix))].into_iter().collect()
+        chained.extend((if self.words.tests { (TESTS_VAR.clone(), OsString::from("1")) } else { null }).collect())
+        return chained.iter().chain(self.words.cpu.map(fn(level) { (CPU_VAR.clone(), OsString::from(level)) })).collect()
+    }
+
+    /// What the driver put in the environment. Absent means the wrapper was run
+    /// by hand, and the built-in defaults are the honest answer.
+    fn from_env() -> Settings throws {
+        let word = fn(name, default) { (std::env::var(name) catch { default.to_string() }) }
+        let target = word(TARGET_VAR, default_target().name())
+        let user_parallelism = word(PARALLELISM_VAR, "no")
+        let reentrancy_check = word(REENTRANCY_VAR, "yes")
+        let optimization = word(OPTIMIZATION_VAR, "")
+        let refuted_claims = refuted_claims(word(REFUTED_VAR, "error"))
+        let unproved_claims = unproved_claims(word(UNPROVED_VAR, "error"))
+        let artifact = artifact(word(ARTIFACT_VAR, "program"))
+        let symbol_prefix = symbol_prefix(word(PREFIX_VAR, "program"))
+        let mut build = Build::parse(target, user_parallelism, reentrancy_check)
+        (build.bounds, build.overflow) = optimizations(optimization)
+        build.skip_free_at_exit = skip_free_at_exit(optimization)
+        build.prove_through_loops = prove_through_loops(optimization)
+        build.called_from_c = artifact == "c-library"
+        return Settings { build: build, words: ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, artifact: artifact, symbol_prefix: symbol_prefix, tests: std::env::var_os(TESTS_VAR) != null, bind: null, cpu: (std::env::var(CPU_VAR) catch { null }).filter(fn(level) { !level.is_empty() }) } }
+    }
+
+    /// The cache's view of this build (ADR-021 D5): the key is
+    /// `project_settings::choices_key`'s, and the backend is `"rust"` because it
+    /// names **the lowering that produced the artifact**, not the flag the user
+    /// typed, and a bare invocation *is* `--backend rust`
+    /// ([ADR-004](../../docs/specification/adr/adr-004.md) D1), so the two
+    /// spellings share one entry - which is correct, because it is one lowering.
+    /// The dimension itself stays in [`orchestrator::cache::Key::build`] (D5, D7)
+    /// so that the day a second backend caches, the literal here becomes that
+    /// backend's name and the two cannot collide.
+    pub fn choices(ref self) -> Choices {
+        let cpu_key = if self.words.cpu != null {
+            self.cpu_key().unwrap_or_default()
+        } else {
+            ""
+        }
+        let build = self.build
+        return Choices::new(choices_key(self.words, build.bounds, build.overflow, build.skip_free_at_exit, build.prove_through_loops, cpu_key), "rust")
+    }
+
+    /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.
+    fn panic_strategy(ref self) -> String {
+        return panic_strategy(self.build.target)
+    }
+}
+
+/// A project: its root, its manifest, and the switches this build resolved.
+pub struct Project {
+    pub root: fs::Path,
+    pub manifest: Manifest,
+    pub settings: Settings,
+    /// **The warnings were said already** (#481): `nikaia run` with a file
+    /// lowers it where it stands first, so its findings name the file the
+    /// author wrote, and the build of the copy then keeps them to itself.
+    pub warned: bool,
+    /// **The file a loose `nikaia run` was given** (#510): the build is of a
+    /// copy in the cache, and a message the language below raised about it is
+    /// said against the file the author wrote, not the copy's path.
+    pub written: fs::Path?,
+    /// **Which of `nikaia test`'s builds this is** (ADR-269 D12): the test
+    /// build and the program, each at each setting asked for. They differ in
+    /// what is lowered and in the switches, so in one place each would make
+    /// the others stale and Cargo would build all of them again every run;
+    /// each keeps a directory and a name of its own instead. `None` for a
+    /// plain build, which keeps `target/nikaia/` as it is.
+    pub variant: String?,
+}
+
+thread_local! {
+    /// Set while a build lowers what [`Project::warned`] said already.
+    // TODO(rs2nika): `static` cell of a `thread_local!`: no globals in tools/*.nika; a field of the state struct (the cell drops), set through `mut self`
+    static WARNED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }
+    /// Set while a build lowers the copy [`Project::written`] names: the entry
+    /// it lowers is said under that file's name (#510).
+    // TODO(rs2nika): `static` cell of a `thread_local!`: no globals in tools/*.nika; a field of the state struct (the cell drops), set through `mut self`
+    static SHOWN_AS: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(null) }
+}
+
+impl Project {
+    /// Find the project governing `start` and read its manifest.
+    ///
+    /// The walk to the root is `Layout::resolve`'s - the same one the build
+    /// cache uses - so a build and the cache entries it writes can never
+    /// disagree about which project a file belongs to.
+    pub fn open(start: ref fs::Path, target: String?, user_parallelism: String?) -> Project throws {
+        // `Layout::resolve` searches from an input file's *parent*, so it is
+        // handed the manifest's own path: the search then starts at `start`
+        // itself, which is what "build the project I am standing in" means.
+        let layout = Layout::resolve(start.join("nikaia.toml"))
+        if !layout.in_project {
+            throw Refused::Because(f"There's no `nikaia.toml` in {start.display()} or any folder above it.\n`nikaia build` needs a project. To lower a single file to Rust, run `nikaia lower {start.join("main.nika").display()}`.")
+        }
+
+        let manifest = Manifest::read(layout.root.join("nikaia.toml"))
+        // ADR-303 D5 moved `cleanup-deadline` out of the manifest. The key is
+        // still accepted, and the note is what keeps the move from being
+        // silent - a manifest whose setting stopped being read without saying
+        // so is the mistake `[build]`'s unknown-key check already exists for.
+        for note in manifest.notes() {
+            eprintln(f"note: {note}")
+        }
+        let settings = Settings::resolve(manifest, target, user_parallelism)
+        match settings.build.target.unbuildable() {
+            missing => throw Refused::Because(f"Building for `{settings.build.target.triple()}` isn't possible yet: {missing}"),
+            null => {},
+        }
+
+        return Project { root: layout.root, manifest: manifest, settings: settings, warned: false, written: null, variant: null }
+    }
+
+    /// `src/main.nika` (Part III 13.1).
+    pub fn entry(root: ref fs::Path) -> fs::Path {
+        return root.join(ENTRY)
+    }
+
+    /// Where the generated `Cargo.toml` goes. Under `target/`, because it is
+    /// build output: it is regenerated from `nikaia.toml` on every build and
+    /// editing it would be editing something the next build overwrites.
+    pub fn build_dir(ref self) -> fs::Path {
+        return self.own_dir().join("build")
+    }
+
+    /// `target/nikaia/`, or a directory under it of the [`Project::variant`]'s.
+    fn own_dir(ref self) -> fs::Path {
+        let dir = self.root.join("target").join("nikaia")
+        if self.variant != null {
+            dir.join("variants").join(self.variant)
+        } else {
+            dir
+        }
+    }
+
+    /// **The switches, as a file Cargo can see** (ADR-021 D5).
+    ///
+    /// A build switch is not a source, so nothing Cargo watches changes when
+    /// one does — and the lowering happens inside the `rustc` wrapper, which
+    /// Cargo runs only for a package it thinks is stale. So flipping
+    /// `user-parallelism` in `nikaia.toml` left the package fresh and the
+    /// binary at the **old** setting, silently: the cache had the switch as a
+    /// dimension (D5) and nothing ever got as far as asking it.
+    ///
+    /// This is the third member of the same family as the two freshness traps
+    /// the project build already carries, and it takes the same answer: give
+    /// Cargo a file. The driver writes the resolved switches here before
+    /// `cargo` runs, and the wrapper puts it into the dependency file beside
+    /// the `.nika` sources — so a switch that changed is an input that changed.
+    ///
+    /// Under `target/` and outside [`Project::build_dir`], for [`Project::gen_dir`]'s
+    /// reason: a file *inside* the path package would make it dirty on every
+    /// build rather than on a changed one.
+    pub fn switches_path(ref self) -> fs::Path {
+        return self.own_dir().join("gen").join("switches")
+    }
+
+    /// The ledger, in the project root (Part III 13.5).
+    pub fn ledger_path(root: ref fs::Path) -> fs::Path {
+        return root.join("nikaia.contracts")
+    }
+
+    /// The packages this project depends on by path - see [`packages_of`].
+    pub fn packages(ref self) -> Vec[modules::Dependency] throws {
+        return packages_of(self.manifest, self.root, true)
+    }
+
+    /// Every package of this build, the entry first - see [`members_of`].
+    pub fn members(ref self) -> Vec[Member] throws {
+        return members_of(self.manifest, self.root)
+    }
+impl Project {
+    /// The program's name for Cargo: in the shared directory its package's
+    /// name and [`Project::root_tag`], elsewhere the package's name (#495).
+
+    /// What sets this project's program apart in the shared directory: the
+    /// start of the hash of where the project is (#495).
+
+    /// The program a build in the shared directory produced, under the
+    /// project's own name in its own `target/nikaia/bin/` (#495): a hard link
+    /// where the file system allows one, a copy where not.
+}
+/// The switches file the driver wrote, where there is one.
+///
+/// The wrapper is told the generated-source directory and nothing else
+/// (`GEN_DIR_VAR` is the one channel), and the file sits in it — so this is a
+/// lookup rather than a second answer to where it lives. Absent means the
+/// wrapper was run by hand rather than by a project build, and then there is no
+/// switch anybody could flip between two runs.
+pub fn switches_beside(gen_dir: ref fs::Path) -> fs::Path? {
+    let path = gen_dir.join("switches")
+    return project_tests_is_file(path).then_some(path)
+}
+
+/// Record one invocation, if anybody asked. A trace that cannot be written is
+/// silent: this is a debugging facility, and a build must not fail because the
+/// place it was told to write a note to is unwritable.
+pub fn trace(invocation: ref Invocation, verdict: String) {
+
+    let path = std::env::var_os(TRACE_VAR) ?? return
+    let crate_name = invocation.crate_name ?? "-"
+    // **And whether this one is Cargo's target-info probe**
+    // ([ADR-166](../../docs/specification/adr/adr-166.md) D1), because that is
+    // the invocation whose standard input decides whether a build starts at all
+    // — and a trace that cannot say so cannot answer the question the trace
+    // exists for.
+    let project_tests_verdict = match invocation.is_a_probe() {
+        true => f"{verdict} (target-info probe)",
+        false => project_tests_verdict,
+    }
+    // TODO(rs2nika): `match` on `Ok`/`Err`: the `Ok` arm runs on success only, but binds a `mut` name (an arm binds none) or the `Err` arms are more than one value: the failure made `null` (Part I 7.1), `match call catch { null } { v => { let mut x = v; .. }, null => <the Err arm> }`
+    match std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        Ok(mut file) => {
+            writeln!(file, "{crate_name} {verdict}") catch {}
+        },
+        else => {},
+    }
+}
+
+

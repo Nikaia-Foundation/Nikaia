@@ -1,0 +1,3 @@
+// rs2nika: `resolve` may be in Nikaia already: tools/surface.nika `fn resolve` (the same name)
+// rs2nika: `panic_strategy` may be in Nikaia already: tools/project_settings.nika `fn panic_strategy` (the same doc comment)
+// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): cpu_levels, default_target, members_of, native_cpu, packages_of, word
