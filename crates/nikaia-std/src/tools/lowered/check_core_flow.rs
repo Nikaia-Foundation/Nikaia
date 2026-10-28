@@ -935,7 +935,8 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     check_core_flow_a_guard(state, world, host, &arm.pattern, (arm.guard).as_ref(), span);
     let ty = check_core_flow_guarded_body(state, world, host, (arm.guard).as_ref(), &arm.body, span);
     let name = check_core_flow_variable(world, value);
-    let by_reference = through_the_reference || a_list || name != "" && (on.is_a_view() || state.got_past_a_jump.contains(&name));
+    let a_map_read = state.flow.map_read_sites.contains(&(id_of(value) as i64));
+    let by_reference = through_the_reference || a_list || a_map_read || name != "" && (on.is_a_view() || state.got_past_a_jump.contains(&name));
     check_core_flow_lent_parts(state, world, host, &arm.body, &parts, handed_from, changed_from, by_reference, a_list);
     let leaves = state.exits(world, &arm.body);
     state.a_branch_that_leaves(from, leaves, span);

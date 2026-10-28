@@ -1,0 +1,19 @@
+// A `match` over a map's read binds the view the read holds, so `.clone()`
+// in the arm is an owned text (found moving `project_members`, P4a).
+
+use std::collections
+
+fn named(here: ref collections::HashMap[String, String], key: String) -> String {
+    let canonical: String = match here.get(key) {
+        ours => ours.clone(),
+        null => key.clone(),
+    }
+    return canonical
+}
+
+fn main() {
+    let mut here: collections::HashMap[String, String] = collections::HashMap()
+    here.insert("a", "b")
+    println(named(here, "a"))
+    println(named(here, "c"))
+}
