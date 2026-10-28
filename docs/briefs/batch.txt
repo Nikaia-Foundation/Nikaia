@@ -1,2 +1,3 @@
-k1-comptime-tree.md
-p5-lane1-plan.md
+b-fixforward-sweep.md
+p5a-project-settings.md
+m3a-modules-collect.md
