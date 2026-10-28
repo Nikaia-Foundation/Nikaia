@@ -1,4 +1,2 @@
-p1-large-files-plan.md
-n903a-node-id-probe.md
 n903b-node-numbers-pass.md
 p2-large-files-plan.md
