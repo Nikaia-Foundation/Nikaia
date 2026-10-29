@@ -603,6 +603,7 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
             let contract = ask.own.functions[callee] ?? ask.library.functions[callee] ?? return null
             let signature = contract.signature ?? return null
             let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
+            let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
             let mut way_out: collections::BTreeMap[String, String] = collections::BTreeMap()
             for borrowed in contract.borrows {
                 let index = vc_param_index(signature, borrowed)
@@ -611,6 +612,15 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
                 }
                 let root = root_of(ask.names, args[index]) ?? continue
                 way_out.insert(root.clone(), vc_returning(callee, borrowed, ask))
+                // A field given (`parse(c.input)`) is the part read: a change
+                // to `c.pos` leaves the view alone (#944). Any other argument
+                // under the root reads it whole.
+                let path = vc_path_of(args[index], ask)
+                if path == "" {
+                    parts.insert(root.clone())
+                } else {
+                    parts.insert(path)
+                }
                 roots.insert(root)
             }
             if roots.len() == 0 {
@@ -621,7 +631,7 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
                 shown.push(root_of(ask.names, arg) ?? "..")
             }
             let written = shown.join(", ")
-            return VcView { name: name.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", help: null }
+            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", help: null }
         }
         else => return null,
     }

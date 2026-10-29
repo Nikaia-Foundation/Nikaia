@@ -406,19 +406,22 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
             let contract = match *nikaia_std::index::get(&ask.own.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => return None } };
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
             let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut parts: collections::BTreeSet<String> = collections::BTreeSet::new();
             let mut way_out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
             for borrowed in contract.borrows.iter() {
                 let index = vc_param_index(signature, borrowed);
                 if index < 0 || index >= args.len() as i64 { continue; }
                 let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(index))) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 way_out.insert(root.to_string(), vc_returning(&callee, borrowed, ask));
+                let path = vc_path_of(nikaia_std::index::get(&args, nikaia_std::index::at(index)), ask);
+                if path == "" { parts.insert(root.to_string()); } else { parts.insert(path); }
                 roots.insert(root);
             }
             if roots.is_empty() { return None; }
             let mut shown: Vec<String> = vec![];
             for arg in args.iter() { shown.push(nikaia_std::index::or(root_of(ask.names, arg), || "..".into())); }
             let written = shown.join(", ");
-            return Some(VcView { name: name.to_string(), roots, parts: collections::BTreeSet::new(), made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), help: None });
+            return Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), help: None });
         },
         _ => return None,
     }

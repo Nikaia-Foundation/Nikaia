@@ -1,0 +1,19 @@
+struct View { head: String }
+struct Cursor { input: String, pos: i64 }
+
+fn parse(t: String) -> View {
+    return View { head: t }
+}
+
+// ADR-353 D4 (#944): `v` is made from `c.input` alone, so changing `c.pos`
+// while `v` is still used is no change to data it may point into.
+fn main() {
+    let n = 1
+    let text = f"a: {n}"
+    let mut c = Cursor { input: text, pos: 0 }
+    let v = parse(c.input)
+    c.pos = c.pos + 1
+    println(f"{c.pos}")
+    println(v.head)
+    println(c.input)
+}
