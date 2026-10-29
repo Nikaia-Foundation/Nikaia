@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1301] — 2026-10-29
+
+**Lowering defects (lane E).** A `??` default of `split_once`/`rsplit_once` stays a pair of views when every default part is a literal or a place, otherwise both halves become owned `String`s (#908). A `trim*` or `trim_*_matches` followed by `.clone()` is a copy, not a view (#915, #910). A `String` place assigned an either-text gets `.into()`; the runtime gains `From<EitherText> for String` and `PartialEq<EitherText> for String` (#911, part of #925). `?.clone()` of a `ref Bytes?` gives owned bytes, and `ref Bytes?` is lent as `Option<&[u8]>` (#913). A match arm whose body is an `if` lowers as a block, a field read in a nested match subject is copied out, and an `else` after arms naming every variant of an enum the file declares is not written (ADR-357 D5) (#930, #940, #918). An `f"…"` argument reading a `mut` argument of the same call is hoisted (part of #899); its holes read before a `ref mut self` call are copied first, and a changed binding lowers as `*x`, parenthesised only as a postfix base (#970, #937).
+
 ## [0.0.1300] — 2026-10-29
 
 **Text tiers: an element reached by index, `get` or a `for` binding owns the text changed through it (#967, #981); NK2305 names the list's place (#971).** A text field of a list or map element changed in place through `v[i]`, a `let` of the element or a `for` binding, and a text element of a list or map changed in place through a `let` of `xs[i]`, `m[k]` or `m.get(k)` (also before `??` return), now makes that element text of its own instead of lowering a borrowed text the change cannot write to. NK2305's help for a `for mut` loop whose list is read in the body names the list's place (`for i in 0..<self.pending.len()`), not its root.
