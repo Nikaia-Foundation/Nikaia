@@ -363,6 +363,7 @@ pub struct CheckState {
     pub arm_disagreements: collections::BTreeMap<i64, CheckFinding>,
     pub got_past_a_jump: collections::BTreeSet<String>,
     pub arm_bound: collections::BTreeMap<i64, i64>,
+    pub arm_compared: Vec<(i64, String, i64, String, bool, bool)>,
     pub discarded: collections::BTreeSet<i64>,
 }
 

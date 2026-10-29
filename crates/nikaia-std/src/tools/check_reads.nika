@@ -251,6 +251,29 @@ impl CheckState {
         if read_right {
             let added = self.facts.compared_views.insert((here, "rhs"))
         }
+        self.a_comparison_beside_an_arm_name(world, lhs, left, "lhs", rhs, right, here)
+        self.a_comparison_beside_an_arm_name(world, rhs, right, "rhs", lhs, left, here)
+    }
+
+    /// **A name an arm bound, read here as a value** (#954): the arm may yet
+    /// write it `ref name`, so the comparison waits for the arm's end
+    /// (`check_core_flow_arm_names_compared`).
+    fn a_comparison_beside_an_arm_name(ref mut self, world: ref CheckWorld, side: ref Expr, ty: ref Ty, which: String, other: ref Expr, other_ty: ref Ty, here: i64) sync {
+        if !self.a_side_is_a_value(world, side, ty) {
+            return
+        }
+        let name = match side {
+            Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
+            else => return,
+        }
+        let local = self.binding(name) ?? return
+        if !self.arm_bound.contains_key(local.id) {
+            return
+        }
+        let arm = self.arm_bound.get(local.id) ?? -1
+        let view = self.a_side_is_a_view(world, other, other_ty)
+        let value = self.a_side_is_a_value(world, other, other_ty)
+        self.arm_compared.push((arm, name, here, which, view, value))
     }
 
     fn a_number_beside(ref self, world: ref CheckWorld, side: ref Expr, ty: ref Ty) -> bool sync {

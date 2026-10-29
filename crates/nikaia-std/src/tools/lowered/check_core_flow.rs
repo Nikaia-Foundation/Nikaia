@@ -867,8 +867,27 @@ pub(crate) fn check_core_flow_lent_parts<H: CheckHost>(state: &mut CheckState, w
     if a_list { for (name, part) in parts.iter() { if !lent.contains(name) && !part.is_a_view() && !state.copied(world, part) { state.facts.cloned_bindings.insert((id_of(body) as i64, name.to_string())); } } }
     if !lent.is_empty() {
         state.a_lent_part_is_handed_on_as_it_is(world, host, body, &lent);
-        if !bound_by_reference { state.facts.lent_bindings.insert(id_of(body) as i64, lent); }
+        if !bound_by_reference {
+            check_core_flow_arm_names_compared(state, id_of(body) as i64, &lent);
+            state.facts.lent_bindings.insert(id_of(body) as i64, lent);
+        }
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_arm_names_compared(state: &mut CheckState, arm: i64, lent: &collections::BTreeSet<String>) {
+    let pending = state.arm_compared.to_owned();
+    let mut kept: Vec<(i64, String, i64, String, bool, bool)> = vec![];
+    for each in pending.iter() {
+        if each.0 != arm {
+            kept.push(each.clone());
+            continue;
+        }
+        if !lent.contains(&each.1) { continue; }
+        if each.4 && each.3 == "lhs" { let removed = state.facts.compared_views.remove(&(each.2, String::from("rhs"))); } else if each.4 { let removed = state.facts.compared_views.remove(&(each.2, String::from("lhs"))); } else if each.5 { let added = state.facts.compared_views.insert((each.2, each.3.to_string())); }
+    }
+    state.arm_compared = kept;
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

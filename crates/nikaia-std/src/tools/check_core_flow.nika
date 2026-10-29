@@ -1076,9 +1076,35 @@ fn check_core_flow_lent_parts[H: CheckHost](mut state: CheckState, world: ref Ch
     if lent.len() > 0 {
         state.a_lent_part_is_handed_on_as_it_is(world, host, body, lent)
         if !bound_by_reference {
+            check_core_flow_arm_names_compared(state, id_of(body) as i64, lent)
             state.facts.lent_bindings.insert(id_of(body) as i64, lent)
         }
     }
+}
+
+/// **A name the arm writes `ref name` is a view below** (#954): a comparison
+/// that read it as a value beside a view reads the view as it is
+/// (`&String != &String`), and beside a value reads the name (`*got`).
+fn check_core_flow_arm_names_compared(mut state: CheckState, arm: i64, lent: ref collections::BTreeSet[String]) sync {
+    let pending = state.arm_compared.clone()
+    let mut kept: Vec[(i64, String, i64, String, bool, bool)] = []
+    for each in pending {
+        if each.0 != arm {
+            kept.push(each.clone())
+            continue
+        }
+        if !lent.contains(each.1) {
+            continue
+        }
+        if each.4 && each.3 == "lhs" {
+            let removed = state.facts.compared_views.remove((each.2, "rhs"))
+        } else if each.4 {
+            let removed = state.facts.compared_views.remove((each.2, "lhs"))
+        } else if each.5 {
+            let added = state.facts.compared_views.insert((each.2, each.3.clone()))
+        }
+    }
+    state.arm_compared = kept
 }
 
 /// **A part an arm over a `mut` parameter bound in place is a `&mut`

@@ -405,10 +405,10 @@ pub fn project_tests_explain_output(output: ref OutputTest, outcome: ref Project
             }
         },
     }
-    for at in 0..<output.files.len().min(outcome.files.len()) {
-        let relative = output.files[at].0
-        let want = output.files[at].1
-        match outcome.files[at].1 {
+    for (wanted, written) in output.files.iter().zip(outcome.files.iter()) {
+        let relative = wanted.0
+        let want = wanted.1
+        match written.1 {
             null => println(f"{relative}: not written"),
             got => {
                 if got != want {

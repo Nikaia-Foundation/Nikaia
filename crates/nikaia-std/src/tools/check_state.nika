@@ -865,6 +865,12 @@ pub struct CheckState {
     /// **The `match` arm that bound a name**, by the binding's id: the arm's
     /// body, whose lent names the lowering writes `ref` (`CheckFacts::arm_subjects`).
     pub arm_bound: collections::BTreeMap[i64, i64],
+    /// **A comparison beside a name an arm bound** (#954), waiting for the
+    /// arm's end: (the arm's body, the name, the operator's site, the name's
+    /// side, the other side a view, the other side a value). Only once the
+    /// body is checked is it known whether the arm writes `ref name`, a view
+    /// below, which turns what the comparison reads.
+    pub arm_compared: Vec[(i64, String, i64, String, bool, bool)],
     /// The statements whose value nothing reads.
     pub discarded: collections::BTreeSet[i64],
 }

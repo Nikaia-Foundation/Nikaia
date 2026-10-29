@@ -168,6 +168,24 @@ impl CheckState {
         if number_right { let added = self.facts.compared_numbers.insert((here, String::from("rhs"))); }
         if read_left { let added = self.facts.compared_views.insert((here, String::from("lhs"))); }
         if read_right { let added = self.facts.compared_views.insert((here, String::from("rhs"))); }
+        self.a_comparison_beside_an_arm_name(world, lhs, left, String::from("lhs"), rhs, right, here);
+        self.a_comparison_beside_an_arm_name(world, rhs, right, String::from("rhs"), lhs, left, here);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn a_comparison_beside_an_arm_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty, which: String, other: &Expr, other_ty: &Ty, here: i64) {
+        if !self.a_side_is_a_value(world, side, ty) { return; }
+        let name = match side {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            _ => return,
+        };
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !self.arm_bound.contains_key(&local.id) { return; }
+        let arm = nikaia_std::index::or(self.arm_bound.get(&local.id), || -1);
+        let view = self.a_side_is_a_view(world, other, other_ty);
+        let value = self.a_side_is_a_value(world, other, other_ty);
+        self.arm_compared.push((arm, name, here, which, view, value));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

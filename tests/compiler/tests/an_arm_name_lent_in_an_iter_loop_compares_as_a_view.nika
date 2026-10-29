@@ -1,0 +1,32 @@
+// #954: a `match` arm over an option field of an `.iter()` loop variable
+// binds its name by `ref`, a view below; compared with a view (a `let` over
+// a place) or with a value, it is read the way the other side is.
+fn name() -> String {
+    return f"{1}y"
+}
+
+fn main() {
+    let a: Vec[(String, String)] = [("a", "x")]
+    let mut b: Vec[(String, String?)] = [("a", "y"), ("c", "x")]
+    b.push(("b", null))
+    for written in b.iter() {
+        let want = a[0].1
+        match written.1 {
+            null => println(f"{written.0}: none"),
+            got => {
+                if got != want {
+                    println(f"{written.0}: {got} is not {want}")
+                }
+                if want == got {
+                    println(f"{written.0}: {want} is {got}")
+                }
+                if got == name() {
+                    println(f"{written.0}: {got} is the name")
+                }
+                if name() != got {
+                    println(f"{written.0}: {got} is not the name")
+                }
+            },
+        }
+    }
+}

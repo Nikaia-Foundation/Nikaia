@@ -311,12 +311,12 @@ pub fn project_tests_explain_output(output: &OutputTest, outcome: &ProjectTestsO
             }
         },
     }
-    for at in 0..(output.files.len() as i64).min(outcome.files.len() as i64) {
-        let relative = &nikaia_std::index::get(&output.files, (at) as usize).0;
-        let want = &nikaia_std::index::get(&output.files, (at) as usize).1;
-        match &nikaia_std::index::get(&outcome.files, (at) as usize).1 {
+    for (wanted, written) in output.files.iter().zip(outcome.files.iter()) {
+        let relative = &wanted.0;
+        let want = &wanted.1;
+        match written.1 {
             None => { println!("{}: not written", relative); },
-            Some(got) => {
+            Some(ref got) => {
                 if got != want {
                     println!("{} (- expected, + written):", relative);
                     print!("{}", project_tests_difference(&want, got));
