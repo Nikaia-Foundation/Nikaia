@@ -1,0 +1,40 @@
+use std::collections
+
+// `let mut x = m.entry(k).or_insert(v)` binds the `&mut` the map hands back
+// (#974): changed through, never reassigned, so the Rust takes no `mut`.
+struct Class { members: Vec[String], n: i64 }
+
+fn put(mut classes: collections::BTreeMap[String, collections::BTreeMap[i64, Class]], file: String, root: i64, member: String) {
+    let mut class = classes.entry(file.clone()).or_insert(collections::BTreeMap()).entry(root).or_insert(Class { members: [], n: 0 })
+    class.members.push(member.clone())
+    class.n = class.n + 1
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    let k: String = "a"
+    for _ in 0..<2 {
+        let mut all = m.entry(k.clone()).or_insert([])
+        if !all.contains("x") {
+            all.push("x")
+        }
+        all.push("y")
+    }
+    let mut late = m.entry("b").or_insert_with(fn() { [] })
+    late.push("z")
+    late.push("w")
+    let mut h: collections::HashMap[String, Vec[i64]] = collections::HashMap()
+    let mut nums = h.entry("n").or_insert([])
+    nums.push(4)
+    for (key, v) in m {
+        println(f"{key} {v.len()}")
+    }
+    let got = h["n"] ?? return
+    println(f"{got.len()}")
+    let mut c: collections::BTreeMap[String, collections::BTreeMap[i64, Class]] = collections::BTreeMap()
+    put(c, "f", 1, "u")
+    put(c, "f", 1, "v")
+    let r = c["f"] ?? return
+    let cl = r[1] ?? return
+    println(f"{cl.members.len()} {cl.n}")
+}

@@ -646,6 +646,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let read_through_a_jump = jumped && !copied_read && !copied_word;
     let got_a_view = got && !a_copy_by_value(&bound) && !copies_as_a_view(&bound) && !(state.a_package_copy(world, &bound) && check_core_stmt_a_named(&bound));
     if mutable && (read_through_a_jump || got_a_view || check_core_stmt_a_field_jump(&state, world, value)) { check_core_stmt_mut_view(state, world, value, span, a_copy_by_value(&bound)); } else if mutable && ty.is_none() && names.len() == 1 && shape.is_empty() && check_core_stmt_a_named(&bound) && !a_copy_by_value(&bound) { ({ let __nikaia_arg3 = state.a_package_copy(world, &bound); check_core_stmt_mut_view_of_an_element(state, world, value, __nikaia_arg3) }); }
+    if mutable && state.flow.std_entry_views.contains(&(id_of(value) as i64)) { state.facts.mut_view_reads.insert(id_of(value) as i64, String::from("")); }
     if check_core_stmt_a_path(&bound) && state.made_from_text(world, value) { state.flow.text_paths.insert(id); }
     if bound.is_unknown() || state.a_drivers_row(world, value) { state.flow.unknown_bound.insert(id); }
     let mut literal: Option<String> = None;
@@ -665,6 +666,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     local.immutable = immutable;
     local.written_mut = mutable;
     state.bind_local(local);
+    if mutable && state.facts.mut_view_reads.contains_key(&(id_of(value) as i64)) { state.flow.mut_view_bindings.insert(id); }
     check_core_stmt_unit()
 }
 

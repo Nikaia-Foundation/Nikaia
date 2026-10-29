@@ -198,6 +198,12 @@ pub struct CheckFlow {
     /// A `get` of a `std` list or map, by the call's id: the read a `let mut`
     /// past a jump turns into a mutable view of the entry (#952).
     pub std_gets: collections::BTreeSet[i64],
+    /// An `Entry`'s `or_insert` or `or_insert_with`, by the call's id: the
+    /// value in the map, which a `let mut` binds as the `&mut` itself (#974).
+    pub std_entry_views: collections::BTreeSet[i64],
+    /// The bindings a `let mut` made a mutable view of a place, by their id:
+    /// the `&mut` already, lent on to a `mut` parameter as `&mut *x` (#975).
+    pub mut_view_bindings: collections::BTreeSet[i64],
     /// The ledger key the last method call resolved to (ADR-293 D24).
     pub last_resolved: String?,
     /// The name of the receiver of the method call being walked, where it is a
@@ -358,6 +364,8 @@ impl CheckFlow {
             map_views: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             std_gets: collections::BTreeSet(),
+            std_entry_views: collections::BTreeSet(),
+            mut_view_bindings: collections::BTreeSet(),
             last_resolved: null,
             receiver_name: null,
             receiver_from_text: false,
