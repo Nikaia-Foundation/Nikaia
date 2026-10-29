@@ -136,3 +136,4 @@
 /home/user/Nikaia/docs/briefs/p5d-project-check.md 537796 5
 /home/user/Nikaia/docs/briefs/p5b-project-lower.md 836753 8
 /home/user/Nikaia/docs/briefs/architect-task.md 1693019 43
+/home/user/Nikaia/docs/briefs/b-fixforward-fmt-tuple-closure.md 459614 16
