@@ -576,6 +576,50 @@ pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckW
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], at: i64, var: &str, span: &Span) {
+    if at >= args.len() as i64 || at >= found.len() as i64 { return; }
+    let held: Ty = unviewed_type(&nikaia_std::index::or(match bound.get(var) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown));
+    let want: Ty = if held.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { held };
+    let walked: Ty = unviewed_type(nikaia_std::index::get(&found, nikaia_std::index::at(at)));
+    let have: Ty = if walked.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { walked };
+    let plain = match have {
+        Ty::Named { ref args, .. } => args.is_empty(),
+        _ => false,
+    } && match want {
+        Ty::Named { ref args, .. } => args.is_empty(),
+        _ => false,
+    };
+    let numbers = match have {
+        Ty::Named { ref name, .. } => a_number_name(name),
+        _ => false,
+    } && match want {
+        Ty::Named { ref name, .. } => a_number_name(name),
+        _ => false,
+    };
+    if !plain || numbers || have.fits(&want) { return; }
+    let at_span = check_span_at(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), span);
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_member(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], span: &Span) {
+    let entry = check_core_call_on_base(key);
+    let list = key.starts_with("Vec::");
+    let set = key.starts_with("collections::HashSet::") || key.starts_with("collections::BTreeSet::");
+    let map = key.starts_with("collections::HashMap::") || key.starts_with("collections::BTreeMap::");
+    if list && (entry == "push" || entry == "contains") { check_core_call_on_member_one(state, world, key, bound, args, found, 0, "T", span); } else if list && entry == "insert" { check_core_call_on_member_one(state, world, key, bound, args, found, 1, "T", span); } else if set && (entry == "insert" || entry == "contains" || entry == "remove") { check_core_call_on_member_one(state, world, key, bound, args, found, 0, "T", span); } else if map && entry == "insert" {
+        check_core_call_on_member_one(state, world, key, bound, args, found, 0, "K", span);
+        check_core_call_on_member_one(state, world, key, bound, args, found, 1, "V", span);
+    } else if map && (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") { check_core_call_on_member_one(state, world, key, bound, args, found, 0, "K", span); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, key: &str, contract: &FnContract, span: &Span) -> Ty {
     let node = id_of(receiver) as i64;
     state.facts.method_callees.insert(node, key.to_string());
@@ -766,6 +810,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, &found, &expected, span);
     check_core_call_on_given(state, world, host, key, args, &found, &expected, span);
     check_core_call_on_extended(state, world, key, &bound, args, &found, span);
+    check_core_call_on_member(state, world, key, &bound, args, &found, span);
     state.a_pattern_of_owned_text(key, args, &found, span);
     for (name, ty) in argument_bindings(contract, &found) { if !bound.contains_key(&name) { bound.insert(name.to_string(), ty.clone()); } }
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);

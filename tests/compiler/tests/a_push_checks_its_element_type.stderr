@@ -1,0 +1,8 @@
+error[NK1102]: `Vec::push` expects `i64` here, but you're passing `String`.
+  --> tests/a_push_checks_its_element_type.nika:3:12
+   |
+ 3 |     v.push("a")
+   |            ^^^
+   |
+   = help: Make it an `i64`, or change the declaration to `String`.
+1 type error

@@ -1,0 +1,8 @@
+error[NK1102]: `collections::HashMap::insert` expects `i64` here, but you're passing `String`.
+  --> tests/a_map_insert_checks_its_value_type.nika:5:19
+   |
+ 5 |     m.insert("a", "b")
+   |                   ^^^
+   |
+   = help: Make it an `i64`, or change the declaration to `String`.
+1 type error

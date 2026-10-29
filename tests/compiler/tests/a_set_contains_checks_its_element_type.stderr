@@ -1,0 +1,8 @@
+error[NK1102]: `collections::HashSet::contains` expects `i64` here, but you're passing `String`.
+  --> tests/a_set_contains_checks_its_element_type.nika:6:24
+   |
+ 6 |     println(s.contains("a"))
+   |                        ^^^
+   |
+   = help: Make it an `i64`, or change the declaration to `String`.
+1 type error

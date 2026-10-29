@@ -1,0 +1,7 @@
+use std::collections
+
+fn main() {
+    let mut s: collections::HashSet[i64] = collections::HashSet()
+    s.insert(1)
+    println(s.contains("a"))
+}

@@ -734,6 +734,61 @@ fn check_core_call_on_extended(mut state: CheckState, world: ref CheckWorld, key
     state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
 }
 
+/// **A collection's own element, key or value, handed to a method** (#964):
+/// the argument at `at` is compared with what the receiver binds to `var`
+/// (`T`, `K` or `V`). Only plain named types are compared; two numbers are
+/// left to the literal rules, and a text literal's `str` is a `String`.
+fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr], found: ref Vec[Ty], at: i64, var: ref String, span: ref Span) sync {
+    if at >= args.len() as i64 || at >= found.len() as i64 {
+        return
+    }
+    let held: Ty = unviewed_type(bound.get(var)?.clone() ?? Ty::Unknown)
+    let want: Ty = if held.text() == "str" { Ty::Named { name: "String", args: [], view: false } } else { held }
+    let walked: Ty = unviewed_type(found[at])
+    let have: Ty = if walked.text() == "str" { Ty::Named { name: "String", args: [], view: false } } else { walked }
+    let plain = match have {
+        Ty::Named { args, .. } => args.len() == 0,
+        else => false,
+    } && match want {
+        Ty::Named { args, .. } => args.len() == 0,
+        else => false,
+    }
+    let numbers = match have {
+        Ty::Named { name, .. } => a_number_name(name),
+        else => false,
+    } && match want {
+        Ty::Named { name, .. } => a_number_name(name),
+        else => false,
+    }
+    if !plain || numbers || have.fits(want) {
+        return
+    }
+    let at_span = check_span_at(world, args[at], span)
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
+}
+
+/// **Which argument of a list, set or map method is one of its elements,
+/// keys or values** (#964): `push`, `insert`, `contains`, `contains_key`,
+/// `remove`, `get`, `entry`.
+fn check_core_call_on_member(mut state: CheckState, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+    let entry = check_core_call_on_base(key)
+    let list = key.starts_with("Vec::")
+    let set = key.starts_with("collections::HashSet::") || key.starts_with("collections::BTreeSet::")
+    let map = key.starts_with("collections::HashMap::") || key.starts_with("collections::BTreeMap::")
+    if list && (entry == "push" || entry == "contains") {
+        check_core_call_on_member_one(state, world, key, bound, args, found, 0, "T", span)
+    } else if list && entry == "insert" {
+        check_core_call_on_member_one(state, world, key, bound, args, found, 1, "T", span)
+    } else if set && (entry == "insert" || entry == "contains" || entry == "remove") {
+        check_core_call_on_member_one(state, world, key, bound, args, found, 0, "T", span)
+    } else if map && entry == "insert" {
+        check_core_call_on_member_one(state, world, key, bound, args, found, 0, "K", span)
+        check_core_call_on_member_one(state, world, key, bound, args, found, 1, "V", span)
+    } else if map && (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") {
+        check_core_call_on_member_one(state, world, key, bound, args, found, 0, "K", span)
+    }
+}
+
 /// **A method call the ledger describes**: reached, asked whether it changes,
 /// takes, walks, fails or pauses, its arguments walked against the
 /// signature the receiver binds, and typed.
@@ -996,6 +1051,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, found, expected, span)
     check_core_call_on_given(state, world, host, key, args, found, expected, span)
     check_core_call_on_extended(state, world, key, bound, args, found, span)
+    check_core_call_on_member(state, world, key, bound, args, found, span)
     state.a_pattern_of_owned_text(key, args, found, span)
     // The receiver first (ADR-288), then whatever the arguments can still
     // say (ADR-295 D2).
