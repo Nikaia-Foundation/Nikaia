@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1273] — 2026-10-29
+
+**A view made from one field of a struct leaves its other fields free (#944).**
+- NK2305 no longer refuses a change to one field of a struct while a view made from another field (`parse(c.input)`) is still used; a change to the viewed field, or to a path that holds it, is still refused.
+
 ## [0.0.1272] — 2026-10-29
 
 **A text moved into a struct field, a tuple or a list while a view of it is still used is followed there: changing it in place is NK2305 (ADR-353 D3, D4, #942).**
