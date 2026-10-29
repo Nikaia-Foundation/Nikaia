@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1289] — 2026-10-29
+
+**`push`, `insert`, `contains`, `contains_key`, `remove`, `get` and `entry` on lists, sets and maps refuse an element, key or value of the wrong plain type with `NK1102` instead of a rustc error (Fixes #964).**
+- Compared: plain named types; numbers stay with the literal rules, and `str` and `String` count as one. Lists, tuples, options and aliases as arguments are not compared yet.
+
 ## [0.0.1288] — 2026-10-29
 
 **`extend` on a list, a `HashSet` or a `BTreeSet` refuses elements of the wrong type with `NK1102` instead of a rustc error (ADR-collections-1, Fixes #963).**
