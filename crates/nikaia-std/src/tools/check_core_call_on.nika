@@ -1030,9 +1030,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // generic type of the program's own by position (#497).
     let mut bound = receiver_bindings(contract, on)
     for (name, ty) in state.arguments_of(on) {
-        if !bound.contains_key(name) {
-            bound.insert(name.clone(), ty.clone())
-        }
+        bound.entry(name).or_insert(ty)
     }
     // The arguments are walked **after** the contract is in hand (ADR-288).
     let patterns = expected_arguments(contract)
@@ -1175,9 +1173,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // The receiver first (ADR-288), then whatever the arguments can still
     // say (ADR-295 D2).
     for (name, ty) in argument_bindings(contract, found) {
-        if !bound.contains_key(name) {
-            bound.insert(name.clone(), ty.clone())
-        }
+        bound.entry(name).or_insert(ty)
     }
     state.a_bound_the_argument_does_not_meet(world, key, bound, span)
     check_crossings_a_standard_bound_not_met(state, world, key, bound, span)

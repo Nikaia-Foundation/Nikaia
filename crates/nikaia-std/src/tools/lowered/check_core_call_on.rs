@@ -789,7 +789,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.a_pausing_call_in_an_action(&written, contract, span);
     if !known_text { state.may_fail_here(world, host, key, contract, span); }
     let mut bound = receiver_bindings(contract, on);
-    for (name, ty) in state.arguments_of(on) { if !bound.contains_key(&name) { bound.insert(name.to_string(), ty.clone()); } }
+    for (name, ty) in state.arguments_of(on) { bound.entry(String::from(name)).or_insert(ty); }
     let patterns = expected_arguments(contract);
     let mut expected: Vec<Ty> = vec![];
     for ty in patterns.iter() { expected.push(substitute(ty, &bound)); }
@@ -891,7 +891,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     check_core_call_on_extended(state, world, key, &bound, args, &found, span);
     check_core_call_on_member(state, world, key, &bound, args, &found, span);
     state.a_pattern_of_owned_text(key, args, &found, span);
-    for (name, ty) in argument_bindings(contract, &found) { if !bound.contains_key(&name) { bound.insert(name.to_string(), ty.clone()); } }
+    for (name, ty) in argument_bindings(contract, &found) { bound.entry(String::from(name)).or_insert(ty); }
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);
     check_crossings_a_standard_bound_not_met(state, world, key, &bound, span);
     let substituted = substitute(&result, &bound);
