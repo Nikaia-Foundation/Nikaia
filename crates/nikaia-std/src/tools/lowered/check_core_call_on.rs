@@ -670,6 +670,17 @@ pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &Chec
     state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
 }
 
+pub(crate) fn check_core_call_on_extend_literal(key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], expected: &mut Vec<Ty>) {
+    let extends = key == "Vec::extend" || key == "collections::HashSet::extend" || key == "collections::BTreeSet::extend";
+    if !extends || args.len() != 1 || expected.len() != 1 { return; }
+    let literal = matches!(*nikaia_std::index::get(&args, 0), Expr::ListLit { .. });
+    let element: Ty = match match bound.get("T") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    if literal { { let __nikaia_stored = Ty::Named { name: String::from("Vec"), args: vec![element], view: false }; nikaia_std::index::set(&mut *expected, 0usize, __nikaia_stored); } }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_on_member(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], span: &Span) {
@@ -781,6 +792,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let patterns = expected_arguments(contract);
     let mut expected: Vec<Ty> = vec![];
     for ty in patterns.iter() { expected.push(substitute(ty, &bound)); }
+    check_core_call_on_extend_literal(key, &bound, args, &mut expected);
     let outer_paused: Vec<i64> = state.flow.paused_args.to_owned();
     state.flow.paused_args = vec![];
     let outer_parallel: Option<i64> = state.in_parallel;

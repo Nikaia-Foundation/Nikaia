@@ -1,0 +1,11 @@
+// A list literal handed to `extend` is a list of the receiver's elements
+// (ADR-collections-1 D3): into owned text it builds owned text, as `push` does.
+fn main() {
+    let mut w: Vec[String] = ["x"]
+    w.extend(["y", "z"])
+    let t = w[0] + w[2]
+    println(f"{w.len()} {t}")
+    let mut a = [1, 2]
+    a.extend([3])
+    println(f"{a.len()}")
+}

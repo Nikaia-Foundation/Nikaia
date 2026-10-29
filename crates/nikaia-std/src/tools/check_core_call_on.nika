@@ -862,6 +862,26 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
     state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
 }
 
+/// **A list literal handed to `extend` is a list of the receiver's elements**
+/// (ADR-collections-1 D3): `items` is `?` in the ledger, since a list, a set
+/// and a sequence all fit, but a literal is a list, and it is walked against
+/// `Vec[T]` as it was before the parameter widened, so `w.extend(["y"])` into
+/// a `Vec[String]` builds owned text.
+fn check_core_call_on_extend_literal(key: ref String, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr], mut expected: Vec[Ty]) {
+    let extends = key == "Vec::extend" || key == "collections::HashSet::extend" || key == "collections::BTreeSet::extend"
+    if !extends || args.len() != 1 || expected.len() != 1 {
+        return
+    }
+    let literal = match args[0] {
+        Expr::ListLit { .. } => true,
+        else => false,
+    }
+    let element: Ty = bound.get("T")?.clone() ?? return
+    if literal {
+        expected[0] = Ty::Named { name: "Vec", args: [element], view: false }
+    }
+}
+
 /// **Which argument of a list, set or map method is one of its elements,
 /// keys or values** (#964): `push`, `insert`, `contains`, `contains_key`,
 /// `remove`, `get`, `entry`.
@@ -1017,6 +1037,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     for ty in patterns {
         expected.push(substitute(ty, bound))
     }
+    check_core_call_on_extend_literal(key, bound, args, expected)
     let outer_paused: Vec[i64] = state.flow.paused_args.clone()
     state.flow.paused_args = []
     // **A lambda handed to a walk of a `Par[T]` runs on several cores at
