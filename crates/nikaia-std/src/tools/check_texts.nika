@@ -454,6 +454,16 @@ impl CheckState {
                 }
                 got = wants[at].clone()
             }
+            // **A `null` where the part is a `T?`** is that `T?` (#957):
+            // `(null, 1)` under `(String?, i64)`, beside `("y", 2)`.
+            if got == null && check_overflow_a_nullable(wants[at]) {
+                match parts[at] {
+                    Expr::LitNull(_) => {
+                        got = wants[at].clone()
+                    },
+                    else => {}
+                }
+            }
             if got != null {
                 built = true
                 answered.push(got ?? Ty::Unknown)

@@ -7,8 +7,7 @@ fn name() -> String {
 
 fn main() {
     let a: Vec[(String, String)] = [("a", "x")]
-    let mut b: Vec[(String, String?)] = [("a", "y"), ("c", "x")]
-    b.push(("b", null))
+    let b: Vec[(String, String?)] = [("a", "y"), ("c", "x"), ("b", null)]
     for written in b.iter() {
         let want = a[0].1
         match written.1 {

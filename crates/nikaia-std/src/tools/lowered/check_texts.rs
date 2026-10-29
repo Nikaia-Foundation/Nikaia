@@ -351,6 +351,12 @@ impl CheckState {
                 }
                 got = Some((*nikaia_std::index::get(&wants, nikaia_std::index::at(at))).clone());
             }
+            if got.is_none() && check_overflow_a_nullable(nikaia_std::index::get(&wants, nikaia_std::index::at(at))) {
+                match *nikaia_std::index::get(&parts, nikaia_std::index::at(at)) {
+                    Expr::LitNull(_) => { got = Some((*nikaia_std::index::get(&wants, nikaia_std::index::at(at))).clone()); },
+                    _ => { },
+                }
+            }
             if got.is_some() {
                 built = true;
                 answered.push(nikaia_std::index::or(got, || Ty::Unknown));

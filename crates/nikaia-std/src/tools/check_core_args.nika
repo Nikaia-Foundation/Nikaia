@@ -603,7 +603,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
     }
     let mut k = 0
     for item in items {
-        let found: Ty = founds[k].clone()
+        let found: Ty = check_core_args_declared_nulls(item, founds[k], declared)
         k += 1
         // **A number beside text, where neither has a type yet** (Part III C.1).
         let shape = element_kind(item, found)
@@ -787,6 +787,55 @@ pub fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref
         else => {}
     }
     return null
+}
+
+/// **A `null` part of a tuple where the declared element holds a `T?` there**
+/// (#957): `[("a", "y"), ("b", null)]` under `Vec[(String, String?)]`. The
+/// part agrees with any, as the declared type says what it is; the use
+/// (`list_of_tuple_literals`) types it.
+fn check_core_args_declared_nulls(item: ref Expr, found: ref Ty, declared: ref Ty?) -> Ty {
+    let ty = declared ?? return found.clone()
+    let element: Ty = match ty {
+        Ty::Named { name, args, .. } => {
+            if name != "Vec" || args.len() != 1 {
+                return found.clone()
+            }
+            args[0].clone()
+        },
+        else => return found.clone(),
+    }
+    let wants: Vec[Ty] = match element {
+        Ty::Tuple(parts) => parts.clone(),
+        else => return found.clone(),
+    }
+    let each: Vec[Ty] = match found {
+        Ty::Tuple(parts) => parts.clone(),
+        else => return found.clone(),
+    }
+    match item {
+        Expr::Tuple(parts, _) => {
+            if parts.len() != wants.len() || parts.len() != each.len() {
+                return found.clone()
+            }
+            let mut out: Vec[Ty] = []
+            let mut p = 0
+            while p < parts.len() {
+                let a_null = match parts[p] {
+                    Expr::LitNull(_) => true,
+                    else => false,
+                }
+                if a_null && check_overflow_a_nullable(wants[p]) {
+                    out.push(Ty::Unknown)
+                } else {
+                    out.push(each[p].clone())
+                }
+                p += 1
+            }
+            return Ty::Tuple(out)
+        },
+        else => {}
+    }
+    return found.clone()
 }
 
 /// A tuple of a list literal, its text literals made text of their own where

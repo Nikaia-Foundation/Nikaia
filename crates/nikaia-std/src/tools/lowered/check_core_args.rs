@@ -465,7 +465,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     let mut k: i64 = 0;
     for item in items.iter() {
-        let found: Ty = (*nikaia_std::index::get(&founds, (k) as usize)).clone();
+        let found: Ty = check_core_args_declared_nulls(item, nikaia_std::index::get(&founds, (k) as usize), (declared).as_ref());
         k += 1;
         let shape = element_kind(item, &found);
         if shape.is_some() {
@@ -624,6 +624,40 @@ pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &C
         _ => { },
     }
     None
+}
+
+pub(crate) fn check_core_args_declared_nulls(item: &Expr, found: &Ty, declared: Option<&Ty>) -> Ty {
+    let ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return found.clone() };
+    let element: Ty = match ty {
+        Ty::Named { name, args, .. } => {
+            if name != "Vec" || args.len() != 1 { return found.clone(); }
+            (*nikaia_std::index::get(&args, 0)).clone()
+        },
+        _ => return found.clone(),
+    };
+    let wants: Vec<Ty> = match element {
+        Ty::Tuple(ref parts) => parts.to_owned(),
+        _ => return found.clone(),
+    };
+    let each: Vec<Ty> = match found {
+        Ty::Tuple(parts) => parts.to_owned(),
+        _ => return found.clone(),
+    };
+    match item {
+        Expr::Tuple(parts, _) => {
+            if (parts.len() as i64) != wants.len() as i64 || (parts.len() as i64) != each.len() as i64 { return found.clone(); }
+            let mut out: Vec<Ty> = vec![];
+            let mut p: i64 = 0;
+            while ((p) as usize) < parts.len() {
+                let a_null = matches!(*nikaia_std::index::get(&parts, (p) as usize), Expr::LitNull(_));
+                if a_null && check_overflow_a_nullable(nikaia_std::index::get(&wants, (p) as usize)) { out.push(Ty::Unknown); } else { out.push((*nikaia_std::index::get(&each, (p) as usize)).clone()); }
+                p += 1;
+            }
+            return Ty::Tuple(out);
+        },
+        _ => { },
+    }
+    found.clone()
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
