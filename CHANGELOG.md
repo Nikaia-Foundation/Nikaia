@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1286] — 2026-10-29
+
+**`BTreeMap::entry`, `HashSet::extend` and `BTreeSet::extend` exist; `Vec::extend` takes a list, a set or a sequence; `s.extend(xs.clone())` copies the elements, not the list (ADR-collections-1, part of #950).**
+- Decided and specified, not yet built: `for mut x in v` is a `let mut` view of each element, written back; keys and set elements stay unchangeable (`NK1306`) (ADR-views-2, #951).
+
 ## [0.0.1285] — 2026-10-29
 
 **A name bound to a text literal and changed in place (`push_str`, `+=`) is declared `String`, and the set, list of tuples or typed `let` it goes into holds `String`, not `&'static str` (ADR-282 D17, Fixes #961).**
