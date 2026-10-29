@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1283] — 2026-10-29
+
+**`let mut e = v[i]` over a `mut` list binds a view of the element (`&mut v[i]`), also for a struct of numbers: a write through `e` reaches the list instead of being lost in a copy (Fixes #959).**
+
 ## [0.0.1282] — 2026-10-29
 
 **A `for` lends its list: changing it in the body (a mutating method, an element assignment, an assignment of the whole list) is `NK2305` instead of a rustc error; reading stays allowed (Part I 3.3, Fixes #960).**
