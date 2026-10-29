@@ -1,0 +1,2 @@
+[forms modules_]
+parser::parse_to_ast({a}) = host.parse_unit({a}) # the host parses (M3a)

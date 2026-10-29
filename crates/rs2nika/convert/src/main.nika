@@ -20660,7 +20660,7 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
     // the corpus: each of the others changes nothing or costs lines).
     let all: Vec[String] = ["renames", "names", "tail", "rmatch", "m2", "consts", "texts", "p4apre", "forms", "p3b", "p4b", "p4a", "uses", "typed"]
     let mut stages: Vec[String] = []
-    for w in all { if !skip.contains(w) { stages.push(w.clone()) } }
+    for w in all { if !skip.contains(w) || (w == "forms" && ctx.prefix != "" && ctx.form_from.len() > 0 && !ctx.skips.contains("forms")) { stages.push(w.clone()) } }
     let mut lines: Vec[String] = []
     // the state's methods (`tr_convert` wrote them as free functions of
     // `state`) read its fields and methods through `state` and `world`
@@ -20709,7 +20709,9 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
     if stages.contains("consts") { lines = rs2nika_prefix_consts(ctx, lines) }
     if stages.contains("texts") { lines = rs2nika_text_values(ctx, lines) }
     if stages.contains("p4apre") { lines = rs2nika_p4a_pre(ctx, lines) }
-    if stages.contains("forms") { lines = rs2nika_forms(ctx, lines) }
+    // R295 and R314 as in the line engine: a `[forms X_]` entry's `host.`
+    // threads the host through the file's functions
+    if stages.contains("forms") { lines = rs2nika_free_hosts(ctx, rs2nika_forms(ctx, lines)) }
     if stages.contains("p3b") { lines = rs2nika_p3b_shapes(ctx, lines) }
     if stages.contains("p4b") { lines = rs2nika_p4b_post(ctx, lines) }
     if stages.contains("p4a") { lines = rs2nika_p4a_post(ctx, lines) }

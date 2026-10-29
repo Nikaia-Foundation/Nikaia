@@ -1,0 +1,8 @@
+fn modules_read_unit[H: ModulesHost](source: String, m: ref Manifest, host: ref H) -> i64 throws {
+    let parsed = host.parse_unit(source)
+    let s = m.setting("x")
+    return parsed + s
+}
+pub fn modules_outer[H: ModulesHost](source: String, m: ref Manifest, host: ref H) -> i64 throws {
+    return modules_read_unit(source, m, host)
+}
