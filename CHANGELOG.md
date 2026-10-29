@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1287] — 2026-10-29
+
+**`let mut e = v[i]` and `let mut f = s.field` (a struct of numbers) are mutable views: reading the list or struct before the view's last use is `NK2305` instead of a rustc error, and a write through `f` reaches `s` (Part I 6.8, Fixes #962).**
+- ADR-views-2 narrowed: `mut` stands before the whole `for` head; one `mut` name inside a tuple (`let (tx, mut rx)`, `for (k, mut v) in m`) is refused for now (`NK1307`, reserved), and map values written in place wait for it (#951).
+
 ## [0.0.1286] — 2026-10-29
 
 **`BTreeMap::entry`, `HashSet::extend` and `BTreeSet::extend` exist; `Vec::extend` takes a list, a set or a sequence; `s.extend(xs.clone())` copies the elements, not the list (ADR-collections-1, part of #950).**
