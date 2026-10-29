@@ -1,14 +1,13 @@
-**(1) What cost the most.** Reading `docs/architect.md`. At about 28k tokens it was over the read limit, so it took two reads. Most of it is the *State* section, a history log going back to 10-24, and I needed only the newest entry. After that, about six greps confirmed that `std` covers what the P5a rest needs (`append`, `copy`, `replacen`, `file_name`); three of them came back empty because I searched the wrong files.
-
-**(2) What the brief could have handed me.**
-- The path of the report behind the cut (`b934-...md.report.md`) and whether the cut was a false one. I worked that out myself from the report.
-- The plan row for the P5a rest. I had to re-find the line ranges in `project.rs`, the existing host trait and its Rust impl, and the callers.
-- An index of `std` functions (a `where.nika` that also covers `std`). I checked `replacen` only indirectly, by seeing that `tools/*.nika` already uses it.
-
-**(3) Checks.**
-- Useful: `git status`/`log`, the b934 report, the P5a report, the `project.rs` ranges, the `append` option of `fs::open`/`fs::write`, `scripts/pre-push-check.sh`.
-- Wasted: the specification grep for `replace`, the `text.nika`/`text.rs` grep, and the `rs2nika.names` grep (wrong path).
-- Against the rules: I tried `git pull --rebase` even though agents in the shared checkout do not rebase. It failed on other sessions' files; the plain push worked.
-- Not done: I did not check that the `it` test filters named in p5e exist; I left that to the builder with `where.nika`.
-
-**(4) The change that would save the most.** Move the *State* entries older than about two days out of `docs/architect.md` into an archive file, and have `architect-task.md` name the cut brief's report path and the next plan row's `Cut:` ranges. That would have saved about 25k tokens and around five turns.
+1. **Most turns and time:** designing the new Rust host for K3a part 1 (`ComptimeLowerHost`). I read about 480 lines of `comptime_run.rs`, `comptime_tree.nika`'s API, `Parsed::keeping`, `may_not_run`, the M3b host pattern and P5b's step for the converter rows (`[forms]`/`[hosts]`), about 8 tool calls. The second biggest cost was reading `docs/architect.md` whole: about 29k tokens, three quarters of it the *State* diary, which I needed only for the newest two entries.
+2. **What the brief could have handed me:**
+   - The cut report's `Deviation:` text with the governing ADR next to it (D10), so I didn't have to reason out whether the cut was false.
+   - The current *State* entry alone, instead of a pointer to the whole file.
+   - The plan row's `Cut:`/`Convert:` line for the next move, with ranges checked against today's tree. I had to re-check that K1 landed after a4b33a0 and re-grep the function lines.
+3. **Checks:**
+   - Useful: `git log` on `project.rs` (p5e's ranges still hold), the grep of callers (`grammar_run.rs`, and none in `it/`), and the `--tethers` flag existing before I wrote a rule naming it.
+   - Wasted: none really. The CI query only showed runs in progress, so it decided nothing.
+   - Not run, so the k3a1 brief carries unverified claims:
+     - that the `it` filters `comptime grammar_at_build_time` match any tests;
+     - that `String.len()` counts bytes (I handed that check to the builder);
+     - that P5b's convert command still works.
+4. **One change:** split `docs/architect.md` so that *State* keeps only the last 3 entries and the older ones move to `docs/architect-history.md`. Also, `drive.nika` should write the cut brief's report and debrief paths into `architect-input.txt`. That would have saved about 25k tokens and two calls.
