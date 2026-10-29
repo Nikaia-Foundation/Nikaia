@@ -1,0 +1,25 @@
+// The help of NK2305 for a read inside a `for mut` names the list's place,
+// not its root (#971).
+
+struct Jobs {
+    pending: Vec[i64],
+    seen: i64,
+}
+
+impl Jobs {
+    fn count(ref self) -> i64 {
+        return self.seen
+    }
+
+    fn run(ref mut self) {
+        for mut c in self.pending {
+            c += self.count()
+        }
+    }
+}
+
+fn main() {
+    let mut jobs = Jobs { pending: [1, 2], seen: 0 }
+    jobs.run()
+    println(f"{jobs.pending.len()}")
+}

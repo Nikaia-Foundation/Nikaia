@@ -1267,10 +1267,12 @@ fn vc_refuse(root: ref String, at: ref Span, views: ref Vec[VcView], mut walk: V
 
 /// A read of `root` while a mutable view of it is still used.
 fn vc_refuse_read(root: ref String, at: ref Span, view: ref VcView, mut walk: VcWalk) {
+    // A looped view's name is the list's place as written (`self.pending`),
+    // which the index loop walks (#971).
     let name = view.name.clone()
     if view.looped {
         let labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{root}` is read here", true), vc_label(view.made.clone(), name, view.from.clone(), false)]
-        walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is read here, inside the loop whose element is a mutable view of it.", notes: [], help: f"Read what you need into a name before the loop, or write the index loop: `for i in 0..<{root}.len()`.", warning: false, labels: labels })
+        walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is read here, inside the loop whose element is a mutable view of it.", notes: [], help: f"Read what you need into a name before the loop, or write the index loop: `for i in 0..<{name}.len()`.", warning: false, labels: labels })
         return
     }
     let mut labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{root}` is read here", true), vc_label(view.made.clone(), name, view.from.clone(), false)]

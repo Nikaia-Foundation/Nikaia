@@ -1,0 +1,10 @@
+error[NK2305]: `self` is read here, inside the loop whose element is a mutable view of it.
+   --> tests/for_mut_read_help_names_list.nika:16:18
+    |
+ 15 |         for mut c in self.pending {
+    |                      ------------ `self.pending` is lent to this loop, and each element is a mutable view of it
+ 16 |             c += self.count()
+    |                  ^^^^ `self` is read here
+    |
+    = help: Read what you need into a name before the loop, or write the index loop: `for i in 0..<self.pending.len()`.
+1 change to data a view still to be used may point into

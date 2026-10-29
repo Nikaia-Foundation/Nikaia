@@ -873,7 +873,7 @@ pub(crate) fn vc_refuse_read(root: &str, at: &Span, view: &VcView, walk: &mut Vc
     let name = view.name.to_string();
     if view.looped {
         let labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` is read here", root), true), vc_label(view.made.clone(), &name, view.from.to_string(), false)];
-        walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` is read here, inside the loop whose element is a mutable view of it.", root), notes: vec![], help: Some(format!("Read what you need into a name before the loop, or write the index loop: `for i in 0..<{}.len()`.", root)), warning: false, labels });
+        walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` is read here, inside the loop whose element is a mutable view of it.", root), notes: vec![], help: Some(format!("Read what you need into a name before the loop, or write the index loop: `for i in 0..<{}.len()`.", name)), warning: false, labels });
         return;
     }
     let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` is read here", root), true), vc_label(view.made.clone(), &name, view.from.to_string(), false)];
