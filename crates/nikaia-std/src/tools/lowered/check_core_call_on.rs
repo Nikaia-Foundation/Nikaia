@@ -555,10 +555,11 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], span: &Span) {
     if !(key == "Vec::extend" || key == "collections::HashSet::extend" || key == "collections::BTreeSet::extend") || args.len() != 1 || found.len() != 1 { return; }
-    let want: Ty = unviewed_type(&nikaia_std::index::or(match bound.get("T") {
+    let held: Ty = unviewed_type(&nikaia_std::index::or(match bound.get("T") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || Ty::Unknown));
+    let want: Ty = if held.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { held };
     let walked: Ty = unviewed_type(&element_walked(nikaia_std::index::get(&found, 0), 1));
     let have: Ty = if walked.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { walked };
     let numbers = match have {

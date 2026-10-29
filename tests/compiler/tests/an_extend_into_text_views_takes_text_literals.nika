@@ -1,0 +1,17 @@
+use std::collections
+
+// A list or a set of text literals is one of views below (ADR-282), and
+// `extend` of more literals into it is no mismatch (ADR-collections-1 D3).
+fn main() {
+    let mut s: collections::BTreeSet[String] = collections::BTreeSet()
+    s.extend(["b", "a"])
+    for one in s {
+        println(one)
+    }
+    let mut h: collections::HashSet[String] = collections::HashSet()
+    h.extend(["p", "p", "q"])
+    println(f"{h.len()}")
+    let mut v = ["m"]
+    v.extend(["n"])
+    println(f"{v[1]}{v[0]}")
+}

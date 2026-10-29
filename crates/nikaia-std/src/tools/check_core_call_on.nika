@@ -716,9 +716,12 @@ fn check_core_call_on_extended(mut state: CheckState, world: ref CheckWorld, key
     if !(key == "Vec::extend" || key == "collections::HashSet::extend" || key == "collections::BTreeSet::extend") || args.len() != 1 || found.len() != 1 {
         return
     }
-    let want: Ty = unviewed_type(bound.get("T")?.clone() ?? Ty::Unknown)
+    // A text literal's element is a `str`, and so is the element of a list
+    // or a set the tiers made a view of literals; the program calls both
+    // `String`.
+    let held: Ty = unviewed_type(bound.get("T")?.clone() ?? Ty::Unknown)
+    let want: Ty = if held.text() == "str" { Ty::Named { name: "String", args: [], view: false } } else { held }
     let walked: Ty = unviewed_type(element_walked(found[0], 1))
-    // A text literal's element is a `str`; the program calls it `String`.
     let have: Ty = if walked.text() == "str" { Ty::Named { name: "String", args: [], view: false } } else { walked }
     let numbers = match have {
         Ty::Named { name, .. } => a_number_name(name),
