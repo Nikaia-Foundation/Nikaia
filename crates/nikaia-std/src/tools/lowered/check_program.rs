@@ -104,7 +104,7 @@ pub fn check_program_instantiations_beside<H: CheckHost>(state: &mut CheckState,
         }
     }
     if mine.is_empty() { return; }
-    for (key, fields) in host.instantiations_beside(&state.modules, &mine) { if !state.facts.unrolled.contains_key(&key) { state.facts.unrolled.insert(key.clone(), fields); } }
+    for (key, fields) in host.instantiations_beside(&state.modules, &mine) { state.facts.unrolled.entry(key).or_insert(fields); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

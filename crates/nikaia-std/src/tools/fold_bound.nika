@@ -618,11 +618,7 @@ impl FbIndex {
     }
 
     fn reach(ref mut self, name: String, at: i64) {
-        if !self.reached_by.contains_key(name) {
-            self.reached_by.insert(name.clone(), collections::BTreeSet())
-        }
-        let mut set = self.reached_by[name] ?? return
-        set.insert(at)
+        self.reached_by.entry(name).or_insert(collections::BTreeSet()).insert(at)
     }
 
     fn of(source: ref FbSource) -> FbIndex {
@@ -1450,17 +1446,11 @@ pub struct FbUses {
 
 impl FbUses {
     fn touch(ref mut self, field: String, owner: i64) {
-        if !self.touches.contains_key(field) {
-            self.touches.insert(field.clone(), collections::BTreeSet())
-        }
-        let mut set = self.touches[field] ?? return
-        set.insert(owner)
+        self.touches.entry(field).or_insert(collections::BTreeSet()).insert(owner)
     }
 
     fn name(ref mut self, owner: i64, text: String) {
-        self.names.entry(owner).or_insert(collections::BTreeSet())
-        let mut set = self.names[owner] ?? return
-        set.insert(text)
+        self.names.entry(owner).or_insert(collections::BTreeSet()).insert(text)
     }
 
     fn pattern[H: FbHost](ref mut self, host: ref H, ix: ref FbIndex, pattern: ref Pattern, owner: i64) {

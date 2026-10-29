@@ -472,7 +472,7 @@ pub(crate) fn a_contribution(expr: &Expr, names: &winnow_grammar::InternerContex
                 let given = contribution_of(expr);
                 for error in given.fatal.iter() { if !out.named.contains(error) { out.direct.insert(error.to_string()); } }
                 let call = nikaia_std::index::or(given.call, || "".into());
-                if !call.is_empty() && !out.fatal_calls.contains_key(&call) { out.fatal_calls.insert(call, out.named.to_owned()); }
+                if !call.is_empty() { out.fatal_calls.entry(String::from(call)).or_insert_with(|| { out.named.to_owned() }); }
             },
         }
         return;

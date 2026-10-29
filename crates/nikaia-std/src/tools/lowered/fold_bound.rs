@@ -431,11 +431,7 @@ pub(crate) fn fb_vec_of(m: &collections::BTreeMap<String, Vec<i64>>, key: &str) 
 
 impl<'a> FbIndex<'a, 'a, 'a> {
     pub(crate) fn text(&self, sym: winnow_grammar::Symbol) -> String { self.words.resolve(sym).to_string() }
-    pub(crate) fn reach(&mut self, name: String, at: i64) {
-        if !self.reached_by.contains_key(&name) { self.reached_by.insert(name.to_string(), collections::BTreeSet::new()); }
-        let set = match nikaia_std::index::get_mut(&mut self.reached_by, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
-        set.insert(at);
-    }
+    pub(crate) fn reach(&mut self, name: String, at: i64) { self.reached_by.entry(String::from(name)).or_insert(collections::BTreeSet::new()).insert(at); }
     pub(crate) fn of<'r>(source: &FbSource<'r, 'r>) -> FbIndex<'r, 'r, 'r> {
         let words = source.words;
         let mut ix = FbIndex { words, structs: collections::BTreeMap::new(), methods: collections::BTreeMap::new(), impls: collections::BTreeSet::new(), by_name: collections::BTreeMap::new(), free: collections::BTreeMap::new(), fns: collections::BTreeMap::new(), reached_by: collections::BTreeMap::new(), implicit: collections::BTreeSet::new() };
@@ -1094,16 +1090,8 @@ pub struct FbUses {
 }
 
 impl FbUses {
-    pub(crate) fn touch(&mut self, field: String, owner: i64) {
-        if !self.touches.contains_key(&field) { self.touches.insert(field.to_string(), collections::BTreeSet::new()); }
-        let set = match nikaia_std::index::get_mut(&mut self.touches, &field) { Some(__nikaia_value) => __nikaia_value, None => return };
-        set.insert(owner);
-    }
-    pub(crate) fn name(&mut self, owner: i64, text: String) {
-        self.names.entry(owner).or_insert(collections::BTreeSet::new());
-        let set = match nikaia_std::index::get_mut(&mut self.names, &owner) { Some(__nikaia_value) => __nikaia_value, None => return };
-        set.insert(text);
-    }
+    pub(crate) fn touch(&mut self, field: String, owner: i64) { self.touches.entry(String::from(field)).or_insert(collections::BTreeSet::new()).insert(owner); }
+    pub(crate) fn name(&mut self, owner: i64, text: String) { self.names.entry(owner).or_insert(collections::BTreeSet::new()).insert(text); }
     pub(crate) fn pattern<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, pattern: &Pattern, owner: i64) {
         match pattern {
             Pattern::Seq(parts) => { for p in parts.iter() { self.pattern(host, ix, &p.node, owner); } },

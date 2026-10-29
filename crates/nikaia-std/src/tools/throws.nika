@@ -724,8 +724,8 @@ fn a_contribution(expr: ref Expr, names: ref winnow_grammar::InternerContext, co
                     }
                 }
                 let call = given.call ?? ""
-                if call.len() > 0 && !out.fatal_calls.contains_key(call) {
-                    out.fatal_calls.insert(call, out.named.clone())
+                if call.len() > 0 {
+                    out.fatal_calls.entry(call).or_insert_with(fn() { out.named.clone() })
                 }
             }
         }
